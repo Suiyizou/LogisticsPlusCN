@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="通道 C：通过 COSCO 公开网页接口查询并生成货运跟踪快照"
+    />
+    <title>Shipment Lens · 通道 C</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Shipment Lens 首页">
+          <span class="brand-mark" aria-hidden="true">SL</span>
+          <span>
+            <strong>Shipment Lens</strong>
+            <small>Third-party tracking workspace</small>
+          </span>
+        </a>
+        <div class="channel-badge">
+          <span class="pulse"></span>
+          通道 C · Public Web Interface
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">COSCO SHIPPING · MINIMUM VIABLE TRACKER</p>
+          <h1>把网页数据，变成<br /><em>可用的运输快照。</em></h1>
+          <p class="lede">
+            当前版本仅实现通道 C：调用 COSCO 公开网页接口，完成 Base64 与 XOR
+            解码，并输出统一的运输摘要。
+          </p>
+        </div>
+
+        <form class="query-card" id="tracking-form">
+          <div class="query-card__head">
+            <span>新建查询</span>
+            <span class="free-tag">FREE PATH</span>
+          </div>
+          <label for="tracking-type">查询类型</label>
+          <select id="tracking-type" name="type">
+            <option value="BILLOFLADING">提单号</option>
+            <option value="BOOKING">订舱号</option>
+            <option value="CONTAINER">箱号</option>
+          </select>
+          <label for="tracking-number">查询号码</label>
+          <div class="input-row">
+            <input
+              id="tracking-number"
+              name="number"
+              value="6502077380"
+              autocomplete="off"
+              maxlength="35"
+              required
+              spellcheck="false"
+            />
+            <button type="submit" id="submit-button">
+              <span class="button-label">生成快照</span>
+              <span class="button-loader" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="form-note">数据来自船司公开页面的内部查询通道，非正式开放 API。</p>
+        </form>
+      </section>
+
+      <section class="notice" id="error-panel" hidden role="alert">
+        <strong>查询失败</strong>
+        <span id="error-message"></span>
+      </section>
+
+      <section class="empty-state" id="empty-state">
+        <span class="empty-state__index">01</span>
+        <div>
+          <strong>准备生成第一份数据快照</strong>
+          <p>输入提单号、订舱号或箱号，系统会在这里呈现运输摘要和节点。</p>
+        </div>
+      </section>
+
+      <section class="results" id="results" hidden aria-live="polite">
+        <div class="result-heading">
+          <div>
+            <p class="eyebrow">TRACKING SNAPSHOT</p>
+            <h2 id="result-number">—</h2>
+          </div>
+          <div class="result-meta">
+            <span id="cache-status">LIVE</span>
+            <time id="fetched-at">—</time>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <article class="summary-card route-card">
+            <p>运输路径</p>
+            <div class="route-pair">
+              <div>
+                <strong id="origin-name">—</strong>
+                <span id="origin-code">—</span>
+              </div>
+              <div class="route-line"><span></span></div>
+              <div>
+                <strong id="destination-name">—</strong>
+                <span id="destination-code">—</span>
+              </div>
+            </div>
+          </article>
+          <article class="summary-card">
+            <p>最新动态</p>
+            <strong id="latest-event">—</strong>
+            <span id="latest-location">—</span>
+            <time id="latest-time">—</time>
+          </article>
+          <article class="summary-card">
+            <p>运输信息</p>
+            <strong id="transport-mode">—</strong>
+            <span id="traffic-term">—</span>
+            <span id="container-summary">—</span>
+          </article>
+        </div>
+
+        <div class="detail-grid">
+          <article class="panel timeline-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">ROUTE EVENTS</p>
+                <h3>运输节点</h3>
+              </div>
+              <span id="route-count">0 NODES</span>
+            </div>
+            <ol class="timeline" id="route-timeline"></ol>
+          </article>
+
+          <aside class="side-stack">
+            <article class="panel">
+              <div class="panel-heading compact">
+                <div>
+                  <p class="eyebrow">SAILING</p>
+                  <h3>船期</h3>
+                </div>
+              </div>
+              <div id="sailing-schedule" class="sailing-list"></div>
+            </article>
+
+            <article class="panel raw-panel">
+              <details>
+                <summary>
+                  <span>
+                    <small>DEVELOPER VIEW</small>
+                    原始解码结果
+                  </span>
+                  <span>JSON</span>
+                </summary>
+                <pre id="raw-json"></pre>
+              </details>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <footer>
+        <span>Channel C prototype · v0.1.0</span>
+        <span>Source changes may require adapter maintenance.</span>
+      </footer>
+    </main>
+  </body>
+</html>
