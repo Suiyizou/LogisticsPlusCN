@@ -21,6 +21,11 @@
   --warning: #bb8228;
   --warning-soft: #f5ead5;
   --red: #c5524e;
+  --accent: #35677c;
+  --accent-deep: #294f60;
+  --accent-soft: #edf4f6;
+  --accent-line: #bfd2da;
+  --accent-shadow: rgba(53, 103, 124, 0.2);
   --shadow: 0 14px 36px rgba(20, 22, 21, 0.045);
   --shadow-soft: 0 2px 8px rgba(20, 22, 21, 0.025);
   font-family:
@@ -194,9 +199,9 @@ a {
 }
 
 .nav-item.is-active {
-  color: #fff;
-  background: var(--ink);
-  box-shadow: 0 9px 22px rgba(25, 28, 27, 0.14);
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
   font-weight: 700;
 }
 
@@ -390,12 +395,18 @@ a {
   border-radius: 7px;
   font-size: 12px;
   font-weight: 800;
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.language-switch button:hover:not(.is-active) {
+  color: var(--accent-deep);
+  background: #f5f8f9;
 }
 
 .language-switch button.is-active {
-  color: #fff;
-  background: var(--ink);
-  box-shadow: 0 3px 8px rgba(47, 92, 84, 0.2);
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 .content {
@@ -474,10 +485,10 @@ a {
   padding: 12px 14px 12px 18px;
   border: 0;
   color: #fff;
-  background: var(--forest);
+  background: var(--accent);
   border-radius: 9px;
   align-items: center;
-  box-shadow: 0 10px 24px rgba(49, 73, 68, 0.2);
+  box-shadow: 0 10px 24px var(--accent-shadow);
   font-size: 14px;
   font-weight: 750;
   transition: transform 180ms ease, box-shadow 180ms ease;
@@ -487,14 +498,15 @@ a {
   display: grid;
   width: 25px;
   height: 25px;
-  color: var(--ink);
+  color: var(--accent-deep);
   background: #fff;
   border-radius: 8px;
   place-items: center;
 }
 
 .primary-action:hover {
-  box-shadow: 0 14px 29px rgba(49, 73, 68, 0.25);
+  background: var(--accent-deep);
+  box-shadow: 0 14px 29px rgba(53, 103, 124, 0.26);
   transform: translateY(-2px);
 }
 
@@ -870,6 +882,13 @@ tbody tr:hover {
   border-radius: 8px;
   font-size: 11.5px;
   font-weight: 800;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.open-history-button:hover {
+  border-color: var(--accent-line);
+  color: var(--accent-deep);
+  background: var(--accent-soft);
 }
 
 .page-heading {
@@ -914,7 +933,7 @@ tbody tr:hover {
   left: 0;
   width: 5px;
   height: 100%;
-  background: var(--ink);
+  background: var(--accent);
   content: "";
 }
 
@@ -952,8 +971,8 @@ tbody tr:hover {
 
 .field input:focus,
 .field select:focus {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 4px rgba(25, 28, 27, 0.08);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(53, 103, 124, 0.1);
 }
 
 #submit-button {
@@ -963,18 +982,28 @@ tbody tr:hover {
   padding: 0 18px;
   border: 0;
   color: #fff;
-  background: var(--ink);
+  background: var(--accent);
   border-radius: 9px;
   place-items: center;
-  box-shadow: 0 8px 18px rgba(49, 73, 68, 0.2);
+  box-shadow: 0 8px 18px var(--accent-shadow);
   font-size: 13.5px;
   font-weight: 800;
-  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
 
 #submit-button:hover:not(:disabled) {
-  box-shadow: 0 11px 24px rgba(49, 73, 68, 0.26);
+  background: var(--accent-deep);
+  box-shadow: 0 11px 24px rgba(53, 103, 124, 0.28);
   transform: translateY(-1px);
+}
+
+.primary-action:focus-visible,
+#submit-button:focus-visible,
+.open-history-button:focus-visible,
+.text-button:focus-visible,
+.language-switch button:focus-visible {
+  outline: 3px solid rgba(53, 103, 124, 0.22);
+  outline-offset: 2px;
 }
 
 #submit-button:disabled {
