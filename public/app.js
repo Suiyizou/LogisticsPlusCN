@@ -9,6 +9,7 @@ const emptyState = document.querySelector("#empty-state");
 const results = document.querySelector("#results");
 const errorPanel = document.querySelector("#error-panel");
 const errorMessage = document.querySelector("#error-message");
+const alertTitle = document.querySelector("#alert-title");
 const channelState = document.querySelector("#channel-state");
 const channelStatusText = document.querySelector("#channel-status-text");
 const overviewMonitorStatus = document.querySelector("#overview-monitor-status");
@@ -17,6 +18,10 @@ const historyEmpty = document.querySelector("#history-empty");
 const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
 const clearHistoryButton = document.querySelector("#clear-history-button");
+const journeyStage = document.querySelector("#journey-stage");
+const journeyProgressLabel = document.querySelector("#journey-progress-label");
+const journeyProgressFill = document.querySelector("#journey-progress-fill");
+const journeySteps = [...document.querySelectorAll("[data-journey-step]")];
 
 const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -100,6 +105,7 @@ const MESSAGES = {
     "error.generic": "Tracking failed. Please try again.",
     "error.http": "Tracking failed (HTTP {status})",
     "error.localFallback": "{message} Showing the latest browser snapshot instead.",
+    "notice.cacheTitle": "Live refresh unavailable",
     "empty.title": "Ready when you are",
     "empty.description": "Enter a bill, booking or container number to begin.",
     "metrics.actualDeparture": "Actual departure",
@@ -107,6 +113,12 @@ const MESSAGES = {
     "metrics.estimatedDelivery": "Estimated final delivery",
     "metrics.latestEvent": "Latest event",
     "metrics.noLatestEvent": "No latest event",
+    "journey.currentStage": "Current stage",
+    "journey.departed": "Departed",
+    "journey.arrived": "Port arrival",
+    "journey.delivered": "Final destination",
+    "journey.progress": "{completed} of {total} milestones confirmed",
+    "journey.awaiting": "Awaiting the next carrier event",
     "route.title": "Route story",
     "route.origin": "Origin",
     "route.destination": "Destination",
@@ -213,6 +225,7 @@ const MESSAGES = {
     "error.generic": "查询失败，请稍后重试。",
     "error.http": "查询失败（HTTP {status}）",
     "error.localFallback": "{message} 当前展示最近一次浏览器缓存结果。",
+    "notice.cacheTitle": "实时刷新暂不可用",
     "empty.title": "等待查询",
     "empty.description": "输入提单号、订舱号或箱号即可开始。",
     "metrics.actualDeparture": "实际离港",
@@ -220,6 +233,12 @@ const MESSAGES = {
     "metrics.estimatedDelivery": "预计到达最终目的地",
     "metrics.latestEvent": "最新动态",
     "metrics.noLatestEvent": "暂无最新动态",
+    "journey.currentStage": "当前阶段",
+    "journey.departed": "已离港",
+    "journey.arrived": "已到港",
+    "journey.delivered": "最终目的地",
+    "journey.progress": "已确认 {completed}/{total} 个主要节点",
+    "journey.awaiting": "等待船司更新下一节点",
     "route.title": "路线详情",
     "route.origin": "起始地",
     "route.destination": "目的地",
@@ -320,6 +339,8 @@ let activeView = "overview";
 let currentPayload = null;
 let lastChannelStatus = { status: "unknown" };
 let loading = false;
+let resultAnimationTimer = null;
+let viewTransitionSequence = 0;
 
 function t(key, variables = {}) {
   const template = MESSAGES[currentLanguage]?.[key] ?? MESSAGES.en[key] ?? key;
@@ -521,15 +542,20 @@ function setLoading(value) {
   loading = value;
   submitButton.classList.toggle("is-loading", loading);
   submitButton.disabled = loading || !CARRIERS[carrierSelect.value]?.enabled;
+  results.classList.toggle("is-refreshing", loading && !results.hidden);
 }
 
-function showError(message) {
+function showError(message, variant = "error") {
   errorMessage.textContent = message;
+  errorPanel.dataset.variant = variant;
+  alertTitle.textContent = variant === "warning" ? t("notice.cacheTitle") : t("error.title");
   errorPanel.hidden = false;
 }
 
 function clearError() {
   errorMessage.textContent = "";
+  errorPanel.dataset.variant = "error";
+  alertTitle.textContent = t("error.title");
   errorPanel.hidden = true;
 }
 
@@ -674,6 +700,44 @@ function renderContainers(containers) {
   }
 }
 
+function renderJourney(snapshot) {
+  const keyTimes = snapshot.keyTimes ?? {};
+  const latest = snapshot.summary?.latestEvent;
+  const milestones = [
+    Boolean(keyTimes.actualDeparture?.time),
+    Boolean(keyTimes.actualArrival?.time),
+    Boolean(keyTimes.estimatedDelivery?.actualTime)
+  ];
+  const completed = milestones.filter(Boolean).length;
+  const progressByCompleted = [0, 8, 55, 100];
+
+  journeyStage.textContent = valueOrDash(latest?.name, t("journey.awaiting"));
+  journeyProgressLabel.textContent = t("journey.progress", {
+    completed,
+    total: milestones.length
+  });
+
+  journeySteps.forEach((step, index) => {
+    step.classList.toggle("is-complete", milestones[index]);
+    step.classList.toggle("is-current", index === Math.min(completed, milestones.length - 1));
+  });
+
+  journeyProgressFill.style.width = "0%";
+  requestAnimationFrame(() => {
+    journeyProgressFill.style.width = `${progressByCompleted[completed]}%`;
+  });
+}
+
+function restartResultAnimation() {
+  clearTimeout(resultAnimationTimer);
+  results.classList.remove("is-revealing");
+  void results.offsetWidth;
+  results.classList.add("is-revealing");
+  resultAnimationTimer = setTimeout(() => {
+    results.classList.remove("is-revealing");
+  }, 1_300);
+}
+
 function renderResult(payload) {
   const snapshot = payload.snapshot;
   const summary = snapshot.summary;
@@ -729,6 +793,7 @@ function renderResult(payload) {
   elements["destination-code"].textContent = valueOrDash(summary.destination.countryCode);
 
   renderRoute(snapshot.route ?? []);
+  renderJourney(snapshot);
   renderRoutingLegs(snapshot.routingLegs ?? []);
   renderReferences(snapshot.references ?? {});
   renderContainers(snapshot.containers ?? []);
@@ -738,6 +803,8 @@ function renderResult(payload) {
 
   emptyState.hidden = true;
   results.hidden = false;
+  results.classList.toggle("is-refreshing", loading);
+  restartResultAnimation();
 }
 
 function renderHistory() {
@@ -754,8 +821,11 @@ function renderHistory() {
   clearHistoryButton.hidden = history.length === 0;
   historyTableBody.replaceChildren();
 
+  let rowIndex = 0;
   for (const entry of history) {
     const row = document.createElement("tr");
+    row.style.setProperty("--row-index", rowIndex);
+    rowIndex += 1;
     const snapshot = entry.snapshot;
     const summary = snapshot.summary;
 
@@ -865,10 +935,13 @@ function updateUrl(query) {
 }
 
 function showView(name, { updateLocation = true } = {}) {
-  activeView = name === "tracking" ? "tracking" : "overview";
-  document.querySelectorAll(".app-view").forEach((view) => {
-    view.hidden = view.dataset.view !== activeView;
-  });
+  const nextView = name === "tracking" ? "tracking" : "overview";
+  const incoming = document.querySelector(`[data-view="${nextView}"]`);
+  const outgoing = document.querySelector(".app-view:not([hidden])");
+  const transitionId = ++viewTransitionSequence;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  activeView = nextView;
   document.querySelectorAll("[data-view-target]").forEach((link) => {
     link.classList.toggle("is-active", link.dataset.viewTarget === activeView);
   });
@@ -885,8 +958,40 @@ function showView(name, { updateLocation = true } = {}) {
     window.history.replaceState({}, "", url);
   }
 
-  if (activeView === "overview") renderHistory();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  const revealIncoming = () => {
+    if (transitionId !== viewTransitionSequence) return;
+    document.querySelectorAll(".app-view").forEach((view) => {
+      view.hidden = view !== incoming;
+      view.getAnimations().forEach((animation) => animation.cancel());
+    });
+    incoming.hidden = false;
+    if (!reduceMotion) {
+      incoming.animate(
+        [
+          { opacity: 0, transform: "translateY(10px)" },
+          { opacity: 1, transform: "translateY(0)" }
+        ],
+        { duration: 320, easing: "cubic-bezier(.2,.75,.2,1)" }
+      );
+    }
+    if (activeView === "overview") renderHistory();
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  };
+
+  if (outgoing && outgoing !== incoming && !reduceMotion) {
+    outgoing
+      .animate(
+        [
+          { opacity: 1, transform: "translateY(0)" },
+          { opacity: 0, transform: "translateY(-6px)" }
+        ],
+        { duration: 150, easing: "ease-in", fill: "forwards" }
+      )
+      .finished.catch(() => {})
+      .then(revealIncoming);
+  } else {
+    revealIncoming();
+  }
 }
 
 function openHistoryEntry(entry) {
@@ -916,12 +1021,40 @@ function applyLanguage(language, { persist = true } = {}) {
     button.classList.toggle("is-active", button.dataset.language === currentLanguage);
   });
 
+  if (!errorPanel.hidden) {
+    alertTitle.textContent =
+      errorPanel.dataset.variant === "warning" ? t("notice.cacheTitle") : t("error.title");
+  }
+
   if (persist) localStorage.setItem(LANGUAGE_KEY, currentLanguage);
   activeViewTitle.textContent = t(`nav.${activeView}`);
   updateCarrierUI();
   renderChannelStatus(lastChannelStatus);
   renderHistory();
   if (currentPayload) renderResult(currentPayload);
+}
+
+async function postTrackingRequest(path, query) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(query)
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
+async function requestTracking(query) {
+  const primary = await postTrackingRequest("/api/track", query);
+
+  if (
+    query.carrier === "COSCO" &&
+    [404, 405].includes(primary.response.status)
+  ) {
+    return postTrackingRequest("/api/track/cosco", query);
+  }
+
+  return primary;
 }
 
 form.addEventListener("submit", async (event) => {
@@ -936,7 +1069,7 @@ form.addEventListener("submit", async (event) => {
   const carrier = CARRIERS[query.carrier];
 
   if (!carrier?.enabled) {
-    showError(t("carrier.cmaNotice"));
+    showError(t("carrier.cmaNotice"), "warning");
     return;
   }
 
@@ -946,12 +1079,7 @@ form.addEventListener("submit", async (event) => {
   if (localPayload) renderResult(localPayload);
 
   try {
-    const response = await fetch("/api/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query)
-    });
-    const payload = await response.json();
+    const { response, payload } = await requestTracking(query);
 
     if (!response.ok) {
       throw new Error(payload?.error?.message || t("error.http", { status: response.status }));
@@ -962,7 +1090,10 @@ form.addEventListener("submit", async (event) => {
     renderHistory();
   } catch (error) {
     const message = error?.message || t("error.generic");
-    showError(localPayload ? t("error.localFallback", { message }) : message);
+    showError(
+      localPayload ? t("error.localFallback", { message }) : message,
+      localPayload ? "warning" : "error"
+    );
   } finally {
     setLoading(false);
   }

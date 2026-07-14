@@ -223,10 +223,10 @@
               </div>
             </section>
 
-            <section class="alert" id="error-panel" role="alert" hidden>
+            <section class="alert" id="error-panel" role="alert" data-variant="error" hidden>
               <span>!</span>
               <div>
-                <strong data-i18n="error.title">Tracking request failed</strong>
+                <strong id="alert-title" data-i18n="error.title">Tracking request failed</strong>
                 <p id="error-message"></p>
               </div>
             </section>
@@ -253,6 +253,32 @@
                   <time id="fetched-at">—</time>
                 </div>
               </div>
+
+              <section class="journey-overview" id="journey-overview" aria-label="Journey progress">
+                <div class="journey-stage-summary">
+                  <span class="journey-pulse"><i></i></span>
+                  <span>
+                    <small data-i18n="journey.currentStage">Current stage</small>
+                    <strong id="journey-stage">—</strong>
+                    <em id="journey-progress-label">—</em>
+                  </span>
+                </div>
+                <div class="journey-progress" id="journey-progress">
+                  <div class="journey-track"><i id="journey-progress-fill"></i></div>
+                  <div class="journey-step" data-journey-step="0">
+                    <b>01</b>
+                    <span data-i18n="journey.departed">Departed</span>
+                  </div>
+                  <div class="journey-step" data-journey-step="1">
+                    <b>02</b>
+                    <span data-i18n="journey.arrived">Port arrival</span>
+                  </div>
+                  <div class="journey-step" data-journey-step="2">
+                    <b>03</b>
+                    <span data-i18n="journey.delivered">Final destination</span>
+                  </div>
+                </div>
+              </section>
 
               <section class="metric-grid" aria-label="Key shipment events">
                 <article class="metric-card departure-card">

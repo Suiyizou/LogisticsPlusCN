@@ -405,7 +405,7 @@ a {
 }
 
 .app-view {
-  animation: view-in 420ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+  will-change: opacity, transform;
 }
 
 .kicker {
@@ -814,6 +814,11 @@ tbody tr {
   transition: background 150ms ease;
 }
 
+.history-table tbody tr {
+  animation: history-row-reveal 360ms cubic-bezier(.2,.75,.2,1) both;
+  animation-delay: calc(var(--row-index, 0) * 55ms);
+}
+
 tbody tr:hover {
   background: #fbfbfa;
 }
@@ -1017,6 +1022,10 @@ tbody tr:hover {
   font-weight: 750;
 }
 
+.carrier-notice:not([hidden]) {
+  animation: notice-in 260ms ease-out both;
+}
+
 .alert,
 .empty-state {
   display: flex;
@@ -1031,6 +1040,25 @@ tbody tr:hover {
   border-color: #e8bbb2;
   color: #8f3f39;
   background: #fff1ec;
+}
+
+.alert:not([hidden]) {
+  animation: notice-in 280ms ease-out both;
+}
+
+.alert[data-variant="warning"] {
+  padding: 13px 16px;
+  border-color: #e8dcc4;
+  color: #66552f;
+  background: #fffdf7;
+}
+
+.alert[data-variant="warning"] > span {
+  width: 31px;
+  height: 31px;
+  color: #fff;
+  background: var(--warning);
+  border-radius: 8px;
 }
 
 .alert > span,
@@ -1067,7 +1095,14 @@ tbody tr:hover {
 }
 
 .results {
-  animation: rise 400ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+  opacity: 1;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.results.is-refreshing {
+  opacity: 0.48;
+  transform: translateY(3px);
+  pointer-events: none;
 }
 
 .result-titlebar {
@@ -1130,6 +1165,210 @@ tbody tr:hover {
 .result-meta span[data-source="browser"] {
   color: #97650b;
   background: var(--gold-soft);
+}
+
+.journey-overview {
+  display: grid;
+  min-height: 112px;
+  margin-bottom: 11px;
+  padding: 20px 23px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  grid-template-columns: minmax(245px, 0.72fr) minmax(480px, 1.28fr);
+  align-items: center;
+}
+
+.journey-stage-summary {
+  display: flex;
+  gap: 13px;
+  min-width: 0;
+  align-items: center;
+}
+
+.journey-stage-summary > span:last-child,
+.journey-stage-summary small,
+.journey-stage-summary strong,
+.journey-stage-summary em {
+  display: block;
+}
+
+.journey-stage-summary small {
+  color: var(--quiet);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.journey-stage-summary strong {
+  margin-top: 3px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.journey-stage-summary em {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.journey-pulse {
+  position: relative;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #d5d7d3;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.journey-pulse::before {
+  width: 9px;
+  height: 9px;
+  background: var(--ink);
+  border-radius: 50%;
+  content: "";
+}
+
+.journey-pulse i {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid #ececea;
+  border-radius: 50%;
+  animation: journey-ring 2.2s ease-in-out infinite;
+}
+
+.journey-progress {
+  position: relative;
+  display: grid;
+  padding-top: 17px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.journey-track {
+  position: absolute;
+  top: 27px;
+  right: 16.5%;
+  left: 16.5%;
+  height: 2px;
+  background: #e1e2df;
+  overflow: hidden;
+}
+
+.journey-track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ink);
+  transition: width 780ms cubic-bezier(.2,.75,.2,1) 180ms;
+}
+
+.journey-step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  color: var(--quiet);
+  align-items: center;
+  flex-direction: column;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.journey-step b {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #d6d7d3;
+  color: transparent;
+  background: #fff;
+  border-radius: 50%;
+  place-items: center;
+  font-size: 0;
+  transition: border-color 260ms ease, background 260ms ease, transform 260ms ease;
+}
+
+.journey-step b::after {
+  width: 6px;
+  height: 6px;
+  background: #c9cbc7;
+  border-radius: 50%;
+  content: "";
+}
+
+.journey-step.is-complete {
+  color: var(--ink);
+}
+
+.journey-step.is-complete b {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.journey-step.is-complete b::after {
+  width: 7px;
+  height: 4px;
+  border: solid #fff;
+  border-width: 0 0 2px 2px;
+  background: transparent;
+  border-radius: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.journey-step.is-current b {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 5px rgba(23, 25, 24, 0.07);
+  transform: scale(1.04);
+}
+
+.results.is-revealing .result-titlebar,
+.results.is-revealing .journey-overview,
+.results.is-revealing .metric-card,
+.results.is-revealing .primary-grid .panel,
+.results.is-revealing .routing-panel,
+.results.is-revealing .secondary-grid {
+  opacity: 0;
+  animation: content-reveal 480ms cubic-bezier(.2,.75,.2,1) both;
+}
+
+.results.is-revealing .journey-overview {
+  animation-delay: 70ms;
+}
+
+.results.is-revealing .metric-card:nth-child(1) {
+  animation-delay: 130ms;
+}
+
+.results.is-revealing .metric-card:nth-child(2) {
+  animation-delay: 190ms;
+}
+
+.results.is-revealing .metric-card:nth-child(3) {
+  animation-delay: 250ms;
+}
+
+.results.is-revealing .metric-card:nth-child(4) {
+  animation-delay: 310ms;
+}
+
+.results.is-revealing .metric-card > strong {
+  animation: value-focus 620ms cubic-bezier(.2,.75,.2,1) both;
+  animation-delay: 250ms;
+}
+
+.results.is-revealing .primary-grid .panel {
+  animation-delay: 360ms;
+}
+
+.results.is-revealing .routing-panel {
+  animation-delay: 430ms;
+}
+
+.results.is-revealing .secondary-grid {
+  animation-delay: 500ms;
 }
 
 .metric-grid {
@@ -1610,6 +1849,53 @@ tbody tr:hover {
   }
 }
 
+@keyframes content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes value-focus {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes history-row-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+@keyframes journey-ring {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.82);
+  }
+}
+
 @keyframes status-pulse {
   50% {
     opacity: 0.5;
@@ -1716,6 +2002,11 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .journey-overview {
+    gap: 22px;
+    grid-template-columns: 1fr;
+  }
+
   .hero-art {
     margin-top: 20px;
   }
@@ -1743,6 +2034,19 @@ tbody tr:hover {
   .metric-grid,
   .query-panel form {
     grid-template-columns: 1fr;
+  }
+
+  .journey-overview {
+    padding: 18px;
+  }
+
+  .journey-progress {
+    padding-top: 12px;
+  }
+
+  .journey-step span {
+    max-width: 80px;
+    text-align: center;
   }
 
   #submit-button {
