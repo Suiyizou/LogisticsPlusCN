@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildRoutingLegs,
   decodeCoscoPayload,
+  listCarrierAdapters,
+  normalizeCarrierCode,
+  runChannelCHealthCheck,
   normalizeCoscoSnapshot,
   normalizeTrackingRequest
 } from "../server.mjs";
@@ -38,6 +42,21 @@ test("normalizes and validates tracking input", () => {
   assert.throws(() => normalizeTrackingRequest({ type: "BILLOFLADING", number: "@@" }));
 });
 
+test("exposes a multi-carrier adapter registry", () => {
+  assert.equal(normalizeCarrierCode("cosco"), "COSCO");
+  assert.equal(normalizeCarrierCode("cma"), "CMA");
+  assert.throws(() => normalizeCarrierCode("unknown"));
+
+  const carriers = listCarrierAdapters();
+  assert.deepEqual(
+    carriers.map(({ code, enabled }) => ({ code, enabled })),
+    [
+      { code: "COSCO", enabled: true },
+      { code: "CMA", enabled: false }
+    ]
+  );
+});
+
 test("creates a stable channel C snapshot", () => {
   const snapshot = normalizeCoscoSnapshot(
     {
@@ -63,6 +82,77 @@ test("creates a stable channel C snapshot", () => {
   );
 
   assert.equal(snapshot.channel, "C");
+  assert.equal(snapshot.provider.code, "COSCO");
   assert.equal(snapshot.summary.origin.name, "Shanghai");
   assert.equal(snapshot.route[0].sequence, 1);
+});
+
+test("builds sea and inland routing legs", () => {
+  const legs = buildRoutingLegs({
+    cargoTrackingSummary: {
+      blNumber: "ABC123",
+      latestMilestone: {
+        eventName: "Rail Departure",
+        actualEventDateTime: "2026-07-09T11:37:00",
+        transportMode: "Rail"
+      }
+    },
+    cargoTrackingFullChain: [
+      { locationType: "LPOD", city: "Savannah" },
+      { locationType: "FND", city: "Atlanta", estimatedTime: "2026-07-12T16:00:00" }
+    ],
+    cargoTrackingSailingSchedule: [
+      {
+        vesselName: "TOKYO TRIUMPH",
+        voyage: "1268E",
+        polPort: "Shanghai",
+        podPort: "Savannah",
+        atd: "2026-06-05T10:18:35",
+        ata: "2026-07-08T14:33:41"
+      }
+    ]
+  });
+
+  assert.equal(legs.length, 2);
+  assert.equal(legs[0].mode, "SEA");
+  assert.equal(legs[0].loadCountryCode, null);
+  assert.equal(legs[1].mode, "Rail");
+  assert.equal(legs[1].actualDeparture, "2026-07-09T11:37:00");
+  assert.equal(legs[1].estimatedArrival, "2026-07-12T16:00:00");
+});
+
+test("records channel C monitor success and failure", async () => {
+  const successTimes = [1_000, 1_125];
+  let attempt = 0;
+  const success = await runChannelCHealthCheck({
+    now: () => successTimes.shift(),
+    wait: async () => {},
+    fetchDetail: async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error("temporary failure");
+      return { cargoTrackingSummary: { blNumber: "6502077380" } };
+    }
+  });
+
+  assert.equal(success.status, "available");
+  assert.equal(success.available, true);
+  assert.equal(success.responseTimeMs, 125);
+  assert.equal(success.lastAttemptCount, 2);
+  assert.equal(success.consecutiveFailures, 0);
+  assert.equal(success.lastError, null);
+
+  const failureTimes = [2_000, 2_080];
+  const failure = await runChannelCHealthCheck({
+    now: () => failureTimes.shift(),
+    maxAttempts: 1,
+    fetchDetail: async () => {
+      throw new Error("upstream unavailable");
+    }
+  });
+
+  assert.equal(failure.status, "unavailable");
+  assert.equal(failure.available, false);
+  assert.equal(failure.responseTimeMs, 80);
+  assert.equal(failure.lastError, "upstream unavailable");
+  assert.equal(failure.lastSuccessAt, success.lastSuccessAt);
 });

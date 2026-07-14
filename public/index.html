@@ -1,170 +1,417 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="通道 C：通过 COSCO 公开网页接口查询并生成货运跟踪快照"
+      content="A unified multi-carrier shipment tracking workspace"
+      data-i18n-content="meta.description"
     />
-    <title>Shipment Lens · 通道 C</title>
+    <title>Shipment Track</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" type="module"></script>
   </head>
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="Shipment Lens 首页">
-          <span class="brand-mark" aria-hidden="true">SL</span>
-          <span>
-            <strong>Shipment Lens</strong>
-            <small>Third-party tracking workspace</small>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview" data-view-target="overview" aria-label="Shipment Track">
+          <span class="brand-mark">ST</span>
+          <span class="brand-copy">
+            <strong>Shipment Track</strong>
+            <small data-i18n="brand.subtitle">Carrier intelligence desk</small>
           </span>
         </a>
-        <div class="channel-badge">
-          <span class="pulse"></span>
-          通道 C · Public Web Interface
-        </div>
-      </header>
 
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">COSCO SHIPPING · MINIMUM VIABLE TRACKER</p>
-          <h1>把网页数据，变成<br /><em>可用的运输快照。</em></h1>
-          <p class="lede">
-            当前版本仅实现通道 C：调用 COSCO 公开网页接口，完成 Base64 与 XOR
-            解码，并输出统一的运输摘要。
-          </p>
-        </div>
+        <nav aria-label="Primary navigation" data-i18n-aria-label="nav.ariaLabel">
+          <p class="nav-title" data-i18n="nav.workspace">Workspace</p>
+          <a class="nav-item is-active" href="#overview" data-view-target="overview">
+            <span class="nav-icon">◫</span>
+            <span data-i18n="nav.overview">Overview</span>
+          </a>
+          <a class="nav-item" href="#tracking" data-view-target="tracking">
+            <span class="nav-icon">⌁</span>
+            <span data-i18n="nav.tracking">Shipment tracking</span>
+          </a>
 
-        <form class="query-card" id="tracking-form">
-          <div class="query-card__head">
-            <span>新建查询</span>
-            <span class="free-tag">FREE PATH</span>
+          <p class="nav-title" data-i18n="nav.carriers">Carrier adapters</p>
+          <div class="carrier-nav-item is-current" id="cosco-nav-status">
+            <span class="carrier-monogram cosco">CO</span>
+            <span>
+              COSCO
+              <small data-i18n="carrier.connected">Connected · Channel C</small>
+            </span>
+            <i></i>
           </div>
-          <label for="tracking-type">查询类型</label>
-          <select id="tracking-type" name="type">
-            <option value="BILLOFLADING">提单号</option>
-            <option value="BOOKING">订舱号</option>
-            <option value="CONTAINER">箱号</option>
-          </select>
-          <label for="tracking-number">查询号码</label>
-          <div class="input-row">
-            <input
-              id="tracking-number"
-              name="number"
-              value="6502077380"
-              autocomplete="off"
-              maxlength="35"
-              required
-              spellcheck="false"
-            />
-            <button type="submit" id="submit-button">
-              <span class="button-label">生成快照</span>
-              <span class="button-loader" aria-hidden="true"></span>
-            </button>
+          <div class="carrier-nav-item is-planned">
+            <span class="carrier-monogram cma">CM</span>
+            <span>
+              CMA CGM
+              <small data-i18n="carrier.planned">Adapter reserved</small>
+            </span>
           </div>
-          <p class="form-note">数据来自船司公开页面的内部查询通道，非正式开放 API。</p>
-        </form>
-      </section>
+        </nav>
 
-      <section class="notice" id="error-panel" hidden role="alert">
-        <strong>查询失败</strong>
-        <span id="error-message"></span>
-      </section>
-
-      <section class="empty-state" id="empty-state">
-        <span class="empty-state__index">01</span>
-        <div>
-          <strong>准备生成第一份数据快照</strong>
-          <p>输入提单号、订舱号或箱号，系统会在这里呈现运输摘要和节点。</p>
+        <div class="sidebar-foot">
+          <span data-i18n="sidebar.architecture">UNIFIED ADAPTER</span>
+          <strong>COSCO · CMA READY</strong>
         </div>
-      </section>
+      </aside>
 
-      <section class="results" id="results" hidden aria-live="polite">
-        <div class="result-heading">
-          <div>
-            <p class="eyebrow">TRACKING SNAPSHOT</p>
-            <h2 id="result-number">—</h2>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="breadcrumbs">
+            <span data-i18n="breadcrumb.workspace">Workspace</span>
+            <b>/</b>
+            <strong id="active-view-title">Overview</strong>
           </div>
-          <div class="result-meta">
-            <span id="cache-status">LIVE</span>
-            <time id="fetched-at">—</time>
-          </div>
-        </div>
 
-        <div class="summary-grid">
-          <article class="summary-card route-card">
-            <p>运输路径</p>
-            <div class="route-pair">
-              <div>
-                <strong id="origin-name">—</strong>
-                <span id="origin-code">—</span>
-              </div>
-              <div class="route-line"><span></span></div>
-              <div>
-                <strong id="destination-name">—</strong>
-                <span id="destination-code">—</span>
-              </div>
+          <div class="topbar-actions">
+            <div class="system-state" id="channel-state" data-status="unknown">
+              <span class="state-dot"></span>
+              <span id="channel-status-text">Channel C awaiting check</span>
             </div>
-          </article>
-          <article class="summary-card">
-            <p>最新动态</p>
-            <strong id="latest-event">—</strong>
-            <span id="latest-location">—</span>
-            <time id="latest-time">—</time>
-          </article>
-          <article class="summary-card">
-            <p>运输信息</p>
-            <strong id="transport-mode">—</strong>
-            <span id="traffic-term">—</span>
-            <span id="container-summary">—</span>
-          </article>
-        </div>
-
-        <div class="detail-grid">
-          <article class="panel timeline-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">ROUTE EVENTS</p>
-                <h3>运输节点</h3>
-              </div>
-              <span id="route-count">0 NODES</span>
+            <div class="language-switch" role="group" aria-label="Language">
+              <button type="button" data-language="en" class="is-active">EN</button>
+              <button type="button" data-language="zh">中文</button>
             </div>
-            <ol class="timeline" id="route-timeline"></ol>
-          </article>
+          </div>
+        </header>
 
-          <aside class="side-stack">
-            <article class="panel">
-              <div class="panel-heading compact">
+        <main class="content">
+          <section class="app-view" id="overview-view" data-view="overview">
+            <section class="overview-hero">
+              <div class="hero-copy">
+                <p class="kicker" data-i18n="overview.kicker">OPERATIONS OVERVIEW</p>
+                <h1 data-i18n="overview.title">Every shipment, one calm view.</h1>
+                <p data-i18n="overview.description">
+                  Revisit recent searches, monitor carrier availability and continue where you left off.
+                </p>
+                <button class="primary-action" type="button" id="start-tracking-button">
+                  <span data-i18n="overview.startTracking">Track a shipment</span>
+                  <b>↗</b>
+                </button>
+              </div>
+              <div class="hero-art" aria-hidden="true">
+                <span class="art-label origin"><i class="flag-icon flag-cn"></i>CN</span>
+                <span class="art-route"><i></i></span>
+                <span class="art-vessel">◭</span>
+                <span class="art-label destination"><i class="flag-icon flag-us"></i>US</span>
+                <small>Pacific route / 11,400 km</small>
+              </div>
+            </section>
+
+            <section class="overview-stats" aria-label="Local history summary">
+              <article class="stat-card coral">
+                <span>01</span>
                 <div>
-                  <p class="eyebrow">SAILING</p>
-                  <h3>船期</h3>
+                  <small data-i18n="overview.savedSearches">Saved searches</small>
+                  <strong id="history-total">0</strong>
+                </div>
+              </article>
+              <article class="stat-card teal">
+                <span>02</span>
+                <div>
+                  <small data-i18n="overview.carriersUsed">Carriers used</small>
+                  <strong id="history-carriers">0</strong>
+                </div>
+              </article>
+              <article class="stat-card gold">
+                <span>03</span>
+                <div>
+                  <small data-i18n="overview.lastUpdated">Last updated</small>
+                  <strong id="history-last-updated">—</strong>
+                </div>
+              </article>
+              <article class="stat-card monitor">
+                <span class="monitor-orbit"><i></i></span>
+                <div>
+                  <small data-i18n="overview.monitoring">Carrier monitoring</small>
+                  <strong id="overview-monitor-status">Checking</strong>
+                </div>
+              </article>
+            </section>
+
+            <section class="panel history-panel">
+              <div class="panel-header history-heading">
+                <div>
+                  <span class="panel-icon">↺</span>
+                  <span>
+                    <strong data-i18n="history.title">Recent searches</strong>
+                    <small data-i18n="history.subtitle">Stored on this browser for 24 hours</small>
+                  </span>
+                </div>
+                <button type="button" class="text-button" id="clear-history-button" data-i18n="history.clear">
+                  Clear history
+                </button>
+              </div>
+
+              <div class="history-empty" id="history-empty">
+                <span>⌁</span>
+                <strong data-i18n="history.emptyTitle">No shipment history yet</strong>
+                <p data-i18n="history.emptyDescription">Your successful searches will appear here.</p>
+              </div>
+
+              <div class="table-scroll history-table-wrap" id="history-table-wrap" hidden>
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="history.carrier">Carrier</th>
+                      <th data-i18n="history.reference">Reference</th>
+                      <th data-i18n="history.route">Route</th>
+                      <th data-i18n="history.latestStatus">Latest status</th>
+                      <th data-i18n="history.queriedAt">Queried at</th>
+                      <th aria-label="Action"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-table-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="app-view" id="tracking-view" data-view="tracking" hidden>
+            <section class="page-heading">
+              <div>
+                <p class="kicker" data-i18n="tracking.kicker">SHIPMENT INTELLIGENCE</p>
+                <h1 data-i18n="tracking.title">Shipment tracking</h1>
+                <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
+              </div>
+              <span class="source-tag" id="source-tag">COSCO · PUBLIC WEB</span>
+            </section>
+
+            <section class="query-panel">
+              <form id="tracking-form">
+                <div class="field carrier-field">
+                  <label for="carrier-select" data-i18n="query.carrier">Carrier</label>
+                  <select id="carrier-select" name="carrier">
+                    <option value="COSCO">COSCO SHIPPING</option>
+                    <option value="CMA" data-i18n="carrier.cmaOption">CMA CGM · COMING SOON</option>
+                  </select>
+                </div>
+                <div class="field type-field">
+                  <label for="tracking-type" data-i18n="query.type">Reference type</label>
+                  <select id="tracking-type" name="type">
+                    <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
+                    <option value="BOOKING" data-i18n="type.booking">Booking number</option>
+                    <option value="CONTAINER" data-i18n="type.container">Container number</option>
+                  </select>
+                </div>
+                <div class="field number-field">
+                  <label for="tracking-number" data-i18n="query.number">Reference number</label>
+                  <input
+                    id="tracking-number"
+                    name="number"
+                    value="6502077380"
+                    maxlength="35"
+                    autocomplete="off"
+                    spellcheck="false"
+                    required
+                  />
+                </div>
+                <button type="submit" id="submit-button">
+                  <span class="button-label" data-i18n="query.submit">Track shipment</span>
+                  <span class="button-loader" aria-hidden="true"></span>
+                </button>
+              </form>
+              <div class="query-foot">
+                <p data-i18n="query.helper">Snapshots stay on this browser for 24 hours and refresh from the server.</p>
+                <p class="carrier-notice" id="carrier-notice" hidden></p>
+              </div>
+            </section>
+
+            <section class="alert" id="error-panel" role="alert" hidden>
+              <span>!</span>
+              <div>
+                <strong data-i18n="error.title">Tracking request failed</strong>
+                <p id="error-message"></p>
+              </div>
+            </section>
+
+            <section class="empty-state" id="empty-state">
+              <div class="empty-icon">↗</div>
+              <div>
+                <strong data-i18n="empty.title">Ready when you are</strong>
+                <p data-i18n="empty.description">Enter a bill, booking or container number to begin.</p>
+              </div>
+            </section>
+
+            <section class="results" id="results" hidden aria-live="polite">
+              <div class="result-titlebar">
+                <div class="result-identity">
+                  <span class="result-carrier" id="result-carrier">COSCO</span>
+                  <span>
+                    <small class="result-type" id="result-type">Bill of lading</small>
+                    <h2 id="result-number">—</h2>
+                  </span>
+                </div>
+                <div class="result-meta">
+                  <span id="cache-status">Live result</span>
+                  <time id="fetched-at">—</time>
                 </div>
               </div>
-              <div id="sailing-schedule" class="sailing-list"></div>
-            </article>
 
-            <article class="panel raw-panel">
-              <details>
-                <summary>
-                  <span>
-                    <small>DEVELOPER VIEW</small>
-                    原始解码结果
-                  </span>
-                  <span>JSON</span>
-                </summary>
-                <pre id="raw-json"></pre>
-              </details>
-            </article>
-          </aside>
-        </div>
-      </section>
+              <section class="metric-grid" aria-label="Key shipment events">
+                <article class="metric-card departure-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">↗</span>
+                    <p data-i18n="metrics.actualDeparture">Actual departure</p>
+                  </div>
+                  <strong id="actual-departure">—</strong>
+                  <span id="actual-departure-location">Not provided</span>
+                </article>
+                <article class="metric-card arrival-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">↘</span>
+                    <p data-i18n="metrics.actualArrival">Actual arrival</p>
+                  </div>
+                  <strong id="actual-arrival">—</strong>
+                  <span id="actual-arrival-location">Not provided</span>
+                </article>
+                <article class="metric-card estimate-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">◷</span>
+                    <p data-i18n="metrics.estimatedDelivery">Estimated final delivery</p>
+                  </div>
+                  <strong id="estimated-delivery">—</strong>
+                  <span id="estimated-delivery-location">Not provided</span>
+                </article>
+                <article class="metric-card latest-card">
+                  <div class="metric-head">
+                    <span class="live-dot"></span>
+                    <p data-i18n="metrics.latestEvent">Latest event</p>
+                  </div>
+                  <strong id="latest-event">—</strong>
+                  <span id="latest-event-detail">—</span>
+                </article>
+              </section>
 
-      <footer>
-        <span>Channel C prototype · v0.1.0</span>
-        <span>Source changes may require adapter maintenance.</span>
-      </footer>
-    </main>
+              <div class="primary-grid">
+                <section class="panel route-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">⌖</span>
+                      <strong data-i18n="route.title">Route story</strong>
+                    </div>
+                    <span id="route-count">0 nodes</span>
+                  </div>
+                  <div class="route-summary">
+                    <div>
+                      <small data-i18n="route.origin">Origin</small>
+                      <span class="location-name"><b class="flag-icon" id="origin-flag"></b><strong id="origin-name">—</strong></span>
+                      <span id="origin-code">—</span>
+                    </div>
+                    <div class="route-summary-line"><i></i><span>◭</span></div>
+                    <div>
+                      <small data-i18n="route.destination">Destination</small>
+                      <span class="location-name"><b class="flag-icon" id="destination-flag"></b><strong id="destination-name">—</strong></span>
+                      <span id="destination-code">—</span>
+                    </div>
+                  </div>
+                  <div class="route-flow" id="route-flow"></div>
+                </section>
+
+                <aside class="panel references-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">#</span>
+                      <strong data-i18n="references.title">Reference numbers</strong>
+                    </div>
+                  </div>
+                  <dl class="reference-core">
+                    <div>
+                      <dt data-i18n="references.masterBill">Master bill</dt>
+                      <dd id="master-bill">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="references.booking">Booking number</dt>
+                      <dd id="booking-numbers">—</dd>
+                    </div>
+                    <div class="reference-wide">
+                      <dt data-i18n="references.external">External / order references</dt>
+                      <dd id="external-references">Not provided</dd>
+                    </div>
+                  </dl>
+                  <div class="reference-list" id="reference-information"></div>
+                </aside>
+              </div>
+
+              <section class="panel table-panel routing-panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon">⇄</span>
+                    <strong data-i18n="routing.title">Routing legs</strong>
+                  </div>
+                  <span id="routing-count">0 legs</span>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th data-i18n="routing.leg">Leg</th>
+                        <th data-i18n="routing.transport">Mode / vessel</th>
+                        <th data-i18n="routing.voyage">Service / voyage</th>
+                        <th data-i18n="routing.loadPort">Load port</th>
+                        <th data-i18n="routing.dischargePort">Discharge port</th>
+                        <th data-i18n="routing.estimatedDeparture">Est. departure</th>
+                        <th class="actual-column" data-i18n="routing.actualDeparture">Actual departure</th>
+                        <th data-i18n="routing.estimatedArrival">Est. arrival</th>
+                        <th class="actual-column" data-i18n="routing.actualArrival">Actual arrival</th>
+                        <th data-i18n="routing.masterBill">Master bill</th>
+                      </tr>
+                    </thead>
+                    <tbody id="routing-table-body"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <div class="secondary-grid">
+                <section class="panel table-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">▣</span>
+                      <strong data-i18n="containers.title">Container details</strong>
+                    </div>
+                    <span id="container-count">0 containers</span>
+                  </div>
+                  <div class="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th data-i18n="containers.number">Container</th>
+                          <th data-i18n="containers.type">Type</th>
+                          <th data-i18n="containers.mode">Mode</th>
+                          <th data-i18n="containers.terms">Terms</th>
+                          <th data-i18n="containers.location">Current location</th>
+                          <th data-i18n="containers.status">Latest status</th>
+                          <th data-i18n="containers.time">Status time</th>
+                        </tr>
+                      </thead>
+                      <tbody id="container-table-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section class="panel raw-panel">
+                  <details>
+                    <summary>
+                      <span>
+                        <small>DEVELOPER VIEW</small>
+                        <span data-i18n="raw.title">Decoded source payload</span>
+                      </span>
+                      <b>JSON</b>
+                    </summary>
+                    <pre id="raw-json"></pre>
+                  </details>
+                </section>
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
   </body>
 </html>

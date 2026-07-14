@@ -7,13 +7,28 @@ const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT_DIR, "public");
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
 
-const COSCO_DETAIL_ENDPOINT =
-  "https://elines.coscoshipping.com/scct/scct_customer/public/cargoTracking/detail";
+const COSCO_TRACKING_BASE =
+  "https://elines.coscoshipping.com/scct/scct_customer/public/cargoTracking";
 const COSCO_PAGE_URL =
   "https://elines.coscoshipping.com/ebusiness/cargoTracking";
 const COSCO_XOR_KEY = "b3Ay6#9f1a@%&2^6";
 const UPSTREAM_TIMEOUT_MS = 30_000;
 const CACHE_TTL_MS = 5 * 60_000;
+const DEFAULT_CHANNEL_C_MONITOR_INTERVAL_MS = 6 * 60 * 60_000;
+const configuredMonitorInterval = Number.parseInt(
+  process.env.CHANNEL_C_MONITOR_INTERVAL_MS ?? "",
+  10
+);
+const CHANNEL_C_MONITOR_INTERVAL_MS =
+  Number.isFinite(configuredMonitorInterval) && configuredMonitorInterval > 0
+    ? configuredMonitorInterval
+    : DEFAULT_CHANNEL_C_MONITOR_INTERVAL_MS;
+const CHANNEL_C_MONITOR_ENABLED =
+  String(process.env.CHANNEL_C_MONITOR_ENABLED ?? "true").toLowerCase() !== "false";
+const CHANNEL_C_MONITOR_REQUEST = Object.freeze({
+  type: process.env.CHANNEL_C_MONITOR_TYPE ?? "BILLOFLADING",
+  number: process.env.CHANNEL_C_MONITOR_NUMBER ?? "6502077380"
+});
 
 const TRACKING_TYPES = Object.freeze({
   BILLOFLADING: {
@@ -30,6 +45,23 @@ const TRACKING_TYPES = Object.freeze({
   }
 });
 
+const CARRIER_ADAPTERS = Object.freeze({
+  COSCO: {
+    code: "COSCO",
+    name: "COSCO SHIPPING Lines",
+    channel: "C",
+    enabled: true,
+    source: "COSCO_PUBLIC_WEB_INTERFACE"
+  },
+  CMA: {
+    code: "CMA",
+    name: "CMA CGM",
+    channel: null,
+    enabled: false,
+    source: null
+  }
+});
+
 const MIME_TYPES = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -39,6 +71,21 @@ const MIME_TYPES = Object.freeze({
 });
 
 const cache = new Map();
+const channelCHealth = {
+  status: CHANNEL_C_MONITOR_ENABLED ? "unknown" : "disabled",
+  available: null,
+  intervalMs: CHANNEL_C_MONITOR_INTERVAL_MS,
+  lastCheckedAt: null,
+  lastSuccessAt: null,
+  lastFailureAt: null,
+  responseTimeMs: null,
+  lastAttemptCount: 0,
+  consecutiveFailures: 0,
+  nextCheckAt: null,
+  lastError: null
+};
+let channelCMonitorTimer = null;
+let channelCMonitorPromise = null;
 
 class HttpError extends Error {
   constructor(status, message, details) {
@@ -107,6 +154,20 @@ export function normalizeTrackingRequest(input) {
   return { type, number, ...typeConfig };
 }
 
+export function normalizeCarrierCode(value = "COSCO") {
+  const code = String(value).trim().toUpperCase();
+
+  if (!CARRIER_ADAPTERS[code]) {
+    throw new HttpError(400, "不支持的船司");
+  }
+
+  return code;
+}
+
+export function listCarrierAdapters() {
+  return Object.values(CARRIER_ADAPTERS).map((carrier) => ({ ...carrier }));
+}
+
 export function decodeCoscoPayload(rawText) {
   let payload;
 
@@ -136,14 +197,102 @@ export function decodeCoscoPayload(rawText) {
   return JSON.parse(decoded.toString("utf8"));
 }
 
-export function normalizeCoscoSnapshot(result, request, fetchedAt) {
+function normalizeReferenceValue(reference) {
+  if (typeof reference === "string") return reference;
+  return (
+    reference?.value ??
+    reference?.referenceNumber ??
+    reference?.refNumber ??
+    reference?.number ??
+    null
+  );
+}
+
+export function buildRoutingLegs(result) {
+  const summary = result?.cargoTrackingSummary ?? {};
+  const route = result?.cargoTrackingFullChain ?? [];
+  const schedules = result?.cargoTrackingSailingSchedule ?? [];
+  const countryForCity = (city) =>
+    route.find(
+      (node) =>
+        node.city && city && node.city.trim().toLowerCase() === city.trim().toLowerCase()
+    )?.countryCode ?? null;
+  const legs = schedules.map((sailing, index) => ({
+    sequence: index + 1,
+    mode: "SEA",
+    vesselName: sailing.vesselName ?? null,
+    service: sailing.service ?? null,
+    voyage: sailing.voyage ?? null,
+    estimatedDeparture: sailing.etd ?? null,
+    actualDeparture: sailing.atd ?? null,
+    estimatedArrival: sailing.eta ?? null,
+    actualArrival: sailing.ata ?? null,
+    loadPort: sailing.polPort ?? null,
+    loadCountryCode: countryForCity(sailing.polPort),
+    dischargePort: sailing.podPort ?? null,
+    dischargeCountryCode: countryForCity(sailing.podPort),
+    masterBill: summary.blNumber ?? null
+  }));
+
+  const finalNode = [...route].reverse().find((node) => node.locationType === "FND");
+  const podNode = [...route].reverse().find((node) => node.locationType === "LPOD");
+  const lastSchedule = schedules.at(-1);
+  const latest = summary.latestMilestone;
+  const hasInlandDestination =
+    finalNode?.city &&
+    lastSchedule?.podPort &&
+    finalNode.city.trim().toLowerCase() !== lastSchedule.podPort.trim().toLowerCase();
+
+  if (hasInlandDestination) {
+    const latestIsDeparture = /depart/i.test(latest?.eventName ?? "");
+    legs.push({
+      sequence: legs.length + 1,
+      mode: latest?.transportMode ?? "INLAND",
+      vesselName: null,
+      service: null,
+      voyage: null,
+      estimatedDeparture: null,
+      actualDeparture: latestIsDeparture ? latest.actualEventDateTime ?? null : null,
+      estimatedArrival: finalNode.estimatedTime ?? null,
+      actualArrival: finalNode.actualTime ?? null,
+      loadPort: podNode?.city ?? lastSchedule.podPort,
+      loadCountryCode: podNode?.countryCode ?? countryForCity(lastSchedule.podPort),
+      dischargePort: finalNode.city,
+      dischargeCountryCode: finalNode.countryCode ?? null,
+      masterBill: summary.blNumber ?? null
+    });
+  }
+
+  return legs;
+}
+
+export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) {
   const summary = result?.cargoTrackingSummary ?? {};
   const latest = summary.latestMilestone ?? null;
+  const bookingInfo = extras.bookingInfo ?? {};
+  const containerInfo = extras.containerInfo ?? [];
+  const externalReferences = (bookingInfo.externalReferenceNumbers ?? [])
+    .map(normalizeReferenceValue)
+    .filter(Boolean);
+  const containerReferences = containerInfo.flatMap((container) =>
+    (container.refNumbers ?? []).map(normalizeReferenceValue).filter(Boolean)
+  );
+  const routingLegs = buildRoutingLegs(result);
+  const actualDepartureLeg = routingLegs.find((leg) => leg.actualDeparture);
+  const actualArrivalLeg = [...routingLegs].reverse().find((leg) => leg.actualArrival);
+  const finalRouteNode = [...(result?.cargoTrackingFullChain ?? [])]
+    .reverse()
+    .find((node) => node.locationType === "FND");
 
   return {
     channel: "C",
     source: "COSCO_PUBLIC_WEB_INTERFACE",
     carrier: "COSCO SHIPPING Lines",
+    provider: {
+      code: "COSCO",
+      name: "COSCO SHIPPING Lines",
+      channel: "C"
+    },
     fetchedAt,
     tracking: {
       type: request.type,
@@ -175,6 +324,28 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt) {
           }
         : null
     },
+    keyTimes: {
+      actualDeparture: actualDepartureLeg
+        ? {
+            time: actualDepartureLeg.actualDeparture,
+            location: actualDepartureLeg.loadPort
+          }
+        : null,
+      actualArrival: actualArrivalLeg
+        ? {
+            time: actualArrivalLeg.actualArrival,
+            location: actualArrivalLeg.dischargePort
+          }
+        : null,
+      estimatedDelivery: finalRouteNode
+        ? {
+            time: finalRouteNode.estimatedTime ?? null,
+            actualTime: finalRouteNode.actualTime ?? null,
+            location: finalRouteNode.city ?? null,
+            timezone: finalRouteNode.localTimezone ?? null
+          }
+        : null
+    },
     route: (result?.cargoTrackingFullChain ?? []).map((item, index) => ({
       sequence: index + 1,
       locationType: item.locationType ?? null,
@@ -190,17 +361,41 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt) {
       active: Boolean(item.active)
     })),
     transportStatuses: result?.cargoTrackingTransportStatus ?? [],
-    sailingSchedule: result?.cargoTrackingSailingSchedule ?? []
+    sailingSchedule: result?.cargoTrackingSailingSchedule ?? [],
+    routingLegs,
+    containers: containerInfo.map((container) => ({
+      number: container.containerNumber ?? null,
+      type: container.containerType ?? null,
+      sealNumber: container.sealNumber ?? null,
+      trafficTerm: container.trafficTerm ?? null,
+      transportMode: container.currentMilestone?.transportMode ?? null,
+      currentLocation: container.currentMilestone?.eventLocation ?? null,
+      latestEvent: container.currentMilestone?.eventName ?? null,
+      latestEventTime: container.currentMilestone?.actualEventDateTime ?? null,
+      referenceNumbers: (container.refNumbers ?? [])
+        .map(normalizeReferenceValue)
+        .filter(Boolean)
+    })),
+    references: {
+      masterBill: summary.blNumber ?? null,
+      bookingNumbers: summary.bookingNumber ?? [],
+      external: [...new Set([...externalReferences, ...containerReferences])],
+      information: (bookingInfo.referenceInformation ?? []).map((item) => ({
+        name: item.name ?? null,
+        value: item.value ?? null,
+        sequence: item.seq ?? null
+      }))
+    }
   };
 }
 
-async function fetchCoscoTracking(request) {
+async function fetchCoscoEndpoint(endpoint, request) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   const referer = `${COSCO_PAGE_URL}?trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
 
   try {
-    const upstream = await fetch(COSCO_DETAIL_ENDPOINT, {
+    const upstream = await fetch(`${COSCO_TRACKING_BASE}/${endpoint}`, {
       method: "POST",
       headers: {
         Accept: "application/json, text/plain, */*",
@@ -231,7 +426,7 @@ async function fetchCoscoTracking(request) {
       throw new HttpError(502, "COSCO 响应解码失败", error.message);
     }
 
-    if (decoded?.code !== "200" || decoded?.success !== true || !decoded?.result) {
+    if (decoded?.code !== "200" || decoded?.success !== true || decoded?.result == null) {
       const status = decoded?.code === "404" ? 404 : 502;
       throw new HttpError(
         status,
@@ -240,11 +435,7 @@ async function fetchCoscoTracking(request) {
       );
     }
 
-    const fetchedAt = new Date().toISOString();
-    return {
-      snapshot: normalizeCoscoSnapshot(decoded.result, request, fetchedAt),
-      raw: decoded.result
-    };
+    return decoded.result;
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new HttpError(504, "COSCO 查询超时");
@@ -255,10 +446,157 @@ async function fetchCoscoTracking(request) {
   }
 }
 
-async function handleTrackRequest(request, response) {
+async function optionalCoscoEndpoint(endpoint, request, fallback) {
+  try {
+    return await fetchCoscoEndpoint(endpoint, request);
+  } catch {
+    return fallback;
+  }
+}
+
+async function fetchCoscoTracking(request) {
+  const [detail, bookingInfo, containerInfo] = await Promise.all([
+    fetchCoscoEndpoint("detail", request),
+    optionalCoscoEndpoint("bookingInfo", request, {}),
+    optionalCoscoEndpoint("containerInfo", request, [])
+  ]);
+  const fetchedAt = new Date().toISOString();
+
+  return {
+    snapshot: normalizeCoscoSnapshot(detail, request, fetchedAt, {
+      bookingInfo,
+      containerInfo
+    }),
+    raw: {
+      detail,
+      bookingInfo,
+      containerInfo
+    }
+  };
+}
+
+export function getChannelCHealthStatus() {
+  return {
+    channel: "C",
+    source: "COSCO_PUBLIC_WEB_INTERFACE",
+    ...channelCHealth
+  };
+}
+
+export async function runChannelCHealthCheck(options = {}) {
+  if (channelCMonitorPromise) return channelCMonitorPromise;
+
+  const now = options.now ?? Date.now;
+  const fetchDetail =
+    options.fetchDetail ?? ((request) => fetchCoscoEndpoint("detail", request));
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 2);
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? 1_500);
+  const wait =
+    options.wait ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
+  const startedAt = now();
+  channelCHealth.status = "checking";
+  channelCHealth.available = null;
+  channelCHealth.lastError = null;
+
+  channelCMonitorPromise = (async () => {
+    let attemptCount = 0;
+
+    try {
+      const trackingRequest = normalizeTrackingRequest(CHANNEL_C_MONITOR_REQUEST);
+      let detail = null;
+      let finalError = null;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        attemptCount = attempt;
+
+        try {
+          detail = await fetchDetail(trackingRequest);
+          if (!detail?.cargoTrackingSummary) {
+            throw new Error("COSCO 返回结果缺少运输摘要");
+          }
+          finalError = null;
+          break;
+        } catch (error) {
+          finalError = error;
+          if (attempt < maxAttempts) await wait(retryDelayMs);
+        }
+      }
+
+      if (finalError) throw finalError;
+
+      channelCHealth.status = "available";
+      channelCHealth.available = true;
+      channelCHealth.consecutiveFailures = 0;
+    } catch (error) {
+      channelCHealth.status = "unavailable";
+      channelCHealth.available = false;
+      channelCHealth.lastError = error?.message || "通道 C 探测失败";
+      channelCHealth.consecutiveFailures += 1;
+    } finally {
+      const finishedAt = now();
+      const checkedAt = new Date(finishedAt).toISOString();
+      channelCHealth.lastCheckedAt = checkedAt;
+      channelCHealth.responseTimeMs = Math.max(0, finishedAt - startedAt);
+      channelCHealth.lastAttemptCount = attemptCount;
+
+      if (channelCHealth.available) {
+        channelCHealth.lastSuccessAt = checkedAt;
+      } else {
+        channelCHealth.lastFailureAt = checkedAt;
+      }
+    }
+
+    return getChannelCHealthStatus();
+  })();
+
+  try {
+    return await channelCMonitorPromise;
+  } finally {
+    channelCMonitorPromise = null;
+  }
+}
+
+export function startChannelCMonitor() {
+  if (!CHANNEL_C_MONITOR_ENABLED || channelCMonitorTimer) return;
+
+  const executeCheck = async () => {
+    const status = await runChannelCHealthCheck();
+    channelCHealth.nextCheckAt = new Date(
+      Date.now() + CHANNEL_C_MONITOR_INTERVAL_MS
+    ).toISOString();
+
+    const message = status.available
+      ? `available (${status.responseTimeMs} ms)`
+      : `unavailable: ${status.lastError}`;
+    console.log(`[channel-c-monitor] ${message}`);
+  };
+
+  void executeCheck();
+  channelCMonitorTimer = setInterval(() => {
+    void executeCheck();
+  }, CHANNEL_C_MONITOR_INTERVAL_MS);
+  channelCMonitorTimer.unref();
+}
+
+export function stopChannelCMonitor() {
+  if (channelCMonitorTimer) {
+    clearInterval(channelCMonitorTimer);
+    channelCMonitorTimer = null;
+  }
+  channelCHealth.nextCheckAt = null;
+}
+
+async function handleTrackRequest(request, response, forcedCarrier) {
   const input = await readJsonBody(request);
+  const carrierCode = normalizeCarrierCode(forcedCarrier ?? input.carrier ?? "COSCO");
+  const carrier = CARRIER_ADAPTERS[carrierCode];
+
+  if (!carrier.enabled) {
+    throw new HttpError(501, `${carrier.name} 适配器尚未接入`);
+  }
+
   const trackingRequest = normalizeTrackingRequest(input);
-  const cacheKey = `${trackingRequest.type}:${trackingRequest.number}`;
+  const cacheKey = `${carrierCode}:${trackingRequest.type}:${trackingRequest.number}`;
   const cached = cache.get(cacheKey);
 
   if (cached && cached.expiresAt > Date.now()) {
@@ -309,13 +647,31 @@ export const server = createServer(async (request, response) => {
       sendJson(response, 200, {
         ok: true,
         channel: "C",
+        channels: {
+          C: getChannelCHealthStatus()
+        },
         time: new Date().toISOString()
       });
       return;
     }
 
-    if (request.method === "POST" && url.pathname === "/api/track/cosco") {
+    if (request.method === "GET" && url.pathname === "/api/channels/c/status") {
+      sendJson(response, 200, getChannelCHealthStatus());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/carriers") {
+      sendJson(response, 200, { carriers: listCarrierAdapters() });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/track") {
       await handleTrackRequest(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/track/cosco") {
+      await handleTrackRequest(request, response, "COSCO");
       return;
     }
 
@@ -339,5 +695,6 @@ export const server = createServer(async (request, response) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   server.listen(PORT, "127.0.0.1", () => {
     console.log(`Channel C tracker running at http://127.0.0.1:${PORT}`);
+    startChannelCMonitor();
   });
 }
