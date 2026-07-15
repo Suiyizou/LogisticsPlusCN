@@ -9,6 +9,7 @@
       data-i18n-content="meta.description"
     />
     <title>Shipment Track</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231769d2'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-family='Arial' font-size='25' font-weight='700' fill='white'%3EST%3C/text%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" type="module"></script>
   </head>
@@ -85,10 +86,10 @@
           <section class="app-view" id="overview-view" data-view="overview">
             <section class="overview-hero">
               <div class="hero-copy">
-                <p class="kicker" data-i18n="overview.kicker">OPERATIONS OVERVIEW</p>
-                <h1 data-i18n="overview.title">Every shipment, one calm view.</h1>
+                <p class="kicker" data-i18n="overview.kicker">SHIPMENT DASHBOARD</p>
+                <h1 data-i18n="overview.title">Your shipments, moving in plain sight.</h1>
                 <p data-i18n="overview.description">
-                  Revisit recent searches, monitor carrier availability and continue where you left off.
+                  See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.
                 </p>
                 <button class="primary-action" type="button" id="start-tracking-button">
                   <span data-i18n="overview.startTracking">Track a shipment</span>
@@ -135,13 +136,13 @@
               </article>
             </section>
 
-            <section class="panel history-panel">
+            <section class="panel history-panel shipment-dashboard-panel">
               <div class="panel-header history-heading">
                 <div>
                   <span class="panel-icon">↺</span>
                   <span>
-                    <strong data-i18n="history.title">Recent searches</strong>
-                    <small data-i18n="history.subtitle">Stored on this browser for 24 hours</small>
+                    <strong data-i18n="history.title">Tracked shipments</strong>
+                    <small data-i18n="history.subtitle">Latest carrier snapshots stored on this browser</small>
                   </span>
                 </div>
                 <button type="button" class="text-button" id="clear-history-button" data-i18n="history.clear">
@@ -155,20 +156,8 @@
                 <p data-i18n="history.emptyDescription">Your successful searches will appear here.</p>
               </div>
 
-              <div class="table-scroll history-table-wrap" id="history-table-wrap" hidden>
-                <table class="history-table">
-                  <thead>
-                    <tr>
-                      <th data-i18n="history.carrier">Carrier</th>
-                      <th data-i18n="history.reference">Reference</th>
-                      <th data-i18n="history.route">Route</th>
-                      <th data-i18n="history.latestStatus">Latest status</th>
-                      <th data-i18n="history.queriedAt">Queried at</th>
-                      <th aria-label="Action"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="history-table-body"></tbody>
-                </table>
+              <div class="shipment-list-wrap" id="history-table-wrap" hidden>
+                <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
               </div>
             </section>
           </section>
@@ -193,7 +182,7 @@
                   </select>
                 </div>
                 <div class="field type-field">
-                  <label for="tracking-type" data-i18n="query.type">Reference type</label>
+                  <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
                   <select id="tracking-type" name="type">
                     <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
                     <option value="BOOKING" data-i18n="type.booking">Booking number</option>
@@ -201,7 +190,7 @@
                   </select>
                 </div>
                 <div class="field number-field">
-                  <label for="tracking-number" data-i18n="query.number">Reference number</label>
+                  <label for="tracking-number" data-i18n="query.number">Shipment No.</label>
                   <input
                     id="tracking-number"
                     name="number"
@@ -344,7 +333,7 @@
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">#</span>
-                      <strong data-i18n="references.title">Reference numbers</strong>
+                      <strong data-i18n="references.title">Carrier identifiers</strong>
                     </div>
                   </div>
                   <dl class="reference-core">
@@ -357,7 +346,7 @@
                       <dd id="booking-numbers">—</dd>
                     </div>
                     <div class="reference-wide">
-                      <dt data-i18n="references.external">External / order references</dt>
+                      <dt data-i18n="references.external">Other carrier references</dt>
                       <dd id="external-references">Not provided</dd>
                     </div>
                   </dl>

@@ -69,33 +69,45 @@ const MESSAGES = {
     "carrier.cmaNotice": "CMA CGM is selectable, but its adapter is not connected yet.",
     "sidebar.architecture": "UNIFIED ADAPTER",
     "breadcrumb.workspace": "Workspace",
-    "overview.kicker": "OPERATIONS OVERVIEW",
-    "overview.title": "Every shipment, one calm view.",
-    "overview.description": "Revisit recent searches, monitor carrier availability and continue where you left off.",
+    "overview.kicker": "SHIPMENT DASHBOARD",
+    "overview.title": "Your shipments, moving in plain sight.",
+    "overview.description": "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
     "overview.savedSearches": "Saved searches",
     "overview.carriersUsed": "Carriers used",
     "overview.lastUpdated": "Last updated",
     "overview.monitoring": "Carrier monitoring",
     "overview.noRecords": "No records",
-    "history.title": "Recent searches",
-    "history.subtitle": "Stored on this browser for 24 hours",
+    "history.title": "Tracked shipments",
+    "history.subtitle": "Latest carrier snapshots stored on this browser",
     "history.clear": "Clear history",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.carrier": "Carrier",
-    "history.reference": "Reference",
+    "history.reference": "Shipment No.",
     "history.route": "Route",
     "history.latestStatus": "Latest status",
     "history.queriedAt": "Queried at",
-    "history.open": "Open",
+    "history.open": "Open details",
+    "history.departed": "Departed",
+    "history.etd": "ETD",
+    "history.arrived": "Arrived",
+    "history.eta": "ETA",
+    "history.originPort": "Origin port",
+    "history.destinationPort": "Destination port",
+    "history.currentLocation": "Current location",
+    "history.updated": "Snapshot updated",
+    "history.recentMovement": "Recent movement",
+    "history.expand": "Expand shipment {number}",
+    "history.collapse": "Collapse shipment {number}",
+    "history.noTimeline": "No confirmed movement events yet.",
     "history.confirmClear": "Clear all locally saved shipment history?",
     "tracking.kicker": "SHIPMENT INTELLIGENCE",
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
     "query.carrier": "Carrier",
-    "query.type": "Reference type",
-    "query.number": "Reference number",
+    "query.type": "Shipment number type",
+    "query.number": "Shipment No.",
     "query.submit": "Track shipment",
     "query.helper": "Snapshots stay on this browser for 24 hours and refresh from the server.",
     "type.bill": "Bill of lading",
@@ -126,10 +138,10 @@ const MESSAGES = {
     "route.noNodes": "The carrier did not provide route nodes.",
     "route.unknownLocation": "Unknown location",
     "route.noEvent": "Event name not provided",
-    "references.title": "Reference numbers",
+    "references.title": "Carrier identifiers",
     "references.masterBill": "Master bill",
     "references.booking": "Booking number",
-    "references.external": "External / order references",
+    "references.external": "Other carrier references",
     "routing.title": "Routing legs",
     "routing.legs": "{count} legs",
     "routing.leg": "Leg",
@@ -189,33 +201,45 @@ const MESSAGES = {
     "carrier.cmaNotice": "已支持选择 CMA CGM，但查询适配器暂未接入。",
     "sidebar.architecture": "统一适配层",
     "breadcrumb.workspace": "工作台",
-    "overview.kicker": "运营总览",
-    "overview.title": "每一票货物，都清晰可见。",
-    "overview.description": "回看最近查询、监控船司可用性，并从上次的位置继续工作。",
+    "overview.kicker": "运输看板",
+    "overview.title": "每一票货物，进度一眼可见。",
+    "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
     "overview.savedSearches": "已保存查询",
     "overview.carriersUsed": "已使用船司",
     "overview.lastUpdated": "最近更新",
     "overview.monitoring": "船司监控",
     "overview.noRecords": "暂无记录",
-    "history.title": "最近查询",
-    "history.subtitle": "在当前浏览器保存 24 小时",
+    "history.title": "运输任务",
+    "history.subtitle": "当前浏览器保存的最新船司快照",
     "history.clear": "清空记录",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.carrier": "船司",
-    "history.reference": "查询号码",
+    "history.reference": "运输单号",
     "history.route": "路线",
     "history.latestStatus": "最新状态",
     "history.queriedAt": "查询时间",
-    "history.open": "打开",
+    "history.open": "打开详情",
+    "history.departed": "已离港",
+    "history.etd": "预计离港",
+    "history.arrived": "已到达",
+    "history.eta": "预计到达",
+    "history.originPort": "起运港",
+    "history.destinationPort": "目的港",
+    "history.currentLocation": "当前位置",
+    "history.updated": "快照更新时间",
+    "history.recentMovement": "最近动态",
+    "history.expand": "展开运输任务 {number}",
+    "history.collapse": "收起运输任务 {number}",
+    "history.noTimeline": "船司尚未提供已确认的运输动态。",
     "history.confirmClear": "确定清空当前浏览器保存的全部查询记录吗？",
     "tracking.kicker": "货运信息",
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
     "query.carrier": "船司",
-    "query.type": "查询类型",
-    "query.number": "查询号码",
+    "query.type": "运输单号类型",
+    "query.number": "运输单号",
     "query.submit": "查询运输信息",
     "query.helper": "统一快照在本机保留 24 小时，同时从后端刷新最新数据。",
     "type.bill": "提单号",
@@ -246,10 +270,10 @@ const MESSAGES = {
     "route.noNodes": "船司未提供路线节点。",
     "route.unknownLocation": "未知地点",
     "route.noEvent": "船司未提供事件名称",
-    "references.title": "参考号码",
+    "references.title": "船司识别号",
     "references.masterBill": "主提单号",
     "references.booking": "订舱号",
-    "references.external": "外部 / 订单参考号",
+    "references.external": "其他船司参考号",
     "routing.title": "分段运输 Routing",
     "routing.legs": "{count} 段",
     "routing.leg": "段",
@@ -334,13 +358,20 @@ const elements = Object.fromEntries(
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
-let currentLanguage = localStorage.getItem(LANGUAGE_KEY) === "zh" ? "zh" : "en";
+let currentLanguage = "en";
+try {
+  currentLanguage = localStorage.getItem(LANGUAGE_KEY) === "zh" ? "zh" : "en";
+} catch {
+  // Storage policies must not prevent the application from starting.
+}
 let activeView = "overview";
 let currentPayload = null;
 let lastChannelStatus = { status: "unknown" };
 let loading = false;
 let resultAnimationTimer = null;
 let viewTransitionSequence = 0;
+let trackingRequestSequence = 0;
+const expandedHistoryKeys = new Set();
 
 function t(key, variables = {}) {
   const template = MESSAGES[currentLanguage]?.[key] ?? MESSAGES.en[key] ?? key;
@@ -509,9 +540,8 @@ function readHistory() {
 }
 
 function migrateLegacyCache() {
-  if (localStorage.getItem(MIGRATION_KEY)) return;
-
   try {
+    if (localStorage.getItem(MIGRATION_KEY)) return;
     const legacyKeys = JSON.parse(localStorage.getItem(LEGACY_CACHE_INDEX_KEY) ?? "[]");
     if (Array.isArray(legacyKeys)) {
       for (const legacyKey of legacyKeys) {
@@ -807,6 +837,183 @@ function renderResult(payload) {
   restartResultAnimation();
 }
 
+function formatShipmentDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10) || "—";
+  return new Intl.DateTimeFormat(locale(), {
+    year: "numeric",
+    month: "short",
+    day: "2-digit"
+  }).format(date);
+}
+
+function portCode(value) {
+  return String(value ?? "")
+    .toUpperCase()
+    .match(/\b[A-Z]{5}\b/)?.[0] ?? "";
+}
+
+function historyPort(snapshot, side) {
+  const route = snapshot.route ?? [];
+  const isOrigin = side === "origin";
+  const preferredTypes = isOrigin ? ["FPOL", "POR"] : ["LPOD", "FND"];
+  const node = preferredTypes
+    .map((type) => route.find((item) => item.locationType === type))
+    .find(Boolean) ?? (isOrigin ? route[0] : route.at(-1));
+  const summary = snapshot.summary?.[side] ?? {};
+  const name = node?.city ?? summary.name ?? t("route.unknownLocation");
+  const code = portCode(node?.facilityCode) || portCode(name);
+
+  return {
+    name,
+    code,
+    countryCode: node?.countryCode ?? summary.countryCode ?? ""
+  };
+}
+
+function historyTiming(snapshot) {
+  const keyTimes = snapshot.keyTimes ?? {};
+  const legs = snapshot.routingLegs ?? [];
+  const firstLeg = legs[0] ?? {};
+  const lastLeg = legs.at(-1) ?? {};
+  const oceanLegs = legs.filter((leg) => String(leg.mode ?? "").toUpperCase() === "SEA");
+  const firstOceanLeg = oceanLegs[0] ?? firstLeg;
+  const lastOceanLeg = oceanLegs.at(-1) ?? lastLeg;
+  const actualDeparture = firstOceanLeg.actualDeparture ?? keyTimes.actualDeparture?.time ?? null;
+  const estimatedDeparture = firstOceanLeg.estimatedDeparture ?? null;
+  const actualArrival =
+    lastOceanLeg.actualArrival ??
+    keyTimes.actualArrival?.time ??
+    keyTimes.estimatedDelivery?.actualTime ??
+    null;
+  const estimatedArrival =
+    lastOceanLeg.estimatedArrival ?? keyTimes.estimatedDelivery?.time ?? null;
+
+  return {
+    departureTime: actualDeparture ?? estimatedDeparture,
+    departureIsActual: Boolean(actualDeparture),
+    arrivalTime: actualArrival ?? estimatedArrival,
+    arrivalIsActual: Boolean(actualArrival),
+    actualDeparture,
+    actualArrival,
+    estimatedArrival
+  };
+}
+
+function historyProgress(snapshot, timing) {
+  if (timing.arrivalIsActual) return 100;
+  if (!timing.actualDeparture) return 8;
+
+  const departure = Date.parse(timing.actualDeparture);
+  const arrival = Date.parse(timing.estimatedArrival ?? "");
+  if (Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure) {
+    const elapsed = (Date.now() - departure) / (arrival - departure);
+    return Math.round(Math.min(92, Math.max(18, elapsed * 84 + 8)));
+  }
+
+  return snapshot.keyTimes?.actualArrival?.time ? 78 : 52;
+}
+
+function historyTimeline(snapshot) {
+  const keyTimes = snapshot.keyTimes ?? {};
+  const latest = snapshot.summary?.latestEvent;
+  const items = [];
+  const seen = new Set();
+  const add = (name, time, location) => {
+    if (!name || !time) return;
+    const identity = `${time}|${location ?? ""}`;
+    if (seen.has(identity)) return;
+    seen.add(identity);
+    items.push({ name, time, location });
+  };
+
+  add(latest?.name, latest?.occurredAt, latest?.location);
+  for (const node of snapshot.route ?? []) {
+    add(node.event ?? node.locationType, node.actualTime, node.city);
+  }
+  for (const status of snapshot.transportStatuses ?? []) {
+    if (!status || typeof status !== "object") continue;
+    add(
+      status.eventName ?? status.event ?? status.status ?? status.description,
+      status.actualEventDateTime ?? status.actualTime ?? status.eventTime ?? status.dateTime,
+      status.eventLocation ?? status.location ?? status.city
+    );
+  }
+  add(t("metrics.actualArrival"), keyTimes.actualArrival?.time, keyTimes.actualArrival?.location);
+  add(t("metrics.actualDeparture"), keyTimes.actualDeparture?.time, keyTimes.actualDeparture?.location);
+
+  return items
+    .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
+    .slice(0, 3);
+}
+
+function createHistoryPort(port, side) {
+  const wrapper = document.createElement("span");
+  wrapper.className = `shipment-port shipment-${side}-port`;
+  const flag = createCountryFlag(port.countryCode);
+  const copy = document.createElement("span");
+  const label = document.createElement("small");
+  label.className = "shipment-field-label";
+  label.textContent = t(side === "origin" ? "history.originPort" : "history.destinationPort");
+  const primary = document.createElement("strong");
+  primary.textContent = port.code || port.name;
+  const secondary = document.createElement("small");
+  secondary.textContent = port.code ? port.name : port.countryCode || "—";
+  copy.append(label, primary, secondary);
+  wrapper.append(flag, copy);
+  return wrapper;
+}
+
+function setHistoryDetailsExpanded({ item, toggle, details, entryKey, expanded, animate = true }) {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  details.getAnimations().forEach((animation) => animation.cancel());
+  toggle.setAttribute("aria-expanded", String(expanded));
+  item.classList.toggle("is-expanded", expanded);
+  toggle.setAttribute(
+    "aria-label",
+    t(expanded ? "history.collapse" : "history.expand", {
+      number: item.dataset.shipmentNumber
+    })
+  );
+
+  if (expanded) expandedHistoryKeys.add(entryKey);
+  else expandedHistoryKeys.delete(entryKey);
+
+  if (!animate || reduceMotion) {
+    details.hidden = !expanded;
+    return;
+  }
+
+  if (expanded) {
+    details.hidden = false;
+    const targetHeight = details.scrollHeight;
+    const animation = details.animate(
+      [
+        { height: "0px", opacity: 0, transform: "translateY(-8px)" },
+        { height: `${targetHeight}px`, opacity: 1, transform: "translateY(0)" }
+      ],
+      { duration: 320, easing: "cubic-bezier(.2,.75,.2,1)" }
+    );
+    animation.addEventListener("finish", () => {
+      if (toggle.getAttribute("aria-expanded") === "true") details.style.height = "";
+    });
+    return;
+  }
+
+  const currentHeight = details.getBoundingClientRect().height || details.scrollHeight;
+  const animation = details.animate(
+    [
+      { height: `${currentHeight}px`, opacity: 1, transform: "translateY(0)" },
+      { height: "0px", opacity: 0, transform: "translateY(-8px)" }
+    ],
+    { duration: 240, easing: "cubic-bezier(.4,0,.6,1)" }
+  );
+  animation.addEventListener("finish", () => {
+    if (toggle.getAttribute("aria-expanded") === "false") details.hidden = true;
+  });
+}
+
 function renderHistory() {
   const history = readHistory();
   const carriers = new Set(history.map((entry) => entry.query.carrier));
@@ -823,55 +1030,172 @@ function renderHistory() {
 
   let rowIndex = 0;
   for (const entry of history) {
-    const row = document.createElement("tr");
-    row.style.setProperty("--row-index", rowIndex);
+    const item = document.createElement("article");
+    item.className = "shipment-history-item";
+    item.style.setProperty("--row-index", rowIndex);
     rowIndex += 1;
     const snapshot = entry.snapshot;
     const summary = snapshot.summary;
+    const origin = historyPort(snapshot, "origin");
+    const destination = historyPort(snapshot, "destination");
+    const timing = historyTiming(snapshot);
+    const progress = historyProgress(snapshot, timing);
+    const detailId = `shipment-history-detail-${rowIndex}`;
+    const entryKey = cacheKey(entry.query);
+    const initiallyExpanded = expandedHistoryKeys.has(entryKey);
 
-    const carrierCell = document.createElement("td");
-    const carrier = document.createElement("span");
-    carrier.className = "carrier-pill";
-    carrier.textContent = entry.query.carrier;
-    carrierCell.append(carrier);
+    item.dataset.shipmentNumber = entry.query.number;
+    item.classList.add(
+      timing.arrivalIsActual ? "is-arrived" : timing.actualDeparture ? "is-in-transit" : "is-planned"
+    );
+    item.style.setProperty("--shipment-progress", `${progress}%`);
 
-    const referenceCell = document.createElement("td");
-    referenceCell.className = "history-reference";
-    const reference = document.createElement("strong");
-    reference.textContent = entry.query.number;
-    const type = document.createElement("small");
-    type.textContent = trackingTypeLabel(entry.query.type);
-    referenceCell.append(reference, type);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "shipment-row-toggle";
+    toggle.setAttribute("aria-expanded", String(initiallyExpanded));
+    toggle.setAttribute("aria-controls", detailId);
+    toggle.setAttribute(
+      "aria-label",
+      t(initiallyExpanded ? "history.collapse" : "history.expand", {
+        number: entry.query.number
+      })
+    );
 
-    const routeCell = document.createElement("td");
-    const route = document.createElement("span");
-    route.className = "history-route";
-    const origin = document.createElement("b");
-    setCountryFlag(origin, summary.origin?.countryCode);
-    origin.title = valueOrDash(summary.origin?.name);
-    const line = document.createElement("i");
-    const destination = document.createElement("b");
-    setCountryFlag(destination, summary.destination?.countryCode);
-    destination.title = valueOrDash(summary.destination?.name);
-    route.append(origin, line, destination);
-    routeCell.append(route);
+    const transportIcon = document.createElement("span");
+    transportIcon.className = "shipment-transport-icon";
+    transportIcon.setAttribute("aria-hidden", "true");
+    transportIcon.textContent = "♒";
 
-    const statusCell = document.createElement("td");
-    statusCell.textContent = valueOrDash(summary.latestEvent?.name, t("metrics.noLatestEvent"));
+    const identity = document.createElement("span");
+    identity.className = "shipment-identity";
+    const identityLabel = document.createElement("small");
+    identityLabel.className = "shipment-field-label";
+    identityLabel.textContent = t("history.reference");
+    const number = document.createElement("strong");
+    number.textContent = entry.query.number;
+    const identityMeta = document.createElement("small");
+    identityMeta.textContent = `${trackingTypeLabel(entry.query.type)} · ${entry.query.carrier}`;
+    identity.append(identityLabel, number, identityMeta);
 
-    const timeCell = document.createElement("td");
-    timeCell.textContent = formatLocalDateTime(entry.savedAt);
+    const journey = document.createElement("span");
+    journey.className = "shipment-journey-dates";
+    const dateLabels = document.createElement("span");
+    dateLabels.className = "shipment-date-labels";
+    const departureDate = document.createElement("span");
+    departureDate.innerHTML = `<b>${t(timing.departureIsActual ? "history.departed" : "history.etd")}</b><small>${formatShipmentDate(timing.departureTime)}</small>`;
+    const arrivalDate = document.createElement("span");
+    arrivalDate.innerHTML = `<b>${t(timing.arrivalIsActual ? "history.arrived" : "history.eta")}</b><small>${formatShipmentDate(timing.arrivalTime)}</small>`;
+    dateLabels.append(departureDate, arrivalDate);
+    const progressTrack = document.createElement("span");
+    progressTrack.className = "shipment-progress-track";
+    progressTrack.append(document.createElement("i"));
+    journey.append(dateLabels, progressTrack);
 
-    const actionCell = document.createElement("td");
+    const current = document.createElement("span");
+    current.className = "shipment-current-status";
+    const currentLabel = document.createElement("span");
+    currentLabel.className = "shipment-field-label";
+    currentLabel.textContent = t("history.latestStatus");
+    const currentName = document.createElement("strong");
+    currentName.textContent = valueOrDash(summary.latestEvent?.name, t("metrics.noLatestEvent"));
+    const currentTime = document.createElement("small");
+    currentTime.textContent = formatLocalDateTime(summary.latestEvent?.occurredAt);
+    current.append(currentLabel, currentName, currentTime);
+
+    const chevron = document.createElement("span");
+    chevron.className = "shipment-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "⌄";
+    toggle.append(
+      transportIcon,
+      identity,
+      createHistoryPort(origin, "origin"),
+      journey,
+      createHistoryPort(destination, "destination"),
+      current,
+      chevron
+    );
+
+    const details = document.createElement("div");
+    details.className = "shipment-row-details";
+    details.id = detailId;
+    details.hidden = !initiallyExpanded;
+    item.classList.toggle("is-expanded", initiallyExpanded);
+
+    const facts = document.createElement("dl");
+    facts.className = "shipment-detail-facts";
+    const factEntries = [
+      [t("history.reference"), entry.query.number],
+      [t("history.currentLocation"), summary.latestEvent?.location],
+      [t("history.updated"), formatLocalDateTime(entry.savedAt)]
+    ];
+    for (const [label, value] of factEntries) {
+      const fact = document.createElement("div");
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = valueOrDash(value);
+      fact.append(dt, dd);
+      facts.append(fact);
+    }
+
+    const timelineSection = document.createElement("section");
+    timelineSection.className = "shipment-timeline-section";
+    const timelineTitle = document.createElement("strong");
+    timelineTitle.className = "shipment-detail-title";
+    timelineTitle.textContent = t("history.recentMovement");
+    const timeline = document.createElement("div");
+    timeline.className = "shipment-mini-timeline";
+    const timelineItems = historyTimeline(snapshot);
+    if (timelineItems.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = t("history.noTimeline");
+      timeline.append(empty);
+    } else {
+      for (const event of timelineItems) {
+        const eventNode = document.createElement("div");
+        const marker = document.createElement("i");
+        const copy = document.createElement("span");
+        const eventName = document.createElement("strong");
+        eventName.textContent = event.name;
+        const eventMeta = document.createElement("small");
+        eventMeta.textContent = [event.location, formatLocalDateTime(event.time)]
+          .filter(Boolean)
+          .join(" · ");
+        copy.append(eventName, eventMeta);
+        eventNode.append(marker, copy);
+        timeline.append(eventNode);
+      }
+    }
+    timelineSection.append(timelineTitle, timeline);
+
+    const detailActions = document.createElement("div");
+    detailActions.className = "shipment-detail-actions";
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "open-history-button";
-    openButton.textContent = t("history.open");
-    openButton.addEventListener("click", () => openHistoryEntry(entry));
-    actionCell.append(openButton);
+    openButton.innerHTML = `<span>${t("history.open")}</span><b aria-hidden="true">↗</b>`;
+    openButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openHistoryEntry(entry);
+    });
+    detailActions.append(openButton);
+    details.append(facts, timelineSection, detailActions);
 
-    row.append(carrierCell, referenceCell, routeCell, statusCell, timeCell, actionCell);
-    historyTableBody.append(row);
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      setHistoryDetailsExpanded({
+        item,
+        toggle,
+        details,
+        entryKey,
+        expanded: !expanded
+      });
+    });
+
+    item.append(toggle, details);
+    historyTableBody.append(item);
   }
 }
 
@@ -924,14 +1248,14 @@ async function refreshChannelStatus() {
   }
 }
 
-function updateUrl(query) {
+function updateUrl(query, { push = false } = {}) {
   const normalized = normalizeQuery(query);
   const url = new URL(window.location.href);
   url.searchParams.set("carrier", normalized.carrier);
   url.searchParams.set("type", normalized.type);
   url.searchParams.set("number", normalized.number);
   url.hash = "tracking";
-  window.history.replaceState({}, "", url);
+  window.history[push ? "pushState" : "replaceState"]({}, "", url);
 }
 
 function showView(name, { updateLocation = true } = {}) {
@@ -940,6 +1264,10 @@ function showView(name, { updateLocation = true } = {}) {
   const outgoing = document.querySelector(".app-view:not([hidden])");
   const transitionId = ++viewTransitionSequence;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let resolveShown;
+  const shown = new Promise((resolve) => {
+    resolveShown = resolve;
+  });
 
   activeView = nextView;
   document.querySelectorAll("[data-view-target]").forEach((link) => {
@@ -976,6 +1304,7 @@ function showView(name, { updateLocation = true } = {}) {
     }
     if (activeView === "overview") renderHistory();
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    resolveShown();
   };
 
   if (outgoing && outgoing !== incoming && !reduceMotion) {
@@ -992,6 +1321,8 @@ function showView(name, { updateLocation = true } = {}) {
   } else {
     revealIncoming();
   }
+
+  return shown;
 }
 
 function openHistoryEntry(entry) {
@@ -999,8 +1330,32 @@ function openHistoryEntry(entry) {
   trackingType.value = entry.query.type;
   trackingNumber.value = entry.query.number;
   updateCarrierUI();
-  showView("tracking");
-  form.requestSubmit();
+  currentPayload = {
+    snapshot: entry.snapshot,
+    raw: null,
+    cached: false,
+    browserCached: true,
+    browserCachedAt: entry.savedAt
+  };
+  renderResult(currentPayload);
+  updateUrl(entry.query, { push: true });
+  void showView("tracking", { updateLocation: false }).then(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const currentQuery = normalizeQuery({
+          carrier: carrierSelect.value,
+          type: trackingType.value,
+          number: trackingNumber.value
+        });
+        if (
+          activeView === "tracking" &&
+          cacheKey(currentQuery) === cacheKey(entry.query)
+        ) {
+          form.requestSubmit();
+        }
+      });
+    });
+  });
 }
 
 function applyLanguage(language, { persist = true } = {}) {
@@ -1026,7 +1381,13 @@ function applyLanguage(language, { persist = true } = {}) {
       errorPanel.dataset.variant === "warning" ? t("notice.cacheTitle") : t("error.title");
   }
 
-  if (persist) localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+  if (persist) {
+    try {
+      localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+    } catch {
+      // Language switching still works when storage is disabled.
+    }
+  }
   activeViewTitle.textContent = t(`nav.${activeView}`);
   updateCarrierUI();
   renderChannelStatus(lastChannelStatus);
@@ -1073,6 +1434,7 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
+  const requestSequence = ++trackingRequestSequence;
   setLoading(true);
   updateUrl(query);
   const localPayload = loadSnapshot(query);
@@ -1086,20 +1448,26 @@ form.addEventListener("submit", async (event) => {
     }
 
     saveSnapshot(query, payload);
-    renderResult(payload);
     renderHistory();
+    if (requestSequence !== trackingRequestSequence) return;
+    renderResult(payload);
   } catch (error) {
+    if (requestSequence !== trackingRequestSequence) return;
     const message = error?.message || t("error.generic");
     showError(
       localPayload ? t("error.localFallback", { message }) : message,
       localPayload ? "warning" : "error"
     );
   } finally {
-    setLoading(false);
+    if (requestSequence === trackingRequestSequence) setLoading(false);
   }
 });
 
-carrierSelect.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
+carrierSelect.addEventListener("change", () => {
+  trackingRequestSequence += 1;
+  setLoading(false);
+  updateCarrierUI({ resetResult: true });
+});
 
 document.querySelectorAll("[data-language]").forEach((button) => {
   button.addEventListener("click", () => applyLanguage(button.dataset.language));
@@ -1121,14 +1489,18 @@ clearHistoryButton.addEventListener("click", () => {
   if (!window.confirm(t("history.confirmClear"))) return;
   for (const key of readCacheIndex()) localStorage.removeItem(key);
   localStorage.removeItem(CACHE_INDEX_KEY);
+  expandedHistoryKeys.clear();
   renderHistory();
 });
 
-window.addEventListener("hashchange", () => {
-  showView(window.location.hash === "#tracking" ? "tracking" : "overview", {
-    updateLocation: false
-  });
-});
+function syncViewFromLocation() {
+  const nextView = window.location.hash === "#tracking" ? "tracking" : "overview";
+  if (nextView === activeView) return;
+  showView(nextView, { updateLocation: false });
+}
+
+window.addEventListener("hashchange", syncViewFromLocation);
+window.addEventListener("popstate", syncViewFromLocation);
 
 migrateLegacyCache();
 applyLanguage(currentLanguage, { persist: false });
@@ -1136,9 +1508,14 @@ applyLanguage(currentLanguage, { persist: false });
 const initial = new URLSearchParams(window.location.search);
 const initialNumber = initial.get("number");
 if (initialNumber) {
-  carrierSelect.value = initial.get("carrier") || "COSCO";
-  trackingType.value = initial.get("type") || "BILLOFLADING";
-  trackingNumber.value = initialNumber;
+  const initialQuery = normalizeQuery({
+    carrier: initial.get("carrier") || "COSCO",
+    type: initial.get("type") || "BILLOFLADING",
+    number: initialNumber
+  });
+  carrierSelect.value = CARRIERS[initialQuery.carrier] ? initialQuery.carrier : "COSCO";
+  trackingType.value = TYPE_KEYS[initialQuery.type] ? initialQuery.type : "BILLOFLADING";
+  trackingNumber.value = initialQuery.number;
   updateCarrierUI();
   showView("tracking", { updateLocation: false });
   form.requestSubmit();
