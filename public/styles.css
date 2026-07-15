@@ -3078,6 +3078,446 @@ body {
   }
 }
 
+/* Tracking detail hierarchy refinements */
+.sidebar {
+  border-right-color: #356b9a;
+  color: #e7f1fc;
+  background: linear-gradient(180deg, #285f92 0%, #1d4b78 100%);
+  box-shadow: 10px 0 28px rgba(19, 63, 105, 0.1);
+}
+
+.brand {
+  border-bottom-color: rgba(219, 235, 251, 0.22);
+}
+
+.brand-copy small,
+.carrier-nav-item small,
+.sidebar-foot span {
+  color: #b3cee9;
+}
+
+.nav-title {
+  color: #adc8e3;
+}
+
+.nav-item {
+  color: #d9e8f8;
+}
+
+.nav-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.nav-item.is-active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 3px 0 0 #91ccff;
+}
+
+.carrier-nav-item {
+  color: #e1edf9;
+}
+
+.carrier-nav-item.is-current {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.carrier-nav-item.is-current small {
+  color: #c1d8ef;
+}
+
+.sidebar-foot {
+  border-top-color: rgba(219, 235, 251, 0.22);
+}
+
+.result-titlebar {
+  gap: 22px;
+  min-height: 82px;
+  padding: 9px 4px;
+  flex-wrap: wrap;
+}
+
+.result-titlebar h2 {
+  color: #0d2f58;
+  font-size: 32px;
+  font-weight: 850;
+}
+
+.result-primary-facts {
+  display: flex;
+  gap: 10px;
+  margin-right: auto;
+  align-items: stretch;
+}
+
+.result-primary-facts[hidden],
+.result-primary-fact[hidden] {
+  display: none;
+}
+
+.result-primary-fact {
+  display: flex;
+  min-width: 128px;
+  padding: 9px 15px 10px;
+  border: 1px solid #c8dbf1;
+  background: linear-gradient(145deg, #f8fbff, #eef6ff);
+  border-radius: 11px;
+  flex-direction: column;
+  box-shadow: 0 5px 14px rgba(35, 88, 148, 0.06);
+}
+
+.result-primary-fact small {
+  color: #68819e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.result-primary-fact strong {
+  margin-top: 2px;
+  color: #0d4f96;
+  font-size: 21px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.journey-overview {
+  min-height: 84px;
+  padding: 15px 20px;
+  background: linear-gradient(100deg, #ffffff, #f7fbff);
+  grid-template-columns: 1fr;
+}
+
+.journey-stage-summary strong {
+  color: #133a68;
+  font-size: 20px;
+  font-weight: 830;
+}
+
+.route-panel {
+  min-height: 420px;
+}
+
+.route-panel .panel-header strong,
+.references-panel .panel-header strong {
+  font-size: 16px;
+}
+
+.route-summary {
+  gap: 8px;
+  padding: 23px 22px 14px;
+}
+
+.route-summary small,
+.route-summary > div > span:last-child {
+  font-size: 11.5px;
+}
+
+.location-name strong {
+  color: #102f55;
+  font-size: 21px;
+  font-weight: 830;
+}
+
+.route-summary-line {
+  height: 8px;
+  margin: 0 22px;
+  border: 1px solid #cbdff3;
+  background: #dbe8f6;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 2px rgba(20, 67, 115, 0.1);
+}
+
+.route-summary-line i {
+  top: -1px;
+  width: var(--route-progress, 0%);
+  height: 8px;
+  background: linear-gradient(90deg, #1769d2, #3f92e8);
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(23, 105, 210, 0.28);
+}
+
+.route-summary-line span {
+  top: 50%;
+  left: clamp(15px, var(--route-progress, 0%), calc(100% - 15px));
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 2px solid #7eb0e8;
+  color: #0d57ac;
+  background: #ffffff;
+  border-radius: 50%;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 4px 12px rgba(24, 80, 140, 0.16);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.route-summary-line.is-complete i {
+  background: linear-gradient(90deg, #16835c, #3faf7f);
+  box-shadow: 0 0 12px rgba(22, 131, 92, 0.26);
+}
+
+.route-summary-line.is-complete span {
+  border-color: #67bd98;
+  color: #16835c;
+}
+
+.route-flow {
+  --route-progress-color: #2278d4;
+  gap: 12px;
+  padding: 54px 18px 26px;
+}
+
+.route-flow.is-complete {
+  --route-progress-color: #23966d;
+}
+
+.route-flow::before {
+  top: 70px;
+  right: 9%;
+  left: 9%;
+  height: 4px;
+  background: linear-gradient(
+    to right,
+    var(--route-progress-color) 0 var(--route-progress, 0%),
+    #d6e3f1 var(--route-progress, 0%) 100%
+  );
+  border-radius: 999px;
+}
+
+.route-node {
+  min-height: 146px;
+  padding: 45px 11px 15px;
+  border: 1px solid #d9e6f4;
+  background: rgba(250, 253, 255, 0.92);
+  border-radius: 12px;
+  box-shadow: 0 5px 14px rgba(27, 75, 129, 0.045);
+}
+
+.route-node.is-complete {
+  border-color: #bcd5ef;
+}
+
+.route-node.is-active {
+  border-color: #79afe9;
+  background: #f1f7ff;
+  box-shadow: 0 8px 20px rgba(23, 105, 210, 0.11);
+}
+
+.route-dot.route-stage-icon {
+  top: 0;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border: 3px solid #ffffff;
+  color: #1769d2;
+  background: #eaf4ff;
+  border-radius: 10px;
+  place-items: center;
+  box-shadow: 0 0 0 1px #a8c8eb, 0 4px 10px rgba(28, 82, 143, 0.12);
+  max-width: none;
+}
+
+.route-stage-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-stage-icon-origin {
+  color: #7253b8;
+  background: #f1edff;
+  box-shadow: 0 0 0 1px #c8b9ed, 0 4px 10px rgba(87, 61, 151, 0.1);
+}
+
+.route-stage-icon-arrival {
+  color: #117b8f;
+  background: #e9f8fb;
+  box-shadow: 0 0 0 1px #a7d7df, 0 4px 10px rgba(17, 123, 143, 0.1);
+}
+
+.route-stage-icon-destination {
+  color: #16835c;
+  background: #eaf8f2;
+  box-shadow: 0 0 0 1px #a6d8c3, 0 4px 10px rgba(22, 131, 92, 0.1);
+}
+
+.route-node.is-active .route-stage-icon {
+  border-color: #ffffff;
+  color: #ffffff;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 7px rgba(23, 105, 210, 0.12);
+  animation: none;
+}
+
+.route-flow.is-complete .route-node.is-active .route-stage-icon {
+  background: #16835c;
+  box-shadow: 0 0 0 2px #16835c, 0 0 0 7px rgba(22, 131, 92, 0.13);
+}
+
+.route-node small {
+  color: #4e6987;
+  font-size: 11.5px;
+}
+
+.route-node strong {
+  color: #102f55;
+  font-size: 16.5px;
+  font-weight: 830;
+  line-height: 1.25;
+}
+
+.route-node > span:not(.route-dot) {
+  color: #526d8a;
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.route-node time {
+  margin-top: 12px;
+  color: #173e6a;
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.reference-core dt,
+.reference-row span {
+  font-size: 11.5px;
+}
+
+.reference-core dd {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.reference-row {
+  grid-template-columns: 104px minmax(0, 1fr);
+}
+
+.reference-row strong {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .result-titlebar {
+    padding-bottom: 12px;
+  }
+
+  .result-primary-facts {
+    order: 3;
+    width: 100%;
+    margin: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .result-primary-facts {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-primary-fact {
+    min-width: 0;
+    padding: 9px 12px;
+  }
+
+  .result-primary-fact strong {
+    font-size: 18px;
+  }
+
+  .result-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .journey-overview {
+    padding: 14px 16px;
+  }
+
+  .route-summary {
+    gap: 14px 10px;
+    padding: 20px 16px 16px;
+    grid-template-areas:
+      "origin destination"
+      "progress progress";
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .route-summary > div:first-child {
+    grid-area: origin;
+  }
+
+  .route-summary-line {
+    display: block;
+    margin: 7px 4px 0;
+    grid-area: progress;
+  }
+
+  .route-summary > div:last-child {
+    margin: 0;
+    grid-area: destination;
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .location-name strong {
+    font-size: 16px;
+  }
+
+  .route-flow {
+    gap: 10px;
+    padding: 18px;
+  }
+
+  .route-flow::before {
+    top: 29px;
+    bottom: 29px;
+    left: 32px;
+    width: 4px;
+    height: auto;
+    background: linear-gradient(
+      to bottom,
+      var(--route-progress-color) 0 var(--route-progress, 0%),
+      #d6e3f1 var(--route-progress, 0%) 100%
+    );
+  }
+
+  .route-node {
+    width: 100%;
+    min-height: 116px;
+    padding: 14px 14px 14px 62px;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .route-dot.route-stage-icon {
+    top: 12px;
+    left: -2px;
+  }
+
+  .route-node strong {
+    justify-content: flex-start;
+    font-size: 16px;
+  }
+
+  .route-node time {
+    margin-top: 8px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

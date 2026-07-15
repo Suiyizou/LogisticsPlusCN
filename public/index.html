@@ -244,6 +244,16 @@
                     <h2 id="result-number">—</h2>
                   </span>
                 </div>
+                <div class="result-primary-facts" id="result-primary-facts">
+                  <div class="result-primary-fact" id="result-traffic-term-fact">
+                    <small data-i18n="result.transportTerms">Transport terms</small>
+                    <strong id="result-traffic-term">—</strong>
+                  </div>
+                  <div class="result-primary-fact" id="result-container-types-fact">
+                    <small data-i18n="result.containerType">Container type</small>
+                    <strong id="result-container-types">—</strong>
+                  </div>
+                </div>
                 <div class="result-meta">
                   <span id="cache-status">Live result</span>
                   <time id="fetched-at">—</time>
@@ -256,23 +266,7 @@
                   <span>
                     <small data-i18n="journey.currentStage">Current stage</small>
                     <strong id="journey-stage">—</strong>
-                    <em id="journey-progress-label">—</em>
                   </span>
-                </div>
-                <div class="journey-progress" id="journey-progress">
-                  <div class="journey-track"><i id="journey-progress-fill"></i></div>
-                  <div class="journey-step" data-journey-step="0">
-                    <b>01</b>
-                    <span data-i18n="journey.departed">Departed</span>
-                  </div>
-                  <div class="journey-step" data-journey-step="1">
-                    <b>02</b>
-                    <span data-i18n="journey.arrived">Port arrival</span>
-                  </div>
-                  <div class="journey-step" data-journey-step="2">
-                    <b>03</b>
-                    <span data-i18n="journey.delivered">Final destination</span>
-                  </div>
                 </div>
               </section>
 
@@ -326,7 +320,16 @@
                       <span class="location-name"><b class="flag-icon" id="origin-flag"></b><strong id="origin-name">—</strong></span>
                       <span id="origin-code">—</span>
                     </div>
-                    <div class="route-summary-line"><i></i><span>◭</span></div>
+                    <div
+                      class="route-summary-line"
+                      id="route-summary-line"
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow="0"
+                    >
+                      <i></i><span id="route-summary-marker" aria-hidden="true">◭</span>
+                    </div>
                     <div>
                       <small data-i18n="route.destination">Destination</small>
                       <span class="location-name"><b class="flag-icon" id="destination-flag"></b><strong id="destination-name">—</strong></span>

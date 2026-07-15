@@ -20,9 +20,6 @@ const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
 const clearHistoryButton = document.querySelector("#clear-history-button");
 const journeyStage = document.querySelector("#journey-stage");
-const journeyProgressLabel = document.querySelector("#journey-progress-label");
-const journeyProgressFill = document.querySelector("#journey-progress-fill");
-const journeySteps = [...document.querySelectorAll("[data-journey-step]")];
 
 const CACHE_VERSION = 2;
 const CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -119,6 +116,8 @@ const MESSAGES = {
     "tracking.kicker": "SHIPMENT INTELLIGENCE",
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
+    "result.transportTerms": "Transport terms",
+    "result.containerType": "Container type",
     "query.carrier": "Carrier",
     "query.channel": "Query channel",
     "query.type": "Shipment number type",
@@ -157,6 +156,12 @@ const MESSAGES = {
     "route.noNodes": "The carrier did not provide route nodes.",
     "route.unknownLocation": "Unknown location",
     "route.noEvent": "Event name not provided",
+    "route.progress": "Route progress {progress}%",
+    "route.stage.origin": "Place of receipt",
+    "route.stage.departure": "Departure port",
+    "route.stage.arrival": "Arrival port",
+    "route.stage.destination": "Final destination",
+    "route.stage.waypoint": "Route waypoint",
     "references.title": "Carrier identifiers",
     "references.masterBill": "Master bill",
     "references.booking": "Booking number",
@@ -256,6 +261,8 @@ const MESSAGES = {
     "tracking.kicker": "货运信息",
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
+    "result.transportTerms": "运输条款",
+    "result.containerType": "箱型",
     "query.carrier": "船司",
     "query.channel": "查询通道",
     "query.type": "运输单号类型",
@@ -294,6 +301,12 @@ const MESSAGES = {
     "route.noNodes": "船司未提供路线节点。",
     "route.unknownLocation": "未知地点",
     "route.noEvent": "船司未提供事件名称",
+    "route.progress": "路线进度 {progress}%",
+    "route.stage.origin": "起运节点",
+    "route.stage.departure": "离港节点",
+    "route.stage.arrival": "到港节点",
+    "route.stage.destination": "最终目的地",
+    "route.stage.waypoint": "运输节点",
     "references.title": "船司识别号",
     "references.masterBill": "主提单号",
     "references.booking": "订舱号",
@@ -349,6 +362,11 @@ const elements = Object.fromEntries(
     "result-carrier",
     "result-type",
     "result-number",
+    "result-primary-facts",
+    "result-traffic-term-fact",
+    "result-traffic-term",
+    "result-container-types-fact",
+    "result-container-types",
     "cache-status",
     "fetched-at",
     "actual-departure",
@@ -367,6 +385,8 @@ const elements = Object.fromEntries(
     "destination-code",
     "route-count",
     "route-flow",
+    "route-summary-line",
+    "route-summary-marker",
     "master-bill",
     "booking-numbers",
     "external-references",
@@ -619,10 +639,117 @@ function clearError() {
   errorPanel.hidden = true;
 }
 
-function renderRoute(route) {
+const ROUTE_STAGE_ICONS = Object.freeze({
+  origin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.5 12 4l7.5 4.5v10L12 22l-7.5-3.5z"/><path d="M4.5 8.5 12 13l7.5-4.5M12 13v9"/></svg>',
+  departure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16h14l-2 4H7zM8 16V8h8v8M12 8V4M9.5 11h5"/><path d="M3 22c2-1 4-1 6 0 2-1 4-1 6 0 2-1 4-1 6 0"/></svg>',
+  arrival: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 7v12M7 11h10M5 15c1.5 4 4 6 7 6s5.5-2 7-6M7 15H4m13 0h3"/></svg>',
+  destination: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-13A7 7 0 0 0 5 9c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/><path d="m9.5 15.5 1.7 1.7 3.5-3.7"/></svg>',
+  waypoint: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 12h3.5c3.5 0 3-6 3.5-6M12 12c3.5 0 3 6 3.5 6"/></svg>'
+});
+
+function routeStageKind(node, index, total) {
+  const locationType = String(node?.locationType ?? "").trim().toUpperCase();
+  if (locationType === "FND" || locationType.includes("FINAL")) return "destination";
+  if (["LPOD", "POD"].includes(locationType) || locationType.includes("DISCHARGE")) {
+    return "arrival";
+  }
+  if (["FPOL", "POL"].includes(locationType) || locationType.includes("LOAD")) {
+    return "departure";
+  }
+  if (locationType === "POR" || locationType.includes("RECEIPT")) return "origin";
+  if (index === 0) return "origin";
+  if (index === total - 1) return "destination";
+  return "waypoint";
+}
+
+function normalizeLocationName(value) {
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+}
+
+function calculateRouteProgress(route, snapshot) {
+  if (route.length === 0) return 0;
+  const finalNode = route.at(-1);
+  const finalLocationType = String(finalNode?.locationType ?? "").toUpperCase();
+  const latest = snapshot.summary?.latestEvent;
+  const latestStage = `${latest?.stage ?? ""} ${latest?.oceanStage ?? ""}`.toUpperCase();
+  const destination = normalizeLocationName(snapshot.summary?.destination?.name);
+  const latestLocation = normalizeLocationName(latest?.location);
+  const reachedDestination =
+    Boolean(snapshot.keyTimes?.estimatedDelivery?.actualTime) ||
+    Boolean(finalNode?.actualTime && finalLocationType === "FND") ||
+    Boolean(finalNode?.active && finalLocationType === "FND") ||
+    /FND|FINAL|DELIVER/.test(latestStage) ||
+    Boolean(latest?.occurredAt && destination && latestLocation === destination);
+
+  if (reachedDestination) return 100;
+
+  const activeIndex = route.findIndex((node) => node.active);
+  const lastActualIndex = route.reduce(
+    (lastIndex, node, index) => (node.actualTime ? index : lastIndex),
+    -1
+  );
+  const reachedIndex = Math.max(activeIndex, lastActualIndex);
+  if (reachedIndex < 0) return 0;
+  if (route.length === 1) return 100;
+  return Math.max(6, Math.round((reachedIndex / (route.length - 1)) * 100));
+}
+
+function containerTypeSummary(snapshot) {
+  const normalizedContainers = (snapshot.containers ?? []).filter((container) => container?.type);
+  const fallbackContainers = (snapshot.summary?.containers ?? [])
+    .map((container) => ({
+      type: container?.containerType ?? container?.type,
+      quantity: Number(container?.quantity ?? container?.count ?? 1)
+    }))
+    .filter((container) => container.type);
+  const source = normalizedContainers.length > 0 ? normalizedContainers : fallbackContainers;
+  const counts = new Map();
+
+  for (const container of source) {
+    const type = String(container.type).trim().toUpperCase();
+    if (!type) continue;
+    const quantity = Number.isFinite(container.quantity) && container.quantity > 0
+      ? container.quantity
+      : 1;
+    counts.set(type, (counts.get(type) ?? 0) + quantity);
+  }
+
+  return [...counts.entries()]
+    .map(([type, count]) => (count > 1 ? `${type} × ${count}` : type))
+    .join(" · ");
+}
+
+function renderPrimaryFacts(snapshot) {
+  const trafficTerm =
+    snapshot.summary?.trafficTerm ??
+    (snapshot.containers ?? []).find((container) => container?.trafficTerm)?.trafficTerm ??
+    "";
+  const containerTypes = containerTypeSummary(snapshot);
+
+  elements["result-traffic-term"].textContent = valueOrDash(trafficTerm);
+  elements["result-container-types"].textContent = valueOrDash(containerTypes);
+  elements["result-traffic-term-fact"].hidden = !trafficTerm;
+  elements["result-container-types-fact"].hidden = !containerTypes;
+  elements["result-primary-facts"].hidden = !trafficTerm && !containerTypes;
+}
+
+function renderRoute(route, snapshot = {}) {
   elements["route-flow"].replaceChildren();
   elements["route-flow"].style.setProperty("--route-columns", Math.max(route.length, 1));
   elements["route-count"].textContent = t("route.nodes", { count: route.length });
+  const progress = calculateRouteProgress(route, snapshot);
+  const progressLabel = t("route.progress", { progress });
+  elements["route-flow"].style.setProperty("--route-progress", `${progress}%`);
+  elements["route-flow"].classList.toggle("is-complete", progress === 100);
+  elements["route-summary-line"].style.setProperty("--route-progress", `${progress}%`);
+  elements["route-summary-line"].classList.toggle("is-complete", progress === 100);
+  elements["route-summary-line"].setAttribute("aria-valuenow", String(progress));
+  elements["route-summary-line"].setAttribute("aria-label", progressLabel);
+  elements["route-summary-line"].title = progressLabel;
+  elements["route-summary-marker"].textContent = progress === 100 ? "✓" : "◭";
 
   if (route.length === 0) {
     const empty = document.createElement("div");
@@ -632,12 +759,30 @@ function renderRoute(route) {
     return;
   }
 
-  for (const node of route) {
-    const item = document.createElement("article");
-    item.className = `route-node${node.active ? " is-active" : ""}`;
+  const explicitActiveIndex = route.findIndex((node) => node.active);
+  const lastActualIndex = route.reduce(
+    (lastIndex, node, index) => (node.actualTime ? index : lastIndex),
+    -1
+  );
+  const currentIndex = explicitActiveIndex >= 0 ? explicitActiveIndex : lastActualIndex;
 
-    const dot = document.createElement("i");
-    dot.className = "route-dot";
+  route.forEach((node, index) => {
+    const stage = routeStageKind(node, index, route.length);
+    const item = document.createElement("article");
+    item.className = [
+      "route-node",
+      `route-stage-${stage}`,
+      node.actualTime ? "is-complete" : "",
+      index === currentIndex ? "is-active is-current" : ""
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const dot = document.createElement("span");
+    dot.className = `route-dot route-stage-icon route-stage-icon-${stage}`;
+    dot.innerHTML = ROUTE_STAGE_ICONS[stage];
+    dot.setAttribute("aria-label", t(`route.stage.${stage}`));
+    dot.title = t(`route.stage.${stage}`);
 
     const type = document.createElement("small");
     type.textContent = valueOrDash(node.locationType, `#${node.sequence}`);
@@ -658,7 +803,7 @@ function renderRoute(route) {
 
     item.append(dot, type, city, event, time);
     elements["route-flow"].append(item);
-  }
+  });
 }
 
 function renderRoutingLegs(legs) {
@@ -761,31 +906,8 @@ function renderContainers(containers) {
 }
 
 function renderJourney(snapshot) {
-  const keyTimes = snapshot.keyTimes ?? {};
   const latest = snapshot.summary?.latestEvent;
-  const milestones = [
-    Boolean(keyTimes.actualDeparture?.time),
-    Boolean(keyTimes.actualArrival?.time),
-    Boolean(keyTimes.estimatedDelivery?.actualTime)
-  ];
-  const completed = milestones.filter(Boolean).length;
-  const progressByCompleted = [0, 8, 55, 100];
-
   journeyStage.textContent = valueOrDash(latest?.name, t("journey.awaiting"));
-  journeyProgressLabel.textContent = t("journey.progress", {
-    completed,
-    total: milestones.length
-  });
-
-  journeySteps.forEach((step, index) => {
-    step.classList.toggle("is-complete", milestones[index]);
-    step.classList.toggle("is-current", index === Math.min(completed, milestones.length - 1));
-  });
-
-  journeyProgressFill.style.width = "0%";
-  requestAnimationFrame(() => {
-    journeyProgressFill.style.width = `${progressByCompleted[completed]}%`;
-  });
 }
 
 function restartResultAnimation() {
@@ -811,6 +933,7 @@ function renderResult(payload) {
   elements["result-carrier"].textContent = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
   elements["result-number"].textContent = snapshot.tracking.number;
+  renderPrimaryFacts(snapshot);
 
   const source = payload.browserCached ? "browser" : payload.cached ? "server" : "live";
   elements["cache-status"].dataset.source = source;
@@ -854,7 +977,7 @@ function renderResult(payload) {
   elements["destination-name"].textContent = valueOrDash(summary.destination.name);
   elements["destination-code"].textContent = valueOrDash(summary.destination.countryCode);
 
-  renderRoute(snapshot.route ?? []);
+  renderRoute(snapshot.route ?? [], snapshot);
   renderJourney(snapshot);
   renderRoutingLegs(snapshot.routingLegs ?? []);
   renderReferences(snapshot.references ?? {});
