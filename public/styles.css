@@ -943,7 +943,7 @@ tbody tr:hover {
 .query-panel form {
   display: grid;
   gap: 12px;
-  grid-template-columns: 230px 190px minmax(260px, 1fr) 180px;
+  grid-template-columns: 185px 230px 175px minmax(240px, 1fr) 170px;
   align-items: end;
 }
 

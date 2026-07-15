@@ -1,6 +1,7 @@
 const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
+const channelSelect = document.querySelector("#channel-select");
 const trackingType = document.querySelector("#tracking-type");
 const trackingNumber = document.querySelector("#tracking-number");
 const carrierNotice = document.querySelector("#carrier-notice");
@@ -47,6 +48,19 @@ const CARRIERS = Object.freeze({
   }
 });
 
+const CHANNELS = Object.freeze({
+  NETWORK: {
+    code: "NETWORK",
+    labelKey: "channel.network",
+    sourceKey: "source.network"
+  },
+  PLAYWRIGHT: {
+    code: "PLAYWRIGHT",
+    labelKey: "channel.playwright",
+    sourceKey: "source.playwright"
+  }
+});
+
 const TYPE_KEYS = Object.freeze({
   BILLOFLADING: "type.bill",
   BOOKING: "type.booking",
@@ -63,7 +77,7 @@ const MESSAGES = {
     "nav.overview": "Overview",
     "nav.tracking": "Shipment tracking",
     "nav.carriers": "Carrier adapters",
-    "carrier.connected": "Connected · Channel C",
+    "carrier.connected": "Connected · 2 channels",
     "carrier.planned": "Adapter reserved",
     "carrier.cmaOption": "CMA CGM · COMING SOON",
     "carrier.cmaNotice": "CMA CGM is selectable, but its adapter is not connected yet.",
@@ -106,10 +120,15 @@ const MESSAGES = {
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
     "query.carrier": "Carrier",
+    "query.channel": "Query channel",
     "query.type": "Shipment number type",
     "query.number": "Shipment No.",
     "query.submit": "Track shipment",
-    "query.helper": "Snapshots stay on this browser for 24 hours and refresh from the server.",
+    "query.helper": "Channel 1 calls the network interface; Channel 2 drives the carrier page with Playwright.",
+    "channel.network": "Channel 1 · Network interface",
+    "channel.playwright": "Channel 2 · Playwright browser",
+    "source.network": "COSCO · CHANNEL 1 · NETWORK",
+    "source.playwright": "COSCO · CHANNEL 2 · PLAYWRIGHT",
     "type.bill": "Bill of lading",
     "type.booking": "Booking number",
     "type.container": "Container number",
@@ -172,11 +191,11 @@ const MESSAGES = {
     "cache.server": "Server cache",
     "cache.browser": "Browser cache",
     "cache.savedAt": "Saved {time}",
-    "status.available": "Channel C available",
-    "status.unavailable": "Channel C unavailable",
-    "status.checking": "Channel C checking",
-    "status.disabled": "Channel C monitor disabled",
-    "status.unknown": "Channel C awaiting check",
+    "status.available": "Channel 1 network available",
+    "status.unavailable": "Channel 1 network unavailable",
+    "status.checking": "Channel 1 network checking",
+    "status.disabled": "Channel 1 monitor disabled",
+    "status.unknown": "Channel 1 awaiting check",
     "status.shortAvailable": "Healthy",
     "status.shortUnavailable": "Unavailable",
     "status.shortChecking": "Checking",
@@ -195,7 +214,7 @@ const MESSAGES = {
     "nav.overview": "总览",
     "nav.tracking": "货物跟踪",
     "nav.carriers": "船司适配器",
-    "carrier.connected": "已接入 · 通道 C",
+    "carrier.connected": "已接入 · 双通道",
     "carrier.planned": "已预留适配器",
     "carrier.cmaOption": "CMA CGM · 即将接入",
     "carrier.cmaNotice": "已支持选择 CMA CGM，但查询适配器暂未接入。",
@@ -238,10 +257,15 @@ const MESSAGES = {
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
     "query.carrier": "船司",
+    "query.channel": "查询通道",
     "query.type": "运输单号类型",
     "query.number": "运输单号",
     "query.submit": "查询运输信息",
-    "query.helper": "统一快照在本机保留 24 小时，同时从后端刷新最新数据。",
+    "query.helper": "通道一直接调用网络接口；通道二由 Playwright 操作船司网页查询。",
+    "channel.network": "通道一 · 网络接口",
+    "channel.playwright": "通道二 · Playwright 浏览器",
+    "source.network": "COSCO · 通道一 · 网络接口",
+    "source.playwright": "COSCO · 通道二 · PLAYWRIGHT",
     "type.bill": "提单号",
     "type.booking": "订舱号",
     "type.container": "箱号",
@@ -304,11 +328,11 @@ const MESSAGES = {
     "cache.server": "服务端缓存",
     "cache.browser": "浏览器缓存",
     "cache.savedAt": "保存于 {time}",
-    "status.available": "通道 C 可用",
-    "status.unavailable": "通道 C 异常",
-    "status.checking": "通道 C 检测中",
-    "status.disabled": "通道 C 监控已停用",
-    "status.unknown": "通道 C 等待检测",
+    "status.available": "通道一网络接口可用",
+    "status.unavailable": "通道一网络接口异常",
+    "status.checking": "通道一网络接口检测中",
+    "status.disabled": "通道一监控已停用",
+    "status.unknown": "通道一等待检测",
     "status.shortAvailable": "监控正常",
     "status.shortUnavailable": "监控异常",
     "status.shortChecking": "正在检测",
@@ -435,6 +459,7 @@ function trackingTypeLabel(type) {
 function normalizeQuery(query) {
   return {
     carrier: String(query.carrier ?? "COSCO").trim().toUpperCase(),
+    channel: String(query.channel ?? "NETWORK").trim().toUpperCase(),
     type: String(query.type ?? "BILLOFLADING").trim().toUpperCase(),
     number: String(query.number ?? "")
       .trim()
@@ -444,6 +469,11 @@ function normalizeQuery(query) {
 }
 
 function cacheKey(query) {
+  const normalized = normalizeQuery(query);
+  return `${CACHE_PREFIX}${normalized.carrier}:${normalized.channel}:${normalized.type}:${normalized.number}`;
+}
+
+function legacyCacheKey(query) {
   const normalized = normalizeQuery(query);
   return `${CACHE_PREFIX}${normalized.carrier}:${normalized.type}:${normalized.number}`;
 }
@@ -513,7 +543,7 @@ function readCacheEntry(key) {
       if (stored) removeCacheKey(key);
       return null;
     }
-    return stored;
+    return { ...stored, query: normalizeQuery(stored.query) };
   } catch {
     removeCacheKey(key);
     return null;
@@ -521,7 +551,7 @@ function readCacheEntry(key) {
 }
 
 function loadSnapshot(query) {
-  const stored = readCacheEntry(cacheKey(query));
+  const stored = readCacheEntry(cacheKey(query)) ?? readCacheEntry(legacyCacheKey(query));
   if (!stored) return null;
   return {
     snapshot: stored.snapshot,
@@ -774,8 +804,10 @@ function renderResult(payload) {
   const keyTimes = snapshot.keyTimes ?? {};
   const latest = summary.latestEvent;
   const providerCode = snapshot.provider?.code ?? "COSCO";
+  const resultChannel = CHANNELS[snapshot.channel] ?? CHANNELS.NETWORK;
 
   currentPayload = payload;
+  sourceTag.textContent = t(resultChannel.sourceKey);
   elements["result-carrier"].textContent = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
   elements["result-number"].textContent = snapshot.tracking.number;
@@ -1075,7 +1107,7 @@ function renderHistory() {
     const number = document.createElement("strong");
     number.textContent = entry.query.number;
     const identityMeta = document.createElement("small");
-    identityMeta.textContent = `${trackingTypeLabel(entry.query.type)} · ${entry.query.carrier}`;
+    identityMeta.textContent = `${trackingTypeLabel(entry.query.type)} · ${entry.query.carrier} · ${t((CHANNELS[entry.query.channel] ?? CHANNELS.NETWORK).labelKey)}`;
     identity.append(identityLabel, number, identityMeta);
 
     const journey = document.createElement("span");
@@ -1201,12 +1233,17 @@ function renderHistory() {
 
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
-  sourceTag.textContent = carrier.source;
+  const channel = CHANNELS[channelSelect.value] ?? CHANNELS.NETWORK;
+  sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   carrierNotice.hidden = carrier.enabled;
   carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
   setLoading(loading);
 
-  if (resetResult && currentPayload?.snapshot?.provider?.code !== carrier.code) {
+  if (
+    resetResult &&
+    (currentPayload?.snapshot?.provider?.code !== carrier.code ||
+      currentPayload?.snapshot?.channel !== channel.code)
+  ) {
     currentPayload = null;
     results.hidden = true;
     emptyState.hidden = false;
@@ -1237,7 +1274,7 @@ function renderChannelStatus(status) {
 
 async function refreshChannelStatus() {
   try {
-    const response = await fetch("/api/channels/c/status", {
+    const response = await fetch("/api/channels/network/status", {
       headers: { Accept: "application/json" },
       cache: "no-store"
     });
@@ -1252,6 +1289,7 @@ function updateUrl(query, { push = false } = {}) {
   const normalized = normalizeQuery(query);
   const url = new URL(window.location.href);
   url.searchParams.set("carrier", normalized.carrier);
+  url.searchParams.set("channel", normalized.channel);
   url.searchParams.set("type", normalized.type);
   url.searchParams.set("number", normalized.number);
   url.hash = "tracking";
@@ -1280,6 +1318,7 @@ function showView(name, { updateLocation = true } = {}) {
     url.hash = activeView;
     if (activeView === "overview") {
       url.searchParams.delete("carrier");
+      url.searchParams.delete("channel");
       url.searchParams.delete("type");
       url.searchParams.delete("number");
     }
@@ -1327,6 +1366,7 @@ function showView(name, { updateLocation = true } = {}) {
 
 function openHistoryEntry(entry) {
   carrierSelect.value = entry.query.carrier;
+  channelSelect.value = entry.query.channel ?? "NETWORK";
   trackingType.value = entry.query.type;
   trackingNumber.value = entry.query.number;
   updateCarrierUI();
@@ -1412,7 +1452,11 @@ async function requestTracking(query) {
     query.carrier === "COSCO" &&
     [404, 405].includes(primary.response.status)
   ) {
-    return postTrackingRequest("/api/track/cosco", query);
+    const compatibilityPath =
+      query.channel === "PLAYWRIGHT"
+        ? "/api/track/cosco/playwright"
+        : "/api/track/cosco";
+    return postTrackingRequest(compatibilityPath, query);
   }
 
   return primary;
@@ -1424,6 +1468,7 @@ form.addEventListener("submit", async (event) => {
 
   const query = normalizeQuery({
     carrier: carrierSelect.value,
+    channel: channelSelect.value,
     type: trackingType.value,
     number: trackingNumber.value
   });
@@ -1468,6 +1513,7 @@ carrierSelect.addEventListener("change", () => {
   setLoading(false);
   updateCarrierUI({ resetResult: true });
 });
+channelSelect.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
 
 document.querySelectorAll("[data-language]").forEach((button) => {
   button.addEventListener("click", () => applyLanguage(button.dataset.language));
@@ -1510,10 +1556,12 @@ const initialNumber = initial.get("number");
 if (initialNumber) {
   const initialQuery = normalizeQuery({
     carrier: initial.get("carrier") || "COSCO",
+    channel: initial.get("channel") || "NETWORK",
     type: initial.get("type") || "BILLOFLADING",
     number: initialNumber
   });
   carrierSelect.value = CARRIERS[initialQuery.carrier] ? initialQuery.carrier : "COSCO";
+  channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "NETWORK";
   trackingType.value = TYPE_KEYS[initialQuery.type] ? initialQuery.type : "BILLOFLADING";
   trackingNumber.value = initialQuery.number;
   updateCarrierUI();

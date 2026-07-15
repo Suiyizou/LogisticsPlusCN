@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Minimal COSCO channel C shipment tracker",
+  "description": "Dual-channel COSCO shipment tracker with network and Playwright adapters",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "track:playwright": "node scripts/cosco-playwright.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
   }
 }

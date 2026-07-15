@@ -43,7 +43,7 @@
             <span class="carrier-monogram cosco">CO</span>
             <span>
               COSCO
-              <small data-i18n="carrier.connected">Connected · Channel C</small>
+              <small data-i18n="carrier.connected">Connected · 2 channels</small>
             </span>
             <i></i>
           </div>
@@ -73,7 +73,7 @@
           <div class="topbar-actions">
             <div class="system-state" id="channel-state" data-status="unknown">
               <span class="state-dot"></span>
-              <span id="channel-status-text">Channel C awaiting check</span>
+              <span id="channel-status-text">Channel 1 awaiting check</span>
             </div>
             <div class="language-switch" role="group" aria-label="Language">
               <button type="button" data-language="en" class="is-active">EN</button>
@@ -169,7 +169,7 @@
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
                 <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
               </div>
-              <span class="source-tag" id="source-tag">COSCO · PUBLIC WEB</span>
+              <span class="source-tag" id="source-tag">COSCO · CHANNEL 1 · NETWORK</span>
             </section>
 
             <section class="query-panel">
@@ -179,6 +179,13 @@
                   <select id="carrier-select" name="carrier">
                     <option value="COSCO">COSCO SHIPPING</option>
                     <option value="CMA" data-i18n="carrier.cmaOption">CMA CGM · COMING SOON</option>
+                  </select>
+                </div>
+                <div class="field channel-field">
+                  <label for="channel-select" data-i18n="query.channel">Query channel</label>
+                  <select id="channel-select" name="channel">
+                    <option value="NETWORK" data-i18n="channel.network">Channel 1 · Network interface</option>
+                    <option value="PLAYWRIGHT" data-i18n="channel.playwright">Channel 2 · Playwright browser</option>
                   </select>
                 </div>
                 <div class="field type-field">
@@ -207,7 +214,7 @@
                 </button>
               </form>
               <div class="query-foot">
-                <p data-i18n="query.helper">Snapshots stay on this browser for 24 hours and refresh from the server.</p>
+                <p data-i18n="query.helper">Channel 1 calls the network interface; Channel 2 drives the carrier page with Playwright.</p>
                 <p class="carrier-notice" id="carrier-notice" hidden></p>
               </div>
             </section>

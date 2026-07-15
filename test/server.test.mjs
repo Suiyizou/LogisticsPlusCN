@@ -4,7 +4,9 @@ import {
   buildRoutingLegs,
   decodeCoscoPayload,
   listCarrierAdapters,
+  listCoscoQueryChannels,
   normalizeCarrierCode,
+  normalizeQueryChannel,
   runChannelCHealthCheck,
   normalizeCoscoSnapshot,
   normalizeTrackingRequest
@@ -57,7 +59,20 @@ test("exposes a multi-carrier adapter registry", () => {
   );
 });
 
-test("creates a stable channel C snapshot", () => {
+test("exposes network and Playwright query channels", () => {
+  assert.equal(normalizeQueryChannel().code, "NETWORK");
+  assert.equal(normalizeQueryChannel("playwright").number, 2);
+  assert.throws(() => normalizeQueryChannel("unknown"));
+  assert.deepEqual(
+    listCoscoQueryChannels().map(({ code, number }) => ({ code, number })),
+    [
+      { code: "NETWORK", number: 1 },
+      { code: "PLAYWRIGHT", number: 2 }
+    ]
+  );
+});
+
+test("creates a stable channel-one network snapshot", () => {
   const snapshot = normalizeCoscoSnapshot(
     {
       cargoTrackingSummary: {
@@ -81,10 +96,31 @@ test("creates a stable channel C snapshot", () => {
     "2026-07-14T00:00:00.000Z"
   );
 
-  assert.equal(snapshot.channel, "C");
+  assert.equal(snapshot.channel, "NETWORK");
+  assert.equal(snapshot.channelNumber, 1);
   assert.equal(snapshot.provider.code, "COSCO");
   assert.equal(snapshot.summary.origin.name, "Shanghai");
   assert.equal(snapshot.route[0].sequence, 1);
+});
+
+test("marks Playwright results as channel two without changing the snapshot shape", () => {
+  const snapshot = normalizeCoscoSnapshot(
+    {
+      cargoTrackingSummary: {
+        blNumber: "ABC123",
+        por: "Shanghai",
+        fnd: "Atlanta"
+      }
+    },
+    normalizeTrackingRequest({ type: "BILLOFLADING", number: "ABC123" }),
+    "2026-07-15T00:00:00.000Z",
+    { queryChannel: normalizeQueryChannel("PLAYWRIGHT") }
+  );
+
+  assert.equal(snapshot.channel, "PLAYWRIGHT");
+  assert.equal(snapshot.channelNumber, 2);
+  assert.equal(snapshot.provider.channel, "PLAYWRIGHT");
+  assert.equal(snapshot.source, "COSCO_WEB_UI_PLAYWRIGHT");
 });
 
 test("builds sea and inland routing legs", () => {
@@ -121,7 +157,7 @@ test("builds sea and inland routing legs", () => {
   assert.equal(legs[1].estimatedArrival, "2026-07-12T16:00:00");
 });
 
-test("records channel C monitor success and failure", async () => {
+test("records channel-one network monitor success and failure", async () => {
   const successTimes = [1_000, 1_125];
   let attempt = 0;
   const success = await runChannelCHealthCheck({
