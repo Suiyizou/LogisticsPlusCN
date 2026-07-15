@@ -6,7 +6,9 @@ import {
   listCarrierAdapters,
   listCoscoQueryChannels,
   normalizeCarrierCode,
+  normalizeCoscoContainerSnapshot,
   normalizeQueryChannel,
+  runCoscoChannelChecks,
   runChannelCHealthCheck,
   normalizeCoscoSnapshot,
   normalizeTrackingRequest
@@ -61,6 +63,7 @@ test("exposes a multi-carrier adapter registry", () => {
 
 test("exposes network and Playwright query channels", () => {
   assert.equal(normalizeQueryChannel().code, "NETWORK");
+  assert.equal(normalizeQueryChannel("auto").code, "AUTO");
   assert.equal(normalizeQueryChannel("playwright").number, 2);
   assert.throws(() => normalizeQueryChannel("unknown"));
   assert.deepEqual(
@@ -72,12 +75,65 @@ test("exposes network and Playwright query channels", () => {
   );
 });
 
+test("uses the dedicated container payload without leaking other shipment records", () => {
+  const request = normalizeTrackingRequest({ type: "CONTAINER", number: "TEMU6003424" });
+  const snapshot = normalizeCoscoContainerSnapshot(
+    [
+      {
+        containerNumber: "TEMU600342",
+        containerNumberWithCheckDigit: "TEMU6003424",
+        containerType: "40HQ",
+        ataAtLastPod: "2026-07-08T14:33:41",
+        milestones: [
+          {
+            eventName: "Gate Out from Final Hub",
+            actualEventDateTime: "2026-07-14T20:21:00",
+            eventLocationName: "CSX TRANSPORTATION",
+            transportMode: "Truck"
+          }
+        ]
+      },
+      {
+        containerNumberWithCheckDigit: "OTHER0000000",
+        containerType: "20GP",
+        milestones: []
+      }
+    ],
+    request,
+    "2026-07-15T00:00:00.000Z"
+  );
+
+  assert.equal(snapshot.viewMode, "CONTAINER");
+  assert.equal(snapshot.containers.length, 1);
+  assert.equal(snapshot.containers[0].number, "TEMU6003424");
+  assert.equal(snapshot.summary.latestEvent.name, "Gate Out from Final Hub");
+  assert.deepEqual(snapshot.route, []);
+});
+
+test("checks the primary network and fallback DOM channels independently", async () => {
+  const result = await runCoscoChannelChecks(
+    { type: "BILLOFLADING", number: "6502077380" },
+    {
+      networkProbe: async () => {},
+      playwrightProbe: async () => {
+        throw new Error("browser unavailable");
+      }
+    }
+  );
+
+  assert.equal(result.strategy.preferred, "NETWORK");
+  assert.equal(result.channels.NETWORK.available, true);
+  assert.equal(result.channels.PLAYWRIGHT.available, false);
+  assert.equal(result.channels.PLAYWRIGHT.error, "browser unavailable");
+});
+
 test("creates a stable channel-one network snapshot", () => {
   const snapshot = normalizeCoscoSnapshot(
     {
       cargoTrackingSummary: {
         blNumber: "ABC123",
         bookingNumber: ["ABC123"],
+        containerSummaryInfos: [{ cntrType: "40HQ", quantity: "1" }],
         por: "Shanghai",
         porCountryCode: "CN",
         fnd: "Atlanta",
@@ -93,7 +149,22 @@ test("creates a stable channel-one network snapshot", () => {
       cargoTrackingSailingSchedule: []
     },
     normalizeTrackingRequest({ type: "BILLOFLADING", number: "ABC123" }),
-    "2026-07-14T00:00:00.000Z"
+    "2026-07-14T00:00:00.000Z",
+    {
+      containerInfo: [
+        {
+          containerNumber: "TEMU6003424",
+          containerType: "40HQ",
+          trafficTerm: "CY | CY",
+          currentMilestone: {
+            eventName: "Gate Out from Final Hub",
+            actualEventDateTime: "2026-07-14T20:21:00",
+            eventLocation: "CSX TRANSPORTATION",
+            transportMode: "Truck"
+          }
+        }
+      ]
+    }
   );
 
   assert.equal(snapshot.channel, "NETWORK");
@@ -101,6 +172,8 @@ test("creates a stable channel-one network snapshot", () => {
   assert.equal(snapshot.provider.code, "COSCO");
   assert.equal(snapshot.summary.origin.name, "Shanghai");
   assert.equal(snapshot.route[0].sequence, 1);
+  assert.equal(snapshot.containers.length, 1);
+  assert.equal(snapshot.containers[0].number, "TEMU6003424");
 });
 
 test("marks Playwright results as channel two without changing the snapshot shape", () => {

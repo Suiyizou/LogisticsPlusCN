@@ -12,13 +12,28 @@ export { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT_DIR, "public");
+const ELEMENT_PLUS_CSS = join(
+  ROOT_DIR,
+  "node_modules",
+  "element-plus",
+  "dist",
+  "index.css"
+);
+const FLAG_ICONS_DIR = join(ROOT_DIR, "node_modules", "flag-icons", "flags");
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
 
 const COSCO_TRACKING_BASE =
   "https://elines.coscoshipping.com/scct/scct_customer/public/cargoTracking";
+const COSCO_TRACKING_EX_BASE =
+  "https://elines.coscoshipping.com/scct/scct_customer_ex/public/cargoTracking";
+const COSCO_PUBLIC_TRACKING_PAGE =
+  "https://elines.coscoshipping.com/scct/public/ct/base";
 const COSCO_PAGE_URL =
   "https://elines.coscoshipping.com/ebusiness/cargoTracking";
 const UPSTREAM_TIMEOUT_MS = 30_000;
+const NETWORK_CORE_TIMEOUT_MS = 10_000;
+const NETWORK_ENRICHMENT_TIMEOUT_MS = 4_000;
+const PLAYWRIGHT_TIMEOUT_MS = 20_000;
 const CACHE_TTL_MS = 5 * 60_000;
 const DEFAULT_CHANNEL_C_MONITOR_INTERVAL_MS = 6 * 60 * 60_000;
 const configuredMonitorInterval = Number.parseInt(
@@ -66,13 +81,20 @@ const COSCO_QUERY_CHANNELS = Object.freeze({
   }
 });
 
+const COSCO_AUTO_QUERY_STRATEGY = Object.freeze({
+  code: "AUTO",
+  number: 0,
+  label: "接口优先 · DOM 托底",
+  source: "COSCO_NETWORK_WITH_PLAYWRIGHT_FALLBACK"
+});
+
 const CARRIER_ADAPTERS = Object.freeze({
   COSCO: {
     code: "COSCO",
     name: "COSCO SHIPPING Lines",
-    channel: "NETWORK",
+    channel: "AUTO",
     channels: ["NETWORK", "PLAYWRIGHT"],
-    defaultChannel: "NETWORK",
+    defaultChannel: "AUTO",
     enabled: true,
     source: "COSCO_INTERNAL_WEB_API"
   },
@@ -94,6 +116,8 @@ const MIME_TYPES = Object.freeze({
 });
 
 const cache = new Map();
+const inFlightTrackingRequests = new Map();
+let coscoPublicCookieCache = null;
 const channelCHealth = {
   status: CHANNEL_C_MONITOR_ENABLED ? "unknown" : "disabled",
   available: null,
@@ -193,6 +217,9 @@ export function listCarrierAdapters() {
 
 export function normalizeQueryChannel(value = "NETWORK") {
   const code = String(value).trim().toUpperCase();
+  if (code === COSCO_AUTO_QUERY_STRATEGY.code) {
+    return COSCO_AUTO_QUERY_STRATEGY;
+  }
   const channel = COSCO_QUERY_CHANNELS[code];
 
   if (!channel) {
@@ -204,6 +231,44 @@ export function normalizeQueryChannel(value = "NETWORK") {
 
 export function listCoscoQueryChannels() {
   return Object.values(COSCO_QUERY_CHANNELS).map((channel) => ({ ...channel }));
+}
+
+function normalizeContainerNumber(container) {
+  return (
+    container?.containerNumberWithCheckDigit ??
+    container?.containerNumber ??
+    null
+  );
+}
+
+function normalizeContainerMilestone(milestone) {
+  if (!milestone) return null;
+
+  return {
+    name: milestone.eventName ?? null,
+    occurredAt: milestone.actualEventDateTime ?? null,
+    location: milestone.eventLocationName ?? milestone.eventLocation ?? null,
+    stage: milestone.stageType ?? milestone.stage ?? null,
+    oceanStage: milestone.eventStage ?? milestone.oceanStage ?? null,
+    transportMode: milestone.transportMode ?? null
+  };
+}
+
+function selectRequestedContainers(containers, request) {
+  const source = Array.isArray(containers) ? containers : [];
+  const exact = source.filter(
+    (container) => normalizeContainerNumber(container)?.toUpperCase() === request.number
+  );
+  const selected = exact.length > 0 ? exact : source;
+  const unique = new Map();
+
+  for (const container of selected) {
+    const number = normalizeContainerNumber(container);
+    if (!number || unique.has(number)) continue;
+    unique.set(number, container);
+  }
+
+  return [...unique.values()];
 }
 
 function normalizeReferenceValue(reference) {
@@ -401,13 +466,106 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
   };
 }
 
-async function fetchCoscoEndpoint(endpoint, request) {
+export function normalizeCoscoContainerSnapshot(
+  containerResult,
+  request,
+  fetchedAt,
+  extras = {}
+) {
+  const queryChannel = extras.queryChannel ?? COSCO_QUERY_CHANNELS.NETWORK;
+  const selectedContainers = selectRequestedContainers(containerResult, request);
+
+  if (selectedContainers.length === 0) {
+    throw new HttpError(404, "COSCO 没有返回该箱号的动态");
+  }
+
+  const primaryContainer = selectedContainers[0];
+  const primaryMilestone = primaryContainer.milestones?.[0] ?? null;
+  const latest = normalizeContainerMilestone(primaryMilestone);
+  const containers = selectedContainers.map((container) => {
+    const milestone = container.milestones?.[0] ?? null;
+    return {
+      number: normalizeContainerNumber(container),
+      type: container.containerType ?? null,
+      sealNumber: container.sealNumber ?? null,
+      trafficTerm: null,
+      transportMode: milestone?.transportMode ?? null,
+      currentLocation: milestone?.eventLocationName ?? milestone?.eventLocation ?? null,
+      latestEvent: milestone?.eventName ?? null,
+      latestEventTime: milestone?.actualEventDateTime ?? null,
+      etaAtLastPod: container.etaAtLastPod ?? null,
+      ataAtLastPod: container.ataAtLastPod ?? null,
+      referenceNumbers: [],
+      milestones: (container.milestones ?? []).map(normalizeContainerMilestone).filter(Boolean)
+    };
+  });
+
+  return {
+    channel: queryChannel.code,
+    channelNumber: queryChannel.number,
+    channelLabel: queryChannel.label,
+    source: queryChannel.source,
+    carrier: "COSCO SHIPPING Lines",
+    provider: {
+      code: "COSCO",
+      name: "COSCO SHIPPING Lines",
+      channel: queryChannel.code
+    },
+    fetchedAt,
+    viewMode: "CONTAINER",
+    tracking: {
+      type: request.type,
+      typeLabel: request.label,
+      number: request.number
+    },
+    summary: {
+      billOfLading: null,
+      bookingNumbers: [],
+      origin: { name: null, countryCode: null },
+      destination: { name: null, countryCode: null },
+      trafficTerm: null,
+      serviceScopes: [],
+      containers: containers.map((container) => ({
+        containerNumber: container.number,
+        containerType: container.type,
+        quantity: 1
+      })),
+      latestEvent: latest
+    },
+    keyTimes: {
+      actualDeparture: null,
+      actualArrival: primaryContainer.ataAtLastPod
+        ? { time: primaryContainer.ataAtLastPod, location: null }
+        : null,
+      estimatedDelivery: primaryContainer.etaAtLastPod
+        ? { time: primaryContainer.etaAtLastPod, actualTime: null, location: null, timezone: null }
+        : null
+    },
+    route: [],
+    transportStatuses: primaryContainer.milestones ?? [],
+    sailingSchedule: [],
+    routingLegs: [],
+    containers,
+    references: {
+      masterBill: null,
+      bookingNumbers: [],
+      external: [],
+      information: []
+    }
+  };
+}
+
+async function fetchCoscoEndpoint(endpoint, request, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-  const referer = `${COSCO_PAGE_URL}?trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
+  const timeoutMs = options.timeoutMs ?? UPSTREAM_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const baseUrl = options.baseUrl ?? COSCO_TRACKING_BASE;
+  const referer =
+    options.referer ??
+    `${COSCO_PAGE_URL}?trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
 
   try {
-    const upstream = await fetch(`${COSCO_TRACKING_BASE}/${endpoint}`, {
+    const upstream = await fetch(`${baseUrl}/${endpoint}`, {
       method: "POST",
       headers: {
         Accept: "application/json, text/plain, */*",
@@ -415,7 +573,8 @@ async function fetchCoscoEndpoint(endpoint, request) {
         Referer: referer,
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
-        tz: "Asia/Shanghai"
+        tz: "Asia/Shanghai",
+        ...(options.cookie ? { Cookie: options.cookie } : {})
       },
       body: JSON.stringify({
         businessNumber: request.number,
@@ -458,28 +617,124 @@ async function fetchCoscoEndpoint(endpoint, request) {
   }
 }
 
-async function optionalCoscoEndpoint(endpoint, request, fallback) {
+function extractCoscoPageCookies(html, headers) {
+  const cookies = [];
+  const setCookies = headers?.getSetCookie?.() ?? [];
+  for (const value of setCookies) {
+    const cookie = value.split(";", 1)[0];
+    if (cookie) cookies.push(cookie);
+  }
+
+  for (const match of String(html).matchAll(/document\.cookie\s*=\s*"([^;]+);/g)) {
+    cookies.push(match[1]);
+  }
+
+  return [...new Set(cookies)].join("; ");
+}
+
+async function getCoscoPublicCookies(request) {
+  if (coscoPublicCookieCache?.expiresAt > Date.now()) {
+    return coscoPublicCookieCache.value;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), NETWORK_CORE_TIMEOUT_MS);
+  const pageUrl = `${COSCO_PUBLIC_TRACKING_PAGE}?lang=en&trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
+
   try {
-    return await fetchCoscoEndpoint(endpoint, request);
+    const response = await fetch(pageUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36"
+      },
+      signal: controller.signal
+    });
+    const html = await response.text();
+    const value = extractCoscoPageCookies(html, response.headers);
+    coscoPublicCookieCache = {
+      value,
+      expiresAt: Date.now() + 5 * 60_000
+    };
+    return value;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new HttpError(504, "COSCO 公共查询页初始化超时");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchCoscoContainers(request) {
+  const referer = `${COSCO_PUBLIC_TRACKING_PAGE}?lang=en&trackingType=CONTAINER&number=${encodeURIComponent(request.number)}`;
+  let finalError = null;
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const cookie = await getCoscoPublicCookies(request);
+      return await fetchCoscoEndpoint("containers", request, {
+        baseUrl: COSCO_TRACKING_EX_BASE,
+        referer,
+        cookie,
+        timeoutMs: NETWORK_CORE_TIMEOUT_MS
+      });
+    } catch (error) {
+      finalError = error;
+      coscoPublicCookieCache = null;
+    }
+  }
+
+  throw finalError;
+}
+
+async function optionalCoscoEndpoint(endpoint, request, fallback, options = {}) {
+  try {
+    return await fetchCoscoEndpoint(endpoint, request, options);
   } catch {
     return fallback;
   }
 }
 
+async function fetchCoscoShipmentContainers(request) {
+  const result = await fetchCoscoEndpoint("containerInfo", request, {
+    timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
+  });
+  return Array.isArray(result) ? result : [];
+}
+
 async function fetchCoscoTrackingViaNetwork(request) {
+  if (request.type === "CONTAINER") {
+    const containers = await fetchCoscoContainers(request);
+    const fetchedAt = new Date().toISOString();
+    return {
+      snapshot: normalizeCoscoContainerSnapshot(containers, request, fetchedAt, {
+        queryChannel: COSCO_QUERY_CHANNELS.NETWORK
+      }),
+      raw: { containers }
+    };
+  }
+
   const [detail, bookingInfo, containerInfo] = await Promise.all([
-    fetchCoscoEndpoint("detail", request),
-    optionalCoscoEndpoint("bookingInfo", request, {}),
-    optionalCoscoEndpoint("containerInfo", request, [])
+    fetchCoscoEndpoint("detail", request, { timeoutMs: NETWORK_CORE_TIMEOUT_MS }),
+    optionalCoscoEndpoint("bookingInfo", request, {}, {
+      timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
+    }),
+    fetchCoscoShipmentContainers(request).catch(() => [])
   ]);
   const fetchedAt = new Date().toISOString();
+  const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
+    queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
+    bookingInfo,
+    containerInfo
+  });
 
   return {
-    snapshot: normalizeCoscoSnapshot(detail, request, fetchedAt, {
-      queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
-      bookingInfo,
-      containerInfo
-    }),
+    snapshot,
+    enrichment: {
+      containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request)
+    },
     raw: {
       detail,
       bookingInfo,
@@ -493,7 +748,7 @@ async function fetchCoscoTrackingWithPlaywright(request) {
 
   try {
     result = await fetchCoscoTrackingViaPlaywright(request, {
-      timeoutMs: UPSTREAM_TIMEOUT_MS
+      timeoutMs: PLAYWRIGHT_TIMEOUT_MS
     });
   } catch (error) {
     throw new HttpError(
@@ -504,14 +759,29 @@ async function fetchCoscoTrackingWithPlaywright(request) {
   }
 
   const fetchedAt = new Date().toISOString();
-  const { detail, bookingInfo, containerInfo, browser } = result;
+  const { detail, bookingInfo, containerInfo, containers, browser } = result;
 
-  return {
-    snapshot: normalizeCoscoSnapshot(detail, request, fetchedAt, {
+  if (request.type === "CONTAINER") {
+    return {
+      snapshot: normalizeCoscoContainerSnapshot(containers, request, fetchedAt, {
+        queryChannel: COSCO_QUERY_CHANNELS.PLAYWRIGHT
+      }),
+      raw: { containers, browser }
+    };
+  }
+
+  const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
       queryChannel: COSCO_QUERY_CHANNELS.PLAYWRIGHT,
       bookingInfo,
       containerInfo
-    }),
+    });
+
+  if (!snapshotHasCompleteContainerDetails(snapshot, request)) {
+    throw new HttpError(502, "COSCO DOM 通道未捕获到箱号明细");
+  }
+
+  return {
+    snapshot,
     raw: {
       detail,
       bookingInfo,
@@ -522,11 +792,112 @@ async function fetchCoscoTrackingWithPlaywright(request) {
 }
 
 async function fetchCoscoTracking(request, queryChannel) {
+  if (queryChannel.code === "AUTO") {
+    try {
+      const result = await fetchCoscoTrackingViaNetwork(request);
+      return {
+        ...result,
+        strategy: {
+          requested: "AUTO",
+          used: "NETWORK",
+          fallbackUsed: false
+        }
+      };
+    } catch (networkError) {
+      try {
+        const result = await fetchCoscoTrackingWithPlaywright(request);
+        return {
+          ...result,
+          strategy: {
+            requested: "AUTO",
+            used: "PLAYWRIGHT",
+            fallbackUsed: true,
+            primaryError: networkError?.message ?? "网络接口不可用"
+          }
+        };
+      } catch (playwrightError) {
+        throw new HttpError(502, "COSCO 两个查询通道均不可用", {
+          network: networkError?.message ?? "网络接口失败",
+          playwright: playwrightError?.message ?? "DOM 通道失败"
+        });
+      }
+    }
+  }
+
   if (queryChannel.code === "PLAYWRIGHT") {
     return fetchCoscoTrackingWithPlaywright(request);
   }
 
   return fetchCoscoTrackingViaNetwork(request);
+}
+
+function probeResult(channel, available, startedAt, finishedAt, error = null) {
+  return {
+    channel,
+    available,
+    status: available ? "available" : "unavailable",
+    responseTimeMs: Math.max(0, finishedAt - startedAt),
+    error: error?.message ?? null
+  };
+}
+
+export async function runCoscoChannelChecks(input = CHANNEL_C_MONITOR_REQUEST, options = {}) {
+  const request = normalizeTrackingRequest(input);
+  const now = options.now ?? Date.now;
+  const networkProbe =
+    options.networkProbe ??
+    (async () => {
+      if (request.type === "CONTAINER") {
+        const result = await fetchCoscoContainers(request);
+        if (!Array.isArray(result) || result.length === 0) {
+          throw new Error("箱号接口没有返回动态");
+        }
+        return;
+      }
+      const detail = await fetchCoscoEndpoint("detail", request);
+      if (!detail?.cargoTrackingSummary) throw new Error("运输详情缺少摘要");
+    });
+  const playwrightProbe =
+    options.playwrightProbe ??
+    (async () => {
+      const result = await fetchCoscoTrackingViaPlaywright(request, {
+        timeoutMs: PLAYWRIGHT_TIMEOUT_MS
+      });
+      if (request.type === "CONTAINER") {
+        if (!Array.isArray(result?.containers) || result.containers.length === 0) {
+          throw new Error("DOM 通道没有捕获到箱号结果");
+        }
+        return;
+      }
+      if (!result?.detail?.cargoTrackingSummary) {
+        throw new Error("DOM 通道没有捕获到运输摘要");
+      }
+    });
+
+  const runProbe = async (channel, probe) => {
+    const startedAt = now();
+    try {
+      await probe(request);
+      return probeResult(channel, true, startedAt, now());
+    } catch (error) {
+      return probeResult(channel, false, startedAt, now(), error);
+    }
+  };
+
+  const [network, playwright] = await Promise.all([
+    runProbe("NETWORK", networkProbe),
+    runProbe("PLAYWRIGHT", playwrightProbe)
+  ]);
+
+  return {
+    checkedAt: new Date(now()).toISOString(),
+    strategy: {
+      preferred: "NETWORK",
+      fallback: "PLAYWRIGHT"
+    },
+    request: { type: request.type, number: request.number },
+    channels: { NETWORK: network, PLAYWRIGHT: playwright }
+  };
 }
 
 export function getChannelCHealthStatus() {
@@ -643,6 +1014,18 @@ export function stopChannelCMonitor() {
   channelCHealth.nextCheckAt = null;
 }
 
+function snapshotHasCompleteContainerDetails(snapshot, trackingRequest) {
+  if (trackingRequest.type === "CONTAINER") {
+    return Array.isArray(snapshot?.containers) && snapshot.containers.length > 0;
+  }
+
+  const expectedContainerCount = (snapshot?.summary?.containers ?? []).reduce(
+    (total, container) => total + Number(container?.quantity ?? container?.count ?? 0),
+    0
+  );
+  return expectedContainerCount <= 0 || (snapshot?.containers?.length ?? 0) > 0;
+}
+
 async function handleTrackRequest(request, response, forcedCarrier, forcedChannel) {
   const input = await readJsonBody(request);
   const carrierCode = normalizeCarrierCode(forcedCarrier ?? input.carrier ?? "COSCO");
@@ -659,12 +1042,31 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   const cacheKey = `${carrierCode}:${queryChannel.code}:${trackingRequest.type}:${trackingRequest.number}`;
   const cached = cache.get(cacheKey);
 
-  if (cached && cached.expiresAt > Date.now()) {
+  if (
+    cached &&
+    cached.expiresAt > Date.now() &&
+    snapshotHasCompleteContainerDetails(cached.value?.snapshot, trackingRequest)
+  ) {
     sendJson(response, 200, { ...cached.value, cached: true });
     return;
   }
 
-  const value = await fetchCoscoTracking(trackingRequest, queryChannel);
+  if (cached) cache.delete(cacheKey);
+
+  let requestPromise = inFlightTrackingRequests.get(cacheKey);
+  if (!requestPromise) {
+    requestPromise = fetchCoscoTracking(trackingRequest, queryChannel);
+    inFlightTrackingRequests.set(cacheKey, requestPromise);
+  }
+
+  let value;
+  try {
+    value = await requestPromise;
+  } finally {
+    if (inFlightTrackingRequests.get(cacheKey) === requestPromise) {
+      inFlightTrackingRequests.delete(cacheKey);
+    }
+  }
   cache.set(cacheKey, {
     value,
     expiresAt: Date.now() + CACHE_TTL_MS
@@ -675,6 +1077,35 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
 
 async function serveStatic(request, response) {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname === "/vendor/element-plus.css") {
+    const content = await readFile(ELEMENT_PLUS_CSS);
+    setCommonHeaders(response);
+    response.writeHead(200, {
+      "Content-Type": MIME_TYPES[".css"],
+      "Cache-Control": "public, max-age=86400"
+    });
+    response.end(content);
+    return;
+  }
+
+  const flagMatch = url.pathname.match(/^\/vendor\/flags\/(1x1|4x3)\/([a-z]{2})\.svg$/);
+  if (flagMatch) {
+    const [, ratio, countryCode] = flagMatch;
+    try {
+      const content = await readFile(join(FLAG_ICONS_DIR, ratio, `${countryCode}.svg`));
+      setCommonHeaders(response);
+      response.writeHead(200, {
+        "Content-Type": MIME_TYPES[".svg"],
+        "Cache-Control": "public, max-age=86400"
+      });
+      response.end(content);
+      return;
+    } catch (error) {
+      if (error?.code === "ENOENT") throw new HttpError(404, "国旗资源不存在");
+      throw error;
+    }
+  }
+
   const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
   const safePath = normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = join(PUBLIC_DIR, safePath);
@@ -732,6 +1163,16 @@ export const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/channels") {
       sendJson(response, 200, { channels: listCoscoQueryChannels() });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/channels/check") {
+      const input = await readJsonBody(request);
+      const probeRequest = {
+        type: input.type ?? CHANNEL_C_MONITOR_REQUEST.type,
+        number: input.number ?? CHANNEL_C_MONITOR_REQUEST.number
+      };
+      sendJson(response, 200, await runCoscoChannelChecks(probeRequest));
       return;
     }
 

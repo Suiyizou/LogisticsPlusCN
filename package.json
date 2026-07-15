@@ -13,6 +13,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "element-plus": "^2.14.3",
+    "flag-icons": "^7.5.0",
     "playwright": "^1.61.1"
   }
 }

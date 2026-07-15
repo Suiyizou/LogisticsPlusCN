@@ -20,14 +20,22 @@ const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
 const clearHistoryButton = document.querySelector("#clear-history-button");
 const journeyStage = document.querySelector("#journey-stage");
+const checkChannelsButton = document.querySelector("#check-channels-button");
+const channelCheckSummary = document.querySelector("#channel-check-summary");
+const networkProbe = document.querySelector("#network-probe");
+const playwrightProbe = document.querySelector("#playwright-probe");
+const networkProbeStatus = document.querySelector("#network-probe-status");
+const playwrightProbeStatus = document.querySelector("#playwright-probe-status");
+const networkProbeLatency = document.querySelector("#network-probe-latency");
+const playwrightProbeLatency = document.querySelector("#playwright-probe-latency");
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_TTL_MS = 24 * 60 * 60_000;
 const CACHE_LIMIT = 20;
-const CACHE_PREFIX = "shipment-track:v2:";
-const CACHE_INDEX_KEY = "shipment-track:v2:index";
-const LEGACY_CACHE_INDEX_KEY = "shipment-track:v1:C:index";
-const MIGRATION_KEY = "shipment-track:v2:migrated";
+const CACHE_PREFIX = "shipment-track:v3:";
+const CACHE_INDEX_KEY = "shipment-track:v3:index";
+const LEGACY_CACHE_INDEX_KEY = "shipment-track:v2:index";
+const MIGRATION_KEY = "shipment-track:v3:migrated";
 const LANGUAGE_KEY = "shipment-track:language";
 
 const CARRIERS = Object.freeze({
@@ -46,6 +54,11 @@ const CARRIERS = Object.freeze({
 });
 
 const CHANNELS = Object.freeze({
+  AUTO: {
+    code: "AUTO",
+    labelKey: "channel.auto",
+    sourceKey: "source.auto"
+  },
   NETWORK: {
     code: "NETWORK",
     labelKey: "channel.network",
@@ -89,6 +102,23 @@ const MESSAGES = {
     "overview.lastUpdated": "Last updated",
     "overview.monitoring": "Carrier monitoring",
     "overview.noRecords": "No records",
+    "workbench.kicker": "QUERY WORKBENCH",
+    "workbench.title": "Channel health",
+    "workbench.description": "COSCO uses the network API first and switches to the browser DOM automatically when needed.",
+    "workbench.policy": "API FIRST · DOM FALLBACK",
+    "workbench.check": "Check both channels",
+    "workbench.checking": "Checking both channels…",
+    "workbench.primary": "PRIMARY · NETWORK API",
+    "workbench.fallback": "FALLBACK · BROWSER DOM",
+    "workbench.networkName": "Network interface",
+    "workbench.playwrightName": "Playwright browser",
+    "workbench.notChecked": "Not checked",
+    "workbench.available": "Available",
+    "workbench.unavailable": "Unavailable",
+    "workbench.helper": "The check uses the current shipment number; it does not add a tracking record.",
+    "workbench.checkedAt": "Both channels checked at {time}",
+    "workbench.checkFailed": "Channel check failed: {message}",
+    "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest carrier snapshots stored on this browser",
     "history.clear": "Clear history",
@@ -100,6 +130,9 @@ const MESSAGES = {
     "history.latestStatus": "Latest status",
     "history.queriedAt": "Queried at",
     "history.open": "Open details",
+    "history.delete": "Delete",
+    "history.deleteLabel": "Delete tracking history for {number}",
+    "history.confirmDelete": "Delete the saved tracking history for {number}? This only removes the browser snapshot.",
     "history.departed": "Departed",
     "history.etd": "ETD",
     "history.arrived": "Arrived",
@@ -118,14 +151,22 @@ const MESSAGES = {
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
     "result.transportTerms": "Transport terms",
     "result.containerType": "Container type",
+    "summary.services": "Selected services",
+    "summary.sea": "Ocean",
+    "summary.inland": "Inland",
+    "summary.customs": "Customs",
+    "summary.warehouse": "Warehouse",
     "query.carrier": "Carrier",
     "query.channel": "Query channel",
     "query.type": "Shipment number type",
     "query.number": "Shipment No.",
     "query.submit": "Track shipment",
-    "query.helper": "Channel 1 calls the network interface; Channel 2 drives the carrier page with Playwright.",
+    "query.loading": "Tracking…",
+    "query.helper": "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
+    "channel.auto": "Automatic · API first, DOM fallback",
     "channel.network": "Channel 1 · Network interface",
     "channel.playwright": "Channel 2 · Playwright browser",
+    "source.auto": "COSCO · API FIRST · DOM FALLBACK",
     "source.network": "COSCO · CHANNEL 1 · NETWORK",
     "source.playwright": "COSCO · CHANNEL 2 · PLAYWRIGHT",
     "type.bill": "Bill of lading",
@@ -140,6 +181,8 @@ const MESSAGES = {
     "empty.description": "Enter a bill, booking or container number to begin.",
     "metrics.actualDeparture": "Actual departure",
     "metrics.actualArrival": "Actual arrival",
+    "metrics.notDeparted": "Not departed",
+    "metrics.notArrived": "Not arrived",
     "metrics.estimatedDelivery": "Estimated final delivery",
     "metrics.latestEvent": "Latest event",
     "metrics.noLatestEvent": "No latest event",
@@ -234,6 +277,23 @@ const MESSAGES = {
     "overview.lastUpdated": "最近更新",
     "overview.monitoring": "船司监控",
     "overview.noRecords": "暂无记录",
+    "workbench.kicker": "查询工作台",
+    "workbench.title": "通道健康状态",
+    "workbench.description": "COSCO 默认优先调用网络接口，必要时自动切换浏览器 DOM 托底。",
+    "workbench.policy": "接口优先 · DOM 托底",
+    "workbench.check": "检测双通道",
+    "workbench.checking": "正在检测两个通道…",
+    "workbench.primary": "主通道 · 网络接口",
+    "workbench.fallback": "托底通道 · 浏览器 DOM",
+    "workbench.networkName": "网络接口",
+    "workbench.playwrightName": "Playwright 浏览器",
+    "workbench.notChecked": "尚未检测",
+    "workbench.available": "可用",
+    "workbench.unavailable": "不可用",
+    "workbench.helper": "检测使用当前运输单号，不会写入查询记录。",
+    "workbench.checkedAt": "双通道检测完成：{time}",
+    "workbench.checkFailed": "通道检测失败：{message}",
+    "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
     "history.subtitle": "当前浏览器保存的最新船司快照",
     "history.clear": "清空记录",
@@ -245,6 +305,9 @@ const MESSAGES = {
     "history.latestStatus": "最新状态",
     "history.queriedAt": "查询时间",
     "history.open": "打开详情",
+    "history.delete": "删除",
+    "history.deleteLabel": "删除 {number} 的跟踪历史",
+    "history.confirmDelete": "确定删除 {number} 的本地跟踪历史吗？只会移除浏览器快照。",
     "history.departed": "已离港",
     "history.etd": "预计离港",
     "history.arrived": "已到达",
@@ -263,14 +326,22 @@ const MESSAGES = {
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
     "result.transportTerms": "运输条款",
     "result.containerType": "箱型",
+    "summary.services": "已选服务",
+    "summary.sea": "海运",
+    "summary.inland": "陆运",
+    "summary.customs": "关务",
+    "summary.warehouse": "仓储",
     "query.carrier": "船司",
     "query.channel": "查询通道",
     "query.type": "运输单号类型",
     "query.number": "运输单号",
     "query.submit": "查询运输信息",
-    "query.helper": "通道一直接调用网络接口；通道二由 Playwright 操作船司网页查询。",
+    "query.loading": "查询中…",
+    "query.helper": "自动模式优先调用网络接口，失败后才启用 Playwright 浏览器托底。",
+    "channel.auto": "自动 · 接口优先，DOM 托底",
     "channel.network": "通道一 · 网络接口",
     "channel.playwright": "通道二 · Playwright 浏览器",
+    "source.auto": "COSCO · 接口优先 · DOM 托底",
     "source.network": "COSCO · 通道一 · 网络接口",
     "source.playwright": "COSCO · 通道二 · PLAYWRIGHT",
     "type.bill": "提单号",
@@ -285,6 +356,8 @@ const MESSAGES = {
     "empty.description": "输入提单号、订舱号或箱号即可开始。",
     "metrics.actualDeparture": "实际离港",
     "metrics.actualArrival": "实际到港",
+    "metrics.notDeparted": "未离港",
+    "metrics.notArrived": "未到港",
     "metrics.estimatedDelivery": "预计到达最终目的地",
     "metrics.latestEvent": "最新动态",
     "metrics.noLatestEvent": "暂无最新动态",
@@ -367,6 +440,14 @@ const elements = Object.fromEntries(
     "result-traffic-term",
     "result-container-types-fact",
     "result-container-types",
+    "summary-booking-number",
+    "summary-origin-name",
+    "summary-destination-name",
+    "summary-latest-detail",
+    "summary-service-sea",
+    "summary-service-inland",
+    "summary-service-customs",
+    "summary-service-warehouse",
     "cache-status",
     "fetched-at",
     "actual-departure",
@@ -395,10 +476,7 @@ const elements = Object.fromEntries(
     "routing-table-body",
     "container-count",
     "container-table-body",
-    "raw-json",
-    "history-total",
-    "history-carriers",
-    "history-last-updated"
+    "raw-json"
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
@@ -415,6 +493,8 @@ let loading = false;
 let resultAnimationTimer = null;
 let viewTransitionSequence = 0;
 let trackingRequestSequence = 0;
+let lastChannelCheck = null;
+let channelCheckLoading = false;
 const expandedHistoryKeys = new Set();
 
 function t(key, variables = {}) {
@@ -455,13 +535,26 @@ function formatLocalDateTime(value) {
 
 function normalizeCountryCode(countryCode) {
   const code = String(countryCode ?? "").trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(code) ? code : "";
+  if (!/^[A-Z]{2}$/.test(code)) return "";
+  return code === "UK" ? "GB" : code;
 }
 
 function setCountryFlag(element, countryCode) {
   const code = normalizeCountryCode(countryCode);
-  element.className = `flag-icon${code ? ` flag-${code.toLowerCase()}` : " flag-generic"}`;
-  element.textContent = code && !["CN", "US"].includes(code) ? code : "";
+  element.className = `flag-icon ${code ? "flag-image" : "flag-generic"}`;
+  element.replaceChildren();
+  if (code) {
+    const image = document.createElement("img");
+    image.src = `/vendor/flags/4x3/${code.toLowerCase()}.svg`;
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("error", () => {
+      element.className = "flag-icon flag-code";
+      element.textContent = code;
+    });
+    element.append(image);
+  }
+  element.dataset.countryCode = code;
   element.title = code || t("route.unknownLocation");
   element.setAttribute("aria-label", code || t("route.unknownLocation"));
 }
@@ -479,7 +572,7 @@ function trackingTypeLabel(type) {
 function normalizeQuery(query) {
   return {
     carrier: String(query.carrier ?? "COSCO").trim().toUpperCase(),
-    channel: String(query.channel ?? "NETWORK").trim().toUpperCase(),
+    channel: String(query.channel ?? "AUTO").trim().toUpperCase(),
     type: String(query.type ?? "BILLOFLADING").trim().toUpperCase(),
     number: String(query.number ?? "")
       .trim()
@@ -551,11 +644,18 @@ function readCacheEntry(key) {
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? "null");
     const savedAt = Date.parse(stored?.savedAt ?? "");
+    const expectedContainerCount = (stored?.snapshot?.summary?.containers ?? []).reduce(
+      (total, container) => total + Number(container?.quantity ?? container?.count ?? 0),
+      0
+    );
+    const hasCompleteContainerDetails =
+      expectedContainerCount <= 0 || (stored?.snapshot?.containers?.length ?? 0) > 0;
     const valid =
       stored?.version === CACHE_VERSION &&
       stored?.query &&
       stored?.snapshot?.tracking &&
       stored?.snapshot?.summary &&
+      hasCompleteContainerDetails &&
       Number.isFinite(savedAt) &&
       Date.now() - savedAt <= CACHE_TTL_MS;
 
@@ -583,10 +683,41 @@ function loadSnapshot(query) {
 }
 
 function readHistory() {
-  return readCacheIndex()
-    .map((key) => readCacheEntry(key))
-    .filter(Boolean)
-    .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt));
+  const records = readCacheIndex()
+    .map((key) => ({ key, entry: readCacheEntry(key) }))
+    .filter((record) => record.entry)
+    .sort((left, right) => Date.parse(right.entry.savedAt) - Date.parse(left.entry.savedAt));
+  const seenShipmentNumbers = new Set();
+  const duplicateKeys = new Set();
+  const latestRecords = [];
+
+  for (const record of records) {
+    const shipmentNumber = String(
+      record.entry.snapshot?.tracking?.number ?? record.entry.query?.number ?? ""
+    )
+      .trim()
+      .replace(/\s+/g, "")
+      .toUpperCase();
+
+    if (shipmentNumber && seenShipmentNumbers.has(shipmentNumber)) {
+      duplicateKeys.add(record.key);
+      continue;
+    }
+
+    if (shipmentNumber) seenShipmentNumbers.add(shipmentNumber);
+    latestRecords.push(record);
+  }
+
+  if (duplicateKeys.size > 0) {
+    try {
+      for (const key of duplicateKeys) localStorage.removeItem(key);
+      writeCacheIndex(readCacheIndex().filter((key) => !duplicateKeys.has(key)));
+    } catch {
+      // Deduplication is best-effort when browser storage is unavailable.
+    }
+  }
+
+  return latestRecords.map((record) => record.entry);
 }
 
 function migrateLegacyCache() {
@@ -597,8 +728,10 @@ function migrateLegacyCache() {
       for (const legacyKey of legacyKeys) {
         const stored = JSON.parse(localStorage.getItem(legacyKey) ?? "null");
         if (!stored?.snapshot?.tracking) continue;
+        if (stored.snapshot.tracking.type === "CONTAINER") continue;
         const query = {
           carrier: "COSCO",
+          channel: stored.query?.channel ?? stored.snapshot.channel ?? "AUTO",
           type: stored.snapshot.tracking.type,
           number: stored.snapshot.tracking.number
         };
@@ -620,7 +753,10 @@ function appendCell(row, value, className = "") {
 
 function setLoading(value) {
   loading = value;
-  submitButton.classList.toggle("is-loading", loading);
+  submitButton.classList.remove("is-loading");
+  submitButton.setAttribute("aria-busy", String(loading));
+  const label = submitButton.querySelector(".button-label");
+  if (label) label.textContent = t(loading ? "query.loading" : "query.submit");
   submitButton.disabled = loading || !CARRIERS[carrierSelect.value]?.enabled;
   results.classList.toggle("is-refreshing", loading && !results.hidden);
 }
@@ -669,6 +805,24 @@ function normalizeLocationName(value) {
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
 }
 
+function selectDisplayRouteNodes(route) {
+  const seen = new Set();
+  return route.filter((node) => {
+    if (!node) return false;
+    const identity = [
+      node.locationType,
+      normalizeLocationName(node.city),
+      node.event,
+      node.actualTime ?? node.estimatedTime
+    ]
+      .map((value) => String(value ?? "").trim().toUpperCase())
+      .join("|");
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}
+
 function calculateRouteProgress(route, snapshot) {
   if (route.length === 0) return 0;
   const finalNode = route.at(-1);
@@ -701,11 +855,11 @@ function containerTypeSummary(snapshot) {
   const normalizedContainers = (snapshot.containers ?? []).filter((container) => container?.type);
   const fallbackContainers = (snapshot.summary?.containers ?? [])
     .map((container) => ({
-      type: container?.containerType ?? container?.type,
+      type: container?.containerType ?? container?.cntrType ?? container?.type,
       quantity: Number(container?.quantity ?? container?.count ?? 1)
     }))
     .filter((container) => container.type);
-  const source = normalizedContainers.length > 0 ? normalizedContainers : fallbackContainers;
+  const source = fallbackContainers.length > 0 ? fallbackContainers : normalizedContainers;
   const counts = new Map();
 
   for (const container of source) {
@@ -718,7 +872,7 @@ function containerTypeSummary(snapshot) {
   }
 
   return [...counts.entries()]
-    .map(([type, count]) => (count > 1 ? `${type} × ${count}` : type))
+    .map(([type, count]) => `${type} × ${count}`)
     .join(" · ");
 }
 
@@ -737,6 +891,7 @@ function renderPrimaryFacts(snapshot) {
 }
 
 function renderRoute(route, snapshot = {}) {
+  route = selectDisplayRouteNodes(route);
   elements["route-flow"].replaceChildren();
   elements["route-flow"].style.setProperty("--route-columns", Math.max(route.length, 1));
   elements["route-count"].textContent = t("route.nodes", { count: route.length });
@@ -839,9 +994,17 @@ function renderRoutingLegs(legs) {
     );
     row.append(dischargePort);
     appendCell(row, formatDateTime(leg.estimatedDeparture));
-    appendCell(row, formatDateTime(leg.actualDeparture), "actual-time");
+    appendCell(
+      row,
+      leg.actualDeparture ? formatDateTime(leg.actualDeparture) : t("metrics.notDeparted"),
+      `actual-time${leg.actualDeparture ? "" : " pending-time"}`
+    );
     appendCell(row, formatDateTime(leg.estimatedArrival));
-    appendCell(row, formatDateTime(leg.actualArrival), "actual-time");
+    appendCell(
+      row,
+      leg.actualArrival ? formatDateTime(leg.actualArrival) : t("metrics.notArrived"),
+      `actual-time${leg.actualArrival ? "" : " pending-time"}`
+    );
     appendCell(row, leg.masterBill);
     body.append(row);
   }
@@ -849,8 +1012,13 @@ function renderRoutingLegs(legs) {
 
 function renderReferences(references) {
   elements["master-bill"].textContent = valueOrDash(references.masterBill);
+  const bookingNumbers = Array.isArray(references.bookingNumbers)
+    ? references.bookingNumbers
+    : references.bookingNumbers
+      ? [references.bookingNumbers]
+      : [];
   elements["booking-numbers"].textContent =
-    references.bookingNumbers?.length > 0 ? references.bookingNumbers.join(", ") : "—";
+    bookingNumbers.length > 0 ? bookingNumbers.join(", ") : "—";
 
   if (references.external?.length > 0) {
     elements["external-references"].className = "";
@@ -920,6 +1088,11 @@ function restartResultAnimation() {
   }, 1_300);
 }
 
+function setSummaryService(element, enabled) {
+  element.classList.toggle("is-enabled", enabled);
+  element.setAttribute("aria-checked", String(enabled));
+}
+
 function renderResult(payload) {
   const snapshot = payload.snapshot;
   const summary = snapshot.summary;
@@ -927,13 +1100,61 @@ function renderResult(payload) {
   const latest = summary.latestEvent;
   const providerCode = snapshot.provider?.code ?? "COSCO";
   const resultChannel = CHANNELS[snapshot.channel] ?? CHANNELS.NETWORK;
+  const isContainerOnly = snapshot.viewMode === "CONTAINER";
 
   currentPayload = payload;
+  results.classList.toggle("is-container-only", isContainerOnly);
   sourceTag.textContent = t(resultChannel.sourceKey);
   elements["result-carrier"].textContent = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
   elements["result-number"].textContent = snapshot.tracking.number;
   renderPrimaryFacts(snapshot);
+
+  const bookingNumbers = Array.isArray(summary.bookingNumbers)
+    ? summary.bookingNumbers
+    : summary.bookingNumbers
+      ? [summary.bookingNumbers]
+      : [];
+  elements["summary-booking-number"].textContent =
+    bookingNumbers.length > 0 ? bookingNumbers.join(", ") : "—";
+  elements["summary-origin-name"].textContent = valueOrDash(
+    [summary.origin?.name, summary.origin?.countryCode].filter(Boolean).join(", ")
+  );
+  elements["summary-destination-name"].textContent = valueOrDash(
+    [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
+  );
+  elements["summary-latest-detail"].textContent = [
+    latest?.location,
+    formatDateTime(latest?.occurredAt)
+  ]
+    .filter((value) => value && value !== "—")
+    .join(" · ") || "—";
+
+  const transportModes = new Set(
+    (snapshot.routingLegs ?? [])
+      .map((leg) => String(leg?.mode ?? "").trim().toUpperCase())
+      .filter(Boolean)
+  );
+  const serviceScopes = (summary.serviceScopes ?? []).map((scope) =>
+    String(scope).trim().toLowerCase()
+  );
+  setSummaryService(
+    elements["summary-service-sea"],
+    transportModes.has("SEA") || serviceScopes.some((scope) => scope.includes("ocean"))
+  );
+  setSummaryService(
+    elements["summary-service-inland"],
+    ["TRUCK", "RAIL", "ROAD", "INLAND"].some((mode) => transportModes.has(mode)) ||
+      serviceScopes.some((scope) => scope.includes("truck") || scope.includes("inland"))
+  );
+  setSummaryService(
+    elements["summary-service-customs"],
+    serviceScopes.some((scope) => scope.includes("custom"))
+  );
+  setSummaryService(
+    elements["summary-service-warehouse"],
+    serviceScopes.some((scope) => scope.includes("warehouse") || scope.includes("storage"))
+  );
 
   const source = payload.browserCached ? "browser" : payload.cached ? "server" : "live";
   elements["cache-status"].dataset.source = source;
@@ -943,12 +1164,16 @@ function renderResult(payload) {
     : "";
   elements["fetched-at"].textContent = formatLocalDateTime(snapshot.fetchedAt);
 
-  elements["actual-departure"].textContent = formatDateTime(keyTimes.actualDeparture?.time);
+  elements["actual-departure"].textContent = keyTimes.actualDeparture?.time
+    ? formatDateTime(keyTimes.actualDeparture.time)
+    : t("metrics.notDeparted");
   elements["actual-departure-location"].textContent = valueOrDash(
     keyTimes.actualDeparture?.location,
     t("common.notProvided")
   );
-  elements["actual-arrival"].textContent = formatDateTime(keyTimes.actualArrival?.time);
+  elements["actual-arrival"].textContent = keyTimes.actualArrival?.time
+    ? formatDateTime(keyTimes.actualArrival.time)
+    : t("metrics.notArrived");
   elements["actual-arrival-location"].textContent = valueOrDash(
     keyTimes.actualArrival?.location,
     t("common.notProvided")
@@ -1171,12 +1396,6 @@ function setHistoryDetailsExpanded({ item, toggle, details, entryKey, expanded, 
 
 function renderHistory() {
   const history = readHistory();
-  const carriers = new Set(history.map((entry) => entry.query.carrier));
-  elements["history-total"].textContent = String(history.length);
-  elements["history-carriers"].textContent = String(carriers.size);
-  elements["history-last-updated"].textContent = history[0]
-    ? formatLocalDateTime(history[0].savedAt)
-    : t("overview.noRecords");
 
   historyEmpty.hidden = history.length > 0;
   historyTableWrap.hidden = history.length === 0;
@@ -1272,6 +1491,22 @@ function renderHistory() {
       chevron
     );
 
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "history-delete-button";
+    deleteButton.textContent = t("history.delete");
+    deleteButton.setAttribute(
+      "aria-label",
+      t("history.deleteLabel", { number: entry.query.number })
+    );
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!window.confirm(t("history.confirmDelete", { number: entry.query.number }))) return;
+      removeCacheKey(entryKey);
+      expandedHistoryKeys.delete(entryKey);
+      renderHistory();
+    });
+
     const details = document.createElement("div");
     details.className = "shipment-row-details";
     details.id = detailId;
@@ -1349,7 +1584,7 @@ function renderHistory() {
       });
     });
 
-    item.append(toggle, details);
+    item.append(toggle, deleteButton, details);
     historyTableBody.append(item);
   }
 }
@@ -1360,6 +1595,7 @@ function updateCarrierUI({ resetResult = false } = {}) {
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   carrierNotice.hidden = carrier.enabled;
   carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
+  checkChannelsButton.disabled = channelCheckLoading || !carrier.enabled;
   setLoading(loading);
 
   if (
@@ -1371,6 +1607,62 @@ function updateCarrierUI({ resetResult = false } = {}) {
     results.hidden = true;
     emptyState.hidden = false;
     clearError();
+  }
+}
+
+function probeElements(channel) {
+  return channel === "PLAYWRIGHT"
+    ? {
+        card: playwrightProbe,
+        status: playwrightProbeStatus,
+        latency: playwrightProbeLatency
+      }
+    : {
+        card: networkProbe,
+        status: networkProbeStatus,
+        latency: networkProbeLatency
+      };
+}
+
+function renderProbe(channel, probe) {
+  const target = probeElements(channel);
+  const status = probe?.status ?? "unknown";
+  const available = probe?.available === true || status === "available";
+  const unavailable = probe?.available === false || status === "unavailable";
+  target.card.dataset.status = status;
+  target.status.textContent = available
+    ? t("workbench.available")
+    : unavailable
+      ? t("workbench.unavailable")
+      : status === "checking"
+        ? t("status.shortChecking")
+        : t("workbench.notChecked");
+  target.latency.textContent = Number.isFinite(probe?.responseTimeMs)
+    ? t("workbench.latency", { time: probe.responseTimeMs })
+    : "—";
+  target.card.title = probe?.error ?? "";
+}
+
+function renderChannelCheck(result) {
+  if (!result?.channels) return;
+  lastChannelCheck = result;
+  renderProbe("NETWORK", result.channels.NETWORK);
+  renderProbe("PLAYWRIGHT", result.channels.PLAYWRIGHT);
+  channelCheckSummary.textContent = t("workbench.checkedAt", {
+    time: formatLocalDateTime(result.checkedAt)
+  });
+}
+
+function setChannelCheckLoading(value) {
+  channelCheckLoading = value;
+  checkChannelsButton.disabled = value || !CARRIERS[carrierSelect.value]?.enabled;
+  checkChannelsButton.classList.toggle("is-loading", value);
+  const label = checkChannelsButton.querySelector("[data-i18n]");
+  if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");
+  if (value) {
+    renderProbe("NETWORK", { status: "checking" });
+    renderProbe("PLAYWRIGHT", { status: "checking" });
+    channelCheckSummary.textContent = t("workbench.helper");
   }
 }
 
@@ -1393,6 +1685,10 @@ function renderChannelStatus(status) {
   ]
     .filter(Boolean)
     .join("\n");
+
+  if (!lastChannelCheck) {
+    renderProbe("NETWORK", lastChannelStatus);
+  }
 }
 
 async function refreshChannelStatus() {
@@ -1489,7 +1785,7 @@ function showView(name, { updateLocation = true } = {}) {
 
 function openHistoryEntry(entry) {
   carrierSelect.value = entry.query.carrier;
-  channelSelect.value = entry.query.channel ?? "NETWORK";
+  channelSelect.value = entry.query.channel ?? "AUTO";
   trackingType.value = entry.query.type;
   trackingNumber.value = entry.query.number;
   updateCarrierUI();
@@ -1507,6 +1803,7 @@ function openHistoryEntry(entry) {
       requestAnimationFrame(() => {
         const currentQuery = normalizeQuery({
           carrier: carrierSelect.value,
+          channel: channelSelect.value,
           type: trackingType.value,
           number: trackingNumber.value
         });
@@ -1554,6 +1851,7 @@ function applyLanguage(language, { persist = true } = {}) {
   activeViewTitle.textContent = t(`nav.${activeView}`);
   updateCarrierUI();
   renderChannelStatus(lastChannelStatus);
+  if (lastChannelCheck) renderChannelCheck(lastChannelCheck);
   renderHistory();
   if (currentPayload) renderResult(currentPayload);
 }
@@ -1584,6 +1882,36 @@ async function requestTracking(query) {
 
   return primary;
 }
+
+checkChannelsButton.addEventListener("click", async () => {
+  const carrier = CARRIERS[carrierSelect.value];
+  if (!carrier?.enabled || channelCheckLoading) return;
+
+  setChannelCheckLoading(true);
+  try {
+    const response = await fetch("/api/channels/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: trackingType.value || "BILLOFLADING",
+        number: trackingNumber.value.trim() || "6502077380"
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || t("error.http", { status: response.status }));
+    }
+    renderChannelCheck(payload);
+  } catch (error) {
+    renderProbe("NETWORK", { status: "unknown" });
+    renderProbe("PLAYWRIGHT", { status: "unknown" });
+    channelCheckSummary.textContent = t("workbench.checkFailed", {
+      message: error?.message || t("error.generic")
+    });
+  } finally {
+    setChannelCheckLoading(false);
+  }
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1679,12 +2007,12 @@ const initialNumber = initial.get("number");
 if (initialNumber) {
   const initialQuery = normalizeQuery({
     carrier: initial.get("carrier") || "COSCO",
-    channel: initial.get("channel") || "NETWORK",
+    channel: initial.get("channel") || "AUTO",
     type: initial.get("type") || "BILLOFLADING",
     number: initialNumber
   });
   carrierSelect.value = CARRIERS[initialQuery.carrier] ? initialQuery.carrier : "COSCO";
-  channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "NETWORK";
+  channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "AUTO";
   trackingType.value = TYPE_KEYS[initialQuery.type] ? initialQuery.type : "BILLOFLADING";
   trackingNumber.value = initialQuery.number;
   updateCarrierUI();

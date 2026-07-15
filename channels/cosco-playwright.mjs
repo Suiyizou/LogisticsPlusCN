@@ -2,14 +2,14 @@ import { chromium } from "playwright";
 import { decodeCoscoPayload } from "../lib/cosco-payload.mjs";
 
 const COSCO_TRACKING_PAGE =
-  "https://elines.coscoshipping.com/scct/public/ct/base?lang=zh";
+  "https://elines.coscoshipping.com/scct/public/ct/base?lang=en";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const OPTIONAL_RESPONSE_SETTLE_MS = 1_200;
 
 const TRACKING_LABELS = Object.freeze({
-  BILLOFLADING: "提单号",
-  BOOKING: "订舱号",
-  CONTAINER: "箱号"
+  BILLOFLADING: "B/L No.",
+  BOOKING: "Booking No.",
+  CONTAINER: "Container No."
 });
 
 let sharedBrowserPromise = null;
@@ -41,7 +41,9 @@ async function getSharedBrowser() {
 }
 
 function endpointName(response) {
-  return response.url().match(/\/public\/cargoTracking\/(detail|bookingInfo|containerInfo)$/)?.[1] ?? null;
+  return response
+    .url()
+    .match(/\/public\/cargoTracking\/(detail|bookingInfo|containerInfo|containers)$/)?.[1] ?? null;
 }
 
 function responseMatchesRequest(response, request, endpoint = "detail") {
@@ -98,7 +100,7 @@ export async function fetchCoscoTrackingViaPlaywright(request, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const browser = options.browser ?? (await getSharedBrowser());
   const context = await browser.newContext({
-    locale: "zh-CN",
+    locale: "en-US",
     timezoneId: "Asia/Shanghai"
   });
 
@@ -106,10 +108,15 @@ export async function fetchCoscoTrackingViaPlaywright(request, options = {}) {
     const page = await context.newPage();
     const optionalPayloads = new Map();
     const optionalCaptures = new Set();
+    const primaryEndpoint = request.type === "CONTAINER" ? "containers" : "detail";
 
     page.on("response", (response) => {
       const endpoint = endpointName(response);
-      if (!endpoint || endpoint === "detail" || !responseMatchesRequest(response, request, endpoint)) {
+      if (
+        !endpoint ||
+        endpoint === primaryEndpoint ||
+        !responseMatchesRequest(response, request, endpoint)
+      ) {
         return;
       }
 
@@ -135,25 +142,28 @@ export async function fetchCoscoTrackingViaPlaywright(request, options = {}) {
     await page.locator("input:not([readonly])").first().fill(request.number);
 
     const responsePromise = page.waitForResponse(
-      (response) => responseMatchesRequest(response, request),
+      (response) => responseMatchesRequest(response, request, primaryEndpoint),
       { timeout: timeoutMs }
     );
 
-    await page.getByRole("button", { name: /搜\s*索/ }).click();
+    await page.getByRole("button", { name: /Search/i }).click();
     const response = await responsePromise;
-    const detail = await decodeSuccessfulResponse(response);
+    const primaryResult = await decodeSuccessfulResponse(response);
 
     await page.waitForTimeout(OPTIONAL_RESPONSE_SETTLE_MS);
     await Promise.allSettled([...optionalCaptures]);
     const pageText = await page.locator("body").innerText();
 
     return {
-      detail,
+      detail: request.type === "CONTAINER" ? null : primaryResult,
+      containers: request.type === "CONTAINER" ? primaryResult : [],
       bookingInfo: optionalPayloads.get("bookingInfo") ?? {},
       containerInfo: optionalPayloads.get("containerInfo") ?? [],
       browser: {
         pageRenderedTrackingResult:
-          pageText.includes(request.number) || pageText.includes("最新动态"),
+          pageText.includes(request.number) ||
+          pageText.includes("Dynamic Node") ||
+          pageText.includes("Latest Event"),
         responseUrl: response.url(),
         responseStatus: response.status()
       }
