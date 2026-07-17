@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildRoutingLegs,
   decodeCoscoPayload,
+  enrichCoscoShipmentContainers,
   listCarrierAdapters,
   listCoscoQueryChannels,
   normalizeCarrierCode,
@@ -174,6 +175,66 @@ test("creates a stable channel-one network snapshot", () => {
   assert.equal(snapshot.route[0].sequence, 1);
   assert.equal(snapshot.containers.length, 1);
   assert.equal(snapshot.containers[0].number, "TEMU6003424");
+});
+
+test("maps business references and enriches missing container milestones with a child query", async () => {
+  const containerInfo = await enrichCoscoShipmentContainers(
+    [
+      {
+        containerNumber: "TEMU6003424",
+        containerType: "40HQ",
+        trafficTerm: "CY | CY"
+      }
+    ],
+    async (request) => {
+      assert.equal(request.type, "CONTAINER");
+      assert.equal(request.number, "TEMU6003424");
+      return [
+        {
+          containerNumberWithCheckDigit: "TEMU6003424",
+          etaAtLastPod: "2026-07-12T16:00:00",
+          milestones: [
+            {
+              eventName: "Container Gated Out",
+              actualEventDateTime: "2026-07-14T20:21:00",
+              eventLocationName: "Savannah",
+              transportMode: "Truck"
+            }
+          ]
+        }
+      ];
+    }
+  );
+
+  const snapshot = normalizeCoscoSnapshot(
+    {
+      cargoTrackingSummary: {
+        blNumber: "ABC123",
+        containerSummaryInfos: [{ cntrType: "40HQ", quantity: "1" }]
+      }
+    },
+    normalizeTrackingRequest({ type: "BILLOFLADING", number: "ABC123" }),
+    "2026-07-16T00:00:00.000Z",
+    {
+      bookingInfo: {
+        referenceInformation: [
+          { name: "Client name code", value: "HHUSA" },
+          { name: "Client's PO number", value: "PO-1048" },
+          { name: "JOB NUMBER", value: "JOB-6021" }
+        ]
+      },
+      containerInfo
+    }
+  );
+
+  assert.deepEqual(snapshot.references.business, {
+    clientNameCode: "HHUSA",
+    clientPoNumber: "PO-1048",
+    forwarderJobNumber: "JOB-6021"
+  });
+  assert.equal(snapshot.containers[0].detailSource, "CONTAINER_SUBQUERY");
+  assert.equal(snapshot.containers[0].latestEvent, "Container Gated Out");
+  assert.equal(snapshot.containers[0].milestones.length, 1);
 });
 
 test("marks Playwright results as channel two without changing the snapshot shape", () => {

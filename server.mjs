@@ -282,6 +282,108 @@ function normalizeReferenceValue(reference) {
   );
 }
 
+function normalizeReferenceName(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, " ")
+    .trim();
+}
+
+function extractBusinessReferences(bookingInfo = {}) {
+  const information = Array.isArray(bookingInfo.referenceInformation)
+    ? bookingInfo.referenceInformation
+    : [];
+  const findByName = (patterns) => {
+    const match = information.find((item) => {
+      const name = normalizeReferenceName(item?.name ?? item?.label ?? item?.type);
+      return patterns.some((pattern) => pattern.test(name));
+    });
+    return normalizeReferenceValue(match);
+  };
+
+  return {
+    clientNameCode:
+      bookingInfo.clientNameCode ??
+      bookingInfo.customerCode ??
+      findByName([/client name/, /client code/, /customer.*code/, /客户.*代码/]) ??
+      null,
+    clientPoNumber:
+      bookingInfo.clientPoNumber ??
+      bookingInfo.customerPoNumber ??
+      findByName([/client.*po/, /customer.*po/, /purchase order/, /客户订单/]) ??
+      null,
+    forwarderJobNumber:
+      bookingInfo.forwarderJobNumber ??
+      bookingInfo.jobNumber ??
+      findByName([/forwarder.*job/, /job number/, /freight.*order/, /货代订单/]) ??
+      null
+  };
+}
+
+function containerNeedsSubquery(container) {
+  return Boolean(
+    normalizeContainerNumber(container) &&
+      (!Array.isArray(container?.milestones) ||
+        container.milestones.length === 0 ||
+        !container?.currentMilestone?.eventName ||
+        !container?.currentMilestone?.actualEventDateTime)
+  );
+}
+
+export async function enrichCoscoShipmentContainers(containerInfo, fetchContainerDetails) {
+  const containers = Array.isArray(containerInfo) ? containerInfo : [];
+  if (containers.length === 0 || typeof fetchContainerDetails !== "function") return containers;
+
+  const enriched = [...containers];
+  const batchSize = 4;
+
+  for (let offset = 0; offset < containers.length; offset += batchSize) {
+    const batch = containers.slice(offset, offset + batchSize);
+    const results = await Promise.all(
+      batch.map(async (container) => {
+        if (!containerNeedsSubquery(container)) return container;
+
+        const number = normalizeContainerNumber(container);
+        const request = normalizeTrackingRequest({ type: "CONTAINER", number });
+
+        try {
+          const response = await fetchContainerDetails(request);
+          const detail = selectRequestedContainers(response, request)[0];
+          if (!detail) return container;
+
+          return {
+            ...detail,
+            ...container,
+            containerNumber: container.containerNumber ?? detail.containerNumber ?? null,
+            containerNumberWithCheckDigit:
+              container.containerNumberWithCheckDigit ??
+              detail.containerNumberWithCheckDigit ??
+              null,
+            containerType: container.containerType ?? detail.containerType ?? null,
+            sealNumber: container.sealNumber ?? detail.sealNumber ?? null,
+            milestones: detail.milestones ?? container.milestones ?? [],
+            currentMilestone:
+              container.currentMilestone ?? detail.milestones?.[0] ?? detail.currentMilestone ?? null,
+            etaAtLastPod: container.etaAtLastPod ?? detail.etaAtLastPod ?? null,
+            ataAtLastPod: container.ataAtLastPod ?? detail.ataAtLastPod ?? null,
+            detailSource: "CONTAINER_SUBQUERY"
+          };
+        } catch {
+          return { ...container, detailSource: "SHIPMENT_QUERY" };
+        }
+      })
+    );
+
+    results.forEach((container, index) => {
+      enriched[offset + index] = container;
+    });
+  }
+
+  return enriched;
+}
+
 export function buildRoutingLegs(result) {
   const summary = result?.cargoTrackingSummary ?? {};
   const route = result?.cargoTrackingFullChain ?? [];
@@ -358,6 +460,7 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
   const finalRouteNode = [...(result?.cargoTrackingFullChain ?? [])]
     .reverse()
     .find((node) => node.locationType === "FND");
+  const businessReferences = extractBusinessReferences(bookingInfo);
 
   return {
     channel: queryChannel.code,
@@ -440,23 +543,34 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
     transportStatuses: result?.cargoTrackingTransportStatus ?? [],
     sailingSchedule: result?.cargoTrackingSailingSchedule ?? [],
     routingLegs,
-    containers: containerInfo.map((container) => ({
-      number: container.containerNumber ?? null,
+    containers: containerInfo.map((container) => {
+      const currentMilestone = container.currentMilestone ?? container.milestones?.[0] ?? null;
+      return {
+      number: normalizeContainerNumber(container),
       type: container.containerType ?? null,
       sealNumber: container.sealNumber ?? null,
       trafficTerm: container.trafficTerm ?? null,
-      transportMode: container.currentMilestone?.transportMode ?? null,
-      currentLocation: container.currentMilestone?.eventLocation ?? null,
-      latestEvent: container.currentMilestone?.eventName ?? null,
-      latestEventTime: container.currentMilestone?.actualEventDateTime ?? null,
+      transportMode: currentMilestone?.transportMode ?? null,
+      currentLocation:
+        currentMilestone?.eventLocationName ?? currentMilestone?.eventLocation ?? null,
+      latestEvent: currentMilestone?.eventName ?? null,
+      latestEventTime: currentMilestone?.actualEventDateTime ?? null,
+      etaAtLastPod: container.etaAtLastPod ?? null,
+      ataAtLastPod: container.ataAtLastPod ?? null,
+      detailSource: container.detailSource ?? "SHIPMENT_QUERY",
+      milestones: (container.milestones ?? [])
+        .map(normalizeContainerMilestone)
+        .filter(Boolean),
       referenceNumbers: (container.refNumbers ?? [])
         .map(normalizeReferenceValue)
         .filter(Boolean)
-    })),
+    };
+    }),
     references: {
       masterBill: summary.blNumber ?? null,
       bookingNumbers: summary.bookingNumber ?? [],
       external: [...new Set([...externalReferences, ...containerReferences])],
+      business: businessReferences,
       information: (bookingInfo.referenceInformation ?? []).map((item) => ({
         name: item.name ?? null,
         value: item.value ?? null,
@@ -550,6 +664,11 @@ export function normalizeCoscoContainerSnapshot(
       masterBill: null,
       bookingNumbers: [],
       external: [],
+      business: {
+        clientNameCode: null,
+        clientPoNumber: null,
+        forwarderJobNumber: null
+      },
       information: []
     }
   };
@@ -723,11 +842,15 @@ async function fetchCoscoTrackingViaNetwork(request) {
     }),
     fetchCoscoShipmentContainers(request).catch(() => [])
   ]);
+  const enrichedContainerInfo = await enrichCoscoShipmentContainers(
+    containerInfo,
+    fetchCoscoContainers
+  );
   const fetchedAt = new Date().toISOString();
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
     queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
     bookingInfo,
-    containerInfo
+    containerInfo: enrichedContainerInfo
   });
 
   return {
@@ -738,7 +861,7 @@ async function fetchCoscoTrackingViaNetwork(request) {
     raw: {
       detail,
       bookingInfo,
-      containerInfo
+      containerInfo: enrichedContainerInfo
     }
   };
 }
@@ -770,10 +893,14 @@ async function fetchCoscoTrackingWithPlaywright(request) {
     };
   }
 
+  const enrichedContainerInfo = await enrichCoscoShipmentContainers(
+    containerInfo,
+    fetchCoscoContainers
+  );
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
       queryChannel: COSCO_QUERY_CHANNELS.PLAYWRIGHT,
       bookingInfo,
-      containerInfo
+      containerInfo: enrichedContainerInfo
     });
 
   if (!snapshotHasCompleteContainerDetails(snapshot, request)) {
@@ -785,7 +912,7 @@ async function fetchCoscoTrackingWithPlaywright(request) {
     raw: {
       detail,
       bookingInfo,
-      containerInfo,
+      containerInfo: enrichedContainerInfo,
       browser
     }
   };
@@ -795,6 +922,12 @@ async function fetchCoscoTracking(request, queryChannel) {
   if (queryChannel.code === "AUTO") {
     try {
       const result = await fetchCoscoTrackingViaNetwork(request);
+      if (
+        request.type !== "CONTAINER" &&
+        result.enrichment?.containerDetailsComplete === false
+      ) {
+        throw new HttpError(502, "COSCO 网络接口未返回完整箱号明细");
+      }
       return {
         ...result,
         strategy: {
@@ -1023,7 +1156,14 @@ function snapshotHasCompleteContainerDetails(snapshot, trackingRequest) {
     (total, container) => total + Number(container?.quantity ?? container?.count ?? 0),
     0
   );
-  return expectedContainerCount <= 0 || (snapshot?.containers?.length ?? 0) > 0;
+  if (expectedContainerCount <= 0) return true;
+
+  const actualContainerCount = new Set(
+    (snapshot?.containers ?? [])
+      .map((container) => String(container?.number ?? "").trim().toUpperCase())
+      .filter(Boolean)
+  ).size;
+  return actualContainerCount >= expectedContainerCount;
 }
 
 async function handleTrackRequest(request, response, forcedCarrier, forcedChannel) {

@@ -276,6 +276,10 @@
                   <div class="result-meta">
                     <span id="cache-status">Live result</span>
                     <time id="fetched-at">—</time>
+                    <button type="button" class="document-drawer-trigger" id="open-document-drawer">
+                      <span data-i18n="documents.open">Documents</span>
+                      <b id="document-filled-count">0/8</b>
+                    </button>
                   </div>
                 </div>
 
@@ -406,7 +410,24 @@
                       <span class="panel-icon">#</span>
                       <strong data-i18n="references.title">Carrier identifiers</strong>
                     </div>
+                    <button type="button" class="panel-edit-button" id="edit-business-references" data-i18n="business.edit">
+                      Edit business references
+                    </button>
                   </div>
+                  <dl class="business-reference-grid">
+                    <div>
+                      <dt data-i18n="business.clientCode">Client name code</dt>
+                      <dd id="client-name-code">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="business.clientPo">Client PO number</dt>
+                      <dd id="client-po-number">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="business.forwarderJob">Forwarder job number</dt>
+                      <dd id="forwarder-job-number">—</dd>
+                    </div>
+                  </dl>
                   <dl class="reference-core">
                     <div>
                       <dt data-i18n="references.masterBill">Master bill</dt>
@@ -454,6 +475,30 @@
                 </div>
               </section>
 
+              <section class="panel table-panel tracking-events-panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon">◷</span>
+                    <span>
+                      <strong data-i18n="trackingEvents.title">Tracking information</strong>
+                      <small data-i18n="trackingEvents.subtitle">Estimated and confirmed carrier milestones</small>
+                    </span>
+                  </div>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th data-i18n="trackingEvents.movement">Movement</th>
+                        <th data-i18n="trackingEvents.estimate">Estimate</th>
+                        <th class="actual-column" data-i18n="trackingEvents.actual">Actual</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tracking-events-table-body"></tbody>
+                  </table>
+                </div>
+              </section>
+
               <div class="secondary-grid">
                 <section class="panel table-panel">
                   <div class="panel-header">
@@ -474,6 +519,7 @@
                           <th data-i18n="containers.location">Current location</th>
                           <th data-i18n="containers.status">Latest status</th>
                           <th data-i18n="containers.time">Status time</th>
+                          <th data-i18n="containers.details">Details</th>
                         </tr>
                       </thead>
                       <tbody id="container-table-body"></tbody>
@@ -499,5 +545,86 @@
         </main>
       </div>
     </div>
+
+    <div class="document-drawer-layer" id="document-drawer-layer" hidden>
+      <button class="document-drawer-backdrop" id="document-drawer-backdrop" type="button" aria-label="Close document drawer"></button>
+      <aside class="document-drawer" id="document-drawer" aria-hidden="true" aria-labelledby="document-drawer-title">
+        <header>
+          <span>
+            <small data-i18n="documents.kicker">SHIPMENT FILES</small>
+            <strong id="document-drawer-title" data-i18n="documents.title">Document details</strong>
+            <em id="document-drawer-shipment">—</em>
+          </span>
+          <button type="button" id="close-document-drawer" aria-label="Close">×</button>
+        </header>
+        <p class="document-drawer-intro" data-i18n="documents.intro">
+          One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.
+        </p>
+        <div class="document-list" id="document-list"></div>
+      </aside>
+    </div>
+
+    <dialog class="supplement-dialog" id="business-reference-dialog">
+      <form method="dialog" id="business-reference-form">
+        <header>
+          <span>
+            <small data-i18n="business.kicker">BUSINESS REFERENCES</small>
+            <strong data-i18n="business.dialogTitle">Edit shipment identifiers</strong>
+          </span>
+          <button type="button" class="dialog-close" data-dialog-close="business-reference-dialog" aria-label="Close">×</button>
+        </header>
+        <div class="supplement-form-grid">
+          <label>
+            <span data-i18n="business.clientCode">Client name code</span>
+            <input id="business-client-code-input" name="clientNameCode" maxlength="40" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="business.clientPo">Client PO number</span>
+            <input id="business-client-po-input" name="clientPoNumber" maxlength="80" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="business.forwarderJob">Forwarder job number</span>
+            <input id="business-forwarder-job-input" name="forwarderJobNumber" maxlength="80" autocomplete="off" />
+          </label>
+        </div>
+        <footer>
+          <button type="button" class="secondary-dialog-button" data-dialog-close="business-reference-dialog" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog class="supplement-dialog document-editor-dialog" id="document-editor-dialog">
+      <form method="dialog" id="document-editor-form">
+        <header>
+          <span>
+            <small data-i18n="documents.kicker">SHIPMENT FILES</small>
+            <strong id="document-editor-title" data-i18n="documents.add">Add file</strong>
+          </span>
+          <button type="button" class="dialog-close" data-dialog-close="document-editor-dialog" aria-label="Close">×</button>
+        </header>
+        <input type="hidden" id="document-type-input" name="documentType" />
+        <div class="document-editor-topic" id="document-editor-topic">—</div>
+        <div class="supplement-form-grid">
+          <label>
+            <span data-i18n="documents.file">File</span>
+            <input type="file" id="document-file-input" name="file" />
+            <small id="document-current-file"></small>
+          </label>
+          <label>
+            <span data-i18n="documents.uploader">Upload subject</span>
+            <select id="document-uploader-input" name="uploader"></select>
+          </label>
+          <label>
+            <span data-i18n="documents.visibility">Visible to</span>
+            <select id="document-visibility-input" name="visibility"></select>
+          </label>
+        </div>
+        <footer>
+          <button type="button" class="secondary-dialog-button" data-dialog-close="document-editor-dialog" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+        </footer>
+      </form>
+    </dialog>
   </body>
 </html>

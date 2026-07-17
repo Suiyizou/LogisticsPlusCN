@@ -28,6 +28,13 @@ const networkProbeStatus = document.querySelector("#network-probe-status");
 const playwrightProbeStatus = document.querySelector("#playwright-probe-status");
 const networkProbeLatency = document.querySelector("#network-probe-latency");
 const playwrightProbeLatency = document.querySelector("#playwright-probe-latency");
+const documentDrawerLayer = document.querySelector("#document-drawer-layer");
+const documentDrawer = document.querySelector("#document-drawer");
+const documentList = document.querySelector("#document-list");
+const businessReferenceDialog = document.querySelector("#business-reference-dialog");
+const businessReferenceForm = document.querySelector("#business-reference-form");
+const documentEditorDialog = document.querySelector("#document-editor-dialog");
+const documentEditorForm = document.querySelector("#document-editor-form");
 
 const CACHE_VERSION = 3;
 const CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -37,6 +44,59 @@ const CACHE_INDEX_KEY = "shipment-track:v3:index";
 const LEGACY_CACHE_INDEX_KEY = "shipment-track:v2:index";
 const MIGRATION_KEY = "shipment-track:v3:migrated";
 const LANGUAGE_KEY = "shipment-track:language";
+const BUSINESS_REFERENCE_PREFIX = "shipment-track:business-references:";
+const DOCUMENT_METADATA_PREFIX = "shipment-track:documents:";
+
+const DOCUMENT_TYPES = Object.freeze([
+  {
+    code: "EXPORT_CIV_PL",
+    labelKey: "documents.type.exportCivPl",
+    uploaders: ["shipper"],
+    visibility: ["pending", "uploader", "agents", "all"]
+  },
+  {
+    code: "HOUSE_BILL",
+    labelKey: "documents.type.houseBill",
+    uploaders: ["forwarder"],
+    visibility: ["all"]
+  },
+  {
+    code: "MASTER_BILL",
+    labelKey: "documents.type.masterBill",
+    uploaders: ["forwarder"],
+    visibility: ["agents"]
+  },
+  {
+    code: "ARRIVAL_NOTICE",
+    labelKey: "documents.type.arrivalNotice",
+    uploaders: ["overseasAgent"],
+    visibility: ["pending", "agents", "consignee", "all"]
+  },
+  {
+    code: "DELIVERY_ORDER",
+    labelKey: "documents.type.deliveryOrder",
+    uploaders: ["overseasAgent"],
+    visibility: ["pending", "agents", "consignee"]
+  },
+  {
+    code: "POD",
+    labelKey: "documents.type.pod",
+    uploaders: ["overseasAgent"],
+    visibility: ["shipperConsignee"]
+  },
+  {
+    code: "DUTY_SUMMARY",
+    labelKey: "documents.type.dutySummary",
+    uploaders: ["overseasAgent"],
+    visibility: ["pending", "agents", "consignee"]
+  },
+  {
+    code: "IMPORT_CIV_PL",
+    labelKey: "documents.type.importCivPl",
+    uploaders: ["shipper", "consignee"],
+    visibility: ["pending", "shipperConsignee", "agents", "all"]
+  }
+]);
 
 const CARRIERS = Object.freeze({
   COSCO: {
@@ -209,6 +269,12 @@ const MESSAGES = {
     "references.masterBill": "Master bill",
     "references.booking": "Booking number",
     "references.external": "Other carrier references",
+    "business.kicker": "BUSINESS REFERENCES",
+    "business.edit": "Edit business references",
+    "business.dialogTitle": "Edit shipment identifiers",
+    "business.clientCode": "Client name code",
+    "business.clientPo": "Client PO number",
+    "business.forwarderJob": "Forwarder job number",
     "routing.title": "Routing legs",
     "routing.legs": "{count} legs",
     "routing.leg": "Leg",
@@ -222,6 +288,18 @@ const MESSAGES = {
     "routing.actualArrival": "Actual arrival",
     "routing.masterBill": "Master bill",
     "routing.empty": "The carrier did not provide enough data to compose routing legs.",
+    "trackingEvents.title": "Tracking information",
+    "trackingEvents.subtitle": "Estimated and confirmed carrier milestones",
+    "trackingEvents.movement": "Movement",
+    "trackingEvents.estimate": "Estimate",
+    "trackingEvents.actual": "Actual",
+    "trackingEvents.emptyPickup": "Empty container picked up at origin",
+    "trackingEvents.gatedIn": "Container gated in at origin",
+    "trackingEvents.loaded": "Container loaded on vessel",
+    "trackingEvents.departure": "Vessel departure from first load port",
+    "trackingEvents.arrival": "Vessel arrival at final discharge port",
+    "trackingEvents.gatedOut": "Container gated out",
+    "trackingEvents.emptyReturn": "Empty container returned",
     "containers.title": "Container details",
     "containers.count": "{count} containers",
     "containers.number": "Container",
@@ -231,10 +309,50 @@ const MESSAGES = {
     "containers.location": "Current location",
     "containers.status": "Latest status",
     "containers.time": "Status time",
+    "containers.details": "Details",
+    "containers.openDetails": "View timeline",
+    "containers.closeDetails": "Hide timeline",
+    "containers.noMilestones": "No container-specific milestones were returned.",
+    "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
+    "documents.kicker": "SHIPMENT FILES",
+    "documents.title": "Document details",
+    "documents.open": "Documents",
+    "documents.intro": "One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.",
+    "documents.file": "File",
+    "documents.uploader": "Upload subject",
+    "documents.visibility": "Visible to",
+    "documents.notUploaded": "Not uploaded",
+    "documents.add": "Add file",
+    "documents.edit": "Edit",
+    "documents.delete": "Delete",
+    "documents.updated": "Updated {time}",
+    "documents.currentFile": "Current file: {name}",
+    "documents.chooseFile": "Choose a file before saving.",
+    "documents.confirmDelete": "Delete {name} from this shipment?",
+    "documents.type.exportCivPl": "CIV & PL · Export invoice and packing list",
+    "documents.type.houseBill": "House bill of lading",
+    "documents.type.masterBill": "Master bill of lading · MB/L",
+    "documents.type.arrivalNotice": "Arrival notice",
+    "documents.type.deliveryOrder": "Delivery order",
+    "documents.type.pod": "POD · Proof of delivery",
+    "documents.type.dutySummary": "Duty summary",
+    "documents.type.importCivPl": "Import CIV & PL",
+    "documents.subject.shipper": "Shipper",
+    "documents.subject.forwarder": "Freight forwarder",
+    "documents.subject.overseasAgent": "Overseas agent",
+    "documents.subject.consignee": "Consignee",
+    "documents.visibility.pending": "To be confirmed",
+    "documents.visibility.uploader": "Uploader only",
+    "documents.visibility.agents": "Agents",
+    "documents.visibility.consignee": "Consignee",
+    "documents.visibility.shipperConsignee": "Shipper and consignee",
+    "documents.visibility.all": "All shipment parties",
     "raw.title": "Decoded source payload",
     "raw.cacheNotice": "The browser cache stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
+    "common.cancel": "Cancel",
+    "common.save": "Save",
     "cache.live": "Live result",
     "cache.server": "Server cache",
     "cache.browser": "Browser cache",
@@ -384,6 +502,12 @@ const MESSAGES = {
     "references.masterBill": "主提单号",
     "references.booking": "订舱号",
     "references.external": "其他船司参考号",
+    "business.kicker": "业务参考号",
+    "business.edit": "编辑业务参考号",
+    "business.dialogTitle": "编辑票单识别信息",
+    "business.clientCode": "客户名称代码",
+    "business.clientPo": "客户订单号",
+    "business.forwarderJob": "货代订单号",
     "routing.title": "分段运输 Routing",
     "routing.legs": "{count} 段",
     "routing.leg": "段",
@@ -397,6 +521,18 @@ const MESSAGES = {
     "routing.actualArrival": "实际到港",
     "routing.masterBill": "主提单",
     "routing.empty": "船司未提供可组成分段运输的数据。",
+    "trackingEvents.title": "TRACKING 信息",
+    "trackingEvents.subtitle": "预计时间与实际发生时间",
+    "trackingEvents.movement": "运输节点",
+    "trackingEvents.estimate": "预计时间",
+    "trackingEvents.actual": "实际发生时间",
+    "trackingEvents.emptyPickup": "提空箱时间",
+    "trackingEvents.gatedIn": "进港时间",
+    "trackingEvents.loaded": "装船时间",
+    "trackingEvents.departure": "开船时间",
+    "trackingEvents.arrival": "到港时间",
+    "trackingEvents.gatedOut": "提箱时间",
+    "trackingEvents.emptyReturn": "还空箱时间",
     "containers.title": "集装箱明细",
     "containers.count": "{count} 个箱",
     "containers.number": "箱号",
@@ -406,10 +542,50 @@ const MESSAGES = {
     "containers.location": "当前位置",
     "containers.status": "最新状态",
     "containers.time": "状态时间",
+    "containers.details": "详情",
+    "containers.openDetails": "查看箱子轨迹",
+    "containers.closeDetails": "收起箱子轨迹",
+    "containers.noMilestones": "船司未返回该箱的独立轨迹。",
+    "containers.enriched": "已通过箱号子查询补全",
     "containers.empty": "船司未提供箱级明细。",
+    "documents.kicker": "票单文件",
+    "documents.title": "文件详情",
+    "documents.open": "文件详情",
+    "documents.intro": "每个主题保留一份主文件，可在这里新增、编辑或删除文件及可见权限信息。",
+    "documents.file": "文件",
+    "documents.uploader": "上传主体",
+    "documents.visibility": "可见主体",
+    "documents.notUploaded": "尚未上传",
+    "documents.add": "新增文件",
+    "documents.edit": "编辑",
+    "documents.delete": "删除",
+    "documents.updated": "更新于 {time}",
+    "documents.currentFile": "当前文件：{name}",
+    "documents.chooseFile": "保存前请选择文件。",
+    "documents.confirmDelete": "确定从当前票单删除 {name} 吗？",
+    "documents.type.exportCivPl": "CIV & PL · 出口箱单和发票",
+    "documents.type.houseBill": "货代提单 · House B/L",
+    "documents.type.masterBill": "海运提单 · MB/L",
+    "documents.type.arrivalNotice": "到货通知 · Arrival Notice",
+    "documents.type.deliveryOrder": "派送单 · Delivery Order",
+    "documents.type.pod": "送货签收单 · POD",
+    "documents.type.dutySummary": "进口税单 · Duty Summary",
+    "documents.type.importCivPl": "进口箱单和发票 · Import CIV & PL",
+    "documents.subject.shipper": "发货方",
+    "documents.subject.forwarder": "货代公司",
+    "documents.subject.overseasAgent": "海外代理",
+    "documents.subject.consignee": "收货人",
+    "documents.visibility.pending": "待确认",
+    "documents.visibility.uploader": "仅上传方可见",
+    "documents.visibility.agents": "代理可见",
+    "documents.visibility.consignee": "收货人可见",
+    "documents.visibility.shipperConsignee": "发货人和收货人可见",
+    "documents.visibility.all": "全部主体可见",
     "raw.title": "原始解码结果",
     "raw.cacheNotice": "浏览器缓存仅保存统一快照，不保存船司原始报文。",
     "common.notProvided": "上游未提供",
+    "common.cancel": "取消",
+    "common.save": "保存",
     "cache.live": "实时查询",
     "cache.server": "服务端缓存",
     "cache.browser": "浏览器缓存",
@@ -471,11 +647,17 @@ const elements = Object.fromEntries(
     "master-bill",
     "booking-numbers",
     "external-references",
+    "client-name-code",
+    "client-po-number",
+    "forwarder-job-number",
     "reference-information",
     "routing-count",
     "routing-table-body",
+    "tracking-events-table-body",
     "container-count",
     "container-table-body",
+    "document-filled-count",
+    "document-drawer-shipment",
     "raw-json"
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
@@ -584,6 +766,218 @@ function normalizeQuery(query) {
 function cacheKey(query) {
   const normalized = normalizeQuery(query);
   return `${CACHE_PREFIX}${normalized.carrier}:${normalized.channel}:${normalized.type}:${normalized.number}`;
+}
+
+function snapshotStorageIdentity(snapshot) {
+  const provider = String(snapshot?.provider?.code ?? "COSCO").trim().toUpperCase();
+  const type = String(snapshot?.tracking?.type ?? "BILLOFLADING").trim().toUpperCase();
+  const number = String(snapshot?.tracking?.number ?? "").trim().toUpperCase();
+  return `${provider}:${type}:${number}`;
+}
+
+function readSupplementaryRecord(prefix, snapshot, fallback) {
+  if (!snapshot?.tracking?.number) return fallback;
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(`${prefix}${snapshotStorageIdentity(snapshot)}`) ?? "null"
+    );
+    return stored && typeof stored === "object" ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSupplementaryRecord(prefix, snapshot, value) {
+  if (!snapshot?.tracking?.number) return;
+  try {
+    localStorage.setItem(
+      `${prefix}${snapshotStorageIdentity(snapshot)}`,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Restricted storage should not prevent the detail view from remaining usable.
+  }
+}
+
+function businessReferencesForSnapshot(snapshot) {
+  const upstream = snapshot?.references?.business ?? {};
+  const stored = readSupplementaryRecord(BUSINESS_REFERENCE_PREFIX, snapshot, {});
+  return {
+    clientNameCode: stored.clientNameCode ?? upstream.clientNameCode ?? "",
+    clientPoNumber: stored.clientPoNumber ?? upstream.clientPoNumber ?? "",
+    forwarderJobNumber: stored.forwarderJobNumber ?? upstream.forwarderJobNumber ?? ""
+  };
+}
+
+function renderBusinessReferences(snapshot) {
+  const references = businessReferencesForSnapshot(snapshot);
+  elements["client-name-code"].textContent = valueOrDash(references.clientNameCode);
+  elements["client-po-number"].textContent = valueOrDash(references.clientPoNumber);
+  elements["forwarder-job-number"].textContent = valueOrDash(references.forwarderJobNumber);
+}
+
+function openBusinessReferenceDialog() {
+  if (!currentPayload?.snapshot) return;
+  const references = businessReferencesForSnapshot(currentPayload.snapshot);
+  document.querySelector("#business-client-code-input").value = references.clientNameCode;
+  document.querySelector("#business-client-po-input").value = references.clientPoNumber;
+  document.querySelector("#business-forwarder-job-input").value =
+    references.forwarderJobNumber;
+  businessReferenceDialog.showModal();
+}
+
+function documentMetadataForSnapshot(snapshot) {
+  return readSupplementaryRecord(DOCUMENT_METADATA_PREFIX, snapshot, {});
+}
+
+function documentDefinition(code) {
+  return DOCUMENT_TYPES.find((definition) => definition.code === code) ?? null;
+}
+
+function documentSubjectLabel(subject) {
+  return t(`documents.subject.${subject}`);
+}
+
+function documentVisibilityLabel(visibility) {
+  return t(`documents.visibility.${visibility}`);
+}
+
+function populateSelect(select, values, labeler, selectedValue) {
+  select.replaceChildren();
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = labeler(value);
+    option.selected = value === selectedValue;
+    select.append(option);
+  }
+  select.disabled = values.length === 1;
+}
+
+function openDocumentEditor(code) {
+  if (!currentPayload?.snapshot) return;
+  const definition = documentDefinition(code);
+  if (!definition) return;
+  const metadata = documentMetadataForSnapshot(currentPayload.snapshot);
+  const existing = metadata[code] ?? null;
+  const fileInput = document.querySelector("#document-file-input");
+
+  document.querySelector("#document-type-input").value = code;
+  document.querySelector("#document-editor-topic").textContent = t(definition.labelKey);
+  document.querySelector("#document-editor-title").textContent = t(
+    existing ? "documents.edit" : "documents.add"
+  );
+  document.querySelector("#document-current-file").textContent = existing?.fileName
+    ? t("documents.currentFile", { name: existing.fileName })
+    : "";
+  fileInput.value = "";
+  populateSelect(
+    document.querySelector("#document-uploader-input"),
+    definition.uploaders,
+    documentSubjectLabel,
+    existing?.uploader ?? definition.uploaders[0]
+  );
+  populateSelect(
+    document.querySelector("#document-visibility-input"),
+    definition.visibility,
+    documentVisibilityLabel,
+    existing?.visibility ?? definition.visibility[0]
+  );
+  documentEditorDialog.showModal();
+}
+
+function closeDocumentDrawer() {
+  documentDrawer.setAttribute("aria-hidden", "true");
+  documentDrawerLayer.classList.remove("is-open");
+  window.setTimeout(() => {
+    if (!documentDrawerLayer.classList.contains("is-open")) documentDrawerLayer.hidden = true;
+  }, 220);
+}
+
+function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
+  if (!snapshot) return;
+  const metadata = documentMetadataForSnapshot(snapshot);
+  const filledCount = DOCUMENT_TYPES.filter((definition) => metadata[definition.code]).length;
+  elements["document-filled-count"].textContent = `${filledCount}/${DOCUMENT_TYPES.length}`;
+  elements["document-drawer-shipment"].textContent = snapshot.tracking.number;
+  documentList.replaceChildren();
+
+  for (const definition of DOCUMENT_TYPES) {
+    const item = document.createElement("article");
+    item.className = "document-item";
+    const existing = metadata[definition.code] ?? null;
+
+    const heading = document.createElement("div");
+    heading.className = "document-item-heading";
+    const title = document.createElement("strong");
+    title.textContent = t(definition.labelKey);
+    const state = document.createElement("span");
+    state.className = existing ? "is-present" : "is-empty";
+    state.textContent = existing?.fileName ?? t("documents.notUploaded");
+    heading.append(title, state);
+
+    const constraints = document.createElement("dl");
+    for (const [label, value] of [
+      [t("documents.uploader"), documentSubjectLabel(existing?.uploader ?? definition.uploaders[0])],
+      [
+        t("documents.visibility"),
+        documentVisibilityLabel(existing?.visibility ?? definition.visibility[0])
+      ]
+    ]) {
+      const row = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = label;
+      dd.textContent = value;
+      row.append(dt, dd);
+      constraints.append(row);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "document-item-actions";
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = existing ? "document-edit-button" : "document-add-button";
+    editButton.textContent = t(existing ? "documents.edit" : "documents.add");
+    editButton.addEventListener("click", () => openDocumentEditor(definition.code));
+    actions.append(editButton);
+
+    if (existing) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "document-delete-button";
+      deleteButton.textContent = t("documents.delete");
+      deleteButton.addEventListener("click", () => {
+        if (!window.confirm(t("documents.confirmDelete", { name: existing.fileName }))) return;
+        const nextMetadata = { ...documentMetadataForSnapshot(snapshot) };
+        delete nextMetadata[definition.code];
+        writeSupplementaryRecord(DOCUMENT_METADATA_PREFIX, snapshot, nextMetadata);
+        renderDocumentDrawer(snapshot);
+      });
+      actions.append(deleteButton);
+    }
+
+    if (existing?.updatedAt) {
+      const updated = document.createElement("small");
+      updated.textContent = t("documents.updated", {
+        time: formatLocalDateTime(existing.updatedAt)
+      });
+      actions.prepend(updated);
+    }
+
+    item.append(heading, constraints, actions);
+    documentList.append(item);
+  }
+}
+
+function openDocumentDrawer() {
+  if (!currentPayload?.snapshot) return;
+  renderDocumentDrawer(currentPayload.snapshot);
+  documentDrawerLayer.hidden = false;
+  requestAnimationFrame(() => {
+    documentDrawerLayer.classList.add("is-open");
+    documentDrawer.setAttribute("aria-hidden", "false");
+  });
 }
 
 function legacyCacheKey(query) {
@@ -1044,6 +1438,135 @@ function renderReferences(references) {
   }
 }
 
+function trackingEventCandidates(snapshot) {
+  const candidates = [];
+  const add = (event, source = "") => {
+    if (!event || typeof event !== "object") return;
+    const name =
+      event.eventName ?? event.name ?? event.event ?? event.status ?? event.description ?? source;
+    if (!name) return;
+    candidates.push({
+      name: String(name),
+      estimated:
+        event.estimatedEventDateTime ??
+        event.estimateDateTime ??
+        event.estimatedTime ??
+        event.estimate ??
+        null,
+      actual:
+        event.actualEventDateTime ??
+        event.occurredAt ??
+        event.actualTime ??
+        event.eventTime ??
+        event.dateTime ??
+        null
+    });
+  };
+
+  for (const status of snapshot.transportStatuses ?? []) add(status);
+  for (const container of snapshot.containers ?? []) {
+    for (const milestone of container.milestones ?? []) add(milestone);
+  }
+  for (const node of snapshot.route ?? []) {
+    add({
+      eventName: node.event ?? node.locationType,
+      estimatedTime: node.estimatedTime,
+      actualTime: node.actualTime
+    });
+  }
+  return candidates;
+}
+
+function renderTrackingEvents(snapshot) {
+  const candidates = trackingEventCandidates(snapshot);
+  const firstMatching = (patterns) =>
+    candidates.find((candidate) => {
+      const name = candidate.name.toLowerCase();
+      return patterns.some((pattern) => pattern.test(name));
+    }) ?? {};
+  const oceanLegs = (snapshot.routingLegs ?? []).filter(
+    (leg) => String(leg?.mode ?? "").toUpperCase() === "SEA"
+  );
+  const departureLeg = oceanLegs[0] ?? snapshot.routingLegs?.[0] ?? {};
+  const arrivalLeg = oceanLegs.at(-1) ?? snapshot.routingLegs?.at(-1) ?? {};
+  const rows = [
+    ["trackingEvents.emptyPickup", [/empty.*(pick|gate out)/, /picked up.*origin/]],
+    ["trackingEvents.gatedIn", [/gat(e|ed).*in.*origin/, /gate in.*origin/]],
+    ["trackingEvents.loaded", [/load(ed)?.*vessel/, /vessel.*load/]],
+    ["trackingEvents.departure", [/vessel.*depart/, /depart.*load port/]],
+    ["trackingEvents.arrival", [/vessel.*arriv/, /arriv.*discharge port/]],
+    ["trackingEvents.gatedOut", [/gat(e|ed).*out/, /container.*pick(ed)? up.*destination/]],
+    ["trackingEvents.emptyReturn", [/empty.*return/]]
+  ].map(([labelKey, patterns]) => ({ labelKey, ...firstMatching(patterns) }));
+
+  const departure = rows[3];
+  departure.estimated ??= departureLeg.estimatedDeparture ?? null;
+  departure.actual ??= departureLeg.actualDeparture ?? snapshot.keyTimes?.actualDeparture?.time ?? null;
+  const arrival = rows[4];
+  arrival.estimated ??=
+    arrivalLeg.estimatedArrival ?? snapshot.keyTimes?.estimatedDelivery?.time ?? null;
+  arrival.actual ??= arrivalLeg.actualArrival ?? snapshot.keyTimes?.actualArrival?.time ?? null;
+
+  const body = elements["tracking-events-table-body"];
+  body.replaceChildren();
+  for (const event of rows) {
+    const row = document.createElement("tr");
+    appendCell(row, t(event.labelKey), "tracking-movement-cell");
+    appendCell(row, formatDateTime(event.estimated), event.estimated ? "" : "pending-time");
+    appendCell(
+      row,
+      formatDateTime(event.actual),
+      `actual-time${event.actual ? "" : " pending-time"}`
+    );
+    body.append(row);
+  }
+}
+
+function renderContainerMilestones(cell, container) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "container-milestone-detail";
+  const heading = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = container.number ?? t("containers.title");
+  heading.append(title);
+  if (container.detailSource === "CONTAINER_SUBQUERY") {
+    const source = document.createElement("span");
+    source.textContent = t("containers.enriched");
+    heading.append(source);
+  }
+  wrapper.append(heading);
+
+  const milestones = container.milestones ?? [];
+  if (milestones.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = t("containers.noMilestones");
+    wrapper.append(empty);
+  } else {
+    const timeline = document.createElement("div");
+    timeline.className = "container-milestone-timeline";
+    for (const milestone of milestones) {
+      const item = document.createElement("article");
+      const marker = document.createElement("i");
+      const copy = document.createElement("span");
+      const name = document.createElement("strong");
+      const meta = document.createElement("small");
+      name.textContent = valueOrDash(milestone.name, t("route.noEvent"));
+      meta.textContent = [
+        milestone.location,
+        formatDateTime(milestone.occurredAt),
+        milestone.transportMode
+      ]
+        .filter((value) => value && value !== "—")
+        .join(" · ");
+      copy.append(name, meta);
+      item.append(marker, copy);
+      timeline.append(item);
+    }
+    wrapper.append(timeline);
+  }
+  cell.append(wrapper);
+}
+
 function renderContainers(containers) {
   const body = elements["container-table-body"];
   body.replaceChildren();
@@ -1052,7 +1575,7 @@ function renderContainers(containers) {
   if (containers.length === 0) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = "table-empty";
     cell.textContent = t("containers.empty");
     row.append(cell);
@@ -1069,7 +1592,31 @@ function renderContainers(containers) {
     appendCell(row, container.currentLocation);
     appendCell(row, container.latestEvent);
     appendCell(row, formatDateTime(container.latestEventTime));
-    body.append(row);
+    const actionCell = document.createElement("td");
+    const detailsButton = document.createElement("button");
+    detailsButton.type = "button";
+    detailsButton.className = "container-details-button";
+    detailsButton.textContent = t("containers.openDetails");
+    detailsButton.setAttribute("aria-expanded", "false");
+    actionCell.append(detailsButton);
+    row.append(actionCell);
+
+    const detailRow = document.createElement("tr");
+    detailRow.className = "container-detail-row";
+    detailRow.hidden = true;
+    const detailCell = document.createElement("td");
+    detailCell.colSpan = 8;
+    renderContainerMilestones(detailCell, container);
+    detailRow.append(detailCell);
+    detailsButton.addEventListener("click", () => {
+      const expanded = detailsButton.getAttribute("aria-expanded") === "true";
+      detailsButton.setAttribute("aria-expanded", String(!expanded));
+      detailsButton.textContent = t(
+        expanded ? "containers.openDetails" : "containers.closeDetails"
+      );
+      detailRow.hidden = expanded;
+    });
+    body.append(row, detailRow);
   }
 }
 
@@ -1206,7 +1753,10 @@ function renderResult(payload) {
   renderJourney(snapshot);
   renderRoutingLegs(snapshot.routingLegs ?? []);
   renderReferences(snapshot.references ?? {});
+  renderBusinessReferences(snapshot);
+  renderTrackingEvents(snapshot);
   renderContainers(snapshot.containers ?? []);
+  renderDocumentDrawer(snapshot);
   elements["raw-json"].textContent = payload.raw
     ? JSON.stringify(payload.raw, null, 2)
     : JSON.stringify({ notice: t("raw.cacheNotice"), snapshot }, null, 2);
@@ -1410,6 +1960,7 @@ function renderHistory() {
     rowIndex += 1;
     const snapshot = entry.snapshot;
     const summary = snapshot.summary;
+    const businessReferences = businessReferencesForSnapshot(snapshot);
     const origin = historyPort(snapshot, "origin");
     const destination = historyPort(snapshot, "destination");
     const timing = historyTiming(snapshot);
@@ -1445,11 +1996,25 @@ function renderHistory() {
     identity.className = "shipment-identity";
     const identityLabel = document.createElement("small");
     identityLabel.className = "shipment-field-label";
-    identityLabel.textContent = t("history.reference");
+    identityLabel.textContent = businessReferences.clientNameCode
+      ? `${t("business.clientCode")} · ${businessReferences.clientNameCode}`
+      : t("history.reference");
     const number = document.createElement("strong");
     number.textContent = entry.query.number;
     const identityMeta = document.createElement("small");
-    identityMeta.textContent = `${trackingTypeLabel(entry.query.type)} · ${entry.query.carrier} · ${t((CHANNELS[entry.query.channel] ?? CHANNELS.NETWORK).labelKey)}`;
+    identityMeta.textContent = [
+      businessReferences.clientPoNumber
+        ? `${t("business.clientPo")} ${businessReferences.clientPoNumber}`
+        : null,
+      businessReferences.forwarderJobNumber
+        ? `${t("business.forwarderJob")} ${businessReferences.forwarderJobNumber}`
+        : null,
+      trackingTypeLabel(entry.query.type),
+      entry.query.carrier,
+      t((CHANNELS[entry.query.channel] ?? CHANNELS.NETWORK).labelKey)
+    ]
+      .filter(Boolean)
+      .join(" · ");
     identity.append(identityLabel, number, identityMeta);
 
     const journey = document.createElement("span");
@@ -1517,6 +2082,9 @@ function renderHistory() {
     facts.className = "shipment-detail-facts";
     const factEntries = [
       [t("history.reference"), entry.query.number],
+      [t("business.clientCode"), businessReferences.clientNameCode],
+      [t("business.clientPo"), businessReferences.clientPoNumber],
+      [t("business.forwarderJob"), businessReferences.forwarderJobNumber],
       [t("history.currentLocation"), summary.latestEvent?.location],
       [t("history.updated"), formatLocalDateTime(entry.savedAt)]
     ];
@@ -1988,6 +2556,76 @@ clearHistoryButton.addEventListener("click", () => {
   localStorage.removeItem(CACHE_INDEX_KEY);
   expandedHistoryKeys.clear();
   renderHistory();
+});
+
+document.querySelector("#edit-business-references").addEventListener("click", () => {
+  openBusinessReferenceDialog();
+});
+
+businessReferenceForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!currentPayload?.snapshot) return;
+  const references = {
+    clientNameCode: document.querySelector("#business-client-code-input").value.trim(),
+    clientPoNumber: document.querySelector("#business-client-po-input").value.trim(),
+    forwarderJobNumber: document
+      .querySelector("#business-forwarder-job-input")
+      .value.trim()
+  };
+  writeSupplementaryRecord(
+    BUSINESS_REFERENCE_PREFIX,
+    currentPayload.snapshot,
+    references
+  );
+  businessReferenceDialog.close();
+  renderBusinessReferences(currentPayload.snapshot);
+  renderHistory();
+});
+
+document.querySelector("#open-document-drawer").addEventListener("click", openDocumentDrawer);
+document.querySelector("#close-document-drawer").addEventListener("click", closeDocumentDrawer);
+document.querySelector("#document-drawer-backdrop").addEventListener("click", closeDocumentDrawer);
+
+documentEditorForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!currentPayload?.snapshot) return;
+  const code = document.querySelector("#document-type-input").value;
+  const definition = documentDefinition(code);
+  if (!definition) return;
+  const metadata = documentMetadataForSnapshot(currentPayload.snapshot);
+  const existing = metadata[code] ?? null;
+  const file = document.querySelector("#document-file-input").files?.[0] ?? null;
+
+  if (!file && !existing) {
+    window.alert(t("documents.chooseFile"));
+    return;
+  }
+
+  const nextMetadata = {
+    ...metadata,
+    [code]: {
+      fileName: file?.name ?? existing.fileName,
+      fileSize: file?.size ?? existing.fileSize ?? null,
+      mimeType: file?.type ?? existing.mimeType ?? null,
+      lastModified: file?.lastModified ?? existing.lastModified ?? null,
+      uploader: document.querySelector("#document-uploader-input").value,
+      visibility: document.querySelector("#document-visibility-input").value,
+      updatedAt: new Date().toISOString()
+    }
+  };
+  writeSupplementaryRecord(DOCUMENT_METADATA_PREFIX, currentPayload.snapshot, nextMetadata);
+  documentEditorDialog.close();
+  renderDocumentDrawer(currentPayload.snapshot);
+});
+
+document.querySelectorAll("[data-dialog-close]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector(`#${button.dataset.dialogClose}`)?.close();
+  });
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !documentDrawerLayer.hidden) closeDocumentDrawer();
 });
 
 function syncViewFromLocation() {
