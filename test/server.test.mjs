@@ -7,8 +7,10 @@ import {
   listCarrierAdapters,
   listCoscoQueryChannels,
   normalizeCarrierCode,
+  normalizeCmaSnapshot,
   normalizeCoscoContainerSnapshot,
   normalizeQueryChannel,
+  parseCmaLocalDateTime,
   runCoscoChannelChecks,
   runChannelCHealthCheck,
   normalizeCoscoSnapshot,
@@ -57,9 +59,75 @@ test("exposes a multi-carrier adapter registry", () => {
     carriers.map(({ code, enabled }) => ({ code, enabled })),
     [
       { code: "COSCO", enabled: true },
-      { code: "CMA", enabled: false }
+      { code: "CMA", enabled: true }
     ]
   );
+});
+
+test("normalizes CMA local date text without inventing a timezone", () => {
+  assert.equal(
+    parseCmaLocalDateTime("Monday, 22-JUN-2026 09:03 AM"),
+    "2026-06-22T09:03:00"
+  );
+  assert.equal(
+    parseCmaLocalDateTime("Sun.14-JUN-2026 09:30 AM"),
+    "2026-06-14T09:30:00"
+  );
+});
+
+test("creates a unified CMA snapshot from server-rendered container cards", () => {
+  const snapshot = normalizeCmaSnapshot(
+    {
+      bookingReference: "TJN0940917",
+      containers: [
+        {
+          number: "TRHU8582015",
+          typeCode: "45G1",
+          typeLabel: "40HC",
+          latestEvent: "Empty in depot",
+          latestEventTime: "Monday, 22-JUN-2026 09:03 AM",
+          currentLocation: "SAVANNAH, GA",
+          etaAtPod: "Sun.14-JUN-2026 09:30 AM",
+          bookingReference: "TJN0940917",
+          pdfUrl:
+            "https://www.cma-cgm.com/ebusiness/tracking/export-pdf?bookingReference=TJN0940917&containerID=TRHU8582015&fileType=pdf",
+          origin: { name: "TIANJIN XINGANG (CN)", countryCode: "CN" },
+          destination: { name: "SAVANNAH, GA (US)", countryCode: "US" },
+          milestones: [
+            {
+              dateText: "Monday, 22-JUN-2026 09:03 AM",
+              name: "Empty in depot",
+              location: "SAVANNAH, GA",
+              terminal: "GARDEN CITY TERMINAL"
+            },
+            {
+              dateText: "Monday, 15-JUN-2026 10:00 AM",
+              name: "Vessel arrival at final discharge port",
+              location: "SAVANNAH, GA"
+            },
+            {
+              dateText: "Wednesday, 20-MAY-2026 04:40 PM",
+              name: "Vessel departure from first load port",
+              location: "TIANJIN XINGANG"
+            }
+          ]
+        }
+      ]
+    },
+    normalizeTrackingRequest({ type: "BOOKING", number: "TJN0940917" }),
+    "2026-07-17T00:00:00.000Z"
+  );
+
+  assert.equal(snapshot.provider.code, "CMA");
+  assert.equal(snapshot.channel, "PLAYWRIGHT");
+  assert.equal(snapshot.summary.bookingNumbers[0], "TJN0940917");
+  assert.equal(snapshot.summary.origin.countryCode, "CN");
+  assert.equal(snapshot.summary.destination.countryCode, "US");
+  assert.equal(snapshot.containers[0].number, "TRHU8582015");
+  assert.equal(snapshot.containers[0].milestones.length, 3);
+  assert.equal(snapshot.keyTimes.actualDeparture.time, "2026-05-20T16:40:00");
+  assert.equal(snapshot.keyTimes.actualArrival.time, "2026-06-15T10:00:00");
+  assert.match(snapshot.references.information[0].value, /export-pdf/);
 });
 
 test("exposes network and Playwright query channels", () => {

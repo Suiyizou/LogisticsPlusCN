@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Dual-channel COSCO shipment tracker with network and Playwright adapters",
+  "description": "Multi-carrier shipment tracker with COSCO and CMA CGM adapters",
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",

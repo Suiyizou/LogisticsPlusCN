@@ -1,0 +1,284 @@
+import { chromium } from "playwright";
+
+const CMA_TRACKING_PAGE = "https://www.cma-cgm.com/ebusiness/tracking/search";
+const DEFAULT_TIMEOUT_MS = 45_000;
+const EXPANSION_SETTLE_MS = 4_000;
+let sharedBrowserPromise = null;
+let sessionCookies = [];
+
+function configuredSessionCookies() {
+  return String(process.env.CMA_SESSION_COOKIE ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .flatMap((part) => {
+      const separator = part.indexOf("=");
+      if (separator <= 0) return [];
+      return [{
+        name: part.slice(0, separator).trim(),
+        value: part.slice(separator + 1).trim(),
+        domain: ".cma-cgm.com",
+        path: "/",
+        secure: true
+      }];
+    });
+}
+
+async function launchSharedBrowser() {
+  const browser = await chromium.launch({
+    channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? "chrome",
+    headless: String(process.env.PLAYWRIGHT_HEADLESS ?? "true").toLowerCase() !== "false"
+  });
+  browser.once("disconnected", () => {
+    sharedBrowserPromise = null;
+  });
+  return browser;
+}
+
+async function getSharedBrowser() {
+  if (!sharedBrowserPromise) {
+    sharedBrowserPromise = launchSharedBrowser().catch((error) => {
+      sharedBrowserPromise = null;
+      throw error;
+    });
+  }
+  return sharedBrowserPromise;
+}
+
+function upstreamError(message, httpStatus = 502, details) {
+  const error = new Error(message);
+  error.httpStatus = httpStatus;
+  error.details = details;
+  return error;
+}
+
+async function expandCard(page, card, timeoutMs) {
+  const pdfLink = card.locator('a[href*="/ebusiness/tracking/export-pdf"]');
+  if ((await pdfLink.count()) === 0) {
+    const label = card.getByText("Display Details", { exact: true });
+    const toggle = card.getByRole("checkbox");
+    if ((await label.count()) === 1) await label.click();
+    else if ((await toggle.count()) === 1) await toggle.check({ force: true });
+    await pdfLink.waitFor({ state: "attached", timeout: timeoutMs });
+  }
+
+  const previousMoves = card.locator('a[aria-label="Display Previous Moves"][tabindex="0"]');
+  if ((await previousMoves.count()) !== 1) return;
+  const previousCount = await card.locator('[role="gridcell"]').count();
+  await previousMoves.click({ force: true });
+  const deadline = Date.now() + EXPANSION_SETTLE_MS;
+  while (Date.now() < deadline) {
+    const currentCount = await card.locator('[role="gridcell"]').count();
+    if (currentCount > previousCount) break;
+    await page.waitForTimeout(120);
+  }
+}
+
+async function extractCard(card) {
+  return card.evaluate((root) => {
+    const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+    const exportLink = root.querySelector('a[href*="/ebusiness/tracking/export-pdf"]');
+    const exportUrl = exportLink?.href ?? null;
+    let bookingReference = null;
+    let number = root.textContent.match(/\b[A-Z]{4}\d{7}\b/)?.[0] ?? null;
+    if (exportUrl) {
+      const url = new URL(exportUrl);
+      bookingReference = url.searchParams.get("bookingReference");
+      number = url.searchParams.get("containerID") ?? number;
+    }
+
+    const terms = Array.from(root.querySelectorAll("dt")).map((item) => clean(item.innerText));
+    const definitions = Array.from(root.querySelectorAll("dd")).map((item) => clean(item.innerText));
+    const identityText = terms.find((value) => value.includes(number ?? "")) ?? terms[0] ?? "";
+    const typeCode = identityText.match(/\b\d{2}[A-Z]\d\b/)?.[0] ?? null;
+    const typeLabel = identityText.match(/\(([^)]+)\)/)?.[1] ?? null;
+
+    const labelValue = (label) => {
+      const block = Array.from(root.querySelectorAll("li, div")).find((element) => {
+        const text = clean(element.innerText);
+        return text.startsWith(`${label} `) && text.length < 220;
+      });
+      return clean(block?.querySelector("strong")?.innerText) || null;
+    };
+
+    const etaLabel = Array.from(root.querySelectorAll("*"))
+      .find((element) => clean(element.innerText) === "ETA Berth at POD");
+    let etaText = null;
+    let etaScope = etaLabel;
+    for (let depth = 0; etaScope && depth < 4; depth += 1, etaScope = etaScope.parentElement) {
+      const text = clean(etaScope.innerText);
+      const match = text.match(/(?:MON|TUE|WED|THU|FRI|SAT|SUN)[A-Z]*\.?\s*,?\s*\d{1,2}-[A-Z]{3}-\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+      if (match) {
+        etaText = match[0];
+        break;
+      }
+    }
+
+    const grid = root.querySelector('[id="gridTrackingDetails"], [data-role="grid"]');
+    const milestones = grid
+      ? Array.from(grid.querySelectorAll('[role="row"]')).flatMap((row) => {
+          const values = Array.from(row.querySelectorAll('[role="gridcell"]'))
+            .map((cell) => clean(cell.innerText))
+            .filter(Boolean);
+          if (values.length < 2 || values.includes("Display Previous Moves")) return [];
+          const dateIndex = values.findIndex((value) => /\d{1,2}-[A-Z]{3}-\d{4}/i.test(value));
+          if (dateIndex < 0 || !values[dateIndex + 1]) return [];
+          return [{
+            dateText: values[dateIndex],
+            name: values[dateIndex + 1],
+            location: values[dateIndex + 2] ?? null,
+            terminal: null,
+            vesselVoyage: values[dateIndex + 3] ?? null
+          }];
+        })
+      : [];
+    const originName = labelValue("POL");
+    const destinationName = labelValue("POD");
+    const countryCode = (value) => value?.match(/\(([A-Z]{2})\)\s*$/)?.[1] ?? null;
+
+    return {
+      number,
+      typeCode,
+      typeLabel,
+      latestEvent: definitions[0] ?? null,
+      currentLocation: terms[1] ?? null,
+      latestEventTime: definitions[1] ?? null,
+      etaAtPod: etaText,
+      bookingReference,
+      pdfUrl: exportUrl,
+      origin: { name: originName, countryCode: countryCode(originName) },
+      destination: { name: destinationName, countryCode: countryCode(destinationName) },
+      milestones
+    };
+  });
+}
+
+export async function closeCmaPlaywrightBrowser() {
+  if (!sharedBrowserPromise) return;
+  const browserPromise = sharedBrowserPromise;
+  sharedBrowserPromise = null;
+  try {
+    const browser = await browserPromise;
+    await browser.close();
+  } catch {
+    // A failed or already disconnected browser does not need additional cleanup.
+  }
+}
+
+export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const browser = options.browser ?? (await getSharedBrowser());
+  const context = await browser.newContext({
+    locale: "en-US",
+    timezoneId: "Asia/Shanghai",
+    acceptDownloads: false,
+    ...(process.env.CMA_BROWSER_USER_AGENT
+      ? { userAgent: process.env.CMA_BROWSER_USER_AGENT }
+      : {})
+  });
+
+  try {
+    const seedCookies = [...sessionCookies, ...configuredSessionCookies()];
+    if (seedCookies.length > 0) await context.addCookies(seedCookies);
+    const page = await context.newPage();
+    const entryResponse = await page.goto(CMA_TRACKING_PAGE, {
+      waitUntil: "domcontentloaded",
+      timeout: timeoutMs
+    });
+
+    const form = page.locator('form[action="/ebusiness/tracking/search"]');
+    if ((await form.count()) !== 1) {
+      if (entryResponse?.status() === 403) {
+        throw upstreamError(
+          "CMA CGM 触发 DataDome 验证，请配置已通过验证的 CMA_SESSION_COOKIE 后重试",
+          503,
+          { challenge: "DATADOME" }
+        );
+      }
+      throw upstreamError("CMA CGM 搜索表单结构已变化");
+    }
+
+    let searchInput = form.locator('input[name*="SearchByReference"]:not([type="hidden"])');
+    if ((await searchInput.count()) !== 1) {
+      searchInput = form.locator('input[type="text"], input[type="search"]');
+    }
+    if ((await searchInput.count()) !== 1) {
+      throw upstreamError("CMA CGM 搜索输入框结构已变化");
+    }
+    await searchInput.fill(request.number);
+
+    const searchButton = form.getByRole("button", { name: "Search", exact: true });
+    if ((await searchButton.count()) !== 1) throw upstreamError("CMA CGM 搜索按钮结构已变化");
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/ebusiness/tracking/search",
+      { timeout: timeoutMs }
+    );
+    await searchButton.click();
+    const searchResponse = await responsePromise;
+    if (!searchResponse.ok()) {
+      throw upstreamError(
+        `CMA CGM 查询返回 HTTP ${searchResponse.status()}`,
+        searchResponse.status() === 404 ? 404 : 502
+      );
+    }
+    await page.waitForLoadState("domcontentloaded", { timeout: timeoutMs });
+
+    let cards = page.locator("#multiresultssection li.cardelem");
+    if ((await cards.count()) === 0) cards = page.locator("li.cardelem");
+    if ((await cards.count()) === 0) cards = page.locator("article.result-card");
+    const cardCount = await cards.count();
+    if (cardCount === 0) {
+      const errorText = await page.locator("main").innerText().catch(() => "");
+      const notFound = /no result|not found|invalid reference/i.test(errorText);
+      throw upstreamError(
+        notFound ? "CMA CGM 未找到该票货物" : "CMA CGM 未返回可解析的跟踪结果",
+        notFound ? 404 : 502
+      );
+    }
+
+    const containers = [];
+    for (let index = 0; index < cardCount; index += 1) {
+      const card = cards.nth(index);
+      await expandCard(page, card, timeoutMs);
+      containers.push(await extractCard(card));
+    }
+
+    const usableContainers = containers.filter((container) => container.number);
+    if (usableContainers.length === 0) {
+      throw upstreamError("CMA CGM 返回的页面中没有可识别箱号");
+    }
+    if (request.type === "CONTAINER") {
+      const exact = usableContainers.filter(
+        (container) => container.number?.toUpperCase() === request.number
+      );
+      if (exact.length > 0) usableContainers.splice(0, usableContainers.length, ...exact);
+    }
+
+    return {
+      bookingReference:
+        usableContainers.find((container) => container.bookingReference)?.bookingReference ?? null,
+      containers: usableContainers,
+      browser: {
+        responseUrl: searchResponse.url(),
+        responseStatus: searchResponse.status(),
+        pageUrl: page.url(),
+        cardCount,
+        extraction: "SERVER_RENDERED_HTML"
+      }
+    };
+  } catch (error) {
+    if (error?.name === "TimeoutError") {
+      throw upstreamError("CMA CGM Playwright 查询超时", 504);
+    }
+    throw error;
+  } finally {
+    try {
+      sessionCookies = await context.cookies(CMA_TRACKING_PAGE);
+    } catch {
+      // Cookie persistence is an optimization; context cleanup must still continue.
+    }
+    await context.close();
+  }
+}

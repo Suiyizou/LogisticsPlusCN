@@ -1,6 +1,6 @@
 # Shipment Track — 多船司货运跟踪工作台
 
-当前版本实现统一船司适配层和 COSCO 双通道查询：通道一由服务端直接调用 COSCO 网页内部网络接口；通道二由 Playwright 操作真实 Chrome 完成网页查询并拦截结果。两个通道都会完成 Base64 + XOR 解码，并返回相同的统一快照。CMA CGM 已加入船司注册表和界面选择器，实际查询适配器尚未实现。
+当前版本实现统一船司适配层、COSCO 双通道查询以及 CMA CGM 服务端 HTML 查询。COSCO 通道一直接调用网页内部网络接口，通道二由 Playwright 操作真实 Chrome；CMA CGM 通过 Playwright 提交服务端渲染的查询表单，展开逐箱历史节点，并保留每箱 PDF 报告地址。所有通道最终返回相同的统一快照。
 
 ## 为什么不是纯静态前端
 
@@ -31,7 +31,7 @@ npm test
 - 通道一 `NETWORK`：网络接口，默认通道，已实现
 - 通道二 `PLAYWRIGHT`：真实浏览器查询，已实现
 - 统一 `POST /api/track` 船司分发入口
-- COSCO：可查询；CMA CGM：已预留、返回未实现状态
+- COSCO：网络接口与 Playwright 双通道；CMA CGM：服务端 HTML + 逐箱 PDF 地址
 - 默认英文界面，支持中英文即时切换并记忆语言偏好
 - 提单号、订舱号、箱号查询
 - 5 分钟内存缓存
@@ -81,6 +81,18 @@ npm run track:playwright -- 6502077380
 npm run track:playwright -- 6502077380 --headed
 ```
 
+## CMA CGM 会话
+
+CMA CGM 搜索页由 DataDome 保护。适配器不会绕过验证；需要把合法、已通过验证的 CMA 浏览器会话通过环境变量提供给 Node 服务。Cookie 只保存在进程内存中，不会写入统一快照或浏览器 LocalStorage。
+
+```powershell
+$env:CMA_SESSION_COOKIE="datadome=YOUR_APPROVED_SESSION_VALUE"
+$env:CMA_PLAYWRIGHT_TIMEOUT_MS="45000"
+npm start
+```
+
+`CMA_SESSION_COOKIE` 属于敏感会话信息，不要写入代码、日志、Git 或前端。会话失效时接口会返回 `503` 和 `DATADOME` 标识，更新合法会话后即可重试。
+
 ## 浏览器缓存
 
 LocalStorage 只保存后端转换后的统一 `snapshot`，不保存 COSCO 原始报文。查询时会先显示同一查询条件下的有效本地快照，同时向后端请求最新数据；实时查询成功后会覆盖本地快照。
@@ -118,6 +130,7 @@ GET /api/carriers
 ```http
 POST /api/track/cosco/network
 POST /api/track/cosco/playwright
+POST /api/track/cma
 ```
 
 这是对船司网页及其内部接口的非官方适配。上游页面、接口、请求字段或解码逻辑发生变化时，需要更新相应通道适配器。

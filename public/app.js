@@ -108,8 +108,8 @@ const CARRIERS = Object.freeze({
   CMA: {
     code: "CMA",
     name: "CMA CGM",
-    enabled: false,
-    source: "CMA CGM · ADAPTER RESERVED"
+    enabled: true,
+    source: "CMA CGM · SERVER HTML"
   }
 });
 
@@ -149,8 +149,9 @@ const MESSAGES = {
     "nav.carriers": "Carrier adapters",
     "carrier.connected": "Connected · 2 channels",
     "carrier.planned": "Adapter reserved",
-    "carrier.cmaOption": "CMA CGM · COMING SOON",
-    "carrier.cmaNotice": "CMA CGM is selectable, but its adapter is not connected yet.",
+    "carrier.cmaConnected": "Connected · HTML/PDF",
+    "carrier.cmaOption": "CMA CGM · CONNECTED",
+    "carrier.cmaNotice": "CMA CGM uses its server-rendered HTML tracking page.",
     "sidebar.architecture": "UNIFIED ADAPTER",
     "breadcrumb.workspace": "Workspace",
     "overview.kicker": "SHIPMENT DASHBOARD",
@@ -382,8 +383,9 @@ const MESSAGES = {
     "nav.carriers": "船司适配器",
     "carrier.connected": "已接入 · 双通道",
     "carrier.planned": "已预留适配器",
-    "carrier.cmaOption": "CMA CGM · 即将接入",
-    "carrier.cmaNotice": "已支持选择 CMA CGM，但查询适配器暂未接入。",
+    "carrier.cmaConnected": "已接入 · HTML/PDF",
+    "carrier.cmaOption": "CMA CGM · 已接入",
+    "carrier.cmaNotice": "CMA CGM 使用服务端渲染 HTML 查询通道。",
     "sidebar.architecture": "统一适配层",
     "breadcrumb.workspace": "工作台",
     "overview.kicker": "运输看板",
@@ -2159,11 +2161,15 @@ function renderHistory() {
 
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
+  const cmaSelected = carrier.code === "CMA";
+  if (cmaSelected) channelSelect.value = "PLAYWRIGHT";
+  else if (channelSelect.disabled) channelSelect.value = "AUTO";
+  channelSelect.disabled = cmaSelected;
   const channel = CHANNELS[channelSelect.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   carrierNotice.hidden = carrier.enabled;
   carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
-  checkChannelsButton.disabled = channelCheckLoading || !carrier.enabled;
+  checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
   setLoading(loading);
 
   if (
@@ -2223,7 +2229,7 @@ function renderChannelCheck(result) {
 
 function setChannelCheckLoading(value) {
   channelCheckLoading = value;
-  checkChannelsButton.disabled = value || !CARRIERS[carrierSelect.value]?.enabled;
+  checkChannelsButton.disabled = value || carrierSelect.value !== "COSCO";
   checkChannelsButton.classList.toggle("is-loading", value);
   const label = checkChannelsButton.querySelector("[data-i18n]");
   if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");

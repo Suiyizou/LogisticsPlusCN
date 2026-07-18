@@ -6,9 +6,15 @@ import {
   closeCoscoPlaywrightBrowser,
   fetchCoscoTrackingViaPlaywright
 } from "./channels/cosco-playwright.mjs";
+import {
+  closeCmaPlaywrightBrowser,
+  fetchCmaTrackingViaPlaywright
+} from "./channels/cma-playwright.mjs";
 import { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
+import { normalizeCmaSnapshot } from "./lib/cma-tracking.mjs";
 
 export { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
+export { normalizeCmaSnapshot, parseCmaLocalDateTime } from "./lib/cma-tracking.mjs";
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT_DIR, "public");
@@ -101,9 +107,11 @@ const CARRIER_ADAPTERS = Object.freeze({
   CMA: {
     code: "CMA",
     name: "CMA CGM",
-    channel: null,
-    enabled: false,
-    source: null
+    channel: "PLAYWRIGHT",
+    channels: ["PLAYWRIGHT"],
+    defaultChannel: "PLAYWRIGHT",
+    enabled: true,
+    source: "CMA_SERVER_RENDERED_HTML"
   }
 });
 
@@ -964,6 +972,31 @@ async function fetchCoscoTracking(request, queryChannel) {
   return fetchCoscoTrackingViaNetwork(request);
 }
 
+async function fetchCmaTracking(request) {
+  let result;
+  try {
+    result = await fetchCmaTrackingViaPlaywright(request, {
+      timeoutMs: Number.parseInt(process.env.CMA_PLAYWRIGHT_TIMEOUT_MS ?? "45000", 10)
+    });
+  } catch (error) {
+    throw new HttpError(
+      error?.httpStatus ?? 502,
+      error?.message || "CMA CGM Playwright 查询失败",
+      error?.details
+    );
+  }
+
+  return {
+    snapshot: normalizeCmaSnapshot(result, request, new Date().toISOString()),
+    raw: result,
+    strategy: {
+      requested: "PLAYWRIGHT",
+      used: "PLAYWRIGHT",
+      fallbackUsed: false
+    }
+  };
+}
+
 function probeResult(channel, available, startedAt, finishedAt, error = null) {
   return {
     channel,
@@ -1177,7 +1210,9 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
 
   const trackingRequest = normalizeTrackingRequest(input);
   const queryChannel = normalizeQueryChannel(
-    forcedChannel ?? input.channel ?? carrier.defaultChannel ?? "NETWORK"
+    carrierCode === "CMA"
+      ? "PLAYWRIGHT"
+      : forcedChannel ?? input.channel ?? carrier.defaultChannel ?? "NETWORK"
   );
   const cacheKey = `${carrierCode}:${queryChannel.code}:${trackingRequest.type}:${trackingRequest.number}`;
   const cached = cache.get(cacheKey);
@@ -1195,7 +1230,9 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
 
   let requestPromise = inFlightTrackingRequests.get(cacheKey);
   if (!requestPromise) {
-    requestPromise = fetchCoscoTracking(trackingRequest, queryChannel);
+    requestPromise = carrierCode === "CMA"
+      ? fetchCmaTracking(trackingRequest)
+      : fetchCoscoTracking(trackingRequest, queryChannel);
     inFlightTrackingRequests.set(cacheKey, requestPromise);
   }
 
@@ -1341,6 +1378,11 @@ export const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/track/cma") {
+      await handleTrackRequest(request, response, "CMA", "PLAYWRIGHT");
+      return;
+    }
+
     if (request.method === "GET" || request.method === "HEAD") {
       await serveStatic(request, response);
       return;
@@ -1361,6 +1403,7 @@ export const server = createServer(async (request, response) => {
 server.on("close", () => {
   stopChannelCMonitor();
   void closeCoscoPlaywrightBrowser();
+  void closeCmaPlaywrightBrowser();
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
