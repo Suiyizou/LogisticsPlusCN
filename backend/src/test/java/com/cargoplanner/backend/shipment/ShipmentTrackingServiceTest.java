@@ -15,9 +15,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -77,6 +79,16 @@ class ShipmentTrackingServiceTest {
         Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
     );
     employee = new AuthenticatedUser(1, "customer", "Customer One", "EMPLOYEE", "ACTIVE");
+  }
+
+  @Test
+  void marksTheProductionConstructorForSpringInjection() {
+    var autowiredConstructors = Arrays.stream(ShipmentTrackingService.class.getDeclaredConstructors())
+        .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))
+        .toList();
+
+    assertThat(autowiredConstructors).singleElement()
+        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(6));
   }
 
   @Test

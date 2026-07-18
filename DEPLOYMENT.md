@@ -37,15 +37,43 @@ backend/sql/schema.sql
 ```env
 APP_BOOTSTRAP_ADMIN_ENABLED=true
 APP_BOOTSTRAP_ADMIN_USERNAME=你的管理员账号
-APP_BOOTSTRAP_ADMIN_PASSWORD=至少12位且包含大小写字母、数字和符号
+APP_BOOTSTRAP_ADMIN_PASSWORD=12-128位、包含大小写字母数字符号、且不含管理员账号
 APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 ```
 
-管理员创建成功后，立即把 `APP_BOOTSTRAP_ADMIN_ENABLED` 改回 `false`，清除部署环境中的引导密码并重建 backend。升级旧数据库时，后端会拒绝带已知历史固定口令的活动账号启动；请先在受控环境中完成口令轮换或停用该账号。
+管理员创建成功后，立即把 `APP_BOOTSTRAP_ADMIN_ENABLED` 改回 `false`，清除部署环境中的引导密码并重建 backend。引导密码必须为 12-128 位，包含大小写字母、数字和符号，并且不得包含管理员账号（不区分大小写）；例如账号为 `admin` 时，`Admin@123456` 会因包含账号而被拒绝，而不是因为长度不足。
+
+升级旧数据库时，后端仍会拒绝使用已知历史固定口令（`123456` 或 `Admin@123456`）的活动账号；`password_iterations=120000` 只用于缩小检查范围，不会单独判定账号不安全。若数据库中只有一个命中的旧管理员，可复用一次性引导变量原地轮换：
+
+```env
+APP_BOOTSTRAP_ADMIN_ENABLED=true
+APP_BOOTSTRAP_ADMIN_USERNAME=旧管理员的准确账号
+APP_BOOTSTRAP_ADMIN_PASSWORD=新的强密码且不得包含该账号
+APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
+```
+
+成功启动后会更新该管理员的口令哈希、撤销已有登录设备会话并写入审计日志，不会创建第二个管理员。随后立即禁用引导并清除密码。若命中多个账号，或命中的是非管理员账号，需先在受控数据库环境中逐一轮换或停用，后端不会猜测迁移目标。
 
 首次构建 `tracking` 会拉取 Playwright Chromium 基础镜像，下载体积较大。Compose 已为浏览器兜底通道设置 `1gb` 共享内存和健康检查；服务器还需要能够访问船司查询站点。`PLAYWRIGHT_MAX_CONCURRENCY`、`PLAYWRIGHT_QUEUE_LIMIT` 和 `PLAYWRIGHT_QUEUE_TIMEOUT_MS` 分别限制浏览器并发数、排队数量和最长排队时间，默认值为 `2`、`8`、`15000`。海外小规格服务器不要盲目提高并发，队列满或超时会返回 `429`，不会继续挤占内存。
 
 Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。这样公开的 Node/Playwright 追踪服务无法直接连接数据库。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
+
+Compose 为 `app`、`data` 固定使用 `cargo-planner-app`、`cargo-planner-data` 两个 Docker 网络名；代码目录改名或 Compose 项目名变化时不会再生成另一套网络，同时不会改变既有 MySQL 数据卷名。若升级前已经出现“backend 解析不到 `mysql`”，先检查新网络和旧 MySQL 的网络归属：
+
+```bash
+docker network inspect cargo-planner-data
+docker inspect cargo-planner-mysql --format '{{json .NetworkSettings.Networks}}'
+```
+
+如果 MySQL 的输出中没有 `cargo-planner-data`，将旧容器接入固定网络后再重建后端。若 `docker network connect` 提示已存在，直接继续下一条：
+
+```bash
+docker network connect cargo-planner-data cargo-planner-mysql
+docker compose up -d --force-recreate backend
+docker compose ps
+```
+
+最后再次检查两个容器，确认它们都列出 `cargo-planner-data`。
 
 ## 前端路由刷新
 

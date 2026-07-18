@@ -130,5 +130,7 @@ volumes:
 
 networks:
   app:
+    name: cargo-planner-app
   data:
+    name: cargo-planner-data
     internal: true

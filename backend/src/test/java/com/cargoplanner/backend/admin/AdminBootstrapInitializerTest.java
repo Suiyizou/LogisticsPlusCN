@@ -50,6 +50,16 @@ class AdminBootstrapInitializerTest {
           ip_address VARCHAR(64)
         )
         """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_login_devices (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          user_id BIGINT NOT NULL,
+          online BOOLEAN NOT NULL DEFAULT FALSE,
+          session_token_hash VARCHAR(64),
+          revoked_at TIMESTAMP
+        )
+        """);
+
     properties = new AdminBootstrapProperties();
   }
 
@@ -109,6 +119,101 @@ class AdminBootstrapInitializerTest {
 
   @Test
   void refusesToStartWithTheLegacyKnownAdministratorCredential() {
+    insertLegacyAdministrator();
+
+    assertThatThrownBy(() -> initializer().run(null))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("legacy fixed credential")
+        .hasMessageContaining("APP_BOOTSTRAP_ADMIN_ENABLED");
+  }
+
+  @Test
+  void rotatesSingleLegacyAdministratorThroughExplicitBootstrap() {
+    insertLegacyAdministrator();
+    Long adminId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_users WHERE username = 'admin'",
+        Long.class
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_login_devices (user_id, online, session_token_hash)
+        VALUES (?, TRUE, 'existing-session')
+        """,
+        adminId
+    );
+    properties.setEnabled(true);
+    properties.setUsername("admin");
+    properties.setPassword("Fresh!Deploy9Secret");
+
+    initializer().run(null);
+
+    String salt = jdbcTemplate.queryForObject(
+        "SELECT password_salt FROM cp_users WHERE id = ?",
+        String.class,
+        adminId
+    );
+    String hash = jdbcTemplate.queryForObject(
+        "SELECT password_hash FROM cp_users WHERE id = ?",
+        String.class,
+        adminId
+    );
+    Integer iterations = jdbcTemplate.queryForObject(
+        "SELECT password_iterations FROM cp_users WHERE id = ?",
+        Integer.class,
+        adminId
+    );
+    PasswordHasher hasher = new PasswordHasher();
+    assertThat(hasher.verify("Fresh!Deploy9Secret", salt, hash, iterations)).isTrue();
+    assertThat(hasher.verify("Admin@123456", salt, hash, iterations)).isFalse();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_admin_audit_log WHERE action = 'MIGRATE_LEGACY_ADMIN_PASSWORD'",
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_security_migrations",
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_login_devices WHERE online = TRUE OR session_token_hash IS NOT NULL",
+        Integer.class
+    )).isZero();
+  }
+
+  @Test
+  void doesNotTreatTheIterationCountAloneAsACompromisedPassword() {
+    PasswordHasher.PasswordHash safeHash = new PasswordHasher().hash("Different!Safe9Secret");
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_users (
+          username, display_name, role, party_role, status,
+          password_salt, password_hash, password_iterations
+        ) VALUES ('employee', 'Existing User', 'EMPLOYEE', 'SHIPPER', 'ACTIVE', ?, ?, ?)
+        """,
+        safeHash.salt(),
+        safeHash.hash(),
+        safeHash.iterations()
+    );
+
+    initializer().run(null);
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_security_migrations",
+        Integer.class
+    )).isEqualTo(1);
+  }
+
+  @Test
+  void explainsWhenBootstrapPasswordContainsTheUsername() {
+    properties.setEnabled(true);
+    properties.setUsername("admin");
+    properties.setPassword("Admin@123456");
+
+    assertThatThrownBy(() -> initializer().run(null))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("must not contain APP_BOOTSTRAP_ADMIN_USERNAME");
+  }
+
+  private void insertLegacyAdministrator() {
     jdbcTemplate.update(
         """
         INSERT INTO cp_users (
@@ -121,10 +226,6 @@ class AdminBootstrapInitializerTest {
         )
         """
     );
-
-    assertThatThrownBy(() -> initializer().run(null))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("legacy fixed credential");
   }
 
   private AdminBootstrapInitializer initializer() {
