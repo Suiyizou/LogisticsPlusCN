@@ -6530,6 +6530,50 @@ td {
   grid-template-columns: minmax(112px, 0.42fr) minmax(0, 1fr);
 }
 
+.extra-information {
+  margin: 4px 18px 16px;
+  padding: 14px 16px;
+  border: 1px solid #d9e7f5;
+  background: #f6faff;
+  border-radius: 10px;
+}
+
+.extra-information h3 {
+  margin: 0 0 10px;
+  color: #335d89;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.extra-information dl {
+  display: grid;
+  margin: 0;
+  gap: 8px 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.extra-information dl > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.extra-information dt {
+  color: #71839a;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.extra-information dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #203d60;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 900px) {
   .hero-copy {
     width: 100%;
@@ -6543,6 +6587,10 @@ td {
 
   .references-panel .reference-wide {
     grid-column: 1;
+  }
+
+  .extra-information dl {
+    grid-template-columns: 1fr;
   }
 }
 

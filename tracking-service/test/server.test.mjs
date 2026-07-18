@@ -147,6 +147,17 @@ test("parses CMA tracking events from the server-rendered treegrid instead of th
   assert.doesNotMatch(cmaSource, /waitForEvent\(["']download["']\)|pdf-parse|pdfjs/i);
 });
 
+test("distinguishes a missing CMA session from a saved session rejected by DataDome", async () => {
+  const cmaSource = await readFile(
+    new URL("../channels/cma-playwright.mjs", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(cmaSource, /hasProvidedDataDome/);
+  assert.match(cmaSource, /sessionProvided: hasProvidedDataDome/);
+  assert.match(cmaSource, /浏览器指纹不匹配/);
+});
+
 test("creates a unified CMA snapshot from server-rendered container cards", () => {
   const snapshot = normalizeCmaSnapshot(
     {

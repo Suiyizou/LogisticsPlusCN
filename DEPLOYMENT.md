@@ -64,6 +64,8 @@ Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `ba
 
 后端把会话以 AES-GCM 密文保存到 `cp_tracking_credentials`，加密密钥首次使用时自动生成到 Compose 的 `backend-secrets` 命名卷。备份和迁移服务器时必须把 MySQL 数据与该命名卷一起迁移；只恢复数据库而丢失密钥时，旧密文无法恢复，需要业务员重新保存会话。更新与清除操作都会写入审计日志。
 
+“已保存”不代表 DataDome 已验证可用。DataDome 可能把会话绑定到 User-Agent、来源 IP 或浏览器指纹；业务员保存后必须立即用服务器实际查询一票。若返回“已保存会话被拒绝”，需要重新获取与服务器出口环境兼容的会话，不能通过反复重试绕过挑战。
+
 Compose 为 `app`、`data` 固定使用 `cargo-planner-app`、`cargo-planner-data` 两个 Docker 网络名；代码目录改名或 Compose 项目名变化时不会再生成另一套网络，同时不会改变既有 MySQL 数据卷名。若升级前已经出现“backend 解析不到 `mysql`”，先检查新网络和旧 MySQL 的网络归属：
 
 ```bash

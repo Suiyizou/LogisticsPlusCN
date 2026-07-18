@@ -6,6 +6,7 @@ import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRe
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -93,6 +94,7 @@ public class ShipmentTrackingService {
 
   public ObjectNode track(ShipmentTrackRequest input, AuthenticatedUser user) {
     NormalizedTrackRequest request = normalize(input);
+    ShipmentImportDetails importedDetails = normalizeImportedDetails(input, request, user);
     boolean forceRefresh = Boolean.TRUE.equals(input == null ? null : input.forceRefresh());
     if (forceRefresh && (user == null || !user.canManageShipmentFiles())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Only business users or administrators may force a refresh");
@@ -102,7 +104,8 @@ public class ShipmentTrackingService {
     // identities. Never resolve a long-lived shipment aggregate from a container-only alias.
     CachedShipment cached = isDurableReferenceType(request.type()) ? findCached(request) : null;
     Instant now = clock.instant();
-    if (!forceRefresh && cached != null && cached.freshUntil() != null && cached.freshUntil().isAfter(now)) {
+    if (!forceRefresh && importedDetails == null && cached != null
+        && cached.freshUntil() != null && cached.freshUntil().isAfter(now)) {
       return cachedResponse(cached, user, false);
     }
 
@@ -112,13 +115,16 @@ public class ShipmentTrackingService {
           ? adapterClient.track(request, cmaTrackingSessionService.requireCredentials())
           : adapterClient.track(request);
     } catch (ApiException error) {
-      if (cached != null && (error.status().is5xxServerError() || error.status() == HttpStatus.TOO_MANY_REQUESTS)) {
+      if (importedDetails == null && cached != null
+          && (error.status().is5xxServerError() || error.status() == HttpStatus.TOO_MANY_REQUESTS)) {
         ObjectNode response = cachedResponse(cached, user, true);
         response.put("warning", error.getMessage());
         return response;
       }
       throw error;
     }
+
+    upstream = enrichWithImportedDetails(upstream, importedDetails);
 
     JsonNode snapshot = upstream.path("snapshot");
     if (!snapshot.isObject()) {
@@ -453,10 +459,195 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported shipment number type");
     }
     String number = normalizeReference(input.number());
+    if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)) {
+      java.util.regex.Matcher prefixed = number.matches("COSU[0-9]{6,20}")
+          ? java.util.regex.Pattern.compile("^COSU([0-9]{6,20})$").matcher(number)
+          : null;
+      if (prefixed != null && prefixed.matches()) number = prefixed.group(1);
+    }
     if (!number.matches("[A-Z0-9-]{4,35}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
     }
     return new NormalizedTrackRequest(carrier, channel, type, number);
+  }
+
+  private ShipmentImportDetails normalizeImportedDetails(
+      ShipmentTrackRequest input,
+      NormalizedTrackRequest request,
+      AuthenticatedUser user
+  ) {
+    ShipmentImportDetails supplied = input == null ? null : input.importedDetails();
+    boolean suppliedValues = hasImportedValues(supplied);
+    if (suppliedValues && (user == null || !user.canManageShipmentFiles())) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Business user or administrator permission is required to persist spreadsheet details"
+      );
+    }
+
+    String rawNumber = normalizeReference(input == null ? null : input.number());
+    boolean derivedCosu = "COSCO".equals(request.carrier())
+        && "BILLOFLADING".equals(request.type())
+        && rawNumber.matches("COSU[0-9]{6,20}");
+    String carrierPrefix = cleanImported(
+        supplied == null ? null : supplied.carrierPrefix(),
+        8
+    );
+    String originalBill = cleanImported(
+        supplied == null ? null : supplied.originalBillOfLading(),
+        64
+    );
+    if (derivedCosu) {
+      if (carrierPrefix == null) carrierPrefix = "COSU";
+      if (originalBill == null) originalBill = rawNumber;
+    }
+    if (carrierPrefix != null) {
+      carrierPrefix = carrierPrefix.toUpperCase(Locale.ROOT);
+      if (!carrierPrefix.matches("[A-Z0-9]{2,8}")) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier prefix format is invalid");
+      }
+    }
+    if (originalBill != null) {
+      originalBill = normalizeReference(originalBill);
+      if (!originalBill.matches("[A-Z0-9-]{4,64}")) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Original bill of lading format is invalid");
+      }
+    }
+    if (carrierPrefix != null && originalBill == null) {
+      originalBill = carrierPrefix + request.number();
+    }
+    if (carrierPrefix != null && originalBill != null
+        && (!originalBill.startsWith(carrierPrefix) || !originalBill.endsWith(request.number()))) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier prefix does not match the bill of lading");
+    }
+
+    ShipmentImportDetails normalized = new ShipmentImportDetails(
+        carrierPrefix,
+        originalBill,
+        cleanImported(supplied == null ? null : supplied.forwarderJobNumber(), 160),
+        cleanImported(supplied == null ? null : supplied.vesselVoyage(), 240),
+        cleanImported(supplied == null ? null : supplied.portOfLoading(), 160),
+        cleanImported(supplied == null ? null : supplied.portOfDischarge(), 160),
+        cleanImported(supplied == null ? null : supplied.clientPoNumber(), 160),
+        cleanImported(supplied == null ? null : supplied.estimatedDeparture(), 80),
+        cleanImported(supplied == null ? null : supplied.estimatedArrival(), 80),
+        cleanImported(supplied == null ? null : supplied.volume(), 80),
+        cleanImported(supplied == null ? null : supplied.clientNameCode(), 160)
+    );
+    return hasImportedValues(normalized) ? normalized : null;
+  }
+
+  private boolean hasImportedValues(ShipmentImportDetails details) {
+    return details != null && java.util.stream.Stream.of(
+        details.carrierPrefix(), details.originalBillOfLading(), details.forwarderJobNumber(),
+        details.vesselVoyage(), details.portOfLoading(), details.portOfDischarge(),
+        details.clientPoNumber(), details.estimatedDeparture(), details.estimatedArrival(),
+        details.volume(), details.clientNameCode()
+    ).anyMatch(value -> value != null && !value.isBlank());
+  }
+
+  private String cleanImported(String value, int limit) {
+    if (value == null) return null;
+    String cleaned = value.replaceAll("\\s+", " ").trim();
+    if (cleaned.isBlank()) return null;
+    return cleaned.length() <= limit ? cleaned : cleaned.substring(0, limit);
+  }
+
+  private JsonNode enrichWithImportedDetails(JsonNode upstream, ShipmentImportDetails details) {
+    if (details == null || !upstream.isObject() || !upstream.path("snapshot").isObject()) {
+      return upstream;
+    }
+    ObjectNode enriched = ((ObjectNode) upstream).deepCopy();
+    ObjectNode snapshot = (ObjectNode) enriched.path("snapshot");
+    ObjectNode tracking = childObject(snapshot, "tracking");
+    ObjectNode summary = childObject(snapshot, "summary");
+    ObjectNode references = childObject(snapshot, "references");
+    ObjectNode business = childObject(references, "business");
+    ArrayNode extra = snapshot.withArray("extraInformation");
+
+    putIfBlank(tracking, "carrierPrefix", details.carrierPrefix());
+    putIfBlank(tracking, "originalNumber", details.originalBillOfLading());
+    putIfBlank(references, "carrierPrefix", details.carrierPrefix());
+    putIfBlank(references, "originalBillOfLading", details.originalBillOfLading());
+    putIfBlank(references, "masterBill", details.originalBillOfLading());
+    putIfBlank(summary, "billOfLading", details.originalBillOfLading());
+    addExtra(extra, "carrierPrefix", details.carrierPrefix());
+    addExtra(extra, "originalBillOfLading", details.originalBillOfLading());
+
+    if (isBlank(business.path("forwarderJobNumber"))) {
+      putIfBlank(business, "forwarderJobNumber", details.forwarderJobNumber());
+      addExtra(extra, "forwarderJobNumber", details.forwarderJobNumber());
+    }
+    if (isBlank(business.path("clientPoNumber"))) {
+      putIfBlank(business, "clientPoNumber", details.clientPoNumber());
+      addExtra(extra, "clientPoNumber", details.clientPoNumber());
+    }
+    if (isBlank(business.path("clientNameCode"))) {
+      putIfBlank(business, "clientNameCode", details.clientNameCode());
+      addExtra(extra, "clientNameCode", details.clientNameCode());
+    }
+    if (!arrayHasText(snapshot.path("routingLegs"), "vesselName", "voyage")
+        && !arrayHasText(snapshot.path("sailingSchedule"), "vesselName", "voyage")) {
+      addExtra(extra, "vesselVoyage", details.vesselVoyage());
+    }
+    if (isBlank(summary.path("origin").path("name"))) {
+      addExtra(extra, "portOfLoading", details.portOfLoading());
+    }
+    if (isBlank(summary.path("destination").path("name"))) {
+      addExtra(extra, "portOfDischarge", details.portOfDischarge());
+    }
+    JsonNode keyTimes = snapshot.path("keyTimes");
+    if (isBlank(keyTimes.path("actualDeparture").path("time"))
+        && !arrayHasText(snapshot.path("routingLegs"), "estimatedDeparture", "actualDeparture")) {
+      addExtra(extra, "estimatedDeparture", details.estimatedDeparture());
+    }
+    if (isBlank(keyTimes.path("estimatedDelivery").path("time"))
+        && isBlank(keyTimes.path("actualArrival").path("time"))
+        && !arrayHasText(snapshot.path("routingLegs"), "estimatedArrival", "actualArrival")) {
+      addExtra(extra, "estimatedArrival", details.estimatedArrival());
+    }
+    if (!arrayHasText(snapshot.path("containers"), "sizeType", "type", "isoSizeType")
+        && !arrayHasText(summary.path("containers"), "sizeType", "type", "isoSizeType")) {
+      addExtra(extra, "volume", details.volume());
+    }
+    return enriched;
+  }
+
+  private ObjectNode childObject(ObjectNode parent, String field) {
+    JsonNode current = parent.path(field);
+    if (current.isObject()) return (ObjectNode) current;
+    ObjectNode created = objectMapper.createObjectNode();
+    parent.set(field, created);
+    return created;
+  }
+
+  private void putIfBlank(ObjectNode target, String field, String value) {
+    if (value != null && !value.isBlank() && isBlank(target.path(field))) target.put(field, value);
+  }
+
+  private boolean isBlank(JsonNode value) {
+    return value == null || value.isMissingNode() || value.isNull() || value.asText("").isBlank();
+  }
+
+  private boolean arrayHasText(JsonNode array, String... fields) {
+    if (!array.isArray()) return false;
+    for (JsonNode item : array) {
+      for (String field : fields) {
+        if (!isBlank(item.path(field))) return true;
+      }
+    }
+    return false;
+  }
+
+  private void addExtra(ArrayNode extra, String key, String value) {
+    if (value == null || value.isBlank()) return;
+    for (JsonNode item : extra) {
+      if (key.equals(item.path("key").asText())) return;
+    }
+    ObjectNode item = extra.addObject();
+    item.put("key", key);
+    item.put("value", value);
+    item.put("source", "SPREADSHEET");
   }
 
   private CachedShipment mapCachedShipment(ResultSet rs, int rowNumber) throws SQLException {

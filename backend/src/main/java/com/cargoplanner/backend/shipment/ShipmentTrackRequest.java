@@ -5,5 +5,16 @@ public record ShipmentTrackRequest(
     String channel,
     String type,
     String number,
-    Boolean forceRefresh
-) {}
+    Boolean forceRefresh,
+    ShipmentImportDetails importedDetails
+) {
+  public ShipmentTrackRequest(
+      String carrier,
+      String channel,
+      String type,
+      String number,
+      Boolean forceRefresh
+  ) {
+    this(carrier, channel, type, number, forceRefresh, null);
+  }
+}

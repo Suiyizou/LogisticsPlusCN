@@ -1,12 +1,14 @@
 package com.cargoplanner.backend.shipment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.CmaTrackingSessionService.CmaSessionCredentials;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,14 +26,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class ShipmentTrackingServiceTest {
   private JdbcTemplate jdbcTemplate;
   private TrackingAdapterClient adapterClient;
   private CmaTrackingSessionService cmaTrackingSessionService;
+  private ObjectMapper objectMapper;
   private ShipmentTrackingService service;
   private AuthenticatedUser employee;
+  private AuthenticatedUser business;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -45,8 +50,11 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.update(
         "INSERT INTO cp_users (id, display_name, role) VALUES (1, 'Customer One', 'EMPLOYEE')"
     );
+    jdbcTemplate.update(
+        "INSERT INTO cp_users (id, display_name, role) VALUES (2, 'Business One', 'BUSINESS')"
+    );
 
-    ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper = new ObjectMapper();
     adapterClient = mock(TrackingAdapterClient.class);
     cmaTrackingSessionService = mock(CmaTrackingSessionService.class);
     JsonNode adapterResponse = objectMapper.readTree("""
@@ -83,6 +91,7 @@ class ShipmentTrackingServiceTest {
         Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
     );
     employee = new AuthenticatedUser(1, "customer", "Customer One", "EMPLOYEE", "ACTIVE");
+    business = new AuthenticatedUser(2, "business", "Business One", "BUSINESS", "ACTIVE");
   }
 
   @Test
@@ -168,6 +177,108 @@ class ShipmentTrackingServiceTest {
     assertThat(second.path("cached").asBoolean()).isTrue();
     verify(adapterClient, times(1))
         .track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
+  }
+
+  @Test
+  void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO",
+        "AUTO",
+        "BILLOFLADING",
+        "6502406170"
+    );
+    JsonNode adapterResponse = objectMapper.readTree("""
+        {
+          "snapshot": {
+            "provider": {"code": "COSCO"},
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BILLOFLADING", "number": "6502406170"},
+            "summary": {
+              "billOfLading": "6502406170",
+              "origin": {"name": "Shanghai"},
+              "destination": {"name": "Long Beach"},
+              "latestEvent": {"name": "Loaded on board"}
+            },
+            "references": {"business": {"clientNameCode": "API-CODE"}},
+            "routingLegs": [{"vesselName": "COSCO EUROPE", "voyage": "113E"}],
+            "containers": [{"number": "CSNU1234567", "sizeType": "40HC"}]
+          },
+          "cached": false
+        }
+        """);
+    when(adapterClient.track(normalized)).thenReturn(adapterResponse);
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        "COSU",
+        "COSU6502406170",
+        "JSH2606003",
+        "COSCO EUROPE 113E-44",
+        "SHA",
+        "LONG BEACH",
+        "HW202600057-2",
+        "7-Jun-26",
+        "22-Jun-26",
+        "4*40HC",
+        "FILE-CODE"
+    );
+
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest(
+            "COSCO",
+            "AUTO",
+            "BILLOFLADING",
+            "COSU6502406170",
+            false,
+            details
+        ),
+        business
+    );
+
+    JsonNode snapshot = response.path("snapshot");
+    assertThat(snapshot.path("tracking").path("number").asText()).isEqualTo("6502406170");
+    assertThat(snapshot.path("tracking").path("carrierPrefix").asText()).isEqualTo("COSU");
+    assertThat(snapshot.path("tracking").path("originalNumber").asText())
+        .isEqualTo("COSU6502406170");
+    assertThat(snapshot.path("references").path("originalBillOfLading").asText())
+        .isEqualTo("COSU6502406170");
+    assertThat(snapshot.path("references").path("business").path("clientNameCode").asText())
+        .isEqualTo("API-CODE");
+    assertThat(snapshot.path("references").path("business").path("clientPoNumber").asText())
+        .isEqualTo("HW202600057-2");
+    assertThat(snapshot.path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("JSH2606003");
+    assertThat(snapshot.path("extraInformation").findValuesAsText("key"))
+        .contains("carrierPrefix", "originalBillOfLading", "clientPoNumber", "forwarderJobNumber")
+        .doesNotContain(
+            "clientNameCode", "vesselVoyage", "portOfLoading", "portOfDischarge", "volume"
+        );
+    verify(adapterClient).track(normalized);
+
+    String storedJson = jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots",
+        String.class
+    );
+    JsonNode stored = objectMapper.readTree(storedJson);
+    assertThat(stored.path("tracking").path("originalNumber").asText())
+        .isEqualTo("COSU6502406170");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = 'COSU6502406170'",
+        Integer.class
+    )).isEqualTo(1);
+
+    assertThatThrownBy(() -> service.track(
+        new ShipmentTrackRequest(
+            "COSCO",
+            "AUTO",
+            "BILLOFLADING",
+            "COSU6502406170",
+            false,
+            details
+        ),
+        employee
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
   }
 
   @Test
@@ -260,6 +371,20 @@ class ShipmentTrackingServiceTest {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (shipment_id, user_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customers (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          created_by BIGINT,
+          status VARCHAR(24) NOT NULL
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_shipment_access (
+          shipment_id BIGINT NOT NULL,
+          customer_id BIGINT NOT NULL,
+          PRIMARY KEY (shipment_id, customer_id)
         )
         """);
   }

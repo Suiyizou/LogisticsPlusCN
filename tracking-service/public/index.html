@@ -231,7 +231,7 @@
               <div class="batch-import-body">
                 <div class="batch-import-intro">
                   <p data-i18n="batch.columns">
-                    Recognizes Booking / Booking Ref / Booking No. and Bill of Lading / B/L / MBL / B/L No. columns.
+                    Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.
                   </p>
                   <small data-i18n="batch.localNotice">
                     Queue and result status are stored only in this browser on this device.
@@ -369,7 +369,7 @@
                 <div>
                   <p class="kicker" data-i18n="cmaSession.kicker">CMA ACCESS SESSION</p>
                   <h2 data-i18n="cmaSession.title">DataDome session</h2>
-                  <p data-i18n="cmaSession.description">Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned to the browser.</p>
+                  <p data-i18n="cmaSession.description">Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned; a successful query is still required to verify it.</p>
                 </div>
                 <span class="cma-session-status" id="cma-session-status" data-state="unknown" data-i18n="cmaSession.checking">Checking…</span>
               </div>
@@ -610,6 +610,10 @@
                       <dd id="external-references">Not provided</dd>
                     </div>
                   </dl>
+                  <section class="extra-information" id="extra-information-section" hidden>
+                    <h3 data-i18n="extraInformation.title">Extra information from spreadsheet</h3>
+                    <dl id="extra-information-list"></dl>
+                  </section>
                   <div class="reference-list" id="reference-information"></div>
                 </aside>
               </div>

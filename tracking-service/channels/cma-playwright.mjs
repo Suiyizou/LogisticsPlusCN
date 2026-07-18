@@ -239,6 +239,9 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
   try {
     const providedSessionCookie = options.sessionCookie ?? process.env.CMA_SESSION_COOKIE;
     const providedCookies = parseCmaSessionCookies(providedSessionCookie);
+    const hasProvidedDataDome = providedCookies.some(
+      (cookie) => cookie.name.toLowerCase() === "datadome"
+    );
     const profileCookies = await profileSessionCookies(browser);
     const seedCookies = mergeCookies(
       providedCookies.length > 0 ? [] : sessionCookies,
@@ -256,9 +259,11 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
     if ((await form.count()) !== 1) {
       if (entryResponse?.status() === 403) {
         throw upstreamError(
-          "CMA CGM 触发 DataDome 验证，请更新有效会话或检查 Chrome CDP 服务",
+          hasProvidedDataDome
+            ? "CMA CGM 拒绝了已保存的 DataDome 会话；它可能已过期，或与服务器出口 IP / User-Agent / 浏览器指纹不匹配"
+            : "CMA CGM 触发了 DataDome 验证；请由业务员或管理员保存有效会话",
           503,
-          { challenge: "DATADOME" }
+          { challenge: "DATADOME", sessionProvided: hasProvidedDataDome }
         );
       }
       throw upstreamError("CMA CGM 搜索表单结构已变化");
@@ -284,6 +289,13 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
     await searchButton.click();
     const searchResponse = await responsePromise;
     if (!searchResponse.ok()) {
+      if (searchResponse.status() === 403) {
+        throw upstreamError(
+          "CMA CGM 在查询时拒绝了已保存的 DataDome 会话；请重新获取服务器可用的会话",
+          503,
+          { challenge: "DATADOME", sessionProvided: hasProvidedDataDome }
+        );
+      }
       throw upstreamError(
         `CMA CGM 查询返回 HTTP ${searchResponse.status()}`,
         searchResponse.status() === 404 ? 404 : 502

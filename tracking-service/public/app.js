@@ -49,6 +49,8 @@ const batchPendingCount = document.querySelector("#batch-pending-count");
 const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
+const extraInformationSection = document.querySelector("#extra-information-section");
+const extraInformationList = document.querySelector("#extra-information-list");
 const relatedFilesButton = document.querySelector("#related-files-button");
 const relatedFilesCount = document.querySelector("#related-files-count");
 const relatedFilesBackdrop = document.querySelector("#related-files-backdrop");
@@ -116,8 +118,8 @@ const CACHE_INDEX_KEY = "shipment-track:v3:index";
 const LEGACY_CACHE_INDEX_KEY = "shipment-track:v2:index";
 const MIGRATION_KEY = "shipment-track:v3:migrated";
 const LANGUAGE_KEY = "shipment-track:language";
-const BATCH_STORAGE_KEY = "shipment-track:batch-import:v1";
-const BATCH_VERSION = 1;
+const BATCH_STORAGE_KEY = "shipment-track:batch-import:v2";
+const BATCH_VERSION = 2;
 const BATCH_IMPORT_LIMIT = 50;
 const BATCH_FILE_SIZE_LIMIT = 2 * 1024 * 1024;
 const BATCH_REQUEST_INTERVAL_MS = 2_100;
@@ -400,7 +402,7 @@ const MESSAGES = {
     "batch.subtitle": "Import an Excel or CSV list and query shipments one at a time",
     "batch.localBadge": "This device only",
     "batch.selectFile": "Select Excel / CSV",
-    "batch.columns": "Recognizes Booking / Booking Ref / Booking No. and Bill of Lading / B/L / MBL / B/L No. columns.",
+    "batch.columns": "Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.",
     "batch.localNotice": "Queue and result status are stored only in this browser on this device.",
     "batch.resume": "Continue pending queries",
     "batch.clear": "Clear imported queue",
@@ -412,7 +414,7 @@ const MESSAGES = {
     "batch.pending": "Pending",
     "batch.parsing": "Reading {name}…",
     "batch.unsupportedFile": "Choose an .xlsx, .xls, or .csv file no larger than 2 MB.",
-    "batch.noRecognizedColumns": "No supported column was found. Use Booking / Booking Ref / Booking No. or Bill of Lading / B/L / MBL / B/L No.",
+    "batch.noRecognizedColumns": "No supported column was found. Use Booking / Booking Ref / Booking No. or Bill of Lading / B/L / MBL / M/B/L No.",
     "batch.noRows": "No valid shipment numbers were found in the recognized columns.",
     "batch.workerUnsupported": "This browser cannot process spreadsheets in a background worker.",
     "batch.workerFailed": "The background spreadsheet parser stopped unexpectedly.",
@@ -435,7 +437,7 @@ const MESSAGES = {
     "query.cmaHelper": "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
     "cmaSession.kicker": "CMA ACCESS SESSION",
     "cmaSession.title": "DataDome session",
-    "cmaSession.description": "Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned to the browser.",
+    "cmaSession.description": "Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned; a successful query is still required to verify it.",
     "cmaSession.permission": "Only signed-in business users or administrators can maintain this session.",
     "cmaSession.cookie": "DataDome value or Cookie header",
     "cmaSession.cookieHelp": "Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.",
@@ -444,9 +446,9 @@ const MESSAGES = {
     "cmaSession.save": "Save encrypted session",
     "cmaSession.clear": "Clear session",
     "cmaSession.checking": "Checking…",
-    "cmaSession.configured": "Configured · {time}",
+    "cmaSession.configured": "Saved · verify with a query · {time}",
     "cmaSession.notConfigured": "Not configured",
-    "cmaSession.saved": "The CMA session was encrypted and saved.",
+    "cmaSession.saved": "The CMA session was encrypted and saved. Run a CMA query to verify that the server can use it.",
     "cmaSession.cleared": "The CMA session was cleared.",
     "cmaSession.required": "Enter a DataDome value or CMA Cookie header.",
     "cmaSession.loadFailed": "Could not read the CMA session status: {message}",
@@ -504,6 +506,18 @@ const MESSAGES = {
     "business.clientCode": "Client name code",
     "business.clientPo": "Client PO number",
     "business.forwarderJob": "Forwarder job number",
+    "extraInformation.title": "Extra information from spreadsheet",
+    "extraInformation.carrierPrefix": "Carrier prefix",
+    "extraInformation.originalBillOfLading": "Original bill of lading",
+    "extraInformation.forwarderJobNumber": "Job number",
+    "extraInformation.vesselVoyage": "Vessel / voyage",
+    "extraInformation.portOfLoading": "Port of loading (POL)",
+    "extraInformation.portOfDischarge": "Port of discharge (POD)",
+    "extraInformation.clientPoNumber": "PO number",
+    "extraInformation.estimatedDeparture": "ETD",
+    "extraInformation.estimatedArrival": "ETA",
+    "extraInformation.volume": "Volume",
+    "extraInformation.clientNameCode": "Client code",
     "routing.title": "Routing legs",
     "routing.legs": "{count} legs",
     "routing.leg": "Leg",
@@ -769,7 +783,7 @@ const MESSAGES = {
     "batch.subtitle": "导入 Excel 或 CSV 清单，按顺序逐票查询",
     "batch.localBadge": "仅保存在本设备",
     "batch.selectFile": "选择 Excel / CSV",
-    "batch.columns": "支持 Booking / Booking Ref / 订舱号，以及 Bill of Lading / B/L / MBL / 提单号列。",
+    "batch.columns": "支持 M/B/L NO.、提单号和订舱号列；同时导入 Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code。",
     "batch.localNotice": "队列和处理状态仅保存在本设备的当前浏览器中。",
     "batch.resume": "继续查询待处理项目",
     "batch.clear": "清除导入队列",
@@ -781,7 +795,7 @@ const MESSAGES = {
     "batch.pending": "待处理",
     "batch.parsing": "正在读取 {name}…",
     "batch.unsupportedFile": "请选择不超过 2 MB 的 .xlsx、.xls 或 .csv 文件。",
-    "batch.noRecognizedColumns": "没有找到支持的列，请使用 Booking / Booking Ref / 订舱号或 Bill of Lading / B/L / MBL / 提单号。",
+    "batch.noRecognizedColumns": "没有找到支持的列，请使用 Booking / Booking Ref / 订舱号或 Bill of Lading / B/L / MBL / M/B/L NO. / 提单号。",
     "batch.noRows": "识别到的列中没有有效运输单号。",
     "batch.workerUnsupported": "当前浏览器无法在后台线程中处理表格。",
     "batch.workerFailed": "后台表格解析器意外停止。",
@@ -804,7 +818,7 @@ const MESSAGES = {
     "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
     "cmaSession.kicker": "CMA 访问会话",
     "cmaSession.title": "DataDome 会话",
-    "cmaSession.description": "业务员和管理员可在这里维护 CMA 浏览器会话。该值由后端加密保存，且不会回传浏览器。",
+    "cmaSession.description": "业务员和管理员可在这里维护 CMA 浏览器会话。该值由后端加密保存且不会回传；仍需成功查询一次才能确认可用。",
     "cmaSession.permission": "只有已登录的业务员或管理员可以维护此会话。",
     "cmaSession.cookie": "DataDome 值或 Cookie 请求头",
     "cmaSession.cookieHelp": "可只粘贴 datadome 的值，也可粘贴 CMA 请求的完整 Cookie 头；保存后不会再次显示。",
@@ -813,9 +827,9 @@ const MESSAGES = {
     "cmaSession.save": "加密保存会话",
     "cmaSession.clear": "清除会话",
     "cmaSession.checking": "检查中…",
-    "cmaSession.configured": "已配置 · {time}",
+    "cmaSession.configured": "已保存 · 需查询验证 · {time}",
     "cmaSession.notConfigured": "尚未配置",
-    "cmaSession.saved": "CMA 会话已加密保存。",
+    "cmaSession.saved": "CMA 会话已加密保存；请立即查询一票，验证服务器能否使用。",
     "cmaSession.cleared": "CMA 会话已清除。",
     "cmaSession.required": "请输入 DataDome 值或 CMA Cookie 请求头。",
     "cmaSession.loadFailed": "无法读取 CMA 会话状态：{message}",
@@ -873,6 +887,18 @@ const MESSAGES = {
     "business.clientCode": "客户名称代码",
     "business.clientPo": "客户订单号",
     "business.forwarderJob": "货代订单号",
+    "extraInformation.title": "表格补充信息",
+    "extraInformation.carrierPrefix": "船司前缀",
+    "extraInformation.originalBillOfLading": "原始提单号",
+    "extraInformation.forwarderJobNumber": "Job Number",
+    "extraInformation.vesselVoyage": "船名 / 航次",
+    "extraInformation.portOfLoading": "起运港（POL）",
+    "extraInformation.portOfDischarge": "目的港（POD）",
+    "extraInformation.clientPoNumber": "PO Number",
+    "extraInformation.estimatedDeparture": "预计离港（ETD）",
+    "extraInformation.estimatedArrival": "预计到港（ETA）",
+    "extraInformation.volume": "箱量（Volume）",
+    "extraInformation.clientNameCode": "客户代码",
     "routing.title": "分段运输 Routing",
     "routing.legs": "{count} 段",
     "routing.leg": "段",
@@ -2394,8 +2420,32 @@ function trackingTypeLabel(type) {
   return t(TYPE_KEYS[type] ?? "type.bill");
 }
 
+const IMPORT_DETAIL_LIMITS = Object.freeze({
+  carrierPrefix: 8,
+  originalBillOfLading: 64,
+  forwarderJobNumber: 160,
+  vesselVoyage: 240,
+  portOfLoading: 160,
+  portOfDischarge: 160,
+  clientPoNumber: 160,
+  estimatedDeparture: 80,
+  estimatedArrival: 80,
+  volume: 80,
+  clientNameCode: 160
+});
+
+function normalizeImportedDetails(details) {
+  if (!details || typeof details !== "object") return null;
+  const normalized = {};
+  for (const [key, limit] of Object.entries(IMPORT_DETAIL_LIMITS)) {
+    const value = String(details[key] ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
+    if (value) normalized[key] = value;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 function normalizeQuery(query) {
-  return {
+  const normalized = {
     carrier: String(query.carrier ?? "COSCO").trim().toUpperCase(),
     channel: String(query.channel ?? "AUTO").trim().toUpperCase(),
     type: String(query.type ?? "BILLOFLADING").trim().toUpperCase(),
@@ -2404,6 +2454,9 @@ function normalizeQuery(query) {
       .replace(/\s+/g, "")
       .toUpperCase()
   };
+  const importedDetails = normalizeImportedDetails(query.importedDetails);
+  if (importedDetails) normalized.importedDetails = importedDetails;
+  return normalized;
 }
 
 function cacheKey(query) {
@@ -2457,6 +2510,107 @@ function renderBusinessReferences(snapshot) {
   elements["client-name-code"].textContent = valueOrDash(references.clientNameCode);
   elements["client-po-number"].textContent = valueOrDash(references.clientPoNumber);
   elements["forwarder-job-number"].textContent = valueOrDash(references.forwarderJobNumber);
+}
+
+function hasText(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function hasArrayField(snapshot, collections, fields) {
+  return collections.some((collection) =>
+    (snapshot?.[collection] ?? []).some((item) => fields.some((field) => hasText(item?.[field])))
+  );
+}
+
+function mergeImportedDetailsIntoPayload(payload, importedDetails) {
+  const details = normalizeImportedDetails(importedDetails);
+  if (!payload?.snapshot || !details) return payload;
+  const merged = JSON.parse(JSON.stringify(payload));
+  const snapshot = merged.snapshot;
+  snapshot.tracking = snapshot.tracking && typeof snapshot.tracking === "object"
+    ? snapshot.tracking
+    : {};
+  snapshot.summary = snapshot.summary && typeof snapshot.summary === "object"
+    ? snapshot.summary
+    : {};
+  snapshot.references = snapshot.references && typeof snapshot.references === "object"
+    ? snapshot.references
+    : {};
+  snapshot.references.business =
+    snapshot.references.business && typeof snapshot.references.business === "object"
+      ? snapshot.references.business
+      : {};
+  snapshot.extraInformation = Array.isArray(snapshot.extraInformation)
+    ? snapshot.extraInformation
+    : [];
+
+  const putIfMissing = (target, key, value) => {
+    if (hasText(value) && !hasText(target[key])) target[key] = value;
+  };
+  const addExtra = (key, value) => {
+    if (!hasText(value) || snapshot.extraInformation.some((item) => item?.key === key)) return;
+    snapshot.extraInformation.push({ key, value, source: "SPREADSHEET" });
+  };
+
+  putIfMissing(snapshot.tracking, "carrierPrefix", details.carrierPrefix);
+  putIfMissing(snapshot.tracking, "originalNumber", details.originalBillOfLading);
+  putIfMissing(snapshot.references, "carrierPrefix", details.carrierPrefix);
+  putIfMissing(snapshot.references, "originalBillOfLading", details.originalBillOfLading);
+  putIfMissing(snapshot.references, "masterBill", details.originalBillOfLading);
+  putIfMissing(snapshot.summary, "billOfLading", details.originalBillOfLading);
+  addExtra("carrierPrefix", details.carrierPrefix);
+  addExtra("originalBillOfLading", details.originalBillOfLading);
+
+  for (const [key, value] of [
+    ["forwarderJobNumber", details.forwarderJobNumber],
+    ["clientPoNumber", details.clientPoNumber],
+    ["clientNameCode", details.clientNameCode]
+  ]) {
+    if (!hasText(snapshot.references.business[key])) {
+      putIfMissing(snapshot.references.business, key, value);
+      addExtra(key, value);
+    }
+  }
+  if (!hasArrayField(snapshot, ["routingLegs", "sailingSchedule"], ["vesselName", "voyage"])) {
+    addExtra("vesselVoyage", details.vesselVoyage);
+  }
+  if (!hasText(snapshot.summary.origin?.name)) addExtra("portOfLoading", details.portOfLoading);
+  if (!hasText(snapshot.summary.destination?.name)) {
+    addExtra("portOfDischarge", details.portOfDischarge);
+  }
+  if (
+    !hasText(snapshot.keyTimes?.actualDeparture?.time) &&
+    !hasArrayField(snapshot, ["routingLegs"], ["estimatedDeparture", "actualDeparture"])
+  ) {
+    addExtra("estimatedDeparture", details.estimatedDeparture);
+  }
+  if (
+    !hasText(snapshot.keyTimes?.estimatedDelivery?.time) &&
+    !hasText(snapshot.keyTimes?.actualArrival?.time) &&
+    !hasArrayField(snapshot, ["routingLegs"], ["estimatedArrival", "actualArrival"])
+  ) {
+    addExtra("estimatedArrival", details.estimatedArrival);
+  }
+  if (!containerTypeSummary(snapshot)) addExtra("volume", details.volume);
+  return merged;
+}
+
+function renderExtraInformation(snapshot) {
+  const entries = Array.isArray(snapshot?.extraInformation)
+    ? snapshot.extraInformation.filter((item) => hasText(item?.key) && hasText(item?.value))
+    : [];
+  extraInformationSection.hidden = entries.length === 0;
+  const fragment = document.createDocumentFragment();
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    const description = document.createElement("dd");
+    term.textContent = t(`extraInformation.${entry.key}`);
+    description.textContent = String(entry.value);
+    row.append(term, description);
+    fragment.append(row);
+  }
+  extraInformationList.replaceChildren(fragment);
 }
 
 function openBusinessReferenceDialog() {
@@ -2703,6 +2857,12 @@ function removeCacheKey(key) {
 function saveSnapshot(query, payload, savedAt = new Date().toISOString()) {
   if (!payload?.snapshot) return;
   const normalized = normalizeQuery(query);
+  const cacheQuery = {
+    carrier: normalized.carrier,
+    channel: normalized.channel,
+    type: normalized.type,
+    number: normalized.number
+  };
 
   try {
     const key = cacheKey(normalized);
@@ -2711,7 +2871,7 @@ function saveSnapshot(query, payload, savedAt = new Date().toISOString()) {
       JSON.stringify({
         version: CACHE_VERSION,
         savedAt,
-        query: normalized,
+        query: cacheQuery,
         snapshot: payload.snapshot,
         shipmentId: shipmentRecordId(payload),
         shipmentRecord: payload.shipmentRecord ?? null
@@ -2974,6 +3134,7 @@ function restoreBatchState() {
       .slice(0, BATCH_IMPORT_LIMIT)
       .map((item, index) => {
         const type = item?.type === "BOOKING" ? "BOOKING" : "BILLOFLADING";
+        const carrier = ["COSCO", "CMA"].includes(item?.carrier) ? item.carrier : null;
         const number = String(item?.number ?? "")
           .trim()
           .replace(/\s+/g, "")
@@ -2983,9 +3144,12 @@ function restoreBatchState() {
           ? item.status
           : "pending";
         return {
-          id: `${type}:${number}:${index}`,
+          id: `${carrier ?? "UNKNOWN"}:${type}:${number}:${index}`,
+          carrier,
           type,
           number,
+          displayNumber: String(item?.displayNumber ?? number).trim().slice(0, 64),
+          importedDetails: normalizeImportedDetails(item?.importedDetails),
           status,
           source: status === "success" ? String(item?.source ?? "live") : null,
           error: status === "failed" ? String(item?.error ?? "") : null,
@@ -3070,7 +3234,7 @@ function renderBatchState() {
     batchStatusText.textContent = t("batch.running", {
       current: runningIndex + 1,
       total: items.length,
-      number: items[runningIndex].number
+      number: items[runningIndex].displayNumber ?? items[runningIndex].number
     });
   } else if (counts.pending === 0) {
     batchStatusText.textContent = t("batch.completed", counts);
@@ -3085,19 +3249,19 @@ function renderBatchState() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = `batch-result-item is-${item.status}`;
-    row.disabled = batchRunning;
+    row.disabled = batchRunning || !item.carrier;
     row.setAttribute(
       "aria-label",
       t("batch.openItem", {
         type: trackingTypeLabel(item.type),
-        number: item.number
+        number: item.displayNumber ?? item.number
       })
     );
     const identity = document.createElement("span");
     const type = document.createElement("small");
     type.textContent = trackingTypeLabel(item.type);
     const number = document.createElement("strong");
-    number.textContent = item.number;
+    number.textContent = item.displayNumber ?? item.number;
     identity.append(type, number);
     const status = document.createElement("span");
     const statusDot = document.createElement("i");
@@ -3212,6 +3376,29 @@ async function requestBatchTracking(query) {
   return result;
 }
 
+function batchItemForQuery(query) {
+  if (!batchState?.items?.length) return null;
+  const normalized = normalizeQuery(query);
+  return batchState.items.find(
+    (item) =>
+      item.carrier === normalized.carrier &&
+      item.type === normalized.type &&
+      item.number === normalized.number
+  ) ?? null;
+}
+
+function queryForBatchItem(item) {
+  return normalizeQuery({
+    carrier: item.carrier,
+    channel: "AUTO",
+    type: item.type,
+    number: item.number,
+    importedDetails: canManageFileVisibility(readFileSession())
+      ? item.importedDetails
+      : null
+  });
+}
+
 async function runBatchQueue() {
   if (batchRunning || !batchState?.items?.some((item) => item.status === "pending")) return;
 
@@ -3231,27 +3418,31 @@ async function runBatchQueue() {
       persistBatchState();
       renderBatchState();
 
-      const query = normalizeQuery({
-        carrier: "COSCO",
-        channel: "AUTO",
-        type: item.type,
-        number: item.number
-      });
+      const query = queryForBatchItem(item);
 
       try {
         const localPayload = loadSnapshot(query);
-        if (localPayload) {
+        if (localPayload && !query.importedDetails) {
+          const mergedPayload = mergeImportedDetailsIntoPayload(
+            localPayload,
+            item.importedDetails
+          );
+          saveSnapshot(query, mergedPayload);
           item.status = "success";
           item.source = "device-cache";
           item.error = null;
         } else {
-          const { response, payload } = await requestBatchTracking(query);
+          const { response, payload: upstreamPayload } = await requestBatchTracking(query);
           if (!response.ok) {
             throw new Error(
-              trackingResponseMessage(payload, response) ||
+              trackingResponseMessage(upstreamPayload, response) ||
               t("error.http", { status: response.status })
             );
           }
+          const payload = mergeImportedDetailsIntoPayload(
+            upstreamPayload,
+            item.importedDetails
+          );
           saveSnapshot(query, payload);
           item.status = "success";
           item.source = payload?.cached ? "server-cache" : "live";
@@ -3894,6 +4085,7 @@ function renderResult(payload) {
   renderRoutingLegs(snapshot.routingLegs ?? []);
   renderReferences(snapshot.references ?? {});
   renderBusinessReferences(snapshot);
+  renderExtraInformation(snapshot);
   renderTrackingEvents(snapshot);
   renderContainers(snapshot.containers ?? []);
   renderDocumentDrawer(snapshot);
@@ -4681,7 +4873,9 @@ function markBatchItemResult(query, { status, source = null, error = null }) {
   const normalized = normalizeQuery(query);
   const item = batchState.items.find(
     (candidate) =>
-      candidate.type === normalized.type && candidate.number === normalized.number
+      candidate.carrier === normalized.carrier &&
+      candidate.type === normalized.type &&
+      candidate.number === normalized.number
   );
   if (!item) return;
   item.status = status;
@@ -4698,12 +4892,7 @@ function markBatchItemResult(query, { status, source = null, error = null }) {
 
 function openBatchItem(item) {
   if (batchRunning) return;
-  const query = normalizeQuery({
-    carrier: "COSCO",
-    channel: "AUTO",
-    type: item.type,
-    number: item.number
-  });
+  const query = queryForBatchItem(item);
   carrierSelect.value = query.carrier;
   channelSelect.value = query.channel;
   trackingType.value = query.type;
@@ -4711,8 +4900,8 @@ function openBatchItem(item) {
   updateCarrierUI();
   const localPayload = loadSnapshot(query);
   if (localPayload) {
-    currentPayload = localPayload;
-    renderResult(localPayload);
+    currentPayload = mergeImportedDetailsIntoPayload(localPayload, item.importedDetails);
+    renderResult(currentPayload);
   } else {
     currentPayload = null;
     setRelatedFilesContext(null);
@@ -4882,11 +5071,18 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearError();
 
-  const query = normalizeQuery({
+  const baseQuery = normalizeQuery({
     carrier: carrierSelect.value,
     channel: channelSelect.value,
     type: trackingType.value,
     number: trackingNumber.value
+  });
+  const importedItem = batchItemForQuery(baseQuery);
+  const query = normalizeQuery({
+    ...baseQuery,
+    importedDetails: canManageFileVisibility(readFileSession())
+      ? importedItem?.importedDetails
+      : null
   });
   const carrier = CARRIERS[query.carrier];
 
@@ -4900,19 +5096,26 @@ form.addEventListener("submit", async (event) => {
   const waitToken = beginSystemWait("tracking", "wait.tracking");
   let completed = false;
   updateUrl(query);
-  const localPayload = loadSnapshot(query);
+  const localPayload = mergeImportedDetailsIntoPayload(
+    loadSnapshot(query),
+    importedItem?.importedDetails
+  );
   if (localPayload) renderResult(localPayload);
 
   try {
-    const { response, payload } = await requestTracking(query);
+    const { response, payload: upstreamPayload } = await requestTracking(query);
 
     if (!response.ok) {
       throw new Error(
-        trackingResponseMessage(payload, response) ||
+        trackingResponseMessage(upstreamPayload, response) ||
         t("error.http", { status: response.status })
       );
     }
 
+    const payload = mergeImportedDetailsIntoPayload(
+      upstreamPayload,
+      importedItem?.importedDetails
+    );
     saveSnapshot(query, payload);
     markBatchItemResult(query, {
       status: "success",
