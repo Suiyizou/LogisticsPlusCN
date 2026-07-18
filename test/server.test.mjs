@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parseCmaSessionCookies } from "../channels/cma-playwright.mjs";
 import {
   buildRoutingLegs,
   decodeCoscoPayload,
@@ -72,6 +73,28 @@ test("normalizes CMA local date text without inventing a timezone", () => {
   assert.equal(
     parseCmaLocalDateTime("Sun.14-JUN-2026 09:30 AM"),
     "2026-06-14T09:30:00"
+  );
+});
+
+test("parses CMA session cookies without truncating values that contain equals signs", () => {
+  assert.deepEqual(
+    parseCmaSessionCookies("datadome=abc==; XSRF-TOKEN=token-value"),
+    [
+      {
+        name: "datadome",
+        value: "abc==",
+        domain: ".cma-cgm.com",
+        path: "/",
+        secure: true
+      },
+      {
+        name: "XSRF-TOKEN",
+        value: "token-value",
+        domain: ".cma-cgm.com",
+        path: "/",
+        secure: true
+      }
+    ]
   );
 });
 

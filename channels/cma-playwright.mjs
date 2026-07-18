@@ -3,11 +3,11 @@ import { chromium } from "playwright";
 const CMA_TRACKING_PAGE = "https://www.cma-cgm.com/ebusiness/tracking/search";
 const DEFAULT_TIMEOUT_MS = 45_000;
 const EXPANSION_SETTLE_MS = 4_000;
-let sharedBrowserPromise = null;
+let sharedBrowserHandlePromise = null;
 let sessionCookies = [];
 
-function configuredSessionCookies() {
-  return String(process.env.CMA_SESSION_COOKIE ?? "")
+export function parseCmaSessionCookies(cookieHeader) {
+  return String(cookieHeader ?? "")
     .split(";")
     .map((part) => part.trim())
     .filter(Boolean)
@@ -24,25 +24,51 @@ function configuredSessionCookies() {
     });
 }
 
-async function launchSharedBrowser() {
-  const browser = await chromium.launch({
-    channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? "chrome",
-    headless: String(process.env.PLAYWRIGHT_HEADLESS ?? "true").toLowerCase() !== "false"
-  });
-  browser.once("disconnected", () => {
-    sharedBrowserPromise = null;
-  });
-  return browser;
+function mergeCookies(...cookieGroups) {
+  const merged = new Map();
+  for (const cookie of cookieGroups.flat()) {
+    if (!cookie?.name || !cookie?.domain || !cookie?.path) continue;
+    merged.set(`${cookie.name}\n${cookie.domain}\n${cookie.path}`, cookie);
+  }
+  return [...merged.values()];
 }
 
-async function getSharedBrowser() {
-  if (!sharedBrowserPromise) {
-    sharedBrowserPromise = launchSharedBrowser().catch((error) => {
-      sharedBrowserPromise = null;
+async function createSharedBrowserHandle() {
+  const cdpUrl = String(process.env.CMA_CDP_URL ?? "").trim();
+  const browser = cdpUrl
+    ? await chromium.connectOverCDP(cdpUrl)
+    : await chromium.launch({
+        channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? "chrome",
+        headless:
+          String(process.env.PLAYWRIGHT_HEADLESS ?? "true").toLowerCase() !== "false"
+      });
+  browser.once("disconnected", () => {
+    sharedBrowserHandlePromise = null;
+  });
+  return {
+    browser,
+    mode: cdpUrl ? "CDP" : "LAUNCH"
+  };
+}
+
+async function getSharedBrowserHandle() {
+  if (!sharedBrowserHandlePromise) {
+    sharedBrowserHandlePromise = createSharedBrowserHandle().catch((error) => {
+      sharedBrowserHandlePromise = null;
       throw error;
     });
   }
-  return sharedBrowserPromise;
+  return sharedBrowserHandlePromise;
+}
+
+async function profileSessionCookies(browser) {
+  const [profileContext] = browser.contexts();
+  if (!profileContext) return [];
+  try {
+    return await profileContext.cookies(CMA_TRACKING_PAGE);
+  } catch {
+    return [];
+  }
 }
 
 function upstreamError(message, httpStatus = 502, details) {
@@ -154,12 +180,12 @@ async function extractCard(card) {
 }
 
 export async function closeCmaPlaywrightBrowser() {
-  if (!sharedBrowserPromise) return;
-  const browserPromise = sharedBrowserPromise;
-  sharedBrowserPromise = null;
+  if (!sharedBrowserHandlePromise) return;
+  const handlePromise = sharedBrowserHandlePromise;
+  sharedBrowserHandlePromise = null;
   try {
-    const browser = await browserPromise;
-    await browser.close();
+    const handle = await handlePromise;
+    await handle.browser.close();
   } catch {
     // A failed or already disconnected browser does not need additional cleanup.
   }
@@ -167,7 +193,10 @@ export async function closeCmaPlaywrightBrowser() {
 
 export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const browser = options.browser ?? (await getSharedBrowser());
+  const handle = options.browser
+    ? { browser: options.browser, mode: "INJECTED" }
+    : await getSharedBrowserHandle();
+  const browser = handle.browser;
   const context = await browser.newContext({
     locale: "en-US",
     timezoneId: "Asia/Shanghai",
@@ -178,7 +207,14 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
   });
 
   try {
-    const seedCookies = [...sessionCookies, ...configuredSessionCookies()];
+    const providedSessionCookie = options.sessionCookie ?? process.env.CMA_SESSION_COOKIE;
+    const providedCookies = parseCmaSessionCookies(providedSessionCookie);
+    const profileCookies = await profileSessionCookies(browser);
+    const seedCookies = mergeCookies(
+      providedCookies.length > 0 ? [] : sessionCookies,
+      profileCookies,
+      providedCookies
+    );
     if (seedCookies.length > 0) await context.addCookies(seedCookies);
     const page = await context.newPage();
     const entryResponse = await page.goto(CMA_TRACKING_PAGE, {
@@ -190,7 +226,7 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
     if ((await form.count()) !== 1) {
       if (entryResponse?.status() === 403) {
         throw upstreamError(
-          "CMA CGM 触发 DataDome 验证，请配置已通过验证的 CMA_SESSION_COOKIE 后重试",
+          "CMA CGM 触发 DataDome 验证，请更新有效会话或检查 Chrome CDP 服务",
           503,
           { challenge: "DATADOME" }
         );
@@ -198,9 +234,9 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
       throw upstreamError("CMA CGM 搜索表单结构已变化");
     }
 
-    let searchInput = form.locator('input[name*="SearchByReference"]:not([type="hidden"])');
+    let searchInput = form.locator("#Reference");
     if ((await searchInput.count()) !== 1) {
-      searchInput = form.locator('input[type="text"], input[type="search"]');
+      searchInput = form.locator('input[name="SearchViewModel.Reference"]');
     }
     if ((await searchInput.count()) !== 1) {
       throw upstreamError("CMA CGM 搜索输入框结构已变化");
@@ -265,7 +301,8 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
         responseStatus: searchResponse.status(),
         pageUrl: page.url(),
         cardCount,
-        extraction: "SERVER_RENDERED_HTML"
+        extraction: "SERVER_RENDERED_HTML",
+        browserConnection: handle.mode
       }
     };
   } catch (error) {
@@ -275,7 +312,11 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
     throw error;
   } finally {
     try {
-      sessionCookies = await context.cookies(CMA_TRACKING_PAGE);
+      const refreshedCookies = await context.cookies(CMA_TRACKING_PAGE);
+      if (typeof options.onSessionCookies === "function") {
+        await options.onSessionCookies(refreshedCookies);
+      }
+      if (options.sessionCookie == null) sessionCookies = refreshedCookies;
     } catch {
       // Cookie persistence is an optimization; context cleanup must still continue.
     }

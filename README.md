@@ -83,13 +83,16 @@ npm run track:playwright -- 6502077380 --headed
 
 ## CMA CGM 会话
 
-CMA CGM 搜索页由 DataDome 保护。适配器不会绕过验证；需要把合法、已通过验证的 CMA 浏览器会话通过环境变量提供给 Node 服务。Cookie 只保存在进程内存中，不会写入统一快照或浏览器 LocalStorage。
+CMA CGM 搜索页由 DataDome 保护。适配器不会绕过验证；合法、已通过验证的 CMA 浏览器会话可以来自 CDP Chrome Profile，或由 Spring Boot 在服务端请求中按次提供。Cookie 只保存在进程内存中，不会写入统一快照或浏览器 LocalStorage。
 
 ```powershell
+$env:CMA_CDP_URL="http://127.0.0.1:9222"
 $env:CMA_SESSION_COOKIE="datadome=YOUR_APPROVED_SESSION_VALUE"
 $env:CMA_PLAYWRIGHT_TIMEOUT_MS="45000"
 npm start
 ```
+
+生产环境优先设置 `CMA_CDP_URL`，让 Node 连接一个正常启动、长期存活且使用独立 Profile 的 Chrome 服务。CDP 端口只能监听回环地址或容器内网，不能暴露到公网。`CMA_SESSION_COOKIE` 仅作为开发兜底；Spring Boot 集成时应通过服务端请求把加密存储的会话按次传给适配器，而不是写入进程环境变量。
 
 `CMA_SESSION_COOKIE` 属于敏感会话信息，不要写入代码、日志、Git 或前端。会话失效时接口会返回 `503` 和 `DATADOME` 标识，更新合法会话后即可重试。
 
