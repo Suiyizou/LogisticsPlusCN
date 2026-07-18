@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A unified multi-carrier shipment tracking workspace"
+      data-i18n-content="meta.description"
+    />
+    <title>Shipment Track</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./vendor/element-plus.css" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview" data-view-target="overview" aria-label="Shipment Track">
+          <span class="brand-mark brand-mark--logo"><img src="./favicon.svg" alt="" /></span>
+          <span class="brand-copy">
+            <strong>Shipment Track</strong>
+            <small data-i18n="brand.subtitle">Carrier intelligence desk</small>
+          </span>
+        </a>
+
+        <nav aria-label="Primary navigation" data-i18n-aria-label="nav.ariaLabel">
+          <p class="nav-title" data-i18n="nav.workspace">Workspace</p>
+          <a
+            class="nav-item portal-return-link"
+            href="/workbenches"
+            data-home-link
+            data-i18n-aria-label="nav.portal"
+          >
+            <span class="nav-icon" aria-hidden="true">&#8592;</span>
+            <span data-i18n="nav.portal">Open workbenches</span>
+          </a>
+          <a class="nav-item is-active" href="#overview" data-view-target="overview">
+            <span class="nav-icon">◫</span>
+            <span data-i18n="nav.overview">Overview</span>
+          </a>
+          <a class="nav-item" href="#tracking" data-view-target="tracking">
+            <span class="nav-icon">⌁</span>
+            <span data-i18n="nav.tracking">Shipment tracking</span>
+          </a>
+
+          <p class="nav-title" data-i18n="nav.carriers">Carrier adapters</p>
+          <div class="carrier-nav-item is-current" id="cosco-nav-status">
+            <span class="carrier-monogram cosco">CO</span>
+            <span>
+              COSCO
+              <small data-i18n="carrier.connected">Connected · 2 channels</small>
+            </span>
+            <i></i>
+          </div>
+          <div class="carrier-nav-item is-connected">
+            <span class="carrier-monogram cma">CM</span>
+            <span>
+              CMA CGM
+              <small data-i18n="carrier.cmaConnected">Connected · HTML/PDF</small>
+            </span>
+          </div>
+        </nav>
+
+        <div class="sidebar-foot">
+          <span data-i18n="sidebar.architecture">UNIFIED ADAPTER</span>
+          <strong>COSCO · CMA READY</strong>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="breadcrumbs">
+            <span data-i18n="breadcrumb.workspace">Workspace</span>
+            <b>/</b>
+            <strong id="active-view-title">Overview</strong>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="system-state" id="channel-state" data-status="unknown">
+              <span class="state-dot"></span>
+              <span id="channel-status-text">Channel 1 awaiting check</span>
+            </div>
+            <div class="language-switch" role="group" aria-label="Language">
+              <button type="button" data-language="en" class="is-active">EN</button>
+              <button type="button" data-language="zh">中文</button>
+            </div>
+            <div class="tracking-account" id="tracking-account" hidden>
+              <button
+                class="tracking-account-trigger"
+                id="tracking-account-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                data-i18n-aria-label="account.menu"
+              >
+                <span class="tracking-account-mark" id="tracking-account-mark" aria-hidden="true">U</span>
+                <span class="tracking-account-copy">
+                  <strong id="tracking-account-name"></strong>
+                  <small id="tracking-account-role"></small>
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+              </button>
+              <div class="tracking-account-menu" id="tracking-account-menu" role="menu" aria-hidden="true">
+                <a href="/" role="menuitem" data-home-link>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-5v-6H9v6H4z" /></svg>
+                  <span data-i18n="account.home">Platform home</span>
+                </a>
+                <button id="tracking-account-logout" type="button" role="menuitem">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9" /></svg>
+                  <span data-i18n="account.signOut">Sign out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="app-view" id="overview-view" data-view="overview">
+            <section class="overview-hero">
+              <div class="hero-copy">
+                <p class="kicker" data-i18n="overview.kicker">SHIPMENT DASHBOARD</p>
+                <h1 data-i18n="overview.title">Your shipments, moving in plain sight.</h1>
+                <p data-i18n="overview.description">
+                  See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.
+                </p>
+                <button class="primary-action el-button el-button--primary" type="button" id="start-tracking-button">
+                  <span data-i18n="overview.startTracking">Track a shipment</span>
+                  <b>↗</b>
+                </button>
+              </div>
+              <div class="hero-art hero-ocean-map" aria-hidden="true">
+                <span class="map-land map-land-asia"></span>
+                <span class="map-land map-land-america"></span>
+                <span class="map-land map-land-island"></span>
+                <span class="map-route"><i></i></span>
+                <span class="map-port map-port-origin"><i></i><b>SHA</b></span>
+                <span class="map-port map-port-destination"><i></i><b>SAV</b></span>
+                <span class="map-ship"><i></i><b></b></span>
+                <small>Shanghai <b>→</b> Savannah · Ocean route</small>
+              </div>
+            </section>
+
+            <section
+              class="panel adapter-workbench"
+              aria-label="Channel health"
+              data-i18n-aria-label="workbench.title"
+            >
+              <div class="workbench-body">
+                <div hidden aria-hidden="true">
+                  <span id="overview-monitor-status">Checking</span>
+                  <select id="carrier-select" name="carrier" tabindex="-1">
+                    <option value="COSCO">COSCO SHIPPING</option>
+                    <option value="CMA">CMA CGM</option>
+                  </select>
+                  <select id="channel-select" name="channel" tabindex="-1">
+                    <option value="AUTO">Automatic · API first, DOM fallback</option>
+                    <option value="NETWORK">Channel 1 · Network interface</option>
+                    <option value="PLAYWRIGHT">Channel 2 · Playwright browser</option>
+                  </select>
+                </div>
+
+                <div class="channel-probe-grid" aria-live="polite">
+                  <article class="channel-probe" id="network-probe" data-status="unknown">
+                    <span class="probe-number">01</span>
+                    <span class="probe-copy">
+                      <small data-i18n="workbench.primary">PRIMARY · NETWORK API</small>
+                      <strong data-i18n="workbench.networkName">Network interface</strong>
+                    </span>
+                    <span class="probe-result">
+                      <i></i>
+                      <b id="network-probe-status" data-i18n="workbench.notChecked">Not checked</b>
+                      <small id="network-probe-latency">—</small>
+                    </span>
+                  </article>
+                  <article class="channel-probe" id="playwright-probe" data-status="unknown">
+                    <span class="probe-number">02</span>
+                    <span class="probe-copy">
+                      <small data-i18n="workbench.fallback">FALLBACK · BROWSER DOM</small>
+                      <strong data-i18n="workbench.playwrightName">Playwright browser</strong>
+                    </span>
+                    <span class="probe-result">
+                      <i></i>
+                      <b id="playwright-probe-status" data-i18n="workbench.notChecked">Not checked</b>
+                      <small id="playwright-probe-latency">—</small>
+                    </span>
+                  </article>
+                </div>
+
+                <div class="workbench-controls">
+                  <button class="channel-check-button el-button el-button--primary" type="button" id="check-channels-button">
+                    <span class="channel-check-icon" aria-hidden="true">↻</span>
+                    <span data-i18n="workbench.check">Check both channels</span>
+                  </button>
+                </div>
+
+                <div class="workbench-import-action">
+                  <input
+                    id="batch-file-input"
+                    type="file"
+                    accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    hidden
+                  />
+                  <button
+                    class="batch-select-button"
+                    id="batch-select-button"
+                    type="button"
+                  >
+                    <span aria-hidden="true">＋</span>
+                    <span data-i18n="batch.selectFile">Select Excel / CSV</span>
+                  </button>
+                </div>
+              </div>
+              <p class="workbench-foot" id="channel-check-summary" data-i18n="workbench.helper">The check uses the current shipment number; it does not add a tracking record.</p>
+              <p class="carrier-notice" id="carrier-notice" hidden></p>
+            </section>
+
+            <section class="panel batch-import-panel" aria-labelledby="batch-import-title">
+              <div class="panel-header batch-import-heading">
+                <div>
+                  <span class="panel-icon" aria-hidden="true">⇩</span>
+                  <span>
+                    <strong id="batch-import-title" data-i18n="batch.title">Batch tracking import</strong>
+                    <small data-i18n="batch.subtitle">Import an Excel or CSV list and query shipments one at a time</small>
+                  </span>
+                </div>
+                <span class="batch-local-badge" data-i18n="batch.localBadge">This device only</span>
+              </div>
+
+              <div class="batch-import-body">
+                <div class="batch-import-intro">
+                  <p data-i18n="batch.columns">
+                    Recognizes Booking / Booking Ref / Booking No. and Bill of Lading / B/L / MBL / B/L No. columns.
+                  </p>
+                  <small data-i18n="batch.localNotice">
+                    Queue and result status are stored only in this browser on this device.
+                  </small>
+                  <div class="batch-import-actions">
+                    <button id="batch-resume-button" type="button" hidden data-i18n="batch.resume">
+                      Continue pending queries
+                    </button>
+                    <button id="batch-clear-button" type="button" hidden data-i18n="batch.clear">
+                      Clear imported queue
+                    </button>
+                  </div>
+                </div>
+
+                <div class="batch-import-dashboard">
+                  <div class="batch-import-empty" id="batch-import-empty">
+                    <span aria-hidden="true">XL</span>
+                    <strong data-i18n="batch.emptyTitle">No imported queue</strong>
+                    <p data-i18n="batch.emptyDescription">Choose a spreadsheet to begin batch tracking.</p>
+                  </div>
+
+                  <div class="batch-import-summary" id="batch-import-summary" hidden>
+                    <div class="batch-summary-head">
+                      <span>
+                        <small data-i18n="batch.file">Imported file</small>
+                        <strong id="batch-file-name">—</strong>
+                      </span>
+                      <b id="batch-progress-label">0 / 0</b>
+                    </div>
+                    <div
+                      class="batch-progress-track"
+                      id="batch-progress-track"
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="0"
+                      aria-valuenow="0"
+                    >
+                      <i></i>
+                    </div>
+                    <div class="batch-metrics" aria-live="polite">
+                      <span><b id="batch-success-count">0</b><small data-i18n="batch.success">Succeeded</small></span>
+                      <span><b id="batch-failed-count">0</b><small data-i18n="batch.failed">Failed</small></span>
+                      <span><b id="batch-pending-count">0</b><small data-i18n="batch.pending">Pending</small></span>
+                    </div>
+                    <p id="batch-status-text" class="batch-status-text"></p>
+                    <div
+                      class="batch-result-list"
+                      id="batch-result-list"
+                      role="group"
+                      aria-label="Imported shipment queue"
+                      data-i18n-aria-label="batch.listAria"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <p class="batch-import-message" id="batch-import-message" role="alert" hidden></p>
+            </section>
+
+            <section class="panel history-panel shipment-dashboard-panel">
+              <div class="panel-header history-heading">
+                <div>
+                  <span class="panel-icon">↺</span>
+                  <span>
+                    <strong data-i18n="history.title">Tracked shipments</strong>
+                    <small data-i18n="history.subtitle">Latest carrier snapshots stored on this browser</small>
+                  </span>
+                </div>
+                <button type="button" class="text-button el-button el-button--primary is-link" id="clear-history-button" data-i18n="history.clear">
+                  Clear history
+                </button>
+              </div>
+
+              <div class="history-empty" id="history-empty">
+                <span>⌁</span>
+                <strong data-i18n="history.emptyTitle">No shipment history yet</strong>
+                <p data-i18n="history.emptyDescription">Your successful searches will appear here.</p>
+              </div>
+
+              <div class="shipment-list-wrap" id="history-table-wrap" hidden>
+                <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
+              </div>
+            </section>
+          </section>
+
+          <section class="app-view" id="tracking-view" data-view="tracking" hidden>
+            <section class="page-heading">
+              <div>
+                <p class="kicker" data-i18n="tracking.kicker">SHIPMENT INTELLIGENCE</p>
+                <h1 data-i18n="tracking.title">Shipment tracking</h1>
+                <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
+              </div>
+              <span class="source-tag" id="source-tag">COSCO · CHANNEL 1 · NETWORK</span>
+            </section>
+
+            <section class="query-panel">
+              <form id="tracking-form">
+                <div class="field type-field">
+                  <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
+                  <select id="tracking-type" name="type">
+                    <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
+                    <option value="BOOKING" data-i18n="type.booking">Booking number</option>
+                    <option value="CONTAINER" data-i18n="type.container">Container number</option>
+                  </select>
+                </div>
+                <div class="field number-field">
+                  <label for="tracking-number" data-i18n="query.number">Shipment No.</label>
+                  <input
+                    id="tracking-number"
+                    name="number"
+                    value="6502077380"
+                    maxlength="35"
+                    autocomplete="off"
+                    spellcheck="false"
+                    required
+                  />
+                </div>
+                <button type="submit" id="submit-button" class="el-button el-button--primary">
+                  <span class="button-label" data-i18n="query.submit">Track shipment</span>
+                </button>
+              </form>
+              <div class="query-foot">
+                <p data-i18n="query.helper">Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.</p>
+              </div>
+            </section>
+
+            <section class="alert" id="error-panel" role="alert" data-variant="error" hidden>
+              <span>!</span>
+              <div>
+                <strong id="alert-title" data-i18n="error.title">Tracking request failed</strong>
+                <p id="error-message"></p>
+              </div>
+            </section>
+
+            <section class="empty-state" id="empty-state">
+              <div class="empty-icon">↗</div>
+              <div>
+                <strong data-i18n="empty.title">Ready when you are</strong>
+                <p data-i18n="empty.description">Enter a bill, booking or container number to begin.</p>
+              </div>
+            </section>
+
+            <section class="results" id="results" hidden aria-live="polite">
+              <section class="shipment-summary-card">
+                <div class="result-titlebar">
+                  <div class="result-identity">
+                    <span class="result-carrier" id="result-carrier">COSCO</span>
+                    <span>
+                      <small class="result-type" id="result-type">Bill of lading</small>
+                      <h2 id="result-number">—</h2>
+                    </span>
+                  </div>
+                  <div class="summary-booking-number">
+                    <small data-i18n="references.booking">Booking number</small>
+                    <strong id="summary-booking-number">—</strong>
+                  </div>
+                  <button
+                    class="related-files-trigger"
+                    id="related-files-button"
+                    type="button"
+                    aria-controls="related-files-drawer"
+                    aria-expanded="false"
+                    disabled
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8.5 12.5 13.8 7a3.2 3.2 0 0 1 4.6 4.5l-7.1 7.2a5 5 0 0 1-7.1-7.1l7.2-7.2" />
+                    </svg>
+                    <span data-i18n="files.trigger">Related files</span>
+                    <b id="related-files-count" hidden>0</b>
+                  </button>
+                  <div class="result-meta">
+                    <span id="cache-status">Live result</span>
+                    <time id="fetched-at">—</time>
+                    <button type="button" class="document-drawer-trigger" id="open-document-drawer">
+                      <span data-i18n="documents.open">Documents</span>
+                      <b id="document-filled-count">0/8</b>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="shipment-summary-grid">
+                  <div class="summary-route-pair">
+                    <div>
+                      <i></i>
+                      <span>
+                        <strong id="summary-origin-name">—</strong>
+                        <small data-i18n="route.origin">Origin</small>
+                      </span>
+                    </div>
+                    <div>
+                      <i></i>
+                      <span>
+                        <strong id="summary-destination-name">—</strong>
+                        <small data-i18n="route.destination">Destination</small>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="result-primary-facts" id="result-primary-facts">
+                    <div class="result-primary-fact" id="result-traffic-term-fact">
+                      <small data-i18n="result.transportTerms">Transport terms</small>
+                      <strong id="result-traffic-term">—</strong>
+                    </div>
+                    <div class="result-primary-fact" id="result-container-types-fact">
+                      <small data-i18n="result.containerType">Container type</small>
+                      <strong id="result-container-types">—</strong>
+                    </div>
+                  </div>
+
+                  <section class="journey-overview" id="journey-overview" aria-label="Journey progress">
+                    <div class="journey-stage-summary">
+                      <span class="journey-pulse"><i></i></span>
+                      <span>
+                        <small data-i18n="journey.currentStage">Current stage</small>
+                        <strong id="journey-stage">—</strong>
+                        <em id="summary-latest-detail">—</em>
+                      </span>
+                    </div>
+                  </section>
+
+                  <div class="summary-services">
+                    <small data-i18n="summary.services">Selected services</small>
+                    <div>
+                      <span id="summary-service-sea"><i>✓</i><b data-i18n="summary.sea">Ocean</b></span>
+                      <span id="summary-service-inland"><i>✓</i><b data-i18n="summary.inland">Inland</b></span>
+                      <span id="summary-service-customs"><i>✓</i><b data-i18n="summary.customs">Customs</b></span>
+                      <span id="summary-service-warehouse"><i>✓</i><b data-i18n="summary.warehouse">Warehouse</b></span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="metric-grid" aria-label="Key shipment events">
+                <article class="metric-card departure-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">↗</span>
+                    <p data-i18n="metrics.actualDeparture">Actual departure</p>
+                  </div>
+                  <strong id="actual-departure">—</strong>
+                  <span id="actual-departure-location">Not provided</span>
+                </article>
+                <article class="metric-card arrival-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">↘</span>
+                    <p data-i18n="metrics.actualArrival">Actual arrival</p>
+                  </div>
+                  <strong id="actual-arrival">—</strong>
+                  <span id="actual-arrival-location">Not provided</span>
+                </article>
+                <article class="metric-card estimate-card">
+                  <div class="metric-head">
+                    <span class="metric-icon">◷</span>
+                    <p data-i18n="metrics.estimatedDelivery">Estimated final delivery</p>
+                  </div>
+                  <strong id="estimated-delivery">—</strong>
+                  <span id="estimated-delivery-location">Not provided</span>
+                </article>
+                <article class="metric-card latest-card">
+                  <div class="metric-head">
+                    <span class="live-dot"></span>
+                    <p data-i18n="metrics.latestEvent">Latest event</p>
+                  </div>
+                  <strong id="latest-event">—</strong>
+                  <span id="latest-event-detail">—</span>
+                </article>
+              </section>
+
+              <div class="primary-grid">
+                <section class="panel route-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">⌖</span>
+                      <strong data-i18n="route.title">Route story</strong>
+                    </div>
+                    <span id="route-count">0 nodes</span>
+                  </div>
+                  <div class="route-summary">
+                    <div>
+                      <small data-i18n="route.origin">Origin</small>
+                      <span class="location-name"><b class="flag-icon" id="origin-flag"></b><strong id="origin-name">—</strong></span>
+                      <span id="origin-code">—</span>
+                    </div>
+                    <div
+                      class="route-summary-line"
+                      id="route-summary-line"
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow="0"
+                    >
+                      <i></i><span id="route-summary-marker" aria-hidden="true">◭</span>
+                    </div>
+                    <div>
+                      <small data-i18n="route.destination">Destination</small>
+                      <span class="location-name"><b class="flag-icon" id="destination-flag"></b><strong id="destination-name">—</strong></span>
+                      <span id="destination-code">—</span>
+                    </div>
+                  </div>
+                  <div class="route-flow" id="route-flow"></div>
+                </section>
+
+                <aside class="panel references-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">#</span>
+                      <strong data-i18n="references.title">Carrier identifiers</strong>
+                    </div>
+                    <button type="button" class="panel-edit-button" id="edit-business-references" data-i18n="business.edit">
+                      Edit business references
+                    </button>
+                  </div>
+                  <dl class="business-reference-grid">
+                    <div>
+                      <dt data-i18n="business.clientCode">Client name code</dt>
+                      <dd id="client-name-code">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="business.clientPo">Client PO number</dt>
+                      <dd id="client-po-number">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="business.forwarderJob">Forwarder job number</dt>
+                      <dd id="forwarder-job-number">—</dd>
+                    </div>
+                  </dl>
+                  <dl class="reference-core">
+                    <div>
+                      <dt data-i18n="references.masterBill">Master bill</dt>
+                      <dd id="master-bill">—</dd>
+                    </div>
+                    <div>
+                      <dt data-i18n="references.booking">Booking number</dt>
+                      <dd id="booking-numbers">—</dd>
+                    </div>
+                    <div class="reference-wide">
+                      <dt data-i18n="references.external">Other carrier references</dt>
+                      <dd id="external-references">Not provided</dd>
+                    </div>
+                  </dl>
+                  <div class="reference-list" id="reference-information"></div>
+                </aside>
+              </div>
+
+              <section class="panel table-panel routing-panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon">⇄</span>
+                    <strong data-i18n="routing.title">Routing legs</strong>
+                  </div>
+                  <span id="routing-count">0 legs</span>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th data-i18n="routing.leg">Leg</th>
+                        <th data-i18n="routing.transport">Mode / vessel</th>
+                        <th data-i18n="routing.voyage">Service / voyage</th>
+                        <th data-i18n="routing.loadPort">Load port</th>
+                        <th data-i18n="routing.dischargePort">Discharge port</th>
+                        <th data-i18n="routing.estimatedDeparture">Est. departure</th>
+                        <th class="actual-column" data-i18n="routing.actualDeparture">Actual departure</th>
+                        <th data-i18n="routing.estimatedArrival">Est. arrival</th>
+                        <th class="actual-column" data-i18n="routing.actualArrival">Actual arrival</th>
+                        <th data-i18n="routing.masterBill">Master bill</th>
+                      </tr>
+                    </thead>
+                    <tbody id="routing-table-body"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel table-panel tracking-events-panel">
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon">◷</span>
+                    <span>
+                      <strong data-i18n="trackingEvents.title">Tracking information</strong>
+                      <small data-i18n="trackingEvents.subtitle">Estimated and confirmed carrier milestones</small>
+                    </span>
+                  </div>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th data-i18n="trackingEvents.movement">Movement</th>
+                        <th data-i18n="trackingEvents.estimate">Estimate</th>
+                        <th class="actual-column" data-i18n="trackingEvents.actual">Actual</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tracking-events-table-body"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <div class="secondary-grid">
+                <section class="panel table-panel">
+                  <div class="panel-header">
+                    <div>
+                      <span class="panel-icon">▣</span>
+                      <strong data-i18n="containers.title">Container details</strong>
+                    </div>
+                    <span id="container-count">0 containers</span>
+                  </div>
+                  <div class="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th data-i18n="containers.number">Container</th>
+                          <th data-i18n="containers.type">Type</th>
+                          <th data-i18n="containers.mode">Mode</th>
+                          <th data-i18n="containers.terms">Terms</th>
+                          <th data-i18n="containers.location">Current location</th>
+                          <th data-i18n="containers.status">Latest status</th>
+                          <th data-i18n="containers.time">Status time</th>
+                          <th data-i18n="containers.details">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody id="container-table-body"></tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section class="panel raw-panel">
+                  <details>
+                    <summary>
+                      <span>
+                        <small>DEVELOPER VIEW</small>
+                        <span data-i18n="raw.title">Decoded source payload</span>
+                      </span>
+                      <b>JSON</b>
+                    </summary>
+                    <pre id="raw-json"></pre>
+                  </details>
+                </section>
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="related-files-backdrop" id="related-files-backdrop" hidden></div>
+    <aside
+      class="related-files-drawer"
+      id="related-files-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="related-files-title"
+      tabindex="-1"
+      hidden
+    >
+      <header class="related-files-drawer-header">
+        <div>
+          <p data-i18n="files.kicker">SHIPMENT DOCUMENTS</p>
+          <h2 id="related-files-title" data-i18n="files.title">Related files</h2>
+          <span id="related-files-shipment-reference">—</span>
+        </div>
+        <button
+          class="related-files-close"
+          id="related-files-close-button"
+          type="button"
+          data-i18n-aria-label="files.close"
+          aria-label="Close related files"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 7 10 10M17 7 7 17" />
+          </svg>
+        </button>
+      </header>
+
+      <section class="related-files-auth" id="related-files-auth-required" hidden>
+        <span class="related-files-auth-icon" aria-hidden="true">↗</span>
+        <div>
+          <strong id="related-files-auth-title" data-i18n="files.loginTitle">Sign in to manage shipment files</strong>
+          <p id="related-files-auth-description" data-i18n="files.loginDescription">Shipment documents are available to authenticated enterprise users.</p>
+          <a id="related-files-auth-link" href="/workbenches" data-i18n="files.loginAction">Sign in to the platform</a>
+        </div>
+      </section>
+
+      <div class="related-files-content" id="related-files-content">
+        <div class="related-files-state related-files-loading" id="related-files-loading" hidden>
+          <span aria-hidden="true"></span>
+          <strong data-i18n="files.loading">Loading related files…</strong>
+        </div>
+
+        <div class="related-files-state related-files-error" id="related-files-error" hidden>
+          <span aria-hidden="true">!</span>
+          <strong data-i18n="files.errorTitle">Files could not be loaded</strong>
+          <p id="related-files-error-message"></p>
+          <button id="related-files-retry-button" type="button" data-i18n="files.retry">Try again</button>
+        </div>
+
+        <div class="related-files-state related-files-empty" id="related-files-empty" hidden>
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M5 4.5h9l5 5V20H5zM14 4.5V10h5M8 14h8M8 17h5" />
+            </svg>
+          </span>
+          <strong data-i18n="files.emptyTitle">No related files yet</strong>
+          <p data-i18n="files.emptyDescription">Upload cargo details, invoices or shipping documents for this shipment.</p>
+        </div>
+
+        <ul class="related-files-list" id="related-files-list" aria-live="polite"></ul>
+      </div>
+
+      <footer class="related-files-upload" id="related-files-upload-panel" hidden>
+        <div class="related-files-upload-heading">
+          <div>
+            <strong data-i18n="files.uploadTitle">Add files</strong>
+            <span data-i18n="files.uploadDescription">Files are linked to this shipment record.</span>
+          </div>
+          <span id="related-files-user-name"></span>
+        </div>
+
+        <div class="related-files-upload-options">
+          <div class="related-files-option-field">
+            <span data-i18n="files.category">Category</span>
+            <div class="related-files-custom-select" id="related-files-category-select">
+              <button
+                class="related-files-custom-select-trigger"
+                id="related-files-category-trigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+              >
+                <span id="related-files-category-label" data-i18n="files.categoryCargo">Cargo details</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+              </button>
+              <div class="related-files-custom-select-menu" id="related-files-category-menu" role="listbox" aria-hidden="true">
+                <button type="button" role="option" data-category-value="CARGO_DETAIL" data-i18n="files.categoryCargo">Cargo details</button>
+                <button type="button" role="option" data-category-value="INVOICE" data-i18n="files.categoryInvoice">Invoice</button>
+                <button type="button" role="option" data-category-value="SHIPPING" data-i18n="files.categoryShipping">Shipping document</button>
+                <button type="button" role="option" data-category-value="OTHER" data-i18n="files.categoryOther">Other</button>
+              </div>
+              <input id="related-files-category" type="hidden" value="CARGO_DETAIL" />
+            </div>
+          </div>
+          <label id="related-files-upload-visibility-field" hidden>
+            <span data-i18n="files.visibility">Visibility</span>
+            <select id="related-files-upload-visibility">
+              <option value="PARTIES" data-i18n="files.visibilityParties">Both parties</option>
+              <option value="INTERNAL" data-i18n="files.visibilityInternal" selected>Internal only</option>
+            </select>
+          </label>
+          <label class="related-files-target-customer" id="related-files-target-customer-field" hidden>
+            <span data-i18n="files.targetCustomer">Share with customer</span>
+            <select
+              id="related-files-target-customer"
+              aria-describedby="related-files-target-customer-hint"
+            >
+              <option value="" data-i18n="files.targetPlaceholder">Select a customer</option>
+            </select>
+          </label>
+          <p
+            class="related-files-target-hint"
+            id="related-files-target-customer-hint"
+            data-i18n="files.targetRequired"
+            role="status"
+            hidden
+          >
+            Select a specific customer before uploading a shared file.
+          </p>
+        </div>
+
+        <input
+          id="related-files-upload-input"
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx,.txt,.zip"
+          multiple
+          hidden
+        />
+        <div class="related-files-upload-actions">
+          <button class="related-files-file-picker" id="related-files-select-button" type="button">
+            <span aria-hidden="true">＋</span>
+            <span data-i18n="files.select">Choose files</span>
+          </button>
+          <button
+            class="related-files-upload-button"
+            id="related-files-upload-button"
+            type="button"
+            disabled
+          >
+            <span data-i18n="files.upload">Upload</span>
+          </button>
+        </div>
+        <p class="related-files-selection" id="related-files-selection" data-i18n="files.noSelection" data-state="empty">No files selected.</p>
+        <p class="related-files-upload-message" id="related-files-upload-message" role="status" aria-live="polite" hidden></p>
+      </footer>
+    </aside>
+
+    <div
+      class="system-wait-overlay"
+      id="system-wait-overlay"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      hidden
+    >
+      <div class="system-wait-content">
+        <div class="system-wait-mark" aria-hidden="true">
+          <span class="system-wait-page system-wait-page-one"></span>
+          <span class="system-wait-page system-wait-page-two"></span>
+          <span class="system-wait-page system-wait-page-three"></span>
+        </div>
+        <span class="system-wait-complete" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="m8 16.5 5 5L24 10.5" /></svg>
+        </span>
+        <span class="sr-only" id="system-wait-message" data-i18n="wait.tracking">Retrieving the latest shipment data…</span>
+      </div>
+    </div>
+
+    <div
+      class="platform-route-overlay"
+      id="platform-route-overlay"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-hidden="true"
+    >
+      <div class="platform-route-content">
+        <div class="platform-route-mark" aria-hidden="true"><img src="./favicon.svg" alt="" /></div>
+        <strong>DrewesLogistics</strong>
+        <span id="platform-route-message" data-i18n="wait.home">Returning to the DrewesLogistics home page…</span>
+        <b aria-hidden="true"></b>
+      </div>
+    </div>
+    <div class="document-drawer-layer" id="document-drawer-layer" hidden>
+      <button class="document-drawer-backdrop" id="document-drawer-backdrop" type="button" aria-label="Close document drawer"></button>
+      <aside class="document-drawer" id="document-drawer" aria-hidden="true" aria-labelledby="document-drawer-title">
+        <header>
+          <span>
+            <small data-i18n="documents.kicker">SHIPMENT FILES</small>
+            <strong id="document-drawer-title" data-i18n="documents.title">Document details</strong>
+            <em id="document-drawer-shipment">—</em>
+          </span>
+          <button type="button" id="close-document-drawer" aria-label="Close">×</button>
+        </header>
+        <p class="document-drawer-intro" data-i18n="documents.intro">
+          One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.
+        </p>
+        <div class="document-list" id="document-list"></div>
+      </aside>
+    </div>
+
+    <dialog class="supplement-dialog" id="business-reference-dialog">
+      <form method="dialog" id="business-reference-form">
+        <header>
+          <span>
+            <small data-i18n="business.kicker">BUSINESS REFERENCES</small>
+            <strong data-i18n="business.dialogTitle">Edit shipment identifiers</strong>
+          </span>
+          <button type="button" class="dialog-close" data-dialog-close="business-reference-dialog" aria-label="Close">×</button>
+        </header>
+        <div class="supplement-form-grid">
+          <label>
+            <span data-i18n="business.clientCode">Client name code</span>
+            <input id="business-client-code-input" name="clientNameCode" maxlength="40" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="business.clientPo">Client PO number</span>
+            <input id="business-client-po-input" name="clientPoNumber" maxlength="80" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="business.forwarderJob">Forwarder job number</span>
+            <input id="business-forwarder-job-input" name="forwarderJobNumber" maxlength="80" autocomplete="off" />
+          </label>
+        </div>
+        <footer>
+          <button type="button" class="secondary-dialog-button" data-dialog-close="business-reference-dialog" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog class="supplement-dialog document-editor-dialog" id="document-editor-dialog">
+      <form method="dialog" id="document-editor-form">
+        <header>
+          <span>
+            <small data-i18n="documents.kicker">SHIPMENT FILES</small>
+            <strong id="document-editor-title" data-i18n="documents.add">Add file</strong>
+          </span>
+          <button type="button" class="dialog-close" data-dialog-close="document-editor-dialog" aria-label="Close">×</button>
+        </header>
+        <input type="hidden" id="document-type-input" name="documentType" />
+        <div class="document-editor-topic" id="document-editor-topic">—</div>
+        <div class="supplement-form-grid">
+          <label>
+            <span data-i18n="documents.file">File</span>
+            <input type="file" id="document-file-input" name="file" />
+            <small id="document-current-file"></small>
+          </label>
+          <label>
+            <span data-i18n="documents.uploader">Upload subject</span>
+            <select id="document-uploader-input" name="uploader"></select>
+          </label>
+          <label>
+            <span data-i18n="documents.visibility">Visible to</span>
+            <select id="document-visibility-input" name="visibility"></select>
+          </label>
+        </div>
+        <footer>
+          <button type="button" class="secondary-dialog-button" data-dialog-close="document-editor-dialog" data-i18n="common.cancel">Cancel</button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+        </footer>
+      </form>
+    </dialog>
+  </body>
+</html>

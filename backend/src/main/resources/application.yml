@@ -1,0 +1,63 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: cargo-planner-backend
+  ai:
+    model:
+      chat: ${SPRING_AI_CHAT_MODEL:none}
+    openai:
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.deepseek.com}
+      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${SPRING_AI_OPENAI_MODEL:deepseek-v4-flash}
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/cargo_planner?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:cargo_planner}
+    password: ${SPRING_DATASOURCE_PASSWORD:cargo_planner_pwd}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      location: ${SPRING_SERVLET_MULTIPART_LOCATION:./shipment-files/.multipart}
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:80MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:85MB}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  device-limit-per-user: ${APP_DEVICE_LIMIT_PER_USER:5}
+  customer-session-hours: ${APP_CUSTOMER_SESSION_HOURS:24}
+  bootstrap-admin:
+    enabled: ${APP_BOOTSTRAP_ADMIN_ENABLED:false}
+    username: ${APP_BOOTSTRAP_ADMIN_USERNAME:}
+    password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:}
+    display-name: ${APP_BOOTSTRAP_ADMIN_DISPLAY_NAME:System Administrator}
+  workspace-files:
+    root: ${APP_WORKSPACE_FILE_ROOT:./uploads}
+    retention: ${APP_WORKSPACE_FILE_RETENTION:14d}
+    cleanup-interval-ms: ${APP_WORKSPACE_FILE_CLEANUP_INTERVAL_MS:3600000}
+    max-file-size-bytes: ${APP_WORKSPACE_FILE_MAX_SIZE_BYTES:83886080}
+    allowed-extensions: ${APP_WORKSPACE_FILE_ALLOWED_EXTENSIONS:xlsx,xls,csv,tsv}
+  shipment-tracking:
+    adapter-base-url: ${APP_TRACKING_ADAPTER_BASE_URL:http://127.0.0.1:3000}
+    cache-ttl: ${APP_TRACKING_CACHE_TTL:15m}
+    connect-timeout: ${APP_TRACKING_CONNECT_TIMEOUT:5s}
+    read-timeout: ${APP_TRACKING_READ_TIMEOUT:90s}
+  shipment-files:
+    root: ${APP_SHIPMENT_FILE_ROOT:./shipment-files}
+    max-file-size-bytes: ${APP_SHIPMENT_FILE_MAX_SIZE_BYTES:83886080}
+    max-files-per-shipment: ${APP_SHIPMENT_FILE_MAX_FILES_PER_SHIPMENT:200}
+    max-bytes-per-shipment: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_SHIPMENT:2147483648}
+    max-bytes-per-customer: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_CUSTOMER:5368709120}
+    min-free-space-bytes: ${APP_SHIPMENT_FILE_MIN_FREE_SPACE_BYTES:1073741824}
+    allowed-extensions: ${APP_SHIPMENT_FILE_ALLOWED_EXTENSIONS:pdf,xlsx,xls,csv,doc,docx,jpg,jpeg,png,txt}
+  text-recognition:
+    # Agent providers commonly rate-limit parallel calls. Keep this bounded to 1-4;
+    # use 1 to restore serial execution when a provider has a strict quota.
+    excel-agent-concurrency: ${EXCEL_AGENT_BATCH_CONCURRENCY:3}

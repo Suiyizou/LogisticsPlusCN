@@ -1,0 +1,21 @@
+{
+  "name": "third-party-shipment-tracking",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-carrier shipment tracker with COSCO and CMA CGM adapters",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "track:playwright": "node scripts/cosco-playwright.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "element-plus": "^2.14.3",
+    "flag-icons": "^7.5.0",
+    "playwright": "^1.61.1",
+    "xlsx": "^0.18.5"
+  }
+}

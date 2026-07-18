@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#07131f" />
+    <meta name="description" content="DrewesLogistics 货代数字化运营平台：公开货物追踪、智能装箱及持续建设中的船期订舱与 ERP 接入能力。" />
+    <title>DrewesLogistics · 货代数字化运营平台</title>
+    <style>
+      html, body, #app { min-height: 100%; margin: 0; }
+      .boot-shell {
+        position: fixed; z-index: 99999; inset: 0; display: grid; padding: 24px;
+        color: #133456; place-items: center; box-sizing: border-box;
+        background: radial-gradient(circle at 50% 42%, rgba(34,135,220,.11), transparent 28%), linear-gradient(145deg, #f8fbff, #eef6ff 54%, #f7fbff);
+        font-family: Inter, "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .boot-card { display: grid; width: min(340px, calc(100vw - 48px)); gap: 18px; justify-items: center; text-align: center; }
+      .boot-mark {
+        position: relative; display: grid; width: 58px; height: 58px; border: 1px solid rgba(34,135,220,.22);
+        background: #fff; border-radius: 14px; place-items: center; box-shadow: 0 18px 48px rgba(25,76,124,.14);
+      }
+      .boot-mark img { width: 38px; height: 38px; }
+      .boot-mark::after {
+        position: absolute; inset: -7px; border: 2px solid rgba(21,121,211,.18); border-top-color: #1679d3;
+        border-radius: 18px; content: ""; animation: boot-spin 1s linear infinite;
+      }
+      .boot-copy strong, .boot-copy span { display: block; }
+      .boot-copy strong { font-size: 16px; letter-spacing: .01em; }
+      .boot-copy span { margin-top: 7px; color: #71869c; font-size: 12px; }
+      .boot-progress { width: 132px; height: 3px; background: rgba(31,108,178,.12); border-radius: 999px; overflow: hidden; }
+      .boot-progress::after {
+        display: block; width: 44%; height: 100%; background: linear-gradient(90deg, #1478d4, #32a5e6);
+        border-radius: inherit; content: ""; animation: boot-progress 1.15s cubic-bezier(.4,0,.2,1) infinite;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-progress { from { transform: translateX(-120%); } to { transform: translateX(290%); } }
+      @media (prefers-reduced-motion: reduce) { .boot-mark::after, .boot-progress::after { animation-duration: 2.4s; } }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot-shell" role="status" aria-live="polite" aria-label="正在加载 DrewesLogistics">
+        <div class="boot-card">
+          <span class="boot-mark"><img src="/favicon.svg" alt="" /></span>
+          <div class="boot-copy"><strong>DrewesLogistics</strong><span>正在安全加载工作台 · Securely loading workspace</span></div>
+          <span class="boot-progress" aria-hidden="true"></span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

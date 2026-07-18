@@ -1,139 +1,237 @@
-# Shipment Track — 多船司货运跟踪工作台
+# 货代业务平台（装箱规划 + 货物追踪）
 
-当前版本实现统一船司适配层、COSCO 双通道查询以及 CMA CGM 服务端 HTML 查询。COSCO 通道一直接调用网页内部网络接口，通道二由 Playwright 操作真实 Chrome；CMA CGM 通过 Playwright 提交服务端渲染的查询表单，展开逐箱历史节点，并保留每箱 PDF 报告地址。所有通道最终返回相同的统一快照。
+这是一个面向货代装箱估算、箱型选择、可视化剖析与货物追踪的统一业务平台。装箱工作台保留浏览器端 WebWorker 本地计算；货物追踪工作台使用 Node.js 双通道适配器；Spring Boot + MySQL 统一负责公司员工账号、设备登录限制和总管理员后台。
 
-## 为什么不是纯静态前端
+## 当前架构
 
-COSCO 接口对来自 `localhost` 或其他站点的浏览器 CORS 预检返回 `403`，因此浏览器不能直接读取响应。项目由 Node 服务端统一执行查询：通道一使用服务端网络请求，通道二使用 Playwright 浏览器自动化。
+- 前端：Vue 3 + Vite
+- 3D 可视化：Three.js
+- 装箱计算：WebWorker 本地计算
+- 桌面打包：Electron
+- 后端：Spring Boot 3 + JDBC
+- 货物追踪：Node.js + Playwright，源码位于 `tracking-service/`
+- 智能导入：后台可控制 LLM 开关、API Key、Base URL 和模型，未配置 Key 时使用规则兜底
+- 数据库：MySQL 8
+- 部署：单仓库 Docker Compose；Nginx 代理 `/api/` 到 Spring、`/tracking/` 到追踪服务
 
-## 运行
+## 已有能力
 
-要求 Node.js 20 或更高版本。
+- 录入货物长、宽、高、数量、单重、摆放规则和颜色。
+- 按箱型本地计算，生成推荐箱型排序。
+- 使用 Three.js 展示当前货舱 3D 摆放结果，可拖动、缩放查看。
+- 支持剩余空间、质量重心偏载可视化和导出报告。
+- 提供 CSV 导入导出、Excel 样板说明、示例数据、清空货物和算法说明页面。
+- 新增管理后台：总管理员登录、员工账号管理、在线设备/IP 查看、设备踢下线、基础运行监控。
+- 同一账号默认限制最多 5 台在线设备。
+- 智能导入支持两条路径：本地规则预览，以及后端文本识别任务；管理员启用 LLM 后可由模型抽取非标准文本。
 
-```powershell
+## 公开主页与工作台入口
+
+根路径 `/` 是 DrewesLogistics 公开品牌主页，包含中英文内容、首屏翻页动效、平台能力与建设路线。主页导航和能力卡均提供 Cargo Tracking 入口，可直接访问同域路径 `/tracking/`。
+
+`/tracking/` 页面及其查询 API 面向访客公开，不要求企业账号。Nginx 会清除代理到追踪服务的 Cookie，并对公开查询 API 按来源 IP 限流，避免平台登录 token 泄漏或追踪通道被无约束调用。
+
+企业员工登录成功后进入 `/workbenches`，再进入装箱规划工作台；总管理员登录后直接进入 `/admin`。`/workbenches`、`/planner`、`/home`、`/containers`、`/algorithm` 与 `/admin` 等业务路径仍由统一登录状态和角色权限保护。两个模块的源码、入口、网关和 Compose 编排均位于本仓库的 `combine` 分支，运行时继续按清晰的业务边界使用 Spring 与 Node 两个服务容器。
+
+前端入口链接的构建时变量为：
+
+```env
+VITE_TRACKING_WORKBENCH_URL=/tracking/
+```
+
+默认部署路径固定为 `/tracking/`。如果修改它，还需同步调整 `docker/nginx.conf` 与 `frontend/vite.config.js` 中的代理路径，不能只修改这个变量。
+
+## 后端与数据库
+
+建表脚本：
+
+```text
+backend/sql/schema.sql
+```
+
+系统不再创建带固定口令的默认管理员。新数据库首次部署时，请在 `.env` 临时设置一次性引导参数：
+
+```env
+APP_BOOTSTRAP_ADMIN_ENABLED=true
+APP_BOOTSTRAP_ADMIN_USERNAME=你的管理员账号
+APP_BOOTSTRAP_ADMIN_PASSWORD=至少12位且包含大小写字母、数字和符号的随机密码
+APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
+```
+
+引导只会在 `cp_users` 为空时创建管理员。首次启动并确认可以登录后，立即将 `APP_BOOTSTRAP_ADMIN_ENABLED=false`，从 `.env` 删除密码并重启服务。升级前必须先轮换或禁用历史 `admin` 默认账户；后端检测到旧版已知固定凭据仍处于启用状态时会拒绝启动。浏览器 Web 端无法可靠读取真实 MAC 地址，因此当前版本记录的是设备指纹、IP、浏览器 UA，并预留 `mac_address` 字段给后续桌面客户端或内网 Agent 上报。
+
+货物相关文件默认通过 Docker 绑定目录持久化。生产环境请把 `SHIPMENT_FILE_HOST_PATH` 指向宿主机 SSD 的专用目录，并按磁盘容量调整以下配额：
+
+```env
+SHIPMENT_FILE_HOST_PATH=/mnt/ssd/drewes/shipment-files
+APP_SHIPMENT_FILE_MAX_SIZE_BYTES=83886080
+APP_SHIPMENT_FILE_MAX_FILES_PER_SHIPMENT=200
+APP_SHIPMENT_FILE_MAX_BYTES_PER_SHIPMENT=2147483648
+APP_SHIPMENT_FILE_MAX_BYTES_PER_CUSTOMER=5368709120
+APP_SHIPMENT_FILE_MIN_FREE_SPACE_BYTES=1073741824
+```
+
+四个容量配额分别控制单文件、单票文件数、单票累计容量、单客户累计容量，并始终保留 `MIN_FREE_SPACE` 指定的磁盘余量。上传临时文件也位于同一持久化目录下，避免占满容器系统盘。
+
+## LLM 文本识别
+
+默认启用 LLM 开关，默认模型为 `deepseek-v4-flash`，默认 Base URL 为 `https://api.deepseek.com`。如果管理员尚未配置 API Key，文本识别会自动使用规则兜底，不影响系统使用。
+
+管理员登录后台后，可在“系统管理”中修改：
+
+```text
+是否启用 LLM
+API Key
+Base URL
+模型名称
+```
+
+也可以用 `.env` 作为首次启动的默认种子值：
+
+```env
+SPRING_AI_CHAT_MODEL=none
+SPRING_AI_OPENAI_API_KEY=你的_API_Key
+SPRING_AI_OPENAI_BASE_URL=https://api.deepseek.com
+SPRING_AI_OPENAI_MODEL=deepseek-v4-flash
+```
+
+说明：`SPRING_AI_CHAT_MODEL=none` 用于避免后端启动阶段强制创建模型 Bean；文本识别任务会按后台数据库配置动态创建 OpenAI-compatible HTTP 调用。
+
+对应接口：
+
+```text
+POST /api/text-recognition/tasks
+GET  /api/text-recognition/tasks/{id}
+GET  /api/text-recognition/tasks/{id}/cleaned-excel
+```
+
+## 本地前端开发
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+访问：
+
+```text
+http://127.0.0.1:5177
+```
+
+如果要在 Vite 开发环境访问管理后台，请先启动后端：
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+默认后端地址：
+
+```text
+http://127.0.0.1:8080/api
+```
+
+再启动仓库内的货物追踪服务：
+
+```bash
+cd tracking-service
+npm ci
 npm start
 ```
 
-打开 <http://127.0.0.1:3000>。页面查询成功后会把查询条件写入地址栏，也可以直接使用：
+Vite 会把 `/tracking/` 代理到 `http://127.0.0.1:3000`。追踪模块测试可运行：
 
-```text
-http://127.0.0.1:3000/?carrier=COSCO&type=BILLOFLADING&number=6502077380#tracking
-```
-
-## 测试
-
-```powershell
+```bash
+cd tracking-service
 npm test
 ```
 
-## 当前范围
+## 构建前端
 
-- 通道一 `NETWORK`：网络接口，默认通道，已实现
-- 通道二 `PLAYWRIGHT`：真实浏览器查询，已实现
-- 统一 `POST /api/track` 船司分发入口
-- COSCO：网络接口与 Playwright 双通道；CMA CGM：服务端 HTML + 逐箱 PDF 地址
-- 默认英文界面，支持中英文即时切换并记忆语言偏好
-- 提单号、订舱号、箱号查询
-- 5 分钟内存缓存
-- 启动时立即探测通道一，之后每 6 小时绕过业务缓存复检
-- 浏览器 LocalStorage 保存最近 20 个统一快照，有效期 24 小时
-- Overview 总览展示本机查询记录、船司、路线国旗、最新状态和查询时间
-- 实时查询失败且本地快照仍有效时，自动显示浏览器缓存并提示数据来源
-- 实际离港、实际到港、预计最终到达、最新动态
-- 分段运输 Routing：船名/航次、装卸港、预计与实际离到时间
-- 集装箱状态、主提单号、订舱号和上游可用的其他参考信息
-- 原始解码 JSON 开发者视图
-- 上游未提供的外部/订单参考号会明确标记为缺失，不生成模拟值
-
-## 通道一监控
-
-监控只请求 COSCO 核心详情接口，不经过 5 分钟业务缓存。状态保存在当前 Node 进程内，可通过以下接口读取：
-
-```http
-GET /api/channels/network/status
+```bash
+cd frontend
+npm run build
 ```
 
-默认使用示例提单 `6502077380` 探测。可以通过环境变量调整：
+输出目录：
+
+```text
+frontend/dist/
+```
+
+## 构建后端
+
+```bash
+cd backend
+mvn -DskipTests package
+```
+
+输出文件：
+
+```text
+backend/target/cargo-planner-backend-0.1.0.jar
+```
+
+## Docker 部署
+
+```bash
+docker compose up -d --build
+```
+
+默认端口：
+
+```text
+统一入口：http://服务器IP/
+货物追踪：http://服务器IP/tracking/
+后端（服务器本机）：http://127.0.0.1:8080/
+MySQL（服务器本机）：127.0.0.1:3306
+```
+
+后端与 MySQL 默认只绑定服务器环回地址，公网仅需开放统一入口的 `80/443`。追踪服务的 `3000` 端口只暴露在 Compose 内部网络，不需要单独映射或手工启动。首次构建会拉取含 Chromium 的 Playwright 镜像，体积和内存占用会高于普通 Node 镜像；Chromium 仅在浏览器兜底通道实际使用时启动。
+
+可复制 `.env.example` 为 `.env` 后修改数据库密码、端口和设备登录上限。
+
+## Windows 客户端打包
+
+```bash
+cd frontend
+npm run desktop:build
+```
+
+如果 Electron 下载较慢，可以在 PowerShell 中设置镜像后再执行：
 
 ```powershell
-$env:CHANNEL_C_MONITOR_NUMBER="6502077380"
-$env:CHANNEL_C_MONITOR_TYPE="BILLOFLADING"
-$env:CHANNEL_C_MONITOR_INTERVAL_MS="21600000"
-npm start
+$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-builder-binaries/'
+npm run desktop:build
 ```
 
-设置 `CHANNEL_C_MONITOR_ENABLED=false` 可以停用进程内定时监控。旧的 `GET /api/channels/c/status` 继续作为兼容入口。生产环境如果部署多个 Node 实例，建议把定时任务迁移到单独的 Cron、任务队列或带分布式锁的调度器，避免每个实例重复探测。
+输出目录：
 
-## 通道二 Playwright
-
-通道二默认复用系统安装的 Chrome，并以无头模式运行。每次查询创建独立浏览器上下文，查询结束后立即释放上下文；Chrome 进程由服务复用。
-
-```powershell
-$env:PLAYWRIGHT_BROWSER_CHANNEL="chrome"
-$env:PLAYWRIGHT_HEADLESS="true"
-npm start
+```text
+frontend/release/
 ```
 
-也可以独立验证：
+## Workspace upload storage
 
-```powershell
-npm run track:playwright -- 6502077380
-npm run track:playwright -- 6502077380 --headed
+Authenticated Excel/CSV uploads are retained for 14 days by default. Files are stored below a
+per-user directory named from the account display name plus the immutable user id; database rows
+hold metadata only. Re-uploading the same content under the same name refreshes its expiry without
+creating another copy, while changed content receives the next version number.
+
+Docker Compose mounts the named volume `workspace-files` at `/app/uploads`, so uploads survive
+backend container rebuilds. The relevant environment variables are:
+
+```env
+APP_WORKSPACE_FILE_RETENTION=14d
+APP_WORKSPACE_FILE_CLEANUP_INTERVAL_MS=3600000
+APP_WORKSPACE_FILE_MAX_SIZE_BYTES=83886080
 ```
 
-## CMA CGM 会话
+When the backend runs outside Docker, set `APP_WORKSPACE_FILE_ROOT` to an absolute writable path;
+otherwise it uses `./uploads`. Expired files are removed by an hourly scheduled cleanup.
 
-CMA CGM 搜索页由 DataDome 保护。适配器不会绕过验证；合法、已通过验证的 CMA 浏览器会话可以来自 CDP Chrome Profile，或由 Spring Boot 在服务端请求中按次提供。Cookie 只保存在进程内存中，不会写入统一快照或浏览器 LocalStorage。
-
-```powershell
-$env:CMA_CDP_URL="http://127.0.0.1:9222"
-$env:CMA_SESSION_COOKIE="datadome=YOUR_APPROVED_SESSION_VALUE"
-$env:CMA_PLAYWRIGHT_TIMEOUT_MS="45000"
-npm start
-```
-
-生产环境优先设置 `CMA_CDP_URL`，让 Node 连接一个正常启动、长期存活且使用独立 Profile 的 Chrome 服务。CDP 端口只能监听回环地址或容器内网，不能暴露到公网。`CMA_SESSION_COOKIE` 仅作为开发兜底；Spring Boot 集成时应通过服务端请求把加密存储的会话按次传给适配器，而不是写入进程环境变量。
-
-`CMA_SESSION_COOKIE` 属于敏感会话信息，不要写入代码、日志、Git 或前端。会话失效时接口会返回 `503` 和 `DATADOME` 标识，更新合法会话后即可重试。
-
-## 浏览器缓存
-
-LocalStorage 只保存后端转换后的统一 `snapshot`，不保存 COSCO 原始报文。查询时会先显示同一查询条件下的有效本地快照，同时向后端请求最新数据；实时查询成功后会覆盖本地快照。
-
-## 接口
-
-```http
-POST /api/track
-Content-Type: application/json
-
-{
-  "carrier": "COSCO",
-  "channel": "NETWORK",
-  "type": "BILLOFLADING",
-  "number": "6502077380"
-}
-```
-
-将 `channel` 改为 `PLAYWRIGHT` 即使用通道二。不传时默认使用通道一。
-
-查询通道注册表：
-
-```http
-GET /api/channels
-```
-
-船司注册表：
-
-```http
-GET /api/carriers
-```
-
-原有 `POST /api/track/cosco` 作为通道一兼容入口继续保留；也可显式调用：
-
-```http
-POST /api/track/cosco/network
-POST /api/track/cosco/playwright
-POST /api/track/cma
-```
-
-这是对船司网页及其内部接口的非官方适配。上游页面、接口、请求字段或解码逻辑发生变化时，需要更新相应通道适配器。
+User APIs are rooted at `/api/workspace-files`. Administrators can list and inspect all users'
+uploads through `/api/admin/workspace-files`. Existing databases must apply the
+`cp_workspace_files` statement from `backend/sql/schema.sql` once during upgrade.
