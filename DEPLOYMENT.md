@@ -16,7 +16,7 @@
 | `/api/*` | Spring Boot |
 | `/tracking/*` | Node.js 公开追踪服务 |
 
-`/tracking/` 页面和查询 API 面向访客公开，不读取平台登录状态。Nginx 代理时会清空 `Cookie`，并只对成本较高的追踪查询与通道检查接口按来源 IP 限流；国旗、承运人列表与状态接口不计入该限流。装箱、员工工作台与管理后台继续由 Vue 登录门禁和 Spring API token 校验保护。
+`/tracking/` 页面和查询 API 面向访客公开。CMA 会话维护区会读取同域平台登录 token，但只允许 `BUSINESS`/`ADMIN` 调用 Spring 的受保护维护接口；普通员工、客户和匿名访客不能上传或查看会话。Nginx 代理到 Node 时仍会清空浏览器 `Cookie`，并只对成本较高的追踪查询与通道检查接口按来源 IP 限流；国旗、承运人列表与状态接口不计入该限流。
 
 如果 Docker Nginx 前方还有 CDN 或宿主机反向代理，需要仅对受信任的代理地址配置 `set_real_ip_from` 与 `real_ip_header`。否则 `$binary_remote_addr` 会是统一的前置代理 IP，所有访客将共用同一追踪查询限额。
 
@@ -57,6 +57,12 @@ APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 首次构建 `tracking` 会拉取 Playwright Chromium 基础镜像，下载体积较大。Compose 已为浏览器兜底通道设置 `1gb` 共享内存和健康检查；服务器还需要能够访问船司查询站点。`PLAYWRIGHT_MAX_CONCURRENCY`、`PLAYWRIGHT_QUEUE_LIMIT` 和 `PLAYWRIGHT_QUEUE_TIMEOUT_MS` 分别限制浏览器并发数、排队数量和最长排队时间，默认值为 `2`、`8`、`15000`。海外小规格服务器不要盲目提高并发，队列满或超时会返回 `429`，不会继续挤占内存。
 
 Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。这样公开的 Node/Playwright 追踪服务无法直接连接数据库。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
+
+### CMA DataDome 会话
+
+服务器 `.env` 不需要填写或传输 DataDome。业务员或管理员登录平台后进入 `/tracking/`，选择 `CMA CGM`，在“DataDome 会话”区域粘贴 `datadome` 值或 CMA 请求的完整 `Cookie` 头并保存。页面不会把该值写入 LocalStorage，保存成功后也不会回显。
+
+后端把会话以 AES-GCM 密文保存到 `cp_tracking_credentials`，加密密钥首次使用时自动生成到 Compose 的 `backend-secrets` 命名卷。备份和迁移服务器时必须把 MySQL 数据与该命名卷一起迁移；只恢复数据库而丢失密钥时，旧密文无法恢复，需要业务员重新保存会话。更新与清除操作都会写入审计日志。
 
 Compose 为 `app`、`data` 固定使用 `cargo-planner-app`、`cargo-planner-data` 两个 Docker 网络名；代码目录改名或 Compose 项目名变化时不会再生成另一套网络，同时不会改变既有 MySQL 数据卷名。若升级前已经出现“backend 解析不到 `mysql`”，先检查新网络和旧 MySQL 的网络归属：
 

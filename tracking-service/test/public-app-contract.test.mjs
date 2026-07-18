@@ -199,3 +199,21 @@ test("customer file cards never disclose another customer's display name", () =>
     /function relatedFileSharingLabel\(file, session = readFileSession\(\)\) \{[\s\S]*?if \(session\.kind === "CUSTOMER"\) return t\("files\.sharedWithSelf"\);[\s\S]*?relatedFileTargetDisplayName\(file\)/
   );
 });
+
+test("exposes real carrier selection and restricts CMA session maintenance to managers", () => {
+  assert.match(
+    indexSource,
+    /<label for="carrier-select"[^>]*data-i18n="query\.carrier"[\s\S]*?<select id="carrier-select" name="carrier">[\s\S]*?<option value="COSCO">[\s\S]*?<option value="CMA">/
+  );
+  assert.match(indexSource, /data-carrier-select="COSCO"/);
+  assert.match(indexSource, /data-carrier-select="CMA"/);
+  assert.match(
+    appSource,
+    /function renderCmaSessionPanel[\s\S]*?canManageFileVisibility\(session\)[\s\S]*?cmaSessionForm\.hidden = !canManage/
+  );
+  assert.match(
+    appSource,
+    /fetch\("\/api\/tracking\/cma-session"[\s\S]*?method: "PATCH"[\s\S]*?fileAuthHeaders\(session\)/
+  );
+  assert.doesNotMatch(appSource, /localStorage\.setItem\([^\n]*cma[^\n]*sessionCookie/i);
+});

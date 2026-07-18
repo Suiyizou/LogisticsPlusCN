@@ -31,6 +31,28 @@ public class BusinessCustomerController {
     return service.list(actor);
   }
 
+  @GetMapping("/available-shipments")
+  public Map<String, Object> availableShipments(
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listAvailableShipments(actor);
+  }
+
+  @PatchMapping("/shipments/{shipmentId}/note")
+  public Map<String, Object> updateShipmentNote(
+      @PathVariable String shipmentId,
+      @RequestBody UpdateShipmentNoteRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateShipmentNote(
+        shipmentId,
+        request == null ? null : request.note(),
+        actor,
+        ClientInfo.ip(httpRequest)
+    );
+  }
+
   @PostMapping
   public Map<String, Object> create(
       @RequestBody CreateCustomerRequest request,

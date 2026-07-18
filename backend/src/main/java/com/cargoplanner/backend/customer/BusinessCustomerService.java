@@ -186,6 +186,51 @@ public class BusinessCustomerService {
     return Map.of("items", items, "total", items.size());
   }
 
+  public Map<String, Object> listAvailableShipments(AuthenticatedUser actor) {
+    requireManager(actor);
+    String sql = availableShipmentSelect();
+    List<Map<String, Object>> items = actor.isAdmin()
+        ? jdbcTemplate.query(sql + " ORDER BY s.last_tracked_at DESC, s.updated_at DESC LIMIT 200", this::mapAvailableShipment)
+        : jdbcTemplate.query(
+            sql + " WHERE s.created_by = ? OR EXISTS ("
+                + "SELECT 1 FROM cp_shipment_participants p WHERE p.shipment_id = s.id AND p.user_id = ?"
+                + ") ORDER BY s.last_tracked_at DESC, s.updated_at DESC LIMIT 200",
+            this::mapAvailableShipment,
+            actor.id(),
+            actor.id()
+        );
+    return Map.of("items", items, "total", items.size());
+  }
+
+  @Transactional
+  public Map<String, Object> updateShipmentNote(
+      String shipmentPublicId,
+      String note,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    ShipmentRecord shipment = requireShipment(shipmentPublicId);
+    requireShipmentAssignmentAuthority(shipment, actor);
+    String normalized = note == null ? "" : note.trim();
+    if (normalized.length() > 2000) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment note must not exceed 2000 characters");
+    }
+    Instant updatedAt = Instant.now();
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET business_note = ?, updated_at = ? WHERE id = ?",
+        normalized.isBlank() ? null : normalized,
+        Timestamp.from(updatedAt),
+        shipment.id()
+    );
+    auditShipment(actor, "UPDATE_SHIPMENT_NOTE", shipment.id(), "Updated shipment note", ipAddress);
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("shipmentId", shipment.publicId());
+    value.put("note", normalized);
+    value.put("updatedAt", updatedAt.toString());
+    return value;
+  }
+
   @Transactional
   public Map<String, Object> bindShipment(
       String customerPublicId,
@@ -325,6 +370,7 @@ public class BusinessCustomerService {
   private String shipmentBindingSelect() {
     return """
         SELECT s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
+               s.business_note,
                a.relationship_role,
                a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
                r.reference_type, r.reference_no_raw
@@ -338,6 +384,21 @@ public class BusinessCustomerService {
         )
         """;
   }
+  private String availableShipmentSelect() {
+    return """
+        SELECT s.id, s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
+               s.business_note, s.last_tracked_at, s.updated_at,
+               r.reference_type, r.reference_no_raw,
+               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id) AS customer_count
+        FROM cp_shipments s
+        LEFT JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+        )
+        """;
+  }
+
 
   private CustomerRecord mapCustomer(ResultSet rs, int rowNumber) throws SQLException {
     return new CustomerRecord(
@@ -392,12 +453,27 @@ public class BusinessCustomerService {
     value.put("referenceType", rs.getString("reference_type"));
     value.put("referenceNo", rs.getString("reference_no_raw"));
     value.put("trackingStatus", rs.getString("tracking_status"));
+    value.put("note", rs.getString("business_note"));
     value.put("relationshipRole", rs.getString("relationship_role"));
     value.put("assignedAt", instantString(rs, "assigned_at"));
     value.put("assignedBy", nullableLong(rs, "assigned_by"));
     value.put("assignedByDisplayName", rs.getString("assigned_by_display_name"));
     return value;
   }
+  private Map<String, Object> mapAvailableShipment(ResultSet rs, int rowNumber) throws SQLException {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("shipmentId", rs.getString("shipment_public_id"));
+    value.put("carrier", rs.getString("carrier_code"));
+    value.put("referenceType", rs.getString("reference_type"));
+    value.put("referenceNo", rs.getString("reference_no_raw"));
+    value.put("trackingStatus", rs.getString("tracking_status"));
+    value.put("note", rs.getString("business_note"));
+    value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
+    value.put("updatedAt", instantString(rs, "updated_at"));
+    value.put("customerCount", rs.getLong("customer_count"));
+    return value;
+  }
+
 
   private Map<String, Object> customerMetadata(CustomerRecord record) {
     Map<String, Object> value = new LinkedHashMap<>();
@@ -434,6 +510,20 @@ public class BusinessCustomerService {
         """
         INSERT INTO cp_admin_audit_log (admin_user_id, action, target_type, target_id, detail, ip_address)
         VALUES (?, ?, 'CUSTOMER', ?, ?, ?)
+        """,
+        actor.id(),
+        action,
+        targetId,
+        ClientInfo.trim(detail, 512),
+        ClientInfo.trim(ip, 64)
+    );
+  }
+
+  private void auditShipment(AuthenticatedUser actor, String action, long targetId, String detail, String ip) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_admin_audit_log (admin_user_id, action, target_type, target_id, detail, ip_address)
+        VALUES (?, ?, 'SHIPMENT', ?, ?, ?)
         """,
         actor.id(),
         action,

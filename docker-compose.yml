@@ -51,6 +51,7 @@ services:
       APP_TRACKING_CACHE_TTL: ${APP_TRACKING_CACHE_TTL:-15m}
       APP_TRACKING_CONNECT_TIMEOUT: ${APP_TRACKING_CONNECT_TIMEOUT:-5s}
       APP_TRACKING_READ_TIMEOUT: ${APP_TRACKING_READ_TIMEOUT:-90s}
+      APP_TRACKING_SECRET_KEY_FILE: /app/secrets/tracking-settings.key
       APP_SHIPMENT_FILE_ROOT: /app/shipment-files
       SPRING_SERVLET_MULTIPART_LOCATION: /app/shipment-files/.multipart
       APP_SHIPMENT_FILE_MAX_SIZE_BYTES: ${APP_SHIPMENT_FILE_MAX_SIZE_BYTES:-83886080}
@@ -65,6 +66,7 @@ services:
     volumes:
       - workspace-files:/app/uploads
       - ${SHIPMENT_FILE_HOST_PATH:-./data/shipment-files}:/app/shipment-files
+      - backend-secrets:/app/secrets
     depends_on:
       mysql:
         condition: service_healthy
@@ -127,6 +129,7 @@ services:
 volumes:
   mysql-data:
   workspace-files:
+  backend-secrets:
 
 networks:
   app:

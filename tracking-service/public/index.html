@@ -31,13 +31,14 @@
         <nav aria-label="Primary navigation" data-i18n-aria-label="nav.ariaLabel">
           <p class="nav-title" data-i18n="nav.workspace">Workspace</p>
           <a
+            id="portal-return-link"
             class="nav-item portal-return-link"
-            href="/workbenches"
+            href="/"
             data-home-link
-            data-i18n-aria-label="nav.portal"
+            aria-label="Return to homepage"
           >
             <span class="nav-icon" aria-hidden="true">&#8592;</span>
-            <span data-i18n="nav.portal">Open workbenches</span>
+            <span id="portal-return-label">Return to homepage</span>
           </a>
           <a class="nav-item is-active" href="#overview" data-view-target="overview">
             <span class="nav-icon">◫</span>
@@ -49,7 +50,7 @@
           </a>
 
           <p class="nav-title" data-i18n="nav.carriers">Carrier adapters</p>
-          <div class="carrier-nav-item is-current" id="cosco-nav-status">
+          <div class="carrier-nav-item is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO">
             <span class="carrier-monogram cosco">CO</span>
             <span>
               COSCO
@@ -57,7 +58,7 @@
             </span>
             <i></i>
           </div>
-          <div class="carrier-nav-item is-connected">
+          <div class="carrier-nav-item is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA">
             <span class="carrier-monogram cma">CM</span>
             <span>
               CMA CGM
@@ -81,7 +82,7 @@
           </div>
 
           <div class="topbar-actions">
-            <div class="system-state" id="channel-state" data-status="unknown">
+            <div class="system-state" id="channel-state" data-status="unknown" hidden>
               <span class="state-dot"></span>
               <span id="channel-status-text">Channel 1 awaiting check</span>
             </div>
@@ -153,10 +154,6 @@
               <div class="workbench-body">
                 <div hidden aria-hidden="true">
                   <span id="overview-monitor-status">Checking</span>
-                  <select id="carrier-select" name="carrier" tabindex="-1">
-                    <option value="COSCO">COSCO SHIPPING</option>
-                    <option value="CMA">CMA CGM</option>
-                  </select>
                   <select id="channel-select" name="channel" tabindex="-1">
                     <option value="AUTO">Automatic · API first, DOM fallback</option>
                     <option value="NETWORK">Channel 1 · Network interface</option>
@@ -326,11 +323,18 @@
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
                 <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
               </div>
-              <span class="source-tag" id="source-tag">COSCO · CHANNEL 1 · NETWORK</span>
+              <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
             </section>
 
             <section class="query-panel">
               <form id="tracking-form">
+                <div class="field carrier-field">
+                  <label for="carrier-select" data-i18n="query.carrier">Carrier</label>
+                  <select id="carrier-select" name="carrier">
+                    <option value="COSCO">COSCO SHIPPING</option>
+                    <option value="CMA">CMA CGM</option>
+                  </select>
+                </div>
                 <div class="field type-field">
                   <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
                   <select id="tracking-type" name="type">
@@ -344,7 +348,7 @@
                   <input
                     id="tracking-number"
                     name="number"
-                    value="6502077380"
+                    placeholder="-ABCD1234567"
                     maxlength="35"
                     autocomplete="off"
                     spellcheck="false"
@@ -355,9 +359,42 @@
                   <span class="button-label" data-i18n="query.submit">Track shipment</span>
                 </button>
               </form>
-              <div class="query-foot">
-                <p data-i18n="query.helper">Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.</p>
+              <div class="query-foot" hidden>
+                <p id="query-helper" data-i18n="query.helper">Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.</p>
               </div>
+            </section>
+
+            <section class="cma-session-panel" id="cma-session-panel" hidden>
+              <div class="cma-session-heading">
+                <div>
+                  <p class="kicker" data-i18n="cmaSession.kicker">CMA ACCESS SESSION</p>
+                  <h2 data-i18n="cmaSession.title">DataDome session</h2>
+                  <p data-i18n="cmaSession.description">Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned to the browser.</p>
+                </div>
+                <span class="cma-session-status" id="cma-session-status" data-state="unknown" data-i18n="cmaSession.checking">Checking…</span>
+              </div>
+              <div class="cma-session-permission" id="cma-session-permission" hidden>
+                <p data-i18n="cmaSession.permission">Only signed-in business users or administrators can maintain this session.</p>
+              </div>
+              <form class="cma-session-form" id="cma-session-form" hidden>
+                <div class="field cma-cookie-field">
+                  <label for="cma-session-cookie" data-i18n="cmaSession.cookie">DataDome value or Cookie header</label>
+                  <input id="cma-session-cookie" name="sessionCookie" type="password" maxlength="8192" autocomplete="new-password" spellcheck="false" placeholder="datadome=…" />
+                  <small data-i18n="cmaSession.cookieHelp">Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.</small>
+                </div>
+                <div class="field cma-user-agent-field">
+                  <label for="cma-session-user-agent" data-i18n="cmaSession.userAgent">Browser User-Agent</label>
+                  <input id="cma-session-user-agent" name="userAgent" maxlength="512" spellcheck="false" />
+                  <small data-i18n="cmaSession.userAgentHelp">Filled from this browser because DataDome may bind the session to it.</small>
+                </div>
+                <div class="cma-session-actions">
+                  <button type="submit" class="el-button el-button--primary" id="cma-session-save">
+                    <span data-i18n="cmaSession.save">Save encrypted session</span>
+                  </button>
+                  <button type="button" class="el-button" id="cma-session-clear" data-i18n="cmaSession.clear">Clear session</button>
+                </div>
+                <p class="cma-session-message" id="cma-session-message" hidden></p>
+              </form>
             </section>
 
             <section class="alert" id="error-panel" role="alert" data-variant="error" hidden>

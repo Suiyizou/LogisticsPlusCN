@@ -4237,6 +4237,160 @@ body {
   }
 }
 
+/* Selectable carrier and encrypted CMA session maintenance */
+.carrier-nav-item[role="button"] {
+  cursor: pointer;
+}
+
+.carrier-nav-item[role="button"]:focus-visible {
+  outline: 2px solid #69aaff;
+  outline-offset: 2px;
+}
+
+.query-panel form {
+  grid-template-columns: 190px 210px minmax(300px, 1fr) 168px;
+}
+
+.cma-session-panel {
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid #cfe0f3;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+}
+
+.cma-session-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.cma-session-heading h2 {
+  margin: 2px 0 4px;
+  color: #17324d;
+  font-size: 19px;
+}
+
+.cma-session-heading > div > p:last-child,
+.cma-session-permission p {
+  max-width: 760px;
+  margin: 0;
+  color: #718198;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.cma-session-status {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid #c8d8e8;
+  color: #60758b;
+  background: #f5f8fb;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.cma-session-status[data-state="configured"] {
+  border-color: #a9dfca;
+  color: #16865d;
+  background: #effbf6;
+}
+
+.cma-session-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr) auto;
+  align-items: end;
+}
+
+.cma-session-form .field small {
+  display: block;
+  margin-top: 5px;
+  color: #8592a5;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.cma-session-actions {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 20px;
+}
+
+.cma-session-actions .el-button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.cma-session-message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+.cma-session-message[data-variant="success"] {
+  color: #16865d;
+  background: #effbf6;
+}
+
+.cma-session-message[data-variant="error"] {
+  color: #bd4444;
+  background: #fff5f5;
+}
+
+.cma-session-permission {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed #c8d8e8;
+  background: #f8fbfe;
+  border-radius: 8px;
+}
+
+@media (max-width: 1100px) {
+  .query-panel form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #submit-button {
+    grid-column: 1 / -1;
+  }
+
+  .cma-session-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cma-session-actions,
+  .cma-session-message {
+    grid-column: 1 / -1;
+  }
+
+  .cma-session-actions {
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .query-panel form,
+  .cma-session-form {
+    grid-template-columns: 1fr;
+  }
+
+  .cma-session-heading {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cma-session-actions {
+    flex-direction: column;
+  }
+}
+
 /* July 2026 workspace refinement: clearer hierarchy and explicit channel strategy. */
 body {
   font-family: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
@@ -8551,4 +8705,79 @@ body.related-files-open {
   .related-files-loading > span {
     animation-duration: 1.6s;
   }
+}
+
+/* Keep the visible carrier field in the final responsive cascade. */
+.query-panel form {
+  grid-template-columns: 190px 210px minmax(300px, 1fr) 168px;
+}
+
+@media (max-width: 1100px) {
+  .query-panel form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #submit-button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .query-panel form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Surface the files that are already stored for this shipment. */
+.document-uploaded-section {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 4px;
+  padding: 14px;
+  border: 1px solid #cfe2f5;
+  border-radius: 12px;
+  background: #f4f9ff;
+}
+
+.document-uploaded-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  color: #123b66;
+}
+
+.document-uploaded-heading span {
+  color: #64819f;
+  font-size: 12px;
+}
+
+.document-uploaded-files {
+  margin: 0;
+}
+
+/* Keep the final responsive cascade lighter than the original navy sidebar. */
+.sidebar {
+  color: #eff7ff;
+  background:
+    radial-gradient(circle at 14% 4%, rgba(112, 190, 255, 0.34), transparent 29%),
+    linear-gradient(180deg, #2c6da5 0%, #21547f 100%);
+  box-shadow: 8px 0 24px rgba(25, 74, 119, 0.16);
+}
+
+.nav-title,
+.brand-copy small,
+.carrier-nav-item small,
+.sidebar-foot span {
+  color: #c5ddf2;
+}
+
+.nav-item.portal-return-link {
+  border-color: rgba(220, 239, 255, 0.48);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 7px 18px rgba(9, 44, 78, 0.14);
+}
+
+.nav-item.portal-return-link:hover {
+  background: rgba(255, 255, 255, 0.23);
 }

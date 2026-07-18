@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.shipment.CmaTrackingSessionService.CmaSessionCredentials;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ShipmentTrackingServiceTest {
   private JdbcTemplate jdbcTemplate;
   private TrackingAdapterClient adapterClient;
+  private CmaTrackingSessionService cmaTrackingSessionService;
   private ShipmentTrackingService service;
   private AuthenticatedUser employee;
 
@@ -46,6 +48,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectMapper objectMapper = new ObjectMapper();
     adapterClient = mock(TrackingAdapterClient.class);
+    cmaTrackingSessionService = mock(CmaTrackingSessionService.class);
     JsonNode adapterResponse = objectMapper.readTree("""
         {
           "snapshot": {
@@ -73,6 +76,7 @@ class ShipmentTrackingServiceTest {
         jdbcTemplate,
         objectMapper,
         adapterClient,
+        cmaTrackingSessionService,
         accessService,
         properties,
         new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
@@ -88,7 +92,47 @@ class ShipmentTrackingServiceTest {
         .toList();
 
     assertThat(autowiredConstructors).singleElement()
-        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(6));
+        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(7));
+  }
+
+  @Test
+  void routesCmaThroughPlaywrightWithTheEncryptedServerSession() throws Exception {
+    CmaSessionCredentials credentials = new CmaSessionCredentials(
+        "datadome=server-secret",
+        "Mozilla/5.0 Test"
+    );
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "CMA",
+        "PLAYWRIGHT",
+        "BOOKING",
+        "TJN0940917"
+    );
+    JsonNode adapterResponse = new ObjectMapper().readTree("""
+        {
+          "snapshot": {
+            "provider": {"code": "CMA"},
+            "channel": "PLAYWRIGHT",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "TJN0940917"},
+            "summary": {"bookingNumbers": ["TJN0940917"], "latestEvent": {"name": "Loaded"}},
+            "containers": [{"number": "TRHU8582015"}]
+          },
+          "strategy": {"requested": "PLAYWRIGHT", "used": "PLAYWRIGHT"},
+          "cached": false
+        }
+        """);
+    when(cmaTrackingSessionService.requireCredentials()).thenReturn(credentials);
+    when(adapterClient.track(normalized, credentials)).thenReturn(adapterResponse);
+
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest("CMA", "AUTO", "BOOKING", "TJN0940917", false),
+        employee
+    );
+
+    assertThat(response.path("snapshot").path("provider").path("code").asText()).isEqualTo("CMA");
+    assertThat(response.path("snapshot").path("channel").asText()).isEqualTo("PLAYWRIGHT");
+    verify(cmaTrackingSessionService).requireCredentials();
+    verify(adapterClient).track(normalized, credentials);
   }
 
   @Test

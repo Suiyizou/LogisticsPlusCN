@@ -237,6 +237,38 @@ class CustomerAccessFlowTest {
     ).get("shipmentId")).isEqualTo("anonymous-shipment-id");
   }
 
+  @Test
+  void listsAuthorizedShipmentsAndPersistsOperatorNotes() {
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> available =
+        (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
+
+    assertThat(available).extracting(item -> item.get("shipmentId"))
+        .contains("shipment-public-id", "participant-shipment")
+        .doesNotContain("anonymous-shipment-id", "other-business-shipment");
+
+    Map<String, Object> updated = customerService.updateShipmentNote(
+        "shipment-public-id",
+        "Waiting for consignee confirmation",
+        business,
+        "127.0.0.1"
+    );
+    assertThat(updated.get("note")).isEqualTo("Waiting for consignee confirmation");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT business_note FROM cp_shipments WHERE public_id = ?",
+        String.class,
+        "shipment-public-id"
+    )).isEqualTo("Waiting for consignee confirmation");
+
+    assertThatThrownBy(() -> customerService.updateShipmentNote(
+        "other-business-shipment",
+        "not allowed",
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
@@ -264,6 +296,8 @@ class CustomerAccessFlowTest {
           public_id CHAR(36) NOT NULL UNIQUE,
           carrier_code VARCHAR(32) NOT NULL,
           tracking_status VARCHAR(80),
+          business_note TEXT,
+          last_tracked_at TIMESTAMP,
           created_by BIGINT,
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL

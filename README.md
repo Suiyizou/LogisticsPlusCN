@@ -29,7 +29,7 @@
 
 根路径 `/` 是 DrewesLogistics 公开品牌主页，包含中英文内容、首屏翻页动效、平台能力与建设路线。主页导航和能力卡均提供 Cargo Tracking 入口，可直接访问同域路径 `/tracking/`。
 
-`/tracking/` 页面及其查询 API 面向访客公开，不要求企业账号。Nginx 会清除代理到追踪服务的 Cookie，并对公开查询 API 按来源 IP 限流，避免平台登录 token 泄漏或追踪通道被无约束调用。
+`/tracking/` 页面及其查询 API 面向访客公开，不要求企业账号。船司可在查询表单或左侧适配器卡片中显式选择。CMA 的 DataDome 会话由已登录业务员/管理员在页面维护，后端加密保存且不回显；公开访客只能使用查询能力。Nginx 会清除代理到追踪服务的浏览器 Cookie，并对公开查询 API 按来源 IP 限流。
 
 企业员工登录成功后进入 `/workbenches`，再进入装箱规划工作台；总管理员登录后直接进入 `/admin`。`/workbenches`、`/planner`、`/home`、`/containers`、`/algorithm` 与 `/admin` 等业务路径仍由统一登录状态和角色权限保护。两个模块的源码、入口、网关和 Compose 编排均位于本仓库的 `combine` 分支，运行时继续按清晰的业务边界使用 Spring 与 Node 两个服务容器。
 

@@ -11,13 +11,16 @@
       <div class="customer-access-header-actions">
         <LanguageSwitcher class="customer-access-language" />
         <span class="customer-access-party-pill">{{ t("customers.internalPartyAgent") }}</span>
-        <div class="customer-access-user">
-          <b>{{ displayName }}</b>
-          <small>{{ t("customers.businessOperator") }}</small>
+        <div class="customer-account" :class="{ 'is-open': accountMenuOpen }">
+          <button type="button" class="customer-account-trigger" @click="accountMenuOpen = !accountMenuOpen">
+            <span><b>{{ displayName }}</b><small>{{ t("customers.businessOperator") }}</small></span>
+            <i aria-hidden="true">⌄</i>
+          </button>
+          <div v-if="accountMenuOpen" class="customer-account-menu">
+            <RouterLink to="/workbenches" @click="accountMenuOpen = false">{{ t("customers.backWorkbench") }}</RouterLink>
+            <button type="button" @click="emit('logout')">{{ t("customers.logout") }}</button>
+          </div>
         </div>
-        <button type="button" class="customer-access-logout" @click="emit('logout')">
-          {{ t("customers.logout") }}
-        </button>
       </div>
     </header>
 
@@ -43,38 +46,13 @@
 
       <div class="customer-access-layout">
         <aside class="customer-access-sidebar">
-          <form class="customer-create-card" @submit.prevent="createCustomer">
+          <section class="customer-create-card customer-create-launcher">
             <header>
               <span>01</span>
-              <div>
-                <h2>{{ t("customers.createTitle") }}</h2>
-                <p>{{ t("customers.createDescription") }}</p>
-              </div>
+              <div><h2>{{ t("customers.createTitle") }}</h2><p>{{ t("customers.createDescription") }}</p></div>
             </header>
-            <label>
-              <span>{{ t("customers.username") }}</span>
-              <input v-model.trim="createForm.username" :placeholder="t('customers.usernamePlaceholder')" required />
-            </label>
-            <label>
-              <span>{{ t("customers.displayName") }}</span>
-              <input v-model.trim="createForm.displayName" :placeholder="t('customers.displayNamePlaceholder')" required />
-            </label>
-            <label>
-              <span>{{ t("customers.partyRole") }}</span>
-              <el-select
-                v-model="createForm.partyRole"
-                class="business-select"
-                popper-class="business-select-popper"
-              >
-                <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
-                <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-                <el-option value="AGENT" :label="t('customers.roleAgent')" />
-              </el-select>
-            </label>
-            <button class="customer-access-primary" type="submit" :disabled="creating">
-              {{ creating ? t("customers.creating") : t("customers.create") }}
-            </button>
-          </form>
+            <button class="customer-access-primary" type="button" @click="createDialogOpen = true">{{ t("customers.openCreate") }}</button>
+          </section>
 
           <section class="customer-list-card">
             <header>
@@ -210,7 +188,10 @@
                 <template v-else>
                   <label>
                     <span>{{ t("customers.carrier") }}</span>
-                    <input v-model.trim="bindForm.carrier" :placeholder="t('customers.carrierPlaceholder')" required />
+                    <el-select v-model="bindForm.carrier" class="business-select" popper-class="business-select-popper">
+                      <el-option value="COSCO" label="COSCO SHIPPING" />
+                      <el-option value="CMA" label="CMA CGM" />
+                    </el-select>
                   </label>
                   <label>
                     <span>{{ t("customers.referenceType") }}</span>
@@ -234,6 +215,29 @@
                 </button>
               </form>
 
+              <section class="customer-candidate-section">
+                <header>
+                  <div>
+                    <h4>{{ t("customers.availableShipments") }}</h4>
+                    <p>{{ t("customers.availableShipmentsHint") }}</p>
+                  </div>
+                  <button type="button" @click="loadAvailableShipments" :disabled="loadingAvailableShipments">{{ t("customers.refresh") }}</button>
+                </header>
+                <div v-if="loadingAvailableShipments" class="customer-access-empty">{{ t("customers.loadingAvailableShipments") }}</div>
+                <div v-else-if="!unboundAvailableShipments.length" class="customer-access-empty compact">{{ t("customers.emptyAvailableShipments") }}</div>
+                <div v-else class="customer-candidate-list">
+                  <article v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="customer-candidate-row">
+                    <span><b>{{ shipment.referenceNo || shipment.shipmentId }}</b><small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small></span>
+                    <span><i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}</span>
+                    <span>{{ formatDate(shipment.lastTrackedAt || shipment.updatedAt) }}</span>
+                    <span>
+                      <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
+                      <button type="button" class="is-primary" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
+                    </span>
+                  </article>
+                </div>
+              </section>
+
               <div class="customer-shipment-table">
                 <div class="customer-shipment-table-head">
                   <span>{{ t("customers.shipmentReference") }}</span>
@@ -248,12 +252,14 @@
                     <b>{{ shipment.referenceNo || shipment.shipmentId }}</b>
                     <small>{{ shipment.carrier || "—" }} · {{ referenceTypeLabel(shipment.referenceType) }}</small>
                   </span>
-                  <span><i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}</span>
-                  <span>{{ formatDate(shipment.assignedAt) }}</span>
                   <span>
-                    <button type="button" @click="unbindShipment(shipment)" :disabled="unbindingShipmentId === shipment.shipmentId">
-                      {{ t("customers.unbind") }}
-                    </button>
+                    <i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
+                    <small v-if="shipment.note" class="customer-shipment-note">{{ shipment.note }}</small>
+                  </span>
+                  <span>{{ formatDate(shipment.assignedAt) }}</span>
+                  <span class="customer-shipment-actions">
+                    <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
+                    <button type="button" @click="unbindShipment(shipment)" :disabled="unbindingShipmentId === shipment.shipmentId">{{ t("customers.unbind") }}</button>
                   </span>
                 </div>
               </div>
@@ -278,6 +284,55 @@
         </div>
       </section>
     </div>
+
+    <div v-if="createDialogOpen" class="customer-code-overlay" role="presentation" @click.self="createDialogOpen = false">
+      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createTitle')">
+        <span class="customer-code-kicker">NEW CUSTOMER</span>
+        <h2>{{ t("customers.createTitle") }}</h2>
+        <p>{{ t("customers.createDescription") }}</p>
+        <form class="customer-dialog-form" @submit.prevent="createCustomer">
+          <label><span>{{ t("customers.username") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.usernamePlaceholder')" required /></label>
+          <label><span>{{ t("customers.displayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.displayNamePlaceholder')" required /></label>
+          <label>
+            <span>{{ t("customers.partyRole") }}</span>
+            <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
+              <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
+              <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
+              <el-option value="AGENT" :label="t('customers.roleAgent')" />
+            </el-select>
+          </label>
+          <div class="customer-dialog-actions">
+            <button type="button" @click="createDialogOpen = false">{{ t("customers.cancel") }}</button>
+            <button class="customer-access-primary" type="submit" :disabled="creating">{{ creating ? t("customers.creating") : t("customers.create") }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div v-if="detailShipment" class="customer-code-overlay" role="presentation" @click.self="closeShipmentDetail">
+      <section class="customer-code-dialog customer-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.details')">
+        <span class="customer-code-kicker">SHIPMENT DETAIL</span>
+        <h2>{{ detailShipment.referenceNo || detailShipment.shipmentId }}</h2>
+        <div class="customer-shipment-detail-grid">
+          <span><small>{{ t("customers.carrier") }}</small><b>{{ detailShipment.carrier || '—' }}</b></span>
+          <span><small>{{ t("customers.referenceType") }}</small><b>{{ referenceTypeLabel(detailShipment.referenceType) }}</b></span>
+          <span><small>{{ t("customers.shipmentStatus") }}</small><b>{{ detailShipment.trackingStatus || '—' }}</b></span>
+          <span><small>{{ t("customers.lastTrackedAt") }}</small><b>{{ formatDate(detailShipment.lastTrackedAt || detailShipment.assignedAt || detailShipment.updatedAt) }}</b></span>
+        </div>
+        <label class="customer-note-editor">
+          <span>{{ t("customers.shipmentNote") }}</span>
+          <textarea v-model="detailNote" maxlength="2000" :placeholder="t('customers.shipmentNotePlaceholder')"></textarea>
+          <small>{{ detailNote.length }}/2000</small>
+        </label>
+        <div class="customer-dialog-actions">
+          <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
+          <button type="button" @click="saveShipmentNote" :disabled="savingShipmentNote">{{ t("customers.saveNote") }}</button>
+          <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="toastMessage" class="customer-toast" role="status">{{ toastMessage }}</div>
   </main>
 </template>
 
@@ -290,11 +345,13 @@ import {
   bindBusinessCustomerShipment,
   createBusinessCustomer,
   deleteBusinessCustomer,
+  fetchAvailableBusinessShipments,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   resetBusinessCustomerCode,
   unbindBusinessCustomerShipment,
-  updateBusinessCustomer
+  updateBusinessCustomer,
+  updateBusinessShipmentNote
 } from "../services/businessCustomerApi";
 
 const props = defineProps({
@@ -306,7 +363,15 @@ const { t } = useI18n();
 const customers = ref([]);
 const selectedCustomerId = ref("");
 const shipments = ref([]);
+const availableShipments = ref([]);
 const loadingCustomers = ref(false);
+const loadingAvailableShipments = ref(false);
+const accountMenuOpen = ref(false);
+const createDialogOpen = ref(false);
+const detailShipment = ref(null);
+const detailNote = ref("");
+const savingShipmentNote = ref(false);
+const toastMessage = ref("");
 const loadingShipments = ref(false);
 const creating = ref(false);
 const mutatingCustomer = ref(false);
@@ -321,9 +386,14 @@ const createForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER
 const editForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
 let shipmentRequestSequence = 0;
+let toastTimer = 0;
 
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
+const unboundAvailableShipments = computed(() => {
+  const boundIds = new Set(shipments.value.map((item) => item.shipmentId));
+  return availableShipments.value.filter((item) => !boundIds.has(item.shipmentId));
+});
 
 watch(selectedCustomer, (customer) => {
   editForm.username = customer?.username || "";
@@ -331,9 +401,13 @@ watch(selectedCustomer, (customer) => {
   editForm.partyRole = customer?.partyRole || "SHIPPER";
 }, { immediate: true });
 
-onMounted(loadCustomers);
+onMounted(() => {
+  void loadCustomers();
+  void loadAvailableShipments();
+});
 onUnmounted(() => {
   revealedCode.value = null;
+  window.clearTimeout(toastTimer);
 });
 
 async function loadCustomers(preferredId = "") {
@@ -355,6 +429,19 @@ async function loadCustomers(preferredId = "") {
     showError(error, "customers.loadFailed");
   } finally {
     loadingCustomers.value = false;
+  }
+}
+
+async function loadAvailableShipments() {
+  if (loadingAvailableShipments.value) return;
+  loadingAvailableShipments.value = true;
+  try {
+    const response = await fetchAvailableBusinessShipments();
+    availableShipments.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    showError(error, "customers.loadAvailableShipmentsFailed");
+  } finally {
+    loadingAvailableShipments.value = false;
   }
 }
 
@@ -386,6 +473,7 @@ async function createCustomer() {
     createForm.username = "";
     createForm.displayName = "";
     createForm.partyRole = "SHIPPER";
+    createDialogOpen.value = false;
     await loadCustomers(customer.id);
   } catch (error) {
     showError(error, "customers.createFailed");
@@ -471,7 +559,25 @@ async function bindShipment() {
     bindForm.shipmentId = "";
     bindForm.referenceNo = "";
     await selectCustomer(selectedCustomer.value.id);
+    await loadAvailableShipments();
     showSuccess("customers.boundSuccess");
+  } catch (error) {
+    showError(error, "customers.bindFailed");
+  } finally {
+    bindingShipment.value = false;
+  }
+}
+
+async function quickBindShipment(shipment) {
+  if (!selectedCustomer.value || !shipment?.shipmentId || bindingShipment.value) return;
+  bindingShipment.value = true;
+  clearMessage();
+  try {
+    await bindBusinessCustomerShipment(selectedCustomer.value.id, { shipmentId: shipment.shipmentId });
+    await selectCustomer(selectedCustomer.value.id);
+    await loadAvailableShipments();
+    showSuccess("customers.boundSuccess");
+    if (detailShipment.value?.shipmentId === shipment.shipmentId) closeShipmentDetail();
   } catch (error) {
     showError(error, "customers.bindFailed");
   } finally {
@@ -491,6 +597,44 @@ async function unbindShipment(shipment) {
     showError(error, "customers.unbindFailed");
   } finally {
     unbindingShipmentId.value = "";
+  }
+}
+
+function isShipmentBound(shipment) {
+  return shipments.value.some((item) => item.shipmentId === shipment?.shipmentId);
+}
+
+function openShipmentDetail(shipment) {
+  detailShipment.value = { ...shipment };
+  detailNote.value = shipment?.note || "";
+}
+
+function closeShipmentDetail() {
+  detailShipment.value = null;
+  detailNote.value = "";
+}
+
+async function saveShipmentNote() {
+  if (!detailShipment.value?.shipmentId || savingShipmentNote.value) return;
+  savingShipmentNote.value = true;
+  try {
+    const response = await updateBusinessShipmentNote(detailShipment.value.shipmentId, detailNote.value);
+    const note = response?.note || "";
+    updateLocalShipmentNote(detailShipment.value.shipmentId, note);
+    detailShipment.value = { ...detailShipment.value, note };
+    detailNote.value = note;
+    showSuccess("customers.noteSaved");
+  } catch (error) {
+    showError(error, "customers.noteSaveFailed");
+  } finally {
+    savingShipmentNote.value = false;
+  }
+}
+
+function updateLocalShipmentNote(shipmentId, note) {
+  for (const collection of [shipments.value, availableShipments.value]) {
+    const item = collection.find((candidate) => candidate.shipmentId === shipmentId);
+    if (item) item.note = note;
   }
 }
 
@@ -563,8 +707,12 @@ function clearMessage() {
 }
 
 function showSuccess(key) {
-  pageMessage.value = t(key);
-  messageIsError.value = false;
+  clearMessage();
+  toastMessage.value = t(key);
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toastMessage.value = "";
+  }, 2600);
 }
 
 function showError(error, fallbackKey) {
@@ -997,7 +1145,7 @@ function showError(error, fallbackKey) {
 .customer-shipment-table-head,
 .customer-shipment-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) minmax(130px, .8fr) minmax(110px, .65fr) 80px;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(130px, .8fr) minmax(110px, .65fr) 150px;
   align-items: center;
   gap: 12px;
   padding: 11px 14px;
@@ -1082,6 +1230,141 @@ button:disabled { cursor: wait; opacity: .58; }
 }
 .customer-code-dialog > div { display: flex; gap: 10px; margin-top: 4px; }
 .customer-code-dialog > div button { flex: 1; }
+
+.customer-account {
+  position: relative;
+}
+.customer-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 146px;
+  min-height: 48px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #173752;
+  background: transparent;
+  text-align: left;
+}
+.customer-account-trigger:hover,
+.customer-account.is-open .customer-account-trigger { border-color: #cfe0ef; background: #f6faff; }
+.customer-account-trigger span { display: grid; flex: 1; gap: 2px; }
+.customer-account-trigger b { font-size: 12px; }
+.customer-account-trigger small { color: #7a8fa6; font-size: 10px; }
+.customer-account-trigger i { color: #68829a; font-style: normal; }
+.customer-account-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 178px;
+  padding: 6px;
+  border: 1px solid #d5e3ef;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(18, 55, 88, .18);
+}
+.customer-account-menu a,
+.customer-account-menu button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 7px;
+  color: #254966;
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  font-weight: 750;
+}
+.customer-account-menu a:hover,
+.customer-account-menu button:hover { background: #edf6ff; }
+.customer-create-launcher { gap: 18px; }
+.customer-create-launcher .customer-access-primary { width: 100%; }
+.customer-candidate-section {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #d9e7f2;
+  border-radius: 10px;
+  background: #f8fbfe;
+}
+.customer-candidate-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.customer-candidate-section h4 { margin: 0; font-size: 13px; }
+.customer-candidate-section p { margin: 3px 0 0; color: #73899e; font-size: 10px; }
+.customer-candidate-section button,
+.customer-shipment-actions button {
+  min-height: 31px;
+  padding: 6px 10px;
+  border: 1px solid #cbddeb;
+  border-radius: 7px;
+  color: #315a7c;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+.customer-candidate-list { display: grid; gap: 7px; }
+.customer-candidate-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(110px, .6fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #deebf4;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 10px;
+}
+.customer-candidate-row > span:first-child { display: grid; gap: 3px; }
+.customer-candidate-row small { color: #758b9f; }
+.customer-candidate-row > span:last-child,
+.customer-shipment-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.customer-candidate-row button.is-primary { color: #fff; border-color: #1476c9; background: #1476c9; }
+.customer-access-empty.compact { padding: 12px; }
+.customer-shipment-row > span:nth-child(2) { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+.customer-shipment-note { grid-column: 1 / -1; margin-top: 4px; color: #6d8195; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customer-dialog-form { display: grid; gap: 12px; }
+.customer-dialog-form label,
+.customer-note-editor { display: grid; gap: 6px; }
+.customer-dialog-form label > span,
+.customer-note-editor > span { color: #435d76; font-size: 11px; font-weight: 800; }
+.customer-dialog-form input,
+.customer-note-editor textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cfdeec;
+  border-radius: 9px;
+  color: #183652;
+  background: #fbfdff;
+}
+.customer-note-editor textarea { min-height: 116px; resize: vertical; font: inherit; }
+.customer-note-editor > small { color: #8193a5; text-align: right; }
+.customer-dialog-actions { display: flex; gap: 9px; justify-content: flex-end; }
+.customer-dialog-actions button { flex: 1; }
+.customer-shipment-dialog { width: min(620px, 100%); }
+.customer-shipment-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.customer-shipment-detail-grid > span { display: grid; gap: 4px; padding: 11px; border-radius: 8px; background: #f3f8fc; }
+.customer-shipment-detail-grid small { color: #75899e; }
+.customer-shipment-detail-grid b { color: #183b5a; }
+.customer-toast {
+  position: fixed;
+  top: 92px;
+  left: 50%;
+  z-index: 140;
+  transform: translateX(-50%);
+  padding: 12px 18px;
+  border: 1px solid #a9dfca;
+  border-radius: 10px;
+  color: #146a4c;
+  background: #effbf6;
+  box-shadow: 0 14px 38px rgba(18, 94, 68, .16);
+  font-weight: 750;
+}
 
 @media (max-width: 1100px) {
   .customer-access-layout { grid-template-columns: 1fr; }

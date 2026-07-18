@@ -1098,11 +1098,13 @@ async function fetchCoscoTracking(request, queryChannel) {
   return fetchCoscoTrackingViaNetwork(request);
 }
 
-async function fetchCmaTracking(request) {
+async function fetchCmaTracking(request, credentials = {}) {
   let result;
   try {
     result = await fetchCmaTrackingViaPlaywright(request, {
-      timeoutMs: Number.parseInt(process.env.CMA_PLAYWRIGHT_TIMEOUT_MS ?? "45000", 10)
+      timeoutMs: Number.parseInt(process.env.CMA_PLAYWRIGHT_TIMEOUT_MS ?? "45000", 10),
+      sessionCookie: credentials.sessionCookie || undefined,
+      userAgent: credentials.userAgent || undefined
     });
   } catch (error) {
     throw new HttpError(
@@ -1340,6 +1342,12 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
       ? "PLAYWRIGHT"
       : forcedChannel ?? input.channel ?? carrier.defaultChannel ?? "NETWORK"
   );
+  const cmaCredentials = carrierCode === "CMA"
+    ? {
+        sessionCookie: String(request.headers["x-cma-session-cookie"] ?? "").trim(),
+        userAgent: String(request.headers["x-cma-browser-user-agent"] ?? "").trim()
+      }
+    : null;
   const cacheKey = `${carrierCode}:${queryChannel.code}:${trackingRequest.type}:${trackingRequest.number}`;
   const cached = cache.get(cacheKey);
 
@@ -1357,7 +1365,7 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   let requestPromise = inFlightTrackingRequests.get(cacheKey);
   if (!requestPromise) {
     requestPromise = carrierCode === "CMA"
-      ? fetchCmaTracking(trackingRequest)
+      ? fetchCmaTracking(trackingRequest, cmaCredentials)
       : fetchCoscoTracking(trackingRequest, queryChannel);
     inFlightTrackingRequests.set(cacheKey, requestPromise);
   }

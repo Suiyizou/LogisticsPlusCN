@@ -43,6 +43,7 @@ public class ShipmentTrackingService {
   private final JdbcTemplate jdbcTemplate;
   private final ObjectMapper objectMapper;
   private final TrackingAdapterClient adapterClient;
+  private final CmaTrackingSessionService cmaTrackingSessionService;
   private final ShipmentAccessService accessService;
   private final ShipmentTrackingProperties properties;
   private final TransactionTemplate transactionTemplate;
@@ -53,6 +54,7 @@ public class ShipmentTrackingService {
       JdbcTemplate jdbcTemplate,
       ObjectMapper objectMapper,
       TrackingAdapterClient adapterClient,
+      CmaTrackingSessionService cmaTrackingSessionService,
       ShipmentAccessService accessService,
       ShipmentTrackingProperties properties,
       PlatformTransactionManager transactionManager
@@ -61,6 +63,7 @@ public class ShipmentTrackingService {
         jdbcTemplate,
         objectMapper,
         adapterClient,
+        cmaTrackingSessionService,
         accessService,
         properties,
         new TransactionTemplate(transactionManager),
@@ -72,6 +75,7 @@ public class ShipmentTrackingService {
       JdbcTemplate jdbcTemplate,
       ObjectMapper objectMapper,
       TrackingAdapterClient adapterClient,
+      CmaTrackingSessionService cmaTrackingSessionService,
       ShipmentAccessService accessService,
       ShipmentTrackingProperties properties,
       TransactionTemplate transactionTemplate,
@@ -80,6 +84,7 @@ public class ShipmentTrackingService {
     this.jdbcTemplate = jdbcTemplate;
     this.objectMapper = objectMapper;
     this.adapterClient = adapterClient;
+    this.cmaTrackingSessionService = cmaTrackingSessionService;
     this.accessService = accessService;
     this.properties = properties;
     this.transactionTemplate = transactionTemplate;
@@ -103,7 +108,9 @@ public class ShipmentTrackingService {
 
     JsonNode upstream;
     try {
-      upstream = adapterClient.track(request);
+      upstream = "CMA".equals(request.carrier())
+          ? adapterClient.track(request, cmaTrackingSessionService.requireCredentials())
+          : adapterClient.track(request);
     } catch (ApiException error) {
       if (cached != null && (error.status().is5xxServerError() || error.status() == HttpStatus.TOO_MANY_REQUESTS)) {
         ObjectNode response = cachedResponse(cached, user, true);
@@ -433,10 +440,11 @@ public class ShipmentTrackingService {
   private NormalizedTrackRequest normalize(ShipmentTrackRequest input) {
     if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Tracking request is required");
     String carrier = normalizeCode(input.carrier(), "COSCO");
-    if (!"COSCO".equals(carrier)) {
+    if (!List.of("COSCO", "CMA").contains(carrier)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported carrier");
     }
     String channel = normalizeCode(input.channel(), "AUTO");
+    if ("CMA".equals(carrier)) channel = "PLAYWRIGHT";
     if (!SUPPORTED_CHANNELS.contains(channel)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported tracking channel");
     }

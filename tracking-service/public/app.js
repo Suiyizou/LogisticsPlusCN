@@ -1,11 +1,13 @@
 const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
+const carrierNavItems = Array.from(document.querySelectorAll("[data-carrier-select]"));
 const channelSelect = document.querySelector("#channel-select");
 const trackingType = document.querySelector("#tracking-type");
 const trackingNumber = document.querySelector("#tracking-number");
 const carrierNotice = document.querySelector("#carrier-notice");
 const sourceTag = document.querySelector("#source-tag");
+const queryHelper = document.querySelector("#query-helper");
 const emptyState = document.querySelector("#empty-state");
 const results = document.querySelector("#results");
 const errorPanel = document.querySelector("#error-panel");
@@ -96,6 +98,15 @@ const businessReferenceDialog = document.querySelector("#business-reference-dial
 const businessReferenceForm = document.querySelector("#business-reference-form");
 const documentEditorDialog = document.querySelector("#document-editor-dialog");
 const documentEditorForm = document.querySelector("#document-editor-form");
+const cmaSessionPanel = document.querySelector("#cma-session-panel");
+const cmaSessionPermission = document.querySelector("#cma-session-permission");
+const cmaSessionForm = document.querySelector("#cma-session-form");
+const cmaSessionStatusElement = document.querySelector("#cma-session-status");
+const cmaSessionCookie = document.querySelector("#cma-session-cookie");
+const cmaSessionUserAgent = document.querySelector("#cma-session-user-agent");
+const cmaSessionSave = document.querySelector("#cma-session-save");
+const cmaSessionClear = document.querySelector("#cma-session-clear");
+const cmaSessionMessage = document.querySelector("#cma-session-message");
 
 const CACHE_VERSION = 3;
 const CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -231,6 +242,8 @@ const MESSAGES = {
     "nav.ariaLabel": "Primary navigation",
     "nav.workspace": "Workspace",
     "nav.portal": "Open workbenches",
+    "nav.home": "Return to homepage",
+    "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
     "nav.tracking": "Shipment tracking",
     "nav.carriers": "Carrier adapters",
@@ -375,6 +388,7 @@ const MESSAGES = {
     "query.channel": "Query channel",
     "query.type": "Shipment number type",
     "query.number": "Shipment No.",
+    "query.enterNumber": "Enter a shipment number first.",
     "query.submit": "Track shipment",
     "query.loading": "Tracking…",
     "wait.tracking": "Retrieving the latest shipment data…",
@@ -418,6 +432,26 @@ const MESSAGES = {
     "batch.openItem": "Open and query {type} {number}",
     "batch.confirmClear": "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
     "query.helper": "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
+    "query.cmaHelper": "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
+    "cmaSession.kicker": "CMA ACCESS SESSION",
+    "cmaSession.title": "DataDome session",
+    "cmaSession.description": "Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned to the browser.",
+    "cmaSession.permission": "Only signed-in business users or administrators can maintain this session.",
+    "cmaSession.cookie": "DataDome value or Cookie header",
+    "cmaSession.cookieHelp": "Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.",
+    "cmaSession.userAgent": "Browser User-Agent",
+    "cmaSession.userAgentHelp": "Filled from this browser because DataDome may bind the session to it.",
+    "cmaSession.save": "Save encrypted session",
+    "cmaSession.clear": "Clear session",
+    "cmaSession.checking": "Checking…",
+    "cmaSession.configured": "Configured · {time}",
+    "cmaSession.notConfigured": "Not configured",
+    "cmaSession.saved": "The CMA session was encrypted and saved.",
+    "cmaSession.cleared": "The CMA session was cleared.",
+    "cmaSession.required": "Enter a DataDome value or CMA Cookie header.",
+    "cmaSession.loadFailed": "Could not read the CMA session status: {message}",
+    "cmaSession.saveFailed": "Could not save the CMA session: {message}",
+    "cmaSession.clearConfirm": "Clear the saved CMA DataDome session?",
     "channel.auto": "Automatic · API first, DOM fallback",
     "channel.network": "Channel 1 · Network interface",
     "channel.playwright": "Channel 2 · Playwright browser",
@@ -515,6 +549,8 @@ const MESSAGES = {
     "documents.title": "Document details",
     "documents.open": "Documents",
     "documents.intro": "One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.",
+    "documents.uploadedTitle": "Uploaded shipment files",
+    "documents.uploadedCount": "{count} files uploaded",
     "documents.file": "File",
     "documents.uploader": "Upload subject",
     "documents.visibility": "Visible to",
@@ -544,6 +580,7 @@ const MESSAGES = {
     "documents.visibility.consignee": "Consignee",
     "documents.visibility.shipperConsignee": "Shipper and consignee",
     "documents.visibility.all": "All shipment parties",
+    "documents.visibility.internal": "Internal staff only",
     "raw.title": "Decoded source payload",
     "raw.cacheNotice": "The browser cache stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
@@ -574,6 +611,8 @@ const MESSAGES = {
     "nav.ariaLabel": "主导航",
     "nav.workspace": "工作区",
     "nav.portal": "进入业务工作台",
+    "nav.home": "返回主页",
+    "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
     "nav.tracking": "货物跟踪",
     "nav.carriers": "船司适配器",
@@ -718,6 +757,7 @@ const MESSAGES = {
     "query.channel": "查询通道",
     "query.type": "运输单号类型",
     "query.number": "运输单号",
+    "query.enterNumber": "请先输入运输单号。",
     "query.submit": "查询运输信息",
     "query.loading": "查询中…",
     "wait.tracking": "正在获取最新货物信息…",
@@ -761,6 +801,26 @@ const MESSAGES = {
     "batch.openItem": "打开并查询{type} {number}",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
     "query.helper": "自动模式优先调用网络接口，失败后才启用 Playwright 浏览器托底。",
+    "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
+    "cmaSession.kicker": "CMA 访问会话",
+    "cmaSession.title": "DataDome 会话",
+    "cmaSession.description": "业务员和管理员可在这里维护 CMA 浏览器会话。该值由后端加密保存，且不会回传浏览器。",
+    "cmaSession.permission": "只有已登录的业务员或管理员可以维护此会话。",
+    "cmaSession.cookie": "DataDome 值或 Cookie 请求头",
+    "cmaSession.cookieHelp": "可只粘贴 datadome 的值，也可粘贴 CMA 请求的完整 Cookie 头；保存后不会再次显示。",
+    "cmaSession.userAgent": "浏览器 User-Agent",
+    "cmaSession.userAgentHelp": "自动取当前浏览器值，因为 DataDome 可能会绑定浏览器指纹。",
+    "cmaSession.save": "加密保存会话",
+    "cmaSession.clear": "清除会话",
+    "cmaSession.checking": "检查中…",
+    "cmaSession.configured": "已配置 · {time}",
+    "cmaSession.notConfigured": "尚未配置",
+    "cmaSession.saved": "CMA 会话已加密保存。",
+    "cmaSession.cleared": "CMA 会话已清除。",
+    "cmaSession.required": "请输入 DataDome 值或 CMA Cookie 请求头。",
+    "cmaSession.loadFailed": "无法读取 CMA 会话状态：{message}",
+    "cmaSession.saveFailed": "无法保存 CMA 会话：{message}",
+    "cmaSession.clearConfirm": "确定清除已保存的 CMA DataDome 会话吗？",
     "channel.auto": "自动 · 接口优先，DOM 托底",
     "channel.network": "通道一 · 网络接口",
     "channel.playwright": "通道二 · Playwright 浏览器",
@@ -858,6 +918,8 @@ const MESSAGES = {
     "documents.title": "文件详情",
     "documents.open": "文件详情",
     "documents.intro": "每个主题保留一份主文件，可在这里新增、编辑或删除文件及可见权限信息。",
+    "documents.uploadedTitle": "已上传的票单文件",
+    "documents.uploadedCount": "已上传 {count} 份文件",
     "documents.file": "文件",
     "documents.uploader": "上传主体",
     "documents.visibility": "可见主体",
@@ -886,7 +948,8 @@ const MESSAGES = {
     "documents.visibility.agents": "代理可见",
     "documents.visibility.consignee": "收货人可见",
     "documents.visibility.shipperConsignee": "发货人和收货人可见",
-    "documents.visibility.all": "全部主体可见",
+    "documents.visibility.all": "全部票单参与方可见",
+    "documents.visibility.internal": "仅内部员工可见",
     "raw.title": "原始解码结果",
     "raw.cacheNotice": "浏览器缓存仅保存统一快照，不保存船司原始报文。",
     "common.notProvided": "上游未提供",
@@ -1007,6 +1070,9 @@ let trackingAccountMenuOpen = false;
 let relatedFilesExpiredSessionKind = "";
 let platformPrincipalAwaitingRefresh = false;
 let customerPrincipalAwaitingRefresh = false;
+let cmaSessionStatus = null;
+let cmaSessionStatusLoaded = false;
+let cmaSessionLoading = false;
 let relatedFilesSessionFingerprint = fileSessionFingerprint();
 const trackingPayloadSessionFingerprints = new WeakMap();
 
@@ -1355,6 +1421,16 @@ function setTrackingAccountMenuOpen(open) {
 }
 
 function renderTrackingAccount(session = readFileSession()) {
+  const portalReturnLink = document.querySelector("#portal-return-link");
+  const portalReturnLabel = document.querySelector("#portal-return-label");
+  const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
+  const returnsToWorkbenches =
+    session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
+  const destinationKey = returnsToWorkbenches ? "nav.portal" : "nav.home";
+  portalReturnLink.href = returnsToWorkbenches ? "/workbenches" : "/";
+  portalReturnLink.setAttribute("aria-label", t(destinationKey));
+  portalReturnLabel.textContent = t(destinationKey);
+
   const authenticated = Boolean(session.token);
   trackingAccount.hidden = !authenticated;
   if (!authenticated) {
@@ -1491,6 +1567,11 @@ function setRelatedFilesContext(payload) {
   renderRelatedFilesDrawer();
 }
 
+function preloadRelatedFilesForContext() {
+  const session = readFileSession();
+  if (session.token && relatedFilesShipmentId) void loadRelatedFiles();
+}
+
 function formatFileSize(value) {
   const bytes = Number(value ?? 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -1503,6 +1584,8 @@ function formatFileSize(value) {
 }
 
 function fileCategoryLabel(value) {
+  const documentType = documentDefinition(String(value ?? "").toUpperCase());
+  if (documentType) return t(documentType.labelKey);
   const key = {
     CARGO_DETAIL: "files.categoryCargo",
     INVOICE: "files.categoryInvoice",
@@ -2394,6 +2477,20 @@ function documentDefinition(code) {
   return DOCUMENT_TYPES.find((definition) => definition.code === code) ?? null;
 }
 
+function documentRecord(code, metadata = documentMetadataForSnapshot(currentPayload?.snapshot)) {
+  const uploaded = relatedFilesItems.find((file) => file.category === code);
+  if (!uploaded) return metadata?.[code] ?? null;
+  const definition = documentDefinition(code);
+  return {
+    fileName: uploaded.originalFileName,
+    fileSize: uploaded.sizeBytes,
+    uploader: definition?.uploaders?.[0] ?? "forwarder",
+    visibility: uploaded.visibility === "PARTIES" ? "all" : "internal",
+    updatedAt: uploaded.uploadedAt,
+    relatedFile: uploaded
+  };
+}
+
 function documentSubjectLabel(subject) {
   return t(`documents.subject.${subject}`);
 }
@@ -2419,7 +2516,7 @@ function openDocumentEditor(code) {
   const definition = documentDefinition(code);
   if (!definition) return;
   const metadata = documentMetadataForSnapshot(currentPayload.snapshot);
-  const existing = metadata[code] ?? null;
+  const existing = documentRecord(code, metadata);
   const fileInput = document.querySelector("#document-file-input");
 
   document.querySelector("#document-type-input").value = code;
@@ -2437,11 +2534,13 @@ function openDocumentEditor(code) {
     documentSubjectLabel,
     existing?.uploader ?? definition.uploaders[0]
   );
+  const session = readFileSession();
+  const visibilityOptions = session.kind === "CUSTOMER" ? ["all"] : ["all", "internal"];
   populateSelect(
     document.querySelector("#document-visibility-input"),
-    definition.visibility,
+    visibilityOptions,
     documentVisibilityLabel,
-    existing?.visibility ?? definition.visibility[0]
+    visibilityOptions.includes(existing?.visibility) ? existing.visibility : visibilityOptions[0]
   );
   documentEditorDialog.showModal();
 }
@@ -2457,15 +2556,32 @@ function closeDocumentDrawer() {
 function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
   if (!snapshot) return;
   const metadata = documentMetadataForSnapshot(snapshot);
-  const filledCount = DOCUMENT_TYPES.filter((definition) => metadata[definition.code]).length;
+  const filledCount = DOCUMENT_TYPES.filter((definition) => documentRecord(definition.code, metadata)).length;
   elements["document-filled-count"].textContent = `${filledCount}/${DOCUMENT_TYPES.length}`;
   elements["document-drawer-shipment"].textContent = snapshot.tracking.number;
   documentList.replaceChildren();
 
+  if (relatedFilesItems.length > 0) {
+    const uploadedSection = document.createElement("section");
+    uploadedSection.className = "document-uploaded-section";
+    const uploadedHeading = document.createElement("div");
+    uploadedHeading.className = "document-uploaded-heading";
+    const uploadedTitle = document.createElement("strong");
+    uploadedTitle.textContent = t("documents.uploadedTitle");
+    const uploadedCount = document.createElement("span");
+    uploadedCount.textContent = t("documents.uploadedCount", { count: relatedFilesItems.length });
+    uploadedHeading.append(uploadedTitle, uploadedCount);
+    const uploadedList = document.createElement("ul");
+    uploadedList.className = "related-files-list document-uploaded-files";
+    uploadedList.append(...relatedFilesItems.map((file) => createRelatedFileItem(file)));
+    uploadedSection.append(uploadedHeading, uploadedList);
+    documentList.append(uploadedSection);
+  }
+
   for (const definition of DOCUMENT_TYPES) {
     const item = document.createElement("article");
     item.className = "document-item";
-    const existing = metadata[definition.code] ?? null;
+    const existing = documentRecord(definition.code, metadata);
 
     const heading = document.createElement("div");
     heading.className = "document-item-heading";
@@ -2507,7 +2623,15 @@ function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
       deleteButton.type = "button";
       deleteButton.className = "document-delete-button";
       deleteButton.textContent = t("documents.delete");
-      deleteButton.addEventListener("click", () => {
+      deleteButton.addEventListener("click", async () => {
+        if (existing.relatedFile) {
+          await deleteRelatedFile(existing.relatedFile);
+          const nextMetadata = { ...documentMetadataForSnapshot(snapshot) };
+          delete nextMetadata[definition.code];
+          writeSupplementaryRecord(DOCUMENT_METADATA_PREFIX, snapshot, nextMetadata);
+          renderDocumentDrawer(snapshot);
+          return;
+        }
         if (!window.confirm(t("documents.confirmDelete", { name: existing.fileName }))) return;
         const nextMetadata = { ...documentMetadataForSnapshot(snapshot) };
         delete nextMetadata[definition.code];
@@ -2533,6 +2657,9 @@ function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
 function openDocumentDrawer() {
   if (!currentPayload?.snapshot) return;
   renderDocumentDrawer(currentPayload.snapshot);
+  if (readFileSession().token && relatedFilesShipmentId) {
+    void loadRelatedFiles().then(() => renderDocumentDrawer(currentPayload?.snapshot));
+  }
   documentDrawerLayer.hidden = false;
   requestAnimationFrame(() => {
     documentDrawerLayer.classList.add("is-open");
@@ -3662,6 +3789,7 @@ function renderResult(payload) {
 
   currentPayload = payload;
   setRelatedFilesContext(payload);
+  preloadRelatedFilesForContext();
   results.classList.toggle("is-container-only", isContainerOnly);
   sourceTag.textContent = t(resultChannel.sourceKey);
   elements["result-carrier"].textContent = providerCode;
@@ -4170,6 +4298,141 @@ function renderHistory() {
   }
 }
 
+function cmaSessionErrorMessage(payload, response) {
+  return String(payload?.message ?? payload?.error ?? `${response.status} ${response.statusText}`).trim();
+}
+
+function setCmaSessionMessage(message = "", variant = "info") {
+  cmaSessionMessage.textContent = message;
+  cmaSessionMessage.dataset.variant = variant;
+  cmaSessionMessage.hidden = !message;
+}
+
+function renderCmaSessionPanel() {
+  const selected = carrierSelect.value === "CMA";
+  cmaSessionPanel.hidden = !selected;
+  if (!selected) return;
+
+  const session = readFileSession();
+  const canManage = canManageFileVisibility(session);
+  cmaSessionPermission.hidden = canManage;
+  cmaSessionForm.hidden = !canManage;
+  if (!canManage) {
+    cmaSessionStatusElement.dataset.state = "restricted";
+    cmaSessionStatusElement.textContent = t("cmaSession.notConfigured");
+    return;
+  }
+
+  if (!cmaSessionUserAgent.value) cmaSessionUserAgent.value = navigator.userAgent;
+  const configured = cmaSessionStatus?.configured === true;
+  cmaSessionStatusElement.dataset.state = configured ? "configured" : "empty";
+  if (cmaSessionLoading || !cmaSessionStatusLoaded) {
+    cmaSessionStatusElement.textContent = t("cmaSession.checking");
+  } else if (configured) {
+    const time = cmaSessionStatus.updatedAt
+      ? new Date(cmaSessionStatus.updatedAt).toLocaleString(locale())
+      : "—";
+    cmaSessionStatusElement.textContent = t("cmaSession.configured", { time });
+  } else {
+    cmaSessionStatusElement.textContent = t("cmaSession.notConfigured");
+  }
+  cmaSessionSave.disabled = cmaSessionLoading;
+  cmaSessionClear.disabled = cmaSessionLoading || !configured;
+  if (!cmaSessionStatusLoaded && !cmaSessionLoading) void refreshCmaSessionStatus();
+}
+
+async function refreshCmaSessionStatus() {
+  const session = readFileSession();
+  if (!canManageFileVisibility(session) || cmaSessionLoading) return;
+  cmaSessionLoading = true;
+  renderCmaSessionPanel();
+  try {
+    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
+      headers: { ...fileAuthHeaders(session) }
+    }));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
+    cmaSessionStatus = payload;
+    cmaSessionStatusLoaded = true;
+    setCmaSessionMessage();
+  } catch (error) {
+    cmaSessionStatusLoaded = true;
+    cmaSessionStatus = null;
+    setCmaSessionMessage(t("cmaSession.loadFailed", {
+      message: error?.message || t("error.generic")
+    }), "error");
+  } finally {
+    cmaSessionLoading = false;
+    renderCmaSessionPanel();
+  }
+}
+
+async function saveCmaSession() {
+  const session = readFileSession();
+  if (!canManageFileVisibility(session) || cmaSessionLoading) return;
+  const sessionCookie = cmaSessionCookie.value.trim();
+  if (!sessionCookie) {
+    setCmaSessionMessage(t("cmaSession.required"), "error");
+    cmaSessionCookie.focus();
+    return;
+  }
+  cmaSessionLoading = true;
+  renderCmaSessionPanel();
+  try {
+    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...fileAuthHeaders(session)
+      },
+      body: JSON.stringify({
+        sessionCookie,
+        userAgent: cmaSessionUserAgent.value.trim()
+      })
+    }));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
+    cmaSessionStatus = payload;
+    cmaSessionStatusLoaded = true;
+    cmaSessionCookie.value = "";
+    setCmaSessionMessage(t("cmaSession.saved"), "success");
+  } catch (error) {
+    setCmaSessionMessage(t("cmaSession.saveFailed", {
+      message: error?.message || t("error.generic")
+    }), "error");
+  } finally {
+    cmaSessionLoading = false;
+    renderCmaSessionPanel();
+  }
+}
+
+async function clearCmaSession() {
+  const session = readFileSession();
+  if (!canManageFileVisibility(session) || cmaSessionLoading) return;
+  if (!window.confirm(t("cmaSession.clearConfirm"))) return;
+  cmaSessionLoading = true;
+  renderCmaSessionPanel();
+  try {
+    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
+      method: "DELETE",
+      headers: { ...fileAuthHeaders(session) }
+    }));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
+    cmaSessionStatus = payload;
+    cmaSessionStatusLoaded = true;
+    cmaSessionCookie.value = "";
+    setCmaSessionMessage(t("cmaSession.cleared"), "success");
+  } catch (error) {
+    setCmaSessionMessage(t("cmaSession.saveFailed", {
+      message: error?.message || t("error.generic")
+    }), "error");
+  } finally {
+    cmaSessionLoading = false;
+    renderCmaSessionPanel();
+  }
+}
+
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
   const cmaSelected = carrier.code === "CMA";
@@ -4178,8 +4441,13 @@ function updateCarrierUI({ resetResult = false } = {}) {
   channelSelect.disabled = cmaSelected;
   const channel = CHANNELS[channelSelect.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
+  queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : "query.helper");
   carrierNotice.hidden = carrier.enabled;
   carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
+  carrierNavItems.forEach((item) => {
+    item.classList.toggle("is-current", item.dataset.carrierSelect === carrier.code);
+  });
+  renderCmaSessionPanel();
   checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
   setLoading(loading);
 
@@ -4568,6 +4836,12 @@ async function requestTracking(query) {
 checkChannelsButton.addEventListener("click", async () => {
   const carrier = CARRIERS[carrierSelect.value];
   if (!carrier?.enabled || channelCheckLoading) return;
+  const shipmentNumber = trackingNumber.value.trim();
+  if (!shipmentNumber) {
+    channelCheckSummary.textContent = t("query.enterNumber");
+    trackingNumber.focus();
+    return;
+  }
 
   setChannelCheckLoading(true);
   const waitToken = beginSystemWait("channels", "wait.channels");
@@ -4579,7 +4853,7 @@ checkChannelsButton.addEventListener("click", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: trackingType.value || "BILLOFLADING",
-          number: trackingNumber.value.trim() || "6502077380"
+          number: shipmentNumber
         })
       })
     );
@@ -4672,6 +4946,24 @@ carrierSelect.addEventListener("change", () => {
   clearSystemWaitType("tracking");
   updateCarrierUI({ resetResult: true });
 });
+carrierNavItems.forEach((item) => {
+  const selectCarrier = () => {
+    carrierSelect.value = item.dataset.carrierSelect;
+    carrierSelect.dispatchEvent(new Event("change"));
+    void showView("tracking");
+  };
+  item.addEventListener("click", selectCarrier);
+  item.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    selectCarrier();
+  });
+});
+cmaSessionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveCmaSession();
+});
+cmaSessionClear.addEventListener("click", () => void clearCmaSession());
 channelSelect.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
 
 batchSelectButton.addEventListener("click", () => {
@@ -4867,6 +5159,9 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
     ) return;
 
     event.preventDefault();
+    if (link.classList.contains("portal-return-link") && !window.confirm(t("nav.confirmReturn"))) {
+      return;
+    }
     if (document.body.classList.contains("is-page-leaving")) return;
     showPlatformRouteWait();
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -4916,19 +5211,40 @@ document.querySelector("#open-document-drawer").addEventListener("click", openDo
 document.querySelector("#close-document-drawer").addEventListener("click", closeDocumentDrawer);
 document.querySelector("#document-drawer-backdrop").addEventListener("click", closeDocumentDrawer);
 
-documentEditorForm.addEventListener("submit", (event) => {
+documentEditorForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!currentPayload?.snapshot) return;
   const code = document.querySelector("#document-type-input").value;
   const definition = documentDefinition(code);
   if (!definition) return;
   const metadata = documentMetadataForSnapshot(currentPayload.snapshot);
-  const existing = metadata[code] ?? null;
+  const existing = documentRecord(code, metadata);
   const file = document.querySelector("#document-file-input").files?.[0] ?? null;
 
   if (!file && !existing) {
     window.alert(t("documents.chooseFile"));
     return;
+  }
+
+  const session = readFileSession();
+  if (file && session.token && relatedFilesShipmentId) {
+    const formData = new FormData();
+    formData.append("files", file);
+    formData.append("category", code);
+    if (session.kind === "INTERNAL") {
+      const selectedVisibility = document.querySelector("#document-visibility-input").value;
+      formData.append("visibility", selectedVisibility === "all" ? "PARTIES" : "INTERNAL");
+    }
+    try {
+      await requestRelatedFilesApi(
+        shipmentFilesPath(session, relatedFilesShipmentId),
+        { method: "POST", body: formData, session }
+      );
+      await loadRelatedFiles();
+    } catch (error) {
+      window.alert(t("files.uploadFailed", { message: error?.message || t("error.generic") }));
+      return;
+    }
   }
 
   const nextMetadata = {

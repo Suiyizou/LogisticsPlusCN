@@ -29,6 +29,18 @@ export function fetchBusinessCustomerShipments(customerId) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`);
 }
 
+export function fetchAvailableBusinessShipments() {
+  return request("/business/customers/available-shipments");
+}
+
+export function updateBusinessShipmentNote(shipmentId, note) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/note`, {
+    method: "PATCH",
+    body: { note }
+  });
+}
+
+
 export function bindBusinessCustomerShipment(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`, {
     method: "POST",

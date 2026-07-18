@@ -74,6 +74,11 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
 
   private void upgradeCustomerFileSchemaForMySql() {
     addColumnIfMissing(
+        "cp_shipments",
+        "business_note",
+        "ALTER TABLE cp_shipments ADD COLUMN business_note TEXT NULL AFTER tracking_status"
+    );
+    addColumnIfMissing(
         "cp_shipment_files",
         "uploader_customer_id",
         "ALTER TABLE cp_shipment_files ADD COLUMN uploader_customer_id BIGINT NULL AFTER uploader_user_id"
@@ -184,12 +189,25 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_tracking_credentials (
+          carrier_code VARCHAR(32) PRIMARY KEY,
+          encrypted_session_cookie LONGTEXT NOT NULL,
+          browser_user_agent VARCHAR(512) NULL,
+          updated_by BIGINT NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          INDEX idx_cp_tracking_credentials_updated_at (updated_at),
+          CONSTRAINT fk_cp_tracking_credentials_updated_by FOREIGN KEY (updated_by) REFERENCES cp_users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_shipments (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           public_id CHAR(36) NOT NULL UNIQUE,
           carrier_code VARCHAR(32) NOT NULL,
           current_snapshot_id BIGINT NULL,
           tracking_status VARCHAR(80) NULL,
+          business_note TEXT NULL,
           last_tracked_at DATETIME(6) NULL,
           fresh_until DATETIME(6) NULL,
           created_by BIGINT NULL,

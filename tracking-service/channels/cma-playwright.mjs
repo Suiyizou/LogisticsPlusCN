@@ -88,7 +88,10 @@ async function expandCard(page, card, timeoutMs) {
     await pdfLink.waitFor({ state: "attached", timeout: timeoutMs });
   }
 
-  const previousMoves = card.locator('a[aria-label="Display Previous Moves"][tabindex="0"]');
+  let previousMoves = card.locator('a[aria-label="Display Previous Moves"]');
+  if ((await previousMoves.count()) === 0) {
+    previousMoves = card.getByText("Display Previous Moves", { exact: true });
+  }
   if ((await previousMoves.count()) !== 1) return;
   const previousCount = await card.locator('[role="gridcell"]').count();
   await previousMoves.click({ force: true });
@@ -140,20 +143,44 @@ async function extractCard(card) {
       }
     }
 
-    const grid = root.querySelector('[id="gridTrackingDetails"], [data-role="grid"]');
+    const grid = root.querySelector(
+      '[id^="gridTrackingDetails"], [data-role="grid"], [role="treegrid"]'
+    );
     const milestones = grid
       ? Array.from(grid.querySelectorAll('[role="row"]')).flatMap((row) => {
-          const values = Array.from(row.querySelectorAll('[role="gridcell"]'))
-            .map((cell) => clean(cell.innerText))
-            .filter(Boolean);
-          if (values.length < 2 || values.includes("Display Previous Moves")) return [];
-          const dateIndex = values.findIndex((value) => /\d{1,2}-[A-Z]{3}-\d{4}/i.test(value));
+          // The previous-moves section nests a table inside an outer grid row. Only direct
+          // grid cells belong to the current event; descendant queries duplicate all nested rows.
+          if (row.querySelector('[role="row"]')) return [];
+          const cells = Array.from(row.children)
+            .filter((cell) => cell.getAttribute("role") === "gridcell");
+          const values = cells.map((cell) => clean(cell.innerText));
+          const dateIndex = values.findIndex((value) =>
+            /\d{1,2}-[A-Z]{3}-\d{4}/i.test(value)
+          );
           if (dateIndex < 0 || !values[dateIndex + 1]) return [];
+
+          const locationCell = cells[dateIndex + 2] ?? null;
+          const locationLines = String(locationCell?.innerText ?? "")
+            .split(/\r?\n/)
+            .map(clean)
+            .filter(Boolean);
+          const terminalElement = locationCell
+            ? Array.from(locationCell.querySelectorAll("[aria-label], [title]")).find((element) =>
+                /^Terminal name\s*:/i.test(
+                  element.getAttribute("aria-label") ?? element.getAttribute("title") ?? ""
+                )
+              )
+            : null;
+          const terminalLabel = terminalElement
+            ?.getAttribute("aria-label") ?? terminalElement?.getAttribute("title") ?? "";
+          const terminal =
+            clean(terminalLabel.replace(/^Terminal name\s*:\s*/i, "")) ||
+            (locationLines.length > 1 ? clean(locationLines.slice(1).join(" ")) : null);
           return [{
             dateText: values[dateIndex],
             name: values[dateIndex + 1],
-            location: values[dateIndex + 2] ?? null,
-            terminal: null,
+            location: locationLines[0] ?? values[dateIndex + 2] ?? null,
+            terminal,
             vesselVoyage: values[dateIndex + 3] ?? null
           }];
         })
@@ -193,6 +220,9 @@ export async function closeCmaPlaywrightBrowser() {
 
 export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const browserUserAgent = String(
+    options.userAgent ?? process.env.CMA_BROWSER_USER_AGENT ?? ""
+  ).trim();
   const handle = options.browser
     ? { browser: options.browser, mode: "INJECTED" }
     : await getSharedBrowserHandle();
@@ -201,8 +231,8 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
     locale: "en-US",
     timezoneId: "Asia/Shanghai",
     acceptDownloads: false,
-    ...(process.env.CMA_BROWSER_USER_AGENT
-      ? { userAgent: process.env.CMA_BROWSER_USER_AGENT }
+    ...(browserUserAgent
+      ? { userAgent: browserUserAgent }
       : {})
   });
 

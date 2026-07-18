@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { parseCmaSessionCookies } from "../channels/cma-playwright.mjs";
 import {
   buildRoutingLegs,
@@ -116,6 +117,34 @@ test("parses CMA session cookies without truncating values that contain equals s
       }
     ]
   );
+});
+
+test("passes the server-stored CMA cookie and matching user agent into Playwright", async () => {
+  const serverSource = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const cmaSource = await readFile(
+    new URL("../channels/cma-playwright.mjs", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(serverSource, /request\.headers\["x-cma-session-cookie"\]/);
+  assert.match(serverSource, /request\.headers\["x-cma-browser-user-agent"\]/);
+  assert.match(
+    cmaSource,
+    /options\.userAgent \?\? process\.env\.CMA_BROWSER_USER_AGENT[\s\S]*?userAgent: browserUserAgent/
+  );
+});
+
+test("parses CMA tracking events from the server-rendered treegrid instead of the PDF", async () => {
+  const cmaSource = await readFile(
+    new URL("../channels/cma-playwright.mjs", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(cmaSource, /\[role="treegrid"\]/);
+  assert.match(cmaSource, /Array\.from\(row\.children\)/);
+  assert.match(cmaSource, /Terminal name\\s\*:/);
+  assert.match(cmaSource, /extraction: "SERVER_RENDERED_HTML"/);
+  assert.doesNotMatch(cmaSource, /waitForEvent\(["']download["']\)|pdf-parse|pdfjs/i);
 });
 
 test("creates a unified CMA snapshot from server-rendered container cards", () => {

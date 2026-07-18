@@ -1,6 +1,7 @@
 package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.shipment.CmaTrackingSessionService.CmaSessionCredentials;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -27,17 +28,24 @@ public class TrackingAdapterClient {
   }
 
   public JsonNode track(NormalizedTrackRequest request) {
+    return track(request, null);
+  }
+
+  public JsonNode track(NormalizedTrackRequest request, CmaSessionCredentials credentials) {
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("carrier", request.carrier());
     body.put("channel", request.channel());
     body.put("type", request.type());
     body.put("number", request.number());
     try {
-      JsonNode response = restClient.post()
-          .uri("/api/track")
-          .body(body)
-          .retrieve()
-          .body(JsonNode.class);
+      RestClient.RequestBodySpec requestSpec = restClient.post().uri("/api/track");
+      if (credentials != null) {
+        requestSpec.header("X-CMA-Session-Cookie", credentials.sessionCookie());
+        if (credentials.userAgent() != null && !credentials.userAgent().isBlank()) {
+          requestSpec.header("X-CMA-Browser-User-Agent", credentials.userAgent());
+        }
+      }
+      JsonNode response = requestSpec.body(body).retrieve().body(JsonNode.class);
       if (response == null || !response.path("snapshot").isObject()) {
         throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter returned an incomplete response");
       }
@@ -47,6 +55,8 @@ public class TrackingAdapterClient {
         case 400 -> HttpStatus.BAD_REQUEST;
         case 404 -> HttpStatus.NOT_FOUND;
         case 429 -> HttpStatus.TOO_MANY_REQUESTS;
+        case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
+        case 504 -> HttpStatus.GATEWAY_TIMEOUT;
         default -> HttpStatus.BAD_GATEWAY;
       };
       throw new ApiException(status, adapterMessage(error));
