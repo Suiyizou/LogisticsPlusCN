@@ -30,113 +30,52 @@
 
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
-        <div class="sidebar-tabs">
-          <button
-            type="button"
-            :class="{ active: sidebarTab === 'customers' }"
-            @click="sidebarTab = 'customers'"
-          >
-            <el-icon><User /></el-icon>
-            <span>{{ t("customers.tabCustomerManagement") }}</span>
+        <nav class="sidebar-nav">
+          <button :class="{ active: menuItem === 'customers' }" @click="navigateTo('customers')">
+            <el-icon><User /></el-icon><span>{{ t("customers.tabCustomerManagement") }}</span>
           </button>
-          <button
-            type="button"
-            :class="{ active: sidebarTab === 'shipments' }"
-            @click="sidebarTab = 'shipments'"
-          >
-            <el-icon><Document /></el-icon>
-            <span>{{ t("customers.tabShipmentManagement") }}</span>
+          <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
+            <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
-        </div>
-
-        <template v-if="sidebarTab === 'customers'">
-          <div class="sidebar-search">
-            <el-input
-              v-model="customerSearch"
-              :placeholder="t('customers.searchCustomerPlaceholder')"
-              prefix-icon="Search"
-              clearable
-            />
-          </div>
-
-          <div class="sidebar-customer-list">
-            <div v-if="loadingCustomers" class="sidebar-empty-hint">{{ t("customers.loading") }}</div>
-            <div v-else-if="!filteredCustomers.length" class="sidebar-empty-hint">{{ t("customers.emptyCustomers") }}</div>
-            <button
-              v-for="customer in filteredCustomers"
-              v-else
-              :key="customer.id"
-              type="button"
-              class="sidebar-customer-row"
-              :class="{ 'is-active': selectedCustomerId === customer.id, 'is-disabled': customer.status !== 'ACTIVE' }"
-              @click="selectCustomer(customer.id)"
-            >
-              <span class="sidebar-customer-avatar">{{ customerInitial(customer) }}</span>
-              <span class="sidebar-customer-copy">
-                <b>{{ customer.displayName || customer.username }}</b>
-                <small>@{{ customer.username }} · {{ partyRoleLabel(customer.partyRole) }}</small>
-              </span>
-              <span class="sidebar-customer-state">{{ statusLabel(customer.status) }}</span>
-            </button>
-          </div>
-
-          <div class="sidebar-actions">
-            <el-button type="primary" @click="createDialogOpen = true">
-              <el-icon><Plus /></el-icon>
-              {{ t("customers.openCreate") }}
-            </el-button>
-            <el-button @click="openBatchImport">
-              <el-icon><Upload /></el-icon>
-              {{ t("customers.batchImport") }}
-            </el-button>
-          </div>
-        </template>
-
-        <template v-if="sidebarTab === 'shipments'">
-          <div class="sidebar-section-header">
-            <span>{{ t("customers.availableShipments") }}</span>
-            <b>{{ availableShipments.length }}</b>
-          </div>
-          <div class="sidebar-shipment-list">
-            <div v-if="loadingAvailableShipments" class="sidebar-empty-hint">{{ t("customers.loadingAvailableShipments") }}</div>
-            <div v-else-if="!availableShipments.length" class="sidebar-empty-hint">{{ t("customers.emptyAvailableShipments") }}</div>
-            <button
-              v-for="shipment in availableShipments"
-              v-else
-              :key="shipment.shipmentId"
-              type="button"
-              class="sidebar-shipment-row"
-              :class="{ 'is-active': selectedShipmentId === shipment.shipmentId }"
-              @click="selectShipmentForBinding(shipment)"
-            >
-              <span class="sidebar-shipment-copy">
-                <b>{{ shipment.referenceNo || shipment.shipmentId }}</b>
-                <small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small>
-              </span>
-              <span class="sidebar-shipment-status">
-                <i class="sidebar-shipment-dot"></i>
-                {{ shipment.trackingStatus || t("customers.bound") }}
-              </span>
-            </button>
-          </div>
-        </template>
+          <button @click="navigateTo('tracking')">
+            <el-icon><Ship /></el-icon><span>{{ t("customers.trackingWorkspace") }}</span>
+          </button>
+        </nav>
       </aside>
 
       <div class="workspace-main">
-        <Transition name="fade" mode="out-in">
-        <div v-if="sidebarTab === 'customers'" key="customers">
-          <div v-if="!selectedCustomer" class="main-empty-state">
-            <el-empty :description="t('customers.selectCustomerPrompt')">
-              <template #image>
-                <div class="empty-state-icon">
-                  <el-icon :size="48"><UserFilled /></el-icon>
+        <!-- CUSTOMER MANAGEMENT -->
+        <template v-if="menuItem === 'customers'">
+          <!-- List view -->
+          <template v-if="subView === 'list'">
+            <div class="list-page">
+              <div class="list-page-header">
+                <h2>{{ t("customers.directoryTitle") }}</h2>
+                <div class="list-page-actions">
+                  <el-input v-model="customerSearch" :placeholder="t('customers.searchCustomerPlaceholder')" prefix-icon="Search" clearable style="width:240px" />
+                  <el-button type="primary" @click="createDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button>
+                  <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
                 </div>
-              </template>
-            </el-empty>
-            <p class="main-empty-sub">{{ t("customers.selectCustomerHint") }}</p>
-          </div>
-
+              </div>
+              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" @row-click="selectCustomerFromList" style="cursor:pointer">
+                <el-table-column label="" width="48">
+                  <template #default="{ row }"><span class="customer-table-avatar">{{ customerInitial(row) }}</span></template>
+                </el-table-column>
+                <el-table-column :label="t('customers.username')">
+                  <template #default="{ row }"><b>{{ row.displayName || row.username }}</b><br><small>@{{ row.username }}</small></template>
+                </el-table-column>
+                <el-table-column :label="t('customers.partyRole')" width="120">
+                  <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.shipmentStatus')" width="100">
+                  <template #default="{ row }"><el-tag :type="row.status==='ACTIVE'?'success':'danger'" size="small">{{ statusLabel(row.status) }}</el-tag></template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+          <!-- Detail view -->
           <template v-else>
+            <button class="back-button" @click="subView = 'list'; selectedCustomerId = ''">{{ t("customers.backToList") }}</button>
             <el-card class="main-card" shadow="never">
               <template #header>
                 <div class="main-card-header">
@@ -394,21 +333,39 @@
               </el-card>
             </el-card>
           </template>
-        </div>
+        </template>
 
-        <div v-else-if="sidebarTab === 'shipments'" key="shipments">
-          <div v-if="!selectedShipment" class="main-empty-state">
-            <el-empty :description="t('customers.selectShipmentPrompt')">
-              <template #image>
-                <div class="empty-state-icon">
-                  <el-icon :size="48"><Ship /></el-icon>
+        <!-- SHIPMENT MANAGEMENT -->
+        <template v-if="menuItem === 'shipments'">
+          <!-- List view -->
+          <template v-if="subView === 'list'">
+            <div class="list-page">
+              <div class="list-page-header">
+                <h2>{{ t("customers.availableShipments") }}</h2>
+                <div class="list-page-actions">
+                  <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                  <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                 </div>
-              </template>
-            </el-empty>
-            <p class="main-empty-sub">{{ t('customers.selectShipmentHint') }}</p>
-          </div>
-
+              </div>
+              <el-table :data="availableShipments" stripe v-loading="loadingAvailableShipments" @row-click="selectShipmentFromList" style="cursor:pointer">
+                <el-table-column :label="t('customers.referenceNo')" min-width="180">
+                  <template #default="{ row }"><b>{{ row.referenceNo || row.shipmentId }}</b><br><small>{{ row.carrier }} · {{ referenceTypeLabel(row.referenceType) }}</small></template>
+                </el-table-column>
+                <el-table-column :label="t('customers.shipmentStatus')" width="160">
+                  <template #default="{ row }"><span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span></template>
+                </el-table-column>
+                <el-table-column :label="t('customers.boundCustomers')" width="120">
+                  <template #default="{ row }">{{ (shipmentCustomerMap[row.shipmentId] || []).length || '—' }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.lastTrackedAt')" width="140">
+                  <template #default="{ row }">{{ formatDate(row.lastTrackedAt || row.updatedAt) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+          <!-- Detail view -->
           <template v-else>
+            <button class="back-button" @click="subView = 'list'; selectedShipmentId = ''">{{ t("customers.backToList") }}</button>
             <el-card class="main-card" shadow="never">
               <template #header>
                 <div class="section-label">{{ t('customers.shipmentDetail') }}</div>
@@ -483,8 +440,7 @@
               </el-button>
             </div>
           </template>
-        </div>
-      </Transition>
+        </template>
       </div>
     </section>
 
@@ -815,7 +771,8 @@ const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackin
 let shipmentRequestSequence = 0;
 let toastTimer = 0;
 
-const sidebarTab = ref("customers");
+const menuItem = ref("customers");
+const subView = ref("list");
 const customerSearch = ref("");
 const selectedShipmentId = ref("");
 const selectedCustomerIds = ref([]);
@@ -937,6 +894,7 @@ async function batchBindCustomers() {
     showSuccess(t("customers.batchBindingResult", { success: successCount, total }));
     selectedCustomerIds.value = [];
     await loadAvailableShipments();
+    await buildShipmentCustomerMap();
     if (selectedCustomerId.value) await selectCustomer(selectedCustomerId.value);
   } catch (error) {
     showError(error, "customers.bindFailed");
@@ -955,6 +913,7 @@ async function unbindCustomerFromShipment(customerId) {
       shipmentCustomerMap.value[selectedShipmentId.value] = shipmentCustomerMap.value[selectedShipmentId.value].filter((id) => id !== customerId);
     }
     await loadAvailableShipments();
+    await buildShipmentCustomerMap();
     if (selectedCustomerId.value === customerId) {
       shipments.value = shipments.value.filter((s) => s.shipmentId !== selectedShipmentId.value);
     }
@@ -985,11 +944,50 @@ onMounted(() => {
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
   void loadPendingClientMatches();
+  void buildShipmentCustomerMap();
 });
 onUnmounted(() => {
   revealedCode.value = null;
   window.clearTimeout(toastTimer);
 });
+
+function navigateTo(item) {
+  if (item === "tracking") {
+    openTrackingWorkspace();
+    return;
+  }
+  menuItem.value = item;
+  subView.value = "list";
+}
+
+function selectCustomerFromList(row) {
+  selectCustomer(row.id);
+  subView.value = "detail";
+}
+
+function selectShipmentFromList(row) {
+  selectShipmentForBinding(row);
+  subView.value = "detail";
+}
+
+async function buildShipmentCustomerMap() {
+  const map = {};
+  for (const customer of customers.value) {
+    try {
+      const response = await fetchBusinessCustomerShipments(customer.id);
+      const items = Array.isArray(response?.items) ? response.items : [];
+      for (const item of items) {
+        if (!map[item.shipmentId]) map[item.shipmentId] = [];
+        if (!map[item.shipmentId].includes(customer.id)) {
+          map[item.shipmentId].push(customer.id);
+        }
+      }
+    } catch (e) {
+      // skip failed customer loads
+    }
+  }
+  shipmentCustomerMap.value = map;
+}
 
 async function loadCustomers(preferredId = "") {
   loadingCustomers.value = true;
@@ -1789,242 +1787,46 @@ function showError(error, fallbackKey) {
 
 /* ---- Sidebar ---- */
 .workspace-sidebar {
-  width: 260px;
-  flex: 0 0 260px;
+  width: 180px;
+  flex: 0 0 180px;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #f5f7fa 0%, #eceff4 100%);
   border-right: 1px solid #dce1e8;
   overflow: hidden;
+  padding: 12px 0;
 }
-.sidebar-tabs {
+.sidebar-nav {
   display: flex;
-  gap: 0;
-  padding: 10px 8px;
-  border-bottom: 1px solid #dce1e8;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px;
 }
-.sidebar-tabs button {
-  flex: 1;
+.sidebar-nav button {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 38px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
   color: #5a6d80;
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
+  text-align: left;
 }
-.sidebar-tabs button:hover {
-  color: #3a5068;
-  background: rgba(0, 0, 0, 0.04);
-}
-.sidebar-tabs button.active {
+.sidebar-nav button:hover {
   color: #1e40af;
   background: #e0e7ff;
-  border-color: rgba(59, 130, 246, 0.3);
 }
-
-/* Sidebar search */
-.sidebar-search {
-  padding: 10px 10px 6px;
-}
-.sidebar-search :deep(.el-input__wrapper) {
-  background: #fff;
-  border-color: #dce1e8;
-  box-shadow: none;
-}
-.sidebar-search :deep(.el-input__wrapper:hover) {
-  border-color: #c5d0dc;
-}
-.sidebar-search :deep(.el-input__inner) {
-  color: #1a2d42;
-}
-.sidebar-search :deep(.el-input__inner::placeholder) {
-  color: #94a3b8;
-}
-.sidebar-search :deep(.el-input__prefix) {
-  color: #94a3b8;
-}
-
-/* Sidebar customer list */
-.sidebar-customer-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 6px;
-}
-.sidebar-customer-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 10px;
-  border: 0;
-  border-radius: 6px;
-  color: #334155;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.sidebar-customer-row:hover {
-  background: #e8ecf1;
-}
-.sidebar-customer-row.is-active {
-  background: #e0e7ff;
-  border-left: 2px solid #3b82f6;
-  padding-left: 8px;
-}
-.sidebar-customer-row.is-disabled {
-  opacity: 0.5;
-}
-.sidebar-customer-avatar {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.sidebar-nav button.active {
   color: #1e40af;
-  background: #bfdbfe;
-  font-weight: 800;
-  font-size: 12px;
-}
-.sidebar-customer-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.sidebar-customer-copy b {
-  font-size: 12px;
-  color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-customer-copy small {
-  color: #64748b;
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-customer-state {
-  color: #16a34a;
-  font-size: 9px;
-  font-weight: 800;
-}
-.sidebar-customer-row.is-disabled .sidebar-customer-state {
-  color: #c97a86;
-}
-.sidebar-empty-hint {
-  padding: 18px 10px;
-  color: #94a3b8;
-  font-size: 12px;
-  text-align: center;
-}
-
-/* Sidebar shipment list */
-.sidebar-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px 6px;
-  color: #5a6d80;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sidebar-section-header b {
-  display: grid;
-  place-items: center;
-  min-width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  color: #3a5068;
-  background: #e2e8f0;
-  font-size: 11px;
-}
-.sidebar-shipment-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 6px;
-}
-.sidebar-shipment-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 10px;
-  border: 0;
-  border-radius: 6px;
-  color: #334155;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.sidebar-shipment-row:hover {
-  background: #e8ecf1;
-}
-.sidebar-shipment-row.is-active {
   background: #e0e7ff;
-  border-left: 2px solid #3b82f6;
-  padding-left: 8px;
-}
-.sidebar-shipment-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.sidebar-shipment-copy b {
-  font-size: 11px;
-  color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-shipment-copy small {
-  color: #64748b;
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-shipment-status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #64748b;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.sidebar-shipment-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #16a34a;
-  flex-shrink: 0;
-}
-
-/* Sidebar actions */
-.sidebar-actions {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid #dce1e8;
-}
-.sidebar-actions .el-button {
-  flex: 1;
-  font-size: 11px;
+  font-weight: 800;
 }
 
 /* ---- Main Content Area ---- */
@@ -2033,14 +1835,6 @@ function showError(error, fallbackKey) {
   overflow-y: auto;
   padding: 20px 24px;
   background: #f0f3f7;
-}
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 .main-empty-state {
   display: flex;
@@ -2063,6 +1857,62 @@ function showError(error, fallbackKey) {
   margin: 8px 0 0;
   color: #889aaf;
   font-size: 13px;
+}
+
+/* ---- List Page ---- */
+.list-page {
+  max-width: 1100px;
+}
+.list-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.list-page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #0f1d2e;
+  letter-spacing: -0.02em;
+}
+.list-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.customer-table-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #1e40af;
+  background: #bfdbfe;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+/* ---- Back Button ---- */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 6px 12px;
+  border: 1px solid #dce1e8;
+  border-radius: 6px;
+  color: #5a6d80;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.back-button:hover {
+  background: #f0f4f8;
+  color: #1e40af;
 }
 
 /* Main cards */
@@ -2840,8 +2690,8 @@ button:disabled {
 /* Responsive */
 @media (max-width: 900px) {
   .workspace-sidebar {
-    width: 220px;
-    flex: 0 0 220px;
+    width: 160px;
+    flex: 0 0 160px;
   }
   .workspace-main {
     padding: 14px 12px;
@@ -2854,7 +2704,18 @@ button:disabled {
   .workspace-sidebar {
     width: 100%;
     flex: 0 0 auto;
-    max-height: 40vh;
+    max-height: none;
+  }
+  .sidebar-nav {
+    flex-direction: row;
+    padding: 4px 6px;
+  }
+  .sidebar-nav button {
+    flex: 1;
+    justify-content: center;
+    min-height: 36px;
+    padding: 6px 8px;
+    font-size: 10px;
   }
   .main-card-header {
     flex-direction: column;
