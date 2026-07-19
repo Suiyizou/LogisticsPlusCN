@@ -49,6 +49,16 @@ app:
     cache-ttl: ${APP_TRACKING_CACHE_TTL:15m}
     connect-timeout: ${APP_TRACKING_CONNECT_TIMEOUT:5s}
     read-timeout: ${APP_TRACKING_READ_TIMEOUT:90s}
+    auto-refresh:
+      enabled: ${APP_TRACKING_AUTO_REFRESH_ENABLED:true}
+      refresh-interval: ${APP_TRACKING_AUTO_REFRESH_INTERVAL:24h}
+      initial-delay-ms: ${APP_TRACKING_AUTO_REFRESH_INITIAL_DELAY_MS:60000}
+      poll-interval-ms: ${APP_TRACKING_AUTO_REFRESH_POLL_INTERVAL_MS:60000}
+      discovery-batch-size: ${APP_TRACKING_AUTO_REFRESH_DISCOVERY_BATCH_SIZE:500}
+      claim-batch-size: ${APP_TRACKING_AUTO_REFRESH_CLAIM_BATCH_SIZE:1}
+      lease-duration: ${APP_TRACKING_AUTO_REFRESH_LEASE_DURATION:5m}
+      retry-base-delay: ${APP_TRACKING_AUTO_REFRESH_RETRY_BASE_DELAY:15m}
+      retry-max-delay: ${APP_TRACKING_AUTO_REFRESH_RETRY_MAX_DELAY:6h}
   shipment-files:
     root: ${APP_SHIPMENT_FILE_ROOT:./shipment-files}
     max-file-size-bytes: ${APP_SHIPMENT_FILE_MAX_SIZE_BYTES:83886080}

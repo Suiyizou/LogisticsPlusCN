@@ -95,7 +95,7 @@
           {{ t("landing.nav.tracking") }}
           <span>{{ t("landing.status.publicFree") }}</span>
         </a>
-        <a href="#landing-company">{{ t("landing.nav.about") }}</a>
+        <a v-if="showExtendedLandingContent" href="#landing-company">{{ t("landing.nav.about") }}</a>
       </nav>
 
       <div class="landing-header__actions">
@@ -280,6 +280,7 @@
         </div>
       </section>
 
+      <template v-if="showExtendedLandingContent">
       <section id="landing-company" class="landing-company">
         <div class="landing-company__intro">
           <div class="landing-company__identity landing-reveal">
@@ -440,9 +441,10 @@
         </div>
       </section>
 
+      </template>
     </main>
 
-    <footer class="landing-footer">
+    <footer v-if="showExtendedLandingContent" class="landing-footer">
       <div class="landing-footer__main">
         <div class="landing-footer__brand">
           <span class="landing-brand__mark" aria-hidden="true"><img src="/favicon.svg" alt="" /></span>
@@ -518,6 +520,8 @@ const props = defineProps<{
 
 const INTRO_STORAGE_KEY = "dreweslogistics-public-landing-intro-v1";
 const trackingEntryPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
+// Company profile, services and roadmap stay staged until the public content is finalized.
+const showExtendedLandingContent = false;
 
 function introWasSeen() {
   try {

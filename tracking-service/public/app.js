@@ -3,6 +3,10 @@ const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
 const carrierNavItems = Array.from(document.querySelectorAll("[data-carrier-select]"));
 const channelSelect = document.querySelector("#channel-select");
+document.body.classList.toggle(
+  "is-embedded",
+  new URLSearchParams(window.location.search).get("embed") === "1"
+);
 const trackingType = document.querySelector("#tracking-type");
 const trackingNumber = document.querySelector("#tracking-number");
 const carrierNotice = document.querySelector("#carrier-notice");
@@ -249,6 +253,17 @@ const MESSAGES = {
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
     "nav.tracking": "Shipment tracking",
+    "nav.profile": "Personal information",
+    "profile.kicker": "CUSTOMER PROFILE",
+    "profile.title": "Personal information",
+    "profile.description": "Review the identity and shipment access assigned by your service representative.",
+    "profile.account": "CUSTOMER ACCOUNT",
+    "profile.active": "Active",
+    "profile.username": "Login account",
+    "profile.code": "Customer code",
+    "profile.verified": "Verified",
+    "profile.role": "Freight identity",
+    "profile.help": "To change account information or reset credentials, contact your service representative.",
     "nav.carriers": "Carrier adapters",
     "carrier.connected": "Connected · 2 channels",
     "carrier.planned": "Adapter reserved",
@@ -469,6 +484,7 @@ const MESSAGES = {
     "type.container": "Container number",
     "error.title": "Tracking request failed",
     "error.generic": "Tracking failed. Please try again.",
+    "error.customerFriendly": "Tracking failed. Please try again later or contact customer service.",
     "error.http": "Tracking failed (HTTP {status})",
     "error.localFallback": "{message} Showing the latest browser snapshot instead.",
     "notice.cacheTitle": "Live refresh unavailable",
@@ -633,6 +649,17 @@ const MESSAGES = {
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
     "nav.tracking": "货物跟踪",
+    "nav.profile": "个人信息",
+    "profile.kicker": "客户资料",
+    "profile.title": "个人信息",
+    "profile.description": "查看业务员为您分配的客户身份与货物访问范围。",
+    "profile.account": "客户账号",
+    "profile.active": "正常",
+    "profile.username": "登录账号",
+    "profile.code": "客户 CODE",
+    "profile.verified": "已验证",
+    "profile.role": "货运身份",
+    "profile.help": "如需修改账号信息或重置登录凭证，请联系您的业务员。",
     "nav.carriers": "船司适配器",
     "carrier.connected": "已接入 · 双通道",
     "carrier.planned": "已预留适配器",
@@ -853,6 +880,7 @@ const MESSAGES = {
     "type.container": "箱号",
     "error.title": "查询失败",
     "error.generic": "查询失败，请稍后重试。",
+    "error.customerFriendly": "查询失败，请稍后重试或联系客服。",
     "error.http": "查询失败（HTTP {status}）",
     "error.localFallback": "{message} 当前展示最近一次浏览器缓存结果。",
     "notice.cacheTitle": "实时刷新暂不可用",
@@ -1254,6 +1282,10 @@ function trackingResponseMessage(payload, response) {
   );
 }
 
+function customerFacingTrackingError() {
+  return t("error.customerFriendly");
+}
+
 function isPublicTrackingRouteUnavailable(result) {
   const { response, payload } = result ?? {};
   if (response?.status === 405) return true;
@@ -1468,6 +1500,9 @@ function renderTrackingAccount(session = readFileSession()) {
   portalReturnLabel.textContent = t(destinationKey);
 
   const authenticated = Boolean(session.token);
+  const isCustomer = session.kind === "CUSTOMER";
+  document.body.classList.toggle("is-customer-session", isCustomer);
+  document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
   trackingAccount.hidden = !authenticated;
   if (!authenticated) {
     trackingAccountName.textContent = "";
@@ -1480,6 +1515,17 @@ function renderTrackingAccount(session = readFileSession()) {
   trackingAccountName.textContent = name;
   trackingAccountRole.textContent = fileSessionRoleLabel(session);
   trackingAccountMark.textContent = Array.from(name.trim())[0]?.toUpperCase() || "U";
+
+  if (isCustomer) {
+    const principal = session.principal ?? {};
+    const username = principal.username ?? principal.loginName ?? "—";
+    const code = principal.customerCodePrefix ?? principal.codePrefix ?? principal.customerCode ?? t("profile.verified");
+    document.querySelector("#customer-profile-name").textContent = name;
+    document.querySelector("#customer-profile-username").textContent = username;
+    document.querySelector("#customer-profile-code").textContent = code;
+    document.querySelector("#customer-profile-role").textContent = fileSessionRoleLabel(session);
+    document.querySelector("#customer-profile-avatar").textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
+  }
 }
 
 function customerLogisticsRoleLabel(session = readFileSession()) {
@@ -3285,7 +3331,7 @@ function renderBatchState() {
     const statusCopy = document.createElement("b");
     statusCopy.textContent = t(batchStatusKey(item));
     status.append(statusDot, statusCopy);
-    if (item.error) status.title = item.error;
+    if (item.error) status.title = customerFacingTrackingError();
     row.append(identity, status);
     row.addEventListener("click", () => openBatchItem(item));
     fragment.append(row);
@@ -3520,7 +3566,7 @@ async function runBatchQueue() {
         }
         item.status = "failed";
         item.source = null;
-        item.error = error?.message || t("error.generic");
+        item.error = customerFacingTrackingError();
         if (error?.message === "Platform session expired") throw error;
       }
 
@@ -3825,7 +3871,11 @@ function renderReferences(references) {
 
   const list = elements["reference-information"];
   list.replaceChildren();
-  const visible = (references.information ?? []).filter((item) => item.name && item.value);
+  const customerSession = readFileSession().kind === "CUSTOMER";
+  const internalReferencePattern = /(?:b\/?l\s*type|bill\s*of\s*lading\s*type|surrender(?:ed)?\s*status)/i;
+  const visible = (references.information ?? []).filter((item) =>
+    item.name && item.value && (!customerSession || !internalReferencePattern.test(String(item.name)))
+  );
 
   for (const information of visible) {
     const row = document.createElement("div");
@@ -3909,8 +3959,12 @@ function renderTrackingEvents(snapshot) {
   arrival.actual ??= arrivalLeg.actualArrival ?? snapshot.keyTimes?.actualArrival?.time ?? null;
 
   const body = elements["tracking-events-table-body"];
+  const visibleRows = readFileSession().kind === "CUSTOMER"
+    ? rows.filter((event) => event.estimated || event.actual)
+    : rows;
+  body.closest(".tracking-events-panel").hidden = visibleRows.length === 0;
   body.replaceChildren();
-  for (const event of rows) {
+  for (const event of visibleRows) {
     const row = document.createElement("tr");
     appendCell(row, t(event.labelKey), "tracking-movement-cell");
     appendCell(row, formatDateTime(event.estimated), event.estimated ? "" : "pending-time");
@@ -3999,7 +4053,9 @@ function renderContainers(containers) {
     detailsButton.className = "container-details-button";
     detailsButton.textContent = t("containers.openDetails");
     detailsButton.setAttribute("aria-expanded", "false");
-    actionCell.append(detailsButton);
+    const showMilestoneDetails = readFileSession().kind !== "CUSTOMER" || (container.milestones ?? []).length > 0;
+    if (showMilestoneDetails) actionCell.append(detailsButton);
+    else actionCell.textContent = "—";
     row.append(actionCell);
 
     const detailRow = document.createElement("tr");
@@ -4017,7 +4073,8 @@ function renderContainers(containers) {
       );
       detailRow.hidden = expanded;
     });
-    body.append(row, detailRow);
+    if (showMilestoneDetails) body.append(row, detailRow);
+    else body.append(row);
   }
 }
 
@@ -4836,7 +4893,8 @@ function updateUrl(query, { push = false } = {}) {
 }
 
 function showView(name, { updateLocation = true } = {}) {
-  const nextView = name === "tracking" ? "tracking" : "overview";
+  const nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
+  if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") return showView("overview", { updateLocation });
   const incoming = document.querySelector(`[data-view="${nextView}"]`);
   const outgoing = document.querySelector(".app-view:not([hidden])");
   const transitionId = ++viewTransitionSequence;
@@ -5137,9 +5195,7 @@ checkChannelsButton.addEventListener("click", async () => {
   } catch (error) {
     renderProbe("NETWORK", { status: "unknown" });
     renderProbe("PLAYWRIGHT", { status: "unknown" });
-    channelCheckSummary.textContent = t("workbench.checkFailed", {
-      message: error?.message || t("error.generic")
-    });
+    channelCheckSummary.textContent = customerFacingTrackingError();
   } finally {
     setChannelCheckLoading(false);
     endSystemWait(waitToken, { complete: completed });
@@ -5206,11 +5262,12 @@ form.addEventListener("submit", async (event) => {
     completed = true;
   } catch (error) {
     if (requestSequence !== trackingRequestSequence) return;
-    const message = error?.message || t("error.generic");
+    const technicalMessage = error?.message || t("error.generic");
+    const message = customerFacingTrackingError();
     markBatchItemResult(query, {
       status: localPayload ? "success" : "failed",
       source: localPayload ? "device-cache" : null,
-      error: localPayload ? null : message
+      error: localPayload ? null : technicalMessage
     });
     showError(
       localPayload ? t("error.localFallback", { message }) : message,
@@ -5570,7 +5627,10 @@ window.addEventListener("keydown", (event) => {
 });
 
 function syncViewFromLocation() {
-  const nextView = window.location.hash === "#tracking" ? "tracking" : "overview";
+  const requestedView = window.location.hash.replace(/^#/, "");
+  const nextView = ["overview", "tracking", "profile"].includes(requestedView)
+    ? requestedView
+    : "overview";
   if (nextView === activeView) return;
   showView(nextView, { updateLocation: false });
 }
@@ -5611,7 +5671,9 @@ if (initialNumber) {
   showView("tracking", { updateLocation: false });
   form.requestSubmit();
 } else {
-  showView(window.location.hash === "#tracking" ? "tracking" : "overview", {
+  showView(["overview", "tracking", "profile"].includes(window.location.hash.slice(1))
+    ? window.location.hash.slice(1)
+    : "overview", {
     updateLocation: false
   });
 }

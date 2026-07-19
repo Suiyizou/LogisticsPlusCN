@@ -34,7 +34,7 @@ export function isCustomerSessionExpired() {
   return Boolean(expiresAt && Date.now() >= new Date(expiresAt).getTime());
 }
 
-export async function loginCustomer(customerCode) {
+export async function loginCustomer(credentials) {
   const configuredBase = import.meta.env.VITE_API_BASE_URL;
   let lastError;
   for (const base of apiBaseCandidates(configuredBase)) {
@@ -42,7 +42,15 @@ export async function loginCustomer(customerCode) {
       const response = await fetch(`${base}/public/customers/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerCode })
+        body: JSON.stringify(
+          typeof credentials === "string"
+            ? { customerCode: credentials }
+            : {
+                username: String(credentials?.username || "").trim(),
+                password: String(credentials?.password || ""),
+                customerCode: String(credentials?.customerCode || "").trim()
+              }
+        )
       });
       const data = await readJson(response);
       if (!response.ok) {

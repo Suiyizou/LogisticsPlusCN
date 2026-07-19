@@ -48,9 +48,13 @@
             <span class="nav-icon">⌁</span>
             <span data-i18n="nav.tracking">Shipment tracking</span>
           </a>
+          <a class="nav-item customer-profile-nav" href="#profile" data-view-target="profile">
+            <span class="nav-icon" aria-hidden="true">◎</span>
+            <span data-i18n="nav.profile">Personal information</span>
+          </a>
 
-          <p class="nav-title" data-i18n="nav.carriers">Carrier adapters</p>
-          <div class="carrier-nav-item is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO">
+          <p class="nav-title internal-carrier-navigation" data-i18n="nav.carriers">Carrier adapters</p>
+          <div class="carrier-nav-item internal-carrier-navigation is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO">
             <span class="carrier-monogram cosco">CO</span>
             <span>
               COSCO
@@ -58,7 +62,7 @@
             </span>
             <i></i>
           </div>
-          <div class="carrier-nav-item is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA">
+          <div class="carrier-nav-item internal-carrier-navigation is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA">
             <span class="carrier-monogram cma">CM</span>
             <span>
               CMA CGM
@@ -316,6 +320,32 @@
               <div class="shipment-list-wrap" id="history-table-wrap" hidden>
                 <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
               </div>
+            </section>
+          </section>
+
+          <section class="app-view customer-profile-view" id="profile-view" data-view="profile" hidden>
+            <section class="customer-profile-hero">
+              <div>
+                <p class="kicker" data-i18n="profile.kicker">CUSTOMER PROFILE</p>
+                <h1 data-i18n="profile.title">Personal information</h1>
+                <p data-i18n="profile.description">Review the identity and shipment access assigned by your service representative.</p>
+              </div>
+              <span class="customer-profile-avatar" id="customer-profile-avatar" aria-hidden="true">C</span>
+            </section>
+            <section class="customer-profile-card">
+              <header>
+                <div>
+                  <small data-i18n="profile.account">CUSTOMER ACCOUNT</small>
+                  <h2 id="customer-profile-name">—</h2>
+                </div>
+                <span data-i18n="profile.active">Active</span>
+              </header>
+              <dl>
+                <div><dt data-i18n="profile.username">Login account</dt><dd id="customer-profile-username">—</dd></div>
+                <div><dt data-i18n="profile.code">Customer code</dt><dd id="customer-profile-code">—</dd></div>
+                <div><dt data-i18n="profile.role">Freight identity</dt><dd id="customer-profile-role">—</dd></div>
+              </dl>
+              <p data-i18n="profile.help">To change account information or reset credentials, contact your service representative.</p>
             </section>
           </section>
 

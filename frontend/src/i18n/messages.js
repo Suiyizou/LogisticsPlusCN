@@ -1447,3 +1447,75 @@ messages["en-US"].homeOptions = {
   packing: "Packing Calculation",
   smartImport: "Smart Import"
 };
+
+Object.assign(messages["zh-CN"].login, {
+  customerRoute: "客户登录",
+  customerRouteHint: "账号 + 密码 + 客户 CODE",
+  customerTitle: "登录客户货运工作台",
+  customerDescription: "使用业务员分配的登录账号、密码和客户 CODE，查看仅属于您的货物与文件。",
+  customerUsernameLabel: "客户账号",
+  customerUsernamePlaceholder: "请输入业务员分配的客户账号",
+  customerCodeLabel: "客户 CODE",
+  customerCodePlaceholder: "请输入业务员分配的客户 CODE",
+  customerSignIn: "登录客户工作台",
+  customerSigningIn: "正在验证客户身份...",
+  customerSuccess: "验证成功，正在进入客户工作台。",
+  customerErrorFallback: "登录失败，请检查账号、密码和客户 CODE。"
+});
+
+Object.assign(messages["en-US"].login, {
+  customerRoute: "Customer sign-in",
+  customerRouteHint: "Account + password + customer code",
+  customerTitle: "Sign in to your shipment workspace",
+  customerDescription: "Use the account, password, and customer code issued by your operator to see only your shipments and files.",
+  customerUsernameLabel: "Customer account",
+  customerUsernamePlaceholder: "Enter the customer account issued by your operator",
+  customerCodeLabel: "Customer code",
+  customerCodePlaceholder: "Enter the customer code issued by your operator",
+  customerSignIn: "Sign in to customer workspace",
+  customerSigningIn: "Verifying customer credentials...",
+  customerSuccess: "Access verified. Opening your customer workspace.",
+  customerErrorFallback: "Sign-in failed. Check the account, password, and customer code."
+});
+
+Object.assign(messages["zh-CN"].customers, {
+  initialPassword: "初始密码",
+  customerPasswordPlaceholder: "8–128 位密码",
+  resetPassword: "重置登录密码",
+  resetPasswordDescription: "为“{name}”设置新密码；保存后旧会话会立即失效。",
+  newPassword: "新密码",
+  confirmPassword: "确认新密码",
+  confirmResetPassword: "确认重置",
+  passwordMismatch: "两次输入的密码不一致。",
+  passwordResetSuccess: "客户登录密码已重置，旧会话已失效。",
+  passwordResetFailed: "密码重置失败，请检查密码长度后重试。",
+  workspaceCustomers: "客户与票单",
+  workspaceCustomersHint: "维护客户资料、身份与票单授权",
+  workspaceTracking: "Tracking 工作台",
+  workspaceTrackingHint: "批量导入、手工查询并查看货物详情",
+  trackingEmbeddedDescription: "查询、导入与票单详情已合并到当前客户管理工作台，无需切换模块。",
+  refreshTrackingWorkspace: "刷新 Tracking",
+  openLiveTracking: "查询最新动态",
+  friendlyError: "操作失败，请稍后重试或联系客服。"
+});
+
+Object.assign(messages["en-US"].customers, {
+  initialPassword: "Initial password",
+  customerPasswordPlaceholder: "8–128 characters",
+  resetPassword: "Reset sign-in password",
+  resetPasswordDescription: "Set a new password for “{name}”. Existing sessions will be revoked after saving.",
+  newPassword: "New password",
+  confirmPassword: "Confirm new password",
+  confirmResetPassword: "Reset password",
+  passwordMismatch: "The two passwords do not match.",
+  passwordResetSuccess: "The customer password was reset and existing sessions were revoked.",
+  passwordResetFailed: "Could not reset the password. Check its length and try again.",
+  workspaceCustomers: "Customers & shipments",
+  workspaceCustomersHint: "Manage customer profiles, roles, and shipment access",
+  workspaceTracking: "Tracking workspace",
+  workspaceTrackingHint: "Import, search, and inspect shipment movements",
+  trackingEmbeddedDescription: "Queries, imports, and shipment details now live inside this customer operations workspace.",
+  refreshTrackingWorkspace: "Refresh tracking",
+  openLiveTracking: "Track latest movement",
+  friendlyError: "The operation failed. Try again later or contact customer service."
+});

@@ -101,7 +101,7 @@ class ShipmentTrackingServiceTest {
         .toList();
 
     assertThat(autowiredConstructors).singleElement()
-        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(7));
+        .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(8));
   }
 
   @Test

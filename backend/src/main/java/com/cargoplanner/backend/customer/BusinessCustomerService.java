@@ -1,6 +1,8 @@
 package com.cargoplanner.backend.customer;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.auth.PasswordHasher;
+import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
@@ -33,10 +35,16 @@ public class BusinessCustomerService {
 
   private final JdbcTemplate jdbcTemplate;
   private final CustomerTokenCodec tokenCodec;
+  private final PasswordHasher passwordHasher;
 
-  public BusinessCustomerService(JdbcTemplate jdbcTemplate, CustomerTokenCodec tokenCodec) {
+  public BusinessCustomerService(
+      JdbcTemplate jdbcTemplate,
+      CustomerTokenCodec tokenCodec,
+      PasswordHasher passwordHasher
+  ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
+    this.passwordHasher = passwordHasher;
   }
 
   public Map<String, Object> list(AuthenticatedUser actor) {
@@ -63,8 +71,10 @@ public class BusinessCustomerService {
   ) {
     requireManager(actor);
     String username = normalizeUsername(request == null ? null : request.username());
+    String password = normalizePassword(request == null ? null : request.password());
     String displayName = normalizeDisplayName(request == null ? null : request.displayName());
     String partyRole = normalizePartyRole(request == null ? null : request.partyRole(), null);
+    PasswordHash passwordHash = passwordHasher.hash(password);
     GeneratedCustomerCode code = tokenCodec.newCustomerCode();
     String publicId = UUID.randomUUID().toString();
     KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -73,9 +83,10 @@ public class BusinessCustomerService {
         PreparedStatement statement = connection.prepareStatement(
             """
             INSERT INTO cp_customers (
-              public_id, username, display_name, party_role, customer_code_hash,
-              customer_code_prefix, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+              public_id, username, display_name, party_role,
+              password_salt, password_hash, password_iterations,
+              customer_code_hash, customer_code_prefix, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -83,9 +94,12 @@ public class BusinessCustomerService {
         statement.setString(2, username);
         statement.setString(3, displayName);
         statement.setString(4, partyRole);
-        statement.setString(5, code.hash());
-        statement.setString(6, code.prefix());
-        statement.setLong(7, actor.id());
+        statement.setString(5, passwordHash.salt());
+        statement.setString(6, passwordHash.hash());
+        statement.setInt(7, passwordHash.iterations());
+        statement.setString(8, code.hash());
+        statement.setString(9, code.prefix());
+        statement.setLong(10, actor.id());
         return statement;
       }, keyHolder);
     } catch (DuplicateKeyException error) {
@@ -177,6 +191,32 @@ public class BusinessCustomerService {
     );
     response.put("customerCode", code.plainText());
     return response;
+  }
+
+  @Transactional
+  public Map<String, Object> resetPassword(
+      String customerPublicId,
+      UpdateCustomerPasswordRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord customer = requireManaged(customerPublicId, actor);
+    String password = normalizePassword(request == null ? null : request.password());
+    PasswordHash passwordHash = passwordHasher.hash(password);
+    jdbcTemplate.update(
+        """
+        UPDATE cp_customers
+        SET password_salt = ?, password_hash = ?, password_iterations = ?
+        WHERE id = ?
+        """,
+        passwordHash.salt(),
+        passwordHash.hash(),
+        passwordHash.iterations(),
+        customer.id()
+    );
+    revokeSessions(customer.id());
+    audit(actor, "RESET_CUSTOMER_PASSWORD", customer.id(), "Reset customer password", ipAddress);
+    return Map.of("passwordReset", true, "id", customer.publicId());
   }
 
   public Map<String, Object> listShipments(String customerPublicId, AuthenticatedUser actor) {
@@ -547,7 +587,7 @@ public class BusinessCustomerService {
   private String shipmentBindingSelect() {
     return """
         SELECT s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note,
+               s.business_note, s.last_tracked_at, s.fresh_until, s.updated_at,
                a.relationship_role,
                a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
                r.reference_type, r.reference_no_raw
@@ -634,6 +674,9 @@ public class BusinessCustomerService {
     value.put("referenceNo", rs.getString("reference_no_raw"));
     value.put("trackingStatus", rs.getString("tracking_status"));
     value.put("note", rs.getString("business_note"));
+    value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
+    value.put("freshUntil", instantString(rs, "fresh_until"));
+    value.put("updatedAt", instantString(rs, "updated_at"));
     value.put("relationshipRole", rs.getString("relationship_role"));
     value.put("assignedAt", instantString(rs, "assigned_at"));
     value.put("assignedBy", nullableLong(rs, "assigned_by"));
@@ -796,6 +839,16 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Customer username must contain 3-64 letters, numbers, dots, underscores, or hyphens");
     }
     return normalized;
+  }
+
+  private String normalizePassword(String value) {
+    if (value == null || value.length() < 8 || value.length() > 128) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Customer password must contain 8-128 characters"
+      );
+    }
+    return value;
   }
 
   private String normalizeDisplayName(String value) {

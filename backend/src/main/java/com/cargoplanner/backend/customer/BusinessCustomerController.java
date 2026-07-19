@@ -126,6 +126,16 @@ public class BusinessCustomerController {
     return service.resetCode(customerId, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/{customerId}/reset-password")
+  public Map<String, Object> resetPassword(
+      @PathVariable String customerId,
+      @RequestBody UpdateCustomerPasswordRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.resetPassword(customerId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @GetMapping("/{customerId}/shipments")
   public Map<String, Object> shipments(
       @PathVariable String customerId,

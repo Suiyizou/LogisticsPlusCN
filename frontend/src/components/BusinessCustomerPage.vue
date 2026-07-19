@@ -40,11 +40,32 @@
         </div>
       </header>
 
+      <nav class="customer-workspace-tabs" aria-label="Customer operations workspace">
+        <button
+          type="button"
+          :class="{ 'is-active': activeWorkspaceTab === 'customers' }"
+          @click="activeWorkspaceTab = 'customers'"
+        >
+          <span>01</span>
+          <b>{{ t("customers.workspaceCustomers") }}</b>
+          <small>{{ t("customers.workspaceCustomersHint") }}</small>
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activeWorkspaceTab === 'tracking' }"
+          @click="activeWorkspaceTab = 'tracking'"
+        >
+          <span>02</span>
+          <b>{{ t("customers.workspaceTracking") }}</b>
+          <small>{{ t("customers.workspaceTrackingHint") }}</small>
+        </button>
+      </nav>
+
       <p v-if="pageMessage" class="customer-access-message" :class="{ 'is-error': messageIsError }" role="status">
         {{ pageMessage }}
       </p>
 
-      <div class="customer-access-layout">
+      <div v-show="activeWorkspaceTab === 'customers'" class="customer-access-layout">
         <aside class="customer-access-sidebar">
           <section class="customer-create-card customer-create-launcher">
             <header>
@@ -106,6 +127,9 @@
               <div class="customer-detail-actions">
                 <button type="button" @click="resetCode" :disabled="mutatingCustomer">
                   {{ t("customers.resetCode") }}
+                </button>
+                <button type="button" @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
+                  {{ t("customers.resetPassword") }}
                 </button>
                 <button
                   v-if="selectedCustomer.status === 'ACTIVE'"
@@ -273,6 +297,23 @@
           </template>
         </section>
       </div>
+
+      <section v-show="activeWorkspaceTab === 'tracking'" class="customer-tracking-workspace">
+        <header>
+          <div>
+            <span>LIVE SHIPMENT DESK</span>
+            <h2>{{ t("customers.workspaceTracking") }}</h2>
+            <p>{{ t("customers.trackingEmbeddedDescription") }}</p>
+          </div>
+          <button type="button" @click="reloadTrackingWorkspace">{{ t("customers.refreshTrackingWorkspace") }}</button>
+        </header>
+        <iframe
+          :key="trackingFrameKey"
+          title="Shipment tracking workspace"
+          :src="trackingFrameUrl"
+          loading="lazy"
+        ></iframe>
+      </section>
     </section>
 
     <div v-if="revealedCode" class="customer-code-overlay" role="presentation" @click.self="closeCodeReveal">
@@ -300,6 +341,10 @@
           <label><span>{{ t("customers.username") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.usernamePlaceholder')" required /></label>
           <label><span>{{ t("customers.displayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.displayNamePlaceholder')" required /></label>
           <label>
+            <span>{{ t("customers.initialPassword") }}</span>
+            <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+          </label>
+          <label>
             <span>{{ t("customers.partyRole") }}</span>
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
@@ -310,6 +355,28 @@
           <div class="customer-dialog-actions">
             <button type="button" @click="createDialogOpen = false">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="creating">{{ creating ? t("customers.creating") : t("customers.create") }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div v-if="resetPasswordDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeResetPasswordDialog">
+      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.resetPassword')">
+        <span class="customer-code-kicker">SECURE CREDENTIAL RESET</span>
+        <h2>{{ t("customers.resetPassword") }}</h2>
+        <p>{{ t("customers.resetPasswordDescription", { name: selectedCustomer?.displayName || selectedCustomer?.username || '' }) }}</p>
+        <form class="customer-dialog-form" @submit.prevent="resetPassword">
+          <label>
+            <span>{{ t("customers.newPassword") }}</span>
+            <input v-model="passwordResetForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+          </label>
+          <label>
+            <span>{{ t("customers.confirmPassword") }}</span>
+            <input v-model="passwordResetForm.confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+          </label>
+          <div class="customer-dialog-actions">
+            <button type="button" @click="closeResetPasswordDialog">{{ t("customers.cancel") }}</button>
+            <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">{{ t("customers.confirmResetPassword") }}</button>
           </div>
         </form>
       </section>
@@ -374,6 +441,7 @@
         </label>
         <div class="customer-dialog-actions">
           <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
+          <button type="button" @click="trackShipmentInWorkspace(detailShipment)">{{ t("customers.openLiveTracking") }}</button>
           <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
           <button type="button" @click="saveShipmentDetail" :disabled="savingShipment">{{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}</button>
           <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
@@ -400,6 +468,7 @@ import {
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   resetBusinessCustomerCode,
+  resetBusinessCustomerPassword,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
   updateBusinessShipment
@@ -412,6 +481,9 @@ const emit = defineEmits(["logout"]);
 const { t } = useI18n();
 
 const customers = ref([]);
+const activeWorkspaceTab = ref("customers");
+const trackingFrameKey = ref(0);
+const trackingFrameUrl = ref("/tracking/?embed=1#overview");
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
@@ -419,6 +491,7 @@ const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
+const resetPasswordDialogOpen = ref(false);
 const shipmentCreateDialogOpen = ref(false);
 const detailShipment = ref(null);
 const savingShipment = ref(false);
@@ -435,7 +508,8 @@ const messageIsError = ref(false);
 const revealedCode = ref(null);
 const codeCopied = ref(false);
 const bindMode = ref("reference");
-const createForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
+const createForm = reactive({ username: "", displayName: "", password: "", partyRole: "SHIPPER" });
+const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
 const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "" });
@@ -532,6 +606,7 @@ async function createCustomer() {
     revealCode(response, customer);
     createForm.username = "";
     createForm.displayName = "";
+    createForm.password = "";
     createForm.partyRole = "SHIPPER";
     createDialogOpen.value = false;
     await loadCustomers(customer.id);
@@ -569,6 +644,32 @@ async function resetCode() {
     revealCode(response, customer);
   } catch (error) {
     showError(error, "customers.resetFailed");
+  } finally {
+    mutatingCustomer.value = false;
+  }
+}
+
+function closeResetPasswordDialog() {
+  resetPasswordDialogOpen.value = false;
+  passwordResetForm.password = "";
+  passwordResetForm.confirmPassword = "";
+}
+
+async function resetPassword() {
+  if (!selectedCustomer.value || mutatingCustomer.value) return;
+  if (passwordResetForm.password !== passwordResetForm.confirmPassword) {
+    pageMessage.value = t("customers.passwordMismatch");
+    messageIsError.value = true;
+    return;
+  }
+  mutatingCustomer.value = true;
+  clearMessage();
+  try {
+    await resetBusinessCustomerPassword(selectedCustomer.value.id, passwordResetForm.password);
+    closeResetPasswordDialog();
+    showSuccess("customers.passwordResetSuccess");
+  } catch (error) {
+    showError(error, "customers.passwordResetFailed");
   } finally {
     mutatingCustomer.value = false;
   }
@@ -731,6 +832,24 @@ async function removeShipment() {
   }
 }
 
+function reloadTrackingWorkspace() {
+  trackingFrameKey.value += 1;
+}
+
+function trackShipmentInWorkspace(shipment) {
+  const referenceNo = String(shipment?.referenceNo || "").trim();
+  const parameters = new URLSearchParams({
+    embed: "1",
+    carrier: shipment?.carrier || "COSCO",
+    type: shipment?.referenceType || "BOOKING",
+    number: referenceNo
+  });
+  trackingFrameUrl.value = `/tracking/?${parameters.toString()}#tracking`;
+  trackingFrameKey.value += 1;
+  activeWorkspaceTab.value = "tracking";
+  closeShipmentDetail();
+}
+
 function replaceShipmentInLocalCollections(shipment) {
   for (const collection of [shipments.value, availableShipments.value]) {
     const index = collection.findIndex((candidate) => candidate.shipmentId === shipment.shipmentId);
@@ -826,6 +945,8 @@ function showError(error, fallbackKey) {
     pageMessage.value = t("customers.trackedShipmentNotFound");
   } else if (/explicit operator access|permission|forbidden/i.test(message)) {
     pageMessage.value = t("customers.shipmentAccessRequired");
+  } else if (/\b(?:HTTP|403|Playwright|browser|channel|timeout|ECONN|network interface)\b/i.test(message)) {
+    pageMessage.value = t("customers.friendlyError");
   } else {
     pageMessage.value = message || t(fallbackKey);
   }
@@ -1474,6 +1595,115 @@ button:disabled { cursor: wait; opacity: .58; }
   font-weight: 750;
 }
 
+/* Unified customer operations workspace · restrained deep-ocean theme */
+.customer-access-page {
+  --customer-navy: #0b1f35;
+  --customer-navy-soft: #163552;
+  --customer-blue: #1f69a8;
+  --customer-line: #d9e3ec;
+  --customer-surface: #ffffff;
+  background:
+    radial-gradient(circle at 76% -12%, rgba(69, 126, 174, .12), transparent 34rem),
+    linear-gradient(180deg, #f8fafc 0%, #edf3f7 100%);
+}
+.customer-access-header {
+  border-bottom-color: rgba(165, 185, 201, .38);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 10px 30px rgba(11, 31, 53, .05);
+  backdrop-filter: blur(18px);
+}
+.customer-access-hero h1,
+.customer-detail-head h2,
+.customer-tracking-workspace h2 { color: var(--customer-navy); letter-spacing: -.035em; }
+.customer-workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+  padding: 7px;
+  border: 1px solid rgba(179, 197, 212, .58);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 16px 36px rgba(11, 31, 53, .06);
+  backdrop-filter: blur(14px);
+}
+.customer-workspace-tabs button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  align-items: center;
+  min-height: 72px;
+  padding: 13px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #49657c;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.customer-workspace-tabs button > span {
+  grid-row: 1 / span 2;
+  color: #7891a5;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .14em;
+}
+.customer-workspace-tabs button b { color: var(--customer-navy); font-size: 15px; }
+.customer-workspace-tabs button small { color: #71889b; font-size: 11px; }
+.customer-workspace-tabs button.is-active {
+  border-color: rgba(45, 99, 143, .32);
+  background: linear-gradient(145deg, #fafdff, #edf5fa);
+  box-shadow: 0 10px 25px rgba(17, 60, 96, .1);
+  transform: translateY(-1px);
+}
+.customer-workspace-tabs button.is-active > span { color: var(--customer-blue); }
+.customer-create-card,
+.customer-list-card,
+.customer-detail-card,
+.customer-tracking-workspace {
+  border-color: var(--customer-line);
+  box-shadow: 0 24px 60px rgba(11, 31, 53, .075);
+}
+.customer-access-primary,
+.customer-candidate-section button.is-primary {
+  border-color: var(--customer-navy-soft) !important;
+  background: linear-gradient(135deg, var(--customer-navy-soft), #245b87) !important;
+  box-shadow: 0 8px 18px rgba(15, 53, 84, .16);
+}
+.customer-list-row.is-active {
+  border-color: rgba(36, 91, 135, .34);
+  background: linear-gradient(135deg, #f6fafc, #eaf3f8);
+}
+.customer-list-avatar { background: linear-gradient(145deg, var(--customer-navy-soft), #3579ad); }
+.customer-tracking-workspace {
+  overflow: hidden;
+  border: 1px solid var(--customer-line);
+  border-radius: 18px;
+  background: var(--customer-surface);
+}
+.customer-tracking-workspace > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--customer-line);
+  background: linear-gradient(115deg, #fbfdff, #f2f7fa);
+}
+.customer-tracking-workspace > header span { color: var(--customer-blue); font-size: 10px; font-weight: 850; letter-spacing: .16em; }
+.customer-tracking-workspace > header h2 { margin: 5px 0; font-size: 24px; }
+.customer-tracking-workspace > header p { margin: 0; color: #647d91; }
+.customer-tracking-workspace > header button {
+  padding: 9px 14px;
+  border: 1px solid #c8d6e2;
+  border-radius: 9px;
+  color: #274b69;
+  background: #fff;
+  cursor: pointer;
+}
+.customer-tracking-workspace iframe { display: block; width: 100%; min-height: 1040px; border: 0; background: #f5f8fa; }
+
 @media (max-width: 1100px) {
   .customer-access-layout { grid-template-columns: 1fr; }
   .customer-access-sidebar { grid-template-columns: minmax(280px, .8fr) minmax(320px, 1.2fr); }
@@ -1496,6 +1726,8 @@ button:disabled { cursor: wait; opacity: .58; }
   .customer-shipment-row { grid-template-columns: 1fr auto; }
   .customer-shipment-row > span:nth-child(2),
   .customer-shipment-row > span:nth-child(3) { display: none; }
+  .customer-workspace-tabs { grid-template-columns: 1fr; }
+  .customer-tracking-workspace > header { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,6 @@
 package com.cargoplanner.backend.customer;
 
+import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,38 +20,60 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomerAuthService {
   private final JdbcTemplate jdbcTemplate;
   private final CustomerTokenCodec tokenCodec;
+  private final PasswordHasher passwordHasher;
   private final Duration sessionTtl;
 
   public CustomerAuthService(
       JdbcTemplate jdbcTemplate,
       CustomerTokenCodec tokenCodec,
+      PasswordHasher passwordHasher,
       @Value("${app.customer-session-hours:24}") long sessionHours
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
+    this.passwordHasher = passwordHasher;
     this.sessionTtl = Duration.ofHours(Math.max(1, sessionHours));
   }
 
   @Transactional
   public CustomerLoginResponse login(CustomerLoginRequest request, HttpServletRequest httpRequest) {
+    String username = request == null || request.username() == null
+        ? ""
+        : request.username().trim();
+    String password = request == null ? null : request.password();
     String code = request == null ? null : request.customerCode();
-    if (code == null || code.isBlank() || code.trim().length() < 24) {
-      throw invalidCode();
+    if (username.isBlank() || password == null || password.isBlank()
+        || code == null || code.isBlank() || code.trim().length() < 24) {
+      throw invalidCredentials();
     }
     Instant now = Instant.now();
     expireSessions(now);
-    List<CustomerPrincipal> customers = jdbcTemplate.query(
+    List<CustomerAccount> customers = jdbcTemplate.query(
         """
-        SELECT id, public_id, username, display_name, party_role, status
+        SELECT id, public_id, username, display_name, party_role, status,
+               password_salt, password_hash, password_iterations
         FROM cp_customers
-        WHERE customer_code_hash = ? AND status = 'ACTIVE'
+        WHERE username = ? AND customer_code_hash = ? AND status = 'ACTIVE'
         """,
-        this::mapCustomer,
+        this::mapCustomerAccount,
+        username,
         tokenCodec.hash(code)
     );
-    if (customers.isEmpty()) throw invalidCode();
+    if (customers.isEmpty()) throw invalidCredentials();
 
-    CustomerPrincipal customer = customers.get(0);
+    CustomerAccount account = customers.get(0);
+    if (account.passwordSalt() == null || account.passwordHash() == null
+        || account.passwordIterations() == null
+        || !passwordHasher.verify(
+            password,
+            account.passwordSalt(),
+            account.passwordHash(),
+            account.passwordIterations()
+        )) {
+      throw invalidCredentials();
+    }
+
+    CustomerPrincipal customer = account.principal();
     String token = tokenCodec.newSessionToken();
     Instant expiresAt = now.plus(sessionTtl);
     jdbcTemplate.update(
@@ -148,7 +171,25 @@ public class CustomerAuthService {
     );
   }
 
-  private ApiException invalidCode() {
-    return new ApiException(HttpStatus.UNAUTHORIZED, "Invalid customer code");
+  private CustomerAccount mapCustomerAccount(ResultSet rs, int rowNumber) throws SQLException {
+    int iterations = rs.getInt("password_iterations");
+    Integer nullableIterations = rs.wasNull() ? null : iterations;
+    return new CustomerAccount(
+        mapCustomer(rs, rowNumber),
+        rs.getString("password_salt"),
+        rs.getString("password_hash"),
+        nullableIterations
+    );
   }
+
+  private ApiException invalidCredentials() {
+    return new ApiException(HttpStatus.UNAUTHORIZED, "Invalid customer credentials");
+  }
+
+  private record CustomerAccount(
+      CustomerPrincipal principal,
+      String passwordSalt,
+      String passwordHash,
+      Integer passwordIterations
+  ) {}
 }

@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,6 +50,7 @@ public class ShipmentTrackingService {
   private final ShipmentTrackingProperties properties;
   private final TransactionTemplate transactionTemplate;
   private final Clock clock;
+  private final ApplicationEventPublisher eventPublisher;
 
   @Autowired
   public ShipmentTrackingService(
@@ -58,7 +60,8 @@ public class ShipmentTrackingService {
       CmaTrackingSessionService cmaTrackingSessionService,
       ShipmentAccessService accessService,
       ShipmentTrackingProperties properties,
-      PlatformTransactionManager transactionManager
+      PlatformTransactionManager transactionManager,
+      ApplicationEventPublisher eventPublisher
   ) {
     this(
         jdbcTemplate,
@@ -68,7 +71,8 @@ public class ShipmentTrackingService {
         accessService,
         properties,
         new TransactionTemplate(transactionManager),
-        Clock.systemUTC()
+        Clock.systemUTC(),
+        eventPublisher
     );
   }
 
@@ -82,6 +86,23 @@ public class ShipmentTrackingService {
       TransactionTemplate transactionTemplate,
       Clock clock
   ) {
+    this(
+        jdbcTemplate, objectMapper, adapterClient, cmaTrackingSessionService, accessService,
+        properties, transactionTemplate, clock, event -> {}
+    );
+  }
+
+  private ShipmentTrackingService(
+      JdbcTemplate jdbcTemplate,
+      ObjectMapper objectMapper,
+      TrackingAdapterClient adapterClient,
+      CmaTrackingSessionService cmaTrackingSessionService,
+      ShipmentAccessService accessService,
+      ShipmentTrackingProperties properties,
+      TransactionTemplate transactionTemplate,
+      Clock clock,
+      ApplicationEventPublisher eventPublisher
+  ) {
     this.jdbcTemplate = jdbcTemplate;
     this.objectMapper = objectMapper;
     this.adapterClient = adapterClient;
@@ -90,13 +111,32 @@ public class ShipmentTrackingService {
     this.properties = properties;
     this.transactionTemplate = transactionTemplate;
     this.clock = clock;
+    this.eventPublisher = eventPublisher;
   }
 
   public ObjectNode track(ShipmentTrackRequest input, AuthenticatedUser user) {
+    return track(input, user, false);
+  }
+
+  /** Runs a trusted force refresh for the background scheduler. */
+  ObjectNode refreshAutomatically(String carrier, String type, String number) {
+    return track(
+        new ShipmentTrackRequest(carrier, "AUTO", type, number, true),
+        null,
+        true
+    );
+  }
+
+  private ObjectNode track(
+      ShipmentTrackRequest input,
+      AuthenticatedUser user,
+      boolean trustedAutomaticRefresh
+  ) {
     NormalizedTrackRequest request = normalize(input);
     ShipmentImportDetails importedDetails = normalizeImportedDetails(input, request, user);
     boolean forceRefresh = Boolean.TRUE.equals(input == null ? null : input.forceRefresh());
-    if (forceRefresh && (user == null || !user.canManageShipmentFiles())) {
+    if (forceRefresh && !trustedAutomaticRefresh
+        && (user == null || !user.canManageShipmentFiles())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Only business users or administrators may force a refresh");
     }
 
@@ -259,6 +299,9 @@ public class ShipmentTrackingService {
         timestamp(now),
         shipment.id()
     );
+    eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
+        shipment.id(), shipment.publicId(), snapshot.deepCopy(), now
+    ));
     return new PersistedShipment(shipment.id(), shipment.publicId(), fetchedAt, freshUntil);
   }
 

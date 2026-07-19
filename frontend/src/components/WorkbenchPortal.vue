@@ -168,6 +168,7 @@
           </RouterLink>
 
           <a
+            v-if="!['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
             class="portal-workbench-card portal-workbench-card--tracking"
             :href="trackingWorkbenchUrl"
             target="_blank"
@@ -208,7 +209,7 @@
             to="/customers"
           >
             <div class="portal-card-topline">
-              <span>03 / CUSTOMER ACCESS</span>
+              <span>02 / CUSTOMER OPERATIONS</span>
               <small><i></i>{{ t("portal.controlled") }}</small>
             </div>
             <div class="portal-card-body">

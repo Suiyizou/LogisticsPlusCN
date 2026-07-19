@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
 import java.time.Instant;
@@ -72,8 +73,9 @@ class CustomerAccessFlowTest {
     );
 
     CustomerTokenCodec tokenCodec = new CustomerTokenCodec();
-    customerService = new BusinessCustomerService(jdbcTemplate, tokenCodec);
-    authService = new CustomerAuthService(jdbcTemplate, tokenCodec, 24);
+    PasswordHasher passwordHasher = new PasswordHasher();
+    customerService = new BusinessCustomerService(jdbcTemplate, tokenCodec, passwordHasher);
+    authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(1, "sales-1", "Business One", "BUSINESS", "ACTIVE", "AGENT");
     otherBusiness = new AuthenticatedUser(2, "sales-2", "Business Two", "BUSINESS", "ACTIVE", "AGENT");
@@ -86,7 +88,7 @@ class CustomerAccessFlowTest {
   @Test
   void customerCodeLoginAndExplicitShipmentBindingEnforceOwnership() {
     Map<String, Object> created = customerService.create(
-        new CreateCustomerRequest("acme-shipper", "ACME Shipper", "SHIPPER"),
+        new CreateCustomerRequest("acme-shipper", "SecurePass!23", "ACME Shipper", "SHIPPER"),
         business,
         "127.0.0.1"
     );
@@ -103,13 +105,19 @@ class CustomerAccessFlowTest {
     assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(1);
     assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).isEmpty();
     assertThatThrownBy(() -> customerService.create(
-        new CreateCustomerRequest("forbidden", "Forbidden Customer", "SHIPPER"),
+        new CreateCustomerRequest("forbidden", "SecurePass!23", "Forbidden Customer", "SHIPPER"),
         employee,
         "127.0.0.1"
     )).isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
 
-    CustomerLoginResponse login = authService.login(new CustomerLoginRequest(code), httpRequest);
+    assertThatThrownBy(() -> authService.login(
+        new CustomerLoginRequest("acme-shipper", "wrong-password", code), httpRequest
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.UNAUTHORIZED));
+    CustomerLoginResponse login = authService.login(
+        new CustomerLoginRequest("acme-shipper", "SecurePass!23", code), httpRequest
+    );
     assertThat(login.token()).isNotBlank();
     assertThat(Instant.parse(login.expiresAt())).isAfter(Instant.now());
     assertThat(login.customer().partyRole()).isEqualTo("SHIPPER");
@@ -145,7 +153,7 @@ class CustomerAccessFlowTest {
     assertThat(authService.authenticate(login.token(), httpRequest).partyRole()).isEqualTo("CONSIGNEE");
 
     Map<String, Object> outsider = customerService.create(
-        new CreateCustomerRequest("other-customer", "Other Customer", "CONSIGNEE"),
+        new CreateCustomerRequest("other-customer", "SecurePass!23", "Other Customer", "CONSIGNEE"),
         otherBusiness,
         "127.0.0.1"
     );
@@ -164,11 +172,29 @@ class CustomerAccessFlowTest {
     assertThatThrownBy(() -> authService.authenticate(login.token(), httpRequest))
         .isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.UNAUTHORIZED));
-    assertThatThrownBy(() -> authService.login(new CustomerLoginRequest(code), httpRequest))
+    assertThatThrownBy(() -> authService.login(
+        new CustomerLoginRequest("acme-shipper", "SecurePass!23", code), httpRequest
+    ))
         .isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.UNAUTHORIZED));
-    assertThat(authService.login(new CustomerLoginRequest(newCode), httpRequest).customer().id())
+    assertThat(authService.login(
+        new CustomerLoginRequest("acme-shipper", "SecurePass!23", newCode), httpRequest
+    ).customer().id())
         .isEqualTo(customerId);
+
+    customerService.resetPassword(
+        customerId,
+        new UpdateCustomerPasswordRequest("Replacement!45"),
+        business,
+        "127.0.0.1"
+    );
+    assertThatThrownBy(() -> authService.login(
+        new CustomerLoginRequest("acme-shipper", "SecurePass!23", newCode), httpRequest
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.UNAUTHORIZED));
+    assertThat(authService.login(
+        new CustomerLoginRequest("acme-shipper", "Replacement!45", newCode), httpRequest
+    ).customer().id()).isEqualTo(customerId);
 
     customerService.unbindShipment(customerId, "shipment-public-id", business, "127.0.0.1");
     assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(
@@ -180,7 +206,7 @@ class CustomerAccessFlowTest {
   @Test
   void bindingRequiresShipmentCreatorParticipantOrAdministrator() {
     Map<String, Object> created = customerService.create(
-        new CreateCustomerRequest("scoped-customer", "Scoped Customer", "SHIPPER"),
+        new CreateCustomerRequest("scoped-customer", "SecurePass!23", "Scoped Customer", "SHIPPER"),
         business,
         "127.0.0.1"
     );
@@ -272,17 +298,17 @@ class CustomerAccessFlowTest {
   @Test
   void bindsShipperAndConsigneeToTheSameShipmentButRejectsDuplicatePartyRoles() {
     String shipperId = (String) customerService.create(
-        new CreateCustomerRequest("primary-shipper", "Primary Shipper", "SHIPPER"),
+        new CreateCustomerRequest("primary-shipper", "SecurePass!23", "Primary Shipper", "SHIPPER"),
         business,
         "127.0.0.1"
     ).get("id");
     String consigneeId = (String) customerService.create(
-        new CreateCustomerRequest("primary-consignee", "Primary Consignee", "CONSIGNEE"),
+        new CreateCustomerRequest("primary-consignee", "SecurePass!23", "Primary Consignee", "CONSIGNEE"),
         business,
         "127.0.0.1"
     ).get("id");
     String duplicateShipperId = (String) customerService.create(
-        new CreateCustomerRequest("duplicate-shipper", "Duplicate Shipper", "SHIPPER"),
+        new CreateCustomerRequest("duplicate-shipper", "SecurePass!23", "Duplicate Shipper", "SHIPPER"),
         business,
         "127.0.0.1"
     ).get("id");
@@ -428,6 +454,9 @@ class CustomerAccessFlowTest {
           username VARCHAR(64) NOT NULL UNIQUE,
           display_name VARCHAR(80) NOT NULL,
           party_role VARCHAR(20) NOT NULL,
+          password_salt VARCHAR(64),
+          password_hash VARCHAR(128),
+          password_iterations INT,
           customer_code_hash CHAR(64) NOT NULL UNIQUE,
           customer_code_prefix VARCHAR(16) NOT NULL,
           status VARCHAR(20) NOT NULL,

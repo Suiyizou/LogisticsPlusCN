@@ -25,6 +25,13 @@ export function resetBusinessCustomerCode(customerId) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/reset-code`, { method: "POST" });
 }
 
+export function resetBusinessCustomerPassword(customerId, password) {
+  return request(`/business/customers/${encodeURIComponent(customerId)}/reset-password`, {
+    method: "POST",
+    body: { password }
+  });
+}
+
 export function fetchBusinessCustomerShipments(customerId) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`);
 }
