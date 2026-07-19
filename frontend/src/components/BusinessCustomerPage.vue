@@ -14,7 +14,7 @@
         <div class="customer-account" :class="{ 'is-open': accountMenuOpen }">
           <button type="button" class="customer-account-trigger" @click="accountMenuOpen = !accountMenuOpen">
             <span><b>{{ displayName }}</b><small>{{ t("customers.businessOperator") }}</small></span>
-            <i aria-hidden="true">⌄</i>
+            <i aria-hidden="true">&#x2304;</i>
           </button>
           <div v-if="accountMenuOpen" class="customer-account-menu">
             <RouterLink to="/workbenches" @click="accountMenuOpen = false">{{ t("customers.backWorkbench") }}</RouterLink>
@@ -24,308 +24,487 @@
       </div>
     </header>
 
-    <section class="customer-access-content">
-      <header class="customer-access-hero">
-        <div>
-          <span>{{ t("customers.eyebrow") }}</span>
-          <h1>{{ t("customers.title") }}</h1>
-          <p>{{ t("customers.description") }}</p>
-        </div>
-        <div class="customer-hero-actions">
-          <div class="customer-access-boundary">
-            <i aria-hidden="true"></i>
-            <span>
-              <b>{{ t("customers.boundaryTitle") }}</b>
-              <small>{{ t("customers.boundaryDescription") }}</small>
-            </span>
-          </div>
-          <button class="customer-tracking-link" type="button" @click="openTrackingWorkspace()">
-            <span>{{ t("customers.workspaceTracking") }}</span>
-            <small>{{ t("customers.trackingJumpHint") }}</small>
-            <b aria-hidden="true">↗</b>
+    <p v-if="pageMessage" class="customer-access-message" :class="{ 'is-error': messageIsError }" role="status">
+      {{ pageMessage }}
+    </p>
+
+    <section class="workspace-layout">
+      <aside class="workspace-sidebar">
+        <div class="sidebar-tabs">
+          <button
+            type="button"
+            :class="{ active: sidebarTab === 'customers' }"
+            @click="sidebarTab = 'customers'"
+          >
+            <el-icon><User /></el-icon>
+            <span>{{ t("customers.tabCustomerManagement") }}</span>
+          </button>
+          <button
+            type="button"
+            :class="{ active: sidebarTab === 'shipments' }"
+            @click="sidebarTab = 'shipments'"
+          >
+            <el-icon><Document /></el-icon>
+            <span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
         </div>
-      </header>
 
-      <p v-if="pageMessage" class="customer-access-message" :class="{ 'is-error': messageIsError }" role="status">
-        {{ pageMessage }}
-      </p>
+        <template v-if="sidebarTab === 'customers'">
+          <div class="sidebar-search">
+            <el-input
+              v-model="customerSearch"
+              :placeholder="t('customers.searchCustomerPlaceholder')"
+              prefix-icon="Search"
+              clearable
+            />
+          </div>
 
-      <div class="customer-access-layout">
-        <aside class="customer-access-sidebar">
-          <section class="customer-create-card customer-create-launcher">
-            <header>
-              <span>01</span>
-              <div><h2>{{ t("customers.createTitle") }}</h2><p>{{ t("customers.createDescription") }}</p></div>
-            </header>
-            <div class="customer-create-actions">
-              <button class="customer-access-primary" type="button" @click="createDialogOpen = true">{{ t("customers.openCreate") }}</button>
-              <button type="button" @click="openBatchImport">{{ t("customers.batchImport") }}</button>
-            </div>
-          </section>
-
-          <section class="customer-list-card">
-            <header>
-              <div>
-                <span>{{ t("customers.directoryEyebrow") }}</span>
-                <h2>{{ t("customers.directoryTitle") }}</h2>
-              </div>
-              <b>{{ customers.length }}</b>
-            </header>
-            <div v-if="loadingCustomers" class="customer-access-empty">{{ t("customers.loading") }}</div>
-            <div v-else-if="!customers.length" class="customer-access-empty">{{ t("customers.emptyCustomers") }}</div>
+          <div class="sidebar-customer-list">
+            <div v-if="loadingCustomers" class="sidebar-empty-hint">{{ t("customers.loading") }}</div>
+            <div v-else-if="!filteredCustomers.length" class="sidebar-empty-hint">{{ t("customers.emptyCustomers") }}</div>
             <button
-              v-for="customer in customers"
+              v-for="customer in filteredCustomers"
               v-else
               :key="customer.id"
               type="button"
-              class="customer-list-row"
+              class="sidebar-customer-row"
               :class="{ 'is-active': selectedCustomerId === customer.id, 'is-disabled': customer.status !== 'ACTIVE' }"
               @click="selectCustomer(customer.id)"
             >
-              <span class="customer-list-avatar">{{ customerInitial(customer) }}</span>
-              <span class="customer-list-copy">
+              <span class="sidebar-customer-avatar">{{ customerInitial(customer) }}</span>
+              <span class="sidebar-customer-copy">
                 <b>{{ customer.displayName || customer.username }}</b>
                 <small>@{{ customer.username }} · {{ partyRoleLabel(customer.partyRole) }}</small>
               </span>
-              <span class="customer-list-state">{{ statusLabel(customer.status) }}</span>
+              <span class="sidebar-customer-state">{{ statusLabel(customer.status) }}</span>
             </button>
-          </section>
-        </aside>
+          </div>
 
-        <section class="customer-detail-card">
-          <div v-if="!selectedCustomer" class="customer-detail-empty">
-            <span>↗</span>
-            <h2>{{ t("customers.selectTitle") }}</h2>
-            <p>{{ t("customers.selectDescription") }}</p>
+          <div class="sidebar-actions">
+            <el-button type="primary" @click="createDialogOpen = true">
+              <el-icon><Plus /></el-icon>
+              {{ t("customers.openCreate") }}
+            </el-button>
+            <el-button @click="openBatchImport">
+              <el-icon><Upload /></el-icon>
+              {{ t("customers.batchImport") }}
+            </el-button>
+          </div>
+        </template>
+
+        <template v-if="sidebarTab === 'shipments'">
+          <div class="sidebar-section-header">
+            <span>{{ t("customers.availableShipments") }}</span>
+            <b>{{ availableShipments.length }}</b>
+          </div>
+          <div class="sidebar-shipment-list">
+            <div v-if="loadingAvailableShipments" class="sidebar-empty-hint">{{ t("customers.loadingAvailableShipments") }}</div>
+            <div v-else-if="!availableShipments.length" class="sidebar-empty-hint">{{ t("customers.emptyAvailableShipments") }}</div>
+            <button
+              v-for="shipment in availableShipments"
+              v-else
+              :key="shipment.shipmentId"
+              type="button"
+              class="sidebar-shipment-row"
+              :class="{ 'is-active': selectedShipmentId === shipment.shipmentId }"
+              @click="selectShipmentForBinding(shipment)"
+            >
+              <span class="sidebar-shipment-copy">
+                <b>{{ shipment.referenceNo || shipment.shipmentId }}</b>
+                <small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small>
+              </span>
+              <span class="sidebar-shipment-status">
+                <i class="sidebar-shipment-dot"></i>
+                {{ shipment.trackingStatus || t("customers.bound") }}
+              </span>
+            </button>
+          </div>
+        </template>
+      </aside>
+
+      <div class="workspace-main">
+        <template v-if="sidebarTab === 'customers'">
+          <div v-if="!selectedCustomer" class="main-empty-state">
+            <el-empty :description="t('customers.selectCustomerPrompt')">
+              <template #image>
+                <div class="empty-state-icon">
+                  <el-icon :size="48"><UserFilled /></el-icon>
+                </div>
+              </template>
+            </el-empty>
+            <p class="main-empty-sub">{{ t("customers.selectCustomerHint") }}</p>
           </div>
 
           <template v-else>
-            <header class="customer-detail-head">
-              <div>
-                <span>{{ t("customers.detailEyebrow") }}</span>
-                <h2>{{ selectedCustomer.displayName || selectedCustomer.username }}</h2>
-                <p>
-                  @{{ selectedCustomer.username }}
-                  <i>·</i>
-                  {{ partyRoleLabel(selectedCustomer.partyRole) }}
-                  <i>·</i>
-                  {{ statusLabel(selectedCustomer.status) }}
-                </p>
-              </div>
-              <div class="customer-detail-actions">
-                <button type="button" @click="resetCode" :disabled="mutatingCustomer">
-                  {{ t("customers.resetCode") }}
-                </button>
-                <button type="button" @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
-                  {{ t("customers.resetPassword") }}
-                </button>
-                <button
-                  v-if="selectedCustomer.status === 'ACTIVE'"
-                  type="button"
-                  class="is-danger"
-                  @click="deactivateCustomer"
-                  :disabled="mutatingCustomer"
-                >
-                  {{ t("customers.deactivate") }}
-                </button>
-                <button v-else type="button" @click="reactivateCustomer" :disabled="mutatingCustomer">
-                  {{ t("customers.reactivate") }}
-                </button>
-              </div>
-            </header>
-
-            <section class="customer-edit-section">
-              <div class="customer-section-title">
-                <span>02</span>
-                <div>
-                  <h3>{{ t("customers.profileTitle") }}</h3>
-                  <p>{{ t("customers.profileDescription") }}</p>
-                </div>
-              </div>
-              <form class="customer-edit-form" @submit.prevent="saveCustomer">
-                <label>
-                  <span>{{ t("customers.username") }}</span>
-                  <input v-model.trim="editForm.username" required />
-                </label>
-                <label>
-                  <span>{{ t("customers.displayName") }}</span>
-                  <input v-model.trim="editForm.displayName" required />
-                </label>
-                <label class="customer-client-code-field">
-                  <span>{{ t("customers.clientCode") }}</span>
-                  <div class="customer-inline-value" :class="{ 'is-missing': !selectedCustomer.clientCode }">
-                    <b>{{ selectedCustomer.clientCode || t("customers.missingValue") }}</b>
-                    <button type="button" @click="openClientCodeSupplement">
-                      {{ selectedCustomer.clientCode ? t("customers.editSupplement") : t("customers.manualSupplement") }}
-                    </button>
-                  </div>
-                </label>
-                <label>
-                  <span>{{ t("customers.partyRole") }}</span>
-                  <el-select
-                    v-model="editForm.partyRole"
-                    class="business-select"
-                    popper-class="business-select-popper"
-                  >
-                    <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
-                    <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-                    <el-option value="AGENT" :label="t('customers.roleAgent')" />
-                  </el-select>
-                </label>
-                <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">
-                  {{ t("customers.saveProfile") }}
-                </button>
-              </form>
-
-              <section class="customer-pending-matches">
-                <header>
+            <el-card class="main-card" shadow="never">
+              <template #header>
+                <div class="main-card-header">
                   <div>
-                    <h4>{{ t("customers.pendingMatches") }}</h4>
-                    <p>{{ t("customers.pendingMatchesHint") }}</p>
+                    <span class="main-card-eyebrow">{{ t("customers.detailEyebrow") }}</span>
+                    <h2 class="main-card-title">{{ selectedCustomer.displayName || selectedCustomer.username }}</h2>
+                    <p class="main-card-subtitle">
+                      @{{ selectedCustomer.username }}
+                      <el-divider direction="vertical" />
+                      {{ partyRoleLabel(selectedCustomer.partyRole) }}
+                      <el-divider direction="vertical" />
+                      {{ statusLabel(selectedCustomer.status) }}
+                    </p>
                   </div>
-                  <button type="button" @click="loadPendingClientMatches" :disabled="loadingPendingMatches">{{ t("customers.refresh") }}</button>
-                </header>
-                <div v-if="!pendingClientMatches.length" class="customer-access-empty compact">{{ t("customers.noPendingMatches") }}</div>
-                <article v-for="match in pendingClientMatches" v-else :key="match.id" class="customer-pending-match-row">
-                  <span><b>{{ match.clientCode }}</b><small>{{ match.reason }}</small></span>
-                  <span><b>{{ match.referenceNo || match.shipmentId }}</b><small>{{ match.carrier }} · {{ referenceTypeLabel(match.referenceType) }}</small></span>
-                  <button type="button" class="is-primary" @click="resolveClientMatch(match)" :disabled="resolvingMatchId === match.id">
-                    {{ t("customers.bindToCurrentCustomer") }}
-                  </button>
-                </article>
-              </section>
-              <div class="customer-code-meta">
-                <span>{{ t("customers.codePrefix") }}</span>
-                <b>{{ selectedCustomer.customerCodePrefix || t("customers.notAvailable") }}</b>
-                <small>{{ t("customers.codePrefixHint") }}</small>
-              </div>
-            </section>
-
-            <section class="customer-shipments-section">
-              <div class="customer-section-title">
-                <span>03</span>
-                <div>
-                  <h3>{{ t("customers.shipmentsTitle") }}</h3>
-                  <p>{{ t("customers.shipmentsDescription") }}</p>
-                </div>
-              </div>
-
-              <form class="customer-bind-form" @submit.prevent="bindShipment">
-                <div class="customer-bind-mode" role="group" :aria-label="t('customers.bindMode')">
-                  <button type="button" :class="{ 'is-active': bindMode === 'reference' }" @click="bindMode = 'reference'">
-                    {{ t("customers.bindByReference") }}
-                  </button>
-                  <button type="button" :class="{ 'is-active': bindMode === 'shipmentId' }" @click="bindMode = 'shipmentId'">
-                    {{ t("customers.bindByShipmentId") }}
-                  </button>
-                </div>
-                <label v-if="bindMode === 'shipmentId'" class="customer-bind-wide">
-                  <span>{{ t("customers.shipmentId") }}</span>
-                  <input v-model.trim="bindForm.shipmentId" :placeholder="t('customers.shipmentIdPlaceholder')" required />
-                  <small class="customer-field-hint">{{ t("customers.shipmentIdHint") }}</small>
-                </label>
-                <template v-else>
-                  <label>
-                    <span>{{ t("customers.carrier") }}</span>
-                    <el-select v-model="bindForm.carrier" class="business-select" popper-class="business-select-popper">
-                      <el-option value="COSCO" label="COSCO SHIPPING" />
-                      <el-option value="CMA" label="CMA CGM" />
-                    </el-select>
-                  </label>
-                  <label>
-                    <span>{{ t("customers.referenceType") }}</span>
-                    <el-select
-                      v-model="bindForm.referenceType"
-                      class="business-select"
-                      popper-class="business-select-popper"
+                  <div class="main-card-header-actions">
+                    <el-button text @click="resetCode" :disabled="mutatingCustomer">
+                      {{ t("customers.resetCode") }}
+                    </el-button>
+                    <el-button text @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
+                      {{ t("customers.resetPassword") }}
+                    </el-button>
+                    <el-button
+                      v-if="selectedCustomer.status === 'ACTIVE'"
+                      text
+                      type="danger"
+                      @click="deactivateCustomer"
+                      :disabled="mutatingCustomer"
                     >
-                      <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                      <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-                    </el-select>
-                  </label>
-                  <label>
-                    <span>{{ t("customers.referenceNo") }}</span>
-                    <input v-model.trim="bindForm.referenceNo" :placeholder="t('customers.referenceNoPlaceholder')" required />
-                  </label>
-                  <p class="customer-reference-hint">{{ t("customers.referenceHint") }}</p>
-                </template>
-                <button class="customer-access-primary" type="submit" :disabled="bindingShipment">
-                  {{ bindingShipment ? t("customers.binding") : t("customers.bind") }}
-                </button>
-              </form>
+                      {{ t("customers.deactivate") }}
+                    </el-button>
+                    <el-button v-else text @click="reactivateCustomer" :disabled="mutatingCustomer">
+                      {{ t("customers.reactivate") }}
+                    </el-button>
+                  </div>
+                </div>
+              </template>
 
-              <section class="customer-candidate-section">
-                <header>
-                  <div>
-                    <h4>{{ t("customers.availableShipments") }}</h4>
-                    <p>{{ t("customers.availableShipmentsHint") }}</p>
+              <section class="profile-section">
+                <div class="section-label">{{ t("customers.profileTitle") }}</div>
+                <el-form class="profile-form" @submit.prevent="saveCustomer" label-position="top">
+                  <el-row :gutter="16">
+                    <el-col :span="8">
+                      <el-form-item :label="t('customers.username')">
+                        <el-input v-model.trim="editForm.username" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item :label="t('customers.displayName')">
+                        <el-input v-model.trim="editForm.displayName" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item :label="t('customers.clientCode')">
+                        <div class="client-code-inline">
+                          <el-tag :type="selectedCustomer.clientCode ? 'success' : 'warning'" effect="plain">
+                            {{ selectedCustomer.clientCode || t("customers.missingValue") }}
+                          </el-tag>
+                          <el-button text size="small" @click="openClientCodeSupplement">
+                            {{ selectedCustomer.clientCode ? t("customers.editSupplement") : t("customers.manualSupplement") }}
+                          </el-button>
+                        </div>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="16">
+                    <el-col :span="8">
+                      <el-form-item :label="t('customers.partyRole')">
+                        <el-select v-model="editForm.partyRole" class="business-select" popper-class="business-select-popper">
+                          <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
+                          <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
+                          <el-option value="AGENT" :label="t('customers.roleAgent')" />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="4" :offset="12" style="display:flex;align-items:flex-end;padding-bottom:18px;">
+                      <el-button type="primary" native-type="submit" :disabled="mutatingCustomer">
+                        {{ t("customers.saveProfile") }}
+                      </el-button>
+                    </el-col>
+                  </el-row>
+                </el-form>
+
+                <div class="code-meta-bar">
+                  <span class="code-meta-label">{{ t("customers.codePrefix") }}</span>
+                  <el-tag type="info" effect="plain">
+                    {{ selectedCustomer.customerCodePrefix || t("customers.notAvailable") }}
+                  </el-tag>
+                  <small>{{ t("customers.codePrefixHint") }}</small>
+                </div>
+
+                <el-card class="pending-matches-card" shadow="never">
+                  <template #header>
+                    <div class="pending-matches-header">
+                      <div>
+                        <b>{{ t("customers.pendingMatches") }}</b>
+                        <small>{{ t("customers.pendingMatchesHint") }}</small>
+                      </div>
+                      <el-button text size="small" @click="loadPendingClientMatches" :disabled="loadingPendingMatches">
+                        {{ t("customers.refresh") }}
+                      </el-button>
+                    </div>
+                  </template>
+                  <div v-if="!pendingClientMatches.length" class="empty-hint-compact">{{ t("customers.noPendingMatches") }}</div>
+                  <div v-for="match in pendingClientMatches" v-else :key="match.id" class="pending-match-row">
+                    <span><b>{{ match.clientCode }}</b><small>{{ match.reason }}</small></span>
+                    <span><b>{{ match.referenceNo || match.shipmentId }}</b><small>{{ match.carrier }} · {{ referenceTypeLabel(match.referenceType) }}</small></span>
+                    <el-button type="primary" size="small" @click="resolveClientMatch(match)" :disabled="resolvingMatchId === match.id">
+                      {{ t("customers.bindToCurrentCustomer") }}
+                    </el-button>
                   </div>
-                  <div class="customer-candidate-actions">
-                    <button type="button" class="is-primary" @click="shipmentCreateDialogOpen = true">{{ t("customers.createShipment") }}</button>
-                    <button type="button" @click="loadAvailableShipments" :disabled="loadingAvailableShipments">{{ t("customers.refresh") }}</button>
+                </el-card>
+              </section>
+            </el-card>
+
+            <el-card class="main-card" shadow="never">
+              <template #header>
+                <div class="section-label">{{ t("customers.shipmentsTitle") }}</div>
+              </template>
+
+              <el-card class="bind-form-card" shadow="never">
+                <div class="bind-mode-switch">
+                  <el-radio-group v-model="bindMode" size="small">
+                    <el-radio-button value="reference">{{ t("customers.bindByReference") }}</el-radio-button>
+                    <el-radio-button value="shipmentId">{{ t("customers.bindByShipmentId") }}</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <el-form class="bind-form" @submit.prevent="bindShipment" label-position="top">
+                  <template v-if="bindMode === 'shipmentId'">
+                    <el-form-item :label="t('customers.shipmentId')" class="bind-wide">
+                      <el-input v-model.trim="bindForm.shipmentId" :placeholder="t('customers.shipmentIdPlaceholder')" />
+                      <template #extra><small>{{ t("customers.shipmentIdHint") }}</small></template>
+                    </el-form-item>
+                  </template>
+                  <template v-else>
+                    <el-row :gutter="12">
+                      <el-col :span="8">
+                        <el-form-item :label="t('customers.carrier')">
+                          <el-select v-model="bindForm.carrier" class="business-select" popper-class="business-select-popper">
+                            <el-option value="COSCO" label="COSCO SHIPPING" />
+                            <el-option value="CMA" label="CMA CGM" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item :label="t('customers.referenceType')">
+                          <el-select v-model="bindForm.referenceType" class="business-select" popper-class="business-select-popper">
+                            <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                            <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item :label="t('customers.referenceNo')">
+                          <el-input v-model.trim="bindForm.referenceNo" :placeholder="t('customers.referenceNoPlaceholder')" />
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <p class="reference-hint">{{ t("customers.referenceHint") }}</p>
+                  </template>
+                  <el-button type="primary" native-type="submit" :disabled="bindingShipment">
+                    {{ bindingShipment ? t("customers.binding") : t("customers.bind") }}
+                  </el-button>
+                </el-form>
+              </el-card>
+
+              <el-card class="candidate-card" shadow="never">
+                <template #header>
+                  <div class="candidate-header">
+                    <div>
+                      <b>{{ t("customers.availableShipments") }}</b>
+                      <small>{{ t("customers.availableShipmentsHint") }}</small>
+                    </div>
+                    <div class="candidate-header-actions">
+                      <el-button type="primary" size="small" @click="shipmentCreateDialogOpen = true">
+                        {{ t("customers.createShipment") }}
+                      </el-button>
+                      <el-button size="small" @click="loadAvailableShipments" :disabled="loadingAvailableShipments">
+                        {{ t("customers.refresh") }}
+                      </el-button>
+                    </div>
                   </div>
-                </header>
-                <div v-if="loadingAvailableShipments" class="customer-access-empty">{{ t("customers.loadingAvailableShipments") }}</div>
-                <div v-else-if="!unboundAvailableShipments.length" class="customer-access-empty compact">{{ t("customers.emptyAvailableShipments") }}</div>
-                <div v-else class="customer-candidate-list">
-                  <article v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="customer-candidate-row">
+                </template>
+                <div v-if="loadingAvailableShipments" class="empty-hint-compact">{{ t("customers.loadingAvailableShipments") }}</div>
+                <div v-else-if="!unboundAvailableShipments.length" class="empty-hint-compact">{{ t("customers.emptyAvailableShipments") }}</div>
+                <div v-else class="candidate-list">
+                  <div v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="candidate-row">
                     <span><b>{{ shipment.referenceNo || shipment.shipmentId }}</b><small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small></span>
                     <span>
-                      <i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
+                      <i class="shipment-status-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
                       <small>{{ boundRoleSummary(shipment) }}</small>
                     </span>
                     <span>{{ formatDate(shipment.lastTrackedAt || shipment.updatedAt) }}</span>
-                    <span>
-                      <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
-                      <button type="button" class="is-primary" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
+                    <span class="candidate-row-actions">
+                      <el-button text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</el-button>
+                      <el-button type="primary" size="small" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</el-button>
                     </span>
-                  </article>
+                  </div>
                 </div>
-              </section>
+              </el-card>
 
-              <div class="customer-shipment-table">
-                <div class="customer-shipment-table-head">
-                  <span>{{ t("customers.shipmentReference") }}</span>
-                  <span>{{ t("customers.shipmentStatus") }}</span>
-                  <span>{{ t("customers.assignedAt") }}</span>
-                  <span>{{ t("customers.actions") }}</span>
+              <el-card class="bound-table-card" shadow="never">
+                <div v-if="loadingShipments" class="empty-hint-compact">{{ t("customers.loadingShipments") }}</div>
+                <div v-else-if="!shipments.length" class="empty-hint-compact">{{ t("customers.emptyShipments") }}</div>
+                <el-table v-else :data="shipments" class="bound-table" size="small" stripe>
+                  <el-table-column :label="t('customers.shipmentReference')" min-width="180">
+                    <template #default="{ row }">
+                      <div class="table-ref-cell">
+                        <b>{{ row.referenceNo || row.shipmentId }}</b>
+                        <small>{{ row.carrier || '—' }} · {{ referenceTypeLabel(row.referenceType) }}</small>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.shipmentStatus')" min-width="160">
+                    <template #default="{ row }">
+                      <div class="table-status-cell">
+                        <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || t("customers.bound") }}</span>
+                        <el-tag v-if="row.note" size="small" type="info" effect="plain">{{ row.note }}</el-tag>
+                        <el-tag size="small" :type="row.publicationStatus === 'PUBLISHED' ? 'success' : 'warning'" effect="plain">
+                          {{ row.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.assignedAt')" min-width="120">
+                    <template #default="{ row }">
+                      {{ formatDate(row.assignedAt) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.actions')" min-width="200" fixed="right">
+                    <template #default="{ row }">
+                      <div class="table-actions">
+                        <el-button text size="small" @click="openShipmentDetail(row)">{{ t("customers.details") }}</el-button>
+                        <el-button
+                          v-if="needsManualSupplement(row)"
+                          text
+                          size="small"
+                          type="warning"
+                          @click="openShipmentSupplement(row)"
+                        >{{ t("customers.manualSupplement") }}</el-button>
+                        <el-button
+                          text
+                          size="small"
+                          @click="togglePublication(row)"
+                          :disabled="publishingShipmentId === row.shipmentId"
+                        >
+                          {{ row.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}
+                        </el-button>
+                        <el-button text size="small" type="danger" @click="unbindShipment(row)" :disabled="unbindingShipmentId === row.shipmentId">
+                          {{ t("customers.unbind") }}
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </el-card>
+          </template>
+        </template>
+
+        <template v-if="sidebarTab === 'shipments'">
+          <div v-if="!selectedShipment" class="main-empty-state">
+            <el-empty :description="t('customers.selectShipmentPrompt')">
+              <template #image>
+                <div class="empty-state-icon">
+                  <el-icon :size="48"><Ship /></el-icon>
                 </div>
-                <div v-if="loadingShipments" class="customer-access-empty">{{ t("customers.loadingShipments") }}</div>
-                <div v-else-if="!shipments.length" class="customer-access-empty">{{ t("customers.emptyShipments") }}</div>
-                <div v-for="shipment in shipments" v-else :key="shipment.shipmentId" class="customer-shipment-row">
+              </template>
+            </el-empty>
+            <p class="main-empty-sub">{{ t('customers.selectShipmentHint') }}</p>
+          </div>
+
+          <template v-else>
+            <el-card class="main-card" shadow="never">
+              <template #header>
+                <div class="section-label">{{ t('customers.shipmentDetail') }}</div>
+              </template>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item :label="t('customers.carrier')">
+                  {{ selectedShipment.carrier || '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('customers.referenceType')">
+                  {{ referenceTypeLabel(selectedShipment.referenceType) }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('customers.referenceNo')">
+                  {{ selectedShipment.referenceNo || selectedShipment.shipmentId }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('customers.shipmentStatus')">
+                  {{ selectedShipment.trackingStatus || '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('customers.boundRoles')">
+                  <el-tag
+                    v-for="role in (selectedShipment.boundRoles || [])"
+                    :key="role"
+                    size="small"
+                    effect="plain"
+                    style="margin-right:4px;"
+                  >
+                    {{ partyRoleLabel(role) }}
+                  </el-tag>
+                  <span v-if="!(selectedShipment.boundRoles || []).length">—</span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('customers.lastTrackedAt')">
+                  {{ formatDate(selectedShipment.lastTrackedAt || selectedShipment.updatedAt) }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
+            <el-card class="main-card" shadow="never">
+              <template #header>
+                <div class="section-label">{{ t('customers.batchBindTitle') }}</div>
+              </template>
+              <p class="batch-bind-hint">{{ t('customers.batchBindHint') }}</p>
+              <el-checkbox-group v-model="selectedCustomerIds" class="customer-checkbox-group">
+                <el-checkbox
+                  v-for="customer in customers"
+                  :key="customer.id"
+                  :value="customer.id"
+                  :label="customer.id"
+                  :disabled="isCustomerBoundToSelectedShipment(customer.id)"
+                >
+                  <span class="checkbox-label">
+                    <b>{{ customer.displayName || customer.username }}</b>
+                    <small>@{{ customer.username }} · {{ partyRoleLabel(customer.partyRole) }}</small>
+                    <el-tag v-if="isCustomerBoundToSelectedShipment(customer.id)" size="small" type="success" effect="plain">
+                      {{ t('customers.alreadyBound') }}
+                    </el-tag>
+                  </span>
+                </el-checkbox>
+              </el-checkbox-group>
+              <div class="batch-bind-actions">
+                <el-button
+                  type="primary"
+                  @click="batchBindCustomers"
+                  :disabled="batchBinding || !selectedCustomerIds.length"
+                  :loading="batchBinding"
+                >
+                  {{ batchBinding ? batchBindingProgress : t('customers.batchBind') }}
+                </el-button>
+                <span v-if="batchBindingProgress && !batchBinding" class="batch-progress">{{ batchBindingProgress }}</span>
+              </div>
+
+              <div v-if="boundCustomersForSelectedShipment.length" class="bound-customers-section">
+                <el-divider />
+                <div class="section-label">{{ t('customers.boundCustomers') }}</div>
+                <div v-for="cid in boundCustomersForSelectedShipment" :key="cid" class="bound-customer-row">
                   <span>
-                    <b>{{ shipment.referenceNo || shipment.shipmentId }}</b>
-                    <small>{{ shipment.carrier || "—" }} · {{ referenceTypeLabel(shipment.referenceType) }}</small>
+                    <b>{{ getCustomerName(cid) }}</b>
+                    <small>@{{ getCustomerUsername(cid) }}</small>
                   </span>
-                  <span>
-                    <i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
-                    <small v-if="shipment.note" class="customer-shipment-note">{{ shipment.note }}</small>
-                    <small class="customer-publication-state" :class="{ 'is-published': shipment.publicationStatus === 'PUBLISHED' }">
-                      {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
-                    </small>
-                  </span>
-                  <span>{{ formatDate(shipment.assignedAt) }}</span>
-                  <span class="customer-shipment-actions">
-                    <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
-                    <button
-                      v-if="needsManualSupplement(shipment)"
-                      type="button"
-                      class="is-warning"
-                      @click="openShipmentSupplement(shipment)"
-                    >{{ t("customers.manualSupplement") }}</button>
-                    <button type="button" @click="togglePublication(shipment)" :disabled="publishingShipmentId === shipment.shipmentId">
-                      {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}
-                    </button>
-                    <button type="button" @click="unbindShipment(shipment)" :disabled="unbindingShipmentId === shipment.shipmentId">{{ t("customers.unbind") }}</button>
-                  </span>
+                  <el-button text size="small" type="danger" @click="unbindCustomerFromShipment(cid)">
+                    {{ t('customers.unbind') }}
+                  </el-button>
                 </div>
               </div>
-            </section>
-          </template>
-        </section>
-      </div>
+            </el-card>
 
+            <div class="shipment-tab-actions">
+              <el-button type="primary" @click="shipmentCreateDialogOpen = true">
+                <el-icon><Plus /></el-icon>
+                {{ t('customers.createShipment') }}
+              </el-button>
+              <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments">
+                <el-icon><Refresh /></el-icon>
+                {{ t('customers.refresh') }}
+              </el-button>
+            </div>
+          </template>
+        </template>
+      </div>
     </section>
 
     <div v-if="revealedCode" class="customer-code-overlay" role="presentation" @click.self="closeCodeReveal">
@@ -605,6 +784,16 @@ import {
   updateBusinessShipment,
   updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
+import {
+  User,
+  Document,
+  Plus,
+  Upload,
+  UserFilled,
+  Ship,
+  Refresh,
+  Search
+} from "@element-plus/icons-vue";
 
 const props = defineProps({
   currentUser: { type: Object, default: null }
@@ -662,6 +851,14 @@ const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackin
 let shipmentRequestSequence = 0;
 let toastTimer = 0;
 
+const sidebarTab = ref("customers");
+const customerSearch = ref("");
+const selectedShipmentId = ref("");
+const selectedCustomerIds = ref([]);
+const batchBinding = ref(false);
+const batchBindingProgress = ref("");
+const shipmentCustomerMap = ref({});
+
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
 const unboundAvailableShipments = computed(() => {
@@ -674,12 +871,111 @@ const unboundAvailableShipments = computed(() => {
   });
 });
 
+const filteredCustomers = computed(() => {
+  const query = customerSearch.value.toLowerCase().trim();
+  if (!query) return customers.value;
+  return customers.value.filter((c) =>
+    (c.username || "").toLowerCase().includes(query) ||
+    (c.displayName || "").toLowerCase().includes(query)
+  );
+});
+
+const selectedShipment = computed(() =>
+  availableShipments.value.find((s) => s.shipmentId === selectedShipmentId.value) || null
+);
+
+const boundCustomersForSelectedShipment = computed(() => {
+  if (!selectedShipmentId.value) return [];
+  return shipmentCustomerMap.value[selectedShipmentId.value] || [];
+});
+
+function isCustomerBoundToSelectedShipment(customerId) {
+  return boundCustomersForSelectedShipment.value.includes(customerId);
+}
+
+function getCustomerName(customerId) {
+  const c = customers.value.find((item) => item.id === customerId);
+  return c?.displayName || c?.username || customerId;
+}
+
+function getCustomerUsername(customerId) {
+  const c = customers.value.find((item) => item.id === customerId);
+  return c?.username || customerId;
+}
+
+function selectShipmentForBinding(shipment) {
+  selectedShipmentId.value = shipment.shipmentId;
+  selectedCustomerIds.value = [];
+}
+
+async function batchBindCustomers() {
+  if (!selectedShipmentId.value || batchBinding.value || !selectedCustomerIds.value.length) return;
+  batchBinding.value = true;
+  let successCount = 0;
+  const total = selectedCustomerIds.value.length;
+  const shipmentId = selectedShipmentId.value;
+  try {
+    for (let i = 0; i < selectedCustomerIds.value.length; i++) {
+      const customerId = selectedCustomerIds.value[i];
+      batchBindingProgress.value = `绑定中 ${i + 1}/${total}...`;
+      try {
+        await bindBusinessCustomerShipment(customerId, { shipmentId });
+        successCount++;
+        if (!shipmentCustomerMap.value[shipmentId]) {
+          shipmentCustomerMap.value[shipmentId] = [];
+        }
+        if (!shipmentCustomerMap.value[shipmentId].includes(customerId)) {
+          shipmentCustomerMap.value[shipmentId].push(customerId);
+        }
+      } catch (e) {
+        // continue with next customer
+      }
+    }
+    showSuccess(`成功绑定 ${successCount}/${total} 个客户`);
+    selectedCustomerIds.value = [];
+    await loadAvailableShipments();
+    if (selectedCustomerId.value) await selectCustomer(selectedCustomerId.value);
+  } catch (error) {
+    showError(error, "customers.bindFailed");
+  } finally {
+    batchBinding.value = false;
+    batchBindingProgress.value = "";
+  }
+}
+
+async function unbindCustomerFromShipment(customerId) {
+  if (!selectedShipmentId.value) return;
+  if (!window.confirm(t("customers.unbindConfirm"))) return;
+  try {
+    await unbindBusinessCustomerShipment(customerId, selectedShipmentId.value);
+    if (shipmentCustomerMap.value[selectedShipmentId.value]) {
+      shipmentCustomerMap.value[selectedShipmentId.value] = shipmentCustomerMap.value[selectedShipmentId.value].filter((id) => id !== customerId);
+    }
+    await loadAvailableShipments();
+    if (selectedCustomerId.value === customerId) {
+      shipments.value = shipments.value.filter((s) => s.shipmentId !== selectedShipmentId.value);
+    }
+    showSuccess("customers.unboundSuccess");
+  } catch (error) {
+    showError(error, "customers.unbindFailed");
+  }
+}
+
 watch(selectedCustomer, (customer) => {
   editForm.username = customer?.username || "";
   editForm.displayName = customer?.displayName || "";
   editForm.clientCode = customer?.clientCode || "";
   editForm.partyRole = customer?.partyRole || "SHIPPER";
 }, { immediate: true });
+
+watch(availableShipments, (list) => {
+  if (!list || !selectedShipmentId.value) return;
+  const stillExists = list.some((s) => s.shipmentId === selectedShipmentId.value);
+  if (!stillExists) {
+    selectedShipmentId.value = "";
+    selectedCustomerIds.value = [];
+  }
+});
 
 onMounted(() => {
   const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
@@ -1348,475 +1644,795 @@ function showError(error, fallbackKey) {
 <style scoped>
 .customer-access-page {
   min-height: 100dvh;
-  color: #102a46;
-  background:
-    radial-gradient(circle at 88% 8%, rgba(28, 131, 224, 0.12), transparent 25%),
-    linear-gradient(180deg, #f8fbff 0%, #edf4fb 100%);
+  display: flex;
+  flex-direction: column;
+  color: #1a2d42;
+  background: #f0f3f7;
 }
 
+/* ---- Header (preserved styling) ---- */
 .customer-access-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 78px;
-  padding: 0 clamp(24px, 4.5vw, 76px);
-  border-bottom: 1px solid rgba(115, 148, 180, 0.2);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 34px rgba(31, 70, 108, 0.06);
-  backdrop-filter: blur(16px);
+  min-height: 64px;
+  padding: 0 clamp(24px, 3vw, 48px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0f1d2e;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
-
-.customer-access-brand,
-.customer-access-header-actions,
-.customer-access-user {
+.customer-access-brand {
   display: flex;
   align-items: center;
-}
-
-.customer-access-brand {
-  gap: 12px;
-  color: inherit;
+  gap: 10px;
+  color: #e8edf3;
   text-decoration: none;
 }
-
 .customer-access-brand img {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
 }
-
-.customer-access-brand span,
-.customer-access-user {
+.customer-access-brand span {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
-
-.customer-access-brand strong { font-size: 17px; }
-.customer-access-brand small,
-.customer-access-user small { color: #7a8fa6; font-size: 10px; }
-
-.customer-access-header-actions { gap: 13px; }
-.customer-access-user { padding-left: 3px; }
-.customer-access-user b { font-size: 12px; }
-
-.customer-access-party-pill {
-  padding: 7px 11px;
-  border: 1px solid #cfe2f5;
-  border-radius: 999px;
-  color: #1767ae;
-  background: #f2f8ff;
+.customer-access-brand strong {
+  font-size: 16px;
+  color: #fff;
+}
+.customer-access-brand small {
+  color: #8899b0;
   font-size: 10px;
-  font-weight: 800;
 }
-
-.customer-access-logout,
-.customer-detail-actions button,
-.customer-shipment-row button,
-.customer-code-dialog button {
-  min-height: 36px;
-  padding: 8px 13px;
-  border: 1px solid #ccdae8;
-  border-radius: 9px;
-  color: #31516f;
-  background: #fff;
+.customer-access-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.customer-access-party-pill {
+  padding: 5px 10px;
+  border: 1px solid rgba(100, 150, 210, 0.35);
+  border-radius: 999px;
+  color: #a0c4e8;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
   font-weight: 750;
 }
-
-.customer-access-content {
-  width: min(1480px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 54px 0 72px;
-}
-
-.customer-access-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
-  align-items: end;
-  gap: 44px;
-  margin-bottom: 28px;
-}
-
-.customer-access-hero > div:first-child > span,
-.customer-list-card header span,
-.customer-detail-head > div > span,
-.customer-code-kicker {
-  color: #1377ce;
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.16em;
-}
-
-.customer-access-hero h1 {
-  max-width: 780px;
-  margin: 10px 0 12px;
-  font-size: clamp(34px, 4vw, 58px);
-  letter-spacing: -0.045em;
-  line-height: 1.02;
-}
-
-.customer-access-hero p {
-  max-width: 760px;
-  margin: 0;
-  color: #627b94;
-  line-height: 1.7;
-}
-
-.customer-access-boundary {
-  display: flex;
-  align-items: flex-start;
-  gap: 13px;
-  padding: 18px;
-  border: 1px solid #cfe2f2;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.customer-access-boundary i {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  margin-top: 4px;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  background: #24b889;
-  box-shadow: 0 0 0 3px rgba(36, 184, 137, 0.13);
-}
-
-.customer-access-boundary span { display: grid; gap: 5px; }
-.customer-access-boundary b { font-size: 13px; }
-.customer-access-boundary small { color: #6d8298; line-height: 1.55; }
-
 .customer-access-message {
-  margin: 0 0 18px;
-  padding: 12px 15px;
-  border: 1px solid #bce7d6;
-  border-radius: 10px;
-  color: #14704f;
-  background: #effbf6;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid #d4e2f0;
+  color: #1b5e3f;
+  background: #eafaf1;
+  font-size: 13px;
+  text-align: center;
 }
-
 .customer-access-message.is-error {
-  border-color: #efc1c8;
-  color: #a22f42;
+  border-color: #f0c4cc;
+  color: #a63142;
   background: #fff3f5;
 }
 
-.customer-access-layout {
-  display: grid;
-  grid-template-columns: minmax(310px, 0.62fr) minmax(660px, 1.38fr);
-  gap: 22px;
-  align-items: start;
+/* ---- Account menu (preserved) ---- */
+.customer-account {
+  position: relative;
 }
-
-.customer-access-sidebar { display: grid; gap: 18px; }
-.customer-create-card,
-.customer-list-card,
-.customer-detail-card {
-  border: 1px solid rgba(158, 184, 210, 0.48);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 20px 55px rgba(30, 70, 109, 0.08);
-}
-
-.customer-create-card { display: grid; gap: 13px; padding: 20px; }
-.customer-create-card header,
-.customer-section-title { display: flex; align-items: flex-start; gap: 12px; }
-.customer-create-card header > span,
-.customer-section-title > span {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: #1477ce;
-  background: #eaf5ff;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.customer-create-card h2,
-.customer-list-card h2,
-.customer-section-title h3 { margin: 0; font-size: 16px; }
-.customer-create-card p,
-.customer-section-title p { margin: 4px 0 0; color: #72879c; font-size: 11px; line-height: 1.5; }
-
-.customer-create-card label,
-.customer-edit-form label,
-.customer-bind-form label { display: grid; gap: 6px; }
-.customer-create-card label > span,
-.customer-edit-form label > span,
-.customer-bind-form label > span { color: #435d76; font-size: 11px; font-weight: 800; }
-
-.customer-create-card input,
-.customer-create-card select,
-.customer-edit-form input,
-.customer-edit-form select,
-.customer-bind-form input,
-.customer-bind-form select {
-  min-height: 42px;
-  width: 100%;
-  padding: 8px 11px;
-  border: 1px solid #cfdeec;
-  border-radius: 9px;
-  outline: 0;
-  color: #183652;
-  background: #fbfdff;
-}
-
-.customer-create-card input:focus,
-.customer-create-card select:focus,
-.customer-edit-form input:focus,
-.customer-edit-form select:focus,
-.customer-bind-form input:focus,
-.customer-bind-form select:focus {
-  border-color: #2a89df;
-  box-shadow: 0 0 0 3px rgba(42, 137, 223, 0.1);
-}
-
-.customer-access-primary {
-  min-height: 43px;
-  border: 1px solid #126fc3;
-  border-radius: 9px;
-  color: #fff;
-  background: linear-gradient(110deg, #1264b0, #168fe2);
-  box-shadow: 0 10px 24px rgba(18, 105, 188, 0.18);
-  font-weight: 800;
-}
-
-.customer-list-card { overflow: hidden; }
-.customer-list-card > header {
+.customer-account-trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px;
-  border-bottom: 1px solid #e0e9f2;
+  gap: 8px;
+  min-width: 140px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #dce4ef;
+  background: rgba(255, 255, 255, 0.05);
+  text-align: left;
+  cursor: pointer;
 }
-.customer-list-card header > div { display: grid; gap: 5px; }
-.customer-list-card header > b {
+.customer-account-trigger:hover,
+.customer-account.is-open .customer-account-trigger {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+}
+.customer-account-trigger span {
   display: grid;
-  place-items: center;
-  min-width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  color: #176cb7;
-  background: #edf6ff;
+  flex: 1;
+  gap: 1px;
+}
+.customer-account-trigger b {
+  font-size: 12px;
+  color: #fff;
+}
+.customer-account-trigger small {
+  color: #8a9cb5;
+  font-size: 10px;
+}
+.customer-account-trigger i {
+  color: #7a90ae;
+  font-style: normal;
+  font-size: 14px;
+}
+.customer-account-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: #152a40;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+.customer-account-menu a,
+.customer-account-menu button {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #c8d6e5;
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.customer-account-menu a:hover,
+.customer-account-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
-.customer-list-row {
+/* ---- Workspace Layout ---- */
+.workspace-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- Sidebar ---- */
+.workspace-sidebar {
+  width: 260px;
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #12253b 0%, #0f1d2e 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.sidebar-tabs {
+  display: flex;
+  gap: 0;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sidebar-tabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #7d93ae;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.sidebar-tabs button:hover {
+  color: #bcd2ea;
+  background: rgba(255, 255, 255, 0.05);
+}
+.sidebar-tabs button.active {
+  color: #fff;
+  background: rgba(64, 134, 210, 0.25);
+  border-color: rgba(64, 134, 210, 0.4);
+}
+
+/* Sidebar search */
+.sidebar-search {
+  padding: 10px 10px 6px;
+}
+.sidebar-search :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+.sidebar-search :deep(.el-input__wrapper:hover) {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.sidebar-search :deep(.el-input__inner) {
+  color: #dce4ef;
+}
+.sidebar-search :deep(.el-input__inner::placeholder) {
+  color: #5e7794;
+}
+.sidebar-search :deep(.el-input__prefix) {
+  color: #5e7794;
+}
+
+/* Sidebar customer list */
+.sidebar-customer-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+.sidebar-customer-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 13px 18px;
+  padding: 9px 10px;
   border: 0;
-  border-bottom: 1px solid #edf2f7;
-  color: inherit;
+  border-radius: 6px;
+  color: #c8d6e5;
   background: transparent;
   text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
-.customer-list-row:hover,
-.customer-list-row.is-active { background: #f0f7ff; }
-.customer-list-row.is-active { box-shadow: inset 3px 0 #1885df; }
-.customer-list-row.is-disabled { opacity: 0.62; }
-.customer-list-avatar {
+.sidebar-customer-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sidebar-customer-row.is-active {
+  background: rgba(64, 134, 210, 0.18);
+  border-left: 2px solid #4086d2;
+  padding-left: 8px;
+}
+.sidebar-customer-row.is-disabled {
+  opacity: 0.5;
+}
+.sidebar-customer-avatar {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  color: #176db8;
-  background: #e6f3ff;
-  font-weight: 900;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(64, 134, 210, 0.4);
+  font-weight: 800;
+  font-size: 12px;
 }
-.customer-list-copy { display: grid; gap: 3px; min-width: 0; }
-.customer-list-copy b,
-.customer-list-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.customer-list-copy b { font-size: 12px; }
-.customer-list-copy small { color: #71869c; font-size: 10px; }
-.customer-list-state { color: #248565; font-size: 9px; font-weight: 850; }
-.customer-list-row.is-disabled .customer-list-state { color: #a0626a; }
-
-.customer-detail-card { min-height: 670px; overflow: hidden; }
-.customer-detail-empty {
+.sidebar-customer-copy {
   display: grid;
-  place-items: center;
-  align-content: center;
-  min-height: 670px;
-  padding: 40px;
+  gap: 2px;
+  min-width: 0;
+}
+.sidebar-customer-copy b {
+  font-size: 12px;
+  color: #e4ecf5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-customer-copy small {
+  color: #6f86a0;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-customer-state {
+  color: #56b88d;
+  font-size: 9px;
+  font-weight: 800;
+}
+.sidebar-customer-row.is-disabled .sidebar-customer-state {
+  color: #c97a86;
+}
+.sidebar-empty-hint {
+  padding: 18px 10px;
+  color: #5e7794;
+  font-size: 12px;
   text-align: center;
 }
-.customer-detail-empty > span {
-  display: grid;
-  place-items: center;
-  width: 50px;
-  height: 50px;
-  border-radius: 15px;
-  color: #177bce;
-  background: #e9f5ff;
-  font-size: 24px;
-}
-.customer-detail-empty h2 { margin: 16px 0 6px; }
-.customer-detail-empty p { margin: 0; color: #72879b; }
 
-.customer-detail-head {
+/* Sidebar shipment list */
+.sidebar-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px 26px;
-  border-bottom: 1px solid #dfe9f2;
-  background: linear-gradient(100deg, #fff, #f1f8ff);
-}
-.customer-detail-head h2 { margin: 6px 0; font-size: 26px; }
-.customer-detail-head p { margin: 0; color: #6a8096; font-size: 11px; }
-.customer-detail-head p i { padding: 0 5px; font-style: normal; }
-.customer-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.customer-detail-actions .is-danger { color: #ac3d4d; border-color: #edc5cc; background: #fff7f8; }
-
-.customer-edit-section,
-.customer-shipments-section { padding: 24px 26px; }
-.customer-shipments-section { border-top: 1px solid #e1eaf3; }
-.customer-edit-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-  align-items: end;
-  gap: 11px;
-  margin-top: 18px;
-}
-.customer-edit-form .customer-access-primary { padding: 0 18px; }
-.customer-code-meta {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
-  padding: 11px 13px;
-  border-radius: 9px;
-  color: #607890;
-  background: #f4f8fc;
-  font-size: 10px;
-}
-.customer-code-meta b { color: #18466f; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; }
-.customer-code-meta small { text-align: right; }
-
-.customer-bind-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-  align-items: end;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 14px;
-  border: 1px solid #dbe7f1;
-  border-radius: 6px;
-  background: #f8fbfe;
-}
-.customer-bind-mode {
-  display: flex;
-  grid-column: 1 / -1;
-  gap: 4px;
-  width: fit-content;
-  padding: 3px;
-  border: 1px solid #d7e3ee;
-  border-radius: 5px;
-  background: #fff;
-}
-.customer-bind-mode button {
-  min-height: 32px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 3px;
-  color: #6c8196;
-  background: transparent;
+  padding: 12px 14px 6px;
+  color: #8ea4be;
   font-size: 10px;
   font-weight: 800;
-}
-.customer-bind-mode button.is-active { color: #126dbd; background: #eaf5ff; }
-.customer-bind-wide { grid-column: span 3; }
-.customer-bind-form .customer-access-primary { padding: 0 18px; }
-
-.customer-field-hint,
-.customer-reference-hint {
-  margin: 0;
-  color: #6f8296;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.55;
-}
-
-.customer-reference-hint {
-  grid-column: 1 / -2;
-  padding: 2px 2px 0;
-}
-
-.customer-shipment-table {
-  display: grid;
-  gap: 8px;
-  margin-top: 16px;
-  border: 0;
-  border-radius: 0;
-}
-.customer-shipment-table-head,
-.customer-shipment-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) minmax(130px, .8fr) minmax(110px, .65fr) 150px;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-}
-.customer-shipment-table-head {
-  border: 1px solid #dce7f1;
-  color: #75889b;
-  background: #f3f7fb;
-  font-size: 9px;
-  font-weight: 850;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.customer-shipment-row {
-  border: 1px solid #dce7f1;
-  border-radius: 4px;
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(28, 66, 103, 0.035);
+.sidebar-section-header b {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #bcd2ea;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+}
+.sidebar-shipment-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+.sidebar-shipment-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #c8d6e5;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sidebar-shipment-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sidebar-shipment-row.is-active {
+  background: rgba(64, 134, 210, 0.18);
+  border-left: 2px solid #4086d2;
+  padding-left: 8px;
+}
+.sidebar-shipment-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.sidebar-shipment-copy b {
+  font-size: 11px;
+  color: #e4ecf5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-shipment-copy small {
+  color: #6f86a0;
   font-size: 10px;
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.customer-shipment-row:hover {
-  border-color: #a9cbe8;
-  box-shadow: 0 8px 20px rgba(28, 86, 138, 0.08);
-  transform: translateY(-1px);
+.sidebar-shipment-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #6f86a0;
+  font-size: 10px;
+  white-space: nowrap;
 }
-.customer-shipment-table > .customer-access-empty {
-  border: 1px solid #dce7f1;
-  border-radius: 4px;
+.sidebar-shipment-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #56b88d;
+  flex-shrink: 0;
+}
+
+/* Sidebar actions */
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sidebar-actions .el-button {
+  flex: 1;
+  font-size: 11px;
+}
+
+/* ---- Main Content Area ---- */
+.workspace-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: #f0f3f7;
+}
+.main-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 60px 20px;
+}
+.empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  color: #a0bcd4;
+  background: #e4ecf5;
+}
+.main-empty-sub {
+  margin: 8px 0 0;
+  color: #889aaf;
+  font-size: 13px;
+}
+
+/* Main cards */
+.main-card {
+  margin-bottom: 16px;
+  border: 1px solid #dce3ec;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(15, 29, 46, 0.06);
+}
+.main-card :deep(.el-card__header) {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8edf3;
+  background: #fafbfc;
+}
+.main-card :deep(.el-card__body) {
+  padding: 20px;
+}
+
+/* Main card header */
+.main-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.main-card-eyebrow {
+  color: #4086d2;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.main-card-title {
+  margin: 4px 0;
+  font-size: 22px;
+  color: #0f1d2e;
+  letter-spacing: -0.02em;
+}
+.main-card-subtitle {
+  margin: 0;
+  color: #6a8096;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.main-card-subtitle .el-divider--vertical {
+  height: 12px;
+}
+.main-card-header-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Section labels */
+.section-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2d42;
+  margin: 0;
+}
+
+/* Profile form */
+.profile-section {
+  margin: 0;
+}
+.profile-form {
+  margin-top: 12px;
+}
+.client-code-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.code-meta-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f4f7fb;
+  font-size: 12px;
+}
+.code-meta-label {
+  color: #5e7794;
+  font-weight: 700;
+  font-size: 11px;
+}
+.code-meta-bar small {
+  color: #889aaf;
+  margin-left: auto;
+}
+
+/* Pending matches */
+.pending-matches-card {
+  margin-top: 16px;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.pending-matches-card :deep(.el-card__header) {
+  padding: 12px 16px;
+}
+.pending-matches-card :deep(.el-card__body) {
+  padding: 10px 16px;
+}
+.pending-matches-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pending-matches-header b {
+  font-size: 13px;
+  color: #1a2d42;
+}
+.pending-matches-header small {
+  display: block;
+  color: #7d93ae;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.pending-match-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: #fff;
+  margin-bottom: 6px;
 }
-.customer-shipment-row > span:first-child { display: grid; gap: 3px; }
-.customer-shipment-row b { font-size: 11px; }
-.customer-shipment-row small { color: #72869a; }
-.customer-shipment-dot {
+.pending-match-row > span {
+  display: grid;
+  gap: 2px;
+}
+.pending-match-row small {
+  color: #7d93ae;
+  font-size: 10px;
+}
+.empty-hint-compact {
+  padding: 16px;
+  color: #889aaf;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Bind form card */
+.bind-form-card {
+  margin-bottom: 12px;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.bind-form-card :deep(.el-card__body) {
+  padding: 14px;
+}
+.bind-mode-switch {
+  margin-bottom: 10px;
+}
+.bind-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reference-hint {
+  margin: 0;
+  color: #7d93ae;
+  font-size: 11px;
+}
+
+/* Candidate card */
+.candidate-card {
+  margin-bottom: 12px;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.candidate-card :deep(.el-card__header) {
+  padding: 12px 16px;
+}
+.candidate-card :deep(.el-card__body) {
+  padding: 10px 16px;
+}
+.candidate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.candidate-header b {
+  font-size: 13px;
+  color: #1a2d42;
+}
+.candidate-header small {
+  display: block;
+  color: #7d93ae;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.candidate-header-actions {
+  display: flex;
+  gap: 6px;
+}
+.candidate-list {
+  display: grid;
+  gap: 6px;
+}
+.candidate-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.3fr) minmax(110px, 0.8fr) minmax(100px, 0.6fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e4eaf1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 11px;
+}
+.candidate-row > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+.candidate-row small {
+  color: #7d93ae;
+}
+.candidate-row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* Shipment status dot */
+.shipment-status-dot {
   display: inline-block;
   width: 7px;
   height: 7px;
-  margin-right: 6px;
+  margin-right: 5px;
   border-radius: 50%;
-  background: #31bd8d;
+  background: #56b88d;
+  flex-shrink: 0;
 }
 
-.customer-access-empty { padding: 24px; color: #8193a6; text-align: center; }
-button:disabled { cursor: wait; opacity: .58; }
+/* Bound table */
+.bound-table-card {
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+}
+.bound-table-card :deep(.el-card__body) {
+  padding: 0;
+}
+.bound-table {
+  width: 100%;
+}
+.table-ref-cell {
+  display: grid;
+  gap: 2px;
+}
+.table-ref-cell b {
+  font-size: 12px;
+  color: #1a2d42;
+}
+.table-ref-cell small {
+  color: #7d93ae;
+  font-size: 10px;
+}
+.table-status-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.table-actions {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
 
+/* ---- Shipment tab main area ---- */
+.shipment-tab-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Batch bind */
+.batch-bind-hint {
+  margin: 0 0 12px;
+  color: #7d93ae;
+  font-size: 12px;
+}
+.customer-checkbox-group {
+  display: grid;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+.customer-checkbox-group :deep(.el-checkbox) {
+  margin-right: 0;
+  padding: 6px 0;
+}
+.customer-checkbox-group :deep(.el-checkbox.is-disabled) {
+  opacity: 0.55;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.checkbox-label b {
+  font-size: 12px;
+  color: #1a2d42;
+}
+.checkbox-label small {
+  color: #7d93ae;
+  font-size: 10px;
+}
+.batch-bind-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.batch-progress {
+  color: #4086d2;
+  font-size: 12px;
+  font-weight: 700;
+}
+.bound-customers-section {
+  margin-top: 4px;
+}
+.bound-customer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid #e0e7f0;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  background: #f9fafb;
+}
+.bound-customer-row > span {
+  display: grid;
+  gap: 2px;
+}
+.bound-customer-row b {
+  font-size: 12px;
+  color: #1a2d42;
+}
+.bound-customer-row small {
+  color: #7d93ae;
+  font-size: 10px;
+}
+
+/* ---- Dialogs (preserved originals with minor refinements) ---- */
 .customer-code-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 120;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(6, 28, 49, 0.58);
+  background: rgba(8, 20, 36, 0.62);
   backdrop-filter: blur(8px);
 }
 .customer-code-dialog {
@@ -1824,333 +2440,438 @@ button:disabled { cursor: wait; opacity: .58; }
   gap: 13px;
   width: min(520px, 100%);
   padding: 30px;
-  border: 1px solid rgba(173, 205, 232, 0.55);
-  border-radius: 20px;
+  border: 1px solid rgba(180, 200, 220, 0.5);
+  border-radius: 16px;
   background: #fff;
-  box-shadow: 0 30px 90px rgba(4, 29, 55, .3);
+  box-shadow: 0 24px 64px rgba(6, 24, 44, 0.28);
 }
-.customer-code-dialog h2 { margin: 0; font-size: 26px; }
+.customer-code-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #0f1d2e;
+}
 .customer-code-dialog p,
-.customer-code-dialog > small { margin: 0; color: #6b8095; line-height: 1.6; }
-.customer-code-dialog code {
-  display: block;
-  padding: 18px;
-  border: 1px dashed #8ec2ec;
-  border-radius: 12px;
-  color: #0e5fa7;
-  background: #eff8ff;
-  font-size: clamp(18px, 3vw, 26px);
-  font-weight: 850;
-  letter-spacing: .08em;
-  text-align: center;
-  overflow-wrap: anywhere;
+.customer-code-dialog > small {
+  margin: 0;
+  color: #6b8095;
+  line-height: 1.6;
 }
-.customer-code-dialog > div { display: flex; gap: 10px; margin-top: 4px; }
-.customer-code-dialog > div button { flex: 1; }
-
-.customer-account {
-  position: relative;
-}
-.customer-account-trigger {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 146px;
-  min-height: 48px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  color: #173752;
-  background: transparent;
-  text-align: left;
-}
-.customer-account-trigger:hover,
-.customer-account.is-open .customer-account-trigger { border-color: #cfe0ef; background: #f6faff; }
-.customer-account-trigger span { display: grid; flex: 1; gap: 2px; }
-.customer-account-trigger b { font-size: 12px; }
-.customer-account-trigger small { color: #7a8fa6; font-size: 10px; }
-.customer-account-trigger i { color: #68829a; font-style: normal; }
-.customer-account-menu {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
-  z-index: 30;
-  display: grid;
-  min-width: 178px;
-  padding: 6px;
-  border: 1px solid #d5e3ef;
-  border-radius: 11px;
-  background: #fff;
-  box-shadow: 0 18px 45px rgba(18, 55, 88, .18);
-}
-.customer-account-menu a,
-.customer-account-menu button {
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 7px;
-  color: #254966;
-  background: transparent;
-  text-align: left;
-  text-decoration: none;
-  font-weight: 750;
-}
-.customer-account-menu a:hover,
-.customer-account-menu button:hover { background: #edf6ff; }
-.customer-create-launcher { gap: 18px; }
-.customer-create-launcher .customer-access-primary { width: 100%; }
-.customer-candidate-section {
-  margin-top: 16px;
-  padding: 14px;
-  border: 1px solid #d9e7f2;
-  border-radius: 10px;
-  background: #f8fbfe;
-}
-.customer-candidate-section > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-.customer-candidate-section h4 { margin: 0; font-size: 13px; }
-.customer-candidate-section p { margin: 3px 0 0; color: #73899e; font-size: 10px; }
-.customer-candidate-actions { display: flex; gap: 7px; }
-.customer-candidate-section button,
-.customer-shipment-actions button {
-  min-height: 31px;
-  padding: 6px 10px;
-  border: 1px solid #cbddeb;
-  border-radius: 7px;
-  color: #315a7c;
-  background: #fff;
+.customer-code-kicker {
+  color: #4086d2;
   font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+.customer-credential-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.customer-credential-list > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f4f7fb;
+}
+.customer-credential-list dt {
+  color: #5e7794;
+  font-size: 11px;
+  font-weight: 700;
+}
+.customer-credential-list dd {
+  color: #0f1d2e;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.customer-code-dialog > div {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.customer-code-dialog > div button {
+  flex: 1;
+}
+.customer-access-primary {
+  min-height: 40px;
+  border: 1px solid #1a4f80;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, #1a4f80, #2e7cc4);
+  box-shadow: 0 8px 20px rgba(15, 50, 90, 0.18);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+.customer-access-primary:hover {
+  box-shadow: 0 10px 26px rgba(15, 50, 90, 0.28);
+}
+
+/* Dialog forms */
+.customer-dialog-form {
+  display: grid;
+  gap: 12px;
+}
+.customer-dialog-form label,
+.customer-note-editor {
+  display: grid;
+  gap: 5px;
+}
+.customer-dialog-form label > span,
+.customer-note-editor > span {
+  color: #435d76;
+  font-size: 11px;
   font-weight: 800;
 }
-.customer-candidate-list { display: grid; gap: 7px; }
-.customer-candidate-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(110px, .6fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #deebf4;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 10px;
-}
-.customer-candidate-row > span:first-child { display: grid; gap: 3px; }
-.customer-candidate-row small { color: #758b9f; }
-.customer-candidate-row > span:last-child,
-.customer-shipment-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.customer-candidate-section button.is-primary { color: #fff; border-color: #1476c9; background: #1476c9; }
-.customer-access-empty.compact { padding: 12px; }
-.customer-shipment-row > span:nth-child(2) { display: grid; grid-template-columns: auto 1fr; align-items: center; }
-.customer-shipment-note { grid-column: 1 / -1; margin-top: 4px; color: #6d8195; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.customer-dialog-form { display: grid; gap: 12px; }
-.customer-dialog-form label,
-.customer-note-editor { display: grid; gap: 6px; }
-.customer-dialog-form label > span,
-.customer-note-editor > span { color: #435d76; font-size: 11px; font-weight: 800; }
 .customer-dialog-form input,
 .customer-dialog-form textarea,
 .customer-note-editor textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border: 1px solid #cfdeec;
-  border-radius: 9px;
+  border-radius: 8px;
   color: #183652;
   background: #fbfdff;
+  font-size: 13px;
+}
+.customer-dialog-form input:focus,
+.customer-dialog-form textarea:focus {
+  border-color: #4086d2;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(64, 134, 210, 0.1);
 }
 .customer-dialog-form textarea,
-.customer-note-editor textarea { min-height: 116px; resize: vertical; font: inherit; }
-.customer-note-editor > small { color: #8193a5; text-align: right; }
-.customer-dialog-actions { display: flex; gap: 9px; justify-content: flex-end; }
-.customer-dialog-actions button { flex: 1; }
-.customer-shipment-dialog { width: min(620px, 100%); }
+.customer-note-editor textarea {
+  min-height: 100px;
+  resize: vertical;
+  font: inherit;
+}
+.customer-note-editor > small {
+  color: #889aaf;
+  text-align: right;
+  font-size: 11px;
+}
+.customer-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.customer-dialog-actions button {
+  flex: 1;
+  min-height: 38px;
+  border: 1px solid #cfdeec;
+  border-radius: 8px;
+  color: #3a5572;
+  background: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.customer-dialog-actions button:hover {
+  background: #f4f7fb;
+}
+.customer-dialog-actions .is-danger {
+  color: #ac3d4d;
+  border-color: #edc5cc;
+  background: #fff7f8;
+}
+.customer-dialog-actions .is-danger:hover {
+  background: #ffeff1;
+}
+.customer-shipment-dialog {
+  width: min(620px, 100%);
+}
 .customer-create-dialog,
-.customer-shipment-dialog { max-height: min(86vh, 860px); overflow-y: auto; }
-.customer-manual-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.customer-manual-update { padding: 12px; border: 1px solid #d7e4ef; border-radius: 10px; background: #f8fbfe; }
-.customer-manual-update summary { cursor: pointer; color: #1b5e96; font-size: 12px; font-weight: 850; }
-.customer-manual-update > p { margin: 8px 0 12px; color: #71879c; font-size: 12px; line-height: 1.6; }
-.customer-pending-matches {
-  display: grid;
-  gap: 10px;
-  margin: 18px 0;
-  padding: 14px;
-  border: 1px solid #d8e5ef;
-  border-radius: 12px;
-  background: #f8fbfd;
+.customer-shipment-dialog {
+  max-height: min(86vh, 860px);
+  overflow-y: auto;
 }
-.customer-pending-matches > header,
-.customer-pending-match-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.customer-pending-matches h4 { margin: 0; color: var(--customer-navy); }
-.customer-pending-matches p { margin: 3px 0 0; color: #71879c; font-size: 11px; }
-.customer-pending-match-row { padding: 10px; border-radius: 9px; background: #fff; }
-.customer-pending-match-row > span { display: grid; gap: 3px; }
-.customer-pending-match-row small { color: #788da0; font-size: 10px; }
-.customer-publication-state { color: #956218 !important; font-weight: 800; }
-.customer-publication-state.is-published { color: #147a55 !important; }
-.customer-shipment-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.customer-shipment-detail-grid > span { display: grid; gap: 4px; padding: 11px; border-radius: 8px; background: #f3f8fc; }
-.customer-shipment-detail-grid small { color: #75899e; }
-.customer-shipment-detail-grid b { color: #183b5a; }
-
-@media (max-width: 720px) {
-  .customer-manual-fields { grid-template-columns: 1fr; }
-  .customer-pending-match-row { align-items: stretch; flex-direction: column; }
-}
-.customer-toast {
-  position: fixed;
-  top: 92px;
-  left: 50%;
-  z-index: 140;
-  transform: translateX(-50%);
-  padding: 12px 18px;
-  border: 1px solid #a9dfca;
-  border-radius: 10px;
-  color: #146a4c;
-  background: #effbf6;
-  box-shadow: 0 14px 38px rgba(18, 94, 68, .16);
-  font-weight: 750;
-}
-
-/* Unified customer operations workspace · restrained deep-ocean theme */
-.customer-access-page {
-  --customer-navy: #0b1f35;
-  --customer-navy-soft: #163552;
-  --customer-blue: #1f69a8;
-  --customer-line: #d9e3ec;
-  --customer-surface: #ffffff;
-  background:
-    radial-gradient(circle at 76% -12%, rgba(69, 126, 174, .12), transparent 34rem),
-    linear-gradient(180deg, #f8fafc 0%, #edf3f7 100%);
-}
-.customer-access-header {
-  border-bottom-color: rgba(165, 185, 201, .38);
-  background: rgba(255, 255, 255, .9);
-  box-shadow: 0 10px 30px rgba(11, 31, 53, .05);
-  backdrop-filter: blur(18px);
-}
-.customer-access-hero h1,
-.customer-detail-head h2,
-.customer-tracking-workspace h2 { color: var(--customer-navy); letter-spacing: -.035em; }
-.customer-workspace-tabs {
+.customer-manual-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin: 24px 0;
-  padding: 7px;
-  border: 1px solid rgba(179, 197, 212, .58);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, .72);
-  box-shadow: 0 16px 36px rgba(11, 31, 53, .06);
-  backdrop-filter: blur(14px);
 }
-.customer-workspace-tabs button {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 12px;
-  align-items: center;
-  min-height: 72px;
-  padding: 13px 18px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  color: #49657c;
-  background: transparent;
-  text-align: left;
+.customer-manual-update {
+  padding: 12px;
+  border: 1px solid #d7e4ef;
+  border-radius: 10px;
+  background: #f8fbfe;
+}
+.customer-manual-update summary {
   cursor: pointer;
-  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-.customer-workspace-tabs button > span {
-  grid-row: 1 / span 2;
-  color: #7891a5;
-  font-size: 11px;
+  color: #1b5e96;
+  font-size: 12px;
   font-weight: 850;
-  letter-spacing: .14em;
 }
-.customer-workspace-tabs button b { color: var(--customer-navy); font-size: 15px; }
-.customer-workspace-tabs button small { color: #71889b; font-size: 11px; }
-.customer-workspace-tabs button.is-active {
-  border-color: rgba(45, 99, 143, .32);
-  background: linear-gradient(145deg, #fafdff, #edf5fa);
-  box-shadow: 0 10px 25px rgba(17, 60, 96, .1);
-  transform: translateY(-1px);
+.customer-manual-update > p {
+  margin: 8px 0 12px;
+  color: #71879c;
+  font-size: 12px;
+  line-height: 1.6;
 }
-.customer-workspace-tabs button.is-active > span { color: var(--customer-blue); }
-.customer-create-card,
-.customer-list-card,
-.customer-detail-card,
-.customer-tracking-workspace {
-  border-color: var(--customer-line);
-  box-shadow: 0 24px 60px rgba(11, 31, 53, .075);
+
+/* Segmented controls (preserved) */
+.customer-segmented-control {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #d4e0ed;
+  border-radius: 6px;
+  background: #fff;
 }
-.customer-access-primary,
-.customer-candidate-section button.is-primary {
-  border-color: var(--customer-navy-soft) !important;
-  background: linear-gradient(135deg, var(--customer-navy-soft), #245b87) !important;
-  box-shadow: 0 8px 18px rgba(15, 53, 84, .16);
+.customer-segmented-control button {
+  flex: 1;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  color: #6c8196;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
 }
-.customer-list-row.is-active {
-  border-color: rgba(36, 91, 135, .34);
-  background: linear-gradient(135deg, #f6fafc, #eaf3f8);
+.customer-segmented-control button.is-active {
+  color: #1a4f80;
+  background: #eaf3fc;
 }
-.customer-list-avatar { background: linear-gradient(145deg, var(--customer-navy-soft), #3579ad); }
-.customer-tracking-workspace {
-  overflow: hidden;
-  border: 1px solid var(--customer-line);
-  border-radius: 18px;
-  background: var(--customer-surface);
+
+/* Batch import dialog */
+.customer-batch-tabs {
+  display: flex;
+  gap: 4px;
 }
-.customer-tracking-workspace > header {
+.customer-batch-tabs button {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d4e0ed;
+  border-radius: 6px;
+  color: #6c8196;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.customer-batch-tabs button.is-active {
+  color: #1a4f80;
+  border-color: #4086d2;
+  background: #eaf3fc;
+}
+.customer-batch-policy {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 22px 26px;
-  border-bottom: 1px solid var(--customer-line);
-  background: linear-gradient(115deg, #fbfdff, #f2f7fa);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f7fb;
+  font-size: 11px;
+  color: #5e7794;
 }
-.customer-tracking-workspace > header span { color: var(--customer-blue); font-size: 10px; font-weight: 850; letter-spacing: .16em; }
-.customer-tracking-workspace > header h2 { margin: 5px 0; font-size: 24px; }
-.customer-tracking-workspace > header p { margin: 0; color: #647d91; }
-.customer-tracking-workspace > header button {
-  padding: 9px 14px;
-  border: 1px solid #c8d6e2;
-  border-radius: 9px;
-  color: #274b69;
+.customer-batch-textarea {
+  display: grid;
+  gap: 6px;
+}
+.customer-batch-textarea textarea {
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid #cfdeec;
+  border-radius: 8px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+}
+.customer-batch-textarea small {
+  color: #889aaf;
+  font-size: 10px;
+}
+.customer-excel-dropzone {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 28px 16px;
+  border: 2px dashed #c8d6e2;
+  border-radius: 12px;
+  text-align: center;
+}
+.customer-excel-dropzone.has-file {
+  border-color: #56b88d;
+  background: #f6fdf9;
+}
+.customer-excel-dropzone input {
+  display: none;
+}
+.customer-excel-dropzone b {
+  color: #1a2d42;
+  font-size: 13px;
+}
+.customer-excel-dropzone small {
+  color: #889aaf;
+  font-size: 11px;
+}
+.customer-excel-dropzone button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #cfdeec;
+  border-radius: 6px;
+  color: #3a5572;
   background: #fff;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
 }
-.customer-tracking-workspace iframe { display: block; width: 100%; min-height: 1040px; border: 0; background: #f5f8fa; }
-
-@media (max-width: 1100px) {
-  .customer-access-layout { grid-template-columns: 1fr; }
-  .customer-access-sidebar { grid-template-columns: minmax(280px, .8fr) minmax(320px, 1.2fr); }
+.customer-batch-error {
+  margin: 0;
+  color: #ac3d4d;
+  font-size: 12px;
 }
 
-@media (max-width: 760px) {
-  .customer-access-header { padding: 0 16px; }
-  .customer-access-user,
-  .customer-access-party-pill { display: none; }
-  .customer-access-content { width: min(100% - 28px, 1480px); padding-top: 34px; }
-  .customer-access-hero { grid-template-columns: 1fr; gap: 20px; }
-  .customer-access-sidebar { grid-template-columns: 1fr; }
-  .customer-detail-head { align-items: flex-start; flex-direction: column; }
-  .customer-edit-form,
-  .customer-bind-form { grid-template-columns: 1fr; }
-  .customer-bind-wide,
-  .customer-bind-mode,
-  .customer-reference-hint { grid-column: 1; }
-  .customer-shipment-table-head { display: none; }
-  .customer-shipment-row { grid-template-columns: 1fr auto; }
-  .customer-shipment-row > span:nth-child(2),
-  .customer-shipment-row > span:nth-child(3) { display: none; }
-  .customer-workspace-tabs { grid-template-columns: 1fr; }
-  .customer-tracking-workspace > header { align-items: flex-start; flex-direction: column; }
+/* Credential table */
+.customer-credential-table {
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.customer-credential-table-head,
+.customer-credential-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.2fr 0.8fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+.customer-credential-table-head {
+  background: #f4f7fb;
+  color: #5e7794;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.customer-credential-row {
+  border-bottom: 1px solid #eef2f7;
+}
+.customer-credential-row.is-failed {
+  background: #fff8f8;
+  color: #ac3d4d;
+}
+.customer-credential-row:last-child {
+  border-bottom: 0;
+}
+
+/* Shipment detail grid */
+.customer-shipment-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.customer-shipment-detail-grid > span {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f4f7fb;
+}
+.customer-shipment-detail-grid small {
+  color: #75899e;
+  font-size: 10px;
+}
+.customer-shipment-detail-grid b {
+  color: #183b5a;
+  font-size: 12px;
+}
+
+/* Toast */
+.customer-toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  z-index: 200;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border: 1px solid #a9dfca;
+  border-radius: 8px;
+  color: #146a4c;
+  background: #effbf6;
+  box-shadow: 0 12px 32px rgba(18, 94, 68, 0.14);
+  font-weight: 750;
+  font-size: 13px;
+}
+
+/* Element Plus overrides */
+:deep(.business-select) {
+  width: 100%;
+}
+:deep(.el-divider--vertical) {
+  margin: 0 2px;
+}
+:deep(.el-tag) {
+  font-weight: 600;
+}
+
+/* Disabled state */
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* Scrollbar styling */
+.workspace-sidebar ::-webkit-scrollbar,
+.workspace-main ::-webkit-scrollbar {
+  width: 5px;
+}
+.workspace-sidebar ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.workspace-sidebar ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.workspace-main ::-webkit-scrollbar-track {
+  background: #e8edf3;
+}
+.workspace-main ::-webkit-scrollbar-thumb {
+  background: #c5d0dc;
+  border-radius: 4px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .workspace-sidebar {
+    width: 220px;
+    flex: 0 0 220px;
+  }
+  .workspace-main {
+    padding: 14px 12px;
+  }
+}
+@media (max-width: 680px) {
+  .workspace-layout {
+    flex-direction: column;
+  }
+  .workspace-sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    max-height: 40vh;
+  }
+  .main-card-header {
+    flex-direction: column;
+  }
+  .candidate-row {
+    grid-template-columns: 1fr auto;
+  }
+  .customer-manual-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }
 </style>
