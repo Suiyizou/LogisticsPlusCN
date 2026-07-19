@@ -1558,7 +1558,23 @@ Object.assign(messages["zh-CN"].customers, {
   supplementClientCode: "补充/修改 Client Code",
   supplementClientCodeHint: "为客户设置用于业务匹配的 Client Code，用于自动关联票单。",
   supplementSaved: "Client Code 已更新。",
-  batchBindingFailed: "批量绑定完成：{success} 成功，{failed} 失败"
+  batchBindingFailed: "批量绑定完成：{success} 成功，{failed} 失败",
+  carrierCOSCO: "COSCO SHIPPING",
+  carrierCMA: "CMA CGM",
+  dialogKickerCredential: "一次性凭证",
+  dialogKickerNewCustomer: "新建客户",
+  dialogKickerProvisioning: "客户批量开通",
+  dialogKickerCredentialExport: "一次性凭证导出",
+  dialogKickerBusinessMatching: "业务匹配码",
+  dialogKickerSecureReset: "安全重置凭证",
+  dialogKickerNewShipment: "新建票单",
+  dialogKickerShipmentDetail: "票单详情",
+  batchBindingProgress: "绑定中 {current}/{total}...",
+  batchBindingResult: "成功绑定 {success}/{total} 个客户",
+  customerName: "客户名",
+  field: "字段",
+  value: "值",
+  note: "备注"
 });
 
 Object.assign(messages["en-US"].customers, {
@@ -1641,5 +1657,21 @@ Object.assign(messages["en-US"].customers, {
   supplementClientCode: "Edit Client Code",
   supplementClientCodeHint: "Set a Client Code for business matching and automatic shipment association.",
   supplementSaved: "Client code updated.",
-  batchBindingFailed: "Batch bind complete: {success} succeeded, {failed} failed"
+  batchBindingFailed: "Batch bind complete: {success} succeeded, {failed} failed",
+  carrierCOSCO: "COSCO SHIPPING",
+  carrierCMA: "CMA CGM",
+  dialogKickerCredential: "ONE-TIME CREDENTIAL",
+  dialogKickerNewCustomer: "NEW CUSTOMER",
+  dialogKickerProvisioning: "CUSTOMER PROVISIONING",
+  dialogKickerCredentialExport: "ONE-TIME CREDENTIAL EXPORT",
+  dialogKickerBusinessMatching: "BUSINESS MATCHING KEY",
+  dialogKickerSecureReset: "SECURE CREDENTIAL RESET",
+  dialogKickerNewShipment: "NEW SHIPMENT",
+  dialogKickerShipmentDetail: "SHIPMENT DETAIL",
+  batchBindingProgress: "Binding {current}/{total}...",
+  batchBindingResult: "Successfully bound {success}/{total} customers",
+  customerName: "Customer name",
+  field: "Field",
+  value: "Value",
+  note: "Note"
 });

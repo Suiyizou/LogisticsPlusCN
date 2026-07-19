@@ -123,7 +123,8 @@
       </aside>
 
       <div class="workspace-main">
-        <template v-if="sidebarTab === 'customers'">
+        <Transition name="fade" mode="out-in">
+        <div v-if="sidebarTab === 'customers'" key="customers">
           <div v-if="!selectedCustomer" class="main-empty-state">
             <el-empty :description="t('customers.selectCustomerPrompt')">
               <template #image>
@@ -274,8 +275,8 @@
                       <el-col :span="8">
                         <el-form-item :label="t('customers.carrier')">
                           <el-select v-model="bindForm.carrier" class="business-select" popper-class="business-select-popper">
-                            <el-option value="COSCO" label="COSCO SHIPPING" />
-                            <el-option value="CMA" label="CMA CGM" />
+                            <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+                            <el-option value="CMA" :label="t('customers.carrierCMA')" />
                           </el-select>
                         </el-form-item>
                       </el-col>
@@ -393,9 +394,9 @@
               </el-card>
             </el-card>
           </template>
-        </template>
+        </div>
 
-        <template v-if="sidebarTab === 'shipments'">
+        <div v-else-if="sidebarTab === 'shipments'" key="shipments">
           <div v-if="!selectedShipment" class="main-empty-state">
             <el-empty :description="t('customers.selectShipmentPrompt')">
               <template #image>
@@ -412,35 +413,14 @@
               <template #header>
                 <div class="section-label">{{ t('customers.shipmentDetail') }}</div>
               </template>
-              <el-descriptions :column="2" border size="small">
-                <el-descriptions-item :label="t('customers.carrier')">
-                  {{ selectedShipment.carrier || '—' }}
-                </el-descriptions-item>
-                <el-descriptions-item :label="t('customers.referenceType')">
-                  {{ referenceTypeLabel(selectedShipment.referenceType) }}
-                </el-descriptions-item>
-                <el-descriptions-item :label="t('customers.referenceNo')">
-                  {{ selectedShipment.referenceNo || selectedShipment.shipmentId }}
-                </el-descriptions-item>
-                <el-descriptions-item :label="t('customers.shipmentStatus')">
-                  {{ selectedShipment.trackingStatus || '—' }}
-                </el-descriptions-item>
-                <el-descriptions-item :label="t('customers.boundRoles')">
-                  <el-tag
-                    v-for="role in (selectedShipment.boundRoles || [])"
-                    :key="role"
-                    size="small"
-                    effect="plain"
-                    style="margin-right:4px;"
-                  >
-                    {{ partyRoleLabel(role) }}
-                  </el-tag>
-                  <span v-if="!(selectedShipment.boundRoles || []).length">—</span>
-                </el-descriptions-item>
-                <el-descriptions-item :label="t('customers.lastTrackedAt')">
-                  {{ formatDate(selectedShipment.lastTrackedAt || selectedShipment.updatedAt) }}
-                </el-descriptions-item>
-              </el-descriptions>
+              <el-table :data="shipmentDetailRows" size="small" stripe border class="shipment-detail-table">
+                <el-table-column :label="t('customers.field')" width="160">
+                  <template #default="{ row }">{{ row.label }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.value')">
+                  <template #default="{ row }">{{ row.value }}</template>
+                </el-table-column>
+              </el-table>
             </el-card>
 
             <el-card class="main-card" shadow="never">
@@ -503,13 +483,14 @@
               </el-button>
             </div>
           </template>
-        </template>
+        </div>
+      </Transition>
       </div>
     </section>
 
     <div v-if="revealedCode" class="customer-code-overlay" role="presentation" @click.self="closeCodeReveal">
       <section class="customer-code-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.codeDialogTitle')">
-        <span class="customer-code-kicker">ONE-TIME CREDENTIAL</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerCredential") }}</span>
         <h2>{{ t("customers.codeDialogTitle") }}</h2>
         <p>{{ t("customers.codeDialogDescription", { name: revealedCode.displayName }) }}</p>
         <dl class="customer-credential-list">
@@ -557,7 +538,7 @@
 
     <div v-if="batchImportDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeBatchImport">
       <section class="customer-code-dialog customer-batch-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchImport')">
-        <span class="customer-code-kicker">CUSTOMER PROVISIONING</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerProvisioning") }}</span>
         <h2>{{ t("customers.batchImport") }}</h2>
         <p>{{ t("customers.batchImportDescription") }}</p>
         <div class="customer-batch-tabs">
@@ -594,7 +575,7 @@
 
     <div v-if="batchCredentialRows.length" class="customer-code-overlay" role="presentation">
       <section class="customer-code-dialog customer-credential-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchCredentialTitle')">
-        <span class="customer-code-kicker">ONE-TIME CREDENTIAL EXPORT</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerCredentialExport") }}</span>
         <h2>{{ t("customers.batchCredentialTitle") }}</h2>
         <p>{{ t("customers.batchCredentialDescription") }}</p>
         <div class="customer-credential-table">
@@ -630,7 +611,7 @@
 
     <div v-if="resetPasswordDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeResetPasswordDialog">
       <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.resetPassword')">
-        <span class="customer-code-kicker">SECURE CREDENTIAL RESET</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerSecureReset") }}</span>
         <h2>{{ t("customers.resetPassword") }}</h2>
         <p>{{ t("customers.resetPasswordDescription", { name: selectedCustomer?.displayName || selectedCustomer?.username || '' }) }}</p>
         <form class="customer-dialog-form" @submit.prevent="resetPassword">
@@ -652,15 +633,15 @@
 
     <div v-if="shipmentCreateDialogOpen" class="customer-code-overlay" role="presentation" @click.self="shipmentCreateDialogOpen = false">
       <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createShipment')">
-        <span class="customer-code-kicker">NEW SHIPMENT</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerNewShipment") }}</span>
         <h2>{{ t("customers.createShipment") }}</h2>
         <p>{{ t("customers.createShipmentDescription") }}</p>
         <form class="customer-dialog-form" @submit.prevent="createShipment">
           <label>
             <span>{{ t("customers.carrier") }}</span>
             <el-select v-model="shipmentCreateForm.carrier" class="business-select" popper-class="business-select-popper">
-              <el-option value="COSCO" label="COSCO SHIPPING" />
-              <el-option value="CMA" label="CMA CGM" />
+              <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+              <el-option value="CMA" :label="t('customers.carrierCMA')" />
             </el-select>
           </label>
           <label>
@@ -698,7 +679,7 @@
 
     <div v-if="detailShipment" class="customer-code-overlay" role="presentation" @click.self="closeShipmentDetail">
       <section class="customer-code-dialog customer-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.details')">
-        <span class="customer-code-kicker">SHIPMENT DETAIL</span>
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerShipmentDetail") }}</span>
         <h2>{{ detailShipment.referenceNo || detailShipment.shipmentId }}</h2>
         <div class="customer-shipment-detail-grid">
           <span><small>{{ t("customers.carrier") }}</small><b>{{ detailShipment.carrier || '—' }}</b></span>
@@ -889,6 +870,45 @@ const boundCustomersForSelectedShipment = computed(() => {
   return shipmentCustomerMap.value[selectedShipmentId.value] || [];
 });
 
+const boundCustomerNamesForShipment = computed(() => {
+  if (!selectedShipmentId.value) return "";
+  const cids = shipmentCustomerMap.value[selectedShipmentId.value] || [];
+  if (!cids.length) {
+    const roles = selectedShipment.value?.boundRoles || [];
+    return roles.length ? roles.map(partyRoleLabel).join(", ") : "";
+  }
+  return cids.map(cid => getCustomerName(cid)).join(", ");
+});
+
+const shipmentDetailRows = computed(() => {
+  if (!selectedShipment.value) return [];
+  const s = selectedShipment.value;
+  return [
+    { label: t("customers.carrier"), value: s.carrier || "—" },
+    { label: t("customers.referenceType"), value: referenceTypeLabel(s.referenceType) },
+    { label: t("customers.referenceNo"), value: s.referenceNo || s.shipmentId || "—" },
+    { label: t("customers.shipmentStatus"), value: s.trackingStatus || "—" },
+    { label: t("customers.lastTrackedAt"), value: formatDate(s.lastTrackedAt || s.updatedAt) },
+    { label: t("customers.jobNumber"), value: s.forwarderJobNumber || "—" },
+    { label: t("customers.vesselVoyage"), value: s.vesselVoyage || "—" },
+    { label: t("customers.portOfLoading"), value: s.portOfLoading || "—" },
+    { label: t("customers.portOfDischarge"), value: s.portOfDischarge || "—" },
+    { label: t("customers.clientPoNumber"), value: s.clientPoNumber || "—" },
+    { label: t("customers.volume"), value: s.volume || "—" },
+    { label: t("customers.estimatedDeparture"), value: valueOrDash(s.estimatedDeparture) },
+    { label: t("customers.estimatedArrival"), value: valueOrDash(s.estimatedArrival) },
+    { label: t("customers.actualDeparture"), value: valueOrDash(s.actualDeparture) },
+    { label: t("customers.actualArrival"), value: valueOrDash(s.actualArrival) },
+    { label: t("customers.actualDelivery"), value: valueOrDash(s.actualDelivery) },
+    { label: t("customers.currentLocation"), value: s.currentLocation || "—" },
+    { label: t("customers.clientNameCode"), value: s.clientNameCode || "—" },
+    { label: t("customers.boundCustomers"), value: boundCustomerNamesForShipment.value || "—" },
+    { label: t("customers.note"), value: s.note || "—" },
+  ].filter(row => row.value !== undefined);
+});
+
+function valueOrDash(v) { return v || "—"; }
+
 function isCustomerBoundToSelectedShipment(customerId) {
   return boundCustomersForSelectedShipment.value.includes(customerId);
 }
@@ -917,7 +937,7 @@ async function batchBindCustomers() {
   try {
     for (let i = 0; i < selectedCustomerIds.value.length; i++) {
       const customerId = selectedCustomerIds.value[i];
-      batchBindingProgress.value = `绑定中 ${i + 1}/${total}...`;
+      batchBindingProgress.value = t("customers.batchBindingProgress", { current: i + 1, total });
       try {
         await bindBusinessCustomerShipment(customerId, { shipmentId });
         successCount++;
@@ -931,7 +951,7 @@ async function batchBindCustomers() {
         // continue with next customer
       }
     }
-    showSuccess(`成功绑定 ${successCount}/${total} 个客户`);
+    showSuccess(t("customers.batchBindingResult", { success: successCount, total }));
     selectedCustomerIds.value = [];
     await loadAvailableShipments();
     if (selectedCustomerId.value) await selectCustomer(selectedCustomerId.value);
@@ -1802,15 +1822,15 @@ function showError(error, fallbackKey) {
   flex: 0 0 260px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #12253b 0%, #0f1d2e 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #f5f7fa 0%, #eceff4 100%);
+  border-right: 1px solid #dce1e8;
   overflow: hidden;
 }
 .sidebar-tabs {
   display: flex;
   gap: 0;
   padding: 10px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #dce1e8;
 }
 .sidebar-tabs button {
   flex: 1;
@@ -1822,7 +1842,7 @@ function showError(error, fallbackKey) {
   padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #7d93ae;
+  color: #5a6d80;
   background: transparent;
   font-size: 11px;
   font-weight: 700;
@@ -1830,13 +1850,13 @@ function showError(error, fallbackKey) {
   transition: all 0.18s ease;
 }
 .sidebar-tabs button:hover {
-  color: #bcd2ea;
-  background: rgba(255, 255, 255, 0.05);
+  color: #3a5068;
+  background: rgba(0, 0, 0, 0.04);
 }
 .sidebar-tabs button.active {
-  color: #fff;
-  background: rgba(64, 134, 210, 0.25);
-  border-color: rgba(64, 134, 210, 0.4);
+  color: #1e40af;
+  background: #e0e7ff;
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 /* Sidebar search */
@@ -1844,21 +1864,21 @@ function showError(error, fallbackKey) {
   padding: 10px 10px 6px;
 }
 .sidebar-search :deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #fff;
+  border-color: #dce1e8;
   box-shadow: none;
 }
 .sidebar-search :deep(.el-input__wrapper:hover) {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: #c5d0dc;
 }
 .sidebar-search :deep(.el-input__inner) {
-  color: #dce4ef;
+  color: #1a2d42;
 }
 .sidebar-search :deep(.el-input__inner::placeholder) {
-  color: #5e7794;
+  color: #94a3b8;
 }
 .sidebar-search :deep(.el-input__prefix) {
-  color: #5e7794;
+  color: #94a3b8;
 }
 
 /* Sidebar customer list */
@@ -1876,18 +1896,18 @@ function showError(error, fallbackKey) {
   padding: 9px 10px;
   border: 0;
   border-radius: 6px;
-  color: #c8d6e5;
+  color: #334155;
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .sidebar-customer-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: #e8ecf1;
 }
 .sidebar-customer-row.is-active {
-  background: rgba(64, 134, 210, 0.18);
-  border-left: 2px solid #4086d2;
+  background: #e0e7ff;
+  border-left: 2px solid #3b82f6;
   padding-left: 8px;
 }
 .sidebar-customer-row.is-disabled {
@@ -1899,8 +1919,8 @@ function showError(error, fallbackKey) {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  color: #fff;
-  background: rgba(64, 134, 210, 0.4);
+  color: #1e40af;
+  background: #bfdbfe;
   font-weight: 800;
   font-size: 12px;
 }
@@ -1911,20 +1931,20 @@ function showError(error, fallbackKey) {
 }
 .sidebar-customer-copy b {
   font-size: 12px;
-  color: #e4ecf5;
+  color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sidebar-customer-copy small {
-  color: #6f86a0;
+  color: #64748b;
   font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sidebar-customer-state {
-  color: #56b88d;
+  color: #16a34a;
   font-size: 9px;
   font-weight: 800;
 }
@@ -1933,7 +1953,7 @@ function showError(error, fallbackKey) {
 }
 .sidebar-empty-hint {
   padding: 18px 10px;
-  color: #5e7794;
+  color: #94a3b8;
   font-size: 12px;
   text-align: center;
 }
@@ -1944,7 +1964,7 @@ function showError(error, fallbackKey) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px 6px;
-  color: #8ea4be;
+  color: #5a6d80;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -1956,8 +1976,8 @@ function showError(error, fallbackKey) {
   min-width: 24px;
   height: 24px;
   border-radius: 6px;
-  color: #bcd2ea;
-  background: rgba(255, 255, 255, 0.08);
+  color: #3a5068;
+  background: #e2e8f0;
   font-size: 11px;
 }
 .sidebar-shipment-list {
@@ -1974,18 +1994,18 @@ function showError(error, fallbackKey) {
   padding: 9px 10px;
   border: 0;
   border-radius: 6px;
-  color: #c8d6e5;
+  color: #334155;
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .sidebar-shipment-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: #e8ecf1;
 }
 .sidebar-shipment-row.is-active {
-  background: rgba(64, 134, 210, 0.18);
-  border-left: 2px solid #4086d2;
+  background: #e0e7ff;
+  border-left: 2px solid #3b82f6;
   padding-left: 8px;
 }
 .sidebar-shipment-copy {
@@ -1995,13 +2015,13 @@ function showError(error, fallbackKey) {
 }
 .sidebar-shipment-copy b {
   font-size: 11px;
-  color: #e4ecf5;
+  color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sidebar-shipment-copy small {
-  color: #6f86a0;
+  color: #64748b;
   font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2011,7 +2031,7 @@ function showError(error, fallbackKey) {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #6f86a0;
+  color: #64748b;
   font-size: 10px;
   white-space: nowrap;
 }
@@ -2020,7 +2040,7 @@ function showError(error, fallbackKey) {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #56b88d;
+  background: #16a34a;
   flex-shrink: 0;
 }
 
@@ -2029,7 +2049,7 @@ function showError(error, fallbackKey) {
   display: flex;
   gap: 8px;
   padding: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid #dce1e8;
 }
 .sidebar-actions .el-button {
   flex: 1;
@@ -2042,6 +2062,14 @@ function showError(error, fallbackKey) {
   overflow-y: auto;
   padding: 20px 24px;
   background: #f0f3f7;
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 .main-empty-state {
   display: flex;
@@ -2827,7 +2855,7 @@ button:disabled {
   background: transparent;
 }
 .workspace-sidebar ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: #c5d0dc;
   border-radius: 4px;
 }
 .workspace-main ::-webkit-scrollbar-track {

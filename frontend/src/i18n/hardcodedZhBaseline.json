@@ -714,6 +714,9 @@
     "upright: \"保持朝上\",",
     "weightKg: [\"weightKg\", \"unitWeight\", \"unitWeightKg\", \"weight\", \"单重\", \"单件重量\", \"每件重量\", \"重量kg\", \"单重kg\", \"单件重量kg\", \"毛重kg\", \"净重kg\"],",
     "widthCm: [\"widthCm\", \"width\", \"w\", \"宽\", \"宽度\", \"外宽\", \"宽cm\", \"宽度cm\", \"宽厘米\", \"宽mm\", \"宽度mm\", \"宽毫米\", \"宽m\", \"宽度m\"],",
+    "const usernameIndex = findColumn([\"客户名\", \"用户名\", \"登录名\", \"customer name\", \"username\", \"login name\"]);",
+    "const passwordIndex = findColumn([\"密码\", \"登录密码\", \"password\"]);",
+    "const codeIndex = findColumn([\"客户码\", \"customer code\", \"customercode\"]);",
     "workerScope.postMessage({ id, type: \"error\", message: error.message || \"本机计算失败\" });"
   ]
 }
