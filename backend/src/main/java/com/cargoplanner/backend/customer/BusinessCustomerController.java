@@ -127,6 +127,15 @@ public class BusinessCustomerController {
     return service.create(request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/batch")
+  public Map<String, Object> batchCreate(
+      @RequestBody CustomerBatchImportRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.batchCreate(request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @GetMapping("/{customerId}")
   public Map<String, Object> get(
       @PathVariable String customerId,

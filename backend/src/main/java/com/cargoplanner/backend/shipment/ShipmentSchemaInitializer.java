@@ -319,6 +319,8 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           party_role VARCHAR(20) NOT NULL,
           customer_code_hash CHAR(64) NOT NULL UNIQUE,
           customer_code_prefix VARCHAR(16) NOT NULL,
+          customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
+          provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
           status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
           created_by BIGINT NOT NULL,
           created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),

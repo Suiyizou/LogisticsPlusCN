@@ -14,12 +14,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,6 +44,9 @@ public class BusinessCustomerService {
   private static final List<String> REFERENCE_TYPES = List.of("BOOKING", "BILLOFLADING");
   private static final List<String> CARRIERS = List.of("COSCO", "CMA");
   private static final List<String> UNIQUE_PARTY_ROLES = List.of("SHIPPER", "CONSIGNEE");
+  private static final SecureRandom CREDENTIAL_RANDOM = new SecureRandom();
+  private static final String PASSWORD_ALPHABET =
+      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
 
   private final JdbcTemplate jdbcTemplate;
   private final CustomerTokenCodec tokenCodec;
@@ -92,13 +97,106 @@ public class BusinessCustomerService {
       String ipAddress
   ) {
     requireManager(actor);
+    return createOne(request, actor, ipAddress, "MANUAL");
+  }
+
+  public Map<String, Object> batchCreate(
+      CustomerBatchImportRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    List<CustomerBatchImportItem> items = request == null || request.items() == null
+        ? List.of()
+        : request.items();
+    if (items.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one customer row is required");
+    }
+    if (items.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A customer import cannot exceed 500 rows");
+    }
+    String codeMode = normalizeCustomerCodeMode(
+        request == null ? null : request.customerCodeMode(), null
+    );
+    List<Map<String, Object>> results = new ArrayList<>();
+    int createdCount = 0;
+    for (int index = 0; index < items.size(); index++) {
+      CustomerBatchImportItem item = items.get(index);
+      int rowNumber = item != null && item.rowNumber() != null
+          ? item.rowNumber()
+          : index + 2;
+      String suppliedPassword = item == null ? null : item.password();
+      String password = suppliedPassword == null || suppliedPassword.isBlank()
+          ? generatePassword()
+          : suppliedPassword;
+      String username = item == null ? null : item.username();
+      String customerCode = item == null ? null : item.customerCode();
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("rowNumber", rowNumber);
+      row.put("username", username == null ? "" : username.trim());
+      try {
+        Map<String, Object> created = createOne(
+            new CreateCustomerRequest(
+                username,
+                password,
+                username,
+                "CONSIGNEE",
+                null,
+                customerCode,
+                codeMode
+            ),
+            actor,
+            ipAddress,
+            "BATCH"
+        );
+        row.put("status", "CREATED");
+        row.put("customer", created);
+        row.put("password", password);
+        row.put("customerCode", created.get("customerCode"));
+        createdCount++;
+      } catch (ApiException error) {
+        row.put("status", "FAILED");
+        row.put("message", error.getMessage());
+      }
+      results.add(row);
+    }
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("items", results);
+    response.put("total", results.size());
+    response.put("created", createdCount);
+    response.put("failed", results.size() - createdCount);
+    response.put("customerCodeMode", codeMode);
+    response.put("sourceFileName", ClientInfo.trim(
+        request == null ? null : request.sourceFileName(), 255
+    ));
+    return response;
+  }
+
+  private Map<String, Object> createOne(
+      CreateCustomerRequest request,
+      AuthenticatedUser actor,
+      String ipAddress,
+      String provisioningSource
+  ) {
     String username = normalizeUsername(request == null ? null : request.username());
     String password = normalizePassword(request == null ? null : request.password());
-    String displayName = normalizeDisplayName(request == null ? null : request.displayName());
-    String clientCode = normalizeClientCode(request == null ? null : request.clientCode(), username);
-    String partyRole = normalizePartyRole(request == null ? null : request.partyRole(), null);
+    String displayName = normalizeDisplayName(
+        request == null || request.displayName() == null || request.displayName().isBlank()
+            ? username
+            : request.displayName()
+    );
+    String clientCode = normalizeOptionalClientCode(request == null ? null : request.clientCode());
+    String partyRole = normalizePartyRole(
+        request == null ? null : request.partyRole(), "CONSIGNEE"
+    );
+    String customerCodeMode = normalizeCustomerCodeMode(
+        request == null ? null : request.customerCodeMode(),
+        request == null ? null : request.customerCode()
+    );
     PasswordHash passwordHash = passwordHasher.hash(password);
-    GeneratedCustomerCode code = tokenCodec.newCustomerCode();
+    GeneratedCustomerCode code = "MANUAL".equals(customerCodeMode)
+        ? tokenCodec.customerCode(normalizeCustomerCode(request == null ? null : request.customerCode()))
+        : tokenCodec.newCustomerCode();
     String publicId = UUID.randomUUID().toString();
     KeyHolder keyHolder = new GeneratedKeyHolder();
     try {
@@ -108,8 +206,9 @@ public class BusinessCustomerService {
             INSERT INTO cp_customers (
               public_id, username, display_name, client_code, party_role,
               password_salt, password_hash, password_iterations,
-              customer_code_hash, customer_code_prefix, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+              customer_code_hash, customer_code_prefix, customer_code_mode,
+              provisioning_source, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -123,11 +222,13 @@ public class BusinessCustomerService {
         statement.setInt(8, passwordHash.iterations());
         statement.setString(9, code.hash());
         statement.setString(10, code.prefix());
-        statement.setLong(11, actor.id());
+        statement.setString(11, customerCodeMode);
+        statement.setString(12, provisioningSource);
+        statement.setLong(13, actor.id());
         return statement;
       }, keyHolder);
     } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username already exists");
+      throw new ApiException(HttpStatus.CONFLICT, "Customer username or customer code already exists");
     }
     CustomerRecord customer = requireManaged(publicId, actor);
     audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
@@ -150,9 +251,9 @@ public class BusinessCustomerService {
     String displayName = request == null || request.displayName() == null || request.displayName().isBlank()
         ? existing.displayName()
         : normalizeDisplayName(request.displayName());
-    String clientCode = request == null || request.clientCode() == null || request.clientCode().isBlank()
+    String clientCode = request == null || request.clientCode() == null
         ? existing.clientCode()
-        : normalizeClientCode(request.clientCode(), existing.username());
+        : normalizeOptionalClientCode(request.clientCode());
     String partyRole = normalizePartyRole(
         request == null ? null : request.partyRole(), existing.partyRole()
     );
@@ -207,7 +308,7 @@ public class BusinessCustomerService {
     CustomerRecord customer = requireManaged(customerPublicId, actor);
     GeneratedCustomerCode code = tokenCodec.newCustomerCode();
     jdbcTemplate.update(
-        "UPDATE cp_customers SET customer_code_hash = ?, customer_code_prefix = ? WHERE id = ?",
+        "UPDATE cp_customers SET customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'RANDOM' WHERE id = ?",
         code.hash(),
         code.prefix(),
         customer.id()
@@ -1034,7 +1135,8 @@ public class BusinessCustomerService {
   private String baseCustomerSelect() {
     return """
         SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
-               c.party_role, c.customer_code_prefix,
+               c.party_role, c.customer_code_prefix, c.customer_code_mode,
+               c.provisioning_source,
                c.status, c.created_by, c.created_at, c.updated_at,
                u.display_name AS created_by_display_name,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.customer_id = c.id) AS shipment_count
@@ -1088,6 +1190,8 @@ public class BusinessCustomerService {
         rs.getString("client_code"),
         rs.getString("party_role"),
         rs.getString("customer_code_prefix"),
+        rs.getString("customer_code_mode"),
+        rs.getString("provisioning_source"),
         rs.getString("status"),
         nullableLong(rs, "created_by"),
         rs.getString("created_by_display_name"),
@@ -1188,6 +1292,8 @@ public class BusinessCustomerService {
     value.put("clientCode", record.clientCode());
     value.put("partyRole", record.partyRole());
     value.put("customerCodePrefix", record.codePrefix());
+    value.put("customerCodeMode", record.customerCodeMode());
+    value.put("provisioningSource", record.provisioningSource());
     value.put("status", record.status());
     value.put("createdBy", record.createdBy());
     value.put("createdByDisplayName", record.createdByDisplayName());
@@ -1313,8 +1419,8 @@ public class BusinessCustomerService {
 
   private String normalizeUsername(String value) {
     String normalized = value == null ? "" : value.trim();
-    if (!normalized.matches("[A-Za-z0-9._-]{3,64}")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer username must contain 3-64 letters, numbers, dots, underscores, or hyphens");
+    if (!normalized.matches("[\\p{L}\\p{N}._-]{2,64}")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer name must contain 2-64 letters, numbers, dots, underscores, or hyphens");
     }
     return normalized;
   }
@@ -1337,18 +1443,52 @@ public class BusinessCustomerService {
     return normalized;
   }
 
-  private String normalizeClientCode(String value, String fallback) {
-    String normalized = normalizeCode(
-        value,
-        fallback == null ? null : fallback.trim().toUpperCase(Locale.ROOT)
-    );
-    if (normalized == null || !normalized.matches("[A-Z0-9._-]{1,64}")) {
+  private String normalizeOptionalClientCode(String value) {
+    if (value == null || value.isBlank()) return null;
+    String normalized = value.trim().toUpperCase(Locale.ROOT);
+    if (!normalized.matches("[A-Z0-9._-]{1,64}")) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Client Code must contain 1-64 letters, numbers, dots, underscores, or hyphens"
       );
     }
     return normalized;
+  }
+
+  private String normalizeCustomerCodeMode(String value, String manualCode) {
+    String fallback = manualCode == null || manualCode.isBlank() ? "RANDOM" : "MANUAL";
+    String normalized = normalizeCode(value, fallback);
+    if (!"RANDOM".equals(normalized) && !"MANUAL".equals(normalized)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer code mode must be RANDOM or MANUAL");
+    }
+    return normalized;
+  }
+
+  private String normalizeCustomerCode(String value) {
+    String normalized = value == null ? "" : value.trim();
+    if (normalized.length() < 12 || normalized.length() > 128
+        || normalized.chars().anyMatch(Character::isWhitespace)
+        || normalized.chars().anyMatch(Character::isISOControl)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Manual customer code must contain 12-128 non-space characters"
+      );
+    }
+    return normalized;
+  }
+
+  private String generatePassword() {
+    StringBuilder value = new StringBuilder("Aa1!");
+    while (value.length() < 18) {
+      value.append(PASSWORD_ALPHABET.charAt(CREDENTIAL_RANDOM.nextInt(PASSWORD_ALPHABET.length())));
+    }
+    for (int index = value.length() - 1; index > 0; index--) {
+      int other = CREDENTIAL_RANDOM.nextInt(index + 1);
+      char swap = value.charAt(index);
+      value.setCharAt(index, value.charAt(other));
+      value.setCharAt(other, swap);
+    }
+    return value.toString();
   }
 
   private String normalizeStatus(String value, String fallback) {
@@ -1443,6 +1583,8 @@ public class BusinessCustomerService {
       String clientCode,
       String partyRole,
       String codePrefix,
+      String customerCodeMode,
+      String provisioningSource,
       String status,
       Long createdBy,
       String createdByDisplayName,

@@ -31,48 +31,37 @@
           <h1>{{ t("customers.title") }}</h1>
           <p>{{ t("customers.description") }}</p>
         </div>
-        <div class="customer-access-boundary">
-          <i aria-hidden="true"></i>
-          <span>
-            <b>{{ t("customers.boundaryTitle") }}</b>
-            <small>{{ t("customers.boundaryDescription") }}</small>
-          </span>
+        <div class="customer-hero-actions">
+          <div class="customer-access-boundary">
+            <i aria-hidden="true"></i>
+            <span>
+              <b>{{ t("customers.boundaryTitle") }}</b>
+              <small>{{ t("customers.boundaryDescription") }}</small>
+            </span>
+          </div>
+          <button class="customer-tracking-link" type="button" @click="openTrackingWorkspace()">
+            <span>{{ t("customers.workspaceTracking") }}</span>
+            <small>{{ t("customers.trackingJumpHint") }}</small>
+            <b aria-hidden="true">↗</b>
+          </button>
         </div>
       </header>
-
-      <nav class="customer-workspace-tabs" aria-label="Customer operations workspace">
-        <button
-          type="button"
-          :class="{ 'is-active': activeWorkspaceTab === 'customers' }"
-          @click="activeWorkspaceTab = 'customers'"
-        >
-          <span>01</span>
-          <b>{{ t("customers.workspaceCustomers") }}</b>
-          <small>{{ t("customers.workspaceCustomersHint") }}</small>
-        </button>
-        <button
-          type="button"
-          :class="{ 'is-active': activeWorkspaceTab === 'tracking' }"
-          @click="activeWorkspaceTab = 'tracking'"
-        >
-          <span>02</span>
-          <b>{{ t("customers.workspaceTracking") }}</b>
-          <small>{{ t("customers.workspaceTrackingHint") }}</small>
-        </button>
-      </nav>
 
       <p v-if="pageMessage" class="customer-access-message" :class="{ 'is-error': messageIsError }" role="status">
         {{ pageMessage }}
       </p>
 
-      <div v-show="activeWorkspaceTab === 'customers'" class="customer-access-layout">
+      <div class="customer-access-layout">
         <aside class="customer-access-sidebar">
           <section class="customer-create-card customer-create-launcher">
             <header>
               <span>01</span>
               <div><h2>{{ t("customers.createTitle") }}</h2><p>{{ t("customers.createDescription") }}</p></div>
             </header>
-            <button class="customer-access-primary" type="button" @click="createDialogOpen = true">{{ t("customers.openCreate") }}</button>
+            <div class="customer-create-actions">
+              <button class="customer-access-primary" type="button" @click="createDialogOpen = true">{{ t("customers.openCreate") }}</button>
+              <button type="button" @click="openBatchImport">{{ t("customers.batchImport") }}</button>
+            </div>
           </section>
 
           <section class="customer-list-card">
@@ -163,9 +152,14 @@
                   <span>{{ t("customers.displayName") }}</span>
                   <input v-model.trim="editForm.displayName" required />
                 </label>
-                <label>
+                <label class="customer-client-code-field">
                   <span>{{ t("customers.clientCode") }}</span>
-                  <input v-model.trim="editForm.clientCode" required />
+                  <div class="customer-inline-value" :class="{ 'is-missing': !selectedCustomer.clientCode }">
+                    <b>{{ selectedCustomer.clientCode || t("customers.missingValue") }}</b>
+                    <button type="button" @click="openClientCodeSupplement">
+                      {{ selectedCustomer.clientCode ? t("customers.editSupplement") : t("customers.manualSupplement") }}
+                    </button>
+                  </div>
                 </label>
                 <label>
                   <span>{{ t("customers.partyRole") }}</span>
@@ -314,6 +308,12 @@
                   <span>{{ formatDate(shipment.assignedAt) }}</span>
                   <span class="customer-shipment-actions">
                     <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
+                    <button
+                      v-if="needsManualSupplement(shipment)"
+                      type="button"
+                      class="is-warning"
+                      @click="openShipmentSupplement(shipment)"
+                    >{{ t("customers.manualSupplement") }}</button>
                     <button type="button" @click="togglePublication(shipment)" :disabled="publishingShipmentId === shipment.shipmentId">
                       {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}
                     </button>
@@ -326,22 +326,6 @@
         </section>
       </div>
 
-      <section v-show="activeWorkspaceTab === 'tracking'" class="customer-tracking-workspace">
-        <header>
-          <div>
-            <span>LIVE SHIPMENT DESK</span>
-            <h2>{{ t("customers.workspaceTracking") }}</h2>
-            <p>{{ t("customers.trackingEmbeddedDescription") }}</p>
-          </div>
-          <button type="button" @click="reloadTrackingWorkspace">{{ t("customers.refreshTrackingWorkspace") }}</button>
-        </header>
-        <iframe
-          :key="trackingFrameKey"
-          title="Shipment tracking workspace"
-          :src="trackingFrameUrl"
-          loading="lazy"
-        ></iframe>
-      </section>
     </section>
 
     <div v-if="revealedCode" class="customer-code-overlay" role="presentation" @click.self="closeCodeReveal">
@@ -349,7 +333,11 @@
         <span class="customer-code-kicker">ONE-TIME CREDENTIAL</span>
         <h2>{{ t("customers.codeDialogTitle") }}</h2>
         <p>{{ t("customers.codeDialogDescription", { name: revealedCode.displayName }) }}</p>
-        <code>{{ revealedCode.customerCode }}</code>
+        <dl class="customer-credential-list">
+          <div><dt>{{ t("customers.username") }}</dt><dd>{{ revealedCode.username }}</dd></div>
+          <div v-if="revealedCode.password"><dt>{{ t("customers.initialPassword") }}</dt><dd>{{ revealedCode.password }}</dd></div>
+          <div><dt>{{ t("customers.customerCode") }}</dt><dd>{{ revealedCode.customerCode }}</dd></div>
+        </dl>
         <small>{{ t("customers.codeDialogWarning") }}</small>
         <div>
           <button type="button" class="customer-access-primary" @click="copyRevealedCode">
@@ -366,24 +354,96 @@
         <h2>{{ t("customers.createTitle") }}</h2>
         <p>{{ t("customers.createDescription") }}</p>
         <form class="customer-dialog-form" @submit.prevent="createCustomer">
-          <label><span>{{ t("customers.username") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.usernamePlaceholder')" required /></label>
-          <label><span>{{ t("customers.displayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.displayNamePlaceholder')" required /></label>
-          <label><span>{{ t("customers.clientCode") }}</span><input v-model.trim="createForm.clientCode" :placeholder="t('customers.clientCodePlaceholder')" required /></label>
+          <label><span>{{ t("customers.customerName") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.customerNamePlaceholder')" required /></label>
           <label>
             <span>{{ t("customers.initialPassword") }}</span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
           </label>
-          <label>
-            <span>{{ t("customers.partyRole") }}</span>
-            <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
-              <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
-              <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-              <el-option value="AGENT" :label="t('customers.roleAgent')" />
-            </el-select>
+          <label class="customer-code-mode-field">
+            <span>{{ t("customers.customerCode") }}</span>
+            <div class="customer-segmented-control">
+              <button type="button" :class="{ 'is-active': createForm.customerCodeMode === 'MANUAL' }" @click="createForm.customerCodeMode = 'MANUAL'">{{ t("customers.manualCode") }}</button>
+              <button type="button" :class="{ 'is-active': createForm.customerCodeMode === 'RANDOM' }" @click="createForm.customerCodeMode = 'RANDOM'">{{ t("customers.randomCode") }}</button>
+            </div>
+            <input v-if="createForm.customerCodeMode === 'MANUAL'" v-model.trim="createForm.customerCode" minlength="12" maxlength="128" :placeholder="t('customers.customerCodeManualPlaceholder')" required />
+            <small>{{ t("customers.customerCodeSecurityHint") }}</small>
           </label>
           <div class="customer-dialog-actions">
             <button type="button" @click="createDialogOpen = false">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="creating">{{ creating ? t("customers.creating") : t("customers.create") }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div v-if="batchImportDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeBatchImport">
+      <section class="customer-code-dialog customer-batch-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchImport')">
+        <span class="customer-code-kicker">CUSTOMER PROVISIONING</span>
+        <h2>{{ t("customers.batchImport") }}</h2>
+        <p>{{ t("customers.batchImportDescription") }}</p>
+        <div class="customer-batch-tabs">
+          <button type="button" :class="{ 'is-active': batchImportMode === 'quick' }" @click="batchImportMode = 'quick'">{{ t("customers.quickImport") }}</button>
+          <button type="button" :class="{ 'is-active': batchImportMode === 'excel' }" @click="batchImportMode = 'excel'">{{ t("customers.excelImport") }}</button>
+        </div>
+        <div class="customer-batch-policy">
+          <span>{{ t("customers.customerCodePolicy") }}</span>
+          <div class="customer-segmented-control">
+            <button type="button" :class="{ 'is-active': batchCodeMode === 'RANDOM' }" @click="batchCodeMode = 'RANDOM'">{{ t("customers.randomCode") }}</button>
+            <button type="button" :class="{ 'is-active': batchCodeMode === 'MANUAL' }" @click="batchCodeMode = 'MANUAL'">{{ t("customers.manualCode") }}</button>
+          </div>
+        </div>
+        <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
+          <span>{{ batchCodeMode === 'RANDOM' ? t("customers.quickImportNames") : t("customers.quickImportNamesAndCodes") }}</span>
+          <textarea v-model="quickImportText" :placeholder="batchCodeMode === 'RANDOM' ? t('customers.quickImportPlaceholder') : t('customers.quickImportManualPlaceholder')"></textarea>
+          <small>{{ t("customers.quickImportHint") }}</small>
+        </label>
+        <div v-else class="customer-excel-dropzone" :class="{ 'has-file': batchFileName }">
+          <input ref="batchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleCustomerWorkbook" />
+          <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
+          <small>{{ batchFileName ? t("customers.rowsReady", { count: batchRows.length }) : t("customers.excelColumnsHint") }}</small>
+          <button type="button" @click="batchFileInput?.click()">{{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}</button>
+        </div>
+        <p v-if="batchPreviewError" class="customer-batch-error">{{ batchPreviewError }}</p>
+        <div class="customer-dialog-actions">
+          <button type="button" @click="closeBatchImport">{{ t("customers.cancel") }}</button>
+          <button class="customer-access-primary" type="button" :disabled="importingCustomers" @click="submitBatchImport">
+            {{ importingCustomers ? t("customers.importing") : t("customers.confirmImport") }}
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="batchCredentialRows.length" class="customer-code-overlay" role="presentation">
+      <section class="customer-code-dialog customer-credential-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchCredentialTitle')">
+        <span class="customer-code-kicker">ONE-TIME CREDENTIAL EXPORT</span>
+        <h2>{{ t("customers.batchCredentialTitle") }}</h2>
+        <p>{{ t("customers.batchCredentialDescription") }}</p>
+        <div class="customer-credential-table">
+          <div class="customer-credential-table-head"><span>{{ t("customers.customerName") }}</span><span>{{ t("customers.initialPassword") }}</span><span>{{ t("customers.customerCode") }}</span><span>{{ t("customers.importStatus") }}</span></div>
+          <div v-for="row in batchCredentialRows" :key="`${row.rowNumber}-${row.username}`" class="customer-credential-row" :class="{ 'is-failed': row.status !== 'CREATED' }">
+            <span><b>{{ row.username }}</b><small>#{{ row.rowNumber }}</small></span>
+            <span>{{ row.password || '—' }}</span>
+            <span>{{ row.customerCode || '—' }}</span>
+            <span>{{ row.status === 'CREATED' ? t("customers.importCreated") : row.message }}</span>
+          </div>
+        </div>
+        <div class="customer-dialog-actions">
+          <button type="button" @click="downloadCredentialWorkbook">{{ t("customers.exportCredentials") }}</button>
+          <button class="customer-access-primary" type="button" @click="closeBatchCredentials">{{ t("customers.confirmStored") }}</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="clientCodeDialogOpen" class="customer-code-overlay" role="presentation" @click.self="clientCodeDialogOpen = false">
+      <section class="customer-code-dialog customer-supplement-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.manualSupplement')">
+        <span class="customer-code-kicker">BUSINESS MATCHING KEY</span>
+        <h2>{{ t("customers.supplementClientCode") }}</h2>
+        <p>{{ t("customers.supplementClientCodeHint") }}</p>
+        <form class="customer-dialog-form" @submit.prevent="saveClientCodeSupplement">
+          <label><span>{{ t("customers.clientCode") }}</span><input v-model.trim="clientCodeSupplement" maxlength="64" :placeholder="t('customers.clientCodePlaceholder')" required /></label>
+          <div class="customer-dialog-actions">
+            <button type="button" @click="clientCodeDialogOpen = false">{{ t("customers.cancel") }}</button>
+            <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">{{ t("customers.saveSupplement") }}</button>
           </div>
         </form>
       </section>
@@ -521,10 +581,12 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import * as XLSX from "xlsx";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
   bindBusinessCustomerShipment,
+  batchCreateBusinessCustomers,
   createBusinessCustomer,
   createBusinessShipment,
   deleteBusinessCustomer,
@@ -551,9 +613,6 @@ const emit = defineEmits(["logout"]);
 const { t } = useI18n();
 
 const customers = ref([]);
-const activeWorkspaceTab = ref("customers");
-const trackingFrameKey = ref(0);
-const trackingFrameUrl = ref("/tracking/?embed=1#overview");
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
@@ -563,6 +622,18 @@ const loadingAvailableShipments = ref(false);
 const loadingPendingMatches = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
+const batchImportDialogOpen = ref(false);
+const batchImportMode = ref("quick");
+const batchCodeMode = ref("RANDOM");
+const quickImportText = ref("");
+const batchFileName = ref("");
+const batchRows = ref([]);
+const batchPreviewError = ref("");
+const batchFileInput = ref(null);
+const importingCustomers = ref(false);
+const batchCredentialRows = ref([]);
+const clientCodeDialogOpen = ref(false);
+const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
 const shipmentCreateDialogOpen = ref(false);
 const detailShipment = ref(null);
@@ -582,7 +653,7 @@ const messageIsError = ref(false);
 const revealedCode = ref(null);
 const codeCopied = ref(false);
 const bindMode = ref("reference");
-const createForm = reactive({ username: "", displayName: "", clientCode: "", password: "", partyRole: "SHIPPER" });
+const createForm = reactive({ username: "", password: "", customerCode: "", customerCodeMode: "MANUAL" });
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
@@ -611,7 +682,8 @@ watch(selectedCustomer, (customer) => {
 }, { immediate: true });
 
 onMounted(() => {
-  void loadCustomers();
+  const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
+  void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
   void loadPendingClientMatches();
 });
@@ -690,14 +762,21 @@ async function createCustomer() {
   creating.value = true;
   clearMessage();
   try {
-    const response = await createBusinessCustomer({ ...createForm });
+    const password = createForm.password;
+    const response = await createBusinessCustomer({
+      username: createForm.username,
+      displayName: createForm.username,
+      password,
+      partyRole: "CONSIGNEE",
+      customerCode: createForm.customerCodeMode === "MANUAL" ? createForm.customerCode : null,
+      customerCodeMode: createForm.customerCodeMode
+    });
     const customer = normalizeCustomer(response);
-    revealCode(response, customer);
+    revealCode(response, customer, password);
     createForm.username = "";
-    createForm.displayName = "";
-    createForm.clientCode = "";
     createForm.password = "";
-    createForm.partyRole = "SHIPPER";
+    createForm.customerCode = "";
+    createForm.customerCodeMode = "MANUAL";
     createDialogOpen.value = false;
     await loadCustomers(customer.id);
   } catch (error) {
@@ -1013,22 +1092,151 @@ async function removeShipment() {
   }
 }
 
-function reloadTrackingWorkspace() {
-  trackingFrameKey.value += 1;
+function trackShipmentInWorkspace(shipment) {
+  closeShipmentDetail();
+  openTrackingWorkspace(shipment);
 }
 
-function trackShipmentInWorkspace(shipment) {
+function openTrackingWorkspace(shipment = null) {
+  const returnTo = selectedCustomerId.value
+    ? `/customers?customer=${encodeURIComponent(selectedCustomerId.value)}`
+    : "/customers";
+  const parameters = new URLSearchParams({ returnTo });
   const referenceNo = String(shipment?.referenceNo || "").trim();
-  const parameters = new URLSearchParams({
-    embed: "1",
-    carrier: shipment?.carrier || "COSCO",
-    type: shipment?.referenceType || "BOOKING",
-    number: referenceNo
-  });
-  trackingFrameUrl.value = `/tracking/?${parameters.toString()}#tracking`;
-  trackingFrameKey.value += 1;
-  activeWorkspaceTab.value = "tracking";
-  closeShipmentDetail();
+  if (referenceNo) {
+    parameters.set("carrier", shipment?.carrier || "COSCO");
+    parameters.set("type", shipment?.referenceType || "BOOKING");
+    parameters.set("number", referenceNo);
+  }
+  window.location.assign(`/tracking/?${parameters.toString()}${referenceNo ? "#tracking" : "#overview"}`);
+}
+
+function openClientCodeSupplement() {
+  clientCodeSupplement.value = selectedCustomer.value?.clientCode || "";
+  clientCodeDialogOpen.value = true;
+}
+
+async function saveClientCodeSupplement() {
+  if (!selectedCustomer.value || mutatingCustomer.value) return;
+  mutatingCustomer.value = true;
+  try {
+    const response = await updateBusinessCustomer(selectedCustomer.value.id, {
+      clientCode: clientCodeSupplement.value
+    });
+    replaceCustomer(normalizeCustomer(response));
+    clientCodeDialogOpen.value = false;
+    showSuccess("customers.supplementSaved");
+  } catch (error) {
+    showError(error, "customers.saveFailed");
+  } finally {
+    mutatingCustomer.value = false;
+  }
+}
+
+function needsManualSupplement(shipment) {
+  return shipment?.manualSupplementRequired === true || !String(shipment?.trackingStatus || "").trim();
+}
+
+function openShipmentSupplement(shipment) {
+  openShipmentDetail(shipment);
+}
+
+function openBatchImport() {
+  batchPreviewError.value = "";
+  batchImportDialogOpen.value = true;
+}
+
+function closeBatchImport() {
+  if (importingCustomers.value) return;
+  batchImportDialogOpen.value = false;
+  batchPreviewError.value = "";
+}
+
+function quickImportRows() {
+  return quickImportText.value.split(/\r?\n/).map((line, index) => {
+    const [username = "", customerCode = ""] = line.split(/[,，\t]/, 2).map((value) => value.trim());
+    return { rowNumber: index + 1, username, customerCode };
+  }).filter((row) => row.username);
+}
+
+async function handleCustomerWorkbook(event) {
+  const file = event.target.files?.[0];
+  batchRows.value = [];
+  batchFileName.value = "";
+  batchPreviewError.value = "";
+  if (!file) return;
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
+    const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
+    const findColumn = (aliases) => headers.findIndex((header) => aliases.includes(header));
+    const usernameIndex = findColumn(["客户名", "用户名", "登录名", "customer name", "username", "login name"]);
+    const passwordIndex = findColumn(["密码", "登录密码", "password"]);
+    const codeIndex = findColumn(["客户码", "customer code", "customercode"]);
+    const startIndex = usernameIndex >= 0 ? 1 : 0;
+    const nameColumn = usernameIndex >= 0 ? usernameIndex : 0;
+    batchRows.value = rows.slice(startIndex).map((row, index) => ({
+      rowNumber: index + startIndex + 1,
+      username: String(row[nameColumn] || "").trim(),
+      password: passwordIndex >= 0 ? String(row[passwordIndex] || "") : "",
+      customerCode: codeIndex >= 0 ? String(row[codeIndex] || "").trim() : ""
+    })).filter((row) => row.username);
+    if (!batchRows.value.length) throw new Error(t("customers.noImportRows"));
+    batchFileName.value = file.name;
+  } catch (error) {
+    batchPreviewError.value = error?.message || t("customers.excelReadFailed");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function submitBatchImport() {
+  if (importingCustomers.value) return;
+  const rows = batchImportMode.value === "quick" ? quickImportRows() : batchRows.value;
+  if (!rows.length) {
+    batchPreviewError.value = t("customers.noImportRows");
+    return;
+  }
+  if (batchCodeMode.value === "MANUAL" && rows.some((row) => !row.customerCode)) {
+    batchPreviewError.value = t("customers.manualCodeRequiredForEveryRow");
+    return;
+  }
+  importingCustomers.value = true;
+  batchPreviewError.value = "";
+  try {
+    const response = await batchCreateBusinessCustomers({
+      customerCodeMode: batchCodeMode.value,
+      sourceFileName: batchImportMode.value === "excel" ? batchFileName.value : "quick-entry",
+      items: rows
+    });
+    batchCredentialRows.value = Array.isArray(response?.items) ? response.items : [];
+    batchImportDialogOpen.value = false;
+    quickImportText.value = "";
+    batchRows.value = [];
+    batchFileName.value = "";
+    await loadCustomers();
+  } catch (error) {
+    batchPreviewError.value = error?.message || t("customers.importFailed");
+  } finally {
+    importingCustomers.value = false;
+  }
+}
+
+function downloadCredentialWorkbook() {
+  const rows = batchCredentialRows.value.map((row) => ({
+    [t("customers.customerName")]: row.username,
+    [t("customers.initialPassword")]: row.password || "",
+    [t("customers.customerCode")]: row.customerCode || "",
+    [t("customers.importStatus")]: row.status === "CREATED" ? t("customers.importCreated") : row.message
+  }));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "Customer credentials");
+  XLSX.writeFile(workbook, `customer-credentials-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function closeBatchCredentials() {
+  batchCredentialRows.value = [];
 }
 
 function replaceShipmentInLocalCollections(shipment) {
@@ -1054,10 +1262,12 @@ function replaceCustomer(customer) {
   else customers.value.unshift(customer);
 }
 
-function revealCode(response, customer) {
+function revealCode(response, customer, password = "") {
   if (!response?.customerCode) return;
   revealedCode.value = {
     customerCode: response.customerCode,
+    username: customer.username || "",
+    password,
     displayName: customer.displayName || customer.username || ""
   };
   codeCopied.value = false;

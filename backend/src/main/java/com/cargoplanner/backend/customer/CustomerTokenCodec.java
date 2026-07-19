@@ -18,6 +18,12 @@ public class CustomerTokenCodec {
     return new GeneratedCustomerCode(code, "DL-" + secret.substring(0, 8), sha256(code));
   }
 
+  public GeneratedCustomerCode customerCode(String value) {
+    String code = value == null ? "" : value.trim();
+    String prefix = code.length() <= 12 ? code : code.substring(0, 12);
+    return new GeneratedCustomerCode(code, prefix, sha256(code));
+  }
+
   public String newSessionToken() {
     return randomToken();
   }

@@ -43,7 +43,7 @@ public class CustomerAuthService {
     String password = request == null ? null : request.password();
     String code = request == null ? null : request.customerCode();
     if (username.isBlank() || password == null || password.isBlank()
-        || code == null || code.isBlank() || code.trim().length() < 24) {
+        || code == null || code.isBlank() || code.trim().length() < 12) {
       throw invalidCredentials();
     }
     Instant now = Instant.now();

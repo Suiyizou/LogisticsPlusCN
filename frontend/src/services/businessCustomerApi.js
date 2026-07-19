@@ -10,6 +10,10 @@ export function createBusinessCustomer(payload) {
   return request("/business/customers", { method: "POST", body: payload });
 }
 
+export function batchCreateBusinessCustomers(payload) {
+  return request("/business/customers/batch", { method: "POST", body: payload });
+}
+
 export function updateBusinessCustomer(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}`, {
     method: "PATCH",

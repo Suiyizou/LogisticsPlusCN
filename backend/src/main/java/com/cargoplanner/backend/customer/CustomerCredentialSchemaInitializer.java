@@ -34,6 +34,14 @@ public class CustomerCredentialSchemaInitializer implements ApplicationRunner {
         "password_iterations",
         "ALTER TABLE cp_customers ADD COLUMN password_iterations INT NULL AFTER password_hash"
     );
+    addColumnIfMissing(
+        "customer_code_mode",
+        "ALTER TABLE cp_customers ADD COLUMN customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM' AFTER customer_code_prefix"
+    );
+    addColumnIfMissing(
+        "provisioning_source",
+        "ALTER TABLE cp_customers ADD COLUMN provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL' AFTER customer_code_mode"
+    );
   }
 
   private boolean isMySql() {
