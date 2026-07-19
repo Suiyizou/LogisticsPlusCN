@@ -40,6 +40,17 @@ export function fetchAvailableBusinessShipments() {
   return request("/business/customers/available-shipments");
 }
 
+export function fetchPendingClientMatches() {
+  return request("/business/customers/pending-client-matches");
+}
+
+export function resolvePendingClientMatch(matchId, customerId) {
+  return request(`/business/customers/pending-client-matches/${encodeURIComponent(matchId)}/resolve`, {
+    method: "POST",
+    body: { customerId }
+  });
+}
+
 export function createBusinessShipment(payload) {
   return request("/business/customers/shipments", { method: "POST", body: payload });
 }
@@ -56,6 +67,20 @@ export function updateBusinessShipmentManualSnapshot(shipmentId, payload) {
     method: "POST",
     body: payload
   });
+}
+
+export function invalidateBusinessShipmentSnapshot(shipmentId, reason) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/invalidate-snapshot`, {
+    method: "POST",
+    body: { reason }
+  });
+}
+
+export function setBusinessShipmentPublication(customerId, shipmentId, published) {
+  return request(
+    `/business/customers/${encodeURIComponent(customerId)}/shipments/${encodeURIComponent(shipmentId)}/publication`,
+    { method: "PATCH", body: { published } }
+  );
 }
 
 export function deleteBusinessShipment(shipmentId) {

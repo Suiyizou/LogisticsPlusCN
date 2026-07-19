@@ -1036,6 +1036,19 @@ const MESSAGES = {
   }
 };
 
+Object.assign(MESSAGES.en, {
+  "diagnostic.RATE_LIMITED": "Carrier rate limit / risk control",
+  "diagnostic.UPSTREAM_EMPTY": "Carrier returned no operational data",
+  "diagnostic.INVALID_REFERENCE": "Invalid number or reference type",
+  "diagnostic.ADAPTER_FAILURE": "Carrier adapter failure"
+});
+Object.assign(MESSAGES.zh, {
+  "diagnostic.RATE_LIMITED": "船司限流 / 风控拦截",
+  "diagnostic.UPSTREAM_EMPTY": "船司返回空数据或暂无有效运输节点",
+  "diagnostic.INVALID_REFERENCE": "单号格式或号型错误",
+  "diagnostic.ADAPTER_FAILURE": "船司适配器调用失败"
+});
+
 const elements = Object.fromEntries(
   [
     "result-carrier",
@@ -1281,6 +1294,24 @@ function trackingResponseMessage(payload, response) {
     stringError ||
     `${response?.status ?? ""} ${response?.statusText || "Request failed"}`.trim()
   );
+}
+
+function trackingDiagnosticMessage(payload, response) {
+  const technical = trackingResponseMessage(payload, response)
+    || t("error.http", { status: response?.status ?? "-" });
+  if (!canManageFileVisibility(readFileSession())) return customerFacingTrackingError();
+  const code = String(payload?.code || "").trim();
+  const known = ["RATE_LIMITED", "UPSTREAM_EMPTY", "INVALID_REFERENCE", "ADAPTER_FAILURE"];
+  const normalized = known.includes(code)
+    ? code
+    : response?.status === 429 || response?.status === 403
+      ? "RATE_LIMITED"
+      : response?.status === 400
+        ? "INVALID_REFERENCE"
+        : response?.status >= 500
+          ? "ADAPTER_FAILURE"
+          : "UPSTREAM_EMPTY";
+  return `${t(`diagnostic.${normalized}`)}: ${technical}`;
 }
 
 function customerFacingTrackingError() {
@@ -3377,7 +3408,11 @@ function renderBatchState() {
     const statusCopy = document.createElement("b");
     statusCopy.textContent = t(batchStatusKey(item));
     status.append(statusDot, statusCopy);
-    if (item.error) status.title = customerFacingTrackingError();
+    if (item.error) {
+      status.title = canManageFileVisibility(readFileSession())
+        ? item.error
+        : customerFacingTrackingError();
+    }
     row.append(identity, status);
     row.addEventListener("click", () => openBatchItem(item));
     fragment.append(row);
@@ -3589,10 +3624,7 @@ async function runBatchQueue() {
             taskId
           });
           if (!response.ok) {
-            throw new Error(
-              trackingResponseMessage(upstreamPayload, response) ||
-              t("error.http", { status: response.status })
-            );
+            throw new Error(trackingDiagnosticMessage(upstreamPayload, response));
           }
           const payload = mergeImportedDetailsIntoPayload(
             upstreamPayload,
@@ -3612,7 +3644,9 @@ async function runBatchQueue() {
         }
         item.status = "failed";
         item.source = null;
-        item.error = customerFacingTrackingError();
+        item.error = canManageFileVisibility(readFileSession())
+          ? (error?.message || t("error.generic"))
+          : customerFacingTrackingError();
         if (error?.message === "Platform session expired") throw error;
       }
 
@@ -5291,10 +5325,7 @@ form.addEventListener("submit", async (event) => {
     const { response, payload: upstreamPayload } = await requestTracking(query);
 
     if (!response.ok) {
-      throw new Error(
-        trackingResponseMessage(upstreamPayload, response) ||
-        t("error.http", { status: response.status })
-      );
+      throw new Error(trackingDiagnosticMessage(upstreamPayload, response));
     }
 
     const payload = mergeImportedDetailsIntoPayload(
@@ -5313,7 +5344,9 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     if (requestSequence !== trackingRequestSequence) return;
     const technicalMessage = error?.message || t("error.generic");
-    const message = customerFacingTrackingError();
+    const message = canManageFileVisibility(readFileSession())
+      ? technicalMessage
+      : customerFacingTrackingError();
     markBatchItemResult(query, {
       status: localPayload ? "success" : "failed",
       source: localPayload ? "device-cache" : null,

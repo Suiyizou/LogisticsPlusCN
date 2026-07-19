@@ -177,6 +177,9 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   fetched_at DATETIME(6) NOT NULL,
   fresh_until DATETIME(6) NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  invalidated_at DATETIME(6) NULL,
+  invalidated_by BIGINT NULL,
+  invalidation_reason VARCHAR(500) NULL,
   INDEX idx_cp_tracking_snapshots_shipment_time (shipment_id, fetched_at),
   INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
   CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
@@ -201,6 +204,7 @@ CREATE TABLE IF NOT EXISTS cp_customers (
   public_id CHAR(36) NOT NULL UNIQUE,
   username VARCHAR(64) NOT NULL UNIQUE,
   display_name VARCHAR(80) NOT NULL,
+  client_code VARCHAR(64) NULL,
   party_role VARCHAR(20) NOT NULL,
   password_salt VARCHAR(64) NOT NULL,
   password_hash VARCHAR(128) NOT NULL,
@@ -212,6 +216,7 @@ CREATE TABLE IF NOT EXISTS cp_customers (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   INDEX idx_cp_customers_creator_status (created_by, status, created_at),
+  INDEX idx_cp_customers_creator_client_code (created_by, client_code, status),
   INDEX idx_cp_customers_code_prefix (customer_code_prefix),
   CONSTRAINT fk_cp_customers_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -235,13 +240,34 @@ CREATE TABLE IF NOT EXISTS cp_customer_shipment_access (
   customer_id BIGINT NOT NULL,
   shipment_id BIGINT NOT NULL,
   relationship_role VARCHAR(20) NOT NULL,
+  publication_status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED',
   assigned_by BIGINT NOT NULL,
   assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  published_at DATETIME(6) NULL,
+  published_by BIGINT NULL,
   PRIMARY KEY (customer_id, shipment_id),
   INDEX idx_cp_customer_shipment_access_shipment (shipment_id, customer_id),
   CONSTRAINT fk_cp_customer_shipment_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
   CONSTRAINT fk_cp_customer_shipment_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
   CONSTRAINT fk_cp_customer_shipment_assigned_by FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_shipment_client_match_queue (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  shipment_id BIGINT NOT NULL,
+  imported_client_code VARCHAR(160) NOT NULL,
+  match_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+  match_reason VARCHAR(64) NOT NULL,
+  requested_by BIGINT NULL,
+  matched_customer_id BIGINT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  resolved_at DATETIME(6) NULL,
+  UNIQUE KEY uk_cp_shipment_client_match_queue_shipment (shipment_id),
+  INDEX idx_cp_shipment_client_match_queue_status (match_status, requested_by, updated_at),
+  CONSTRAINT fk_cp_client_match_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_client_match_requested_by FOREIGN KEY (requested_by) REFERENCES cp_users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_cp_client_match_customer FOREIGN KEY (matched_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_shipment_files (

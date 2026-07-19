@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.customer.CustomerPrincipal;
 import com.cargoplanner.backend.shipment.CmaTrackingSessionService.CmaSessionCredentials;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -181,6 +182,9 @@ class ShipmentTrackingServiceTest {
 
   @Test
   void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
+    jdbcTemplate.update(
+        "INSERT INTO cp_customers (created_by, status, client_code, party_role) VALUES (2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"
+    );
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO",
         "AUTO",
@@ -265,6 +269,30 @@ class ShipmentTrackingServiceTest {
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = 'COSU6502406170'",
         Integer.class
     )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT publication_status FROM cp_customer_shipment_access",
+        String.class
+    )).isEqualTo("DRAFT");
+
+    Long matchedCustomerId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_customers WHERE client_code = 'FILE-CODE'", Long.class
+    );
+    CustomerPrincipal customer = new CustomerPrincipal(
+        matchedCustomerId, "customer-public-id", "file-customer", "File Customer", "SHIPPER", "ACTIVE"
+    );
+    String shipmentId = response.path("shipmentId").asText();
+    assertThat(service.listAssignedSnapshots(customer).path("total").asInt()).isZero();
+    assertThatThrownBy(() -> service.readAssignedSnapshotByShipmentId(shipmentId, customer))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.NOT_FOUND)
+        );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED', published_at = CURRENT_TIMESTAMP"
+    );
+    assertThat(service.listAssignedSnapshots(customer).path("total").asInt()).isEqualTo(1);
+    ObjectNode customerDetail = service.readAssignedSnapshotByShipmentId(shipmentId, customer);
+    assertThat(customerDetail.path("customerReadOnly").asBoolean()).isTrue();
+    assertThat(customerDetail.path("cacheSource").asText()).isEqualTo("MYSQL_ASSIGNED");
 
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest(
@@ -279,6 +307,28 @@ class ShipmentTrackingServiceTest {
     )).isInstanceOfSatisfying(ApiException.class, error ->
         assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
+  }
+
+  @Test
+  void sendsUnmatchedImportedClientCodeToTheReviewQueue() {
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        null, null, "JOB-QUEUE", null, "SHA", "LAX", null,
+        null, null, null, "UNMATCHED-CODE"
+    );
+
+    service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false, details),
+        business
+    );
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT imported_client_code FROM cp_shipment_client_match_queue WHERE match_status = 'PENDING'",
+        String.class
+    )).isEqualTo("UNMATCHED-CODE");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT match_reason FROM cp_shipment_client_match_queue WHERE match_status = 'PENDING'",
+        String.class
+    )).isEqualTo("NO_MATCH");
   }
 
   @Test
@@ -330,16 +380,54 @@ class ShipmentTrackingServiceTest {
         }
         """));
 
-    ObjectNode result = service.track(
+    assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "EMPTY-1001", false),
         employee
-    );
-
-    assertThat(result.path("persisted").asBoolean(true)).isFalse();
-    assertThat(result.has("shipmentId")).isFalse();
+    )).isInstanceOfSatisfying(ApiException.class, error -> {
+      assertThat(error.status()).isEqualTo(HttpStatus.BAD_GATEWAY);
+      assertThat(error.code()).isEqualTo("UPSTREAM_EMPTY");
+    });
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class)).isZero();
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipment_references", Integer.class)).isZero();
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isZero();
+  }
+
+  @Test
+  void persistsImportedOperationalFieldsWhenCarrierSnapshotIsEmpty() throws Exception {
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "IMPORT-EMPTY-1001"
+    );
+    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "IMPORT-EMPTY-1001"},
+            "summary": {},
+            "containers": []
+          },
+          "cached": false
+        }
+        """));
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        null, null, "JOB-IMPORT", "VESSEL 001E", "SHA", "LAX", "PO-100",
+        "2026-07-20", "2026-08-02", "1*40HC", "NO-SUCH-CLIENT"
+    );
+
+    ObjectNode result = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BOOKING", "IMPORT-EMPTY-1001", false, details
+        ),
+        business
+    );
+
+    assertThat(result.path("persisted").asBoolean()).isTrue();
+    assertThat(result.path("snapshot").path("summary").path("origin").path("name").asText())
+        .isEqualTo("SHA");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT match_reason FROM cp_shipment_client_match_queue WHERE match_status = 'PENDING'",
+        String.class
+    )).isEqualTo("NO_MATCH");
   }
 
   @Test
@@ -424,7 +512,10 @@ class ShipmentTrackingServiceTest {
           payload_sha256 CHAR(64) NOT NULL,
           fetched_at TIMESTAMP NOT NULL,
           fresh_until TIMESTAMP NOT NULL,
-          created_at TIMESTAMP NOT NULL
+          created_at TIMESTAMP NOT NULL,
+          invalidated_at TIMESTAMP,
+          invalidated_by BIGINT,
+          invalidation_reason VARCHAR(500)
         )
         """);
     jdbcTemplate.execute("""
@@ -442,14 +533,36 @@ class ShipmentTrackingServiceTest {
         CREATE TABLE cp_customers (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
           created_by BIGINT,
-          status VARCHAR(24) NOT NULL
+          status VARCHAR(24) NOT NULL,
+          client_code VARCHAR(64),
+          party_role VARCHAR(20)
         )
         """);
     jdbcTemplate.execute("""
         CREATE TABLE cp_customer_shipment_access (
           shipment_id BIGINT NOT NULL,
           customer_id BIGINT NOT NULL,
+          relationship_role VARCHAR(20),
+          publication_status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED',
+          assigned_by BIGINT,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          published_at TIMESTAMP,
+          published_by BIGINT,
           PRIMARY KEY (shipment_id, customer_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_client_match_queue (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL UNIQUE,
+          imported_client_code VARCHAR(160) NOT NULL,
+          match_status VARCHAR(32) NOT NULL,
+          match_reason VARCHAR(64) NOT NULL,
+          requested_by BIGINT,
+          matched_customer_id BIGINT,
+          created_at TIMESTAMP NOT NULL,
+          updated_at TIMESTAMP NOT NULL,
+          resolved_at TIMESTAMP
         )
         """);
   }

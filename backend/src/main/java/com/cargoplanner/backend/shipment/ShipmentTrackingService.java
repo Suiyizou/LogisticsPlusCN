@@ -144,8 +144,9 @@ public class ShipmentTrackingService {
         FROM cp_customer_shipment_access a
         JOIN cp_shipments s ON s.id = a.shipment_id
         JOIN cp_shipment_references r ON r.shipment_id = s.id
-        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         WHERE a.customer_id = ?
+          AND a.publication_status = 'PUBLISHED'
           AND r.carrier_code = ?
           AND r.reference_type = ?
           AND r.reference_no_normalized = ?
@@ -162,6 +163,46 @@ public class ShipmentTrackingService {
           HttpStatus.FORBIDDEN,
           "Shipment is not assigned to this customer; contact your business representative"
       );
+    }
+    CachedShipment cached = records.get(0);
+    if (cached.snapshotJson() == null || !isUsableCachedSnapshot(cached.snapshotJson())) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Assigned shipment has no confirmed tracking data; contact your business representative"
+      );
+    }
+    ObjectNode response = cachedResponse(cached, null, false);
+    response.put("cacheSource", "MYSQL_ASSIGNED");
+    response.put("fileAccess", true);
+    response.put("customerReadOnly", true);
+    return response;
+  }
+
+  /** Returns one explicitly published, assigned shipment by its durable public id. */
+  public ObjectNode readAssignedSnapshotByShipmentId(
+      String shipmentPublicId,
+      CustomerPrincipal customer
+  ) {
+    if (customer == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
+    }
+    List<CachedShipment> records = jdbcTemplate.query(
+        """
+        SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
+               t.fetched_at, t.fresh_until
+        FROM cp_customer_shipment_access a
+        JOIN cp_shipments s ON s.id = a.shipment_id
+        LEFT JOIN cp_tracking_snapshots t
+          ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        WHERE a.customer_id = ? AND a.publication_status = 'PUBLISHED' AND s.public_id = ?
+        LIMIT 1
+        """,
+        this::mapCachedShipment,
+        customer.id(),
+        shipmentPublicId == null ? "" : shipmentPublicId.trim()
+    );
+    if (records.isEmpty()) {
+      throw new ApiException(HttpStatus.NOT_FOUND, "Published shipment was not found");
     }
     CachedShipment cached = records.get(0);
     if (cached.snapshotJson() == null || !isUsableCachedSnapshot(cached.snapshotJson())) {
@@ -194,8 +235,8 @@ public class ShipmentTrackingService {
           WHERE r2.shipment_id = s.id
           ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
-        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
-        WHERE a.customer_id = ?
+        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        WHERE a.customer_id = ? AND a.publication_status = 'PUBLISHED'
         ORDER BY a.assigned_at DESC, s.updated_at DESC
         """,
         (rs, rowNumber) -> new CustomerAssignedShipment(
@@ -271,30 +312,43 @@ public class ShipmentTrackingService {
           ? adapterClient.track(request, cmaTrackingSessionService.requireCredentials())
           : adapterClient.track(request);
     } catch (ApiException error) {
+      String failureCode = trackingFailureCode(error);
       if (importedDetails == null && cached != null
           && (error.status().is5xxServerError() || error.status() == HttpStatus.TOO_MANY_REQUESTS)) {
         ObjectNode response = cachedResponse(cached, user, true);
         response.put("warning", error.getMessage());
+        ObjectNode diagnostic = response.putObject("diagnostic");
+        diagnostic.put("code", failureCode);
+        diagnostic.put("message", error.getMessage());
         return response;
       }
-      throw error;
+      throw new ApiException(error.status(), failureCode, error.getMessage());
     }
 
     JsonNode snapshot = upstream.path("snapshot");
     if (!snapshot.isObject()) {
-      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter returned an incomplete snapshot");
+      throw new ApiException(
+          HttpStatus.BAD_GATEWAY, "UPSTREAM_EMPTY",
+          "Tracking adapter returned an incomplete snapshot"
+      );
     }
+    upstream = enrichWithImportedDetails(upstream, importedDetails);
+    snapshot = upstream.path("snapshot");
     if (!hasMeaningfulTrackingData(snapshot)) {
       if (cached != null) {
         ObjectNode response = cachedResponse(cached, user, true);
         response.put("warning", "Live tracking returned no operational data; the last valid snapshot was kept");
+        ObjectNode diagnostic = response.putObject("diagnostic");
+        diagnostic.put("code", "UPSTREAM_EMPTY");
+        diagnostic.put("message", "Carrier returned no operational tracking data");
         return response;
       }
-      return transientLiveResponse(upstream);
+      throw new ApiException(
+          HttpStatus.BAD_GATEWAY, "UPSTREAM_EMPTY",
+          "Carrier returned no operational tracking data"
+      );
     }
 
-    upstream = enrichWithImportedDetails(upstream, importedDetails);
-    snapshot = upstream.path("snapshot");
     if (extractReferences(request, snapshot).isEmpty()) {
       return transientLiveResponse(upstream);
     }
@@ -303,7 +357,87 @@ public class ShipmentTrackingService {
     if (persisted == null) {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist tracking result");
     }
+    matchImportedClientCode(persisted, importedDetails, user, now);
     return liveResponse(upstream, persisted, user);
+  }
+
+  private void matchImportedClientCode(
+      PersistedShipment shipment,
+      ShipmentImportDetails importedDetails,
+      AuthenticatedUser user,
+      Instant now
+  ) {
+    if (shipment == null || importedDetails == null || user == null
+        || !user.canManageShipmentFiles() || importedDetails.clientNameCode() == null
+        || importedDetails.clientNameCode().isBlank()) {
+      return;
+    }
+    String clientCode = importedDetails.clientNameCode().trim().toUpperCase(Locale.ROOT);
+    List<ImportedCustomerMatch> matches = user.isAdmin()
+        ? jdbcTemplate.query(
+            "SELECT id, party_role FROM cp_customers WHERE client_code = ? AND status = 'ACTIVE'",
+            (rs, rowNumber) -> new ImportedCustomerMatch(
+                rs.getLong("id"), rs.getString("party_role")
+            ),
+            clientCode
+        )
+        : jdbcTemplate.query(
+            "SELECT id, party_role FROM cp_customers WHERE client_code = ? AND status = 'ACTIVE' AND created_by = ?",
+            (rs, rowNumber) -> new ImportedCustomerMatch(
+                rs.getLong("id"), rs.getString("party_role")
+            ),
+            clientCode,
+            user.id()
+        );
+    String reason = matches.isEmpty() ? "NO_MATCH" : matches.size() > 1 ? "AMBIGUOUS" : null;
+    ImportedCustomerMatch match = matches.size() == 1 ? matches.get(0) : null;
+    if (match != null && ("SHIPPER".equals(match.partyRole()) || "CONSIGNEE".equals(match.partyRole()))) {
+      Integer conflicts = jdbcTemplate.queryForObject(
+          """
+          SELECT COUNT(*) FROM cp_customer_shipment_access
+          WHERE shipment_id = ? AND relationship_role = ? AND customer_id <> ?
+          """,
+          Integer.class,
+          shipment.shipmentId(), match.partyRole(), match.customerId()
+      );
+      if (conflicts != null && conflicts > 0) reason = "ROLE_CONFLICT";
+    }
+    if (match != null && reason == null) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_shipment_access (
+            customer_id, shipment_id, relationship_role, publication_status, assigned_by
+          ) VALUES (?, ?, ?, 'DRAFT', ?)
+          ON DUPLICATE KEY UPDATE customer_id = customer_id
+          """,
+          match.customerId(), shipment.shipmentId(), match.partyRole(), user.id()
+      );
+      jdbcTemplate.update(
+          """
+          UPDATE cp_shipment_client_match_queue
+          SET match_status = 'RESOLVED', match_reason = 'AUTO_BOUND',
+              matched_customer_id = ?, resolved_at = ?, updated_at = ?
+          WHERE shipment_id = ?
+          """,
+          match.customerId(), timestamp(now), timestamp(now), shipment.shipmentId()
+      );
+      return;
+    }
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_client_match_queue (
+          shipment_id, imported_client_code, match_status, match_reason, requested_by,
+          created_at, updated_at
+        ) VALUES (?, ?, 'PENDING', ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          imported_client_code = VALUES(imported_client_code),
+          match_status = 'PENDING', match_reason = VALUES(match_reason),
+          requested_by = VALUES(requested_by), matched_customer_id = NULL,
+          resolved_at = NULL, updated_at = VALUES(updated_at)
+        """,
+        shipment.shipmentId(), clientCode, reason == null ? "NO_MATCH" : reason,
+        user.id(), timestamp(now), timestamp(now)
+    );
   }
 
   public JsonNode cancelBatchTask(String taskId) {
@@ -312,6 +446,25 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Batch task id is invalid");
     }
     return adapterClient.cancelBatchTask(normalized);
+  }
+
+  private String trackingFailureCode(ApiException error) {
+    if (error.code() != null && !error.code().isBlank()) return error.code();
+    String message = error.getMessage() == null ? "" : error.getMessage().toLowerCase(Locale.ROOT);
+    if (error.status() == HttpStatus.TOO_MANY_REQUESTS || error.status() == HttpStatus.FORBIDDEN
+        || message.contains("cooldown") || message.contains("rate limit")
+        || message.contains("datadome") || message.contains("risk control")) {
+      return "RATE_LIMITED";
+    }
+    if (error.status() == HttpStatus.BAD_REQUEST || message.contains("format")
+        || message.contains("unsupported shipment number")) {
+      return "INVALID_REFERENCE";
+    }
+    if (error.status() == HttpStatus.NOT_FOUND || message.contains("no operational")
+        || message.contains("empty") || message.contains("incomplete")) {
+      return "UPSTREAM_EMPTY";
+    }
+    return "ADAPTER_FAILURE";
   }
 
   private boolean hasMeaningfulTrackingData(JsonNode snapshot) {
@@ -428,7 +581,7 @@ public class ShipmentTrackingService {
                t.fetched_at, t.fresh_until
         FROM cp_shipment_references r
         JOIN cp_shipments s ON s.id = r.shipment_id
-        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         WHERE r.carrier_code = ? AND r.reference_type = ? AND r.reference_no_normalized = ?
         LIMIT 1
         """,
@@ -644,6 +797,7 @@ public class ShipmentTrackingService {
     response.put("stale", false);
     response.put("fetchedAt", persisted.fetchedAt().toString());
     response.put("freshUntil", persisted.freshUntil().toString());
+    response.put("persisted", true);
     response.put("fileAccess", accessService.hasAccess(persisted.shipmentPublicId(), user));
     return response;
   }
@@ -662,19 +816,19 @@ public class ShipmentTrackingService {
   }
 
   private NormalizedTrackRequest normalize(ShipmentTrackRequest input) {
-    if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Tracking request is required");
+    if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Tracking request is required");
     String carrier = normalizeCode(input.carrier(), "COSCO");
     if (!List.of("COSCO", "CMA").contains(carrier)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported carrier");
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported carrier");
     }
     String channel = normalizeCode(input.channel(), "AUTO");
     if ("CMA".equals(carrier)) channel = "PLAYWRIGHT";
     if (!SUPPORTED_CHANNELS.contains(channel)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported tracking channel");
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported tracking channel");
     }
     String type = normalizeCode(input.type(), "BILLOFLADING");
     if (!SUPPORTED_TYPES.contains(type)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported shipment number type");
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported shipment number type");
     }
     String number = normalizeReference(input.number());
     if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)) {
@@ -684,7 +838,7 @@ public class ShipmentTrackingService {
       if (prefixed != null && prefixed.matches()) number = prefixed.group(1);
     }
     if (!number.matches("[A-Z0-9-]{4,35}")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Shipment number format is invalid");
     }
     String batchTaskId = input.batchTaskId() == null ? null : input.batchTaskId().trim();
     if (batchTaskId != null && !batchTaskId.isEmpty()
@@ -820,19 +974,31 @@ public class ShipmentTrackingService {
       addExtra(extra, "vesselVoyage", details.vesselVoyage());
     }
     if (isBlank(summary.path("origin").path("name"))) {
+      putIfBlank(childObject(summary, "origin"), "name", details.portOfLoading());
       addExtra(extra, "portOfLoading", details.portOfLoading());
     }
     if (isBlank(summary.path("destination").path("name"))) {
+      putIfBlank(childObject(summary, "destination"), "name", details.portOfDischarge());
       addExtra(extra, "portOfDischarge", details.portOfDischarge());
     }
-    JsonNode keyTimes = snapshot.path("keyTimes");
+    ObjectNode keyTimes = childObject(snapshot, "keyTimes");
     if (isBlank(keyTimes.path("actualDeparture").path("time"))
         && !arrayHasText(snapshot.path("routingLegs"), "estimatedDeparture", "actualDeparture")) {
+      putIfBlank(
+          childObject(keyTimes, "estimatedDeparture"),
+          "time",
+          details.estimatedDeparture()
+      );
       addExtra(extra, "estimatedDeparture", details.estimatedDeparture());
     }
     if (isBlank(keyTimes.path("estimatedDelivery").path("time"))
         && isBlank(keyTimes.path("actualArrival").path("time"))
         && !arrayHasText(snapshot.path("routingLegs"), "estimatedArrival", "actualArrival")) {
+      putIfBlank(
+          childObject(keyTimes, "estimatedFinalArrival"),
+          "time",
+          details.estimatedArrival()
+      );
       addExtra(extra, "estimatedArrival", details.estimatedArrival());
     }
     if (!arrayHasText(snapshot.path("containers"), "sizeType", "type", "isoSizeType")
@@ -985,6 +1151,8 @@ public class ShipmentTrackingService {
       String trackingStatus,
       Instant lastTrackedAt
   ) {}
+
+  private record ImportedCustomerMatch(long customerId, String partyRole) {}
 
   private record PersistedShipment(
       long shipmentId,

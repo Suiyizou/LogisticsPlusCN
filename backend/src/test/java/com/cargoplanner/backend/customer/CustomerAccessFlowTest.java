@@ -136,6 +136,11 @@ class CustomerAccessFlowTest {
     );
     assertThat(binding.get("shipmentId")).isEqualTo("shipment-public-id");
     assertThat(binding.get("relationshipRole")).isEqualTo("SHIPPER");
+    assertThat(binding.get("publicationStatus")).isEqualTo("DRAFT");
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED' WHERE customer_id = ? AND shipment_id = 10",
+        principal.id()
+    );
     assertThat(shipmentAccessService.requireCustomerAccess("shipment-public-id", principal).shipmentId())
         .isEqualTo(10L);
 
@@ -412,6 +417,107 @@ class CustomerAccessFlowTest {
     )).isZero();
   }
 
+  @Test
+  void requiresExplicitPublicationAndInvalidatesBadSnapshots() {
+    Map<String, Object> createdCustomer = customerService.create(
+        new CreateCustomerRequest(
+            "hayden-customer", "SecurePass!23", "Hayden", "SHIPPER", "HAYDEN"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) createdCustomer.get("id");
+    CustomerLoginResponse login = authService.login(
+        new CustomerLoginRequest(
+            "hayden-customer", "SecurePass!23", (String) createdCustomer.get("customerCode")
+        ),
+        httpRequest
+    );
+    CustomerPrincipal principal = authService.authenticate(login.token(), httpRequest);
+    Map<String, Object> createdShipment = customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "PUB-BOOKING-100", "Booking confirmed", null,
+            "JOB-100", "OOCL TEST 001E", "Shanghai", "Long Beach", null,
+            "2026-07-20", "2026-08-02", null, null, null,
+            null, "1*40HC", "HAYDEN"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String shipmentId = (String) createdShipment.get("shipmentId");
+    Map<String, Object> binding = customerService.bindShipment(
+        customerId,
+        new CustomerShipmentBindingRequest(shipmentId, null, null, null),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(binding.get("publicationStatus")).isEqualTo("DRAFT");
+    assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(shipmentId, principal))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+        );
+
+    Map<String, Object> published = customerService.setShipmentPublication(
+        customerId, shipmentId, new ShipmentPublicationRequest(true), business, "127.0.0.1"
+    );
+    assertThat(published.get("publicationStatus")).isEqualTo("PUBLISHED");
+    assertThat(shipmentAccessService.requireCustomerAccess(shipmentId, principal).shipmentPublicId())
+        .isEqualTo(shipmentId);
+
+    Map<String, Object> invalidated = customerService.invalidateCurrentSnapshot(
+        shipmentId,
+        new SnapshotInvalidationRequest("Carrier returned an incorrect empty route"),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(invalidated).containsEntry("invalidated", true);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT invalidation_reason FROM cp_tracking_snapshots WHERE invalidated_at IS NOT NULL",
+        String.class
+    )).contains("incorrect empty route");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT publication_status FROM cp_customer_shipment_access WHERE customer_id = ?",
+        String.class,
+        principal.id()
+    )).isEqualTo("DRAFT");
+    assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(shipmentId, principal))
+        .isInstanceOf(ApiException.class);
+  }
+
+  @Test
+  void refusesToPublishPlaceholderOnlyShipmentData() {
+    String customerId = (String) customerService.create(
+        new CreateCustomerRequest(
+            "placeholder-customer", "SecurePass!23", "Placeholder Customer", "SHIPPER", "PLACEHOLDER"
+        ),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    String shipmentId = (String) customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "PLACEHOLDER-100", "暂无动态", null,
+            null, null, null, null, null,
+            null, null, null, null, null,
+            "Unknown location", null, "PLACEHOLDER"
+        ),
+        business,
+        "127.0.0.1"
+    ).get("shipmentId");
+    customerService.bindShipment(
+        customerId,
+        new CustomerShipmentBindingRequest(shipmentId, null, null, null),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThatThrownBy(() -> customerService.setShipmentPublication(
+        customerId, shipmentId, new ShipmentPublicationRequest(true), business, "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error -> {
+      assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT);
+      assertThat(error.code()).isEqualTo("SNAPSHOT_NOT_PUBLISHABLE");
+    });
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
@@ -474,6 +580,9 @@ class CustomerAccessFlowTest {
           fetched_at TIMESTAMP NOT NULL,
           fresh_until TIMESTAMP NOT NULL,
           created_at TIMESTAMP NOT NULL,
+          invalidated_at TIMESTAMP,
+          invalidated_by BIGINT,
+          invalidation_reason VARCHAR(500),
           FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         )
         """);
@@ -491,6 +600,7 @@ class CustomerAccessFlowTest {
           public_id CHAR(36) NOT NULL UNIQUE,
           username VARCHAR(64) NOT NULL UNIQUE,
           display_name VARCHAR(80) NOT NULL,
+          client_code VARCHAR(64),
           party_role VARCHAR(20) NOT NULL,
           password_salt VARCHAR(64),
           password_hash VARCHAR(128),
@@ -521,9 +631,26 @@ class CustomerAccessFlowTest {
           customer_id BIGINT NOT NULL,
           shipment_id BIGINT NOT NULL,
           relationship_role VARCHAR(20) NOT NULL,
+          publication_status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED',
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          published_at TIMESTAMP,
+          published_by BIGINT,
           PRIMARY KEY (customer_id, shipment_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_client_match_queue (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL UNIQUE,
+          imported_client_code VARCHAR(160) NOT NULL,
+          match_status VARCHAR(32) NOT NULL,
+          match_reason VARCHAR(64) NOT NULL,
+          requested_by BIGINT,
+          matched_customer_id BIGINT,
+          created_at TIMESTAMP NOT NULL,
+          updated_at TIMESTAMP NOT NULL,
+          resolved_at TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

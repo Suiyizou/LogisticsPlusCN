@@ -65,6 +65,7 @@ public class ShipmentAccessService {
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id
         WHERE a.shipment_id = ? AND a.customer_id = ? AND c.status = 'ACTIVE'
+          AND a.publication_status = 'PUBLISHED'
         """,
         Integer.class,
         shipment.id(),

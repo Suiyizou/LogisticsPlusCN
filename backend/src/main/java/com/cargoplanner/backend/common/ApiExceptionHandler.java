@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class ApiExceptionHandler {
   @ExceptionHandler(ApiException.class)
   public ResponseEntity<Map<String, Object>> handleApiException(ApiException error) {
-    return ResponseEntity.status(error.status()).body(body(error.status(), error.getMessage()));
+    Map<String, Object> body = body(error.status(), error.getMessage());
+    if (error.code() != null && !error.code().isBlank()) body.put("code", error.code());
+    return ResponseEntity.status(error.status()).body(body);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

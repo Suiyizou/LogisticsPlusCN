@@ -164,6 +164,10 @@
                   <input v-model.trim="editForm.displayName" required />
                 </label>
                 <label>
+                  <span>{{ t("customers.clientCode") }}</span>
+                  <input v-model.trim="editForm.clientCode" required />
+                </label>
+                <label>
                   <span>{{ t("customers.partyRole") }}</span>
                   <el-select
                     v-model="editForm.partyRole"
@@ -179,6 +183,24 @@
                   {{ t("customers.saveProfile") }}
                 </button>
               </form>
+
+              <section class="customer-pending-matches">
+                <header>
+                  <div>
+                    <h4>{{ t("customers.pendingMatches") }}</h4>
+                    <p>{{ t("customers.pendingMatchesHint") }}</p>
+                  </div>
+                  <button type="button" @click="loadPendingClientMatches" :disabled="loadingPendingMatches">{{ t("customers.refresh") }}</button>
+                </header>
+                <div v-if="!pendingClientMatches.length" class="customer-access-empty compact">{{ t("customers.noPendingMatches") }}</div>
+                <article v-for="match in pendingClientMatches" v-else :key="match.id" class="customer-pending-match-row">
+                  <span><b>{{ match.clientCode }}</b><small>{{ match.reason }}</small></span>
+                  <span><b>{{ match.referenceNo || match.shipmentId }}</b><small>{{ match.carrier }} · {{ referenceTypeLabel(match.referenceType) }}</small></span>
+                  <button type="button" class="is-primary" @click="resolveClientMatch(match)" :disabled="resolvingMatchId === match.id">
+                    {{ t("customers.bindToCurrentCustomer") }}
+                  </button>
+                </article>
+              </section>
               <div class="customer-code-meta">
                 <span>{{ t("customers.codePrefix") }}</span>
                 <b>{{ selectedCustomer.customerCodePrefix || t("customers.notAvailable") }}</b>
@@ -285,10 +307,16 @@
                   <span>
                     <i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
                     <small v-if="shipment.note" class="customer-shipment-note">{{ shipment.note }}</small>
+                    <small class="customer-publication-state" :class="{ 'is-published': shipment.publicationStatus === 'PUBLISHED' }">
+                      {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
+                    </small>
                   </span>
                   <span>{{ formatDate(shipment.assignedAt) }}</span>
                   <span class="customer-shipment-actions">
                     <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
+                    <button type="button" @click="togglePublication(shipment)" :disabled="publishingShipmentId === shipment.shipmentId">
+                      {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}
+                    </button>
                     <button type="button" @click="unbindShipment(shipment)" :disabled="unbindingShipmentId === shipment.shipmentId">{{ t("customers.unbind") }}</button>
                   </span>
                 </div>
@@ -340,6 +368,7 @@
         <form class="customer-dialog-form" @submit.prevent="createCustomer">
           <label><span>{{ t("customers.username") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.usernamePlaceholder')" required /></label>
           <label><span>{{ t("customers.displayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.displayNamePlaceholder')" required /></label>
+          <label><span>{{ t("customers.clientCode") }}</span><input v-model.trim="createForm.clientCode" :placeholder="t('customers.clientCodePlaceholder')" required /></label>
           <label>
             <span>{{ t("customers.initialPassword") }}</span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
@@ -477,6 +506,7 @@
           <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
           <button type="button" @click="trackShipmentInWorkspace(detailShipment)">{{ t("customers.openLiveTracking") }}</button>
           <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
+          <button type="button" class="is-danger" @click="invalidateSnapshot" :disabled="savingShipment">{{ t("customers.invalidateSnapshot") }}</button>
           <button type="button" @click="saveManualSnapshot" :disabled="savingShipment">{{ t("customers.saveManualSnapshot") }}</button>
           <button type="button" @click="saveShipmentDetail" :disabled="savingShipment">{{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}</button>
           <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
@@ -502,8 +532,12 @@ import {
   fetchAvailableBusinessShipments,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
+  fetchPendingClientMatches,
+  invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerCode,
   resetBusinessCustomerPassword,
+  resolvePendingClientMatch,
+  setBusinessShipmentPublication,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
   updateBusinessShipment,
@@ -523,8 +557,10 @@ const trackingFrameUrl = ref("/tracking/?embed=1#overview");
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
+const pendingClientMatches = ref([]);
 const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
+const loadingPendingMatches = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
 const resetPasswordDialogOpen = ref(false);
@@ -539,14 +575,16 @@ const creating = ref(false);
 const mutatingCustomer = ref(false);
 const bindingShipment = ref(false);
 const unbindingShipmentId = ref("");
+const publishingShipmentId = ref("");
+const resolvingMatchId = ref(0);
 const pageMessage = ref("");
 const messageIsError = ref(false);
 const revealedCode = ref(null);
 const codeCopied = ref(false);
 const bindMode = ref("reference");
-const createForm = reactive({ username: "", displayName: "", password: "", partyRole: "SHIPPER" });
+const createForm = reactive({ username: "", displayName: "", clientCode: "", password: "", partyRole: "SHIPPER" });
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
-const editForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
+const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
 const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
@@ -568,12 +606,14 @@ const unboundAvailableShipments = computed(() => {
 watch(selectedCustomer, (customer) => {
   editForm.username = customer?.username || "";
   editForm.displayName = customer?.displayName || "";
+  editForm.clientCode = customer?.clientCode || "";
   editForm.partyRole = customer?.partyRole || "SHIPPER";
 }, { immediate: true });
 
 onMounted(() => {
   void loadCustomers();
   void loadAvailableShipments();
+  void loadPendingClientMatches();
 });
 onUnmounted(() => {
   revealedCode.value = null;
@@ -615,6 +655,19 @@ async function loadAvailableShipments() {
   }
 }
 
+async function loadPendingClientMatches() {
+  if (loadingPendingMatches.value) return;
+  loadingPendingMatches.value = true;
+  try {
+    const response = await fetchPendingClientMatches();
+    pendingClientMatches.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    showError(error, "customers.loadPendingMatchesFailed");
+  } finally {
+    loadingPendingMatches.value = false;
+  }
+}
+
 async function selectCustomer(customerId) {
   const requestSequence = ++shipmentRequestSequence;
   selectedCustomerId.value = customerId;
@@ -642,6 +695,7 @@ async function createCustomer() {
     revealCode(response, customer);
     createForm.username = "";
     createForm.displayName = "";
+    createForm.clientCode = "";
     createForm.password = "";
     createForm.partyRole = "SHIPPER";
     createDialogOpen.value = false;
@@ -797,6 +851,38 @@ async function unbindShipment(shipment) {
   }
 }
 
+async function togglePublication(shipment) {
+  if (!selectedCustomer.value || !shipment?.shipmentId || publishingShipmentId.value) return;
+  const published = shipment.publicationStatus !== "PUBLISHED";
+  if (!window.confirm(t(published ? "customers.publishConfirm" : "customers.withdrawConfirm"))) return;
+  publishingShipmentId.value = shipment.shipmentId;
+  try {
+    const updated = await setBusinessShipmentPublication(
+      selectedCustomer.value.id, shipment.shipmentId, published
+    );
+    shipments.value = shipments.value.map((item) => item.shipmentId === shipment.shipmentId ? updated : item);
+    showSuccess(published ? "customers.publishedSuccess" : "customers.withdrawnSuccess");
+  } catch (error) {
+    showError(error, published ? "customers.publishFailed" : "customers.withdrawFailed");
+  } finally {
+    publishingShipmentId.value = "";
+  }
+}
+
+async function resolveClientMatch(match) {
+  if (!selectedCustomer.value || !match?.id || resolvingMatchId.value) return;
+  resolvingMatchId.value = match.id;
+  try {
+    await resolvePendingClientMatch(match.id, selectedCustomer.value.id);
+    await Promise.all([selectCustomer(selectedCustomer.value.id), loadPendingClientMatches(), loadAvailableShipments()]);
+    showSuccess("customers.pendingMatchResolved");
+  } catch (error) {
+    showError(error, "customers.pendingMatchResolveFailed");
+  } finally {
+    resolvingMatchId.value = 0;
+  }
+}
+
 function isShipmentBound(shipment) {
   return shipments.value.some((item) => item.shipmentId === shipment?.shipmentId);
 }
@@ -851,6 +937,26 @@ async function saveManualSnapshot() {
     showSuccess("customers.manualSnapshotSaved");
   } catch (error) {
     showError(error, "customers.manualSnapshotFailed");
+  } finally {
+    savingShipment.value = false;
+  }
+}
+
+async function invalidateSnapshot() {
+  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  const reason = window.prompt(t("customers.invalidateReasonPrompt"), "Upstream snapshot is empty or incorrect");
+  if (!reason?.trim()) return;
+  savingShipment.value = true;
+  try {
+    await invalidateBusinessShipmentSnapshot(detailShipment.value.shipmentId, reason.trim());
+    await Promise.all([
+      selectedCustomer.value ? selectCustomer(selectedCustomer.value.id) : Promise.resolve(),
+      loadAvailableShipments()
+    ]);
+    closeShipmentDetail();
+    showSuccess("customers.snapshotInvalidated");
+  } catch (error) {
+    showError(error, "customers.snapshotInvalidateFailed");
   } finally {
     savingShipment.value = false;
   }
@@ -1657,6 +1763,24 @@ button:disabled { cursor: wait; opacity: .58; }
 .customer-manual-update { padding: 12px; border: 1px solid #d7e4ef; border-radius: 10px; background: #f8fbfe; }
 .customer-manual-update summary { cursor: pointer; color: #1b5e96; font-size: 12px; font-weight: 850; }
 .customer-manual-update > p { margin: 8px 0 12px; color: #71879c; font-size: 12px; line-height: 1.6; }
+.customer-pending-matches {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #d8e5ef;
+  border-radius: 12px;
+  background: #f8fbfd;
+}
+.customer-pending-matches > header,
+.customer-pending-match-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.customer-pending-matches h4 { margin: 0; color: var(--customer-navy); }
+.customer-pending-matches p { margin: 3px 0 0; color: #71879c; font-size: 11px; }
+.customer-pending-match-row { padding: 10px; border-radius: 9px; background: #fff; }
+.customer-pending-match-row > span { display: grid; gap: 3px; }
+.customer-pending-match-row small { color: #788da0; font-size: 10px; }
+.customer-publication-state { color: #956218 !important; font-weight: 800; }
+.customer-publication-state.is-published { color: #147a55 !important; }
 .customer-shipment-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .customer-shipment-detail-grid > span { display: grid; gap: 4px; padding: 11px; border-radius: 8px; background: #f3f8fc; }
 .customer-shipment-detail-grid small { color: #75899e; }
@@ -1664,6 +1788,7 @@ button:disabled { cursor: wait; opacity: .58; }
 
 @media (max-width: 720px) {
   .customer-manual-fields { grid-template-columns: 1fr; }
+  .customer-pending-match-row { align-items: stretch; flex-direction: column; }
 }
 .customer-toast {
   position: fixed;

@@ -45,6 +45,14 @@ public class CustomerShipmentFileController {
     return trackingService.listAssignedSnapshots(customer);
   }
 
+  @GetMapping("/shipments/{shipmentId}")
+  public ObjectNode shipment(
+      @PathVariable String shipmentId,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return trackingService.readAssignedSnapshotByShipmentId(shipmentId, customer);
+  }
+
   @GetMapping("/shipments/{shipmentId}/files")
   public Map<String, Object> list(
       @PathVariable String shipmentId,

@@ -7,6 +7,7 @@ import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -94,6 +95,7 @@ public class BusinessCustomerService {
     String username = normalizeUsername(request == null ? null : request.username());
     String password = normalizePassword(request == null ? null : request.password());
     String displayName = normalizeDisplayName(request == null ? null : request.displayName());
+    String clientCode = normalizeClientCode(request == null ? null : request.clientCode(), username);
     String partyRole = normalizePartyRole(request == null ? null : request.partyRole(), null);
     PasswordHash passwordHash = passwordHasher.hash(password);
     GeneratedCustomerCode code = tokenCodec.newCustomerCode();
@@ -104,23 +106,24 @@ public class BusinessCustomerService {
         PreparedStatement statement = connection.prepareStatement(
             """
             INSERT INTO cp_customers (
-              public_id, username, display_name, party_role,
+              public_id, username, display_name, client_code, party_role,
               password_salt, password_hash, password_iterations,
               customer_code_hash, customer_code_prefix, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
         statement.setString(1, publicId);
         statement.setString(2, username);
         statement.setString(3, displayName);
-        statement.setString(4, partyRole);
-        statement.setString(5, passwordHash.salt());
-        statement.setString(6, passwordHash.hash());
-        statement.setInt(7, passwordHash.iterations());
-        statement.setString(8, code.hash());
-        statement.setString(9, code.prefix());
-        statement.setLong(10, actor.id());
+        statement.setString(4, clientCode);
+        statement.setString(5, partyRole);
+        statement.setString(6, passwordHash.salt());
+        statement.setString(7, passwordHash.hash());
+        statement.setInt(8, passwordHash.iterations());
+        statement.setString(9, code.hash());
+        statement.setString(10, code.prefix());
+        statement.setLong(11, actor.id());
         return statement;
       }, keyHolder);
     } catch (DuplicateKeyException error) {
@@ -147,15 +150,19 @@ public class BusinessCustomerService {
     String displayName = request == null || request.displayName() == null || request.displayName().isBlank()
         ? existing.displayName()
         : normalizeDisplayName(request.displayName());
+    String clientCode = request == null || request.clientCode() == null || request.clientCode().isBlank()
+        ? existing.clientCode()
+        : normalizeClientCode(request.clientCode(), existing.username());
     String partyRole = normalizePartyRole(
         request == null ? null : request.partyRole(), existing.partyRole()
     );
     String status = normalizeStatus(request == null ? null : request.status(), existing.status());
     try {
       jdbcTemplate.update(
-          "UPDATE cp_customers SET username = ?, display_name = ?, party_role = ?, status = ? WHERE id = ?",
+          "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ? WHERE id = ?",
           username,
           displayName,
+          clientCode,
           partyRole,
           status,
           existing.id()
@@ -264,6 +271,98 @@ public class BusinessCustomerService {
             actor.id()
         );
     return Map.of("items", items, "total", items.size());
+  }
+
+  public Map<String, Object> listPendingClientMatches(AuthenticatedUser actor) {
+    requireManager(actor);
+    String base = """
+        SELECT q.id, q.imported_client_code, q.match_reason, q.created_at, q.updated_at,
+               s.public_id AS shipment_public_id, s.carrier_code,
+               r.reference_type, r.reference_no_raw
+        FROM cp_shipment_client_match_queue q
+        JOIN cp_shipments s ON s.id = q.shipment_id
+        LEFT JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+        )
+        WHERE q.match_status = 'PENDING'
+        """;
+    List<Map<String, Object>> items = actor.isAdmin()
+        ? jdbcTemplate.query(base + " ORDER BY q.updated_at DESC LIMIT 200", this::mapClientMatch)
+        : jdbcTemplate.query(
+            base + " AND (q.requested_by = ? OR s.created_by = ?) ORDER BY q.updated_at DESC LIMIT 200",
+            this::mapClientMatch,
+            actor.id(), actor.id()
+        );
+    return Map.of("items", items, "total", items.size());
+  }
+
+  @Transactional
+  public Map<String, Object> resolveClientMatch(
+      long matchId,
+      ResolveClientMatchRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    if (request == null || request.customerId() == null || request.customerId().isBlank()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer is required to resolve the Client Code match");
+    }
+    CustomerRecord customer = requireManaged(request.customerId(), actor);
+    List<PendingClientMatch> matches = actor.isAdmin()
+        ? jdbcTemplate.query(
+            """
+            SELECT q.id, q.shipment_id, s.public_id
+            FROM cp_shipment_client_match_queue q
+            JOIN cp_shipments s ON s.id = q.shipment_id
+            WHERE q.id = ? AND q.match_status = 'PENDING'
+            """,
+            (rs, rowNumber) -> new PendingClientMatch(
+                rs.getLong("id"), rs.getLong("shipment_id"), rs.getString("public_id")
+            ),
+            matchId
+        )
+        : jdbcTemplate.query(
+            """
+            SELECT q.id, q.shipment_id, s.public_id
+            FROM cp_shipment_client_match_queue q
+            JOIN cp_shipments s ON s.id = q.shipment_id
+            WHERE q.id = ? AND q.match_status = 'PENDING'
+              AND (q.requested_by = ? OR s.created_by = ?)
+            """,
+            (rs, rowNumber) -> new PendingClientMatch(
+                rs.getLong("id"), rs.getLong("shipment_id"), rs.getString("public_id")
+            ),
+            matchId, actor.id(), actor.id()
+        );
+    if (matches.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Pending Client Code match not found");
+    PendingClientMatch match = matches.get(0);
+    ensureShipmentRoleAvailable(match.shipmentId(), customer.id(), customer.partyRole());
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          customer_id, shipment_id, relationship_role, publication_status, assigned_by
+        ) VALUES (?, ?, ?, 'DRAFT', ?)
+        ON DUPLICATE KEY UPDATE relationship_role = VALUES(relationship_role),
+          publication_status = 'DRAFT', published_at = NULL, published_by = NULL,
+          assigned_by = VALUES(assigned_by), assigned_at = CURRENT_TIMESTAMP(6)
+        """,
+        customer.id(), match.shipmentId(), customer.partyRole(), actor.id()
+    );
+    Instant now = Instant.now();
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipment_client_match_queue
+        SET match_status = 'RESOLVED', match_reason = 'MANUAL_BOUND',
+            matched_customer_id = ?, resolved_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        customer.id(), Timestamp.from(now), Timestamp.from(now), matchId
+    );
+    audit(actor, "RESOLVE_CLIENT_CODE_MATCH", customer.id(),
+        "Bound pending shipment " + match.shipmentPublicId(), ipAddress);
+    return requireBinding(customer.id(), match.shipmentPublicId());
   }
 
   @Transactional
@@ -447,6 +546,10 @@ public class BusinessCustomerService {
         snapshotId.longValue(), status, Timestamp.from(now), Timestamp.from(now),
         Timestamp.from(now), shipmentId
     );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'DRAFT', published_at = NULL, published_by = NULL WHERE shipment_id = ?",
+        shipmentId
+    );
   }
 
   private String normalizeManualField(String value, int maxLength) {
@@ -532,6 +635,10 @@ public class BusinessCustomerService {
             trackingStatus,
             note,
             Timestamp.from(now),
+            shipment.id()
+        );
+        jdbcTemplate.update(
+            "UPDATE cp_customer_shipment_access SET publication_status = 'DRAFT', published_at = NULL, published_by = NULL WHERE shipment_id = ?",
             shipment.id()
         );
       } else {
@@ -647,10 +754,13 @@ public class BusinessCustomerService {
     jdbcTemplate.update(
         """
         INSERT INTO cp_customer_shipment_access (
-          customer_id, shipment_id, relationship_role, assigned_by
-        ) VALUES (?, ?, ?, ?)
+          customer_id, shipment_id, relationship_role, publication_status, assigned_by
+        ) VALUES (?, ?, ?, 'DRAFT', ?)
         ON DUPLICATE KEY UPDATE
           relationship_role = VALUES(relationship_role),
+          publication_status = 'DRAFT',
+          published_at = NULL,
+          published_by = NULL,
           assigned_by = VALUES(assigned_by),
           assigned_at = CURRENT_TIMESTAMP(6)
         """,
@@ -667,6 +777,147 @@ public class BusinessCustomerService {
         ipAddress
     );
     return requireBinding(customer.id(), shipment.publicId());
+  }
+
+  @Transactional
+  public Map<String, Object> setShipmentPublication(
+      String customerPublicId,
+      String shipmentPublicId,
+      ShipmentPublicationRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord customer = requireManaged(customerPublicId, actor);
+    ShipmentRecord shipment = requireShipment(shipmentPublicId);
+    requireShipmentAssignmentAuthority(shipment, actor);
+    boolean published = request != null && Boolean.TRUE.equals(request.published());
+    requireBinding(customer.id(), shipment.publicId());
+    if (published) requirePublishableSnapshot(shipment.id());
+    int affected = jdbcTemplate.update(
+        """
+        UPDATE cp_customer_shipment_access
+        SET publication_status = ?, published_at = ?, published_by = ?
+        WHERE customer_id = ? AND shipment_id = ?
+        """,
+        published ? "PUBLISHED" : "DRAFT",
+        published ? Timestamp.from(Instant.now()) : null,
+        published ? actor.id() : null,
+        customer.id(),
+        shipment.id()
+    );
+    if (affected == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
+    audit(
+        actor,
+        published ? "PUBLISH_CUSTOMER_SHIPMENT" : "WITHDRAW_CUSTOMER_SHIPMENT",
+        customer.id(),
+        (published ? "Published shipment " : "Withdrew shipment ") + shipment.publicId(),
+        ipAddress
+    );
+    return requireBinding(customer.id(), shipment.publicId());
+  }
+
+  @Transactional
+  public Map<String, Object> invalidateCurrentSnapshot(
+      String shipmentPublicId,
+      SnapshotInvalidationRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    ShipmentRecord shipment = requireShipment(shipmentPublicId);
+    requireShipmentAssignmentAuthority(shipment, actor);
+    String reason = request == null || request.reason() == null ? "" : request.reason().trim();
+    if (reason.isBlank() || reason.length() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Invalidation reason must contain 1-500 characters");
+    }
+    Long snapshotId = jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = ?",
+        Long.class,
+        shipment.id()
+    );
+    if (snapshotId == null) throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current snapshot");
+    Instant now = Instant.now();
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET invalidated_at = ?, invalidated_by = ?, invalidation_reason = ? WHERE id = ?",
+        Timestamp.from(now), actor.id(), reason, snapshotId
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = NULL, tracking_status = 'Needs review', last_tracked_at = NULL, fresh_until = NULL, updated_at = ? WHERE id = ?",
+        Timestamp.from(now), shipment.id()
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'DRAFT', published_at = NULL, published_by = NULL WHERE shipment_id = ?",
+        shipment.id()
+    );
+    auditShipment(actor, "INVALIDATE_TRACKING_SNAPSHOT", shipment.id(), reason, ipAddress);
+    return Map.of(
+        "shipmentId", shipment.publicId(),
+        "invalidated", true,
+        "snapshotId", snapshotId,
+        "status", "Needs review"
+    );
+  }
+
+  private void requirePublishableSnapshot(long shipmentId) {
+    List<String> snapshots = jdbcTemplate.query(
+        """
+        SELECT t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.id = ? AND t.invalidated_at IS NULL
+        """,
+        (rs, rowNumber) -> rs.getString("snapshot_json"),
+        shipmentId
+    );
+    if (snapshots.isEmpty() || !isPublishableSnapshot(snapshots.get(0))) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "SNAPSHOT_NOT_PUBLISHABLE",
+          "Shipment has no confirmed operational data; complete the manual fields before publishing"
+      );
+    }
+  }
+
+  private boolean isPublishableSnapshot(String rawSnapshot) {
+    if (rawSnapshot == null || rawSnapshot.isBlank()) return false;
+    try {
+      JsonNode snapshot = objectMapper.readTree(rawSnapshot);
+      JsonNode summary = snapshot.path("summary");
+      int meaningful = 0;
+      if (isOperationalText(summary.path("origin").path("name").asText())) meaningful++;
+      if (isOperationalText(summary.path("destination").path("name").asText())) meaningful++;
+      JsonNode latest = summary.path("latestEvent");
+      if (isOperationalText(latest.path("name").asText())) meaningful++;
+      if (isOperationalText(latest.path("location").asText())) meaningful++;
+      if (isOperationalText(latest.path("occurredAt").asText())) meaningful++;
+      if (operationalTextCount(snapshot.path("routingLegs")) >= 2) meaningful += 2;
+      if (operationalTextCount(snapshot.path("containers")) >= 3) meaningful += 2;
+      if (snapshot.path("keyTimes").isObject() && snapshot.path("keyTimes").size() > 0) meaningful++;
+      return meaningful >= 2;
+    } catch (JsonProcessingException error) {
+      return false;
+    }
+  }
+
+  private boolean isOperationalText(String value) {
+    if (value == null || value.isBlank()) return false;
+    String normalized = value.trim().toLowerCase(Locale.ROOT);
+    return !List.of(
+        "-", "—", "–", "n/a", "na", "unknown", "unknown location",
+        "暂无", "暂无动态", "暂不存在", "未知", "未知地点"
+    ).contains(normalized);
+  }
+
+  private int operationalTextCount(JsonNode node) {
+    if (node == null || node.isNull() || node.isMissingNode()) return 0;
+    if (node.isTextual()) return isOperationalText(node.asText()) ? 1 : 0;
+    if (!node.isContainerNode()) return 0;
+    int count = 0;
+    for (JsonNode child : node) {
+      count += operationalTextCount(child);
+      if (count >= 3) return count;
+    }
+    return count;
   }
 
   @Transactional
@@ -782,7 +1033,8 @@ public class BusinessCustomerService {
 
   private String baseCustomerSelect() {
     return """
-        SELECT c.id, c.public_id, c.username, c.display_name, c.party_role, c.customer_code_prefix,
+        SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
+               c.party_role, c.customer_code_prefix,
                c.status, c.created_by, c.created_at, c.updated_at,
                u.display_name AS created_by_display_name,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.customer_id = c.id) AS shipment_count
@@ -795,7 +1047,7 @@ public class BusinessCustomerService {
     return """
         SELECT s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
                s.business_note, s.last_tracked_at, s.fresh_until, s.updated_at,
-               a.relationship_role,
+               a.relationship_role, a.publication_status, a.published_at, a.published_by,
                a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
                r.reference_type, r.reference_no_raw
         FROM cp_customer_shipment_access a
@@ -833,6 +1085,7 @@ public class BusinessCustomerService {
         rs.getString("public_id"),
         rs.getString("username"),
         rs.getString("display_name"),
+        rs.getString("client_code"),
         rs.getString("party_role"),
         rs.getString("customer_code_prefix"),
         rs.getString("status"),
@@ -885,6 +1138,9 @@ public class BusinessCustomerService {
     value.put("freshUntil", instantString(rs, "fresh_until"));
     value.put("updatedAt", instantString(rs, "updated_at"));
     value.put("relationshipRole", rs.getString("relationship_role"));
+    value.put("publicationStatus", rs.getString("publication_status"));
+    value.put("publishedAt", instantString(rs, "published_at"));
+    value.put("publishedBy", nullableLong(rs, "published_by"));
     value.put("assignedAt", instantString(rs, "assigned_at"));
     value.put("assignedBy", nullableLong(rs, "assigned_by"));
     value.put("assignedByDisplayName", rs.getString("assigned_by_display_name"));
@@ -909,12 +1165,27 @@ public class BusinessCustomerService {
     return value;
   }
 
+  private Map<String, Object> mapClientMatch(ResultSet rs, int rowNumber) throws SQLException {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("id", rs.getLong("id"));
+    value.put("clientCode", rs.getString("imported_client_code"));
+    value.put("reason", rs.getString("match_reason"));
+    value.put("shipmentId", rs.getString("shipment_public_id"));
+    value.put("carrier", rs.getString("carrier_code"));
+    value.put("referenceType", rs.getString("reference_type"));
+    value.put("referenceNo", rs.getString("reference_no_raw"));
+    value.put("createdAt", instantString(rs, "created_at"));
+    value.put("updatedAt", instantString(rs, "updated_at"));
+    return value;
+  }
+
 
   private Map<String, Object> customerMetadata(CustomerRecord record) {
     Map<String, Object> value = new LinkedHashMap<>();
     value.put("id", record.publicId());
     value.put("username", record.username());
     value.put("displayName", record.displayName());
+    value.put("clientCode", record.clientCode());
     value.put("partyRole", record.partyRole());
     value.put("customerCodePrefix", record.codePrefix());
     value.put("status", record.status());
@@ -1066,6 +1337,20 @@ public class BusinessCustomerService {
     return normalized;
   }
 
+  private String normalizeClientCode(String value, String fallback) {
+    String normalized = normalizeCode(
+        value,
+        fallback == null ? null : fallback.trim().toUpperCase(Locale.ROOT)
+    );
+    if (normalized == null || !normalized.matches("[A-Z0-9._-]{1,64}")) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Client Code must contain 1-64 letters, numbers, dots, underscores, or hyphens"
+      );
+    }
+    return normalized;
+  }
+
   private String normalizeStatus(String value, String fallback) {
     String normalized = normalizeCode(value, fallback);
     if (!"ACTIVE".equals(normalized) && !"DISABLED".equals(normalized)) {
@@ -1155,6 +1440,7 @@ public class BusinessCustomerService {
       String publicId,
       String username,
       String displayName,
+      String clientCode,
       String partyRole,
       String codePrefix,
       String status,
@@ -1166,6 +1452,7 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long createdBy) {}
+  private record PendingClientMatch(long id, long shipmentId, String shipmentPublicId) {}
   private record BusinessShipmentRecord(
       long referenceId,
       String referenceType,

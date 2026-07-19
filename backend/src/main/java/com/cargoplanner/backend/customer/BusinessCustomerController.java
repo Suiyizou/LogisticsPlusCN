@@ -38,6 +38,23 @@ public class BusinessCustomerController {
     return service.listAvailableShipments(actor);
   }
 
+  @GetMapping("/pending-client-matches")
+  public Map<String, Object> pendingClientMatches(
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listPendingClientMatches(actor);
+  }
+
+  @PostMapping("/pending-client-matches/{matchId}/resolve")
+  public Map<String, Object> resolveClientMatch(
+      @PathVariable long matchId,
+      @RequestBody ResolveClientMatchRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.resolveClientMatch(matchId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @PatchMapping("/shipments/{shipmentId}/note")
   public Map<String, Object> updateShipmentNote(
       @PathVariable String shipmentId,
@@ -80,6 +97,16 @@ public class BusinessCustomerController {
       HttpServletRequest httpRequest
   ) {
     return service.updateManualSnapshot(shipmentId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @PostMapping("/shipments/{shipmentId}/invalidate-snapshot")
+  public Map<String, Object> invalidateSnapshot(
+      @PathVariable String shipmentId,
+      @RequestBody SnapshotInvalidationRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.invalidateCurrentSnapshot(shipmentId, request, actor, ClientInfo.ip(httpRequest));
   }
 
   @DeleteMapping("/shipments/{shipmentId}")
@@ -172,5 +199,18 @@ public class BusinessCustomerController {
       HttpServletRequest httpRequest
   ) {
     return service.unbindShipment(customerId, shipmentId, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @PatchMapping("/{customerId}/shipments/{shipmentId}/publication")
+  public Map<String, Object> setShipmentPublication(
+      @PathVariable String customerId,
+      @PathVariable String shipmentId,
+      @RequestBody ShipmentPublicationRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.setShipmentPublication(
+        customerId, shipmentId, request, actor, ClientInfo.ip(httpRequest)
+    );
   }
 }

@@ -579,6 +579,7 @@ class ShipmentFileServiceTest {
           public_id CHAR(36) NOT NULL UNIQUE,
           username VARCHAR(64) NOT NULL,
           display_name VARCHAR(80) NOT NULL,
+          client_code VARCHAR(64),
           party_role VARCHAR(20) NOT NULL,
           customer_code_hash CHAR(64) NOT NULL,
           customer_code_prefix VARCHAR(16) NOT NULL,
@@ -591,8 +592,11 @@ class ShipmentFileServiceTest {
           customer_id BIGINT NOT NULL,
           shipment_id BIGINT NOT NULL,
           relationship_role VARCHAR(20) NOT NULL,
+          publication_status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED',
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          published_at TIMESTAMP,
+          published_by BIGINT,
           PRIMARY KEY (customer_id, shipment_id)
         )
         """);
