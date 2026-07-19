@@ -2,6 +2,7 @@ package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.customer.CustomerPrincipal;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -116,6 +117,121 @@ public class ShipmentTrackingService {
 
   public ObjectNode track(ShipmentTrackRequest input, AuthenticatedUser user) {
     return track(input, user, false);
+  }
+
+  /**
+   * Returns only a business-confirmed database snapshot assigned to the signed-in customer.
+   * This path deliberately never calls a carrier adapter and never grants access by searching.
+   */
+  public ObjectNode readAssignedSnapshot(
+      ShipmentTrackRequest input,
+      CustomerPrincipal customer
+  ) {
+    if (customer == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
+    }
+    NormalizedTrackRequest request = normalize(input);
+    if (!isDurableReferenceType(request.type())) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Customers can only open assigned booking or bill-of-lading records"
+      );
+    }
+    List<CachedShipment> records = jdbcTemplate.query(
+        """
+        SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
+               t.fetched_at, t.fresh_until
+        FROM cp_customer_shipment_access a
+        JOIN cp_shipments s ON s.id = a.shipment_id
+        JOIN cp_shipment_references r ON r.shipment_id = s.id
+        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE a.customer_id = ?
+          AND r.carrier_code = ?
+          AND r.reference_type = ?
+          AND r.reference_no_normalized = ?
+        LIMIT 1
+        """,
+        this::mapCachedShipment,
+        customer.id(),
+        request.carrier(),
+        request.type(),
+        normalizeReference(request.number())
+    );
+    if (records.isEmpty()) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Shipment is not assigned to this customer; contact your business representative"
+      );
+    }
+    CachedShipment cached = records.get(0);
+    if (cached.snapshotJson() == null || !isUsableCachedSnapshot(cached.snapshotJson())) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Assigned shipment has no confirmed tracking data; contact your business representative"
+      );
+    }
+    ObjectNode response = cachedResponse(cached, null, false);
+    response.put("cacheSource", "MYSQL_ASSIGNED");
+    response.put("fileAccess", true);
+    response.put("customerReadOnly", true);
+    return response;
+  }
+
+  /** Lists the database-backed shipment records explicitly assigned to a customer. */
+  public ObjectNode listAssignedSnapshots(CustomerPrincipal customer) {
+    if (customer == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
+    }
+    List<CustomerAssignedShipment> records = jdbcTemplate.query(
+        """
+        SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
+               s.last_tracked_at, r.reference_type, r.reference_no_raw,
+               t.snapshot_json, t.strategy_json, t.fetched_at, t.fresh_until
+        FROM cp_customer_shipment_access a
+        JOIN cp_shipments s ON s.id = a.shipment_id
+        LEFT JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+        )
+        LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE a.customer_id = ?
+        ORDER BY a.assigned_at DESC, s.updated_at DESC
+        """,
+        (rs, rowNumber) -> new CustomerAssignedShipment(
+            new CachedShipment(
+                rs.getLong("shipment_id"), rs.getString("public_id"),
+                rs.getString("snapshot_json"), rs.getString("strategy_json"),
+                instant(rs, "fetched_at"), instant(rs, "fresh_until")
+            ),
+            rs.getString("carrier_code"), rs.getString("reference_type"),
+            rs.getString("reference_no_raw"), rs.getString("tracking_status"),
+            instant(rs, "last_tracked_at")
+        ),
+        customer.id()
+    );
+    ObjectNode response = objectMapper.createObjectNode();
+    ArrayNode items = response.putArray("items");
+    for (CustomerAssignedShipment record : records) {
+      CachedShipment cached = record.cached();
+      ObjectNode item = items.addObject();
+      item.put("shipmentId", cached.shipmentPublicId());
+      item.put("carrier", record.carrier());
+      item.put("referenceType", record.referenceType());
+      item.put("referenceNo", record.referenceNo());
+      item.put("trackingStatus", record.trackingStatus());
+      item.put(
+          "lastTrackedAt",
+          record.lastTrackedAt() == null ? null : record.lastTrackedAt().toString()
+      );
+      boolean available = cached.snapshotJson() != null
+          && isUsableCachedSnapshot(cached.snapshotJson());
+      item.put("dataAvailable", available);
+      if (available) item.set("snapshot", readJson(cached.snapshotJson()));
+    }
+    response.put("total", records.size());
+    response.put("customerReadOnly", true);
+    return response;
   }
 
   /** Runs a trusted force refresh for the background scheduler. */
@@ -322,7 +438,18 @@ public class ShipmentTrackingService {
         normalizeReference(request.number())
     );
     CachedShipment record = records.isEmpty() ? null : records.get(0);
-    return record == null || record.snapshotJson() == null ? null : record;
+    return record == null || record.snapshotJson() == null
+        || !isUsableCachedSnapshot(record.snapshotJson()) ? null : record;
+  }
+
+  private boolean isUsableCachedSnapshot(String snapshotJson) {
+    if (snapshotJson == null || snapshotJson.isBlank()) return false;
+    try {
+      JsonNode snapshot = objectMapper.readTree(snapshotJson);
+      return snapshot != null && snapshot.isObject() && hasMeaningfulTrackingData(snapshot);
+    } catch (JsonProcessingException error) {
+      return false;
+    }
   }
 
   private ShipmentIdentity findShipmentByAnyReference(List<ShipmentReference> references) {
@@ -848,6 +975,15 @@ public class ShipmentTrackingService {
       String strategyJson,
       Instant fetchedAt,
       Instant freshUntil
+  ) {}
+
+  private record CustomerAssignedShipment(
+      CachedShipment cached,
+      String carrier,
+      String referenceType,
+      String referenceNo,
+      String trackingStatus,
+      Instant lastTrackedAt
   ) {}
 
   private record PersistedShipment(

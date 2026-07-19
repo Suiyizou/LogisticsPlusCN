@@ -6,6 +6,13 @@ import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -17,6 +24,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.HexFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -36,15 +45,27 @@ public class BusinessCustomerService {
   private final JdbcTemplate jdbcTemplate;
   private final CustomerTokenCodec tokenCodec;
   private final PasswordHasher passwordHasher;
+  private final ObjectMapper objectMapper;
 
+  @Autowired
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
       CustomerTokenCodec tokenCodec,
-      PasswordHasher passwordHasher
+      PasswordHasher passwordHasher,
+      ObjectMapper objectMapper
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
     this.passwordHasher = passwordHasher;
+    this.objectMapper = objectMapper;
+  }
+
+  BusinessCustomerService(
+      JdbcTemplate jdbcTemplate,
+      CustomerTokenCodec tokenCodec,
+      PasswordHasher passwordHasher
+  ) {
+    this(jdbcTemplate, tokenCodec, passwordHasher, new ObjectMapper());
   }
 
   public Map<String, Object> list(AuthenticatedUser actor) {
@@ -295,12 +316,169 @@ public class BusinessCustomerService {
           referenceNo,
           referenceNo
       );
+      persistManualSnapshot(
+          generatedId.longValue(), carrier, referenceType, referenceNo,
+          trackingStatus, request, now
+      );
       auditShipment(actor, "CREATE_BUSINESS_SHIPMENT", generatedId.longValue(),
           "Created shipment " + referenceNo, ipAddress);
     } catch (DuplicateKeyException error) {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment reference already exists");
     }
     return requireAvailableShipment(publicId, actor);
+  }
+
+  private void persistManualSnapshot(
+      long shipmentId,
+      String carrier,
+      String referenceType,
+      String referenceNo,
+      String requestedStatus,
+      CreateBusinessShipmentRequest request,
+      Instant now
+  ) {
+    String status = requestedStatus == null ? "Pending update" : requestedStatus;
+    String jobNumber = normalizeManualField(request.forwarderJobNumber(), 160);
+    String vesselVoyage = normalizeManualField(request.vesselVoyage(), 240);
+    String loadingPort = normalizeManualField(request.portOfLoading(), 160);
+    String dischargePort = normalizeManualField(request.portOfDischarge(), 160);
+    String clientPo = normalizeManualField(request.clientPoNumber(), 160);
+    String etd = normalizeManualField(request.estimatedDeparture(), 80);
+    String eta = normalizeManualField(request.estimatedArrival(), 80);
+    String actualDeparture = normalizeManualField(request.actualDeparture(), 80);
+    String actualArrival = normalizeManualField(request.actualArrival(), 80);
+    String actualDelivery = normalizeManualField(request.actualDelivery(), 80);
+    String currentLocation = normalizeManualField(request.currentLocation(), 160);
+    String volume = normalizeManualField(request.volume(), 80);
+    String clientCode = normalizeManualField(request.clientNameCode(), 160);
+
+    ObjectNode snapshot = objectMapper.createObjectNode();
+    snapshot.putObject("provider").put("code", carrier);
+    snapshot.put("channel", "MANUAL");
+    snapshot.put("fetchedAt", now.toString());
+    ObjectNode tracking = snapshot.putObject("tracking");
+    tracking.put("type", referenceType);
+    tracking.put("number", referenceNo);
+    tracking.put("status", status);
+    ObjectNode summary = snapshot.putObject("summary");
+    if ("BOOKING".equals(referenceType)) summary.putArray("bookingNumbers").add(referenceNo);
+    else summary.put("billOfLading", referenceNo);
+    ObjectNode latestEvent = summary.putObject("latestEvent");
+    latestEvent.put("name", status);
+    putManualField(latestEvent, "location", currentLocation);
+    putManualField(latestEvent, "occurredAt", actualDelivery != null
+        ? actualDelivery : actualArrival != null ? actualArrival : actualDeparture);
+    if (loadingPort != null) summary.putObject("origin").put("name", loadingPort);
+    if (dischargePort != null) summary.putObject("destination").put("name", dischargePort);
+
+    ObjectNode business = snapshot.putObject("references").putObject("business");
+    putManualField(business, "forwarderJobNumber", jobNumber);
+    putManualField(business, "clientPoNumber", clientPo);
+    putManualField(business, "clientNameCode", clientCode);
+    if (vesselVoyage != null || etd != null || eta != null) {
+      ObjectNode leg = snapshot.putArray("routingLegs").addObject();
+      putManualField(leg, "vesselName", vesselVoyage);
+      putManualField(leg, "estimatedDeparture", etd);
+      putManualField(leg, "estimatedArrival", eta);
+      putManualField(leg, "actualDeparture", actualDeparture);
+      putManualField(leg, "actualArrival", actualArrival);
+      putManualField(leg, "portOfLoading", loadingPort);
+      putManualField(leg, "portOfDischarge", dischargePort);
+    }
+    ObjectNode keyTimes = snapshot.putObject("keyTimes");
+    if (etd != null) keyTimes.putObject("estimatedDeparture").put("time", etd);
+    if (eta != null) keyTimes.putObject("estimatedFinalArrival").put("time", eta);
+    if (actualDeparture != null) keyTimes.putObject("actualDeparture").put("time", actualDeparture);
+    if (actualArrival != null) keyTimes.putObject("actualArrival").put("time", actualArrival);
+    if (actualDelivery != null) keyTimes.putObject("actualDelivery").put("time", actualDelivery);
+    ArrayNode extra = snapshot.putArray("extraInformation");
+    addManualExtra(extra, "forwarderJobNumber", jobNumber);
+    addManualExtra(extra, "vesselVoyage", vesselVoyage);
+    addManualExtra(extra, "portOfLoading", loadingPort);
+    addManualExtra(extra, "portOfDischarge", dischargePort);
+    addManualExtra(extra, "clientPoNumber", clientPo);
+    addManualExtra(extra, "estimatedDeparture", etd);
+    addManualExtra(extra, "estimatedArrival", eta);
+    addManualExtra(extra, "actualDeparture", actualDeparture);
+    addManualExtra(extra, "actualArrival", actualArrival);
+    addManualExtra(extra, "actualDelivery", actualDelivery);
+    addManualExtra(extra, "currentLocation", currentLocation);
+    addManualExtra(extra, "volume", volume);
+    addManualExtra(extra, "clientNameCode", clientCode);
+
+    String snapshotJson;
+    try {
+      snapshotJson = objectMapper.writeValueAsString(snapshot);
+    } catch (JsonProcessingException error) {
+      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize manual shipment data");
+    }
+    KeyHolder snapshotKey = new GeneratedKeyHolder();
+    jdbcTemplate.update(connection -> {
+      PreparedStatement statement = connection.prepareStatement(
+          """
+          INSERT INTO cp_tracking_snapshots (
+            shipment_id, query_reference_type, query_reference_no, source_channel,
+            snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
+          ) VALUES (?, ?, ?, 'MANUAL', ?, NULL, ?, ?, ?, ?)
+          """,
+          Statement.RETURN_GENERATED_KEYS
+      );
+      statement.setLong(1, shipmentId);
+      statement.setString(2, referenceType);
+      statement.setString(3, referenceNo);
+      statement.setString(4, snapshotJson);
+      statement.setString(5, sha256(snapshotJson));
+      statement.setTimestamp(6, Timestamp.from(now));
+      statement.setTimestamp(7, Timestamp.from(now));
+      statement.setTimestamp(8, Timestamp.from(now));
+      return statement;
+    }, snapshotKey);
+    Number snapshotId = snapshotKey.getKey();
+    if (snapshotId == null) {
+      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save manual shipment data");
+    }
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET current_snapshot_id = ?, tracking_status = ?, last_tracked_at = ?,
+            fresh_until = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        snapshotId.longValue(), status, Timestamp.from(now), Timestamp.from(now),
+        Timestamp.from(now), shipmentId
+    );
+  }
+
+  private String normalizeManualField(String value, int maxLength) {
+    if (value == null) return null;
+    String normalized = value.replaceAll("\\s+", " ").trim();
+    if (normalized.isBlank()) return null;
+    if (normalized.length() > maxLength) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Manual shipment field is too long");
+    }
+    return normalized;
+  }
+
+  private void putManualField(ObjectNode node, String name, String value) {
+    if (value != null) node.put(name, value);
+  }
+
+  private void addManualExtra(ArrayNode values, String key, String value) {
+    if (value == null) return;
+    ObjectNode item = values.addObject();
+    item.put("key", key);
+    item.put("value", value);
+    item.put("source", "BUSINESS_MANUAL");
+  }
+
+  private String sha256(String value) {
+    try {
+      return HexFormat.of().formatHex(
+          MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))
+      );
+    } catch (NoSuchAlgorithmException error) {
+      throw new IllegalStateException("SHA-256 is unavailable", error);
+    }
   }
 
   @Transactional
@@ -370,6 +548,35 @@ public class BusinessCustomerService {
     }
     auditShipment(actor, "UPDATE_BUSINESS_SHIPMENT", shipment.id(),
         "Updated shipment " + referenceNo, ipAddress);
+    return requireAvailableShipment(shipment.publicId(), actor);
+  }
+
+  @Transactional
+  public Map<String, Object> updateManualSnapshot(
+      String shipmentPublicId,
+      CreateBusinessShipmentRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    if (request == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Manual shipment data is required");
+    ShipmentRecord shipment = requireShipment(shipmentPublicId);
+    requireShipmentAssignmentAuthority(shipment, actor);
+    BusinessShipmentRecord existing = requireBusinessShipment(shipment.id());
+    String status = normalizeTrackingStatus(request.trackingStatus(), existing.trackingStatus());
+    Instant now = Instant.now();
+    persistManualSnapshot(
+        shipment.id(), shipment.carrier(), existing.referenceType(),
+        normalizeReference(existing.referenceNo()), status, request, now
+    );
+    if (request.note() != null) {
+      jdbcTemplate.update(
+          "UPDATE cp_shipments SET business_note = ? WHERE id = ?",
+          normalizeShipmentNote(request.note(), existing.note()), shipment.id()
+      );
+    }
+    auditShipment(actor, "UPDATE_MANUAL_SHIPMENT_SNAPSHOT", shipment.id(),
+        "Updated manual shipment data " + existing.referenceNo(), ipAddress);
     return requireAvailableShipment(shipment.publicId(), actor);
   }
 

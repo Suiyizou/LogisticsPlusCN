@@ -728,7 +728,7 @@
     <ContainerReferencePage
       v-else-if="activePage === 'containers'"
       key="containers"
-      :containers="containers"
+      :containers="containerReferenceRows"
     />
     </Transition>
       </section>
@@ -875,7 +875,7 @@ import { exportPackingReportsZip, exportPackingReport } from "./services/exportR
 import { assignCargoModels } from "./utils/cargoModels";
 import { buildPreviewInWorker, readWorkbookInWorker } from "./services/excelImportClient";
 import { calculatePacking, estimatePackingWorkload } from "./services/packingClient";
-import { cloneDefaultContainers, defaultContainerForId, effectiveContainerHeight, isDefaultContainerId, mergeDefaultContainers, normalizeContainerHeightFields, restoreDefaultContainer, restoreDefaultContainerPrice } from "./services/localData";
+import { cloneDefaultContainers, cloneReferenceOnlyContainers, defaultContainerForId, effectiveContainerHeight, isDefaultContainerId, mergeDefaultContainers, normalizeContainerHeightFields, restoreDefaultContainer, restoreDefaultContainerPrice } from "./services/localData";
 import { fetchAdminMe, logoutAdmin } from "./services/adminApi";
 import { clearSession, isSessionExpired, storedExpiresAt, storedToken, storedUser } from "./services/authSession";
 import { currentLocale, elementPlusLocale, t } from "./i18n";
@@ -1150,6 +1150,13 @@ const containerSourceRows = computed(() =>
     dimensionNote: container.dimensionNote || "自定义箱型，请按实际设备复核。"
   }))
 );
+const containerReferenceRows = computed(() => {
+  const editableIds = new Set(containers.value.map((container: any) => container.id));
+  return [
+    ...containers.value,
+    ...cloneReferenceOnlyContainers().filter((container) => !editableIds.has(container.id))
+  ];
+});
 const calculationContainers = computed(() => {
   const selectedIds = new Set(priorityContainerIds.value);
   const selected = containers.value.filter((container: any) => selectedIds.has(container.id));

@@ -16,6 +16,7 @@
     "test:irregular-pallet-import": "node scripts/check-irregular-pallet-import.js",
     "test:packing-single-layer-row-fill": "node scripts/check-packing-single-layer-row-fill.js",
     "test:packing-pallet-gap": "node scripts/check-packing-pallet-gap.js",
+    "test:container-reference-data": "node scripts/check-container-reference-data.js",
     "desktop:preview": "npm run build && electron .",
     "desktop:build": "npm run build && electron-builder --win nsis --x64"
   },

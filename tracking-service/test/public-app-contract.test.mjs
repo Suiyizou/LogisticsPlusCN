@@ -200,6 +200,31 @@ test("customer file cards never disclose another customer's display name", () =>
   );
 });
 
+test("customer tracking is database-backed, assigned-only, and never falls back to carrier lookup", () => {
+  assert.match(
+    appSource,
+    /async function loadCustomerAssignedHistory\(\)[\s\S]*?fetch\("\/api\/customer\/shipments"[\s\S]*?item\?\.dataAvailable && item\?\.snapshot/
+  );
+  assert.match(
+    appSource,
+    /function readHistory\(\)[\s\S]*?readFileSession\(\)\.kind === "CUSTOMER"\) return customerAssignedHistory;/
+  );
+
+  const requestStart = appSource.indexOf("async function requestTracking(query, options = {})");
+  const requestEnd = appSource.indexOf("checkChannelsButton.addEventListener", requestStart);
+  const requestSource = appSource.slice(requestStart, requestEnd);
+  assert.match(requestSource, /const customerReadOnly = readFileSession\(\)\.kind === "CUSTOMER";/);
+  assert.match(
+    requestSource,
+    /postPublicShipmentTrackingRequest\(query, options\);[\s\S]*?if \(customerReadOnly\) return platform;/
+  );
+  assert.match(
+    appSource,
+    /const localPayload = customerReadOnly \? null : mergeImportedDetailsIntoPayload/
+  );
+  assert.match(appSource, /if \(readFileSession\(\)\.kind === "CUSTOMER"\) item\.append\(toggle, details\);/);
+});
+
 test("exposes real carrier selection and restricts CMA session maintenance to managers", () => {
   assert.match(
     indexSource,

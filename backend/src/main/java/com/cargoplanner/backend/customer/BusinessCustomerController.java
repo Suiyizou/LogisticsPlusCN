@@ -72,6 +72,16 @@ public class BusinessCustomerController {
     return service.updateShipment(shipmentId, request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/shipments/{shipmentId}/manual-snapshot")
+  public Map<String, Object> updateManualSnapshot(
+      @PathVariable String shipmentId,
+      @RequestBody CreateBusinessShipmentRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateManualSnapshot(shipmentId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @DeleteMapping("/shipments/{shipmentId}")
   public Map<String, Object> deleteShipment(
       @PathVariable String shipmentId,

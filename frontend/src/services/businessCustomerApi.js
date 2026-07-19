@@ -51,6 +51,13 @@ export function updateBusinessShipment(shipmentId, payload) {
   });
 }
 
+export function updateBusinessShipmentManualSnapshot(shipmentId, payload) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/manual-snapshot`, {
+    method: "POST",
+    body: payload
+  });
+}
+
 export function deleteBusinessShipment(shipmentId) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}`, {
     method: "DELETE"

@@ -1131,6 +1131,7 @@ let relatedFilesUploading = false;
 let relatedFilesCloseTimer = null;
 let relatedFilesCategoryOpen = false;
 let trackingAccountMenuOpen = false;
+let customerAssignedHistory = [];
 let relatedFilesExpiredSessionKind = "";
 let platformPrincipalAwaitingRefresh = false;
 let customerPrincipalAwaitingRefresh = false;
@@ -2984,6 +2985,7 @@ function loadSnapshot(query) {
 }
 
 function readHistory() {
+  if (readFileSession().kind === "CUSTOMER") return customerAssignedHistory;
   const records = readCacheIndex()
     .map((key) => ({ key, entry: readCacheEntry(key) }))
     .filter((record) => record.entry)
@@ -3025,6 +3027,50 @@ function readHistory() {
   }
 
   return latestRecords.map((record) => record.entry);
+}
+
+async function loadCustomerAssignedHistory() {
+  const session = readFileSession();
+  if (session.kind !== "CUSTOMER" || !session.token) {
+    customerAssignedHistory = [];
+    return;
+  }
+  try {
+    const response = await fetch("/api/customer/shipments", {
+      headers: { "X-Customer-Token": session.token }
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      customerAssignedHistory = [];
+      renderHistory();
+      return;
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    customerAssignedHistory = items
+      .filter((item) => item?.dataAvailable && item?.snapshot)
+      .map((item) => ({
+        query: normalizeQuery({
+          carrier: item.carrier || "COSCO",
+          channel: "AUTO",
+          type: item.referenceType || "BILLOFLADING",
+          number: item.referenceNo || item.snapshot?.tracking?.number || ""
+        }),
+        snapshot: item.snapshot,
+        savedAt: item.lastTrackedAt || item.snapshot?.fetchedAt || new Date().toISOString(),
+        shipmentId: item.shipmentId,
+        customerReadOnly: true
+      }));
+    renderHistory();
+    if (items.some((item) => !item?.dataAvailable)) {
+      showError(customerFacingTrackingError(), "warning");
+    }
+  } catch {
+    customerAssignedHistory = [];
+    renderHistory();
+    showError(customerFacingTrackingError(), "error");
+  }
 }
 
 function migrateLegacyCache() {
@@ -4614,7 +4660,8 @@ function renderHistory() {
       });
     });
 
-    item.append(toggle, deleteButton, details);
+    if (readFileSession().kind === "CUSTOMER") item.append(toggle, details);
+    else item.append(toggle, deleteButton, details);
     historyTableBody.append(item);
   }
 }
@@ -5132,7 +5179,7 @@ async function postPublicShipmentTrackingRequest(
 
   if (response.status === 401 && includeAuth && session.token) {
     const cleared = clearFileSession(session, { expired: true });
-    if (cleared) {
+    if (cleared && session.kind !== "CUSTOMER") {
       return postPublicShipmentTrackingRequest(query, { includeAuth: false, signal, batchTaskId });
     }
   }
@@ -5140,7 +5187,9 @@ async function postPublicShipmentTrackingRequest(
 }
 
 async function requestTracking(query, options = {}) {
+  const customerReadOnly = readFileSession().kind === "CUSTOMER";
   const platform = await postPublicShipmentTrackingRequest(query, options);
+  if (customerReadOnly) return platform;
   if (!isPublicTrackingRouteUnavailable(platform)) return platform;
 
   const primary = await postTrackingRequest("/api/track", query, options);
@@ -5231,7 +5280,8 @@ form.addEventListener("submit", async (event) => {
   const waitToken = beginSystemWait("tracking", "wait.tracking");
   let completed = false;
   updateUrl(query);
-  const localPayload = mergeImportedDetailsIntoPayload(
+  const customerReadOnly = readFileSession().kind === "CUSTOMER";
+  const localPayload = customerReadOnly ? null : mergeImportedDetailsIntoPayload(
     loadSnapshot(query),
     importedItem?.importedDetails
   );
@@ -5251,7 +5301,7 @@ form.addEventListener("submit", async (event) => {
       upstreamPayload,
       importedItem?.importedDetails
     );
-    saveSnapshot(query, payload);
+    if (!customerReadOnly) saveSnapshot(query, payload);
     markBatchItemResult(query, {
       status: "success",
       source: payload?.cached ? "server-cache" : "live"
@@ -5653,6 +5703,7 @@ migrateLegacyCache();
 batchState = restoreBatchState();
 if (batchState) persistBatchState();
 applyLanguage(currentLanguage, { persist: false });
+void loadCustomerAssignedHistory();
 
 const initial = new URLSearchParams(window.location.search);
 const initialNumber = initial.get("number");

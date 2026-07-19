@@ -4,6 +4,7 @@ import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerAuthInterceptor;
 import com.cargoplanner.backend.customer.CustomerPrincipal;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,9 +28,21 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/customer")
 public class CustomerShipmentFileController {
   private final ShipmentFileService fileService;
+  private final ShipmentTrackingService trackingService;
 
-  public CustomerShipmentFileController(ShipmentFileService fileService) {
+  public CustomerShipmentFileController(
+      ShipmentFileService fileService,
+      ShipmentTrackingService trackingService
+  ) {
     this.fileService = fileService;
+    this.trackingService = trackingService;
+  }
+
+  @GetMapping("/shipments")
+  public ObjectNode shipments(
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return trackingService.listAssignedSnapshots(customer);
   }
 
   @GetMapping("/shipments/{shipmentId}/files")

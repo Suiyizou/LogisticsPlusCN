@@ -1,5 +1,8 @@
 import { createRouteQuote, QUOTE_CHARGE_CATEGORIES, QUOTE_SOURCE_TYPES } from "./freightQuote.js";
 
+const customerContainerReferenceSource = "客户提供《集装箱尺寸(1).xlsx》";
+const actualLoadingNote = "算法采用客户文件内尺寸；实际装柜仍受具体柜号公差、门框净开口、角柱、波纹板、地板载荷和绑扎方案影响，作业前须按船司放箱设备复核。";
+
 export const defaultContainers = [
   {
     id: "20gp",
@@ -7,11 +10,10 @@ export const defaultContainers = [
     lengthCm: 590,
     widthCm: 235.2,
     heightCm: 239.5,
-    payloadKg: 28130,
-    dimensionSource: "Hapag-Lloyd 20' Standard",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/20-standard.html",
-    dimensionBasis: "Inside Dimension",
-    dimensionNote: "公开规格为名义内尺寸，实际柜号可能因制造批次存在公差。",
+    payloadKg: 18000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 18,000kg。${actualLoadingNote}`,
     usagePriority: "common",
     visualKind: "dry",
     ignoreHeightLimit: false,
@@ -24,10 +26,9 @@ export const defaultContainers = [
     widthCm: 235.2,
     heightCm: 268.9,
     payloadKg: 28340,
-    dimensionSource: "Triton 20ft High Cube Dry",
-    dimensionSourceUrl: "https://www.tritoncontainer.com/products/20ft-high-cube-dry-containers",
-    dimensionBasis: "Internal Dimensions",
-    dimensionNote: "20HQ 不是最常见海运标配，订舱前请按实际设备确认。",
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `客户文件未提供保守配货载重，暂保留既有 28,340kg 参考值，必须按实际设备确认。原文件另有“参考高 238、门高 255”的矛盾记录，仅保留为勘误提示，未用于算法。${actualLoadingNote}`,
     usagePriority: "common",
     visualKind: "high-cube",
     ignoreHeightLimit: false,
@@ -39,11 +40,10 @@ export const defaultContainers = [
     lengthCm: 563.8,
     widthCm: 243.8,
     heightCm: 300,
-    payloadKg: 42100,
-    dimensionSource: "Hapag-Lloyd 20' Flatrack",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/20-flatrack.html",
-    dimensionBasis: "Deck Length / Min. Width / User Load Height Limit",
-    dimensionNote: "\u5e73\u677f\u67dc\u4e3a\u5f00\u653e\u8bbe\u5907\uff1b\u7cfb\u7edf\u9ed8\u8ba4\u6309 300cm \u88c5\u8f7d\u9ad8\u5ea6\u4e0a\u9650\u53c2\u4e0e\u8ba1\u7b97\uff0c\u7528\u6237\u53ef\u6309 OOG\u3001\u573a\u7ad9\u3001\u7ed1\u624e\u548c\u8fd0\u8f93\u65b9\u6848\u81ea\u5b9a\u4e49\u3002",
+    payloadKg: 22000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列平台尺寸 / 用户装载高限",
+    dimensionNote: "保守配货载重 22,000kg。客户文件同时列出脚架 565×203×207.3cm、板框 563.9×222.8×223.3cm，结构差异不另建算法箱型；当前以 563.8×243.8cm 平台和 300cm 用户装载高限计算，实际 OOG、端墙、门框、绑扎和吊装边界必须逐柜复核。",
     usagePriority: "special",
     visualKind: "flat-rack",
     ignoreHeightLimit: true,
@@ -55,11 +55,10 @@ export const defaultContainers = [
     lengthCm: 1203.2,
     widthCm: 235.2,
     heightCm: 239.5,
-    payloadKg: 28750,
-    dimensionSource: "Hapag-Lloyd 40' Standard",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/40-standard.html",
-    dimensionBasis: "Inside Dimension",
-    dimensionNote: "公开规格为名义内尺寸，实际柜号可能因制造批次存在公差。",
+    payloadKg: 26000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 26,000kg。${actualLoadingNote}`,
     usagePriority: "common",
     visualKind: "dry",
     ignoreHeightLimit: false,
@@ -71,11 +70,10 @@ export const defaultContainers = [
     lengthCm: 1203.2,
     widthCm: 235,
     heightCm: 270,
-    payloadKg: 28600,
-    dimensionSource: "Hapag-Lloyd 40' Standard High Cube",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/40-standard-high-cube.html",
-    dimensionBasis: "Inside Dimension",
-    dimensionNote: "公开规格为名义内尺寸，实际柜号可能因制造批次存在公差。",
+    payloadKg: 26000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 26,000kg。原文件“门高 2525”按明显单位/小数点笔误仅作勘误提示，未用于算法。${actualLoadingNote}`,
     usagePriority: "common",
     visualKind: "high-cube",
     ignoreHeightLimit: false,
@@ -87,11 +85,10 @@ export const defaultContainers = [
     lengthCm: 1165.2,
     widthCm: 234.7,
     heightCm: 300,
-    payloadKg: 49100,
-    dimensionSource: "Hapag-Lloyd 40' Flatrack High Cube",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/40-flatrack-high-cube.html",
-    dimensionBasis: "Deck Length / Min. Width / User Load Height Limit",
-    dimensionNote: "\u5e73\u677f\u67dc\u4e3a\u5f00\u653e\u8bbe\u5907\uff1b\u7cfb\u7edf\u9ed8\u8ba4\u6309 300cm \u88c5\u8f7d\u9ad8\u5ea6\u4e0a\u9650\u53c2\u4e0e\u8ba1\u7b97\uff0c\u7528\u6237\u53ef\u6309 OOG\u3001\u573a\u7ad9\u3001\u7ed1\u624e\u548c\u8fd0\u8f93\u65b9\u6848\u81ea\u5b9a\u4e49\u3002",
+    payloadKg: 36000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列平台尺寸 / 用户装载高限",
+    dimensionNote: "保守配货载重 36,000kg。客户文件同时列出脚架 1178.4×203×194.3cm、板架 1177.6×222.8×195.5cm，结构差异不另建算法箱型；当前以 1165.2×234.7cm 平台和 300cm 用户装载高限计算，实际 OOG、端墙、门框、绑扎和吊装边界必须逐柜复核。",
     usagePriority: "special",
     visualKind: "flat-rack",
     ignoreHeightLimit: true,
@@ -103,11 +100,10 @@ export const defaultContainers = [
     lengthCm: 545,
     widthCm: 228,
     heightCm: 215.9,
-    payloadKg: 29140,
-    dimensionSource: "Hapag-Lloyd 20' Reefer",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/20-reefer.html",
-    dimensionBasis: "Inside Dimension",
-    dimensionNote: "冷藏柜属于特殊设备；普通货和冷藏设备类货物优先尝试普柜/高柜，只有温控运输才建议选 RF。",
+    payloadKg: 17000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 17,000kg。冷机、风道和回风空间不可占用，仅适用于温控运输；${actualLoadingNote}`,
     usagePriority: "special",
     visualKind: "reefer",
     ignoreHeightLimit: false,
@@ -119,17 +115,101 @@ export const defaultContainers = [
     lengthCm: 1159.9,
     widthCm: 229,
     heightCm: 242.5,
-    payloadKg: 29580,
-    dimensionSource: "Hapag-Lloyd 40' Reefer High Cube",
-    dimensionSourceUrl: "https://www.hapag-lloyd.com/en/services-information/cargo-fleet/container/40-reefer-high-cube.html",
-    dimensionBasis: "Inside Dimension",
-    dimensionNote: "冷藏柜属于特殊设备；普通货和冷藏设备类货物优先尝试普柜/高柜，只有温控运输才建议选 RF。",
+    payloadKg: 22000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 22,000kg。冷机、风道和回风空间不可占用，仅适用于温控运输；${actualLoadingNote}`,
     usagePriority: "special",
     visualKind: "reefer",
     ignoreHeightLimit: false,
     heightLimitCm: 242.5
+  },
+  {
+    id: "45hq",
+    name: "45HQ 高柜",
+    lengthCm: 1355.6,
+    widthCm: 235.2,
+    heightCm: 269.8,
+    payloadKg: 29000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: `保守配货载重 29,000kg。${actualLoadingNote}`,
+    usagePriority: "limited",
+    visualKind: "high-cube",
+    equipmentClass: "HQ",
+    ignoreHeightLimit: false,
+    heightLimitCm: 269.8
+  },
+  {
+    id: "20ot",
+    name: "20OT 开顶柜",
+    lengthCm: 589.8,
+    widthCm: 235.2,
+    heightCm: 234.2,
+    payloadKg: 20000,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: "保守配货载重 20,000kg。开顶不等于无边界，门框、顶梁、篷布、吊装净空及超高 OOG 条件须按实际设备和订舱方案复核。",
+    usagePriority: "special",
+    visualKind: "open-top",
+    equipmentClass: "OT",
+    ignoreHeightLimit: false,
+    heightLimitCm: 234.2
+  },
+  {
+    id: "40ot",
+    name: "40OT 开顶柜",
+    lengthCm: 1203.4,
+    widthCm: 235.2,
+    heightCm: 233,
+    payloadKg: 30500,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件 B 列内尺寸（装箱算法）",
+    dimensionNote: "保守配货载重 30,500kg。开顶不等于无边界，门框、顶梁、篷布、吊装净空及超高 OOG 条件须按实际设备和订舱方案复核。",
+    usagePriority: "special",
+    visualKind: "open-top",
+    equipmentClass: "OT",
+    ignoreHeightLimit: false,
+    heightLimitCm: 233
   }
 ];
+
+export const referenceOnlyContainers = [
+  {
+    id: "20iso-tank",
+    name: "20ISO TANK 罐箱",
+    lengthCm: null,
+    widthCm: null,
+    heightCm: null,
+    payloadKg: 26000,
+    packingEligible: false,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "罐式设备，内部装箱尺寸不适用",
+    dimensionNote: "客户文件配货毛重参考 26,000kg；只读资料项，仍不进入普通货物自动装箱。罐体容积、介质兼容性、额定总重、残液和危险品条件须按具体罐箱铭牌及承运要求核定。",
+    usagePriority: "special",
+    visualKind: "tank",
+    equipmentClass: "TANK"
+  },
+  {
+    id: "40garment",
+    name: "40 挂衣柜",
+    lengthCm: 1203,
+    widthCm: 235,
+    heightCm: 269,
+    payloadKg: null,
+    packingEligible: false,
+    dimensionSource: customerContainerReferenceSource,
+    dimensionBasis: "客户文件内尺寸（只读资料）",
+    dimensionNote: "客户文件未提供配货载重，暂不进入自动装箱；挂衣杆、内衬和实际门框会减少可用空间，须取得具体设备载重与内部配置后再启用算法。",
+    usagePriority: "special",
+    visualKind: "garment",
+    equipmentClass: "GARMENT"
+  }
+];
+
+export function cloneReferenceOnlyContainers() {
+  return referenceOnlyContainers.map((item) => ({ ...item }));
+}
 
 const referenceFreightSource = "Freightos FBX01 China/East Asia to North America West Coast";
 const referenceFreightSourceUrl = "https://www.freightos.com/enterprise/terminal/fbx-01-china-to-north-america-west-coast/";
@@ -200,7 +280,7 @@ function freightProfile(costFactor, referencePrice, priceTier, equipmentClass, n
 }
 
 const defaultContainerById = new Map(defaultContainers.map((item) => [item.id, item]));
-const removedDefaultContainerIds = new Set(["45hq"]);
+const removedDefaultContainerIds = new Set();
 const defaultDimensionFields = [
   "name",
   "lengthCm",

@@ -38,6 +38,9 @@
               <el-tag :type="priorityTagType(container.usagePriority)" effect="light">
                 {{ priorityText(container.usagePriority) }}
               </el-tag>
+              <el-tag v-if="container.packingEligible === false" type="info" effect="plain">
+                {{ ui('container.referenceOnly') }}
+              </el-tag>
               <h3>{{ tr(container.name) }}</h3>
             </div>
             <el-tag v-if="container.ignoreHeightLimit" type="warning" effect="plain">
@@ -46,7 +49,7 @@
           </div>
 
           <dl class="container-reference-specs">
-            <div><dt>{{ ui('container.calcSize') }}</dt><dd>{{ dimensionText(container) }} cm</dd></div>
+            <div><dt>{{ ui('container.calcSize') }}</dt><dd>{{ dimensionText(container) }}</dd></div>
             <div><dt>{{ ui('container.maxPayload') }}</dt><dd>{{ payloadText(container) }}</dd></div>
             <div class="container-reference-price">
               <dt>{{ ui('container.referencePrice') }}</dt>
@@ -101,6 +104,9 @@ const referenceRows = computed(() => (props.containers as any[]).map((container)
 
 function inferVisualKind(container: any) {
   const text = `${container?.id || ""} ${container?.name || ""}`.toLowerCase();
+  if (/tank|罐/.test(text)) return "tank";
+  if (/garment|挂衣/.test(text)) return "garment";
+  if (/ot|open.?top|开顶/.test(text)) return "open-top";
   if (/fr|flat|平板/.test(text)) return "flat-rack";
   if (/rf|reefer|冷藏/.test(text)) return "reefer";
   if (/hq|high|高/.test(text)) return "high-cube";
@@ -114,6 +120,9 @@ function inferPriority(container: any) {
 }
 
 function containerIcon(name: string) {
+  if (name.includes("TANK") || name.includes("罐")) return "TK";
+  if (name.includes("挂衣")) return "GOH";
+  if (name.includes("OT") || name.includes("开顶")) return "OT";
   if (name.includes("FR") || name.includes("平板")) return "FR";
   if (name.includes("RF") || name.includes("冷藏")) return "RF";
   if (name.includes("45")) return "45";
@@ -122,7 +131,10 @@ function containerIcon(name: string) {
 }
 
 function dimensionText(container: any) {
-  return `${formatNumber(container.lengthCm)} × ${formatNumber(container.widthCm)} × ${formatNumber(container.heightCm)}`;
+  const dimensions = [container.lengthCm, container.widthCm, container.heightCm]
+    .map((value) => Number(value || 0));
+  if (dimensions.every((value) => !(value > 0))) return ui('container.dimensionsNotApplicable');
+  return `${dimensions.map(formatNumber).join(" × ")} cm`;
 }
 
 function payloadText(container: any) {

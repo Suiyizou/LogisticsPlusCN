@@ -404,6 +404,21 @@
           </label>
           <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="shipmentCreateForm.referenceNo" required /></label>
           <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="shipmentCreateForm.trackingStatus" /></label>
+          <div class="customer-manual-fields">
+            <label><span>{{ t("customers.jobNumber") }}</span><input v-model.trim="shipmentCreateForm.forwarderJobNumber" /></label>
+            <label><span>{{ t("customers.vesselVoyage") }}</span><input v-model.trim="shipmentCreateForm.vesselVoyage" /></label>
+            <label><span>{{ t("customers.portOfLoading") }}</span><input v-model.trim="shipmentCreateForm.portOfLoading" /></label>
+            <label><span>{{ t("customers.portOfDischarge") }}</span><input v-model.trim="shipmentCreateForm.portOfDischarge" /></label>
+            <label><span>{{ t("customers.clientPoNumber") }}</span><input v-model.trim="shipmentCreateForm.clientPoNumber" /></label>
+            <label><span>{{ t("customers.volume") }}</span><input v-model.trim="shipmentCreateForm.volume" placeholder="5*40HC" /></label>
+            <label><span>{{ t("customers.estimatedDeparture") }}</span><input v-model.trim="shipmentCreateForm.estimatedDeparture" /></label>
+            <label><span>{{ t("customers.estimatedArrival") }}</span><input v-model.trim="shipmentCreateForm.estimatedArrival" /></label>
+            <label><span>{{ t("customers.actualDeparture") }}</span><input v-model.trim="shipmentCreateForm.actualDeparture" /></label>
+            <label><span>{{ t("customers.actualArrival") }}</span><input v-model.trim="shipmentCreateForm.actualArrival" /></label>
+            <label><span>{{ t("customers.actualDelivery") }}</span><input v-model.trim="shipmentCreateForm.actualDelivery" /></label>
+            <label><span>{{ t("customers.currentLocation") }}</span><input v-model.trim="shipmentCreateForm.currentLocation" /></label>
+            <label><span>{{ t("customers.clientNameCode") }}</span><input v-model.trim="shipmentCreateForm.clientNameCode" /></label>
+          </div>
           <label><span>{{ t("customers.shipmentNote") }}</span><textarea v-model="shipmentCreateForm.note" maxlength="2000"></textarea></label>
           <div class="customer-dialog-actions">
             <button type="button" @click="shipmentCreateDialogOpen = false">{{ t("customers.cancel") }}</button>
@@ -434,6 +449,25 @@
           <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="detailForm.referenceNo" required /></label>
           <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="detailForm.trackingStatus" /></label>
         </div>
+        <details class="customer-manual-update">
+          <summary>{{ t("customers.manualSnapshotTitle") }}</summary>
+          <p>{{ t("customers.manualSnapshotDescription") }}</p>
+          <div class="customer-manual-fields customer-dialog-form">
+            <label><span>{{ t("customers.jobNumber") }}</span><input v-model.trim="detailForm.forwarderJobNumber" /></label>
+            <label><span>{{ t("customers.vesselVoyage") }}</span><input v-model.trim="detailForm.vesselVoyage" /></label>
+            <label><span>{{ t("customers.portOfLoading") }}</span><input v-model.trim="detailForm.portOfLoading" /></label>
+            <label><span>{{ t("customers.portOfDischarge") }}</span><input v-model.trim="detailForm.portOfDischarge" /></label>
+            <label><span>{{ t("customers.clientPoNumber") }}</span><input v-model.trim="detailForm.clientPoNumber" /></label>
+            <label><span>{{ t("customers.volume") }}</span><input v-model.trim="detailForm.volume" /></label>
+            <label><span>{{ t("customers.estimatedDeparture") }}</span><input v-model.trim="detailForm.estimatedDeparture" /></label>
+            <label><span>{{ t("customers.estimatedArrival") }}</span><input v-model.trim="detailForm.estimatedArrival" /></label>
+            <label><span>{{ t("customers.actualDeparture") }}</span><input v-model.trim="detailForm.actualDeparture" /></label>
+            <label><span>{{ t("customers.actualArrival") }}</span><input v-model.trim="detailForm.actualArrival" /></label>
+            <label><span>{{ t("customers.actualDelivery") }}</span><input v-model.trim="detailForm.actualDelivery" /></label>
+            <label><span>{{ t("customers.currentLocation") }}</span><input v-model.trim="detailForm.currentLocation" /></label>
+            <label><span>{{ t("customers.clientNameCode") }}</span><input v-model.trim="detailForm.clientNameCode" /></label>
+          </div>
+        </details>
         <label class="customer-note-editor">
           <span>{{ t("customers.shipmentNote") }}</span>
           <textarea v-model="detailForm.note" maxlength="2000" :placeholder="t('customers.shipmentNotePlaceholder')"></textarea>
@@ -443,6 +477,7 @@
           <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
           <button type="button" @click="trackShipmentInWorkspace(detailShipment)">{{ t("customers.openLiveTracking") }}</button>
           <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
+          <button type="button" @click="saveManualSnapshot" :disabled="savingShipment">{{ t("customers.saveManualSnapshot") }}</button>
           <button type="button" @click="saveShipmentDetail" :disabled="savingShipment">{{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}</button>
           <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
         </div>
@@ -471,7 +506,8 @@ import {
   resetBusinessCustomerPassword,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
-  updateBusinessShipment
+  updateBusinessShipment,
+  updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
 
 const props = defineProps({
@@ -512,8 +548,8 @@ const createForm = reactive({ username: "", displayName: "", password: "", party
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
-const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "" });
-const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "" });
+const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
+const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 let shipmentRequestSequence = 0;
 let toastTimer = 0;
 
@@ -771,6 +807,7 @@ function openShipmentDetail(shipment) {
   detailForm.referenceNo = shipment?.referenceNo || "";
   detailForm.trackingStatus = shipment?.trackingStatus || "";
   detailForm.note = shipment?.note || "";
+  Object.assign(detailForm, emptyManualShipmentFields());
 }
 
 function closeShipmentDetail() {
@@ -779,6 +816,7 @@ function closeShipmentDetail() {
   detailForm.referenceNo = "";
   detailForm.trackingStatus = "";
   detailForm.note = "";
+  Object.assign(detailForm, emptyManualShipmentFields());
 }
 
 async function createShipment() {
@@ -790,6 +828,7 @@ async function createShipment() {
     shipmentCreateForm.referenceNo = "";
     shipmentCreateForm.trackingStatus = "";
     shipmentCreateForm.note = "";
+    Object.assign(shipmentCreateForm, emptyManualShipmentFields());
     shipmentCreateDialogOpen.value = false;
     showSuccess("customers.shipmentCreated");
   } catch (error) {
@@ -797,6 +836,42 @@ async function createShipment() {
   } finally {
     creatingShipment.value = false;
   }
+}
+
+async function saveManualSnapshot() {
+  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  savingShipment.value = true;
+  try {
+    const updated = await updateBusinessShipmentManualSnapshot(
+      detailShipment.value.shipmentId,
+      { ...detailForm }
+    );
+    replaceShipmentInLocalCollections(updated);
+    detailShipment.value = { ...detailShipment.value, ...updated };
+    showSuccess("customers.manualSnapshotSaved");
+  } catch (error) {
+    showError(error, "customers.manualSnapshotFailed");
+  } finally {
+    savingShipment.value = false;
+  }
+}
+
+function emptyManualShipmentFields() {
+  return {
+    forwarderJobNumber: "",
+    vesselVoyage: "",
+    portOfLoading: "",
+    portOfDischarge: "",
+    clientPoNumber: "",
+    estimatedDeparture: "",
+    estimatedArrival: "",
+    actualDeparture: "",
+    actualArrival: "",
+    actualDelivery: "",
+    currentLocation: "",
+    volume: "",
+    clientNameCode: ""
+  };
 }
 
 async function saveShipmentDetail() {
@@ -1576,10 +1651,20 @@ button:disabled { cursor: wait; opacity: .58; }
 .customer-dialog-actions { display: flex; gap: 9px; justify-content: flex-end; }
 .customer-dialog-actions button { flex: 1; }
 .customer-shipment-dialog { width: min(620px, 100%); }
+.customer-create-dialog,
+.customer-shipment-dialog { max-height: min(86vh, 860px); overflow-y: auto; }
+.customer-manual-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.customer-manual-update { padding: 12px; border: 1px solid #d7e4ef; border-radius: 10px; background: #f8fbfe; }
+.customer-manual-update summary { cursor: pointer; color: #1b5e96; font-size: 12px; font-weight: 850; }
+.customer-manual-update > p { margin: 8px 0 12px; color: #71879c; font-size: 12px; line-height: 1.6; }
 .customer-shipment-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .customer-shipment-detail-grid > span { display: grid; gap: 4px; padding: 11px; border-radius: 8px; background: #f3f8fc; }
 .customer-shipment-detail-grid small { color: #75899e; }
 .customer-shipment-detail-grid b { color: #183b5a; }
+
+@media (max-width: 720px) {
+  .customer-manual-fields { grid-template-columns: 1fr; }
+}
 .customer-toast {
   position: fixed;
   top: 92px;

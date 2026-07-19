@@ -271,8 +271,8 @@ const uiText = {
   "container.referenceTitle": { zh: "箱型尺寸资料库", en: "Container Size Reference" },
   "container.backToConfig": { zh: "返回配置页", en: "Back to Setup" },
   "container.sourceAlert": {
-    zh: "尺寸资料来自公开船司/箱东页面；静态参考价格来自公开运价指数并按箱型估算，未绑定实际起运港、目的港、船期、有效期、设备可用性，也未完整包含 OOG、冷藏、绑扎、吊装和码头等附加费，因此只作为方案比较基准，不等于实际订舱报价。",
-    en: "Dimensions come from public carrier/container-owner references. Static reference prices come from public freight indexes and equipment estimates; they are not bound to actual ports, sailing dates, validity, or equipment availability and do not fully include OOG, reefer, lashing, lifting, and terminal charges. They are comparison inputs, not live booking quotes."
+    zh: "默认尺寸与保守配货载重依据客户提供的《集装箱尺寸(1).xlsx》更新。算法使用内尺寸参考值，实际装柜仍须按具体柜号、门框净开口、地板载荷和船司设备复核；静态价格仅作方案比较，不等于实际订舱报价。",
+    en: "Default dimensions and conservative cargo payloads are based on the customer-provided container reference workbook. Packing uses reference internal dimensions; verify the actual unit, door opening, floor load and carrier equipment before loading. Static prices are planning inputs, not booking quotes."
   },
   "container.flatRackHeightIgnored": { zh: "平板不计高度", en: "Flat rack height ignored" },
   "container.flatRackHeightLimitTag": { zh: "装载高限 {value} cm", en: "Load height limit {value} cm" },
@@ -286,7 +286,9 @@ const uiText = {
     en: "Flat racks are no longer treated as unlimited height; packing uses this value as the maximum load height."
   },
   "container.calcSize": { zh: "计算尺寸", en: "Calculation Size" },
-  "container.maxPayload": { zh: "最大载重", en: "Max Payload" },
+  "container.maxPayload": { zh: "配货载重参考", en: "Cargo Payload Reference" },
+  "container.referenceOnly": { zh: "只读资料 · 不参与自动计算", en: "Reference only · Excluded from packing" },
+  "container.dimensionsNotApplicable": { zh: "内部装箱尺寸不适用", en: "Internal packing dimensions not applicable" },
   "container.referencePrice": { zh: "箱型静态参考价", en: "Static Container Reference Price" },
   "container.priceMissing": { zh: "未设置；不参与最低运价比较", en: "Not set; excluded from lowest-freight comparison" },
   "container.priceOptionalHint": { zh: "可留空；箱型仍参与可装性计算，但不会参与最低运价比较。", en: "Optional. The container remains in fit calculations but is excluded from lowest-freight comparison." },

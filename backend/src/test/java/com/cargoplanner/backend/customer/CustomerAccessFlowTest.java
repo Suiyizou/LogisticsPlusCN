@@ -341,7 +341,11 @@ class CustomerAccessFlowTest {
   void createsUpdatesAndDeletesManagedShipmentRecords() {
     Map<String, Object> created = customerService.createShipment(
         new CreateBusinessShipmentRequest(
-            "COSCO", "BOOKING", "NEW-BOOKING-100", "Pending", "Created manually"
+            "COSCO", "BOOKING", "NEW-BOOKING-100", "Booking confirmed", "Created manually",
+            "LJSH26050019", "OOCL POLAND 059E-35", "Shanghai", "Long Beach",
+            "HW202600057-1", "2026-06-07", "2026-06-22",
+            "2026-06-07 14:13:59", "2026-06-22 05:33:58", "2026-06-29 18:32:00",
+            "Pacific Container Terminal", "5*40HC", "HAYDEN"
         ),
         business,
         "127.0.0.1"
@@ -349,6 +353,24 @@ class CustomerAccessFlowTest {
     String shipmentId = (String) created.get("shipmentId");
     assertThat(shipmentId).isNotBlank();
     assertThat(created).containsEntry("referenceNo", "NEW-BOOKING-100");
+    String manualSnapshot = jdbcTemplate.queryForObject(
+        """
+        SELECT t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ?
+        """,
+        String.class,
+        shipmentId
+    );
+    assertThat(manualSnapshot)
+        .contains("\"channel\":\"MANUAL\"")
+        .contains("LJSH26050019")
+        .contains("Shanghai")
+        .contains("Long Beach")
+        .contains("2026-06-29 18:32:00")
+        .contains("5*40HC")
+        .contains("HAYDEN");
     jdbcTemplate.update(
         """
         UPDATE cp_shipments
@@ -436,6 +458,22 @@ class CustomerAccessFlowTest {
           reference_no_normalized VARCHAR(128) NOT NULL,
           primary_reference BOOLEAN NOT NULL,
           UNIQUE (carrier_code, reference_type, reference_no_normalized),
+          FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_tracking_snapshots (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL,
+          query_reference_type VARCHAR(24) NOT NULL,
+          query_reference_no VARCHAR(128) NOT NULL,
+          source_channel VARCHAR(32),
+          snapshot_json CLOB NOT NULL,
+          strategy_json CLOB,
+          payload_sha256 CHAR(64) NOT NULL,
+          fetched_at TIMESTAMP NOT NULL,
+          fresh_until TIMESTAMP NOT NULL,
+          created_at TIMESTAMP NOT NULL,
           FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         )
         """);

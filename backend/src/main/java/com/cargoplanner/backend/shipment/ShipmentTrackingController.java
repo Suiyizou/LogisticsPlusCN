@@ -21,18 +21,15 @@ public class ShipmentTrackingController {
   private final ShipmentTrackingService trackingService;
   private final AuthService authService;
   private final CustomerAuthService customerAuthService;
-  private final ShipmentAccessService accessService;
 
   public ShipmentTrackingController(
       ShipmentTrackingService trackingService,
       AuthService authService,
-      CustomerAuthService customerAuthService,
-      ShipmentAccessService accessService
+      CustomerAuthService customerAuthService
   ) {
     this.trackingService = trackingService;
     this.authService = authService;
     this.customerAuthService = customerAuthService;
-    this.accessService = accessService;
   }
 
   @PostMapping("/track")
@@ -48,14 +45,10 @@ public class ShipmentTrackingController {
     CustomerPrincipal customer = customerToken == null || customerToken.isBlank()
         ? null
         : customerAuthService.authenticate(customerToken, httpRequest);
-    ObjectNode response = trackingService.track(request, user);
     if (customer != null) {
-      response.put(
-          "fileAccess",
-          accessService.hasCustomerAccess(response.path("shipmentId").asText(), customer)
-      );
+      return trackingService.readAssignedSnapshot(request, customer);
     }
-    return response;
+    return trackingService.track(request, user);
   }
 
   @PostMapping("/batch-tasks/{taskId}/cancel")
