@@ -496,7 +496,6 @@
         <dl class="customer-credential-list">
           <div><dt>{{ t("customers.username") }}</dt><dd>{{ revealedCode.username }}</dd></div>
           <div v-if="revealedCode.password"><dt>{{ t("customers.initialPassword") }}</dt><dd>{{ revealedCode.password }}</dd></div>
-          <div><dt>{{ t("customers.customerCode") }}</dt><dd>{{ revealedCode.customerCode }}</dd></div>
         </dl>
         <small>{{ t("customers.codeDialogWarning") }}</small>
         <div>
@@ -519,15 +518,7 @@
             <span>{{ t("customers.initialPassword") }}</span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
           </label>
-          <label class="customer-code-mode-field">
-            <span>{{ t("customers.customerCode") }}</span>
-            <div class="customer-segmented-control">
-              <button type="button" :class="{ 'is-active': createForm.customerCodeMode === 'MANUAL' }" @click="createForm.customerCodeMode = 'MANUAL'">{{ t("customers.manualCode") }}</button>
-              <button type="button" :class="{ 'is-active': createForm.customerCodeMode === 'RANDOM' }" @click="createForm.customerCodeMode = 'RANDOM'">{{ t("customers.randomCode") }}</button>
-            </div>
-            <input v-if="createForm.customerCodeMode === 'MANUAL'" v-model.trim="createForm.customerCode" minlength="12" maxlength="128" :placeholder="t('customers.customerCodeManualPlaceholder')" required />
-            <small>{{ t("customers.customerCodeSecurityHint") }}</small>
-          </label>
+
           <div class="customer-dialog-actions">
             <button type="button" @click="createDialogOpen = false">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="creating">{{ creating ? t("customers.creating") : t("customers.create") }}</button>
@@ -545,16 +536,10 @@
           <button type="button" :class="{ 'is-active': batchImportMode === 'quick' }" @click="batchImportMode = 'quick'">{{ t("customers.quickImport") }}</button>
           <button type="button" :class="{ 'is-active': batchImportMode === 'excel' }" @click="batchImportMode = 'excel'">{{ t("customers.excelImport") }}</button>
         </div>
-        <div class="customer-batch-policy">
-          <span>{{ t("customers.customerCodePolicy") }}</span>
-          <div class="customer-segmented-control">
-            <button type="button" :class="{ 'is-active': batchCodeMode === 'RANDOM' }" @click="batchCodeMode = 'RANDOM'">{{ t("customers.randomCode") }}</button>
-            <button type="button" :class="{ 'is-active': batchCodeMode === 'MANUAL' }" @click="batchCodeMode = 'MANUAL'">{{ t("customers.manualCode") }}</button>
-          </div>
-        </div>
+
         <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
-          <span>{{ batchCodeMode === 'RANDOM' ? t("customers.quickImportNames") : t("customers.quickImportNamesAndCodes") }}</span>
-          <textarea v-model="quickImportText" :placeholder="batchCodeMode === 'RANDOM' ? t('customers.quickImportPlaceholder') : t('customers.quickImportManualPlaceholder')"></textarea>
+          <span>{{ t("customers.quickImportNames") }}</span>
+          <textarea v-model="quickImportText" :placeholder="t('customers.quickImportPlaceholder')"></textarea>
           <small>{{ t("customers.quickImportHint") }}</small>
         </label>
         <div v-else class="customer-excel-dropzone" :class="{ 'has-file': batchFileName }">
@@ -579,11 +564,10 @@
         <h2>{{ t("customers.batchCredentialTitle") }}</h2>
         <p>{{ t("customers.batchCredentialDescription") }}</p>
         <div class="customer-credential-table">
-          <div class="customer-credential-table-head"><span>{{ t("customers.customerName") }}</span><span>{{ t("customers.initialPassword") }}</span><span>{{ t("customers.customerCode") }}</span><span>{{ t("customers.importStatus") }}</span></div>
+          <div class="customer-credential-table-head"><span>{{ t("customers.customerName") }}</span><span>{{ t("customers.initialPassword") }}</span><span>{{ t("customers.importStatus") }}</span></div>
           <div v-for="row in batchCredentialRows" :key="`${row.rowNumber}-${row.username}`" class="customer-credential-row" :class="{ 'is-failed': row.status !== 'CREATED' }">
             <span><b>{{ row.username }}</b><small>#{{ row.rowNumber }}</small></span>
             <span>{{ row.password || '—' }}</span>
-            <span>{{ row.customerCode || '—' }}</span>
             <span>{{ row.status === 'CREATED' ? t("customers.importCreated") : row.message }}</span>
           </div>
         </div>
@@ -794,7 +778,6 @@ const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
 const batchImportDialogOpen = ref(false);
 const batchImportMode = ref("quick");
-const batchCodeMode = ref("RANDOM");
 const quickImportText = ref("");
 const batchFileName = ref("");
 const batchRows = ref([]);
@@ -823,7 +806,7 @@ const messageIsError = ref(false);
 const revealedCode = ref(null);
 const codeCopied = ref(false);
 const bindMode = ref("reference");
-const createForm = reactive({ username: "", password: "", customerCode: "", customerCodeMode: "MANUAL" });
+const createForm = reactive({ username: "", password: "" });
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
@@ -1083,16 +1066,12 @@ async function createCustomer() {
       username: createForm.username,
       displayName: createForm.username,
       password,
-      partyRole: "CONSIGNEE",
-      customerCode: createForm.customerCodeMode === "MANUAL" ? createForm.customerCode : null,
-      customerCodeMode: createForm.customerCodeMode
+      partyRole: "CONSIGNEE"
     });
     const customer = normalizeCustomer(response);
     revealCode(response, customer, password);
     createForm.username = "";
     createForm.password = "";
-    createForm.customerCode = "";
-    createForm.customerCodeMode = "MANUAL";
     createDialogOpen.value = false;
     await loadCustomers(customer.id);
   } catch (error) {
@@ -1489,14 +1468,12 @@ async function handleCustomerWorkbook(event) {
     const findColumn = (aliases) => headers.findIndex((header) => aliases.includes(header));
     const usernameIndex = findColumn(["客户名", "用户名", "登录名", "customer name", "username", "login name"]);
     const passwordIndex = findColumn(["密码", "登录密码", "password"]);
-    const codeIndex = findColumn(["客户码", "customer code", "customercode"]);
     const startIndex = usernameIndex >= 0 ? 1 : 0;
     const nameColumn = usernameIndex >= 0 ? usernameIndex : 0;
     batchRows.value = rows.slice(startIndex).map((row, index) => ({
       rowNumber: index + startIndex + 1,
       username: String(row[nameColumn] || "").trim(),
-      password: passwordIndex >= 0 ? String(row[passwordIndex] || "") : "",
-      customerCode: codeIndex >= 0 ? String(row[codeIndex] || "").trim() : ""
+      password: passwordIndex >= 0 ? String(row[passwordIndex] || "") : ""
     })).filter((row) => row.username);
     if (!batchRows.value.length) throw new Error(t("customers.noImportRows"));
     batchFileName.value = file.name;
@@ -1514,15 +1491,10 @@ async function submitBatchImport() {
     batchPreviewError.value = t("customers.noImportRows");
     return;
   }
-  if (batchCodeMode.value === "MANUAL" && rows.some((row) => !row.customerCode)) {
-    batchPreviewError.value = t("customers.manualCodeRequiredForEveryRow");
-    return;
-  }
   importingCustomers.value = true;
   batchPreviewError.value = "";
   try {
     const response = await batchCreateBusinessCustomers({
-      customerCodeMode: batchCodeMode.value,
       sourceFileName: batchImportMode.value === "excel" ? batchFileName.value : "quick-entry",
       items: rows
     });
@@ -1543,7 +1515,6 @@ function downloadCredentialWorkbook() {
   const rows = batchCredentialRows.value.map((row) => ({
     [t("customers.customerName")]: row.username,
     [t("customers.initialPassword")]: row.password || "",
-    [t("customers.customerCode")]: row.customerCode || "",
     [t("customers.importStatus")]: row.status === "CREATED" ? t("customers.importCreated") : row.message
   }));
   const workbook = XLSX.utils.book_new();
@@ -2766,7 +2737,7 @@ function showError(error, fallbackKey) {
 .customer-credential-table-head,
 .customer-credential-row {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.2fr 0.8fr;
+  grid-template-columns: 1.2fr 1fr 0.8fr;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;

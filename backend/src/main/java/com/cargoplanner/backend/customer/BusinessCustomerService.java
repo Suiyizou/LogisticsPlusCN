@@ -97,7 +97,55 @@ public class BusinessCustomerService {
       String ipAddress
   ) {
     requireManager(actor);
-    return createOne(request, actor, ipAddress, "MANUAL");
+    String username = normalizeUsername(request == null ? null : request.username());
+    String password = normalizePassword(request == null ? null : request.password());
+    String displayName = normalizeDisplayName(
+        request == null || request.displayName() == null || request.displayName().isBlank()
+            ? username
+            : request.displayName()
+    );
+    String clientCode = normalizeOptionalClientCode(request == null ? null : request.clientCode());
+    String partyRole = normalizePartyRole(
+        request == null ? null : request.partyRole(), "CONSIGNEE"
+    );
+    PasswordHash passwordHash = passwordHasher.hash(password);
+    GeneratedCustomerCode code = tokenCodec.newCustomerCode();
+    String publicId = UUID.randomUUID().toString();
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+    try {
+      jdbcTemplate.update(connection -> {
+        PreparedStatement statement = connection.prepareStatement(
+            """
+            INSERT INTO cp_customers (
+              public_id, username, display_name, client_code, party_role,
+              password_salt, password_hash, password_iterations,
+              customer_code_hash, customer_code_prefix, customer_code_mode,
+              provisioning_source, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RANDOM', 'MANUAL', 'ACTIVE', ?)
+            """,
+            Statement.RETURN_GENERATED_KEYS
+        );
+        statement.setString(1, publicId);
+        statement.setString(2, username);
+        statement.setString(3, displayName);
+        statement.setString(4, clientCode);
+        statement.setString(5, partyRole);
+        statement.setString(6, passwordHash.salt());
+        statement.setString(7, passwordHash.hash());
+        statement.setInt(8, passwordHash.iterations());
+        statement.setString(9, code.hash());
+        statement.setString(10, code.prefix());
+        statement.setLong(11, actor.id());
+        return statement;
+      }, keyHolder);
+    } catch (DuplicateKeyException error) {
+      throw new ApiException(HttpStatus.CONFLICT, "Customer username already exists");
+    }
+    CustomerRecord customer = requireManaged(publicId, actor);
+    audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
+    Map<String, Object> response = new LinkedHashMap<>(customerMetadata(customer));
+    response.put("customerCode", code.plainText());
+    return response;
   }
 
   public Map<String, Object> batchCreate(
@@ -115,9 +163,6 @@ public class BusinessCustomerService {
     if (items.size() > 500) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "A customer import cannot exceed 500 rows");
     }
-    String codeMode = normalizeCustomerCodeMode(
-        request == null ? null : request.customerCodeMode(), null
-    );
     List<Map<String, Object>> results = new ArrayList<>();
     int createdCount = 0;
     for (int index = 0; index < items.size(); index++) {
@@ -130,24 +175,20 @@ public class BusinessCustomerService {
           ? generatePassword()
           : suppliedPassword;
       String username = item == null ? null : item.username();
-      String customerCode = item == null ? null : item.customerCode();
       Map<String, Object> row = new LinkedHashMap<>();
       row.put("rowNumber", rowNumber);
       row.put("username", username == null ? "" : username.trim());
       try {
-        Map<String, Object> created = createOne(
+        Map<String, Object> created = create(
             new CreateCustomerRequest(
                 username,
                 password,
                 username,
                 "CONSIGNEE",
-                null,
-                customerCode,
-                codeMode
+                null
             ),
             actor,
-            ipAddress,
-            "BATCH"
+            ipAddress
         );
         row.put("status", "CREATED");
         row.put("customer", created);
@@ -165,75 +206,9 @@ public class BusinessCustomerService {
     response.put("total", results.size());
     response.put("created", createdCount);
     response.put("failed", results.size() - createdCount);
-    response.put("customerCodeMode", codeMode);
     response.put("sourceFileName", ClientInfo.trim(
         request == null ? null : request.sourceFileName(), 255
     ));
-    return response;
-  }
-
-  private Map<String, Object> createOne(
-      CreateCustomerRequest request,
-      AuthenticatedUser actor,
-      String ipAddress,
-      String provisioningSource
-  ) {
-    String username = normalizeUsername(request == null ? null : request.username());
-    String password = normalizePassword(request == null ? null : request.password());
-    String displayName = normalizeDisplayName(
-        request == null || request.displayName() == null || request.displayName().isBlank()
-            ? username
-            : request.displayName()
-    );
-    String clientCode = normalizeOptionalClientCode(request == null ? null : request.clientCode());
-    String partyRole = normalizePartyRole(
-        request == null ? null : request.partyRole(), "CONSIGNEE"
-    );
-    String customerCodeMode = normalizeCustomerCodeMode(
-        request == null ? null : request.customerCodeMode(),
-        request == null ? null : request.customerCode()
-    );
-    PasswordHash passwordHash = passwordHasher.hash(password);
-    GeneratedCustomerCode code = "MANUAL".equals(customerCodeMode)
-        ? tokenCodec.customerCode(normalizeCustomerCode(request == null ? null : request.customerCode()))
-        : tokenCodec.newCustomerCode();
-    String publicId = UUID.randomUUID().toString();
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    try {
-      jdbcTemplate.update(connection -> {
-        PreparedStatement statement = connection.prepareStatement(
-            """
-            INSERT INTO cp_customers (
-              public_id, username, display_name, client_code, party_role,
-              password_salt, password_hash, password_iterations,
-              customer_code_hash, customer_code_prefix, customer_code_mode,
-              provisioning_source, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
-            """,
-            Statement.RETURN_GENERATED_KEYS
-        );
-        statement.setString(1, publicId);
-        statement.setString(2, username);
-        statement.setString(3, displayName);
-        statement.setString(4, clientCode);
-        statement.setString(5, partyRole);
-        statement.setString(6, passwordHash.salt());
-        statement.setString(7, passwordHash.hash());
-        statement.setInt(8, passwordHash.iterations());
-        statement.setString(9, code.hash());
-        statement.setString(10, code.prefix());
-        statement.setString(11, customerCodeMode);
-        statement.setString(12, provisioningSource);
-        statement.setLong(13, actor.id());
-        return statement;
-      }, keyHolder);
-    } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username or customer code already exists");
-    }
-    CustomerRecord customer = requireManaged(publicId, actor);
-    audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
-    Map<String, Object> response = new LinkedHashMap<>(customerMetadata(customer));
-    response.put("customerCode", code.plainText());
     return response;
   }
 
@@ -1450,28 +1425,6 @@ public class BusinessCustomerService {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Client Code must contain 1-64 letters, numbers, dots, underscores, or hyphens"
-      );
-    }
-    return normalized;
-  }
-
-  private String normalizeCustomerCodeMode(String value, String manualCode) {
-    String fallback = manualCode == null || manualCode.isBlank() ? "RANDOM" : "MANUAL";
-    String normalized = normalizeCode(value, fallback);
-    if (!"RANDOM".equals(normalized) && !"MANUAL".equals(normalized)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer code mode must be RANDOM or MANUAL");
-    }
-    return normalized;
-  }
-
-  private String normalizeCustomerCode(String value) {
-    String normalized = value == null ? "" : value.trim();
-    if (normalized.length() < 12 || normalized.length() > 128
-        || normalized.chars().anyMatch(Character::isWhitespace)
-        || normalized.chars().anyMatch(Character::isISOControl)) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Manual customer code must contain 12-128 non-space characters"
       );
     }
     return normalized;
