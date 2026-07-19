@@ -37,6 +37,7 @@ const platformRouteOverlay = document.querySelector("#platform-route-overlay");
 const batchFileInput = document.querySelector("#batch-file-input");
 const batchSelectButton = document.querySelector("#batch-select-button");
 const batchResumeButton = document.querySelector("#batch-resume-button");
+const batchStopButton = document.querySelector("#batch-stop-button");
 const batchClearButton = document.querySelector("#batch-clear-button");
 const batchImportEmpty = document.querySelector("#batch-import-empty");
 const batchImportSummary = document.querySelector("#batch-import-summary");
@@ -405,6 +406,9 @@ const MESSAGES = {
     "batch.columns": "Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.",
     "batch.localNotice": "Queue and result status are stored only in this browser on this device.",
     "batch.resume": "Continue pending queries",
+    "batch.stop": "Stop current task",
+    "batch.stopping": "Stopping the current batch query…",
+    "batch.stopped": "Batch task stopped. Pending items can be resumed.",
     "batch.clear": "Clear imported queue",
     "batch.emptyTitle": "No imported queue",
     "batch.emptyDescription": "Choose a spreadsheet to begin batch tracking.",
@@ -786,6 +790,9 @@ const MESSAGES = {
     "batch.columns": "支持 M/B/L NO.、提单号和订舱号列；同时导入 Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code。",
     "batch.localNotice": "队列和处理状态仅保存在本设备的当前浏览器中。",
     "batch.resume": "继续查询待处理项目",
+    "batch.stop": "停止当前任务",
+    "batch.stopping": "正在停止当前批量查询…",
+    "batch.stopped": "批量任务已停止，待处理项目可以继续查询。",
     "batch.clear": "清除导入队列",
     "batch.emptyTitle": "尚未导入查询队列",
     "batch.emptyDescription": "请选择表格文件开始批量货物查询。",
@@ -1076,6 +1083,9 @@ const activeWaitOperations = new Map();
 let systemWaitCompletionTimer = null;
 let batchState = null;
 let batchRunning = false;
+let batchAbortController = null;
+let batchTaskId = null;
+let batchStopRequested = false;
 let batchImportNotice = null;
 let lastBatchRequestAt = 0;
 const expandedHistoryKeys = new Set();
@@ -3202,6 +3212,8 @@ function renderBatchState() {
   batchImportSummary.hidden = !hasQueue;
   batchResumeButton.hidden =
     !hasQueue || batchRunning || !items.some((item) => item.status === "pending");
+  batchStopButton.hidden = !hasQueue || !batchRunning;
+  batchStopButton.disabled = batchStopRequested;
   batchClearButton.hidden = !hasQueue || batchRunning;
 
   if (batchImportNotice) {
@@ -3230,7 +3242,9 @@ function renderBatchState() {
   batchFailedCount.textContent = String(counts.failed);
   batchPendingCount.textContent = String(counts.pending);
 
-  if (runningIndex >= 0) {
+  if (batchStopRequested) {
+    batchStatusText.textContent = t("batch.stopping");
+  } else if (runningIndex >= 0) {
     batchStatusText.textContent = t("batch.running", {
       current: runningIndex + 1,
       total: items.length,
@@ -3240,6 +3254,8 @@ function renderBatchState() {
     batchStatusText.textContent = t("batch.completed", counts);
   } else if (batchState.status === "ready") {
     batchStatusText.textContent = t("batch.ready", { count: items.length });
+  } else if (batchState.status === "stopped") {
+    batchStatusText.textContent = t("batch.stopped");
   } else {
     batchStatusText.textContent = t("batch.restored");
   }
@@ -3336,8 +3352,28 @@ async function parseBatchFile(file) {
   });
 }
 
-function yieldToBrowser(delay = 80) {
-  return new Promise((resolve) => window.setTimeout(resolve, delay));
+function batchAbortError() {
+  return new DOMException("Batch tracking task was cancelled", "AbortError");
+}
+
+function throwIfBatchAborted(signal) {
+  if (signal?.aborted) throw batchAbortError();
+}
+
+function yieldToBrowser(delay = 80, signal) {
+  throwIfBatchAborted(signal);
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delay);
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(batchAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function retryAfterDelay(response) {
@@ -3350,18 +3386,19 @@ function retryAfterDelay(response) {
   return Math.max(0, retryAt - Date.now());
 }
 
-async function waitForBatchRequestWindow() {
+async function waitForBatchRequestWindow(signal) {
   const elapsed = Date.now() - lastBatchRequestAt;
   const remaining = BATCH_REQUEST_INTERVAL_MS - elapsed;
-  if (lastBatchRequestAt > 0 && remaining > 0) await yieldToBrowser(remaining);
+  if (lastBatchRequestAt > 0 && remaining > 0) await yieldToBrowser(remaining, signal);
+  throwIfBatchAborted(signal);
   lastBatchRequestAt = Date.now();
 }
 
-async function requestBatchTracking(query) {
+async function requestBatchTracking(query, { signal, taskId } = {}) {
   let result = null;
   for (let attempt = 0; attempt <= BATCH_RETRY_LIMIT; attempt += 1) {
-    await waitForBatchRequestWindow();
-    result = await requestTracking(query);
+    await waitForBatchRequestWindow(signal);
+    result = await requestTracking(query, { signal, batchTaskId: taskId });
     if (
       !BATCH_RETRYABLE_STATUSES.has(result.response.status) ||
       attempt >= BATCH_RETRY_LIMIT
@@ -3371,9 +3408,27 @@ async function requestBatchTracking(query) {
 
     const retryDelay =
       retryAfterDelay(result.response) ?? BATCH_RETRY_BASE_MS * 2 ** attempt;
-    await yieldToBrowser(retryDelay);
+    await yieldToBrowser(retryDelay, signal);
   }
   return result;
+}
+
+function createBatchTaskId() {
+  const random = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+  return `batch_${random}`;
+}
+
+async function cancelBatchTask(taskId) {
+  if (!taskId) return null;
+  const encodedTaskId = encodeURIComponent(taskId);
+  const session = readFileSession();
+  const platformResponse = await fetch(`/api/public/shipments/batch-tasks/${encodedTaskId}/cancel`, {
+    method: "POST",
+    headers: fileAuthHeaders(session)
+  });
+  if (![404, 405].includes(platformResponse.status)) return platformResponse;
+  return fetch(appUrl(`/api/batch-tasks/${encodedTaskId}/cancel`), { method: "POST" });
 }
 
 function batchItemForQuery(query) {
@@ -3403,6 +3458,11 @@ async function runBatchQueue() {
   if (batchRunning || !batchState?.items?.some((item) => item.status === "pending")) return;
 
   batchRunning = true;
+  batchAbortController = new AbortController();
+  batchTaskId = createBatchTaskId();
+  batchStopRequested = false;
+  const signal = batchAbortController.signal;
+  const taskId = batchTaskId;
   batchState.status = "running";
   persistBatchState();
   renderBatchState();
@@ -3432,7 +3492,10 @@ async function runBatchQueue() {
           item.source = "device-cache";
           item.error = null;
         } else {
-          const { response, payload: upstreamPayload } = await requestBatchTracking(query);
+          const { response, payload: upstreamPayload } = await requestBatchTracking(query, {
+            signal,
+            taskId
+          });
           if (!response.ok) {
             throw new Error(
               trackingResponseMessage(upstreamPayload, response) ||
@@ -3449,6 +3512,12 @@ async function runBatchQueue() {
           item.error = null;
         }
       } catch (error) {
+        if (signal.aborted || error?.name === "AbortError") {
+          item.status = "pending";
+          item.source = null;
+          item.error = null;
+          throw error;
+        }
         item.status = "failed";
         item.source = null;
         item.error = error?.message || t("error.generic");
@@ -3458,15 +3527,18 @@ async function runBatchQueue() {
       item.updatedAt = new Date().toISOString();
       persistBatchState();
       renderBatchState();
-      await yieldToBrowser();
+      await yieldToBrowser(80, signal);
     }
 
     batchState.status = "complete";
     completed = batchCounts().failed === 0;
   } catch {
-    if (batchState) batchState.status = "paused";
+    if (batchState) batchState.status = signal.aborted ? "stopped" : "paused";
   } finally {
     batchRunning = false;
+    batchAbortController = null;
+    batchTaskId = null;
+    batchStopRequested = false;
     if (batchState) {
       persistBatchState();
       renderBatchState();
@@ -4967,19 +5039,23 @@ function applyLanguage(language, { persist = true } = {}) {
   renderRelatedFilesDrawer();
 }
 
-async function postTrackingRequest(path, query) {
+async function postTrackingRequest(path, query, { signal, batchTaskId } = {}) {
   const response = requireAuthorizedResponse(
     await fetch(appUrl(path), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(query)
+      body: JSON.stringify({ ...query, ...(batchTaskId ? { batchTaskId } : {}) }),
+      signal
     })
   );
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
 }
 
-async function postPublicShipmentTrackingRequest(query, { includeAuth = true } = {}) {
+async function postPublicShipmentTrackingRequest(
+  query,
+  { includeAuth = true, signal, batchTaskId } = {}
+) {
   const session = readFileSession();
   const sessionFingerprint = fileSessionFingerprint(session);
   const response = await fetch("/api/public/shipments/track", {
@@ -4988,7 +5064,8 @@ async function postPublicShipmentTrackingRequest(query, { includeAuth = true } =
       "Content-Type": "application/json",
       ...(includeAuth ? fileAuthHeaders(session) : {})
     },
-    body: JSON.stringify(query)
+    body: JSON.stringify({ ...query, ...(batchTaskId ? { batchTaskId } : {}) }),
+    signal
   });
   const payload = await response.json().catch(() => ({}));
   if (payload && typeof payload === "object") {
@@ -4997,16 +5074,18 @@ async function postPublicShipmentTrackingRequest(query, { includeAuth = true } =
 
   if (response.status === 401 && includeAuth && session.token) {
     const cleared = clearFileSession(session, { expired: true });
-    if (cleared) return postPublicShipmentTrackingRequest(query, { includeAuth: false });
+    if (cleared) {
+      return postPublicShipmentTrackingRequest(query, { includeAuth: false, signal, batchTaskId });
+    }
   }
   return { response, payload };
 }
 
-async function requestTracking(query) {
-  const platform = await postPublicShipmentTrackingRequest(query);
+async function requestTracking(query, options = {}) {
+  const platform = await postPublicShipmentTrackingRequest(query, options);
   if (!isPublicTrackingRouteUnavailable(platform)) return platform;
 
-  const primary = await postTrackingRequest("/api/track", query);
+  const primary = await postTrackingRequest("/api/track", query, options);
 
   if (
     query.carrier === "COSCO" &&
@@ -5016,7 +5095,7 @@ async function requestTracking(query) {
       query.channel === "PLAYWRIGHT"
         ? "/api/track/cosco/playwright"
         : "/api/track/cosco";
-    return postTrackingRequest(compatibilityPath, query);
+    return postTrackingRequest(compatibilityPath, query, options);
   }
 
   return primary;
@@ -5219,6 +5298,19 @@ batchFileInput.addEventListener("change", async () => {
 
 batchResumeButton.addEventListener("click", () => {
   void runBatchQueue();
+});
+
+batchStopButton.addEventListener("click", async () => {
+  if (!batchRunning || batchStopRequested) return;
+  batchStopRequested = true;
+  const taskId = batchTaskId;
+  renderBatchState();
+  batchAbortController?.abort();
+  try {
+    await cancelBatchTask(taskId);
+  } catch {
+    // The local abort already stops this browser queue; server cancellation is best effort.
+  }
 });
 
 batchClearButton.addEventListener("click", () => {

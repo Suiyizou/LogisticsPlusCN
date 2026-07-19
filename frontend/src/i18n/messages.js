@@ -1119,6 +1119,19 @@ Object.assign(messages["en-US"].portal, {
 });
 
 messages["zh-CN"].customers = {
+  createShipment: "新建票单",
+  createShipmentDescription: "手动新增一张可管理的订舱号或提单记录，后续仍可执行实时追踪。",
+  saveShipment: "保存票单",
+  savingShipment: "正在保存...",
+  deleteShipment: "删除票单",
+  deleteShipmentConfirm: "确认删除这张票单吗？票单的客户绑定和查询快照也会一并删除；存在附件时不能删除。",
+  shipmentCreated: "票单已创建。",
+  shipmentSaved: "票单已更新。",
+  shipmentDeleted: "票单已删除。",
+  shipmentCreateFailed: "票单创建失败。",
+  shipmentSaveFailed: "票单保存失败。",
+  shipmentDeleteFailed: "票单删除失败；请先确认票单没有关联附件。",
+  noPartiesBound: "尚未绑定发货人或收货人",
   backWorkbench: "返回工作台首页",
   openCreate: "创建客户",
   cancel: "取消",
@@ -1232,6 +1245,19 @@ messages["zh-CN"].customers = {
 };
 
 messages["en-US"].customers = {
+  createShipment: "New shipment",
+  createShipmentDescription: "Create a manageable booking or bill record. It can still be refreshed through live tracking later.",
+  saveShipment: "Save shipment",
+  savingShipment: "Saving...",
+  deleteShipment: "Delete shipment",
+  deleteShipmentConfirm: "Delete this shipment? Customer assignments and tracking snapshots are removed too. Shipments with files cannot be deleted.",
+  shipmentCreated: "Shipment created.",
+  shipmentSaved: "Shipment updated.",
+  shipmentDeleted: "Shipment deleted.",
+  shipmentCreateFailed: "Could not create the shipment.",
+  shipmentSaveFailed: "Could not save the shipment.",
+  shipmentDeleteFailed: "Could not delete the shipment. Remove related files first.",
+  noPartiesBound: "No shipper or consignee assigned",
   backWorkbench: "Back to workbenches",
   openCreate: "Create customer",
   cancel: "Cancel",

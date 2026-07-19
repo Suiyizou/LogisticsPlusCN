@@ -269,6 +269,101 @@ class CustomerAccessFlowTest {
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
   }
 
+  @Test
+  void bindsShipperAndConsigneeToTheSameShipmentButRejectsDuplicatePartyRoles() {
+    String shipperId = (String) customerService.create(
+        new CreateCustomerRequest("primary-shipper", "Primary Shipper", "SHIPPER"),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    String consigneeId = (String) customerService.create(
+        new CreateCustomerRequest("primary-consignee", "Primary Consignee", "CONSIGNEE"),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    String duplicateShipperId = (String) customerService.create(
+        new CreateCustomerRequest("duplicate-shipper", "Duplicate Shipper", "SHIPPER"),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    CustomerShipmentBindingRequest binding = new CustomerShipmentBindingRequest(
+        "shipment-public-id", null, null, null
+    );
+
+    assertThat(customerService.bindShipment(
+        shipperId, binding, business, "127.0.0.1"
+    ).get("relationshipRole")).isEqualTo("SHIPPER");
+    assertThat(customerService.bindShipment(
+        consigneeId, binding, business, "127.0.0.1"
+    ).get("relationshipRole")).isEqualTo("CONSIGNEE");
+    assertThatThrownBy(() -> customerService.bindShipment(
+        duplicateShipperId, binding, business, "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT)
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> available =
+        (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
+    assertThat(available).filteredOn(item -> "shipment-public-id".equals(item.get("shipmentId")))
+        .singleElement()
+        .satisfies(item -> assertThat(item.get("boundRoles"))
+            .isEqualTo(List.of("SHIPPER", "CONSIGNEE")));
+  }
+
+  @Test
+  void createsUpdatesAndDeletesManagedShipmentRecords() {
+    Map<String, Object> created = customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "NEW-BOOKING-100", "Pending", "Created manually"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String shipmentId = (String) created.get("shipmentId");
+    assertThat(shipmentId).isNotBlank();
+    assertThat(created).containsEntry("referenceNo", "NEW-BOOKING-100");
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET current_snapshot_id = 999, last_tracked_at = CURRENT_TIMESTAMP,
+            fresh_until = CURRENT_TIMESTAMP
+        WHERE public_id = ?
+        """,
+        shipmentId
+    );
+
+    Map<String, Object> updated = customerService.updateShipment(
+        shipmentId,
+        new UpdateBusinessShipmentRequest(
+            "BILLOFLADING", "COSU1234567890", "In transit", "Customer notified"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(updated)
+        .containsEntry("referenceType", "BILLOFLADING")
+        .containsEntry("referenceNo", "1234567890")
+        .containsEntry("trackingStatus", "In transit")
+        .containsEntry("note", "Customer notified");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?",
+        Long.class,
+        shipmentId
+    )).isNull();
+
+    assertThat(customerService.deleteShipment(shipmentId, business, "127.0.0.1"))
+        .containsEntry("deleted", true)
+        .containsEntry("shipmentId", shipmentId);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments WHERE public_id = ?", Integer.class, shipmentId
+    )).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = '1234567890'",
+        Integer.class
+    )).isZero();
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
@@ -292,12 +387,14 @@ class CustomerAccessFlowTest {
         """);
     jdbcTemplate.execute("""
         CREATE TABLE cp_shipments (
-          id BIGINT PRIMARY KEY,
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
           public_id CHAR(36) NOT NULL UNIQUE,
           carrier_code VARCHAR(32) NOT NULL,
+          current_snapshot_id BIGINT,
           tracking_status VARCHAR(80),
           business_note TEXT,
           last_tracked_at TIMESTAMP,
+          fresh_until TIMESTAMP,
           created_by BIGINT,
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
@@ -305,13 +402,15 @@ class CustomerAccessFlowTest {
         """);
     jdbcTemplate.execute("""
         CREATE TABLE cp_shipment_references (
-          id BIGINT PRIMARY KEY,
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
           shipment_id BIGINT NOT NULL,
           carrier_code VARCHAR(32) NOT NULL,
           reference_type VARCHAR(24) NOT NULL,
           reference_no_raw VARCHAR(160) NOT NULL,
           reference_no_normalized VARCHAR(128) NOT NULL,
-          primary_reference BOOLEAN NOT NULL
+          primary_reference BOOLEAN NOT NULL,
+          UNIQUE (carrier_code, reference_type, reference_no_normalized),
+          FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         )
         """);
     jdbcTemplate.execute("""
@@ -358,6 +457,12 @@ class CustomerAccessFlowTest {
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (customer_id, shipment_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_files (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL
         )
         """);
   }

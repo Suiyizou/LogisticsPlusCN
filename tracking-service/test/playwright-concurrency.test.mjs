@@ -114,6 +114,6 @@ test("Playwright browser contexts are closed from a finally block", async () => 
   );
   assert.match(
     source,
-    /let context = null;[\s\S]*?context = await browser\.newContext[\s\S]*?finally \{\s*if \(context\) await context\.close\(\);\s*\}/
+    /let context = null;[\s\S]*?context = await browser\.newContext[\s\S]*?finally \{[\s\S]*?if \(context\) await context\.close\(\);[\s\S]*?\}/
   );
 });

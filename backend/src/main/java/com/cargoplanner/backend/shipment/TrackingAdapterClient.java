@@ -37,6 +37,7 @@ public class TrackingAdapterClient {
     body.put("channel", request.channel());
     body.put("type", request.type());
     body.put("number", request.number());
+    if (request.batchTaskId() != null) body.put("batchTaskId", request.batchTaskId());
     try {
       RestClient.RequestBodySpec requestSpec = restClient.post().uri("/api/track");
       if (credentials != null) {
@@ -54,12 +55,30 @@ public class TrackingAdapterClient {
       HttpStatus status = switch (error.getStatusCode().value()) {
         case 400 -> HttpStatus.BAD_REQUEST;
         case 404 -> HttpStatus.NOT_FOUND;
+        case 409 -> HttpStatus.CONFLICT;
         case 429 -> HttpStatus.TOO_MANY_REQUESTS;
         case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
         case 504 -> HttpStatus.GATEWAY_TIMEOUT;
         default -> HttpStatus.BAD_GATEWAY;
       };
       throw new ApiException(status, adapterMessage(error));
+    } catch (ResourceAccessException error) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
+    }
+  }
+
+  public JsonNode cancelBatchTask(String taskId) {
+    try {
+      JsonNode response = restClient.post()
+          .uri("/api/batch-tasks/{taskId}/cancel", taskId)
+          .retrieve()
+          .body(JsonNode.class);
+      if (response == null) {
+        throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter returned an empty cancellation response");
+      }
+      return response;
+    } catch (RestClientResponseException error) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, adapterMessage(error));
     } catch (ResourceAccessException error) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
     }
@@ -83,5 +102,15 @@ public class TrackingAdapterClient {
     return normalized;
   }
 
-  public record NormalizedTrackRequest(String carrier, String channel, String type, String number) {}
+  public record NormalizedTrackRequest(
+      String carrier,
+      String channel,
+      String type,
+      String number,
+      String batchTaskId
+  ) {
+    public NormalizedTrackRequest(String carrier, String channel, String type, String number) {
+      this(carrier, channel, type, number, null);
+    }
+  }
 }

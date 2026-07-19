@@ -86,6 +86,24 @@ $env:PLAYWRIGHT_QUEUE_TIMEOUT_MS="15000"
 npm start
 ```
 
+## COSCO 代理、限速与 403 冷却
+
+COSCO 的 `NETWORK` 与 `PLAYWRIGHT` 通道共用同一 HTTP(S) 代理配置。代理账号和密码必须使用独立变量，不要嵌入 URL，也不要提交到 Git：
+
+```powershell
+$env:COSCO_PROXY_ENABLED="true"
+$env:COSCO_PROXY_SERVER="http://proxy-host:8080"
+$env:COSCO_PROXY_USERNAME="proxy-user"
+$env:COSCO_PROXY_PASSWORD="proxy-password"
+$env:COSCO_QUERY_MIN_INTERVAL_MS="2500"
+$env:COSCO_QUERY_QUEUE_LIMIT="50"
+$env:COSCO_QUERY_QUEUE_TIMEOUT_MS="120000"
+$env:COSCO_BLOCK_COOLDOWN_MS="1800000"
+npm start
+```
+
+COSCO 查询按进程串行并保持最小间隔，避免批量任务瞬时打满上游。任一通道确认上游返回 HTTP `403` 后会开启共享冷却，在冷却期内直接返回 `503` 与 `COSCO_UPSTREAM_BLOCKED`，不会继续用另一个通道重复冲击同一出口 IP。`GET /api/health` 只暴露脱敏后的代理状态、队列和熔断状态。
+
 也可以独立验证：
 
 ```powershell
@@ -125,6 +143,14 @@ Content-Type: application/json
 ```
 
 将 `channel` 改为 `PLAYWRIGHT` 即使用通道二。不传时默认使用通道一。
+
+批量查询为每次运行附带 16-80 位的 `batchTaskId`。停止任务时调用：
+
+```http
+POST /api/batch-tasks/{batchTaskId}/cancel
+```
+
+接口返回 `202`；正在执行的网络请求或 Playwright 浏览器上下文会被中止，页面把当前条目恢复为待处理。再次继续时会生成新的任务 ID，只处理剩余条目。
 
 查询通道注册表：
 

@@ -312,6 +312,71 @@ class ShipmentTrackingServiceTest {
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isZero();
   }
 
+  @Test
+  void doesNotPersistAnEmptyCarrierSnapshot() throws Exception {
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "EMPTY-1001"
+    );
+    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "EMPTY-1001"},
+            "summary": {},
+            "containers": []
+          },
+          "cached": false
+        }
+        """));
+
+    ObjectNode result = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "EMPTY-1001", false),
+        employee
+    );
+
+    assertThat(result.path("persisted").asBoolean(true)).isFalse();
+    assertThat(result.has("shipmentId")).isFalse();
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class)).isZero();
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipment_references", Integer.class)).isZero();
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isZero();
+  }
+
+  @Test
+  void keepsTheLastValidSnapshotWhenAForcedRefreshReturnsEmpty() throws Exception {
+    ObjectNode first = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        employee
+    );
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:02:00Z",
+            "tracking": {"type": "BOOKING", "number": "BK-10001"},
+            "summary": {},
+            "containers": []
+          },
+          "cached": false
+        }
+        """));
+
+    ObjectNode refreshed = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", true),
+        business
+    );
+
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(first.path("shipmentId").asText());
+    assertThat(refreshed.path("cacheSource").asText()).isEqualTo("MYSQL_STALE");
+    assertThat(refreshed.path("snapshot").path("summary").path("latestEvent").path("name").asText())
+        .isEqualTo("Loaded on board");
+    assertThat(refreshed.path("warning").asText()).contains("last valid snapshot");
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isEqualTo(1);
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (

@@ -41,7 +41,13 @@ VITE_TRACKING_WORKBENCH_URL=/tracking/
 
 默认部署路径固定为 `/tracking/`。如果修改它，还需同步调整 `docker/nginx.conf` 与 `frontend/vite.config.js` 中的代理路径，不能只修改这个变量。
 
+COSCO 两个查询通道可通过 `COSCO_PROXY_*` 环境变量共用 HTTP(S) 代理，并由全局最小请求间隔、有限队列和 403 冷却保护出口 IP。批量页面支持停止当前任务；当前请求会被中止，剩余条目可稍后继续。
+
 ## 后端与数据库
+
+业务员/管理员可在客户与票单工作台维护已查询票单：`POST /api/business/customers/shipments` 新增、`PATCH /api/business/customers/shipments/{shipmentId}` 修改、`DELETE /api/business/customers/shipments/{shipmentId}` 删除。存在关联附件的票单必须先处理附件才能删除。空的船司返回不会落库，也不会覆盖上一份有效快照。
+
+客户绑定按关系角色维护。同一票单可以同时绑定一个 `SHIPPER` 和一个 `CONSIGNEE`；同一角色重复绑定给不同客户会返回 `409`。原有绑定与解绑接口保持为 `POST /api/business/customers/{customerId}/shipments` 和 `DELETE /api/business/customers/{customerId}/shipments/{shipmentId}`。
 
 建表脚本：
 

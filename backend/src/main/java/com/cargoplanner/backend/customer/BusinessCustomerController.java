@@ -53,6 +53,34 @@ public class BusinessCustomerController {
     );
   }
 
+  @PostMapping("/shipments")
+  public Map<String, Object> createShipment(
+      @RequestBody CreateBusinessShipmentRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.createShipment(request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @PatchMapping("/shipments/{shipmentId}")
+  public Map<String, Object> updateShipment(
+      @PathVariable String shipmentId,
+      @RequestBody UpdateBusinessShipmentRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateShipment(shipmentId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @DeleteMapping("/shipments/{shipmentId}")
+  public Map<String, Object> deleteShipment(
+      @PathVariable String shipmentId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.deleteShipment(shipmentId, actor, ClientInfo.ip(httpRequest));
+  }
+
   @PostMapping
   public Map<String, Object> create(
       @RequestBody CreateCustomerRequest request,

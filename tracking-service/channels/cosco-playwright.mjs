@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { decodeCoscoPayload } from "../lib/cosco-payload.mjs";
+import { readCoscoProxyConfig, toPlaywrightProxy } from "../lib/cosco-proxy.mjs";
 
 const COSCO_TRACKING_PAGE =
   "https://elines.coscoshipping.com/scct/public/ct/base?lang=en";
@@ -8,6 +9,7 @@ const OPTIONAL_RESPONSE_SETTLE_MS = 1_200;
 const DEFAULT_MAX_CONCURRENCY = 2;
 const DEFAULT_QUEUE_LIMIT = 8;
 const DEFAULT_QUEUE_TIMEOUT_MS = 15_000;
+const COSCO_PLAYWRIGHT_PROXY = toPlaywrightProxy(readCoscoProxyConfig());
 
 const TRACKING_LABELS = Object.freeze({
   BILLOFLADING: "B/L No.",
@@ -134,6 +136,7 @@ async function launchSharedBrowser() {
   if (channel && channel !== "chromium") {
     launchOptions.channel = channel;
   }
+  if (COSCO_PLAYWRIGHT_PROXY) launchOptions.proxy = COSCO_PLAYWRIGHT_PROXY;
 
   const browser = await chromium.launch(launchOptions);
 
@@ -177,14 +180,16 @@ function responseMatchesRequest(response, request, endpoint = "detail") {
 }
 
 async function decodeSuccessfulResponse(response) {
-  const decoded = decodeCoscoPayload(await response.text());
+  const rawText = await response.text();
 
   if (!response.ok()) {
     const error = new Error(`COSCO Playwright 查询返回 HTTP ${response.status()}`);
     error.httpStatus = 502;
+    error.upstreamStatus = response.status();
     throw error;
   }
 
+  const decoded = decodeCoscoPayload(rawText);
   if (decoded?.code !== "200" || decoded?.result == null) {
     const error = new Error(
       decoded?.message || `COSCO Playwright 查询失败：${decoded?.code ?? "UNKNOWN"}`
@@ -213,8 +218,20 @@ export async function closeCoscoPlaywrightBrowser() {
 
 async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const signal = options.signal;
+  if (signal?.aborted) {
+    const error = new Error("Batch tracking task was cancelled");
+    error.code = "BATCH_CANCELLED";
+    error.httpStatus = 409;
+    throw error;
+  }
   const browser = options.browser ?? (await getSharedBrowser());
   let context = null;
+  let sawUpstream403 = false;
+  const closeOnAbort = () => {
+    if (context) void context.close().catch(() => {});
+  };
+  if (signal) signal.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
     context = await browser.newContext({
@@ -227,6 +244,9 @@ async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
     const primaryEndpoint = request.type === "CONTAINER" ? "containers" : "detail";
 
     page.on("response", (response) => {
+      if (response.status() === 403 && response.url().startsWith("https://elines.coscoshipping.com/")) {
+        sawUpstream403 = true;
+      }
       const endpoint = endpointName(response);
       if (
         !endpoint ||
@@ -285,6 +305,18 @@ async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
       }
     };
   } catch (error) {
+    if (signal?.aborted) {
+      const cancelled = new Error("Batch tracking task was cancelled");
+      cancelled.code = "BATCH_CANCELLED";
+      cancelled.httpStatus = 409;
+      throw cancelled;
+    }
+    if (sawUpstream403) {
+      const blocked = new Error("COSCO Playwright request was rejected with HTTP 403");
+      blocked.httpStatus = 503;
+      blocked.upstreamStatus = 403;
+      throw blocked;
+    }
     if (error?.name === "TimeoutError") {
       const timeoutError = new Error("COSCO Playwright 查询超时");
       timeoutError.httpStatus = 504;
@@ -292,6 +324,7 @@ async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
     }
     throw error;
   } finally {
+    if (signal) signal.removeEventListener("abort", closeOnAbort);
     if (context) await context.close();
   }
 }

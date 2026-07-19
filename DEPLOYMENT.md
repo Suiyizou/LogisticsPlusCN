@@ -56,6 +56,10 @@ APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 
 首次构建 `tracking` 会拉取 Playwright Chromium 基础镜像，下载体积较大。Compose 已为浏览器兜底通道设置 `1gb` 共享内存和健康检查；服务器还需要能够访问船司查询站点。`PLAYWRIGHT_MAX_CONCURRENCY`、`PLAYWRIGHT_QUEUE_LIMIT` 和 `PLAYWRIGHT_QUEUE_TIMEOUT_MS` 分别限制浏览器并发数、排队数量和最长排队时间，默认值为 `2`、`8`、`15000`。海外小规格服务器不要盲目提高并发，队列满或超时会返回 `429`，不会继续挤占内存。
 
+若 COSCO 已限制服务器出口 IP，可在服务器 `.env` 配置 `COSCO_PROXY_ENABLED=true`、`COSCO_PROXY_SERVER=http://代理地址:端口`、`COSCO_PROXY_USERNAME` 和 `COSCO_PROXY_PASSWORD`。这组代理同时作用于 COSCO REST 网络通道与 Playwright Chrome；只支持 HTTP/HTTPS 代理。建议先保持默认的 `COSCO_QUERY_MIN_INTERVAL_MS=2500` 与 `COSCO_BLOCK_COOLDOWN_MS=1800000`，并确认住宅代理服务条款允许该业务流量。代理凭据不得写入镜像、仓库或工单截图。
+
+批量查询使用可取消的任务 ID。浏览器停止按钮先中止本地请求，再经 Spring `POST /api/public/shipments/batch-tasks/{taskId}/cancel` 转发给 Node；正在运行的请求会退出，未完成条目保留为待处理。Node 重启会清空内存中的任务状态，但不影响浏览器保存的待处理队列。
+
 Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。这样公开的 Node/Playwright 追踪服务无法直接连接数据库。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
 
 ### CMA DataDome 会话
@@ -110,7 +114,7 @@ docker compose ps
 docker compose logs --tail=100 frontend backend tracking
 ```
 
-追踪容器内部健康接口为 `http://127.0.0.1:3000/api/health`，Compose 会自动探测。浏览器侧仍可保存本机查询历史；Node 进程缓存用于短期去重，Spring Boot 会把带稳定订舱号或提单号的追踪快照持久化到 MySQL。仅有集装箱号且无法解析出稳定订舱号/提单号的结果只作为临时查询结果，不会作为长期票单主键。
+追踪容器内部健康接口为 `http://127.0.0.1:3000/api/health`，Compose 会自动探测。浏览器侧仍可保存本机查询历史；Node 进程缓存用于短期去重，Spring Boot 只把同时含稳定订舱号/提单号和有效运输节点、路线、箱信息或关键时间的追踪快照持久化到 MySQL。空快照不会创建或覆盖数据库记录；已有有效快照时返回旧快照并标记为 stale。仅有集装箱号且无法解析出稳定订舱号/提单号的结果也只作为临时查询结果，不会作为长期票单主键。
 
 生产环境只需对外开放 Nginx 的 `80/443`。Compose 中后端 `8080` 与 MySQL `3306` 默认绑定 `127.0.0.1`，用于服务器本机排查；生产服务器若不需要宿主机直连数据库，建议通过 production override 删除 MySQL 的 `ports`。如确需远程直连，必须同时调整绑定地址、强密码和防火墙规则。
 

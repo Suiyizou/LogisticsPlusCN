@@ -220,6 +220,13 @@ export async function closeCmaPlaywrightBrowser() {
 
 export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const signal = options.signal;
+  if (signal?.aborted) {
+    const error = new Error("Batch tracking task was cancelled");
+    error.code = "BATCH_CANCELLED";
+    error.httpStatus = 409;
+    throw error;
+  }
   const browserUserAgent = String(
     options.userAgent ?? process.env.CMA_BROWSER_USER_AGENT ?? ""
   ).trim();
@@ -235,6 +242,8 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
       ? { userAgent: browserUserAgent }
       : {})
   });
+  const closeOnAbort = () => void context.close().catch(() => {});
+  if (signal) signal.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
     const providedSessionCookie = options.sessionCookie ?? process.env.CMA_SESSION_COOKIE;
@@ -348,11 +357,18 @@ export async function fetchCmaTrackingViaPlaywright(request, options = {}) {
       }
     };
   } catch (error) {
+    if (signal?.aborted) {
+      const cancelled = new Error("Batch tracking task was cancelled");
+      cancelled.code = "BATCH_CANCELLED";
+      cancelled.httpStatus = 409;
+      throw cancelled;
+    }
     if (error?.name === "TimeoutError") {
       throw upstreamError("CMA CGM Playwright 查询超时", 504);
     }
     throw error;
   } finally {
+    if (signal) signal.removeEventListener("abort", closeOnAbort);
     try {
       const refreshedCookies = await context.cookies(CMA_TRACKING_PAGE);
       if (typeof options.onSessionCookies === "function") {

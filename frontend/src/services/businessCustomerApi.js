@@ -33,6 +33,23 @@ export function fetchAvailableBusinessShipments() {
   return request("/business/customers/available-shipments");
 }
 
+export function createBusinessShipment(payload) {
+  return request("/business/customers/shipments", { method: "POST", body: payload });
+}
+
+export function updateBusinessShipment(shipmentId, payload) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}`, {
+    method: "PATCH",
+    body: payload
+  });
+}
+
+export function deleteBusinessShipment(shipmentId) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}`, {
+    method: "DELETE"
+  });
+}
+
 export function updateBusinessShipmentNote(shipmentId, note) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/note`, {
     method: "PATCH",

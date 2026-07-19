@@ -221,14 +221,20 @@
                     <h4>{{ t("customers.availableShipments") }}</h4>
                     <p>{{ t("customers.availableShipmentsHint") }}</p>
                   </div>
-                  <button type="button" @click="loadAvailableShipments" :disabled="loadingAvailableShipments">{{ t("customers.refresh") }}</button>
+                  <div class="customer-candidate-actions">
+                    <button type="button" class="is-primary" @click="shipmentCreateDialogOpen = true">{{ t("customers.createShipment") }}</button>
+                    <button type="button" @click="loadAvailableShipments" :disabled="loadingAvailableShipments">{{ t("customers.refresh") }}</button>
+                  </div>
                 </header>
                 <div v-if="loadingAvailableShipments" class="customer-access-empty">{{ t("customers.loadingAvailableShipments") }}</div>
                 <div v-else-if="!unboundAvailableShipments.length" class="customer-access-empty compact">{{ t("customers.emptyAvailableShipments") }}</div>
                 <div v-else class="customer-candidate-list">
                   <article v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="customer-candidate-row">
                     <span><b>{{ shipment.referenceNo || shipment.shipmentId }}</b><small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small></span>
-                    <span><i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}</span>
+                    <span>
+                      <i class="customer-shipment-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
+                      <small>{{ boundRoleSummary(shipment) }}</small>
+                    </span>
                     <span>{{ formatDate(shipment.lastTrackedAt || shipment.updatedAt) }}</span>
                     <span>
                       <button type="button" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</button>
@@ -309,6 +315,37 @@
       </section>
     </div>
 
+    <div v-if="shipmentCreateDialogOpen" class="customer-code-overlay" role="presentation" @click.self="shipmentCreateDialogOpen = false">
+      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createShipment')">
+        <span class="customer-code-kicker">NEW SHIPMENT</span>
+        <h2>{{ t("customers.createShipment") }}</h2>
+        <p>{{ t("customers.createShipmentDescription") }}</p>
+        <form class="customer-dialog-form" @submit.prevent="createShipment">
+          <label>
+            <span>{{ t("customers.carrier") }}</span>
+            <el-select v-model="shipmentCreateForm.carrier" class="business-select" popper-class="business-select-popper">
+              <el-option value="COSCO" label="COSCO SHIPPING" />
+              <el-option value="CMA" label="CMA CGM" />
+            </el-select>
+          </label>
+          <label>
+            <span>{{ t("customers.referenceType") }}</span>
+            <el-select v-model="shipmentCreateForm.referenceType" class="business-select" popper-class="business-select-popper">
+              <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+              <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+            </el-select>
+          </label>
+          <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="shipmentCreateForm.referenceNo" required /></label>
+          <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="shipmentCreateForm.trackingStatus" /></label>
+          <label><span>{{ t("customers.shipmentNote") }}</span><textarea v-model="shipmentCreateForm.note" maxlength="2000"></textarea></label>
+          <div class="customer-dialog-actions">
+            <button type="button" @click="shipmentCreateDialogOpen = false">{{ t("customers.cancel") }}</button>
+            <button class="customer-access-primary" type="submit" :disabled="creatingShipment">{{ creatingShipment ? t("customers.savingShipment") : t("customers.createShipment") }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <div v-if="detailShipment" class="customer-code-overlay" role="presentation" @click.self="closeShipmentDetail">
       <section class="customer-code-dialog customer-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.details')">
         <span class="customer-code-kicker">SHIPMENT DETAIL</span>
@@ -319,14 +356,26 @@
           <span><small>{{ t("customers.shipmentStatus") }}</small><b>{{ detailShipment.trackingStatus || '—' }}</b></span>
           <span><small>{{ t("customers.lastTrackedAt") }}</small><b>{{ formatDate(detailShipment.lastTrackedAt || detailShipment.assignedAt || detailShipment.updatedAt) }}</b></span>
         </div>
+        <div class="customer-dialog-form customer-shipment-edit-form">
+          <label>
+            <span>{{ t("customers.referenceType") }}</span>
+            <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
+              <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+              <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+            </el-select>
+          </label>
+          <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="detailForm.referenceNo" required /></label>
+          <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="detailForm.trackingStatus" /></label>
+        </div>
         <label class="customer-note-editor">
           <span>{{ t("customers.shipmentNote") }}</span>
-          <textarea v-model="detailNote" maxlength="2000" :placeholder="t('customers.shipmentNotePlaceholder')"></textarea>
-          <small>{{ detailNote.length }}/2000</small>
+          <textarea v-model="detailForm.note" maxlength="2000" :placeholder="t('customers.shipmentNotePlaceholder')"></textarea>
+          <small>{{ detailForm.note.length }}/2000</small>
         </label>
         <div class="customer-dialog-actions">
           <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
-          <button type="button" @click="saveShipmentNote" :disabled="savingShipmentNote">{{ t("customers.saveNote") }}</button>
+          <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
+          <button type="button" @click="saveShipmentDetail" :disabled="savingShipment">{{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}</button>
           <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
         </div>
       </section>
@@ -344,14 +393,16 @@ import { currentLocale } from "../i18n";
 import {
   bindBusinessCustomerShipment,
   createBusinessCustomer,
+  createBusinessShipment,
   deleteBusinessCustomer,
+  deleteBusinessShipment,
   fetchAvailableBusinessShipments,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   resetBusinessCustomerCode,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
-  updateBusinessShipmentNote
+  updateBusinessShipment
 } from "../services/businessCustomerApi";
 
 const props = defineProps({
@@ -368,9 +419,11 @@ const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
+const shipmentCreateDialogOpen = ref(false);
 const detailShipment = ref(null);
-const detailNote = ref("");
-const savingShipmentNote = ref(false);
+const savingShipment = ref(false);
+const creatingShipment = ref(false);
+const deletingShipment = ref(false);
 const toastMessage = ref("");
 const loadingShipments = ref(false);
 const creating = ref(false);
@@ -385,6 +438,8 @@ const bindMode = ref("reference");
 const createForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
 const editForm = reactive({ username: "", displayName: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
+const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "" });
+const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "" });
 let shipmentRequestSequence = 0;
 let toastTimer = 0;
 
@@ -392,7 +447,12 @@ const displayName = computed(() => props.currentUser?.displayName || props.curre
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
 const unboundAvailableShipments = computed(() => {
   const boundIds = new Set(shipments.value.map((item) => item.shipmentId));
-  return availableShipments.value.filter((item) => !boundIds.has(item.shipmentId));
+  const role = selectedCustomer.value?.partyRole;
+  return availableShipments.value.filter((item) => {
+    if (boundIds.has(item.shipmentId)) return false;
+    if (!["SHIPPER", "CONSIGNEE"].includes(role)) return true;
+    return !item.boundRoles?.includes(role);
+  });
 });
 
 watch(selectedCustomer, (customer) => {
@@ -606,36 +666,81 @@ function isShipmentBound(shipment) {
 
 function openShipmentDetail(shipment) {
   detailShipment.value = { ...shipment };
-  detailNote.value = shipment?.note || "";
+  detailForm.referenceType = shipment?.referenceType || "BOOKING";
+  detailForm.referenceNo = shipment?.referenceNo || "";
+  detailForm.trackingStatus = shipment?.trackingStatus || "";
+  detailForm.note = shipment?.note || "";
 }
 
 function closeShipmentDetail() {
   detailShipment.value = null;
-  detailNote.value = "";
+  detailForm.referenceType = "BOOKING";
+  detailForm.referenceNo = "";
+  detailForm.trackingStatus = "";
+  detailForm.note = "";
 }
 
-async function saveShipmentNote() {
-  if (!detailShipment.value?.shipmentId || savingShipmentNote.value) return;
-  savingShipmentNote.value = true;
+async function createShipment() {
+  if (creatingShipment.value) return;
+  creatingShipment.value = true;
   try {
-    const response = await updateBusinessShipmentNote(detailShipment.value.shipmentId, detailNote.value);
-    const note = response?.note || "";
-    updateLocalShipmentNote(detailShipment.value.shipmentId, note);
-    detailShipment.value = { ...detailShipment.value, note };
-    detailNote.value = note;
-    showSuccess("customers.noteSaved");
+    const created = await createBusinessShipment({ ...shipmentCreateForm });
+    availableShipments.value.unshift(created);
+    shipmentCreateForm.referenceNo = "";
+    shipmentCreateForm.trackingStatus = "";
+    shipmentCreateForm.note = "";
+    shipmentCreateDialogOpen.value = false;
+    showSuccess("customers.shipmentCreated");
   } catch (error) {
-    showError(error, "customers.noteSaveFailed");
+    showError(error, "customers.shipmentCreateFailed");
   } finally {
-    savingShipmentNote.value = false;
+    creatingShipment.value = false;
   }
 }
 
-function updateLocalShipmentNote(shipmentId, note) {
-  for (const collection of [shipments.value, availableShipments.value]) {
-    const item = collection.find((candidate) => candidate.shipmentId === shipmentId);
-    if (item) item.note = note;
+async function saveShipmentDetail() {
+  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  savingShipment.value = true;
+  try {
+    const updated = await updateBusinessShipment(detailShipment.value.shipmentId, { ...detailForm });
+    replaceShipmentInLocalCollections(updated);
+    detailShipment.value = { ...detailShipment.value, ...updated };
+    showSuccess("customers.shipmentSaved");
+  } catch (error) {
+    showError(error, "customers.shipmentSaveFailed");
+  } finally {
+    savingShipment.value = false;
   }
+}
+
+async function removeShipment() {
+  if (!detailShipment.value?.shipmentId || deletingShipment.value) return;
+  if (!window.confirm(t("customers.deleteShipmentConfirm"))) return;
+  deletingShipment.value = true;
+  const shipmentId = detailShipment.value.shipmentId;
+  try {
+    await deleteBusinessShipment(shipmentId);
+    shipments.value = shipments.value.filter((item) => item.shipmentId !== shipmentId);
+    availableShipments.value = availableShipments.value.filter((item) => item.shipmentId !== shipmentId);
+    closeShipmentDetail();
+    showSuccess("customers.shipmentDeleted");
+  } catch (error) {
+    showError(error, "customers.shipmentDeleteFailed");
+  } finally {
+    deletingShipment.value = false;
+  }
+}
+
+function replaceShipmentInLocalCollections(shipment) {
+  for (const collection of [shipments.value, availableShipments.value]) {
+    const index = collection.findIndex((candidate) => candidate.shipmentId === shipment.shipmentId);
+    if (index >= 0) collection.splice(index, 1, { ...collection[index], ...shipment });
+  }
+}
+
+function boundRoleSummary(shipment) {
+  const roles = Array.isArray(shipment?.boundRoles) ? shipment.boundRoles : [];
+  return roles.length ? roles.map(partyRoleLabel).join(" / ") : t("customers.noPartiesBound");
 }
 
 function normalizeCustomer(response) {
@@ -1297,6 +1402,7 @@ button:disabled { cursor: wait; opacity: .58; }
 }
 .customer-candidate-section h4 { margin: 0; font-size: 13px; }
 .customer-candidate-section p { margin: 3px 0 0; color: #73899e; font-size: 10px; }
+.customer-candidate-actions { display: flex; gap: 7px; }
 .customer-candidate-section button,
 .customer-shipment-actions button {
   min-height: 31px;
@@ -1324,7 +1430,7 @@ button:disabled { cursor: wait; opacity: .58; }
 .customer-candidate-row small { color: #758b9f; }
 .customer-candidate-row > span:last-child,
 .customer-shipment-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.customer-candidate-row button.is-primary { color: #fff; border-color: #1476c9; background: #1476c9; }
+.customer-candidate-section button.is-primary { color: #fff; border-color: #1476c9; background: #1476c9; }
 .customer-access-empty.compact { padding: 12px; }
 .customer-shipment-row > span:nth-child(2) { display: grid; grid-template-columns: auto 1fr; align-items: center; }
 .customer-shipment-note { grid-column: 1 / -1; margin-top: 4px; color: #6d8195; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1334,6 +1440,7 @@ button:disabled { cursor: wait; opacity: .58; }
 .customer-dialog-form label > span,
 .customer-note-editor > span { color: #435d76; font-size: 11px; font-weight: 800; }
 .customer-dialog-form input,
+.customer-dialog-form textarea,
 .customer-note-editor textarea {
   width: 100%;
   padding: 10px 12px;
@@ -1342,6 +1449,7 @@ button:disabled { cursor: wait; opacity: .58; }
   color: #183652;
   background: #fbfdff;
 }
+.customer-dialog-form textarea,
 .customer-note-editor textarea { min-height: 116px; resize: vertical; font: inherit; }
 .customer-note-editor > small { color: #8193a5; text-align: right; }
 .customer-dialog-actions { display: flex; gap: 9px; justify-content: flex-end; }

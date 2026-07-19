@@ -124,12 +124,21 @@ public class ShipmentTrackingService {
       throw error;
     }
 
-    upstream = enrichWithImportedDetails(upstream, importedDetails);
-
     JsonNode snapshot = upstream.path("snapshot");
     if (!snapshot.isObject()) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter returned an incomplete snapshot");
     }
+    if (!hasMeaningfulTrackingData(snapshot)) {
+      if (cached != null) {
+        ObjectNode response = cachedResponse(cached, user, true);
+        response.put("warning", "Live tracking returned no operational data; the last valid snapshot was kept");
+        return response;
+      }
+      return transientLiveResponse(upstream);
+    }
+
+    upstream = enrichWithImportedDetails(upstream, importedDetails);
+    snapshot = upstream.path("snapshot");
     if (extractReferences(request, snapshot).isEmpty()) {
       return transientLiveResponse(upstream);
     }
@@ -139,6 +148,45 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist tracking result");
     }
     return liveResponse(upstream, persisted, user);
+  }
+
+  public JsonNode cancelBatchTask(String taskId) {
+    String normalized = taskId == null ? "" : taskId.trim();
+    if (!normalized.matches("[A-Za-z0-9_-]{16,80}")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Batch task id is invalid");
+    }
+    return adapterClient.cancelBatchTask(normalized);
+  }
+
+  private boolean hasMeaningfulTrackingData(JsonNode snapshot) {
+    if (arrayHasItems(snapshot.path("containers"))
+        || arrayHasItems(snapshot.path("route"))
+        || arrayHasItems(snapshot.path("routingLegs"))
+        || arrayHasItems(snapshot.path("sailingSchedule"))) {
+      return true;
+    }
+    JsonNode summary = snapshot.path("summary");
+    if (hasText(summary.path("latestEvent"), "name", "time", "occurredAt", "location")
+        || hasText(summary.path("origin"), "name", "location")
+        || hasText(summary.path("destination"), "name", "location")) {
+      return true;
+    }
+    JsonNode keyTimes = snapshot.path("keyTimes");
+    return hasText(keyTimes.path("actualDeparture"), "time", "value")
+        || hasText(keyTimes.path("actualArrival"), "time", "value")
+        || hasText(keyTimes.path("estimatedFinalArrival"), "time", "value");
+  }
+
+  private boolean arrayHasItems(JsonNode node) {
+    return node != null && node.isArray() && !node.isEmpty();
+  }
+
+  private boolean hasText(JsonNode node, String... fields) {
+    if (node == null || node.isMissingNode() || node.isNull()) return false;
+    for (String field : fields) {
+      if (!node.path(field).asText("").isBlank()) return true;
+    }
+    return false;
   }
 
   private synchronized PersistedShipment persistAtomically(
@@ -468,7 +516,18 @@ public class ShipmentTrackingService {
     if (!number.matches("[A-Z0-9-]{4,35}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
     }
-    return new NormalizedTrackRequest(carrier, channel, type, number);
+    String batchTaskId = input.batchTaskId() == null ? null : input.batchTaskId().trim();
+    if (batchTaskId != null && !batchTaskId.isEmpty()
+        && !batchTaskId.matches("[A-Za-z0-9_-]{16,80}")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Batch task id is invalid");
+    }
+    return new NormalizedTrackRequest(
+        carrier,
+        channel,
+        type,
+        number,
+        batchTaskId == null || batchTaskId.isEmpty() ? null : batchTaskId
+    );
   }
 
   private ShipmentImportDetails normalizeImportedDetails(

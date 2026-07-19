@@ -6,7 +6,8 @@ public record ShipmentTrackRequest(
     String type,
     String number,
     Boolean forceRefresh,
-    ShipmentImportDetails importedDetails
+    ShipmentImportDetails importedDetails,
+    String batchTaskId
 ) {
   public ShipmentTrackRequest(
       String carrier,
@@ -15,6 +16,17 @@ public record ShipmentTrackRequest(
       String number,
       Boolean forceRefresh
   ) {
-    this(carrier, channel, type, number, forceRefresh, null);
+    this(carrier, channel, type, number, forceRefresh, null, null);
+  }
+
+  public ShipmentTrackRequest(
+      String carrier,
+      String channel,
+      String type,
+      String number,
+      Boolean forceRefresh,
+      ShipmentImportDetails importedDetails
+  ) {
+    this(carrier, channel, type, number, forceRefresh, importedDetails, null);
   }
 }
