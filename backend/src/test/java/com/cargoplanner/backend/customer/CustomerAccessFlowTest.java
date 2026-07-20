@@ -71,6 +71,23 @@ class CustomerAccessFlowTest {
     jdbcTemplate.update(
         "INSERT INTO cp_shipment_participants (shipment_id, user_id, participant_role) VALUES (13, 1, 'OPERATOR')"
     );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_tracking_snapshots (
+          shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
+          source_channel, snapshot_json, payload_sha256, fetched_at, fresh_until, created_at
+        ) VALUES
+          (10, 'BOOKING', 'BK-10001', 1, 'sales-1', 'AUTO',
+           '{}', '0000000000000000000000000000000000000000000000000000000000000000',
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (12, 'BOOKING', 'OTHER-10001', 2, 'sales-2', 'AUTO',
+           '{}', '0000000000000000000000000000000000000000000000000000000000000000',
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (13, 'BOOKING', 'PART-10001', 1, 'sales-1', 'AUTO',
+           '{}', '0000000000000000000000000000000000000000000000000000000000000000',
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
 
     CustomerTokenCodec tokenCodec = new CustomerTokenCodec();
     PasswordHasher passwordHasher = new PasswordHasher();
@@ -573,6 +590,8 @@ class CustomerAccessFlowTest {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
+          queried_by BIGINT NOT NULL,
+          queried_by_username VARCHAR(128) NOT NULL,
           source_channel VARCHAR(32),
           snapshot_json CLOB NOT NULL,
           strategy_json CLOB,
@@ -583,6 +602,7 @@ class CustomerAccessFlowTest {
           invalidated_at TIMESTAMP,
           invalidated_by BIGINT,
           invalidation_reason VARCHAR(500),
+          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
           FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         )
         """);

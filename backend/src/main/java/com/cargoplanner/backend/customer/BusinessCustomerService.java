@@ -9,6 +9,7 @@ import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCod
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
@@ -399,7 +400,58 @@ public class BusinessCustomerService {
             this::mapSnapshotShipment,
             actor.id()
         );
+    enrichBoundRoles(items, actor);
     return Map.of("items", items, "total", items.size());
+  }
+
+  private void enrichBoundRoles(List<Map<String, Object>> items, AuthenticatedUser actor) {
+    if (items.isEmpty()) return;
+    List<String> publicIds = items.stream()
+        .map(item -> (String) item.get("shipmentId"))
+        .filter(id -> id != null && !id.isBlank())
+        .distinct()
+        .toList();
+    if (publicIds.isEmpty()) return;
+
+    StringBuilder sql = new StringBuilder(
+        """
+        SELECT s.public_id AS shipment_public_id, a.relationship_role
+        FROM cp_customer_shipment_access a
+        JOIN cp_shipments s ON s.id = a.shipment_id
+        JOIN cp_customers c ON c.id = a.customer_id
+        WHERE s.public_id IN (
+        """
+    );
+    for (int i = 0; i < publicIds.size(); i++) {
+      if (i > 0) sql.append(", ");
+      sql.append("?");
+    }
+    sql.append(") AND c.status = 'ACTIVE'");
+    List<Object> params = new ArrayList<>(publicIds);
+    if (!actor.isAdmin()) {
+      sql.append(" AND c.created_by = ?");
+      params.add(actor.id());
+    }
+
+    Map<String, List<String>> rolesByShipment = new LinkedHashMap<>();
+    jdbcTemplate.query(
+        sql.toString(),
+        (rs, rowNum) -> {
+          String shipmentPublicId = rs.getString("shipment_public_id");
+          String role = rs.getString("relationship_role");
+          rolesByShipment
+              .computeIfAbsent(shipmentPublicId, key -> new ArrayList<>())
+              .add(role);
+          return null;
+        },
+        params.toArray()
+    );
+
+    for (Map<String, Object> item : items) {
+      String shipmentId = (String) item.get("shipmentId");
+      List<String> roles = rolesByShipment.getOrDefault(shipmentId, List.of());
+      item.put("boundRoles", roles.stream().distinct().toList());
+    }
   }
 
   public Map<String, Object> getShipmentSnapshot(AuthenticatedUser actor, String shipmentPublicId) {
@@ -420,6 +472,25 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.NOT_FOUND, "Shipment snapshot not found");
     }
     return items.get(0);
+  }
+
+  public Map<String, Object> listCustomerShipments(CustomerPrincipal customer) {
+    if (customer == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
+    }
+    String baseSql = snapshotShipmentSelect();
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        baseSql + """
+             JOIN cp_customer_shipment_access a ON a.shipment_id = s.id
+             JOIN cp_customers c ON c.id = a.customer_id
+             WHERE a.customer_id = ? AND c.status = 'ACTIVE' AND a.publication_status = 'PUBLISHED'
+               AND t.invalidated_at IS NULL
+             ORDER BY t.fetched_at DESC LIMIT 500
+            """,
+        this::mapCustomerSnapshotShipment,
+        customer.id()
+    );
+    return Map.of("items", items, "total", items.size());
   }
 
   private String snapshotShipmentSelect() {
@@ -518,6 +589,23 @@ public class BusinessCustomerService {
       } catch (Exception ignored) {
       }
     }
+    return value;
+  }
+
+  private Map<String, Object> mapCustomerSnapshotShipment(ResultSet rs, int rowNumber) throws SQLException {
+    Map<String, Object> value = mapSnapshotShipment(rs, rowNumber);
+    String snapshotJson = (String) value.get("snapshotJson");
+    boolean dataAvailable = snapshotJson != null && !snapshotJson.isBlank();
+    Map<String, Object> snapshot = null;
+    if (dataAvailable) {
+      try {
+        snapshot = objectMapper.readValue(snapshotJson, new TypeReference<Map<String, Object>>() {});
+      } catch (Exception ignored) {
+        dataAvailable = false;
+      }
+    }
+    value.put("dataAvailable", dataAvailable);
+    value.put("snapshot", snapshot);
     return value;
   }
 

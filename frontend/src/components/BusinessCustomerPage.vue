@@ -2028,15 +2028,30 @@ async function refreshShipmentFromCarrier() {
       })
     });
     const data = await resp.json().catch(() => ({}));
+    const snapshot = data?.snapshot;
+    const hasDetails = Boolean(
+      snapshot?.containers?.length ||
+      snapshot?.route?.length ||
+      snapshot?.routingLegs?.length ||
+      snapshot?.sailingSchedule?.length ||
+      snapshot?.summary?.latestEvent?.name ||
+      snapshot?.summary?.origin?.name ||
+      snapshot?.summary?.destination?.name
+    );
     refreshTrackingResponse.value = {
       status: resp.status,
       ok: resp.ok,
-      code: data?.code || "-",
-      message: data?.message || data?.error?.message || "-",
+      code: data?.code || data?.diagnostic?.code || (resp.ok ? "SUCCESS" : data?.error) || "-",
+      message:
+        data?.message ||
+        data?.diagnostic?.message ||
+        data?.warning ||
+        (resp.ok ? t("customers.updateTrackingSuccessDefault") : resp.statusText) ||
+        "-",
       carrier: shipment.carrier,
       type: shipment.referenceType,
       number: shipment.referenceNo,
-      hasDetails: Boolean(data?.snapshot?.details || data?.details)
+      hasDetails
     };
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
     refreshTrackingStatus.value = t("customers.updateTrackingSaving");

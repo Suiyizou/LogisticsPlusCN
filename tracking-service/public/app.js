@@ -1596,11 +1596,16 @@ function renderTrackingAccount(session = readFileSession()) {
     const principal = session.principal ?? {};
     const username = principal.username ?? principal.loginName ?? "—";
     const code = principal.customerCodePrefix ?? principal.codePrefix ?? principal.customerCode ?? t("profile.verified");
-    document.querySelector("#customer-profile-name")?.textContent = name;
-    document.querySelector("#customer-profile-username")?.textContent = username;
-    document.querySelector("#customer-profile-code")?.textContent = code;
-    document.querySelector("#customer-profile-role")?.textContent = fileSessionRoleLabel(session);
-    document.querySelector("#customer-profile-avatar")?.textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
+    const customerProfileName = document.querySelector("#customer-profile-name");
+    if (customerProfileName) customerProfileName.textContent = name;
+    const customerProfileUsername = document.querySelector("#customer-profile-username");
+    if (customerProfileUsername) customerProfileUsername.textContent = username;
+    const customerProfileCode = document.querySelector("#customer-profile-code");
+    if (customerProfileCode) customerProfileCode.textContent = code;
+    const customerProfileRole = document.querySelector("#customer-profile-role");
+    if (customerProfileRole) customerProfileRole.textContent = fileSessionRoleLabel(session);
+    const customerProfileAvatar = document.querySelector("#customer-profile-avatar");
+    if (customerProfileAvatar) customerProfileAvatar.textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
   }
 }
 
@@ -1938,7 +1943,7 @@ function relatedFileTargetDisplayName(file) {
 function relatedFileSharingLabel(file, session = readFileSession()) {
   if (file.visibility === "INTERNAL") return t("files.visibilityInternal");
   if (session.kind === "CUSTOMER") return t("files.sharedWithSelf");
-  return fileVisibilityLabel(file.visibility);
+  return relatedFileTargetDisplayName(file) || fileVisibilityLabel(file.visibility);
 }
 
 function createRelatedFileItem(file) {
@@ -1995,6 +2000,7 @@ function createRelatedFileItem(file) {
     const persistVisibility = async (nextVisibility) => {
       if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
       const previousVisibility = file.visibility;
+      const nextTargetCustomerId = relatedFilesSelectedTargetCustomerId;
       visibility.disabled = true;
       try {
         await requestRelatedFilesApi(
@@ -2003,7 +2009,7 @@ function createRelatedFileItem(file) {
             method: "PATCH",
             body: {
               visibility: nextVisibility,
-              targetCustomerId: null
+              targetCustomerId: nextVisibility === "PARTIES" ? nextTargetCustomerId : null
             },
             session
           }
@@ -2270,6 +2276,11 @@ async function uploadRelatedFiles() {
       ? relatedFilesUploadVisibility.value || "SHIPPER"
       : "SHIPPER";
   const targetCustomerId = relatedFilesSelectedTargetCustomerId;
+  if (internalVisibility === "PARTIES" && !targetCustomerId) {
+    setRelatedFilesUploadMessage(t("files.targetRequired"), "error");
+    renderRelatedFilesDrawer();
+    return;
+  }
 
   const sessionFingerprint = relatedFilesSessionFingerprint;
   relatedFilesUploading = true;
@@ -2280,6 +2291,7 @@ async function uploadRelatedFiles() {
   formData.append("category", relatedFilesCategory.value || "OTHER");
   if (session.kind === "INTERNAL") {
     formData.append("visibility", internalVisibility);
+    formData.append("targetCustomerId", targetCustomerId);
   }
 
   try {
@@ -3152,9 +3164,8 @@ function loadSnapshot(query) {
 }
 
 function readHistory() {
-  const session = readFileSession();
-  if (session.kind === "CUSTOMER") return customerAssignedHistory;
-  if (session.kind === "INTERNAL") return internalTrackedHistory;
+  if (readFileSession().kind === "CUSTOMER") return customerAssignedHistory;
+  if (readFileSession().kind === "INTERNAL") return internalTrackedHistory;
   const records = readCacheIndex()
     .map((key) => ({ key, entry: readCacheEntry(key) }))
     .filter((record) => record.entry)
@@ -3522,6 +3533,7 @@ function restoreBatchState() {
 
 function setBatchImportNotice(key = null, variables = {}, variant = "info") {
   batchImportNotice = key ? { key, variables, variant } : null;
+  if (!batchImportMessage) return;
   if (!batchImportNotice) {
     batchImportMessage.hidden = true;
     batchImportMessage.textContent = "";
@@ -3543,6 +3555,7 @@ function batchStatusKey(item) {
 }
 
 function renderBatchState() {
+  if (!batchImportEmpty || !batchImportSummary) return;
   const items = batchState?.items ?? [];
   const hasQueue = items.length > 0;
   batchImportEmpty.hidden = hasQueue;
@@ -4964,10 +4977,12 @@ async function clearCmaSession() {
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
   const cmaSelected = carrier.code === "CMA";
-  if (cmaSelected) channelSelect.value = "PLAYWRIGHT";
-  else if (channelSelect.disabled) channelSelect.value = "AUTO";
-  channelSelect.disabled = cmaSelected;
-  const channel = CHANNELS[channelSelect.value] ?? CHANNELS.NETWORK;
+  if (channelSelect) {
+    if (cmaSelected) channelSelect.value = "PLAYWRIGHT";
+    else if (channelSelect.disabled) channelSelect.value = "AUTO";
+    channelSelect.disabled = cmaSelected;
+  }
+  const channel = CHANNELS[channelSelect?.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : "query.helper");
   carrierNotice.hidden = carrier.enabled;
@@ -4976,7 +4991,9 @@ function updateCarrierUI({ resetResult = false } = {}) {
     item.classList.toggle("is-current", item.dataset.carrierSelect === carrier.code);
   });
   renderCmaSessionPanel();
-  checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
+  if (checkChannelsButton) {
+    checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
+  }
   setLoading(loading);
 
   if (
@@ -5008,6 +5025,7 @@ function probeElements(channel) {
 
 function renderProbe(channel, probe) {
   const target = probeElements(channel);
+  if (!target.card || !target.status || !target.latency) return;
   const status = probe?.status ?? "unknown";
   const available = probe?.available === true || status === "available";
   const unavailable = probe?.available === false || status === "unavailable";
@@ -5030,21 +5048,25 @@ function renderChannelCheck(result) {
   lastChannelCheck = result;
   renderProbe("NETWORK", result.channels.NETWORK);
   renderProbe("PLAYWRIGHT", result.channels.PLAYWRIGHT);
-  channelCheckSummary.textContent = t("workbench.checkedAt", {
-    time: formatLocalDateTime(result.checkedAt)
-  });
+  if (channelCheckSummary) {
+    channelCheckSummary.textContent = t("workbench.checkedAt", {
+      time: formatLocalDateTime(result.checkedAt)
+    });
+  }
 }
 
 function setChannelCheckLoading(value) {
   channelCheckLoading = value;
-  checkChannelsButton.disabled = value || carrierSelect.value !== "COSCO";
-  checkChannelsButton.classList.toggle("is-loading", value);
-  const label = checkChannelsButton.querySelector("[data-i18n]");
-  if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");
+  if (checkChannelsButton) {
+    checkChannelsButton.disabled = value || carrierSelect.value !== "COSCO";
+    checkChannelsButton.classList.toggle("is-loading", value);
+    const label = checkChannelsButton.querySelector("[data-i18n]");
+    if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");
+  }
   if (value) {
     renderProbe("NETWORK", { status: "checking" });
     renderProbe("PLAYWRIGHT", { status: "checking" });
-    channelCheckSummary.textContent = t("workbench.helper");
+    if (channelCheckSummary) channelCheckSummary.textContent = t("workbench.helper");
   }
 }
 
@@ -5053,7 +5075,9 @@ function renderChannelStatus(status) {
   const state = lastChannelStatus.status ?? "unknown";
   channelState.dataset.status = state;
   channelStatusText.textContent = t(`status.${state}`);
-  overviewMonitorStatus.textContent = t(`status.short${state[0].toUpperCase()}${state.slice(1)}`);
+  if (overviewMonitorStatus) {
+    overviewMonitorStatus.textContent = t(`status.short${state[0].toUpperCase()}${state.slice(1)}`);
+  }
   channelState.title = [
     lastChannelStatus.lastCheckedAt
       ? t("status.lastCheck", { time: formatLocalDateTime(lastChannelStatus.lastCheckedAt) })
@@ -5370,7 +5394,7 @@ async function requestTracking(query, options = {}) {
   return primary;
 }
 
-checkChannelsButton.addEventListener("click", async () => {
+checkChannelsButton?.addEventListener("click", async () => {
   const carrier = CARRIERS[carrierSelect.value];
   if (!carrier?.enabled || channelCheckLoading) return;
   const shipmentNumber = trackingNumber.value.trim();
@@ -5514,13 +5538,13 @@ cmaSessionForm.addEventListener("submit", (event) => {
   void saveCmaSession();
 });
 cmaSessionClear.addEventListener("click", () => void clearCmaSession());
-channelSelect.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
+channelSelect?.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
 
-batchSelectButton.addEventListener("click", () => {
-  if (!batchRunning) batchFileInput.click();
+batchSelectButton?.addEventListener("click", () => {
+  if (!batchRunning) batchFileInput?.click();
 });
 
-batchFileInput.addEventListener("change", async () => {
+batchFileInput?.addEventListener("change", async () => {
   const file = batchFileInput.files?.[0];
   if (!file || batchRunning) return;
 
@@ -5564,11 +5588,11 @@ batchFileInput.addEventListener("change", async () => {
   }
 });
 
-batchResumeButton.addEventListener("click", () => {
+batchResumeButton?.addEventListener("click", () => {
   void runBatchQueue();
 });
 
-batchStopButton.addEventListener("click", async () => {
+batchStopButton?.addEventListener("click", async () => {
   if (!batchRunning || batchStopRequested) return;
   batchStopRequested = true;
   const taskId = batchTaskId;
@@ -5581,7 +5605,7 @@ batchStopButton.addEventListener("click", async () => {
   }
 });
 
-batchClearButton.addEventListener("click", () => {
+batchClearButton?.addEventListener("click", () => {
   if (batchRunning || !window.confirm(t("batch.confirmClear"))) return;
   batchState = null;
   batchImportNotice = null;
@@ -5739,8 +5763,12 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
 });
 
 document.querySelector("#start-tracking-button").addEventListener("click", () => {
-  showView("tracking");
-  trackingNumber.focus();
+  showView("tracking").then(() => {
+    if (trackingNumber && !trackingNumber.hidden) {
+      trackingNumber.focus();
+      trackingNumber.select();
+    }
+  });
 });
 
 clearHistoryButton.addEventListener("click", () => {

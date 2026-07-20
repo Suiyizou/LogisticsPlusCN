@@ -786,6 +786,9 @@ public class ShipmentFileService {
   private void deleteStoredContent(ShipmentFileRecord record) {
     Path path = secureResolve(record.relativePath());
     try {
+      if (Files.isDirectory(path)) {
+        throw new IOException("Stored shipment file path is a directory");
+      }
       Files.deleteIfExists(path);
     } catch (IOException error) {
       throw new ApiException(

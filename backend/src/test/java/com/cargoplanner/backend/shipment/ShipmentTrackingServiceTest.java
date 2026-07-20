@@ -506,6 +506,8 @@ class ShipmentTrackingServiceTest {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
+          queried_by BIGINT NOT NULL,
+          queried_by_username VARCHAR(128) NOT NULL,
           source_channel VARCHAR(32),
           snapshot_json CLOB NOT NULL,
           strategy_json CLOB,
@@ -515,7 +517,8 @@ class ShipmentTrackingServiceTest {
           created_at TIMESTAMP NOT NULL,
           invalidated_at TIMESTAMP,
           invalidated_by BIGINT,
-          invalidation_reason VARCHAR(500)
+          invalidation_reason VARCHAR(500),
+          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)
         )
         """);
     jdbcTemplate.execute("""

@@ -262,6 +262,73 @@
               </div>
             </section>
 
+            <section class="panel batch-import-panel" id="batch-import-panel">
+              <div class="panel-header batch-import-heading">
+                <div>
+                  <span class="panel-icon">☰</span>
+                  <span>
+                    <strong data-i18n="batch.title">Batch tracking import</strong>
+                    <small data-i18n="batch.subtitle">Import an Excel or CSV list and query shipments one at a time</small>
+                  </span>
+                </div>
+                <span class="batch-local-badge" data-i18n="batch.localBadge">This device only</span>
+              </div>
+              <div class="batch-import-body">
+                <div class="batch-import-intro">
+                  <input id="batch-file-input" type="file" accept=".xlsx,.xls,.csv" hidden />
+                  <button type="button" class="batch-select-button" id="batch-select-button">
+                    <span>+</span>
+                    <span data-i18n="batch.selectFile">Select Excel / CSV</span>
+                  </button>
+                  <p data-i18n="batch.columns">
+                    Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.
+                  </p>
+                  <small data-i18n="batch.localNotice">Queue and result status are stored only in this browser on this device.</small>
+                  <div class="batch-import-actions">
+                    <button type="button" id="batch-resume-button" data-i18n="batch.resume">Continue pending queries</button>
+                    <button type="button" id="batch-stop-button" data-i18n="batch.stop">Stop current task</button>
+                    <button type="button" id="batch-clear-button" data-i18n="batch.clear">Clear imported queue</button>
+                  </div>
+                </div>
+                <div class="batch-import-dashboard">
+                  <div class="batch-import-empty" id="batch-import-empty">
+                    <span>☰</span>
+                    <strong data-i18n="batch.emptyTitle">No imported queue</strong>
+                    <p data-i18n="batch.emptyDescription">Choose a spreadsheet to begin batch tracking.</p>
+                  </div>
+                  <div class="batch-import-summary" id="batch-import-summary" hidden>
+                    <div class="batch-summary-head">
+                      <div>
+                        <small data-i18n="batch.file">Imported file</small>
+                        <strong id="batch-file-name">—</strong>
+                      </div>
+                      <b id="batch-progress-label">0 / 0</b>
+                    </div>
+                    <div class="batch-progress-track" id="batch-progress-track" role="progressbar" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0">
+                      <i></i>
+                    </div>
+                    <div class="batch-metrics">
+                      <span>
+                        <b id="batch-success-count">0</b>
+                        <small data-i18n="batch.success">Succeeded</small>
+                      </span>
+                      <span>
+                        <b id="batch-failed-count">0</b>
+                        <small data-i18n="batch.failed">Failed</small>
+                      </span>
+                      <span>
+                        <b id="batch-pending-count">0</b>
+                        <small data-i18n="batch.pending">Pending</small>
+                      </span>
+                    </div>
+                    <p class="batch-status-text" id="batch-status-text"></p>
+                    <div class="batch-result-list" id="batch-result-list" role="list" aria-label="Imported shipment queue"></div>
+                  </div>
+                </div>
+              </div>
+              <p class="batch-import-message" id="batch-import-message" hidden></p>
+            </section>
+
             <section class="cma-session-panel" id="cma-session-panel" hidden>
               <div class="cma-session-heading">
                 <div>
