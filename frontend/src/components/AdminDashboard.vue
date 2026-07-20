@@ -762,7 +762,7 @@
         </div>
         <div class="modal-actions">
           <button class="primary" type="button" @click="closeFilePreviewDialog">
-            {{ ui('common.close') }}
+            {{ ui('common.cancel') }}
           </button>
         </div>
       </div>

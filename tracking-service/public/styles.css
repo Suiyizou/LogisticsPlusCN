@@ -3540,9 +3540,12 @@ body {
 .file-preview-dialog {
   width: min(960px, calc(100vw - 32px));
   max-height: calc(100vh - 64px);
+  padding: 0;
+}
+
+.file-preview-dialog[open] {
   display: flex;
   flex-direction: column;
-  padding: 0;
 }
 
 .file-preview-dialog > header {

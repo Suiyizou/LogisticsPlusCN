@@ -179,6 +179,21 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "invalidation_reason",
         "ALTER TABLE cp_tracking_snapshots ADD COLUMN invalidation_reason VARCHAR(500) NULL AFTER invalidated_by"
     );
+    addColumnIfMissing(
+        "cp_tracking_snapshots",
+        "queried_by",
+        "ALTER TABLE cp_tracking_snapshots ADD COLUMN queried_by BIGINT NULL AFTER query_reference_no"
+    );
+    addColumnIfMissing(
+        "cp_tracking_snapshots",
+        "queried_by_username",
+        "ALTER TABLE cp_tracking_snapshots ADD COLUMN queried_by_username VARCHAR(128) NULL AFTER queried_by"
+    );
+    addIndexIfMissing(
+        "cp_tracking_snapshots",
+        "uk_cp_tracking_snapshots_user_query",
+        "ALTER TABLE cp_tracking_snapshots ADD UNIQUE INDEX uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)"
+    );
   }
 
   private void addColumnIfMissing(String table, String column, String ddl) {
@@ -279,6 +294,8 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
+          queried_by BIGINT NULL,
+          queried_by_username VARCHAR(128) NULL,
           source_channel VARCHAR(32) NULL,
           snapshot_json LONGTEXT NOT NULL,
           strategy_json LONGTEXT NULL,
@@ -291,6 +308,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           invalidation_reason VARCHAR(500) NULL,
           INDEX idx_cp_tracking_snapshots_shipment_time (shipment_id, fetched_at),
           INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
+          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
           CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,

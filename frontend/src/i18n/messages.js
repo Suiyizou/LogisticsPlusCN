@@ -1250,7 +1250,17 @@ messages["zh-CN"].customers = {
   bindFailed: "票单绑定失败，请检查 publicId 或承运人和单号是否存在。",
   trackedShipmentNotFound: "未找到已追踪货物。请先进入货运追踪工作台查询并确认这是你的业务票单，再返回绑定。",
   shipmentAccessRequired: "这张票单不在你的业务权限范围内，不能绑定给客户。请先确认票单归属或联系管理员授权。",
-  unbindFailed: "票单解绑失败。"
+  unbindFailed: "票单解绑失败。",
+  batchTrack: "批量追踪",
+  batchTrackKicker: "BATCH TRACKING",
+  batchTrackDescription: "输入多个订舱号或提单号，一次性执行货物追踪。查询完成后会自动刷新票单列表。",
+  batchTrackNumbers: "单号列表",
+  batchTrackPlaceholder: "每行一个单号，例如：\n6505766900\n6505766901",
+  batchTrackHint: "支持换行、逗号、空格分隔",
+  batchTrackStart: "开始追踪",
+  batchTrackRunning: "追踪中...",
+  batchTrackProgress: "进度：{done}/{total}（成功 {success}，失败 {failed}）",
+  referenceContainer: "箱号"
 };
 
 messages["en-US"].customers = {
@@ -1385,7 +1395,17 @@ messages["en-US"].customers = {
   bindFailed: "Could not assign the shipment. Check the publicId or carrier and reference.",
   trackedShipmentNotFound: "No tracked shipment was found. Track it in the shipment workbench and verify it belongs to your business before assigning it here.",
   shipmentAccessRequired: "This shipment is outside your business access scope and cannot be assigned. Verify ownership or ask an administrator to grant access.",
-  unbindFailed: "Could not remove shipment access."
+  unbindFailed: "Could not remove shipment access.",
+  batchTrack: "Batch Track",
+  batchTrackKicker: "BATCH TRACKING",
+  batchTrackDescription: "Enter multiple booking or bill of lading numbers to track them all at once. The shipment list refreshes automatically when done.",
+  batchTrackNumbers: "Reference numbers",
+  batchTrackPlaceholder: "One number per line, e.g.:\n6505766900\n6505766901",
+  batchTrackHint: "Separated by newlines, commas, or spaces",
+  batchTrackStart: "Start Tracking",
+  batchTrackRunning: "Tracking...",
+  batchTrackProgress: "Progress: {done}/{total} ({success} success, {failed} failed)",
+  referenceContainer: "Container No."
 };
 
 messages["zh-CN"].admin = {

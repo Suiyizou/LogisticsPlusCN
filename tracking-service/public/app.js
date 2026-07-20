@@ -3227,24 +3227,35 @@ async function loadInternalTrackedHistory() {
         const referenceNo = String(item.referenceNo || "").trim();
         const trackingStatus = String(item.trackingStatus || "").trim();
         const lastTrackedAt = item.lastTrackedAt || item.updatedAt || new Date().toISOString();
-        const snapshot = {
-          tracking: {
-            number: referenceNo,
-            type: referenceType,
-            carrier
-          },
-          summary: {
-            latestEvent: trackingStatus
-              ? { name: trackingStatus, occurredAt: lastTrackedAt, location: "" }
-              : null,
-            origin: {},
-            destination: {}
-          },
-          route: [],
-          keyTimes: {},
-          routingLegs: [],
-          containers: []
-        };
+
+        let parsedSnapshot = null;
+        if (item.snapshotJson && typeof item.snapshotJson === "string") {
+          try { parsedSnapshot = JSON.parse(item.snapshotJson); } catch {}
+        }
+
+        let snapshot;
+        if (parsedSnapshot && parsedSnapshot.summary) {
+          snapshot = parsedSnapshot;
+        } else {
+          snapshot = {
+            tracking: {
+              number: referenceNo,
+              type: referenceType,
+              carrier
+            },
+            summary: {
+              latestEvent: trackingStatus
+                ? { name: trackingStatus, occurredAt: lastTrackedAt, location: "" }
+                : null,
+              origin: {},
+              destination: {}
+            },
+            route: [],
+            keyTimes: {},
+            routingLegs: [],
+            containers: []
+          };
+        }
         return {
           query: normalizeQuery({
             carrier,

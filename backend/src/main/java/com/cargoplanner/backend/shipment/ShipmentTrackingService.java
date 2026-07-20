@@ -549,7 +549,8 @@ public class ShipmentTrackingService {
         strategyJson,
         fetchedAt,
         freshUntil,
-        now
+        now,
+        user
     );
     String trackingStatus = trim(
         snapshot.path("summary").path("latestEvent").path("name").asText(null),
@@ -690,8 +691,52 @@ public class ShipmentTrackingService {
       String strategyJson,
       Instant fetchedAt,
       Instant freshUntil,
-      Instant now
+      Instant now,
+      AuthenticatedUser user
   ) {
+    Long queriedBy = user != null ? user.id() : null;
+    String queriedByUsername = user != null ? user.username() : null;
+    String payloadSha = sha256(snapshotJson);
+    String sourceChannel = trim(snapshot.path("channel").asText(request.channel()), 32);
+
+    if (queriedBy != null) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_tracking_snapshots (
+            shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
+            source_channel, snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE
+            shipment_id = VALUES(shipment_id),
+            source_channel = VALUES(source_channel),
+            snapshot_json = VALUES(snapshot_json),
+            strategy_json = VALUES(strategy_json),
+            payload_sha256 = VALUES(payload_sha256),
+            fetched_at = VALUES(fetched_at),
+            fresh_until = VALUES(fresh_until),
+            invalidated_at = NULL,
+            invalidated_by = NULL,
+            invalidation_reason = NULL
+          """,
+          shipmentId, request.type(), request.number(), queriedBy, queriedByUsername,
+          sourceChannel, snapshotJson, strategyJson, payloadSha,
+          timestamp(fetchedAt), timestamp(freshUntil), timestamp(now)
+      );
+      Long id = jdbcTemplate.queryForObject(
+          """
+          SELECT id FROM cp_tracking_snapshots
+          WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
+          LIMIT 1
+          """,
+          Long.class,
+          queriedBy, request.type(), request.number()
+      );
+      if (id == null) {
+        throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save tracking snapshot");
+      }
+      return id;
+    }
+
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update((connection) -> {
       PreparedStatement statement = connection.prepareStatement(
@@ -706,10 +751,10 @@ public class ShipmentTrackingService {
       statement.setLong(1, shipmentId);
       statement.setString(2, request.type());
       statement.setString(3, request.number());
-      statement.setString(4, trim(snapshot.path("channel").asText(request.channel()), 32));
+      statement.setString(4, sourceChannel);
       statement.setString(5, snapshotJson);
       statement.setString(6, strategyJson);
-      statement.setString(7, sha256(snapshotJson));
+      statement.setString(7, payloadSha);
       statement.setTimestamp(8, timestamp(fetchedAt));
       statement.setTimestamp(9, timestamp(freshUntil));
       statement.setTimestamp(10, timestamp(now));

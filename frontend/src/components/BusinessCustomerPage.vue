@@ -333,6 +333,7 @@
                 <h2>{{ t("customers.availableShipments") }}</h2>
                 <div class="list-page-actions">
                   <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                  <el-button @click="batchTrackDialogOpen = true"><el-icon><Operation /></el-icon>{{ t("customers.batchTrack") }}</el-button>
                   <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                 </div>
               </div>
@@ -597,6 +598,68 @@
       </section>
     </div>
 
+    <div v-if="batchTrackDialogOpen" class="customer-code-overlay" role="presentation" @click.self="batchTrackDialogOpen = false">
+      <section class="customer-code-dialog customer-batch-track-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchTrack')">
+        <span class="customer-code-kicker">{{ t("customers.batchTrackKicker") }}</span>
+        <h2>{{ t("customers.batchTrack") }}</h2>
+        <p>{{ t("customers.batchTrackDescription") }}</p>
+        <div class="batch-track-form">
+          <div class="batch-track-row">
+            <label>
+              <span>{{ t("customers.carrier") }}</span>
+              <el-select v-model="batchTrackCarrier" class="business-select" popper-class="business-select-popper">
+                <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+                <el-option value="CMA" :label="t('customers.carrierCMA')" />
+              </el-select>
+            </label>
+            <label>
+              <span>{{ t("customers.referenceType") }}</span>
+              <el-select v-model="batchTrackType" class="business-select" popper-class="business-select-popper">
+                <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                <el-option value="CONTAINER" :label="t('customers.referenceContainer')" />
+              </el-select>
+            </label>
+          </div>
+          <label class="batch-track-textarea">
+            <span>{{ t("customers.batchTrackNumbers") }}</span>
+            <textarea
+              v-model="batchTrackText"
+              :placeholder="t('customers.batchTrackPlaceholder')"
+              :disabled="batchTrackRunning"
+              rows="8"
+            ></textarea>
+            <small>{{ t("customers.batchTrackHint") }}</small>
+          </label>
+        </div>
+
+        <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
+          <div class="batch-track-progress">
+            <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
+            <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
+          </div>
+          <div v-if="batchTrackResults.length" class="batch-track-result-list">
+            <div v-for="r in batchTrackResults" :key="r.number" class="batch-track-result-row" :class="r.status">
+              <b>{{ r.number }}</b>
+              <small>{{ r.message }}</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="customer-dialog-actions">
+          <button type="button" @click="handleCloseBatchTrack">{{ t("customers.cancel") }}</button>
+          <button
+            class="customer-access-primary"
+            type="button"
+            :disabled="batchTrackRunning || !batchTrackText.trim()"
+            @click="startBatchTrack"
+          >
+            {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
+          </button>
+        </div>
+      </section>
+    </div>
+
     <div v-if="detailShipment" class="customer-code-overlay" role="presentation" @click.self="closeShipmentDetail">
       <section class="customer-code-dialog customer-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.details')">
         <span class="customer-code-kicker">{{ t("customers.dialogKickerShipmentDetail") }}</span>
@@ -692,7 +755,8 @@ import {
   UserFilled,
   Ship,
   Refresh,
-  Search
+  Search,
+  Operation
 } from "@element-plus/icons-vue";
 
 const props = defineProps({
@@ -728,6 +792,13 @@ const detailShipment = ref(null);
 const savingShipment = ref(false);
 const creatingShipment = ref(false);
 const deletingShipment = ref(false);
+const batchTrackDialogOpen = ref(false);
+const batchTrackText = ref("");
+const batchTrackCarrier = ref("COSCO");
+const batchTrackType = ref("BILLOFLADING");
+const batchTrackRunning = ref(false);
+const batchTrackResults = ref([]);
+const batchTrackProgress = ref({ total: 0, done: 0, success: 0, failed: 0 });
 const toastMessage = ref("");
 const loadingShipments = ref(false);
 const creating = ref(false);
@@ -1004,6 +1075,69 @@ async function loadAvailableShipments() {
   } finally {
     loadingAvailableShipments.value = false;
   }
+}
+
+async function startBatchTrack() {
+  const raw = batchTrackText.value.trim();
+  if (!raw) return;
+  const numbers = raw
+    .split(/[\n,;\s]+/)
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => s.length >= 4);
+  if (!numbers.length) return;
+
+  batchTrackRunning.value = true;
+  batchTrackResults.value = [];
+  batchTrackProgress.value = { total: numbers.length, done: 0, success: 0, failed: 0 };
+
+  const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+  const apiBase = import.meta.env.VITE_API_BASE_URL || "";
+
+  for (let i = 0; i < numbers.length; i++) {
+    const number = numbers[i];
+    try {
+      const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Auth-Token": token
+        },
+        body: JSON.stringify({
+          carrier: batchTrackCarrier.value,
+          channel: "AUTO",
+          type: batchTrackType.value,
+          number
+        })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        batchTrackProgress.value.success++;
+        batchTrackResults.value.push({ number, status: "success", message: data?.snapshot?.summary?.latestEvent?.name || "OK" });
+      } else {
+        batchTrackProgress.value.failed++;
+        batchTrackResults.value.push({ number, status: "failed", message: data?.message || `HTTP ${resp.status}` });
+      }
+    } catch (err) {
+      batchTrackProgress.value.failed++;
+      batchTrackResults.value.push({ number, status: "failed", message: err?.message || "Network error" });
+    }
+    batchTrackProgress.value.done++;
+  }
+
+  batchTrackRunning.value = false;
+  loadAvailableShipments();
+}
+
+function clearBatchTrack() {
+  batchTrackText.value = "";
+  batchTrackResults.value = [];
+  batchTrackProgress.value = { total: 0, done: 0, success: 0, failed: 0 };
+}
+
+function handleCloseBatchTrack() {
+  if (batchTrackRunning.value) return;
+  batchTrackDialogOpen.value = false;
+  clearBatchTrack();
 }
 
 async function loadPendingClientMatches() {
@@ -2679,5 +2813,88 @@ button:disabled {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+
+/* ---- Batch Track Dialog ---- */
+.customer-batch-track-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+}
+.batch-track-form {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 18px;
+}
+.batch-track-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.batch-track-textarea {
+  display: grid;
+  gap: 6px;
+}
+.batch-track-textarea textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 10px 12px;
+  border: 1px solid #cfd9e4;
+  border-radius: 8px;
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-size: 13px;
+  resize: vertical;
+  background: #f8fafc;
+}
+.batch-track-textarea small {
+  color: #6b7e96;
+  font-size: 11px;
+}
+.batch-track-results {
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: #f5f8fb;
+  border: 1px solid #dfe7f0;
+  border-radius: 8px;
+}
+.batch-track-progress {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #3b5170;
+  font-weight: 600;
+}
+.batch-track-result-list {
+  max-height: 160px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+}
+.batch-track-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+}
+.batch-track-result-row.success b {
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  color: #1a3a5c;
+}
+.batch-track-result-row.success {
+  border-left: 3px solid #22c55e;
+}
+.batch-track-result-row.failed {
+  border-left: 3px solid #ef4444;
+}
+.batch-track-result-row small {
+  color: #6b7e96;
+  max-width: 60%;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

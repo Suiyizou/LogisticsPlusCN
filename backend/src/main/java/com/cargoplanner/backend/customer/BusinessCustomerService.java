@@ -108,8 +108,12 @@ public class BusinessCustomerService {
     String partyRole = normalizePartyRole(
         request == null ? null : request.partyRole(), "CONSIGNEE"
     );
+    if (clientCode == null || clientCode.isBlank()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "User code is required");
+    }
     PasswordHash passwordHash = passwordHasher.hash(password);
-    GeneratedCustomerCode code = tokenCodec.newCustomerCode();
+    String customerCodeHash = tokenCodec.hash(clientCode);
+    String customerCodePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
     String publicId = UUID.randomUUID().toString();
     KeyHolder keyHolder = new GeneratedKeyHolder();
     try {
@@ -121,7 +125,7 @@ public class BusinessCustomerService {
               password_salt, password_hash, password_iterations,
               customer_code_hash, customer_code_prefix, customer_code_mode,
               provisioning_source, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RANDOM', 'MANUAL', 'ACTIVE', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'MANUAL', 'ACTIVE', ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -133,8 +137,8 @@ public class BusinessCustomerService {
         statement.setString(6, passwordHash.salt());
         statement.setString(7, passwordHash.hash());
         statement.setInt(8, passwordHash.iterations());
-        statement.setString(9, code.hash());
-        statement.setString(10, code.prefix());
+        statement.setString(9, customerCodeHash);
+        statement.setString(10, customerCodePrefix);
         statement.setLong(11, actor.id());
         return statement;
       }, keyHolder);
@@ -144,7 +148,7 @@ public class BusinessCustomerService {
     CustomerRecord customer = requireManaged(publicId, actor);
     audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
     Map<String, Object> response = new LinkedHashMap<>(customerMetadata(customer));
-    response.put("customerCode", code.plainText());
+    response.put("customerCode", clientCode);
     return response;
   }
 
@@ -234,15 +238,36 @@ public class BusinessCustomerService {
     );
     String status = normalizeStatus(request == null ? null : request.status(), existing.status());
     try {
-      jdbcTemplate.update(
-          "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ? WHERE id = ?",
-          username,
-          displayName,
-          clientCode,
-          partyRole,
-          status,
-          existing.id()
-      );
+      boolean codeChanged = clientCode != null && !clientCode.equals(existing.clientCode());
+      if (codeChanged) {
+        String codeHash = tokenCodec.hash(clientCode);
+        String codePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
+        jdbcTemplate.update(
+            """
+            UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?,
+              customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'MANUAL'
+            WHERE id = ?
+            """,
+            username,
+            displayName,
+            clientCode,
+            partyRole,
+            status,
+            codeHash,
+            codePrefix,
+            existing.id()
+        );
+      } else {
+        jdbcTemplate.update(
+            "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ? WHERE id = ?",
+            username,
+            displayName,
+            clientCode,
+            partyRole,
+            status,
+            existing.id()
+        );
+      }
       // The logistics role is a customer identity attribute in this model. Keep all existing
       // shipment relationships consistent when the business user changes that identity.
       if (!partyRole.equals(existing.partyRole())) {
@@ -335,18 +360,53 @@ public class BusinessCustomerService {
 
   public Map<String, Object> listAvailableShipments(AuthenticatedUser actor) {
     requireManager(actor);
-    String sql = availableShipmentSelect();
+    String baseSql = snapshotShipmentSelect();
     List<Map<String, Object>> items = actor.isAdmin()
-        ? jdbcTemplate.query(sql + " ORDER BY s.last_tracked_at DESC, s.updated_at DESC LIMIT 200", this::mapAvailableShipment)
+        ? jdbcTemplate.query(
+            baseSql + " WHERE t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 500",
+            this::mapSnapshotShipment
+        )
         : jdbcTemplate.query(
-            sql + " WHERE s.created_by = ? OR EXISTS ("
-                + "SELECT 1 FROM cp_shipment_participants p WHERE p.shipment_id = s.id AND p.user_id = ?"
-                + ") ORDER BY s.last_tracked_at DESC, s.updated_at DESC LIMIT 200",
-            this::mapAvailableShipment,
-            actor.id(),
+            baseSql + " WHERE t.queried_by = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 500",
+            this::mapSnapshotShipment,
             actor.id()
         );
     return Map.of("items", items, "total", items.size());
+  }
+
+  private String snapshotShipmentSelect() {
+    return """
+        SELECT t.id, t.shipment_id, t.query_reference_type, t.query_reference_no,
+               t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
+               s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status
+        FROM cp_tracking_snapshots t
+        LEFT JOIN cp_shipments s ON s.id = t.shipment_id
+        """;
+  }
+
+  private Map<String, Object> mapSnapshotShipment(ResultSet rs, int rowNumber) throws SQLException {
+    Map<String, Object> value = new LinkedHashMap<>();
+    String shipmentPublicId = rs.getString("shipment_public_id");
+    String carrier = rs.getString("carrier_code");
+    String referenceType = rs.getString("query_reference_type");
+    String referenceNo = rs.getString("query_reference_no");
+    String trackingStatus = rs.getString("tracking_status");
+    String fetchedAt = instantString(rs, "fetched_at");
+    String snapshotJson = rs.getString("snapshot_json");
+
+    value.put("shipmentId", shipmentPublicId);
+    value.put("carrier", carrier != null ? carrier : "COSCO");
+    value.put("referenceType", referenceType);
+    value.put("referenceNo", referenceNo);
+    value.put("trackingStatus", trackingStatus);
+    value.put("note", null);
+    value.put("lastTrackedAt", fetchedAt);
+    value.put("updatedAt", fetchedAt);
+    value.put("customerCount", 0L);
+    value.put("boundRoles", List.of());
+    value.put("snapshotJson", snapshotJson);
+    value.put("sourceChannel", rs.getString("source_channel"));
+    return value;
   }
 
   public Map<String, Object> listPendingClientMatches(AuthenticatedUser actor) {
@@ -493,7 +553,7 @@ public class BusinessCustomerService {
       );
       persistManualSnapshot(
           generatedId.longValue(), carrier, referenceType, referenceNo,
-          trackingStatus, request, now
+          trackingStatus, request, now, actor
       );
       auditShipment(actor, "CREATE_BUSINESS_SHIPMENT", generatedId.longValue(),
           "Created shipment " + referenceNo, ipAddress);
@@ -510,7 +570,8 @@ public class BusinessCustomerService {
       String referenceNo,
       String requestedStatus,
       CreateBusinessShipmentRequest request,
-      Instant now
+      Instant now,
+      AuthenticatedUser actor
   ) {
     String status = requestedStatus == null ? "Pending update" : requestedStatus;
     String jobNumber = normalizeManualField(request.forwarderJobNumber(), 160);
@@ -587,28 +648,38 @@ public class BusinessCustomerService {
     } catch (JsonProcessingException error) {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize manual shipment data");
     }
-    KeyHolder snapshotKey = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement statement = connection.prepareStatement(
-          """
-          INSERT INTO cp_tracking_snapshots (
-            shipment_id, query_reference_type, query_reference_no, source_channel,
-            snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
-          ) VALUES (?, ?, ?, 'MANUAL', ?, NULL, ?, ?, ?, ?)
-          """,
-          Statement.RETURN_GENERATED_KEYS
-      );
-      statement.setLong(1, shipmentId);
-      statement.setString(2, referenceType);
-      statement.setString(3, referenceNo);
-      statement.setString(4, snapshotJson);
-      statement.setString(5, sha256(snapshotJson));
-      statement.setTimestamp(6, Timestamp.from(now));
-      statement.setTimestamp(7, Timestamp.from(now));
-      statement.setTimestamp(8, Timestamp.from(now));
-      return statement;
-    }, snapshotKey);
-    Number snapshotId = snapshotKey.getKey();
+    String payloadSha = sha256(snapshotJson);
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_tracking_snapshots (
+          shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
+          source_channel, snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
+        ) VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, NULL, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          shipment_id = VALUES(shipment_id),
+          source_channel = VALUES(source_channel),
+          snapshot_json = VALUES(snapshot_json),
+          strategy_json = VALUES(strategy_json),
+          payload_sha256 = VALUES(payload_sha256),
+          fetched_at = VALUES(fetched_at),
+          fresh_until = VALUES(fresh_until),
+          invalidated_at = NULL,
+          invalidated_by = NULL,
+          invalidation_reason = NULL
+        """,
+        shipmentId, referenceType, referenceNo, actor.id(), actor.username(),
+        snapshotJson, payloadSha,
+        Timestamp.from(now), Timestamp.from(now), Timestamp.from(now)
+    );
+    Long snapshotId = jdbcTemplate.queryForObject(
+        """
+        SELECT id FROM cp_tracking_snapshots
+        WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
+        LIMIT 1
+        """,
+        Long.class,
+        actor.id(), referenceType, referenceNo
+    );
     if (snapshotId == null) {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save manual shipment data");
     }
@@ -619,7 +690,7 @@ public class BusinessCustomerService {
             fresh_until = ?, updated_at = ?
         WHERE id = ?
         """,
-        snapshotId.longValue(), status, Timestamp.from(now), Timestamp.from(now),
+        snapshotId, status, Timestamp.from(now), Timestamp.from(now),
         Timestamp.from(now), shipmentId
     );
     jdbcTemplate.update(
@@ -750,7 +821,7 @@ public class BusinessCustomerService {
     Instant now = Instant.now();
     persistManualSnapshot(
         shipment.id(), shipment.carrier(), existing.referenceType(),
-        normalizeReference(existing.referenceNo()), status, request, now
+        normalizeReference(existing.referenceNo()), status, request, now, actor
     );
     if (request.note() != null) {
       jdbcTemplate.update(
