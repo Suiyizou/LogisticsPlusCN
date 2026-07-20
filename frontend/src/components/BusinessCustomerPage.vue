@@ -44,12 +44,14 @@
       </aside>
 
       <div class="workspace-main">
-        <transition name="fade" mode="out-in">
+        <transition name="fade" mode="out-in" appear>
         <!-- CUSTOMER MANAGEMENT -->
         <div v-if="menuItem === 'customers'" key="customers" class="workspace-view">
+          <transition name="fade-slide" mode="out-in">
+          <div :key="subView" class="subview-wrap">
           <!-- List view -->
           <template v-if="subView === 'list'">
-            <div class="list-page">
+            <div class="list-page list-page-full">
               <div class="list-page-header">
                 <h2>{{ t("customers.directoryTitle") }}</h2>
                 <div class="list-page-actions">
@@ -58,9 +60,9 @@
                   <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
                 </div>
               </div>
-              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" style="width:100%">
+              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" style="width:100%" table-layout="auto" class="customer-directory-table">
                 <el-table-column type="index" :label="t('customers.index')" width="60" />
-                <el-table-column :label="t('customers.displayName')" min-width="140">
+                <el-table-column :label="t('customers.displayName')" min-width="180">
                   <template #default="{ row }">
                     <div class="customer-name-cell">
                       <span class="customer-table-avatar">{{ customerInitial(row) }}</span>
@@ -75,10 +77,10 @@
                 <el-table-column :label="t('customers.partyRole')" width="120">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.shipmentCount')" width="90" align="center">
+                <el-table-column :label="t('customers.shipmentCount')" width="100" align="center">
                   <template #default="{ row }">{{ row.shipmentCount || 0 }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.remark')" min-width="160" show-overflow-tooltip>
+                <el-table-column :label="t('customers.remark')" min-width="200" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.remark || '—' }}</template>
                 </el-table-column>
                 <el-table-column :label="t('customers.status')" width="100">
@@ -86,17 +88,17 @@
                     <el-tag :type="row.status==='ACTIVE'?'success':'danger'" size="small">{{ statusLabel(row.status) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('customers.createdAt')" width="160">
+                <el-table-column :label="t('customers.createdAt')" width="170">
                   <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.actions')" width="260" fixed="right">
+                <el-table-column :label="t('customers.actions')" width="460" fixed="right">
                   <template #default="{ row }">
-                    <div class="table-action-buttons">
-                      <el-button size="small" type="primary" link @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
-                      <el-button size="small" type="primary" link @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
-                      <el-button size="small" type="warning" link @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                      <el-button v-if="row.status==='ACTIVE'" size="small" type="danger" link @click.stop="toggleCustomerStatus(row)">{{ t("customers.disable") }}</el-button>
-                      <el-button v-else size="small" type="success" link @click.stop="toggleCustomerStatus(row)">{{ t("customers.enable") }}</el-button>
+                    <div class="table-action-buttons table-action-buttons--spacious">
+                      <el-button type="primary" plain @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
+                      <el-button type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
+                      <el-button type="warning" plain @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                      <el-button v-if="row.status==='ACTIVE'" type="danger" plain @click.stop="toggleCustomerStatus(row)">{{ t("customers.disable") }}</el-button>
+                      <el-button v-else type="success" plain @click.stop="toggleCustomerStatus(row)">{{ t("customers.enable") }}</el-button>
                     </div>
                   </template>
                 </el-table-column>
@@ -352,10 +354,14 @@
               </el-card>
             </el-card>
           </template>
+          </div>
+          </transition>
         </div>
 
         <!-- SHIPMENT MANAGEMENT -->
         <div v-else-if="menuItem === 'shipments'" key="shipments" class="workspace-view">
+          <transition name="fade-slide" mode="out-in">
+          <div :key="subView" class="subview-wrap">
           <!-- List view -->
           <template v-if="subView === 'list'">
             <div class="list-page list-page-full shipment-workspace">
@@ -392,13 +398,13 @@
                   <el-table-column :label="t('customers.lastTrackedAt')" width="160">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" width="280" fixed="right">
+                  <el-table-column :label="t('customers.actions')" width="400" fixed="right">
                     <template #default="{ row }">
-                      <div class="table-action-buttons">
-                        <el-button size="small" type="primary" link @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
-                        <el-button size="small" type="warning" link @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
-                        <el-button size="small" type="info" link @click.stop="viewShipmentDetail(row)">{{ t("customers.detail") }}</el-button>
-                        <el-button size="small" type="danger" link @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
+                      <div class="table-action-buttons table-action-buttons--spacious">
+                        <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
+                        <el-button size="small" type="warning" plain @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
+                        <el-button size="small" type="info" plain @click.stop="viewShipmentDetail(row)">{{ t("customers.detail") }}</el-button>
+                        <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
                       </div>
                     </template>
                   </el-table-column>
@@ -451,8 +457,11 @@
                         <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
                       </div>
                       <div v-if="batchTrackResults.length" class="batch-track-result-list">
-                        <div v-for="r in batchTrackResults" :key="r.number" class="batch-track-result-row" :class="r.status">
-                          <b>{{ r.number }}</b>
+                        <div v-for="(r, idx) in batchTrackResults" :key="`${r.number}-${idx}`" class="batch-track-result-row" :class="r.status">
+                          <span class="batch-track-result-meta">
+                            <b>{{ r.number }}</b>
+                            <el-tag v-if="r.carrier" size="small" effect="plain" type="info">{{ r.carrier }}</el-tag>
+                          </span>
                           <small>{{ r.message }}</small>
                         </div>
                       </div>
@@ -475,19 +484,129 @@
           </template>
           <!-- Detail view -->
           <template v-else>
-            <button class="back-button" @click="subView = 'list'; selectedShipmentId = ''">{{ t("customers.backToList") }}</button>
-            <el-card class="main-card" shadow="never">
+            <button class="back-button" @click="subView = 'list'; selectedShipmentId = ''; detailShipmentSnapshot = null">{{ t("customers.backToList") }}</button>
+
+            <el-card v-loading="loadingShipmentDetail" :element-loading-text="t('customers.loadingShipmentDetail')" class="main-card" shadow="never">
               <template #header>
-                <div class="section-label">{{ t('customers.shipmentDetail') }}</div>
+                <div class="main-card-header">
+                  <div>
+                    <span class="main-card-eyebrow">{{ t("customers.shipmentDetail") }}</span>
+                    <h2 class="main-card-title">{{ selectedShipment?.referenceNo || selectedShipment?.shipmentId || "—" }}</h2>
+                    <p class="main-card-subtitle">
+                      <span>{{ selectedShipment?.carrier || "—" }}</span>
+                      <el-divider direction="vertical" />
+                      <span>{{ referenceTypeLabel(selectedShipment?.referenceType) }}</span>
+                      <el-divider direction="vertical" />
+                      <span>{{ selectedShipment?.trackingStatus || t("customers.noStatus") }}</span>
+                    </p>
+                  </div>
+                  <div class="main-card-header-actions">
+                    <el-button text @click="refreshShipmentFromCarrier" :disabled="refreshingShipment">
+                      {{ refreshingShipment ? t("customers.refreshing") : t("customers.refreshFromCarrier") }}
+                    </el-button>
+                    <el-button text type="danger" @click="removeShipment" :disabled="deletingShipment">
+                      {{ t("customers.deleteShipment") }}
+                    </el-button>
+                  </div>
+                </div>
               </template>
-              <el-table :data="shipmentDetailRows" size="small" stripe border class="shipment-detail-table">
-                <el-table-column :label="t('customers.field')" width="160">
-                  <template #default="{ row }">{{ row.label }}</template>
-                </el-table-column>
-                <el-table-column :label="t('customers.value')">
-                  <template #default="{ row }">{{ row.value }}</template>
-                </el-table-column>
-              </el-table>
+
+              <section class="profile-section">
+                <div class="section-label">{{ t("customers.shipmentDetail") }}</div>
+                <el-form class="profile-form" @submit.prevent="saveShipmentDetail" label-position="top">
+                  <el-row :gutter="16">
+                    <el-col :span="6">
+                      <el-form-item :label="t('customers.referenceType')">
+                        <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
+                          <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                          <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="10">
+                      <el-form-item :label="t('customers.referenceNo')">
+                        <el-input v-model.trim="detailForm.referenceNo" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item :label="t('customers.shipmentStatus')">
+                        <el-input v-model.trim="detailForm.trackingStatus" />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+
+                  <el-card class="pending-matches-card" shadow="never">
+                    <template #header>
+                      <div class="pending-matches-header">
+                        <div>
+                          <b>{{ t("customers.manualSnapshotTitle") }}</b>
+                          <small>{{ t("customers.manualSnapshotDescription") }}</small>
+                        </div>
+                      </div>
+                    </template>
+                    <div class="customer-manual-fields">
+                      <el-form-item :label="t('customers.jobNumber')">
+                        <el-input v-model.trim="detailForm.forwarderJobNumber" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.vesselVoyage')">
+                        <el-input v-model.trim="detailForm.vesselVoyage" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.portOfLoading')">
+                        <el-input v-model.trim="detailForm.portOfLoading" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.portOfDischarge')">
+                        <el-input v-model.trim="detailForm.portOfDischarge" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.clientPoNumber')">
+                        <el-input v-model.trim="detailForm.clientPoNumber" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.volume')">
+                        <el-input v-model.trim="detailForm.volume" placeholder="5*40HC" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.estimatedDeparture')">
+                        <el-input v-model.trim="detailForm.estimatedDeparture" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.estimatedArrival')">
+                        <el-input v-model.trim="detailForm.estimatedArrival" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.actualDeparture')">
+                        <el-input v-model.trim="detailForm.actualDeparture" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.actualArrival')">
+                        <el-input v-model.trim="detailForm.actualArrival" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.actualDelivery')">
+                        <el-input v-model.trim="detailForm.actualDelivery" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.currentLocation')">
+                        <el-input v-model.trim="detailForm.currentLocation" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.clientNameCode')">
+                        <el-input v-model.trim="detailForm.clientNameCode" />
+                      </el-form-item>
+                    </div>
+                  </el-card>
+
+                  <el-form-item :label="t('customers.shipmentNote')" class="shipment-note-field">
+                    <el-input v-model="detailForm.note" type="textarea" :rows="3" maxlength="2000" show-word-limit />
+                  </el-form-item>
+
+                  <div class="shipment-detail-actions">
+                    <el-button @click="openTrackingWorkspace(selectedShipment)">
+                      {{ t("customers.openLiveTracking") }}
+                    </el-button>
+                    <el-button @click="invalidateSnapshot" :disabled="savingShipment">
+                      {{ t("customers.invalidateSnapshot") }}
+                    </el-button>
+                    <el-button type="primary" @click="saveManualSnapshot" :disabled="savingShipment">
+                      {{ t("customers.saveManualSnapshot") }}
+                    </el-button>
+                    <el-button type="primary" native-type="submit" :disabled="savingShipment">
+                      {{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}
+                    </el-button>
+                  </div>
+                </el-form>
+              </section>
             </el-card>
 
             <el-card class="main-card" shadow="never">
@@ -550,6 +669,8 @@
               </el-button>
             </div>
           </template>
+          </div>
+          </transition>
         </div>
         </transition>
       </div>
@@ -730,124 +851,6 @@
       </section>
     </div>
 
-    <div v-if="batchTrackDialogOpen" class="customer-code-overlay" role="presentation">
-      <section class="customer-code-dialog customer-batch-track-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchTrack')">
-        <span class="customer-code-kicker">{{ t("customers.batchTrackKicker") }}</span>
-        <h2>{{ t("customers.batchTrack") }}</h2>
-        <p>{{ t("customers.batchTrackDescription") }}</p>
-        <div class="batch-track-form">
-          <div class="batch-track-row">
-            <label>
-              <span>{{ t("customers.carrier") }}</span>
-              <el-select v-model="batchTrackCarrier" class="business-select" popper-class="business-select-popper">
-                <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-                <el-option value="CMA" :label="t('customers.carrierCMA')" />
-              </el-select>
-            </label>
-            <label>
-              <span>{{ t("customers.referenceType") }}</span>
-              <el-select v-model="batchTrackType" class="business-select" popper-class="business-select-popper">
-                <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-                <el-option value="CONTAINER" :label="t('customers.referenceContainer')" />
-              </el-select>
-            </label>
-          </div>
-          <div class="customer-excel-dropzone" :class="{ 'has-file': batchTrackFileName }">
-            <input ref="batchTrackFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleBatchTrackWorkbook" />
-            <b>{{ batchTrackFileName || t("customers.chooseTrackExcel") }}</b>
-            <small>{{ batchTrackFileName ? t("customers.trackRowsReady", { count: batchTrackNumbers.length }) : t("customers.trackExcelColumnsHint") }}</small>
-            <button v-if="batchTrackFileName" type="button" class="secondary" @click="clearBatchTrackFile">
-              {{ t("customers.clearFile") }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
-          <div class="batch-track-progress">
-            <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
-            <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
-          </div>
-          <div v-if="batchTrackResults.length" class="batch-track-result-list">
-            <div v-for="r in batchTrackResults" :key="r.number" class="batch-track-result-row" :class="r.status">
-              <b>{{ r.number }}</b>
-              <small>{{ r.message }}</small>
-            </div>
-          </div>
-        </div>
-
-        <div class="customer-dialog-actions">
-          <button type="button" @click="handleCloseBatchTrack">{{ t("customers.cancel") }}</button>
-          <button
-            class="customer-access-primary"
-            type="button"
-            :disabled="batchTrackRunning || !batchTrackNumbers.length"
-            @click="startBatchTrack"
-          >
-            {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
-          </button>
-        </div>
-      </section>
-    </div>
-
-    <div v-if="detailShipment" class="customer-code-overlay" role="presentation" @click.self="closeShipmentDetail">
-      <section class="customer-code-dialog customer-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.details')">
-        <span class="customer-code-kicker">{{ t("customers.dialogKickerShipmentDetail") }}</span>
-        <h2>{{ detailShipment.referenceNo || detailShipment.shipmentId }}</h2>
-        <div class="customer-shipment-detail-grid">
-          <span><small>{{ t("customers.carrier") }}</small><b>{{ detailShipment.carrier || '—' }}</b></span>
-          <span><small>{{ t("customers.referenceType") }}</small><b>{{ referenceTypeLabel(detailShipment.referenceType) }}</b></span>
-          <span><small>{{ t("customers.shipmentStatus") }}</small><b>{{ detailShipment.trackingStatus || '—' }}</b></span>
-          <span><small>{{ t("customers.lastTrackedAt") }}</small><b>{{ formatDate(detailShipment.lastTrackedAt || detailShipment.assignedAt || detailShipment.updatedAt) }}</b></span>
-        </div>
-        <div class="customer-dialog-form customer-shipment-edit-form">
-          <label>
-            <span>{{ t("customers.referenceType") }}</span>
-            <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
-              <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-              <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-            </el-select>
-          </label>
-          <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="detailForm.referenceNo" required /></label>
-          <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="detailForm.trackingStatus" /></label>
-        </div>
-        <details class="customer-manual-update">
-          <summary>{{ t("customers.manualSnapshotTitle") }}</summary>
-          <p>{{ t("customers.manualSnapshotDescription") }}</p>
-          <div class="customer-manual-fields customer-dialog-form">
-            <label><span>{{ t("customers.jobNumber") }}</span><input v-model.trim="detailForm.forwarderJobNumber" /></label>
-            <label><span>{{ t("customers.vesselVoyage") }}</span><input v-model.trim="detailForm.vesselVoyage" /></label>
-            <label><span>{{ t("customers.portOfLoading") }}</span><input v-model.trim="detailForm.portOfLoading" /></label>
-            <label><span>{{ t("customers.portOfDischarge") }}</span><input v-model.trim="detailForm.portOfDischarge" /></label>
-            <label><span>{{ t("customers.clientPoNumber") }}</span><input v-model.trim="detailForm.clientPoNumber" /></label>
-            <label><span>{{ t("customers.volume") }}</span><input v-model.trim="detailForm.volume" /></label>
-            <label><span>{{ t("customers.estimatedDeparture") }}</span><input v-model.trim="detailForm.estimatedDeparture" /></label>
-            <label><span>{{ t("customers.estimatedArrival") }}</span><input v-model.trim="detailForm.estimatedArrival" /></label>
-            <label><span>{{ t("customers.actualDeparture") }}</span><input v-model.trim="detailForm.actualDeparture" /></label>
-            <label><span>{{ t("customers.actualArrival") }}</span><input v-model.trim="detailForm.actualArrival" /></label>
-            <label><span>{{ t("customers.actualDelivery") }}</span><input v-model.trim="detailForm.actualDelivery" /></label>
-            <label><span>{{ t("customers.currentLocation") }}</span><input v-model.trim="detailForm.currentLocation" /></label>
-            <label><span>{{ t("customers.clientNameCode") }}</span><input v-model.trim="detailForm.clientNameCode" /></label>
-          </div>
-        </details>
-        <label class="customer-note-editor">
-          <span>{{ t("customers.shipmentNote") }}</span>
-          <textarea v-model="detailForm.note" maxlength="2000" :placeholder="t('customers.shipmentNotePlaceholder')"></textarea>
-          <small>{{ detailForm.note.length }}/2000</small>
-        </label>
-        <div class="customer-dialog-actions">
-          <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
-          <button type="button" @click="refreshShipmentFromCarrier" :disabled="refreshingShipment">{{ refreshingShipment ? t("customers.refreshing") : t("customers.refreshFromCarrier") }}</button>
-          <button type="button" @click="trackShipmentInWorkspace(detailShipment)">{{ t("customers.openLiveTracking") }}</button>
-          <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
-          <button type="button" class="is-danger" @click="invalidateSnapshot" :disabled="savingShipment">{{ t("customers.invalidateSnapshot") }}</button>
-          <button type="button" @click="saveManualSnapshot" :disabled="savingShipment">{{ t("customers.saveManualSnapshot") }}</button>
-          <button type="button" @click="saveShipmentDetail" :disabled="savingShipment">{{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}</button>
-          <button v-if="!isShipmentBound(detailShipment)" type="button" class="customer-access-primary" @click="quickBindShipment(detailShipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</button>
-        </div>
-      </section>
-    </div>
-
     <div v-if="toastMessage" class="customer-toast" role="status">{{ toastMessage }}</div>
   </main>
 </template>
@@ -868,6 +871,7 @@ import {
   fetchAvailableBusinessShipments,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
+  fetchBusinessShipmentSnapshot,
   fetchPendingClientMatches,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
@@ -878,6 +882,7 @@ import {
   updateBusinessShipment,
   updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
+import { storedToken } from "../services/authSession";
 import {
   User,
   Document,
@@ -920,7 +925,8 @@ const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
 const shipmentCreateDialogOpen = ref(false);
-const detailShipment = ref(null);
+const detailShipmentSnapshot = ref(null);
+const loadingShipmentDetail = ref(false);
 const savingShipment = ref(false);
 const creatingShipment = ref(false);
 const deletingShipment = ref(false);
@@ -996,9 +1002,14 @@ const filteredCustomers = computed(() => {
   );
 });
 
-const selectedShipment = computed(() =>
-  availableShipments.value.find((s) => s.shipmentId === selectedShipmentId.value) || null
-);
+const selectedShipment = computed(() => {
+  if (detailShipmentSnapshot.value?.shipmentId === selectedShipmentId.value) {
+    return detailShipmentSnapshot.value;
+  }
+  return availableShipments.value.find((s) => s.shipmentId === selectedShipmentId.value) || null;
+});
+
+const activeDetailShipment = computed(() => selectedShipment.value || null);
 
 const boundCustomersForSelectedShipment = computed(() => {
   if (!selectedShipmentId.value) return [];
@@ -1043,6 +1054,77 @@ const shipmentDetailRows = computed(() => {
 });
 
 function valueOrDash(v) { return v || "—"; }
+
+const CARRIER_PREFIX_MAP = {
+  COSU: "COSCO",
+  CCLU: "COSCO",
+  CMAU: "CMA",
+  CMDU: "CMA",
+  MAEU: "MAERSK",
+  MSCU: "MSC",
+  HLCU: "HAPAG",
+  HMM: "HMM",
+  ONEY: "ONE",
+  OOLU: "OOCL",
+  YMLU: "YANGMING",
+  WHLU: "WANHAI",
+  ZIMU: "ZIM",
+  EVER: "EVERGREEN",
+  EGLV: "EVERGREEN"
+};
+
+function extractReferenceToken(value) {
+  const text = String(value || "").toUpperCase().replace(/\s+/g, " ");
+  const patterns = [
+    /\b(COSU\d{8,11})\b/,
+    /\b(CCLU\d{8,11})\b/,
+    /\b(CMAU\d{8,11})\b/,
+    /\b(CMDU\d{8,11})\b/,
+    /\b(MAEU\d{8,11})\b/,
+    /\b(MSCU\d{8,11})\b/,
+    /\b(HLCU\d{8,11})\b/,
+    /\b(HMM[A-Z0-9]{8,11})\b/,
+    /\b(ONEY[A-Z0-9]{8,11})\b/,
+    /\b(OOLU\d{8,11})\b/,
+    /\b(YMLU\d{8,11})\b/,
+    /\b(WHLU\d{8,11})\b/,
+    /\b(ZIMU\d{8,11})\b/,
+    /\b(EGLV\d{8,11})\b/,
+    /\b([A-Z]{4}\d{7,10})\b/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[1];
+  }
+  return text.trim();
+}
+
+function findReferenceInRow(row) {
+  for (const cell of row) {
+    const token = extractReferenceToken(cell);
+    if (token && token.length >= 8 && /[A-Z]{3,4}\d/.test(token)) {
+      return token;
+    }
+  }
+  return "";
+}
+
+function detectCarrierFromNumber(number) {
+  const upper = String(number || "").toUpperCase();
+  const prefix = Object.keys(CARRIER_PREFIX_MAP).find((p) => upper.startsWith(p));
+  return prefix ? CARRIER_PREFIX_MAP[prefix] : "";
+}
+
+function resolveBatchTrackRequest(number, defaultCarrier, defaultType) {
+  const upper = String(number || "").toUpperCase();
+  const detected = detectCarrierFromNumber(upper);
+  const carrier = detected || defaultCarrier;
+  let type = defaultType || "BILLOFLADING";
+  if (upper.startsWith("COSU") || upper.startsWith("CCLU")) type = "BILLOFLADING";
+  else if (upper.startsWith("CMAU") || upper.startsWith("CMDU")) type = "BILLOFLADING";
+  else if (/^[A-Z]{4}\d{7}$/.test(upper)) type = "CONTAINER";
+  return { carrier, type, number: upper };
+}
 
 function isCustomerBoundToSelectedShipment(customerId) {
   return boundCustomersForSelectedShipment.value.includes(customerId);
@@ -1134,6 +1216,17 @@ watch(availableShipments, (list) => {
   }
 });
 
+watch(selectedShipmentId, (shipmentId) => {
+  detailShipmentSnapshot.value = null;
+  if (shipmentId && subView.value === "detail" && menuItem.value === "shipments") {
+    void loadShipmentDetailSnapshot();
+  }
+}, { immediate: true });
+
+watch(selectedShipment, (shipment) => {
+  syncDetailFormFromShipment(shipment);
+}, { immediate: true });
+
 onMounted(() => {
   const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
   void loadCustomers(requestedCustomer);
@@ -1218,19 +1311,43 @@ async function loadAvailableShipments() {
   }
 }
 
+async function loadShipmentDetailSnapshot() {
+  const shipmentId = selectedShipmentId.value;
+  if (!shipmentId) {
+    detailShipmentSnapshot.value = null;
+    return;
+  }
+  loadingShipmentDetail.value = true;
+  try {
+    const response = await fetchBusinessShipmentSnapshot(shipmentId);
+    detailShipmentSnapshot.value = response || null;
+  } catch (error) {
+    showError(error, "customers.loadShipmentDetailFailed");
+    detailShipmentSnapshot.value = null;
+  } finally {
+    loadingShipmentDetail.value = false;
+  }
+}
+
 async function startBatchTrack() {
   const numbers = batchTrackNumbers.value;
   if (!numbers.length) return;
 
   batchTrackRunning.value = true;
-  batchTrackResults.value = [];
+  batchTrackResults.value = numbers.map((number) => ({ number, status: "pending", message: t("customers.trackPending") }));
   batchTrackProgress.value = { total: numbers.length, done: 0, success: 0, failed: 0 };
 
-  const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+  const token = storedToken();
   const apiBase = import.meta.env.VITE_API_BASE_URL || "";
 
   for (let i = 0; i < numbers.length; i++) {
     const number = numbers[i];
+    batchTrackResults.value[i] = { number, status: "running", message: t("customers.trackRunning") };
+
+    const delayMs = Math.floor(Math.random() * 3000) + 3000;
+    await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+
+    const request = resolveBatchTrackRequest(number, batchTrackCarrier.value, batchTrackType.value);
     try {
       const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
         method: "POST",
@@ -1239,23 +1356,38 @@ async function startBatchTrack() {
           "X-Auth-Token": token
         },
         body: JSON.stringify({
-          carrier: batchTrackCarrier.value,
+          carrier: request.carrier,
           channel: "AUTO",
-          type: batchTrackType.value,
-          number
+          type: request.type,
+          number: request.number
         })
       });
       const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
         batchTrackProgress.value.success++;
-        batchTrackResults.value.push({ number, status: "success", message: data?.snapshot?.summary?.latestEvent?.name || "OK" });
+        batchTrackResults.value[i] = {
+          number,
+          carrier: request.carrier,
+          status: "success",
+          message: data?.snapshot?.summary?.latestEvent?.name || "OK"
+        };
       } else {
         batchTrackProgress.value.failed++;
-        batchTrackResults.value.push({ number, status: "failed", message: data?.message || `HTTP ${resp.status}` });
+        batchTrackResults.value[i] = {
+          number,
+          carrier: request.carrier,
+          status: "failed",
+          message: data?.message || `HTTP ${resp.status}`
+        };
       }
     } catch (err) {
       batchTrackProgress.value.failed++;
-      batchTrackResults.value.push({ number, status: "failed", message: err?.message || "Network error" });
+      batchTrackResults.value[i] = {
+        number,
+        carrier: request.carrier,
+        status: "failed",
+        message: err?.message || "Network error"
+      };
     }
     batchTrackProgress.value.done++;
   }
@@ -1277,7 +1409,7 @@ async function handleBatchTrackWorkbook(event) {
     const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
     // i18n-ignore
     const numberColumnAliases = [
-      "单号", "订舱号", "提单号", "箱号", "业务单号", "追踪号",
+      "单号", "订单号", "订舱号", "提单号", "箱号", "业务单号", "追踪号",
       "number", "reference no", "reference number", "booking no", "booking number",
       "bl no", "bill of lading", "container no", "container number"
     ];
@@ -1287,8 +1419,14 @@ async function handleBatchTrackWorkbook(event) {
     const startIndex = hasHeader ? 1 : 0;
     const colIndex = numberIndex >= 0 ? numberIndex : 0;
     const extracted = rows.slice(startIndex)
-      .map((row) => String(row[colIndex] || "").trim().toUpperCase())
-      .filter((s) => s.length >= 4);
+      .map((row) => {
+        const fromPrimary = extractReferenceToken(row[colIndex]);
+        if (fromPrimary && fromPrimary.length >= 8 && /[A-Z]{3,4}\d/.test(fromPrimary)) {
+          return fromPrimary;
+        }
+        return findReferenceInRow(row);
+      })
+      .filter((s) => s.length >= 8 && /[A-Z]{3,4}\d/.test(s));
     if (!extracted.length) throw new Error(t("customers.noTrackNumbers"));
     batchTrackNumbers.value = [...new Set(extracted)];
     batchTrackFileName.value = file.name;
@@ -1597,7 +1735,6 @@ async function quickBindShipment(shipment) {
     await selectCustomer(selectedCustomer.value.id);
     await loadAvailableShipments();
     showSuccess("customers.boundSuccess");
-    if (detailShipment.value?.shipmentId === shipment.shipmentId) closeShipmentDetail();
   } catch (error) {
     showError(error, "customers.bindFailed");
   } finally {
@@ -1657,21 +1794,7 @@ function isShipmentBound(shipment) {
 }
 
 function openShipmentDetail(shipment) {
-  detailShipment.value = { ...shipment };
-  detailForm.referenceType = shipment?.referenceType || "BOOKING";
-  detailForm.referenceNo = shipment?.referenceNo || "";
-  detailForm.trackingStatus = shipment?.trackingStatus || "";
-  detailForm.note = shipment?.note || "";
-  Object.assign(detailForm, emptyManualShipmentFields());
-}
-
-function closeShipmentDetail() {
-  detailShipment.value = null;
-  detailForm.referenceType = "BOOKING";
-  detailForm.referenceNo = "";
-  detailForm.trackingStatus = "";
-  detailForm.note = "";
-  Object.assign(detailForm, emptyManualShipmentFields());
+  navigateToShipmentDetail(shipment);
 }
 
 async function createShipment() {
@@ -1694,15 +1817,16 @@ async function createShipment() {
 }
 
 async function saveManualSnapshot() {
-  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  const shipment = activeDetailShipment.value;
+  if (!shipment?.shipmentId || savingShipment.value) return;
   savingShipment.value = true;
   try {
     const updated = await updateBusinessShipmentManualSnapshot(
-      detailShipment.value.shipmentId,
+      shipment.shipmentId,
       { ...detailForm }
     );
     replaceShipmentInLocalCollections(updated);
-    detailShipment.value = { ...detailShipment.value, ...updated };
+    await loadShipmentDetailSnapshot();
     showSuccess("customers.manualSnapshotSaved");
   } catch (error) {
     showError(error, "customers.manualSnapshotFailed");
@@ -1712,17 +1836,18 @@ async function saveManualSnapshot() {
 }
 
 async function invalidateSnapshot() {
-  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  const shipment = activeDetailShipment.value;
+  if (!shipment?.shipmentId || savingShipment.value) return;
   const reason = window.prompt(t("customers.invalidateReasonPrompt"), "Upstream snapshot is empty or incorrect");
   if (!reason?.trim()) return;
   savingShipment.value = true;
   try {
-    await invalidateBusinessShipmentSnapshot(detailShipment.value.shipmentId, reason.trim());
+    await invalidateBusinessShipmentSnapshot(shipment.shipmentId, reason.trim());
     await Promise.all([
       selectedCustomer.value ? selectCustomer(selectedCustomer.value.id) : Promise.resolve(),
-      loadAvailableShipments()
+      loadAvailableShipments(),
+      loadShipmentDetailSnapshot()
     ]);
-    closeShipmentDetail();
     showSuccess("customers.snapshotInvalidated");
   } catch (error) {
     showError(error, "customers.snapshotInvalidateFailed");
@@ -1749,13 +1874,44 @@ function emptyManualShipmentFields() {
   };
 }
 
+function syncDetailFormFromShipment(shipment) {
+  if (!shipment) {
+    detailForm.referenceType = "BOOKING";
+    detailForm.referenceNo = "";
+    detailForm.trackingStatus = "";
+    detailForm.note = "";
+    Object.assign(detailForm, emptyManualShipmentFields());
+    return;
+  }
+  detailForm.referenceType = shipment.referenceType || "BOOKING";
+  detailForm.referenceNo = shipment.referenceNo || "";
+  detailForm.trackingStatus = shipment.trackingStatus || "";
+  detailForm.note = shipment.note || "";
+  Object.assign(detailForm, {
+    forwarderJobNumber: shipment.forwarderJobNumber || "",
+    vesselVoyage: shipment.vesselVoyage || "",
+    portOfLoading: shipment.portOfLoading || "",
+    portOfDischarge: shipment.portOfDischarge || "",
+    clientPoNumber: shipment.clientPoNumber || "",
+    estimatedDeparture: shipment.estimatedDeparture || "",
+    estimatedArrival: shipment.estimatedArrival || "",
+    actualDeparture: shipment.actualDeparture || "",
+    actualArrival: shipment.actualArrival || "",
+    actualDelivery: shipment.actualDelivery || "",
+    currentLocation: shipment.currentLocation || "",
+    volume: shipment.volume || "",
+    clientNameCode: shipment.clientNameCode || ""
+  });
+}
+
 async function saveShipmentDetail() {
-  if (!detailShipment.value?.shipmentId || savingShipment.value) return;
+  const shipment = activeDetailShipment.value;
+  if (!shipment?.shipmentId || savingShipment.value) return;
   savingShipment.value = true;
   try {
-    const updated = await updateBusinessShipment(detailShipment.value.shipmentId, { ...detailForm });
+    const updated = await updateBusinessShipment(shipment.shipmentId, { ...detailForm });
     replaceShipmentInLocalCollections(updated);
-    detailShipment.value = { ...detailShipment.value, ...updated };
+    await loadShipmentDetailSnapshot();
     showSuccess("customers.shipmentSaved");
   } catch (error) {
     showError(error, "customers.shipmentSaveFailed");
@@ -1765,11 +1921,11 @@ async function saveShipmentDetail() {
 }
 
 async function refreshShipmentFromCarrier() {
-  const shipment = detailShipment.value;
+  const shipment = activeDetailShipment.value;
   if (!shipment?.carrier || !shipment?.referenceType || !shipment?.referenceNo || refreshingShipment.value) return;
   refreshingShipment.value = true;
   try {
-    const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+    const token = storedToken();
     const apiBase = import.meta.env.VITE_API_BASE_URL || "";
     const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
       method: "POST",
@@ -1788,13 +1944,13 @@ async function refreshShipmentFromCarrier() {
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
     await loadAvailableShipments();
+    await loadShipmentDetailSnapshot();
     if (shipments.value.length) {
       await loadShipments();
     }
     const updated = [...availableShipments.value, ...shipments.value]
       .find((s) => s.shipmentId === shipment.shipmentId);
     if (updated) {
-      detailShipment.value = { ...detailShipment.value, ...updated };
       Object.assign(detailForm, {
         referenceType: updated.referenceType || detailForm.referenceType,
         referenceNo: updated.referenceNo || detailForm.referenceNo,
@@ -1810,15 +1966,16 @@ async function refreshShipmentFromCarrier() {
 }
 
 async function removeShipment() {
-  if (!detailShipment.value?.shipmentId || deletingShipment.value) return;
+  const shipment = activeDetailShipment.value;
+  if (!shipment?.shipmentId || deletingShipment.value) return;
   if (!window.confirm(t("customers.deleteShipmentConfirm"))) return;
   deletingShipment.value = true;
-  const shipmentId = detailShipment.value.shipmentId;
+  const shipmentId = shipment.shipmentId;
   try {
     await deleteBusinessShipment(shipmentId);
     shipments.value = shipments.value.filter((item) => item.shipmentId !== shipmentId);
     availableShipments.value = availableShipments.value.filter((item) => item.shipmentId !== shipmentId);
-    closeShipmentDetail();
+    navigateTo("shipments");
     showSuccess("customers.shipmentDeleted");
   } catch (error) {
     showError(error, "customers.shipmentDeleteFailed");
@@ -1828,11 +1985,18 @@ async function removeShipment() {
 }
 
 function editShipment(row) {
-  openShipmentDetail(row);
+  navigateToShipmentDetail(row);
 }
 
 function viewShipmentDetail(row) {
-  openShipmentDetail(row);
+  navigateToShipmentDetail(row);
+}
+
+function navigateToShipmentDetail(row) {
+  if (!row?.shipmentId) return;
+  selectedShipmentId.value = row.shipmentId;
+  subView.value = "detail";
+  menuItem.value = "shipments";
 }
 
 async function deleteShipmentRow(row) {
@@ -1856,7 +2020,7 @@ async function updateShipmentTracking(row) {
   if (!row?.carrier || !row?.referenceType || !row?.referenceNo || refreshingShipment.value) return;
   refreshingShipment.value = true;
   try {
-    const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+    const token = storedToken();
     const apiBase = import.meta.env.VITE_API_BASE_URL || "";
     const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
       method: "POST",
@@ -1887,7 +2051,6 @@ async function updateShipmentTracking(row) {
 }
 
 function trackShipmentInWorkspace(shipment) {
-  closeShipmentDetail();
   openTrackingWorkspace(shipment);
 }
 
@@ -1932,7 +2095,7 @@ function needsManualSupplement(shipment) {
 }
 
 function openShipmentSupplement(shipment) {
-  openShipmentDetail(shipment);
+  navigateToShipmentDetail(shipment);
 }
 
 function openBatchImport() {
@@ -2356,10 +2519,18 @@ function showError(error, fallbackKey) {
 
 /* ---- List Page ---- */
 .list-page {
-  max-width: 1100px;
+  max-width: none;
+  width: 100%;
 }
 .list-page-full {
   max-width: none;
+  width: 100%;
+}
+.list-page-full :deep(.el-table) {
+  width: 100% !important;
+}
+.list-page-full :deep(.el-table__body-wrapper),
+.list-page-full :deep(.el-table__header-wrapper) {
   width: 100%;
 }
 .shipment-workspace {
@@ -2374,6 +2545,13 @@ function showError(error, fallbackKey) {
 .shipment-workspace-side {
   width: 380px;
   flex: 0 0 380px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 20px;
+  align-self: flex-start;
+  height: calc(100vh - 104px);
 }
 .batch-track-panel {
   background: #fff;
@@ -2381,9 +2559,11 @@ function showError(error, fallbackKey) {
   border: 1px solid #e2e8f0;
   padding: 20px;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow: hidden;
 }
 .batch-track-panel-header {
   display: flex;
@@ -2409,12 +2589,18 @@ function showError(error, fallbackKey) {
 }
 .batch-track-results {
   flex: 1;
-  min-height: 0;
+  min-height: 180px;
+  max-height: none;
   overflow-y: auto;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+.batch-track-results:empty {
+  display: none;
 }
 .batch-track-actions {
   display: flex;
@@ -2436,14 +2622,31 @@ function showError(error, fallbackKey) {
 }
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
 }
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(28px);
 }
-.workspace-view {
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+.workspace-view,
+.subview-wrap {
   width: 100%;
+  min-width: 0;
 }
 .list-page-header {
   display: flex;
@@ -2494,8 +2697,17 @@ function showError(error, fallbackKey) {
 
 .table-action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 16px;
   flex-wrap: wrap;
+  align-items: center;
+}
+.table-action-buttons--spacious {
+  gap: 20px;
+  justify-content: flex-start;
+}
+.table-action-buttons--spacious .el-button {
+  padding-left: 18px;
+  padding-right: 18px;
 }
 
 .required-star {
@@ -3399,24 +3611,32 @@ button:disabled {
 }
 .batch-track-progress {
   display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   font-size: 12px;
   color: #3b5170;
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .batch-track-result-list {
-  max-height: 160px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .batch-track-result-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 8px;
-  border-radius: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
   font-size: 12px;
   background: #fff;
 }
@@ -3430,10 +3650,30 @@ button:disabled {
 .batch-track-result-row.failed {
   border-left: 3px solid #ef4444;
 }
+.batch-track-result-row.pending {
+  border-left: 3px solid #94a3b8;
+  opacity: 0.8;
+}
+.batch-track-result-row.running {
+  border-left: 3px solid #3b82f6;
+  background: #eff6ff;
+}
 .batch-track-result-row small {
   color: #6b7e96;
-  max-width: 60%;
-  text-align: right;
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.batch-track-result-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.batch-track-result-meta b {
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  color: #1a3a5c;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1503,16 +1503,28 @@ function shipmentFilePath(session, fileId, suffix = "") {
 }
 
 function fileSessionDisplayName(session = readFileSession()) {
-  const principal = session.principal ?? {};
-  return (
-    principal.displayName ??
-    principal.customerName ??
-    principal.name ??
-    principal.username ??
-    principal.customerCode ??
-    principal.code ??
-    ""
-  );
+  const principal = session?.principal ?? session?.user ?? session?.storedSession ?? {};
+  const candidates = [
+    principal.displayName,
+    principal.customerName,
+    principal.name,
+    principal.username,
+    principal.loginName,
+    principal.account,
+    principal.customerCode,
+    principal.code,
+    principal.codePrefix,
+    session?.storedSession?.displayName,
+    session?.storedSession?.customerName,
+    session?.storedSession?.name,
+    session?.storedSession?.username,
+    session?.storedSession?.loginName,
+    session?.storedSession?.account
+  ];
+  for (const candidate of candidates) {
+    if (candidate && String(candidate).trim()) return String(candidate).trim();
+  }
+  return "";
 }
 
 function fileSessionRoleLabel(session = readFileSession()) {
@@ -5131,6 +5143,7 @@ function showView(name, { updateLocation = true } = {}) {
       );
     }
     if (activeView === "overview") renderHistory();
+    renderTrackingAccount();
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
     resolveShown();
   };
@@ -5647,6 +5660,12 @@ document.addEventListener("keydown", (event) => {
   if (!relatedFilesDrawer.hidden) closeRelatedFilesDrawer();
 });
 
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    renderTrackingAccount();
+  }
+});
+
 window.addEventListener("storage", (event) => {
   if (
     event.key === null ||
@@ -5677,6 +5696,7 @@ window.addEventListener("storage", (event) => {
     }
     synchronizeRelatedFilesSession(readFileSession(), { expiredKind: "" });
     renderRelatedFilesDrawer();
+    renderTrackingAccount();
   }
 });
 
@@ -5839,6 +5859,7 @@ window.addEventListener("pageshow", () => {
   renderSystemWait();
   synchronizeRelatedFilesSession(readFileSession(), { expiredKind: "" });
   renderRelatedFilesDrawer();
+  renderTrackingAccount();
 });
 
 migrateLegacyCache();
@@ -5872,6 +5893,11 @@ if (initialNumber) {
   });
 }
 
+renderTrackingAccount();
+// Re-render account after a short delay to catch any late session writes
+// when the user is redirected from the workbench login flow.
+window.setTimeout(() => renderTrackingAccount(readFileSession()), 120);
+window.setTimeout(() => renderTrackingAccount(readFileSession()), 500);
 void refreshChannelStatus();
 setInterval(() => {
   void refreshChannelStatus();

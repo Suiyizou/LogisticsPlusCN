@@ -44,6 +44,10 @@ export function fetchAvailableBusinessShipments() {
   return request("/business/customers/available-shipments");
 }
 
+export function fetchBusinessShipmentSnapshot(shipmentId) {
+  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/snapshot`);
+}
+
 export function fetchPendingClientMatches() {
   return request("/business/customers/pending-client-matches");
 }

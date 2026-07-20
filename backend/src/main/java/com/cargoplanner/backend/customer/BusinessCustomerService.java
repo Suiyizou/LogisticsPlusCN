@@ -402,6 +402,26 @@ public class BusinessCustomerService {
     return Map.of("items", items, "total", items.size());
   }
 
+  public Map<String, Object> getShipmentSnapshot(AuthenticatedUser actor, String shipmentPublicId) {
+    requireManager(actor);
+    String baseSql = snapshotShipmentSelect();
+    List<Map<String, Object>> items = actor.isAdmin()
+        ? jdbcTemplate.query(
+            baseSql + " WHERE s.public_id = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 1",
+            this::mapSnapshotShipment,
+            shipmentPublicId
+        )
+        : jdbcTemplate.query(
+            baseSql + " WHERE s.public_id = ? AND t.queried_by = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 1",
+            this::mapSnapshotShipment,
+            shipmentPublicId, actor.id()
+        );
+    if (items.isEmpty()) {
+      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment snapshot not found");
+    }
+    return items.get(0);
+  }
+
   private String snapshotShipmentSelect() {
     return """
         SELECT t.id, t.shipment_id, t.query_reference_type, t.query_reference_no,

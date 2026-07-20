@@ -38,6 +38,14 @@ public class BusinessCustomerController {
     return service.listAvailableShipments(actor);
   }
 
+  @GetMapping("/shipments/{shipmentId}/snapshot")
+  public Map<String, Object> shipmentSnapshot(
+      @PathVariable String shipmentId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.getShipmentSnapshot(actor, shipmentId);
+  }
+
   @GetMapping("/pending-client-matches")
   public Map<String, Object> pendingClientMatches(
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
