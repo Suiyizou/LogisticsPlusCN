@@ -30,7 +30,24 @@
 
     <div v-if="refreshingShipment" class="shipment-updating-overlay" role="dialog" aria-modal="true" :aria-label="t('customers.updateTrackingTitle')">
       <div class="shipment-updating-spinner" aria-hidden="true"></div>
-      <p>{{ t("customers.updatingTracking") }}</p>
+      <p>{{ refreshTrackingStatus || t("customers.updatingTracking") }}</p>
+      <button v-if="batchTrackAbortController" type="button" class="shipment-updating-cancel" @click="cancelRefreshShipment">
+        {{ t("customers.cancel") }}
+      </button>
+    </div>
+
+    <div v-if="refreshTrackingResponse" class="shipment-response-toast" :class="{ 'is-error': !refreshTrackingResponse.ok, 'is-success': refreshTrackingResponse.ok }" role="status">
+      <button type="button" class="shipment-response-close" @click="refreshTrackingResponse = null" aria-label="Close">×</button>
+      <div class="shipment-response-title">
+        {{ refreshTrackingResponse.ok ? t("customers.updateTrackingSuccessToast") : t("customers.updateTrackingErrorToast") }}
+      </div>
+      <div class="shipment-response-body">
+        <div><span>{{ t("customers.updateTrackingStatusCode") }}</span><b>{{ refreshTrackingResponse.status }}</b></div>
+        <div><span>{{ t("customers.updateTrackingResponseCode") }}</span><b>{{ refreshTrackingResponse.code }}</b></div>
+        <div><span>{{ t("customers.updateTrackingResponseMessage") }}</span><b>{{ refreshTrackingResponse.message }}</b></div>
+        <div><span>{{ t("customers.updateTrackingNumber") }}</span><b>{{ refreshTrackingResponse.carrier }} / {{ referenceTypeLabel(refreshTrackingResponse.type) }} / {{ refreshTrackingResponse.number }}</b></div>
+        <div v-if="!refreshTrackingResponse.hasDetails"><span>{{ t("customers.updateTrackingNoDetails") }}</span><b>{{ t("customers.updateTrackingNumberInvalidOrEmpty") }}</b></div>
+      </div>
     </div>
 
     <section class="workspace-layout">
@@ -449,6 +466,7 @@
                         <input ref="batchTrackFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleBatchTrackWorkbook" style="display:none" />
                         <b>{{ batchTrackFileName || t("customers.chooseTrackExcel") }}</b>
                         <small>{{ batchTrackFileName ? t("customers.trackRowsReady", { count: batchTrackNumbers.length }) : t("customers.trackExcelColumnsHint") }}</small>
+                        <small class="batch-track-excel-rule">{{ t("customers.trackExcelRule") }}</small>
                         <button v-if="batchTrackFileName" type="button" class="secondary" @click.stop="clearBatchTrackFile">
                           {{ t("customers.clearFile") }}
                         </button>
@@ -481,6 +499,14 @@
                       >
                         {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
                       </button>
+                      <button
+                        v-if="batchTrackRunning"
+                        type="button"
+                        class="secondary"
+                        @click="cancelBatchTrack"
+                      >
+                        {{ t("customers.cancel") }}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -491,18 +517,16 @@
           <template v-else>
             <button class="back-button" @click="subView = 'list'; selectedShipmentId = ''; detailShipmentSnapshot = null">{{ t("customers.backToList") }}</button>
 
-            <el-card v-loading="loadingShipmentDetail" :element-loading-text="t('customers.loadingShipmentDetail')" class="main-card" shadow="never">
+            <el-card v-loading="loadingShipmentDetail" :element-loading-text="t('customers.loadingShipmentDetail')" class="main-card shipment-detail-card" shadow="never">
               <template #header>
                 <div class="main-card-header">
                   <div>
                     <span class="main-card-eyebrow">{{ t("customers.shipmentDetail") }}</span>
                     <h2 class="main-card-title">{{ selectedShipment?.referenceNo || selectedShipment?.shipmentId || "—" }}</h2>
                     <p class="main-card-subtitle">
-                      <span>{{ selectedShipment?.carrier || "—" }}</span>
-                      <el-divider direction="vertical" />
-                      <span>{{ referenceTypeLabel(selectedShipment?.referenceType) }}</span>
-                      <el-divider direction="vertical" />
-                      <span>{{ selectedShipment?.trackingStatus || t("customers.noStatus") }}</span>
+                      <span class="detail-meta-pill">{{ selectedShipment?.carrier || "—" }}</span>
+                      <span class="detail-meta-pill">{{ referenceTypeLabel(selectedShipment?.referenceType) }}</span>
+                      <span class="detail-meta-pill">{{ selectedShipment?.trackingStatus || t("customers.noStatus") }}</span>
                     </p>
                   </div>
                   <div class="main-card-header-actions">
@@ -519,26 +543,20 @@
               <section class="profile-section">
                 <div class="section-label">{{ t("customers.shipmentDetail") }}</div>
                 <el-form class="profile-form" @submit.prevent="saveShipmentDetail" label-position="top">
-                  <el-row :gutter="16">
-                    <el-col :span="6">
-                      <el-form-item :label="t('customers.referenceType')">
-                        <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
-                          <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                          <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-                        </el-select>
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="10">
-                      <el-form-item :label="t('customers.referenceNo')">
-                        <el-input v-model.trim="detailForm.referenceNo" />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="8">
-                      <el-form-item :label="t('customers.shipmentStatus')">
-                        <el-input v-model.trim="detailForm.trackingStatus" />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
+                  <div class="shipment-detail-single-column">
+                    <el-form-item :label="t('customers.referenceType')">
+                      <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
+                        <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                        <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item :label="t('customers.referenceNo')">
+                      <el-input v-model.trim="detailForm.referenceNo" />
+                    </el-form-item>
+                    <el-form-item :label="t('customers.shipmentStatus')">
+                      <el-input v-model.trim="detailForm.trackingStatus" />
+                    </el-form-item>
+                  </div>
 
                   <el-card class="pending-matches-card" shadow="never">
                     <template #header>
@@ -549,7 +567,7 @@
                         </div>
                       </div>
                     </template>
-                    <div class="customer-manual-fields">
+                    <div class="customer-manual-fields shipment-detail-fields">
                       <el-form-item :label="t('customers.jobNumber')">
                         <el-input v-model.trim="detailForm.forwarderJobNumber" />
                       </el-form-item>
@@ -948,6 +966,9 @@ const batchTrackProgress = ref({ total: 0, done: 0, success: 0, failed: 0 });
 const batchTrackFileInput = ref(null);
 const batchTrackFileName = ref("");
 const batchTrackNumbers = ref([]);
+const batchTrackAbortController = ref(null);
+const refreshTrackingStatus = ref("");
+const refreshTrackingResponse = ref(null);
 const toastMessage = ref("");
 const loadingShipments = ref(false);
 const creating = ref(false);
@@ -1078,36 +1099,55 @@ const CARRIER_PREFIX_MAP = {
   EGLV: "EVERGREEN"
 };
 
+const BILL_OF_LADING_PREFIXES = [
+  "COSU", "CCLU", "CSCU", "COAU", "OOLU", "EGLV", "WHLC",
+  "CMAU", "CMDU", "CMAC", "ANLU", "MAEU", "MSCU", "MEDU",
+  "HLCU", "HMMN", "ONEY", "YMLU", "WHLU", "ZIMU", "PILU",
+  "SMLU", "TSLU", "RCLU", "SAFM", "KMTU", "NCLU"
+];
+
+const BOOKING_PREFIXES = [
+  "SHA", "NGB", "SZC", "YNT", "QDG", "DLC", "XMN", "TSN",
+  "HKG", "NNG", "CSX", "WUH", "CGO", "CTU", "CKG"
+];
+
 function extractReferenceToken(value) {
-  const text = String(value || "").toUpperCase().replace(/\s+/g, " ");
-  const patterns = [
-    /\b(COSU\d{8,11})\b/,
-    /\b(CCLU\d{8,11})\b/,
-    /\b(CMAU\d{8,11})\b/,
-    /\b(CMDU\d{8,11})\b/,
-    /\b(MAEU\d{8,11})\b/,
-    /\b(MSCU\d{8,11})\b/,
-    /\b(HLCU\d{8,11})\b/,
-    /\b(HMM[A-Z0-9]{8,11})\b/,
-    /\b(ONEY[A-Z0-9]{8,11})\b/,
-    /\b(OOLU\d{8,11})\b/,
-    /\b(YMLU\d{8,11})\b/,
-    /\b(WHLU\d{8,11})\b/,
-    /\b(ZIMU\d{8,11})\b/,
-    /\b(EGLV\d{8,11})\b/,
-    /\b([A-Z]{4}\d{7,10})\b/
-  ];
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) return match[1];
+  const raw = String(value || "").replace(/[,;\|\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  const text = raw.toUpperCase();
+
+  /* step 1: match carrier BL prefixes like COSU followed by 7-12 alphanumeric chars */
+  const billPrefix = BILL_OF_LADING_PREFIXES.find((prefix) => text.includes(prefix));
+  if (billPrefix) {
+    const match = text.match(new RegExp(`\\b${billPrefix}[A-Z0-9]{7,12}\\b`));
+    if (match) return match[0];
   }
-  return text.trim();
+
+  /* step 2: generic 4-letter prefix + 7-10 digits, prefer the longer match */
+  const genericMatches = [...text.matchAll(/\b([A-Z]{4}\d{7,10})\b/g)].map((m) => m[1]);
+  if (genericMatches.length) {
+    return genericMatches.reduce((a, b) => (a.length >= b.length ? a : b));
+  }
+
+  /* step 3: booking number = port code + 9+ digits */
+  const bookingMatch = text.match(/\b([A-Z]{3}\d{9,})\b/);
+  if (bookingMatch && BOOKING_PREFIXES.some((p) => text.startsWith(p))) {
+    return bookingMatch[1];
+  }
+
+  /* step 4: fallback to any 8+ alphanumeric token containing both letters and digits */
+  const fallback = text.match(/\b([A-Z0-9]{8,})\b/);
+  if (fallback && /[A-Z]/.test(fallback[1]) && /\d/.test(fallback[1])) {
+    return fallback[1];
+  }
+
+  return "";
 }
 
 function findReferenceInRow(row) {
   for (const cell of row) {
     const token = extractReferenceToken(cell);
-    if (token && token.length >= 8 && /[A-Z]{3,4}\d/.test(token)) {
+    if (token && token.length >= 8 && /[A-Z]/.test(token) && /\d/.test(token)) {
       return token;
     }
   }
@@ -1341,6 +1381,8 @@ async function startBatchTrack() {
   batchTrackRunning.value = true;
   batchTrackResults.value = numbers.map((number) => ({ number, status: "pending", message: t("customers.trackPending") }));
   batchTrackProgress.value = { total: numbers.length, done: 0, success: 0, failed: 0 };
+  const controller = new AbortController();
+  batchTrackAbortController.value = controller;
 
   const token = storedToken();
   const apiBase = import.meta.env.VITE_API_BASE_URL || "";
@@ -1350,12 +1392,29 @@ async function startBatchTrack() {
     batchTrackResults.value[i] = { number, status: "running", message: t("customers.trackRunning") };
 
     const delayMs = Math.floor(Math.random() * 3000) + 3000;
-    await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = window.setTimeout(resolve, delayMs);
+        const abortHandler = () => {
+          window.clearTimeout(timer);
+          controller.signal.removeEventListener("abort", abortHandler);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        controller.signal.addEventListener("abort", abortHandler);
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        batchTrackResults.value[i] = { number, status: "cancelled", message: t("customers.trackCancelled") };
+        break;
+      }
+      throw err;
+    }
 
     const request = resolveBatchTrackRequest(number, batchTrackCarrier.value, batchTrackType.value);
     try {
       const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           "X-Auth-Token": token
@@ -1369,12 +1428,15 @@ async function startBatchTrack() {
       });
       const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
+        const hasDetails = Boolean(data?.snapshot?.details || data?.details);
         batchTrackProgress.value.success++;
         batchTrackResults.value[i] = {
           number,
           carrier: request.carrier,
-          status: "success",
-          message: data?.snapshot?.summary?.latestEvent?.name || "OK"
+          status: hasDetails ? "success" : "empty",
+          message: hasDetails
+            ? (data?.snapshot?.summary?.latestEvent?.name || "OK")
+            : t("customers.batchTrackNoDetails")
         };
       } else {
         batchTrackProgress.value.failed++;
@@ -1382,10 +1444,16 @@ async function startBatchTrack() {
           number,
           carrier: request.carrier,
           status: "failed",
-          message: data?.message || `HTTP ${resp.status}`
+          message: data?.message || data?.error?.message || `HTTP ${resp.status}`,
+          code: data?.code || "-",
+          httpStatus: resp.status
         };
       }
     } catch (err) {
+      if (err?.name === "AbortError") {
+        batchTrackResults.value[i] = { number, status: "cancelled", message: t("customers.trackCancelled") };
+        break;
+      }
       batchTrackProgress.value.failed++;
       batchTrackResults.value[i] = {
         number,
@@ -1398,7 +1466,14 @@ async function startBatchTrack() {
   }
 
   batchTrackRunning.value = false;
+  batchTrackAbortController.value = null;
   loadAvailableShipments();
+}
+
+function cancelBatchTrack() {
+  if (batchTrackAbortController.value) {
+    batchTrackAbortController.value.abort();
+  }
 }
 
 async function handleBatchTrackWorkbook(event) {
@@ -1425,13 +1500,14 @@ async function handleBatchTrackWorkbook(event) {
     const colIndex = numberIndex >= 0 ? numberIndex : 0;
     const extracted = rows.slice(startIndex)
       .map((row) => {
+        /* prefer the detected reference column, fall back to scanning the whole row */
         const fromPrimary = extractReferenceToken(row[colIndex]);
-        if (fromPrimary && fromPrimary.length >= 8 && /[A-Z]{3,4}\d/.test(fromPrimary)) {
+        if (fromPrimary && fromPrimary.length >= 8 && /[A-Z]/.test(fromPrimary) && /\d/.test(fromPrimary)) {
           return fromPrimary;
         }
         return findReferenceInRow(row);
       })
-      .filter((s) => s.length >= 8 && /[A-Z]{3,4}\d/.test(s));
+      .filter((s) => s && s.length >= 8 && /[A-Z]/.test(s) && /\d/.test(s));
     if (!extracted.length) throw new Error(t("customers.noTrackNumbers"));
     batchTrackNumbers.value = [...new Set(extracted)];
     batchTrackFileName.value = file.name;
@@ -1929,11 +2005,16 @@ async function refreshShipmentFromCarrier() {
   const shipment = activeDetailShipment.value;
   if (!shipment?.carrier || !shipment?.referenceType || !shipment?.referenceNo || refreshingShipment.value) return;
   refreshingShipment.value = true;
+  refreshTrackingStatus.value = t("customers.updateTrackingNodeService");
+  refreshTrackingResponse.value = null;
+  const controller = new AbortController();
+  batchTrackAbortController.value = controller;
   try {
     const token = storedToken();
     const apiBase = import.meta.env.VITE_API_BASE_URL || "";
     const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "X-Auth-Token": token
@@ -1947,7 +2028,18 @@ async function refreshShipmentFromCarrier() {
       })
     });
     const data = await resp.json().catch(() => ({}));
+    refreshTrackingResponse.value = {
+      status: resp.status,
+      ok: resp.ok,
+      code: data?.code || "-",
+      message: data?.message || data?.error?.message || "-",
+      carrier: shipment.carrier,
+      type: shipment.referenceType,
+      number: shipment.referenceNo,
+      hasDetails: Boolean(data?.snapshot?.details || data?.details)
+    };
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+    refreshTrackingStatus.value = t("customers.updateTrackingSaving");
     await loadAvailableShipments();
     await loadShipmentDetailSnapshot();
     if (selectedCustomerId.value) {
@@ -1962,12 +2054,32 @@ async function refreshShipmentFromCarrier() {
         trackingStatus: updated.trackingStatus || detailForm.trackingStatus
       });
     }
+    refreshTrackingStatus.value = t("customers.updateTrackingComplete");
     showSuccess("customers.refreshSuccess");
   } catch (error) {
-    showError(error, "customers.refreshFailed");
+    if (error?.name === "AbortError") {
+      refreshTrackingStatus.value = t("customers.updateTrackingCancelled");
+      showInfo("customers.refreshCancelled");
+    } else {
+      refreshTrackingStatus.value = t("customers.updateTrackingFailed");
+      showError(error, "customers.refreshFailed");
+    }
   } finally {
     refreshingShipment.value = false;
+    batchTrackAbortController.value = null;
   }
+}
+
+function cancelRefreshShipment() {
+  if (batchTrackAbortController.value) {
+    batchTrackAbortController.value.abort();
+  }
+}
+
+function showInfo(key) {
+  pageMessage.value = t(key);
+  messageIsError.value = false;
+  clearPageMessage();
 }
 
 async function removeShipment() {
@@ -2384,6 +2496,74 @@ function showError(error, fallbackKey) {
   font-size: 15px;
   font-weight: 500;
 }
+.shipment-updating-cancel {
+  margin-top: 8px;
+  padding: 8px 18px;
+  border: 1px solid #c9d6e8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3a4d65;
+  font-size: 13px;
+  cursor: pointer;
+}
+.shipment-updating-cancel:hover {
+  background: #f3f6fa;
+}
+.shipment-response-toast {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 2001;
+  width: 360px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 30px rgba(15, 29, 46, 0.14);
+  border-left: 4px solid #2563eb;
+}
+.shipment-response-toast.is-error {
+  border-left-color: #dc2626;
+}
+.shipment-response-toast.is-success {
+  border-left-color: #16a34a;
+}
+.shipment-response-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: #8a9bb0;
+  font-size: 18px;
+  cursor: pointer;
+}
+.shipment-response-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f1d2e;
+}
+.shipment-response-body > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+.shipment-response-body > div:last-child {
+  border-bottom: none;
+}
+.shipment-response-body span {
+  color: #6a8096;
+}
+.shipment-response-body b {
+  font-weight: 600;
+  color: #1a2d42;
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
+}
 .shipment-updating-spinner {
   width: 40px;
   height: 40px;
@@ -2641,6 +2821,13 @@ function showError(error, fallbackKey) {
   justify-content: flex-end;
   padding-top: 8px;
   border-top: 1px solid #e2e8f0;
+}
+.batch-track-excel-rule {
+  color: #6a8096;
+  font-size: 11px;
+  line-height: 1.5;
+  max-width: 100%;
+  text-align: center;
 }
 .slide-fade-enter-active {
   transition: all 0.3s ease;
@@ -3294,6 +3481,51 @@ function showError(error, fallbackKey) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.shipment-detail-card :deep(.el-card__body) {
+  padding: 24px;
+}
+.shipment-detail-card .main-card-subtitle {
+  gap: 8px;
+}
+.detail-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid #d3dde9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4a5d75;
+  font-size: 11px;
+  font-weight: 600;
+}
+.shipment-detail-single-column {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.shipment-detail-single-column .el-form-item {
+  margin-bottom: 0;
+}
+.shipment-detail-fields {
+  grid-template-columns: 1fr;
+}
+.shipment-detail-fields .el-input {
+  border-radius: 8px;
+}
+.shipment-detail-fields .el-form-item {
+  margin-bottom: 0;
+  padding: 12px;
+  border: 1px solid #e1e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.shipment-detail-fields .el-form-item__label {
+  padding-bottom: 8px;
+  color: #5a6f86;
+  font-size: 12px;
+  font-weight: 600;
+}
 .customer-manual-update {
   padding: 12px;
   border: 1px solid #d7e4ef;
@@ -3682,6 +3914,15 @@ button:disabled {
 }
 .batch-track-result-row.failed {
   border-left: 3px solid #ef4444;
+  background: #fff3f5;
+}
+.batch-track-result-row.empty {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+}
+.batch-track-result-row.cancelled {
+  border-left: 3px solid #94a3b8;
+  background: #f8fafc;
 }
 .batch-track-result-row.pending {
   border-left: 3px solid #94a3b8;
