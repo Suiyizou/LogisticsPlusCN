@@ -337,6 +337,8 @@ const MESSAGES = {
     "account.roleAdmin": "Administrator",
     "account.roleBusiness": "Business operator",
     "account.roleUser": "Internal user",
+    "welcome.greeting": "Welcome",
+    "welcome.subtitle": ", welcome to the tracking platform.",
     "files.trigger": "Related files",
     "files.unavailable": "Related files will be available after this shipment is saved by the platform.",
     "files.kicker": "SHIPMENT DOCUMENTS",
@@ -736,6 +738,8 @@ const MESSAGES = {
     "account.roleAdmin": "系统管理员",
     "account.roleBusiness": "业务员",
     "account.roleUser": "内部用户",
+    "welcome.greeting": "欢迎",
+    "welcome.subtitle": "，欢迎使用追踪平台。",
     "files.trigger": "相关文件",
     "files.unavailable": "平台保存这票货物后即可使用相关文件。",
     "files.kicker": "货物文档",
@@ -1531,6 +1535,8 @@ function renderTrackingAccount(session = readFileSession()) {
   const portalReturnLabel = document.querySelector("#portal-return-label");
   const signInButton = document.querySelector("#sign-in-button");
   const workbenchLink = document.querySelector("#account-workbench-link");
+  const welcomeMessage = document.querySelector("#welcome-message");
+  const welcomeUsername = document.querySelector("#welcome-username");
   const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
@@ -1550,10 +1556,16 @@ function renderTrackingAccount(session = readFileSession()) {
   if (workbenchLink) {
     workbenchLink.hidden = !returnsToWorkbenches;
   }
+  if (welcomeMessage) {
+    welcomeMessage.hidden = !authenticated;
+  }
   if (!authenticated) {
     trackingAccountName.textContent = "";
     trackingAccountRole.textContent = "";
     trackingAccountMark.textContent = "U";
+    if (welcomeUsername) {
+      welcomeUsername.textContent = "";
+    }
     setTrackingAccountMenuOpen(false);
     return;
   }
@@ -1561,6 +1573,9 @@ function renderTrackingAccount(session = readFileSession()) {
   trackingAccountName.textContent = name;
   trackingAccountRole.textContent = fileSessionRoleLabel(session);
   trackingAccountMark.textContent = Array.from(name.trim())[0]?.toUpperCase() || "U";
+  if (welcomeUsername) {
+    welcomeUsername.textContent = name;
+  }
 
   if (isCustomer) {
     const principal = session.principal ?? {};

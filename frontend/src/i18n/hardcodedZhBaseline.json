@@ -20,6 +20,7 @@
     ".replace(/(?:名称|品名|货物|货名|产品)\\s*[:：]/g, \" \")",
     "\"45HQ\": \"45高柜\",",
     "\"不可重压货物可以放在可承重货物上方，但不能作为上层货物的支撑面\"",
+    "\"单号\", \"订舱号\", \"提单号\", \"箱号\", \"业务单号\", \"追踪号\",",
     "\"单件原始体积(m³) = 长 × 宽 × 高 ÷ 1,000,000\",",
     "\"单件原始体积(m3) = 长 x 宽 x 高 / 1,000,000\",",
     "\"单件占用体积(m³) = 计入长 × 计入宽 × 计入高 ÷ 1,000,000\",",
@@ -404,12 +405,14 @@
     "const name = String(cargo?.name || \"\").trim() || \"未命名货物\";",
     "const name = String(cargo.name || \"\").trim() || \"未命名货物\";",
     "const namedPattern = new RegExp(`长(?:度)?\\\\s*[:：]?\\\\s*${number}\\\\s*${unit}\\\\s*宽(?:度)?\\\\s*[:：]?\\\\s*${number}\\\\s*${unit}\\\\s*高(?:度)?\\\\s*[:：]?\\\\s*${number}\\\\s*${unit}`, \"i\");",
+    "const passwordIndex = findColumn([\"密码\", \"登录密码\", \"password\"]);",
     "const perPiece = text.match(/(\\d+(?:\\.\\d+)?)\\s*(kg|公斤|千克|g|克|t|吨)\\s*(?:\\/|／)?\\s*(?:件|箱|pcs|每件)/i);",
     "const subtitle = `高度范围 ${formatNum(layer.z)}-${formatNum(layer.top)} cm；本层按“魔方切片”单独拉出展示，编号与右侧堆放方式一一对应。`;",
     "const title = `第 ${index + 1} 层 / 共 ${totalLayers} 层：z=${formatNum(layer.z)} cm`;",
     "const title = hasGrouping ? \"已启用同规格块化\" : \"预计计算耗时\";",
     "const total = text.match(/(?:总重|总重量|总毛重|总净重|毛重合计|重量合计|合计重量)\\s*[:：]?\\s*(\\d+(?:\\.\\d+)?)\\s*(kg|公斤|千克|g|克|t|吨)/i);",
     "const unit = \"(mm|毫米|cm|厘米|m|米)?\";",
+    "const usernameIndex = findColumn([\"客户名\", \"用户名\", \"登录名\", \"customer name\", \"username\", \"login name\"]);",
     "containers: \"箱型资料\",",
     "ctx.fillText(\"侧视沿 Y 向观察，Y 向底面边见右侧统计\", ox, oy + height + 22);",
     "ctx.fillText(\"X 长\", x + 76, y + 4);",
@@ -714,9 +717,6 @@
     "upright: \"保持朝上\",",
     "weightKg: [\"weightKg\", \"unitWeight\", \"unitWeightKg\", \"weight\", \"单重\", \"单件重量\", \"每件重量\", \"重量kg\", \"单重kg\", \"单件重量kg\", \"毛重kg\", \"净重kg\"],",
     "widthCm: [\"widthCm\", \"width\", \"w\", \"宽\", \"宽度\", \"外宽\", \"宽cm\", \"宽度cm\", \"宽厘米\", \"宽mm\", \"宽度mm\", \"宽毫米\", \"宽m\", \"宽度m\"],",
-    "const usernameIndex = findColumn([\"客户名\", \"用户名\", \"登录名\", \"customer name\", \"username\", \"login name\"]);",
-    "const passwordIndex = findColumn([\"密码\", \"登录密码\", \"password\"]);",
-    "const codeIndex = findColumn([\"客户码\", \"customer code\", \"customercode\"]);",
     "workerScope.postMessage({ id, type: \"error\", message: error.message || \"本机计算失败\" });"
   ]
 }

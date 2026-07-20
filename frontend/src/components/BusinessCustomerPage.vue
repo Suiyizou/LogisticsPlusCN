@@ -44,8 +44,9 @@
       </aside>
 
       <div class="workspace-main">
+        <transition name="fade" mode="out-in">
         <!-- CUSTOMER MANAGEMENT -->
-        <template v-if="menuItem === 'customers'">
+        <div v-if="menuItem === 'customers'" key="customers" class="workspace-view">
           <!-- List view -->
           <template v-if="subView === 'list'">
             <div class="list-page">
@@ -351,35 +352,125 @@
               </el-card>
             </el-card>
           </template>
-        </template>
+        </div>
 
         <!-- SHIPMENT MANAGEMENT -->
-        <template v-if="menuItem === 'shipments'">
+        <div v-else-if="menuItem === 'shipments'" key="shipments" class="workspace-view">
           <!-- List view -->
           <template v-if="subView === 'list'">
-            <div class="list-page">
-              <div class="list-page-header">
-                <h2>{{ t("customers.availableShipments") }}</h2>
-                <div class="list-page-actions">
-                  <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
-                  <el-button @click="batchTrackDialogOpen = true"><el-icon><Operation /></el-icon>{{ t("customers.batchTrack") }}</el-button>
-                  <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
+            <div class="list-page list-page-full shipment-workspace">
+              <div class="shipment-workspace-main">
+                <div class="list-page-header">
+                  <h2>{{ t("customers.availableShipments") }}</h2>
+                  <div class="list-page-actions">
+                    <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                    <el-button @click="toggleBatchTrackPanel" :type="batchTrackPanelOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ t("customers.batchTrack") }}</el-button>
+                    <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
+                  </div>
                 </div>
+                <el-table :data="availableShipments" stripe v-loading="loadingAvailableShipments" style="width:100%">
+                  <el-table-column type="index" :label="t('customers.index')" width="60" />
+                  <el-table-column :label="t('customers.referenceNo')" min-width="200">
+                    <template #default="{ row }">
+                      <div>
+                        <b>{{ row.referenceNo || row.shipmentId }}</b>
+                        <div style="margin-top:4px"><small>{{ row.carrier }} · {{ referenceTypeLabel(row.referenceType) }}</small></div>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.carrier')" width="120">
+                    <template #default="{ row }">{{ row.carrier || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.shipmentStatus')" width="160">
+                    <template #default="{ row }">
+                      <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.remark')" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.remark || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.lastTrackedAt')" width="160">
+                    <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.actions')" width="280" fixed="right">
+                    <template #default="{ row }">
+                      <div class="table-action-buttons">
+                        <el-button size="small" type="primary" link @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
+                        <el-button size="small" type="warning" link @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
+                        <el-button size="small" type="info" link @click.stop="viewShipmentDetail(row)">{{ t("customers.detail") }}</el-button>
+                        <el-button size="small" type="danger" link @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
               </div>
-              <el-table :data="availableShipments" stripe v-loading="loadingAvailableShipments" @row-click="selectShipmentFromList" style="cursor:pointer">
-                <el-table-column :label="t('customers.referenceNo')" min-width="180">
-                  <template #default="{ row }"><b>{{ row.referenceNo || row.shipmentId }}</b><br><small>{{ row.carrier }} · {{ referenceTypeLabel(row.referenceType) }}</small></template>
-                </el-table-column>
-                <el-table-column :label="t('customers.shipmentStatus')" width="160">
-                  <template #default="{ row }"><span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span></template>
-                </el-table-column>
-                <el-table-column :label="t('customers.boundCustomers')" width="120">
-                  <template #default="{ row }">{{ (shipmentCustomerMap[row.shipmentId] || []).length || '—' }}</template>
-                </el-table-column>
-                <el-table-column :label="t('customers.lastTrackedAt')" width="140">
-                  <template #default="{ row }">{{ formatDate(row.lastTrackedAt || row.updatedAt) }}</template>
-                </el-table-column>
-              </el-table>
+              <transition name="slide-fade">
+                <div v-if="batchTrackPanelOpen" class="shipment-workspace-side">
+                  <div class="batch-track-panel">
+                    <div class="batch-track-panel-header">
+                      <h3>{{ t("customers.batchTrack") }}</h3>
+                      <el-button size="small" link @click="toggleBatchTrackPanel">×</el-button>
+                    </div>
+                    <div class="batch-track-form">
+                      <div class="batch-track-row">
+                        <label>
+                          <span>{{ t("customers.carrier") }}</span>
+                          <el-select v-model="batchTrackCarrier" class="business-select" popper-class="business-select-popper">
+                            <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+                            <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>{{ t("customers.referenceType") }}</span>
+                          <el-select v-model="batchTrackType" class="business-select" popper-class="business-select-popper">
+                            <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                            <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                            <el-option value="CONTAINER" :label="t('customers.referenceContainer')" />
+                          </el-select>
+                        </label>
+                      </div>
+                      <div class="customer-excel-dropzone batch-track-dropzone" :class="{ 'has-file': batchTrackFileName, 'is-dragover': batchTrackDropzoneActive }"
+                        @dragover.prevent="batchTrackDropzoneActive = true"
+                        @dragleave.prevent="batchTrackDropzoneActive = false"
+                        @drop.prevent="handleBatchTrackDrop"
+                        @click="batchTrackFileInput?.click()"
+                      >
+                        <input ref="batchTrackFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleBatchTrackWorkbook" style="display:none" />
+                        <b>{{ batchTrackFileName || t("customers.chooseTrackExcel") }}</b>
+                        <small>{{ batchTrackFileName ? t("customers.trackRowsReady", { count: batchTrackNumbers.length }) : t("customers.trackExcelColumnsHint") }}</small>
+                        <button v-if="batchTrackFileName" type="button" class="secondary" @click.stop="clearBatchTrackFile">
+                          {{ t("customers.clearFile") }}
+                        </button>
+                        <button v-else type="button" @click.stop="batchTrackFileInput?.click()">{{ t("customers.chooseFile") }}</button>
+                      </div>
+                    </div>
+
+                    <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
+                      <div class="batch-track-progress">
+                        <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
+                        <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
+                      </div>
+                      <div v-if="batchTrackResults.length" class="batch-track-result-list">
+                        <div v-for="r in batchTrackResults" :key="r.number" class="batch-track-result-row" :class="r.status">
+                          <b>{{ r.number }}</b>
+                          <small>{{ r.message }}</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="batch-track-actions">
+                      <button
+                        class="customer-access-primary"
+                        type="button"
+                        :disabled="batchTrackRunning || !batchTrackNumbers.length"
+                        @click="startBatchTrack"
+                      >
+                        {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </transition>
             </div>
           </template>
           <!-- Detail view -->
@@ -459,7 +550,8 @@
               </el-button>
             </div>
           </template>
-        </template>
+        </div>
+        </transition>
       </div>
     </section>
 
@@ -514,11 +606,16 @@
           <textarea v-model="quickImportText" :placeholder="t('customers.quickImportPlaceholder')"></textarea>
           <small>{{ t("customers.quickImportHint") }}</small>
         </label>
-        <div v-else class="customer-excel-dropzone" :class="{ 'has-file': batchFileName }">
-          <input ref="batchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleCustomerWorkbook" />
+        <div v-else class="customer-excel-dropzone" :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
+          @dragover.prevent="batchDropzoneActive = true"
+          @dragleave.prevent="batchDropzoneActive = false"
+          @drop.prevent="handleBatchDrop"
+          @click="batchFileInput?.click()"
+        >
+          <input ref="batchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleCustomerWorkbook" style="display:none" />
           <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
           <small>{{ batchFileName ? t("customers.rowsReady", { count: batchRows.length }) : t("customers.excelColumnsHint") }}</small>
-          <button type="button" @click="batchFileInput?.click()">{{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}</button>
+          <button type="button" @click.stop="batchFileInput?.click()">{{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}</button>
         </div>
         <p v-if="batchPreviewError" class="customer-batch-error">{{ batchPreviewError }}</p>
         <div class="customer-dialog-actions">
@@ -816,6 +913,7 @@ const batchFileName = ref("");
 const batchRows = ref([]);
 const batchPreviewError = ref("");
 const batchFileInput = ref(null);
+const batchDropzoneActive = ref(false);
 const importingCustomers = ref(false);
 const batchCredentialRows = ref([]);
 const clientCodeDialogOpen = ref(false);
@@ -828,6 +926,8 @@ const creatingShipment = ref(false);
 const deletingShipment = ref(false);
 const refreshingShipment = ref(false);
 const batchTrackDialogOpen = ref(false);
+const batchTrackPanelOpen = ref(false);
+const batchTrackDropzoneActive = ref(false);
 const batchTrackText = ref("");
 const batchTrackCarrier = ref("COSCO");
 const batchTrackType = ref("BILLOFLADING");
@@ -1175,6 +1275,7 @@ async function handleBatchTrackWorkbook(event) {
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
     const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
+    // i18n-ignore
     const numberColumnAliases = [
       "单号", "订舱号", "提单号", "箱号", "业务单号", "追踪号",
       "number", "reference no", "reference number", "booking no", "booking number",
@@ -1217,6 +1318,24 @@ function handleCloseBatchTrack() {
   if (batchTrackRunning.value) return;
   batchTrackDialogOpen.value = false;
   clearBatchTrack();
+}
+
+function toggleBatchTrackPanel() {
+  batchTrackPanelOpen.value = !batchTrackPanelOpen.value;
+}
+
+function handleBatchTrackDrop(event) {
+  batchTrackDropzoneActive.value = false;
+  const files = event.dataTransfer?.files;
+  if (!files || !files.length) return;
+  const file = files[0];
+  const validTypes = [".xlsx", ".xls", ".csv"];
+  const isValid = validTypes.some((ext) => file.name.toLowerCase().endsWith(ext));
+  if (!isValid) {
+    return;
+  }
+  const fakeEvent = { target: { files } };
+  handleBatchTrackWorkbook(fakeEvent);
 }
 
 async function loadPendingClientMatches() {
@@ -1708,6 +1827,65 @@ async function removeShipment() {
   }
 }
 
+function editShipment(row) {
+  openShipmentDetail(row);
+}
+
+function viewShipmentDetail(row) {
+  openShipmentDetail(row);
+}
+
+async function deleteShipmentRow(row) {
+  if (!row?.shipmentId || deletingShipment.value) return;
+  if (!window.confirm(t("customers.deleteShipmentConfirm"))) return;
+  deletingShipment.value = true;
+  const shipmentId = row.shipmentId;
+  try {
+    await deleteBusinessShipment(shipmentId);
+    shipments.value = shipments.value.filter((item) => item.shipmentId !== shipmentId);
+    availableShipments.value = availableShipments.value.filter((item) => item.shipmentId !== shipmentId);
+    showSuccess("customers.shipmentDeleted");
+  } catch (error) {
+    showError(error, "customers.shipmentDeleteFailed");
+  } finally {
+    deletingShipment.value = false;
+  }
+}
+
+async function updateShipmentTracking(row) {
+  if (!row?.carrier || !row?.referenceType || !row?.referenceNo || refreshingShipment.value) return;
+  refreshingShipment.value = true;
+  try {
+    const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+    const apiBase = import.meta.env.VITE_API_BASE_URL || "";
+    const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": token
+      },
+      body: JSON.stringify({
+        carrier: row.carrier,
+        channel: "AUTO",
+        type: row.referenceType,
+        number: row.referenceNo,
+        forceRefresh: true
+      })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+    await loadAvailableShipments();
+    if (shipments.value.length) {
+      await loadShipments();
+    }
+    showSuccess("customers.refreshSuccess");
+  } catch (error) {
+    showError(error, "customers.refreshFailed");
+  } finally {
+    refreshingShipment.value = false;
+  }
+}
+
 function trackShipmentInWorkspace(shipment) {
   closeShipmentDetail();
   openTrackingWorkspace(shipment);
@@ -1773,6 +1951,21 @@ function quickImportRows() {
     const [username = "", customerCode = ""] = line.split(/[,，\t]/, 2).map((value) => value.trim());
     return { rowNumber: index + 1, username, customerCode };
   }).filter((row) => row.username);
+}
+
+function handleBatchDrop(event) {
+  batchDropzoneActive.value = false;
+  const files = event.dataTransfer?.files;
+  if (!files || !files.length) return;
+  const file = files[0];
+  const validTypes = [".xlsx", ".xls", ".csv"];
+  const isValid = validTypes.some((ext) => file.name.toLowerCase().endsWith(ext));
+  if (!isValid) {
+    batchPreviewError.value = t("customers.excelReadFailed");
+    return;
+  }
+  const fakeEvent = { target: { files } };
+  handleCustomerWorkbook(fakeEvent);
 }
 
 async function handleCustomerWorkbook(event) {
@@ -2164,6 +2357,93 @@ function showError(error, fallbackKey) {
 /* ---- List Page ---- */
 .list-page {
   max-width: 1100px;
+}
+.list-page-full {
+  max-width: none;
+  width: 100%;
+}
+.shipment-workspace {
+  display: flex;
+  gap: 20px;
+  min-height: 0;
+}
+.shipment-workspace-main {
+  flex: 1;
+  min-width: 0;
+}
+.shipment-workspace-side {
+  width: 380px;
+  flex: 0 0 380px;
+}
+.batch-track-panel {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.batch-track-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+.batch-track-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #0f1d2e;
+  font-weight: 700;
+}
+.batch-track-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.batch-track-dropzone {
+  padding: 20px 12px;
+}
+.batch-track-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+.batch-track-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+.slide-fade-enter-active {
+  transition: all 0.3s ease;
+}
+.slide-fade-leave-active {
+  transition: all 0.25s ease;
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(20px);
+  opacity: 0;
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+.workspace-view {
+  width: 100%;
 }
 .list-page-header {
   display: flex;
@@ -2872,10 +3152,22 @@ function showError(error, fallbackKey) {
   border: 2px dashed #c8d6e2;
   border-radius: 12px;
   text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.customer-excel-dropzone:hover {
+  border-color: #5b8def;
+  background: #f5f9ff;
 }
 .customer-excel-dropzone.has-file {
   border-color: #56b88d;
   background: #f6fdf9;
+}
+.customer-excel-dropzone.is-dragover {
+  border-color: #5b8def;
+  background: #eef4ff;
+  transform: scale(1.02);
 }
 .customer-excel-dropzone input {
   display: none;
