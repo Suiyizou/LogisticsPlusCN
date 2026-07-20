@@ -433,6 +433,13 @@
                       <button
                         type="button"
                         :disabled="isShipmentFileDeleted(file)"
+                        @click="handlePreviewShipmentFile(file)"
+                      >
+                        {{ ui('admin.files.preview') }}
+                      </button>
+                      <button
+                        type="button"
+                        :disabled="isShipmentFileDeleted(file)"
                         @click="handleDownloadShipmentFile(file)"
                       >
                         {{ ui('admin.files.download') }}
@@ -655,6 +662,7 @@
               <el-option value="AGENT" :label="t('customers.roleAgent')" />
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
+              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
             </el-select>
             <small v-if="employeeForm.role !== 'EMPLOYEE'">{{ t("admin.employee.agentForcedHint") }}</small>
           </label>
@@ -703,6 +711,62 @@
         </div>
       </div>
     </div>
+
+    <div v-if="filePreviewDialog.open" class="modal-backdrop">
+      <div
+        class="modal file-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        @click.stop
+      >
+        <header>
+          <div>
+            <p>{{ ui('admin.files.previewTitle') }}</p>
+            <h2>{{ filePreviewDialog.name || ui('admin.files.previewTitle') }}</h2>
+          </div>
+          <button type="button" @click="closeFilePreviewDialog">×</button>
+        </header>
+        <div class="file-preview-content-wrapper">
+          <p
+            v-if="filePreviewDialog.message"
+            class="file-preview-message"
+            :class="{ error: filePreviewDialog.isError }"
+          >
+            {{ filePreviewDialog.message }}
+          </p>
+          <div class="file-preview-render">
+            <iframe
+              v-if="filePreviewDialog.kind === 'pdf' && filePreviewDialog.url"
+              :src="filePreviewDialog.url"
+              :title="filePreviewDialog.name || ui('admin.files.previewTitle')"
+            ></iframe>
+            <img
+              v-else-if="filePreviewDialog.kind === 'image' && filePreviewDialog.url"
+              :src="filePreviewDialog.url"
+              :alt="filePreviewDialog.name || ui('admin.files.previewTitle')"
+            />
+            <textarea
+              v-else-if="filePreviewDialog.kind === 'text'"
+              class="file-preview-textarea"
+              readonly
+              :value="filePreviewDialog.text"
+            ></textarea>
+            <p
+              v-else-if="filePreviewDialog.kind === 'fallback'"
+              class="file-preview-fallback"
+            >
+              {{ filePreviewDialog.text || ui('admin.files.previewNotSupported') }}
+            </p>
+            <p v-else class="file-preview-fallback">{{ ui('admin.files.previewLoading') }}</p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" type="button" @click="closeFilePreviewDialog">
+            {{ ui('common.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -716,6 +780,7 @@ import {
   deleteDevice,
   deleteEmployee,
   fetchAdminMe,
+  fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
   fetchAdminWorkspaceFiles,
   fetchDevices,
@@ -774,6 +839,16 @@ const temporaryPasswordDialog = reactive({
   password: "",
   copied: false
 });
+const filePreviewDialog = reactive({
+  open: false,
+  kind: "",
+  name: "",
+  url: "",
+  text: "",
+  message: "",
+  isError: false
+});
+let filePreviewObjectUrl = null;
 const llmForm = reactive({
   enabled: true,
   baseUrl: "https://api.deepseek.com",
@@ -1040,6 +1115,109 @@ async function handleDownloadShipmentFile(file) {
   });
 }
 
+const PREVIEW_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"]);
+const PREVIEW_PDF_EXTENSIONS = new Set(["pdf"]);
+const PREVIEW_TEXT_EXTENSIONS = new Set([
+  "txt", "csv", "log", "json", "xml", "md", "markdown", "html", "htm",
+  "js", "ts", "jsx", "tsx", "css", "scss", "less", "yml", "yaml",
+  "ini", "conf", "properties", "sh", "bash", "bat", "ps1", "sql",
+  "java", "py", "rb", "go", "rs", "c", "cc", "cpp", "h", "hpp",
+  "php", "swift", "kt", "dart", "toml", "env", "gitignore"
+]);
+const PREVIEW_OFFICE_EXTENSIONS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"]);
+
+function getFileExtension(fileName) {
+  const name = String(fileName || "").trim().toLowerCase();
+  if (!name) return "";
+  const idx = name.lastIndexOf(".");
+  if (idx < 0 || idx === name.length - 1) return "";
+  return name.slice(idx + 1);
+}
+
+function resetFilePreviewState() {
+  if (filePreviewObjectUrl) {
+    URL.revokeObjectURL(filePreviewObjectUrl);
+    filePreviewObjectUrl = null;
+  }
+  filePreviewDialog.url = "";
+  filePreviewDialog.text = "";
+  filePreviewDialog.kind = "";
+  filePreviewDialog.message = "";
+  filePreviewDialog.isError = false;
+}
+
+function closeFilePreviewDialog() {
+  filePreviewDialog.open = false;
+  resetFilePreviewState();
+}
+
+async function handlePreviewShipmentFile(file) {
+  const id = shipmentFileApiId(file);
+  if (!id) return;
+  const fileName = file.originalFileName || file.fileName || "";
+  resetFilePreviewState();
+  filePreviewDialog.name = fileName;
+  filePreviewDialog.kind = "";
+  filePreviewDialog.message = ui("admin.files.previewLoading");
+  filePreviewDialog.open = true;
+  try {
+    const blob = await fetchAdminShipmentFileBlob(id);
+    const extension = getFileExtension(fileName);
+    if (PREVIEW_PDF_EXTENSIONS.has(extension)) {
+      filePreviewObjectUrl = URL.createObjectURL(blob);
+      filePreviewDialog.url = filePreviewObjectUrl;
+      filePreviewDialog.kind = "pdf";
+      filePreviewDialog.message = ui("admin.files.previewDownloadTip");
+      return;
+    }
+    if (PREVIEW_IMAGE_EXTENSIONS.has(extension)) {
+      filePreviewObjectUrl = URL.createObjectURL(blob);
+      filePreviewDialog.url = filePreviewObjectUrl;
+      filePreviewDialog.kind = "image";
+      filePreviewDialog.message = ui("admin.files.previewDownloadTip");
+      return;
+    }
+    if (PREVIEW_TEXT_EXTENSIONS.has(extension)) {
+      const text = await blob.text();
+      filePreviewDialog.text = text;
+      filePreviewDialog.kind = "text";
+      filePreviewDialog.message = ui("admin.files.previewTextFallback", { name: fileName });
+      return;
+    }
+    if (PREVIEW_OFFICE_EXTENSIONS.has(extension)) {
+      const text = await blob.text();
+      if (text && /[\x09\x0A\x0D\x20-\x7E]/.test(text)) {
+        filePreviewDialog.text = text;
+        filePreviewDialog.kind = "text";
+        filePreviewDialog.message = ui("admin.files.previewTextFallback", { name: fileName });
+      } else {
+        filePreviewDialog.text = ui("admin.files.previewNotSupported");
+        filePreviewDialog.kind = "fallback";
+        filePreviewDialog.message = ui("admin.files.previewDownloadTip");
+      }
+      return;
+    }
+    const fallbackText = await blob.text().catch(() => "");
+    if (fallbackText && fallbackText.length > 0 && /[\x09\x0A\x0D\x20-\x7E]/.test(fallbackText)) {
+      filePreviewDialog.text = fallbackText;
+      filePreviewDialog.kind = "text";
+      filePreviewDialog.message = ui("admin.files.previewTextFallback", { name: fileName });
+    } else {
+      filePreviewDialog.text = ui("admin.files.previewNotSupported");
+      filePreviewDialog.kind = "fallback";
+      filePreviewDialog.message = ui("admin.files.previewDownloadTip");
+    }
+  } catch (error) {
+    resetFilePreviewState();
+    filePreviewDialog.kind = "fallback";
+    filePreviewDialog.text = ui("admin.files.previewNotSupported");
+    filePreviewDialog.isError = true;
+    filePreviewDialog.message = ui("admin.files.previewFailed", {
+      message: error?.message || "error"
+    });
+  }
+}
+
 async function handleDeleteShipmentFile(file) {
   const fileName = file.originalFileName || file.fileName || shipmentFileKey(file);
   if (!window.confirm(ui("admin.files.deleteConfirm", { name: fileName }))) return;
@@ -1263,15 +1441,18 @@ function shipmentFileUploaderDetail(file) {
 
 function shipmentFileVisibilityText(visibility) {
   const key = {
+    SHIPPER: "admin.files.visibilityShipper",
+    CONSIGNEE: "admin.files.visibilityConsignee",
+    OVERSEA_AGENT: "admin.files.visibilityOverseaAgent",
     INTERNAL: "admin.files.visibilityInternal",
     PARTIES: "admin.files.visibilityParties",
     PUBLIC: "admin.files.visibilityPublic"
-  }[String(visibility || "").toUpperCase()] || "admin.files.visibilityParties";
+  }[String(visibility || "").toUpperCase()] || "admin.files.visibilityShipper";
   return ui(key);
 }
 
 function shipmentFileVisibilityClass(visibility) {
-  return String(visibility || "PARTIES").toLowerCase();
+  return String(visibility || "SHIPPER").toLowerCase();
 }
 
 function shipmentFileStatusText(status) {

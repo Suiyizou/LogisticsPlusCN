@@ -121,6 +121,17 @@ export async function downloadAdminShipmentFile(id, fileName = "shipment-file") 
   );
 }
 
+export async function fetchAdminShipmentFileBlob(id) {
+  const path = `/admin/shipment-files/${encodeURIComponent(id)}/download`;
+  const response = await fetchWithApiFallback(path, {}, configuredBase);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const message = payload?.message || payload?.error || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
 export async function deleteAdminShipmentFile(id) {
   return request(`/admin/shipment-files/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

@@ -91,9 +91,6 @@
                     </p>
                   </div>
                   <div class="main-card-header-actions">
-                    <el-button text @click="resetCode" :disabled="mutatingCustomer">
-                      {{ t("customers.resetCode") }}
-                    </el-button>
                     <el-button text @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
                       {{ t("customers.resetPassword") }}
                     </el-button>
@@ -146,7 +143,7 @@
                         <el-select v-model="editForm.partyRole" class="business-select" popper-class="business-select-popper">
                           <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                           <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-                          <el-option value="AGENT" :label="t('customers.roleAgent')" />
+                          <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
                         </el-select>
                       </el-form-item>
                     </el-col>
@@ -157,14 +154,6 @@
                     </el-col>
                   </el-row>
                 </el-form>
-
-                <div class="code-meta-bar">
-                  <span class="code-meta-label">{{ t("customers.codePrefix") }}</span>
-                  <el-tag type="info" effect="plain">
-                    {{ selectedCustomer.customerCodePrefix || t("customers.notAvailable") }}
-                  </el-tag>
-                  <small>{{ t("customers.codePrefixHint") }}</small>
-                </div>
 
                 <el-card class="pending-matches-card" shadow="never">
                   <template #header>
@@ -444,35 +433,26 @@
       </div>
     </section>
 
-    <div v-if="revealedCode" class="customer-code-overlay" role="presentation" @click.self="closeCodeReveal">
-      <section class="customer-code-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.codeDialogTitle')">
-        <span class="customer-code-kicker">{{ t("customers.dialogKickerCredential") }}</span>
-        <h2>{{ t("customers.codeDialogTitle") }}</h2>
-        <p>{{ t("customers.codeDialogDescription", { name: revealedCode.displayName }) }}</p>
-        <dl class="customer-credential-list">
-          <div><dt>{{ t("customers.username") }}</dt><dd>{{ revealedCode.username }}</dd></div>
-          <div v-if="revealedCode.password"><dt>{{ t("customers.initialPassword") }}</dt><dd>{{ revealedCode.password }}</dd></div>
-        </dl>
-        <small>{{ t("customers.codeDialogWarning") }}</small>
-        <div>
-          <button type="button" class="customer-access-primary" @click="copyRevealedCode">
-            {{ codeCopied ? t("customers.copied") : t("customers.copyCode") }}
-          </button>
-          <button type="button" @click="closeCodeReveal">{{ t("customers.confirmStored") }}</button>
-        </div>
-      </section>
-    </div>
-
     <div v-if="createDialogOpen" class="customer-code-overlay" role="presentation" @click.self="createDialogOpen = false">
       <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createTitle')">
         <span class="customer-code-kicker">NEW CUSTOMER</span>
         <h2>{{ t("customers.createTitle") }}</h2>
         <p>{{ t("customers.createDescription") }}</p>
         <form class="customer-dialog-form" @submit.prevent="createCustomer">
-          <label><span>{{ t("customers.customerName") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.customerNamePlaceholder')" required /></label>
+          <label><span>{{ t("customers.createDisplayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.createDisplayNamePlaceholder')" required /></label>
+          <label><span>{{ t("customers.createAccount") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.createAccountPlaceholder')" required /></label>
           <label>
-            <span>{{ t("customers.initialPassword") }}</span>
+            <span>{{ t("customers.createPassword") }}</span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+          </label>
+          <label><span>{{ t("customers.userCode") }}</span><input v-model.trim="createForm.userCode" :placeholder="t('customers.userCodePlaceholder')" required /></label>
+          <label>
+            <span>{{ t("customers.createPartyRole") }}</span>
+            <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
+              <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
+              <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
+              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
+            </el-select>
           </label>
 
           <div class="customer-dialog-actions">
@@ -696,7 +676,6 @@ import {
   fetchBusinessCustomerShipments,
   fetchPendingClientMatches,
   invalidateBusinessShipmentSnapshot,
-  resetBusinessCustomerCode,
   resetBusinessCustomerPassword,
   resolvePendingClientMatch,
   setBusinessShipmentPublication,
@@ -759,10 +738,14 @@ const publishingShipmentId = ref("");
 const resolvingMatchId = ref(0);
 const pageMessage = ref("");
 const messageIsError = ref(false);
-const revealedCode = ref(null);
-const codeCopied = ref(false);
 const bindMode = ref("reference");
-const createForm = reactive({ username: "", password: "" });
+const createForm = reactive({
+  displayName: "",
+  username: "",
+  password: "",
+  userCode: "",
+  partyRole: "SHIPPER"
+});
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
@@ -947,7 +930,6 @@ onMounted(() => {
   void buildShipmentCustomerMap();
 });
 onUnmounted(() => {
-  revealedCode.value = null;
   window.clearTimeout(toastTimer);
 });
 
@@ -1059,17 +1041,19 @@ async function createCustomer() {
   creating.value = true;
   clearMessage();
   try {
-    const password = createForm.password;
     const response = await createBusinessCustomer({
       username: createForm.username,
-      displayName: createForm.username,
-      password,
-      partyRole: "CONSIGNEE"
+      displayName: createForm.displayName,
+      password: createForm.password,
+      partyRole: createForm.partyRole,
+      clientCode: createForm.userCode
     });
     const customer = normalizeCustomer(response);
-    revealCode(response, customer, password);
+    createForm.displayName = "";
     createForm.username = "";
     createForm.password = "";
+    createForm.userCode = "";
+    createForm.partyRole = "SHIPPER";
     createDialogOpen.value = false;
     await loadCustomers(customer.id);
   } catch (error) {
@@ -1089,23 +1073,6 @@ async function saveCustomer() {
     showSuccess("customers.saved");
   } catch (error) {
     showError(error, "customers.saveFailed");
-  } finally {
-    mutatingCustomer.value = false;
-  }
-}
-
-async function resetCode() {
-  if (!selectedCustomer.value || mutatingCustomer.value) return;
-  if (!window.confirm(t("customers.resetConfirm"))) return;
-  mutatingCustomer.value = true;
-  clearMessage();
-  try {
-    const response = await resetBusinessCustomerCode(selectedCustomer.value.id);
-    const customer = normalizeCustomer(response);
-    replaceCustomer(customer);
-    revealCode(response, customer);
-  } catch (error) {
-    showError(error, "customers.resetFailed");
   } finally {
     mutatingCustomer.value = false;
   }
@@ -1547,38 +1514,17 @@ function replaceCustomer(customer) {
   else customers.value.unshift(customer);
 }
 
-function revealCode(response, customer, password = "") {
-  if (!response?.customerCode) return;
-  revealedCode.value = {
-    customerCode: response.customerCode,
-    username: customer.username || "",
-    password,
-    displayName: customer.displayName || customer.username || ""
-  };
-  codeCopied.value = false;
-}
-
-async function copyRevealedCode() {
-  if (!revealedCode.value?.customerCode) return;
-  try {
-    await navigator.clipboard.writeText(revealedCode.value.customerCode);
-    codeCopied.value = true;
-  } catch {
-    codeCopied.value = false;
-  }
-}
-
-function closeCodeReveal() {
-  revealedCode.value = null;
-  codeCopied.value = false;
-}
-
 function customerInitial(customer) {
   return String(customer.displayName || customer.username || "C").slice(0, 1).toUpperCase();
 }
 
 function partyRoleLabel(role) {
-  return t({ AGENT: "customers.roleAgent", SHIPPER: "customers.roleShipper", CONSIGNEE: "customers.roleConsignee" }[role] || "customers.roleShipper");
+  return t({
+    AGENT: "customers.roleAgent",
+    OVERSEA_AGENT: "customers.roleOverseaAgent",
+    SHIPPER: "customers.roleShipper",
+    CONSIGNEE: "customers.roleConsignee"
+  }[role] || "customers.roleShipper");
 }
 
 function statusLabel(status) {

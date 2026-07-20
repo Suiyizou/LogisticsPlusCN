@@ -680,30 +680,6 @@
                 </div>
               </section>
 
-              <section class="panel table-panel tracking-events-panel">
-                <div class="panel-header">
-                  <div>
-                    <span class="panel-icon">◷</span>
-                    <span>
-                      <strong data-i18n="trackingEvents.title">Tracking information</strong>
-                      <small data-i18n="trackingEvents.subtitle">Estimated and confirmed carrier milestones</small>
-                    </span>
-                  </div>
-                </div>
-                <div class="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th data-i18n="trackingEvents.movement">Movement</th>
-                        <th data-i18n="trackingEvents.estimate">Estimate</th>
-                        <th class="actual-column" data-i18n="trackingEvents.actual">Actual</th>
-                      </tr>
-                    </thead>
-                    <tbody id="tracking-events-table-body"></tbody>
-                  </table>
-                </div>
-              </section>
-
               <div class="secondary-grid">
                 <section class="panel table-panel">
                   <div class="panel-header">
@@ -850,8 +826,9 @@
           <label id="related-files-upload-visibility-field" hidden>
             <span data-i18n="files.visibility">Visibility</span>
             <select id="related-files-upload-visibility">
-              <option value="PARTIES" data-i18n="files.visibilityParties">Both parties</option>
-              <option value="INTERNAL" data-i18n="files.visibilityInternal" selected>Internal only</option>
+              <option value="SHIPPER" data-i18n="files.visibilityShipper" selected>Shipper</option>
+              <option value="CONSIGNEE" data-i18n="files.visibilityConsignee">Consignee</option>
+              <option value="OVERSEA_AGENT" data-i18n="files.visibilityOverseaAgent">Overseas agent</option>
             </select>
           </label>
           <label class="related-files-target-customer" id="related-files-target-customer-field" hidden>
@@ -1015,6 +992,23 @@
           <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
         </footer>
       </form>
+    </dialog>
+
+    <dialog class="supplement-dialog file-preview-dialog" id="file-preview-dialog">
+      <header>
+        <span>
+          <small data-i18n="files.previewTitle">File preview</small>
+          <strong id="file-preview-name">—</strong>
+        </span>
+        <button type="button" class="dialog-close" id="file-preview-close" aria-label="Close">×</button>
+      </header>
+      <div class="file-preview-body" id="file-preview-body">
+        <p class="file-preview-message" id="file-preview-message" hidden></p>
+        <div class="file-preview-content" id="file-preview-content"></div>
+      </div>
+      <footer>
+        <button type="button" class="secondary-dialog-button" id="file-preview-cancel" data-i18n="common.close">Close</button>
+      </footer>
     </dialog>
   </body>
 </html>

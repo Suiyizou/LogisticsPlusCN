@@ -345,9 +345,9 @@ const MESSAGES = {
     "files.loginAction": "Sign in to the platform",
     "files.customerSession": "Customer access",
     "files.customerLogout": "Sign out",
-    "files.customerLoginAction": "Sign in with customer code",
+    "files.customerLoginAction": "Sign in with user code",
     "files.customerSignedOut": "Customer session ended. Public shipment tracking remains available.",
-    "files.customerLoginExpired": "Your customer session has expired. Sign in again with your customer code to access assigned files.",
+    "files.customerLoginExpired": "Your customer session has expired. Sign in again with your user code to access assigned files.",
     "files.customerNotAssigned": "This shipment is not assigned to your customer account. Ask your service representative to link the booking or bill number.",
     "files.forbidden": "Your account does not have access to the files for this shipment.",
     "files.logisticsRoleAgent": "Freight agent",
@@ -368,6 +368,9 @@ const MESSAGES = {
     "files.visibility": "Visibility",
     "files.visibilityParties": "Both parties",
     "files.visibilityInternal": "Internal only",
+    "files.visibilityShipper": "Shipper",
+    "files.visibilityConsignee": "Consignee",
+    "files.visibilityOverseaAgent": "Overseas agent",
     "files.targetCustomer": "Share with customer",
     "files.targetPlaceholder": "Select a customer",
     "files.targetRequired": "Select a specific customer before uploading a shared file.",
@@ -395,6 +398,13 @@ const MESSAGES = {
     "files.contextMissing": "This result is not connected to a saved shipment record yet.",
     "files.unknownUploader": "Enterprise user",
     "files.unknownDate": "Upload time not provided",
+    "files.preview": "Preview",
+    "files.previewing": "Loading…",
+    "files.previewTitle": "File preview",
+    "files.previewFailed": "Preview failed: {message}",
+    "files.previewNotSupported": "Preview is not supported for this file type. Please download the file to view it.",
+    "files.previewDownloadTip": "If the preview is incomplete, please download the file to view the original content.",
+    "files.previewTextFallback": "Showing extracted text content for {name}.",
     "result.transportTerms": "Transport terms",
     "result.containerType": "Container type",
     "summary.services": "Selected services",
@@ -552,18 +562,6 @@ const MESSAGES = {
     "routing.actualArrival": "Actual arrival",
     "routing.masterBill": "Master bill",
     "routing.empty": "The carrier did not provide enough data to compose routing legs.",
-    "trackingEvents.title": "Tracking information",
-    "trackingEvents.subtitle": "Estimated and confirmed carrier milestones",
-    "trackingEvents.movement": "Movement",
-    "trackingEvents.estimate": "Estimate",
-    "trackingEvents.actual": "Actual",
-    "trackingEvents.emptyPickup": "Empty container picked up at origin",
-    "trackingEvents.gatedIn": "Container gated in at origin",
-    "trackingEvents.loaded": "Container loaded on vessel",
-    "trackingEvents.departure": "Vessel departure from first load port",
-    "trackingEvents.arrival": "Vessel arrival at final discharge port",
-    "trackingEvents.gatedOut": "Container gated out",
-    "trackingEvents.emptyReturn": "Empty container returned",
     "containers.title": "Container details",
     "containers.count": "{count} containers",
     "containers.number": "Container",
@@ -615,6 +613,9 @@ const MESSAGES = {
     "documents.visibility.shipperConsignee": "Shipper and consignee",
     "documents.visibility.all": "All shipment parties",
     "documents.visibility.internal": "Internal staff only",
+    "documents.visibility.SHIPPER": "Shipper",
+    "documents.visibility.CONSIGNEE": "Consignee",
+    "documents.visibility.OVERSEA_AGENT": "Overseas agent",
     "raw.title": "Decoded source payload",
     "raw.cacheNotice": "The browser cache stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
@@ -741,9 +742,9 @@ const MESSAGES = {
     "files.loginAction": "登录平台",
     "files.customerSession": "客户身份",
     "files.customerLogout": "退出客户登录",
-    "files.customerLoginAction": "使用客户码重新登录",
+    "files.customerLoginAction": "使用用户码重新登录",
     "files.customerSignedOut": "已退出客户登录，仍可继续使用公开货物追踪。",
-    "files.customerLoginExpired": "客户登录已过期，请重新使用客户码登录后查看已关联文件。",
+    "files.customerLoginExpired": "客户登录已过期，请重新使用用户码登录后查看已关联文件。",
     "files.customerNotAssigned": "这票货物尚未关联到您的客户账号，请联系业务员绑定对应订舱号或提单号。",
     "files.forbidden": "当前账号无权查看这票货物的相关文件。",
     "files.logisticsRoleAgent": "货运代理",
@@ -764,6 +765,9 @@ const MESSAGES = {
     "files.visibility": "可见范围",
     "files.visibilityParties": "双方可见",
     "files.visibilityInternal": "仅内部可见",
+    "files.visibilityShipper": "发货人可见",
+    "files.visibilityConsignee": "收货人可见",
+    "files.visibilityOverseaAgent": "海外代理可见",
     "files.targetCustomer": "共享给客户",
     "files.targetPlaceholder": "请选择客户",
     "files.targetRequired": "共享文件前，请先选择一个具体客户。",
@@ -791,6 +795,13 @@ const MESSAGES = {
     "files.contextMissing": "当前结果尚未关联到平台货物记录。",
     "files.unknownUploader": "企业用户",
     "files.unknownDate": "未提供上传时间",
+    "files.preview": "预览",
+    "files.previewing": "加载中…",
+    "files.previewTitle": "文件预览",
+    "files.previewFailed": "预览失败：{message}",
+    "files.previewNotSupported": "此文件类型不支持预览，请下载后查看。",
+    "files.previewDownloadTip": "如预览不完整，请下载文件查看原始内容。",
+    "files.previewTextFallback": "正在以文本方式展示 {name} 的内容。",
     "result.transportTerms": "运输条款",
     "result.containerType": "箱型",
     "summary.services": "已选服务",
@@ -948,18 +959,6 @@ const MESSAGES = {
     "routing.actualArrival": "实际到港",
     "routing.masterBill": "主提单",
     "routing.empty": "船司未提供可组成分段运输的数据。",
-    "trackingEvents.title": "TRACKING 信息",
-    "trackingEvents.subtitle": "预计时间与实际发生时间",
-    "trackingEvents.movement": "运输节点",
-    "trackingEvents.estimate": "预计时间",
-    "trackingEvents.actual": "实际发生时间",
-    "trackingEvents.emptyPickup": "提空箱时间",
-    "trackingEvents.gatedIn": "进港时间",
-    "trackingEvents.loaded": "装船时间",
-    "trackingEvents.departure": "开船时间",
-    "trackingEvents.arrival": "到港时间",
-    "trackingEvents.gatedOut": "提箱时间",
-    "trackingEvents.emptyReturn": "还空箱时间",
     "containers.title": "集装箱明细",
     "containers.count": "{count} 个箱",
     "containers.number": "箱号",
@@ -1010,6 +1009,9 @@ const MESSAGES = {
     "documents.visibility.consignee": "收货人可见",
     "documents.visibility.shipperConsignee": "发货人和收货人可见",
     "documents.visibility.all": "全部票单参与方可见",
+    "documents.visibility.SHIPPER": "发货人可见",
+    "documents.visibility.CONSIGNEE": "收货人可见",
+    "documents.visibility.OVERSEA_AGENT": "海外代理可见",
     "documents.visibility.internal": "仅内部员工可见",
     "raw.title": "原始解码结果",
     "raw.cacheNotice": "浏览器缓存仅保存统一快照，不保存船司原始报文。",
@@ -1096,7 +1098,6 @@ const elements = Object.fromEntries(
     "reference-information",
     "routing-count",
     "routing-table-body",
-    "tracking-events-table-body",
     "container-count",
     "container-table-body",
     "document-filled-count",
@@ -1145,6 +1146,7 @@ let relatedFilesCloseTimer = null;
 let relatedFilesCategoryOpen = false;
 let trackingAccountMenuOpen = false;
 let customerAssignedHistory = [];
+let internalTrackedHistory = [];
 let relatedFilesExpiredSessionKind = "";
 let platformPrincipalAwaitingRefresh = false;
 let customerPrincipalAwaitingRefresh = false;
@@ -1383,7 +1385,7 @@ function resetRelatedFilesSessionState({ expiredKind = "" } = {}) {
   setRelatedFilesCategory("CARGO_DETAIL");
   setRelatedFilesCategoryOpen(false);
   setTrackingAccountMenuOpen(false);
-  relatedFilesUploadVisibility.value = "INTERNAL";
+  relatedFilesUploadVisibility.value = "SHIPPER";
   setRelatedFilesUploadMessage();
   closeRelatedFilesDrawer({ immediate: true });
   clearSensitiveRelatedFilesDom();
@@ -1737,15 +1739,18 @@ function setRelatedFilesCategoryOpen(open) {
 }
 
 function fileVisibilityLabel(value) {
-  return t(
-    String(value ?? "").toUpperCase() === "INTERNAL"
-      ? "files.visibilityInternal"
-      : "files.visibilityParties"
-  );
+  const key = {
+    SHIPPER: "files.visibilityShipper",
+    CONSIGNEE: "files.visibilityConsignee",
+    OVERSEA_AGENT: "files.visibilityOverseaAgent",
+    INTERNAL: "files.visibilityInternal",
+    PARTIES: "files.visibilityParties"
+  }[String(value ?? "").toUpperCase()];
+  return t(key || "files.visibilityShipper");
 }
 
 function normalizeRelatedFileItem(item) {
-  const rawVisibility = String(item?.visibility ?? "PARTIES").toUpperCase();
+  const rawVisibility = String(item?.visibility ?? "SHIPPER").toUpperCase();
   return {
     ...item,
     id: item?.id ?? item?.publicId ?? item?.fileId,
@@ -1843,28 +1848,15 @@ function setRelatedFilesUploadMessage(message = "", variant = "") {
 }
 
 function relatedFilesUploadTargetMissing(session = readFileSession()) {
-  return (
-    session.kind === "INTERNAL" &&
-    relatedFilesUploadVisibility.value === "PARTIES" &&
-    (!canAssignRelatedFilesCustomer(session) || !relatedFilesSelectedTargetCustomerId)
-  );
+  return false;
 }
 
 function updateRelatedFilesSelection() {
   const session = readFileSession();
   const files = Array.from(relatedFilesUploadInput.files ?? []);
   const totalSize = files.reduce((total, file) => total + Number(file.size ?? 0), 0);
-  const targetMissing = relatedFilesUploadTargetMissing(session);
-  const targetFieldVisible =
-    canAssignRelatedFilesCustomer(session) &&
-    relatedFilesUploadVisibility.value === "PARTIES";
-  relatedFilesTargetCustomerField.hidden = !targetFieldVisible;
-  relatedFilesTargetCustomerHint.hidden = !targetFieldVisible || !targetMissing;
-  relatedFilesTargetCustomerHint.textContent = t(
-    relatedFilesAssignableCustomers.length > 0
-      ? "files.targetRequired"
-      : "files.targetUnavailable"
-  );
+  relatedFilesTargetCustomerField.hidden = true;
+  relatedFilesTargetCustomerHint.hidden = true;
   relatedFilesSelection.textContent =
     files.length > 0
       ? t("files.selection", { count: files.length, size: formatFileSize(totalSize) })
@@ -1873,8 +1865,7 @@ function updateRelatedFilesSelection() {
   relatedFilesUploadButton.disabled =
     relatedFilesUploading ||
     files.length === 0 ||
-    !relatedFilesShipmentId ||
-    targetMissing;
+    !relatedFilesShipmentId;
 }
 
 function relatedFileActionButton(labelKey, className, handler) {
@@ -1905,10 +1896,7 @@ function relatedFileTargetDisplayName(file) {
 function relatedFileSharingLabel(file, session = readFileSession()) {
   if (file.visibility === "INTERNAL") return t("files.visibilityInternal");
   if (session.kind === "CUSTOMER") return t("files.sharedWithSelf");
-  const targetName = relatedFileTargetDisplayName(file);
-  return targetName
-    ? t("files.sharedWith", { name: targetName })
-    : t("files.customerSelectionRequired");
+  return fileVisibilityLabel(file.visibility);
 }
 
 function createRelatedFileItem(file) {
@@ -1946,87 +1934,26 @@ function createRelatedFileItem(file) {
   badges.append(sharing);
 
   if (file.canChangeVisibility && canManageFileVisibility(session)) {
-    const canAssignCustomer = canAssignRelatedFilesCustomer(session);
     const editor = document.createElement("div");
     editor.className = "related-file-sharing-editor";
     const visibility = document.createElement("select");
     visibility.className = "related-file-visibility-select";
     visibility.setAttribute("aria-label", t("files.visibility"));
-    for (const value of ["PARTIES", "INTERNAL"]) {
+    for (const value of ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"]) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = fileVisibilityLabel(value);
-      option.disabled =
-        value === "PARTIES" &&
-        !canAssignCustomer &&
-        file.visibility !== "PARTIES";
       visibility.append(option);
     }
-    visibility.value = file.visibility === "INTERNAL" ? "INTERNAL" : "PARTIES";
-
-    const targetCustomer = document.createElement("select");
-    targetCustomer.className = "related-file-target-select";
-    targetCustomer.setAttribute("aria-label", t("files.targetCustomer"));
-    const targetPlaceholder = document.createElement("option");
-    targetPlaceholder.value = "";
-    targetPlaceholder.textContent = t("files.targetPlaceholder");
-    targetCustomer.append(targetPlaceholder);
-    for (const customer of relatedFilesAssignableCustomers) {
-      const option = document.createElement("option");
-      option.value = customer.id;
-      option.textContent = relatedFilesCustomerOptionLabel(customer);
-      targetCustomer.append(option);
-    }
-    if (
-      file.targetCustomerId &&
-      !relatedFilesAssignableCustomers.some(
-        (customer) => customer.id === file.targetCustomerId
-      )
-    ) {
-      const currentTarget = document.createElement("option");
-      currentTarget.value = file.targetCustomerId;
-      currentTarget.textContent =
-        file.targetCustomerDisplayName || t("files.sharedWithCustomer");
-      targetCustomer.append(currentTarget);
-    }
-    targetCustomer.value = file.targetCustomerId || "";
-
-    const editorHint = document.createElement("span");
-    editorHint.className = "related-file-sharing-hint";
-    editorHint.textContent = t(
-      relatedFilesAssignableCustomers.length > 0
-        ? "files.targetRequiredForFile"
-        : "files.targetUnavailable"
+    const knownVisibility = ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"].includes(
+      String(file.visibility ?? "").toUpperCase()
     );
+    visibility.value = knownVisibility ? file.visibility : "SHIPPER";
 
-    const syncEditor = () => {
-      const sharingWithCustomer = visibility.value === "PARTIES";
-      targetCustomer.hidden = !canAssignCustomer || !sharingWithCustomer;
-      editorHint.hidden =
-        !canAssignCustomer ||
-        !sharingWithCustomer ||
-        Boolean(targetCustomer.value);
-      editor.classList.toggle(
-        "needs-target",
-        canAssignCustomer && sharingWithCustomer && !targetCustomer.value
-      );
-    };
-
-    const persistSharing = async (nextVisibility, nextTargetCustomerId) => {
+    const persistVisibility = async (nextVisibility) => {
       if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-      if (
-        nextVisibility === "PARTIES" &&
-        (!canAssignCustomer || !nextTargetCustomerId)
-      ) {
-        syncEditor();
-        targetCustomer.focus({ preventScroll: true });
-        return;
-      }
       const previousVisibility = file.visibility;
-      const previousTargetCustomerId = file.targetCustomerId;
-      const previousTargetCustomerDisplayName = file.targetCustomerDisplayName;
       visibility.disabled = true;
-      targetCustomer.disabled = true;
       try {
         await requestRelatedFilesApi(
           shipmentFilePath(session, file.id, "/visibility"),
@@ -2034,32 +1961,22 @@ function createRelatedFileItem(file) {
             method: "PATCH",
             body: {
               visibility: nextVisibility,
-              targetCustomerId:
-                nextVisibility === "PARTIES" ? nextTargetCustomerId : null
+              targetCustomerId: null
             },
             session
           }
         );
         if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
         file.visibility = nextVisibility;
-        file.targetCustomerId =
-          nextVisibility === "PARTIES" ? String(nextTargetCustomerId) : "";
-        file.targetCustomerDisplayName =
-          nextVisibility === "PARTIES"
-            ? relatedFileTargetCustomer(file)?.displayName ||
-              relatedFileTargetCustomer(file)?.username ||
-              file.targetCustomerDisplayName
-            : "";
+        file.targetCustomerId = "";
+        file.targetCustomerDisplayName = "";
         sharing.className = `related-file-sharing is-${file.visibility.toLowerCase()}`;
         sharing.textContent = relatedFileSharingLabel(file, session);
         setRelatedFilesUploadMessage();
       } catch (error) {
         if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
         file.visibility = previousVisibility;
-        file.targetCustomerId = previousTargetCustomerId;
-        file.targetCustomerDisplayName = previousTargetCustomerDisplayName;
-        visibility.value = previousVisibility;
-        targetCustomer.value = previousTargetCustomerId || "";
+        visibility.value = previousVisibility || "SHIPPER";
         setRelatedFilesUploadMessage(
           t("files.visibilityUpdateFailed", { message: error?.message || t("error.generic") }),
           "error"
@@ -2067,37 +1984,15 @@ function createRelatedFileItem(file) {
       } finally {
         if (isCurrentRelatedFilesSession(sessionFingerprint)) {
           visibility.disabled = false;
-          targetCustomer.disabled = false;
-          syncEditor();
         }
       }
     };
 
     visibility.addEventListener("change", () => {
       if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-      if (visibility.value === "INTERNAL") {
-        targetCustomer.value = "";
-        syncEditor();
-        void persistSharing("INTERNAL", null);
-        return;
-      }
-      syncEditor();
-      if (targetCustomer.value) {
-        void persistSharing("PARTIES", targetCustomer.value);
-      } else {
-        targetCustomer.focus({ preventScroll: true });
-      }
-    });
-    targetCustomer.addEventListener("change", () => {
-      if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-      syncEditor();
-      if (visibility.value === "PARTIES" && targetCustomer.value) {
-        void persistSharing("PARTIES", targetCustomer.value);
-      }
+      void persistVisibility(visibility.value);
     });
     editor.append(visibility);
-    if (canAssignCustomer) editor.append(targetCustomer, editorHint);
-    syncEditor();
     badges.append(editor);
   }
   content.append(name, metadata, badges);
@@ -2105,6 +2000,9 @@ function createRelatedFileItem(file) {
   const actions = document.createElement("div");
   actions.className = "related-file-actions";
   actions.append(
+    relatedFileActionButton("files.preview", "related-file-preview", (event) => {
+      void previewRelatedFile(file, event.currentTarget);
+    }),
     relatedFileActionButton("files.download", "related-file-download", (event) => {
       void downloadRelatedFile(file, event.currentTarget);
     })
@@ -2134,20 +2032,12 @@ function renderRelatedFilesDrawer() {
 
   if (
     session.kind !== "INTERNAL" ||
-    !canManageVisibility ||
-    (relatedFilesUploadVisibility.value === "PARTIES" && !canAssignCustomer)
+    !canManageVisibility
   ) {
-    relatedFilesUploadVisibility.value = "INTERNAL";
-    relatedFilesSelectedTargetCustomerId = "";
-  }
-  if (relatedFilesUploadVisibility.value === "INTERNAL") {
+    relatedFilesUploadVisibility.value = "SHIPPER";
     relatedFilesSelectedTargetCustomerId = "";
   }
   renderRelatedFilesTargetOptions();
-  const partiesOption = relatedFilesUploadVisibility.querySelector(
-    'option[value="PARTIES"]'
-  );
-  if (partiesOption) partiesOption.disabled = !canAssignCustomer;
 
   relatedFilesShipmentReference.textContent = relatedFilesShipmentNumber || "—";
   relatedFilesButton.hidden = !authenticated;
@@ -2335,19 +2225,9 @@ async function uploadRelatedFiles() {
 
   const internalVisibility =
     canManageFileVisibility(session)
-      ? relatedFilesUploadVisibility.value || "INTERNAL"
-      : "INTERNAL";
+      ? relatedFilesUploadVisibility.value || "SHIPPER"
+      : "SHIPPER";
   const targetCustomerId = relatedFilesSelectedTargetCustomerId;
-  if (
-    session.kind === "INTERNAL" &&
-    internalVisibility === "PARTIES" &&
-    (!canAssignRelatedFilesCustomer(session) || !targetCustomerId)
-  ) {
-    setRelatedFilesUploadMessage(t("files.targetRequired"), "error");
-    updateRelatedFilesSelection();
-    relatedFilesTargetCustomer.focus({ preventScroll: true });
-    return;
-  }
 
   const sessionFingerprint = relatedFilesSessionFingerprint;
   relatedFilesUploading = true;
@@ -2358,9 +2238,6 @@ async function uploadRelatedFiles() {
   formData.append("category", relatedFilesCategory.value || "OTHER");
   if (session.kind === "INTERNAL") {
     formData.append("visibility", internalVisibility);
-    if (internalVisibility === "PARTIES") {
-      formData.append("targetCustomerId", targetCustomerId);
-    }
   }
 
   try {
@@ -2438,6 +2315,221 @@ async function downloadRelatedFile(file, button) {
       button.textContent = previousLabel;
     }
   }
+}
+
+const PREVIEW_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"]);
+const PREVIEW_PDF_EXTENSIONS = new Set(["pdf"]);
+const PREVIEW_TEXT_EXTENSIONS = new Set([
+  "txt", "csv", "log", "json", "xml", "md", "markdown", "html", "htm",
+  "js", "ts", "jsx", "tsx", "css", "scss", "less", "yml", "yaml",
+  "ini", "conf", "properties", "sh", "bash", "bat", "ps1", "sql",
+  "java", "py", "rb", "go", "rs", "c", "cc", "cpp", "h", "hpp",
+  "php", "swift", "kt", "dart", "toml", "env", "gitignore"
+]);
+const PREVIEW_OFFICE_EXTENSIONS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"]);
+
+const filePreviewDialog = document.querySelector("#file-preview-dialog");
+const filePreviewName = document.querySelector("#file-preview-name");
+const filePreviewBody = document.querySelector("#file-preview-body");
+const filePreviewMessage = document.querySelector("#file-preview-message");
+const filePreviewContent = document.querySelector("#file-preview-content");
+const filePreviewClose = document.querySelector("#file-preview-close");
+const filePreviewCancel = document.querySelector("#file-preview-cancel");
+let filePreviewObjectUrls = [];
+
+function getFileExtension(fileName) {
+  const name = String(fileName || "").trim().toLowerCase();
+  if (!name) return "";
+  const idx = name.lastIndexOf(".");
+  if (idx < 0 || idx === name.length - 1) return "";
+  return name.slice(idx + 1);
+}
+
+function clearFilePreviewContent() {
+  filePreviewContent.replaceChildren();
+  filePreviewMessage.hidden = true;
+  filePreviewMessage.textContent = "";
+  filePreviewMessage.classList.remove("error");
+  for (const url of filePreviewObjectUrls) {
+    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+  }
+  filePreviewObjectUrls = [];
+}
+
+function setFilePreviewMessage(text, isError = false) {
+  if (!text) {
+    filePreviewMessage.hidden = true;
+    filePreviewMessage.textContent = "";
+    filePreviewMessage.classList.remove("error");
+    return;
+  }
+  filePreviewMessage.textContent = text;
+  filePreviewMessage.classList.toggle("error", isError);
+  filePreviewMessage.hidden = false;
+}
+
+function closeFilePreviewDialog() {
+  if (typeof filePreviewDialog?.close === "function") {
+    filePreviewDialog.close();
+  }
+  clearFilePreviewContent();
+}
+
+function renderFilePreviewFallback(messageKey, messageParams) {
+  const fallback = document.createElement("p");
+  fallback.className = "file-preview-fallback";
+  fallback.textContent = t(messageKey, messageParams);
+  filePreviewContent.replaceChildren(fallback);
+}
+
+function renderFilePreviewText(text, { asTextarea = false } = {}) {
+  if (asTextarea) {
+    const textarea = document.createElement("textarea");
+    textarea.className = "file-preview-textarea";
+    textarea.value = text;
+    textarea.readOnly = true;
+    filePreviewContent.replaceChildren(textarea);
+    return;
+  }
+  const pre = document.createElement("pre");
+  pre.className = "file-preview-text";
+  pre.textContent = text;
+  filePreviewContent.replaceChildren(pre);
+}
+
+function renderFilePreviewBlob(blob, extension) {
+  const url = URL.createObjectURL(blob);
+  filePreviewObjectUrls.push(url);
+  if (PREVIEW_PDF_EXTENSIONS.has(extension)) {
+    const iframe = document.createElement("iframe");
+    iframe.src = url;
+    iframe.title = filePreviewName.textContent || t("files.previewTitle");
+    filePreviewContent.replaceChildren(iframe);
+    return;
+  }
+  if (PREVIEW_IMAGE_EXTENSIONS.has(extension)) {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = filePreviewName.textContent || t("files.previewTitle");
+    filePreviewContent.replaceChildren(img);
+    return;
+  }
+  renderFilePreviewFallback("files.previewNotSupported");
+}
+
+async function readBlobAsText(blob) {
+  try {
+    return await blob.text();
+  } catch {
+    return null;
+  }
+}
+
+async function previewRelatedFile(file, button) {
+  const session = readFileSession();
+  synchronizeRelatedFilesSession(session);
+  if (!file?.id || !session.token) return;
+  const sessionFingerprint = relatedFilesSessionFingerprint;
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = t("files.previewing");
+  clearFilePreviewContent();
+  filePreviewName.textContent = file.originalFileName || t("files.previewTitle");
+  if (typeof filePreviewDialog?.showModal === "function") {
+    filePreviewDialog.showModal();
+  }
+  setFilePreviewMessage(t("files.previewing"));
+  try {
+    const response = await fetch(
+      shipmentFilePath(session, file.id, "/download"),
+      { headers: { ...fileAuthHeaders(session) } }
+    );
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      closeFilePreviewDialog();
+      return;
+    }
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(
+        response.status === 403
+          ? session.kind === "CUSTOMER"
+            ? t("files.customerNotAssigned")
+            : t("files.forbidden")
+          : relatedFilesApiMessage(payload, response)
+      );
+    }
+    const extension = getFileExtension(file.originalFileName);
+    const blob = await response.blob();
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+
+    clearFilePreviewContent();
+
+    if (PREVIEW_PDF_EXTENSIONS.has(extension) || PREVIEW_IMAGE_EXTENSIONS.has(extension)) {
+      renderFilePreviewBlob(blob, extension);
+      setFilePreviewMessage(t("files.previewDownloadTip"));
+      return;
+    }
+
+    if (PREVIEW_TEXT_EXTENSIONS.has(extension)) {
+      const text = await readBlobAsText(blob);
+      if (text != null) {
+        renderFilePreviewText(text, { asTextarea: false });
+        setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
+      } else {
+        renderFilePreviewFallback("files.previewNotSupported");
+      }
+      return;
+    }
+
+    if (PREVIEW_OFFICE_EXTENSIONS.has(extension)) {
+      const text = await readBlobAsText(blob);
+      if (text != null && /[\x09\x0A\x0D\x20-\x7E]/.test(text)) {
+        renderFilePreviewText(text, { asTextarea: true });
+        setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
+      } else {
+        renderFilePreviewFallback("files.previewNotSupported");
+        setFilePreviewMessage(t("files.previewDownloadTip"));
+      }
+      return;
+    }
+
+    const text = await readBlobAsText(blob);
+    if (text != null && text.length > 0 && /[\x09\x0A\x0D\x20-\x7E]/.test(text)) {
+      renderFilePreviewText(text, { asTextarea: true });
+      setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
+    } else {
+      renderFilePreviewFallback("files.previewNotSupported");
+      setFilePreviewMessage(t("files.previewDownloadTip"));
+    }
+  } catch (error) {
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    clearFilePreviewContent();
+    renderFilePreviewFallback("files.previewNotSupported");
+    setFilePreviewMessage(
+      t("files.previewFailed", { message: error?.message || t("error.generic") }),
+      true
+    );
+  } finally {
+    if (isCurrentRelatedFilesSession(sessionFingerprint)) {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }
+  }
+}
+
+if (filePreviewClose) {
+  filePreviewClose.addEventListener("click", closeFilePreviewDialog);
+}
+if (filePreviewCancel) {
+  filePreviewCancel.addEventListener("click", closeFilePreviewDialog);
+}
+if (filePreviewDialog) {
+  filePreviewDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeFilePreviewDialog();
+  });
 }
 
 async function deleteRelatedFile(file) {
@@ -2727,7 +2819,7 @@ function documentRecord(code, metadata = documentMetadataForSnapshot(currentPayl
     fileName: uploaded.originalFileName,
     fileSize: uploaded.sizeBytes,
     uploader: definition?.uploaders?.[0] ?? "forwarder",
-    visibility: uploaded.visibility === "PARTIES" ? "all" : "internal",
+    visibility: uploaded.visibility,
     updatedAt: uploaded.uploadedAt,
     relatedFile: uploaded
   };
@@ -2777,7 +2869,9 @@ function openDocumentEditor(code) {
     existing?.uploader ?? definition.uploaders[0]
   );
   const session = readFileSession();
-  const visibilityOptions = session.kind === "CUSTOMER" ? ["all"] : ["all", "internal"];
+  const visibilityOptions = session.kind === "CUSTOMER"
+    ? ["SHIPPER"]
+    : ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"];
   populateSelect(
     document.querySelector("#document-visibility-input"),
     visibilityOptions,
@@ -3016,7 +3110,9 @@ function loadSnapshot(query) {
 }
 
 function readHistory() {
-  if (readFileSession().kind === "CUSTOMER") return customerAssignedHistory;
+  const session = readFileSession();
+  if (session.kind === "CUSTOMER") return customerAssignedHistory;
+  if (session.kind === "INTERNAL") return internalTrackedHistory;
   const records = readCacheIndex()
     .map((key) => ({ key, entry: readCacheEntry(key) }))
     .filter((record) => record.entry)
@@ -3101,6 +3197,71 @@ async function loadCustomerAssignedHistory() {
     customerAssignedHistory = [];
     renderHistory();
     showError(customerFacingTrackingError(), "error");
+  }
+}
+
+async function loadInternalTrackedHistory() {
+  const session = readFileSession();
+  if (session.kind !== "INTERNAL" || !session.token) {
+    internalTrackedHistory = [];
+    return;
+  }
+  try {
+    const response = await fetch("/api/business/customers/available-shipments", {
+      headers: { "X-Auth-Token": session.token }
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      internalTrackedHistory = [];
+      renderHistory();
+      return;
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    internalTrackedHistory = items
+      .filter((item) => item?.referenceNo || item?.shipmentId)
+      .map((item) => {
+        const carrier = String(item.carrier || "COSCO").toUpperCase();
+        const referenceType = String(item.referenceType || "BILLOFLADING").toUpperCase();
+        const referenceNo = String(item.referenceNo || "").trim();
+        const trackingStatus = String(item.trackingStatus || "").trim();
+        const lastTrackedAt = item.lastTrackedAt || item.updatedAt || new Date().toISOString();
+        const snapshot = {
+          tracking: {
+            number: referenceNo,
+            type: referenceType,
+            carrier
+          },
+          summary: {
+            latestEvent: trackingStatus
+              ? { name: trackingStatus, occurredAt: lastTrackedAt, location: "" }
+              : null,
+            origin: {},
+            destination: {}
+          },
+          route: [],
+          keyTimes: {},
+          routingLegs: [],
+          containers: []
+        };
+        return {
+          query: normalizeQuery({
+            carrier,
+            channel: "AUTO",
+            type: referenceType,
+            number: referenceNo
+          }),
+          snapshot,
+          savedAt: lastTrackedAt,
+          shipmentId: item.shipmentId,
+          internalTracked: true
+        };
+      });
+    renderHistory();
+  } catch {
+    internalTrackedHistory = [];
+    renderHistory();
   }
 }
 
@@ -3969,94 +4130,6 @@ function renderReferences(references) {
   }
 }
 
-function trackingEventCandidates(snapshot) {
-  const candidates = [];
-  const add = (event, source = "") => {
-    if (!event || typeof event !== "object") return;
-    const name =
-      event.eventName ?? event.name ?? event.event ?? event.status ?? event.description ?? source;
-    if (!name) return;
-    candidates.push({
-      name: String(name),
-      estimated:
-        event.estimatedEventDateTime ??
-        event.estimateDateTime ??
-        event.estimatedTime ??
-        event.estimate ??
-        null,
-      actual:
-        event.actualEventDateTime ??
-        event.occurredAt ??
-        event.actualTime ??
-        event.eventTime ??
-        event.dateTime ??
-        null
-    });
-  };
-
-  for (const status of snapshot.transportStatuses ?? []) add(status);
-  for (const container of snapshot.containers ?? []) {
-    for (const milestone of container.milestones ?? []) add(milestone);
-  }
-  for (const node of snapshot.route ?? []) {
-    add({
-      eventName: node.event ?? node.locationType,
-      estimatedTime: node.estimatedTime,
-      actualTime: node.actualTime
-    });
-  }
-  return candidates;
-}
-
-function renderTrackingEvents(snapshot) {
-  const candidates = trackingEventCandidates(snapshot);
-  const firstMatching = (patterns) =>
-    candidates.find((candidate) => {
-      const name = candidate.name.toLowerCase();
-      return patterns.some((pattern) => pattern.test(name));
-    }) ?? {};
-  const oceanLegs = (snapshot.routingLegs ?? []).filter(
-    (leg) => String(leg?.mode ?? "").toUpperCase() === "SEA"
-  );
-  const departureLeg = oceanLegs[0] ?? snapshot.routingLegs?.[0] ?? {};
-  const arrivalLeg = oceanLegs.at(-1) ?? snapshot.routingLegs?.at(-1) ?? {};
-  const rows = [
-    ["trackingEvents.emptyPickup", [/empty.*(pick|gate out)/, /picked up.*origin/]],
-    ["trackingEvents.gatedIn", [/gat(e|ed).*in.*origin/, /gate in.*origin/]],
-    ["trackingEvents.loaded", [/load(ed)?.*vessel/, /vessel.*load/]],
-    ["trackingEvents.departure", [/vessel.*depart/, /depart.*load port/]],
-    ["trackingEvents.arrival", [/vessel.*arriv/, /arriv.*discharge port/]],
-    ["trackingEvents.gatedOut", [/gat(e|ed).*out/, /container.*pick(ed)? up.*destination/]],
-    ["trackingEvents.emptyReturn", [/empty.*return/]]
-  ].map(([labelKey, patterns]) => ({ labelKey, ...firstMatching(patterns) }));
-
-  const departure = rows[3];
-  departure.estimated ??= departureLeg.estimatedDeparture ?? null;
-  departure.actual ??= departureLeg.actualDeparture ?? snapshot.keyTimes?.actualDeparture?.time ?? null;
-  const arrival = rows[4];
-  arrival.estimated ??=
-    arrivalLeg.estimatedArrival ?? snapshot.keyTimes?.estimatedDelivery?.time ?? null;
-  arrival.actual ??= arrivalLeg.actualArrival ?? snapshot.keyTimes?.actualArrival?.time ?? null;
-
-  const body = elements["tracking-events-table-body"];
-  const visibleRows = readFileSession().kind === "CUSTOMER"
-    ? rows.filter((event) => event.estimated || event.actual)
-    : rows;
-  body.closest(".tracking-events-panel").hidden = visibleRows.length === 0;
-  body.replaceChildren();
-  for (const event of visibleRows) {
-    const row = document.createElement("tr");
-    appendCell(row, t(event.labelKey), "tracking-movement-cell");
-    appendCell(row, formatDateTime(event.estimated), event.estimated ? "" : "pending-time");
-    appendCell(
-      row,
-      formatDateTime(event.actual),
-      `actual-time${event.actual ? "" : " pending-time"}`
-    );
-    body.append(row);
-  }
-}
-
 function renderContainerMilestones(cell, container) {
   const wrapper = document.createElement("div");
   wrapper.className = "container-milestone-detail";
@@ -4295,7 +4368,6 @@ function renderResult(payload) {
   renderReferences(snapshot.references ?? {});
   renderBusinessReferences(snapshot);
   renderExtraInformation(snapshot);
-  renderTrackingEvents(snapshot);
   renderContainers(snapshot.containers ?? []);
   renderDocumentDrawer(snapshot);
   elements["raw-json"].textContent = payload.raw
@@ -4695,6 +4767,7 @@ function renderHistory() {
     });
 
     if (readFileSession().kind === "CUSTOMER") item.append(toggle, details);
+    else if (entry.internalTracked) item.append(toggle, details);
     else item.append(toggle, deleteButton, details);
     historyTableBody.append(item);
   }
@@ -5487,10 +5560,6 @@ relatedFilesUploadInput.addEventListener("change", () => {
   updateRelatedFilesSelection();
 });
 relatedFilesUploadVisibility.addEventListener("change", () => {
-  if (relatedFilesUploadVisibility.value === "INTERNAL") {
-    relatedFilesSelectedTargetCustomerId = "";
-    relatedFilesTargetCustomer.value = "";
-  }
   setRelatedFilesUploadMessage();
   updateRelatedFilesSelection();
 });
@@ -5557,12 +5626,14 @@ window.addEventListener("storage", (event) => {
       platformPrincipalAwaitingRefresh = Boolean(
         event.newValue && event.newValue !== event.oldValue
       );
+      void loadInternalTrackedHistory();
     } else if (event.key === PLATFORM_AUTH_USER_KEY) {
       platformPrincipalAwaitingRefresh = false;
     } else if (event.key === CUSTOMER_AUTH_TOKEN_KEY) {
       customerPrincipalAwaitingRefresh = Boolean(
         event.newValue && event.newValue !== event.oldValue
       );
+      void loadCustomerAssignedHistory();
     } else if (event.key === CUSTOMER_AUTH_SESSION_KEY) {
       customerPrincipalAwaitingRefresh = false;
     }
@@ -5668,7 +5739,7 @@ documentEditorForm.addEventListener("submit", async (event) => {
     formData.append("category", code);
     if (session.kind === "INTERNAL") {
       const selectedVisibility = document.querySelector("#document-visibility-input").value;
-      formData.append("visibility", selectedVisibility === "all" ? "PARTIES" : "INTERNAL");
+      formData.append("visibility", selectedVisibility);
     }
     try {
       await requestRelatedFilesApi(
@@ -5737,6 +5808,7 @@ batchState = restoreBatchState();
 if (batchState) persistBatchState();
 applyLanguage(currentLanguage, { persist: false });
 void loadCustomerAssignedHistory();
+void loadInternalTrackedHistory();
 
 const initial = new URLSearchParams(window.location.search);
 const initialNumber = initial.get("number");
