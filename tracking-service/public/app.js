@@ -1549,13 +1549,16 @@ function renderTrackingAccount(session = readFileSession()) {
   const workbenchLink = document.querySelector("#account-workbench-link");
   const welcomeMessage = document.querySelector("#welcome-message");
   const welcomeUsername = document.querySelector("#welcome-username");
+  if (!portalReturnLink || !trackingAccount || !trackingAccountName || !trackingAccountRole || !trackingAccountMark) {
+    return;
+  }
   const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
   const destinationKey = returnsToWorkbenches ? "nav.portal" : "nav.home";
   portalReturnLink.href = returnsToWorkbenches ? "/workbenches" : "/";
   portalReturnLink.setAttribute("aria-label", t(destinationKey));
-  portalReturnLabel.textContent = t(destinationKey);
+  if (portalReturnLabel) portalReturnLabel.textContent = t(destinationKey);
 
   const authenticated = Boolean(session.token);
   const isCustomer = session.kind === "CUSTOMER";
@@ -1593,11 +1596,11 @@ function renderTrackingAccount(session = readFileSession()) {
     const principal = session.principal ?? {};
     const username = principal.username ?? principal.loginName ?? "—";
     const code = principal.customerCodePrefix ?? principal.codePrefix ?? principal.customerCode ?? t("profile.verified");
-    document.querySelector("#customer-profile-name").textContent = name;
-    document.querySelector("#customer-profile-username").textContent = username;
-    document.querySelector("#customer-profile-code").textContent = code;
-    document.querySelector("#customer-profile-role").textContent = fileSessionRoleLabel(session);
-    document.querySelector("#customer-profile-avatar").textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
+    document.querySelector("#customer-profile-name")?.textContent = name;
+    document.querySelector("#customer-profile-username")?.textContent = username;
+    document.querySelector("#customer-profile-code")?.textContent = code;
+    document.querySelector("#customer-profile-role")?.textContent = fileSessionRoleLabel(session);
+    document.querySelector("#customer-profile-avatar")?.textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
   }
 }
 
@@ -5100,6 +5103,7 @@ function showView(name, { updateLocation = true } = {}) {
   const nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
   if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") return showView("overview", { updateLocation });
   const incoming = document.querySelector(`[data-view="${nextView}"]`);
+  if (!incoming) return Promise.resolve();
   const outgoing = document.querySelector(".app-view:not([hidden])");
   const transitionId = ++viewTransitionSequence;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -5896,8 +5900,19 @@ if (initialNumber) {
 renderTrackingAccount();
 // Re-render account after a short delay to catch any late session writes
 // when the user is redirected from the workbench login flow.
-window.setTimeout(() => renderTrackingAccount(readFileSession()), 120);
 window.setTimeout(() => renderTrackingAccount(readFileSession()), 500);
+
+// If another tab/window writes the session, update the header immediately.
+window.addEventListener("storage", (event) => {
+  if (
+    event.key === PLATFORM_AUTH_TOKEN_KEY ||
+    event.key === PLATFORM_AUTH_USER_KEY ||
+    event.key === CUSTOMER_AUTH_TOKEN_KEY ||
+    event.key === CUSTOMER_AUTH_SESSION_KEY
+  ) {
+    renderTrackingAccount(readFileSession());
+  }
+});
 void refreshChannelStatus();
 setInterval(() => {
   void refreshChannelStatus();

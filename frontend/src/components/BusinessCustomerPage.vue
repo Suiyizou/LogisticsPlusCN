@@ -28,6 +28,11 @@
       {{ pageMessage }}
     </p>
 
+    <div v-if="refreshingShipment" class="shipment-updating-overlay" role="dialog" aria-modal="true" :aria-label="t('customers.updateTrackingTitle')">
+      <div class="shipment-updating-spinner" aria-hidden="true"></div>
+      <p>{{ t("customers.updatingTracking") }}</p>
+    </div>
+
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
         <nav class="sidebar-nav">
@@ -1945,8 +1950,8 @@ async function refreshShipmentFromCarrier() {
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
     await loadAvailableShipments();
     await loadShipmentDetailSnapshot();
-    if (shipments.value.length) {
-      await loadShipments();
+    if (selectedCustomerId.value) {
+      await selectCustomer(selectedCustomerId.value);
     }
     const updated = [...availableShipments.value, ...shipments.value]
       .find((s) => s.shipmentId === shipment.shipmentId);
@@ -2039,9 +2044,6 @@ async function updateShipmentTracking(row) {
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
     await loadAvailableShipments();
-    if (shipments.value.length) {
-      await loadShipments();
-    }
     showSuccess("customers.refreshSuccess");
   } catch (error) {
     showError(error, "customers.refreshFailed");
@@ -2361,6 +2363,37 @@ function showError(error, fallbackKey) {
   border-color: #f0c4cc;
   color: #a63142;
   background: #fff3f5;
+}
+
+/* ---- Shipment updating overlay ---- */
+.shipment-updating-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(2px);
+}
+.shipment-updating-overlay p {
+  margin: 0;
+  color: #1a2b4a;
+  font-size: 15px;
+  font-weight: 500;
+}
+.shipment-updating-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e6f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: shipment-updating-spin 0.8s linear infinite;
+}
+@keyframes shipment-updating-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---- Account menu (preserved) ---- */
