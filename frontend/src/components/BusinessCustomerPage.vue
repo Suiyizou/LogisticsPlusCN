@@ -57,18 +57,47 @@
                   <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
                 </div>
               </div>
-              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" @row-click="selectCustomerFromList" style="cursor:pointer">
-                <el-table-column label="" width="48">
-                  <template #default="{ row }"><span class="customer-table-avatar">{{ customerInitial(row) }}</span></template>
+              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" style="width:100%">
+                <el-table-column type="index" :label="t('customers.index')" width="60" />
+                <el-table-column :label="t('customers.displayName')" min-width="140">
+                  <template #default="{ row }">
+                    <div class="customer-name-cell">
+                      <span class="customer-table-avatar">{{ customerInitial(row) }}</span>
+                      <div>
+                        <b>{{ row.displayName || row.username }}</b>
+                        <small>@{{ row.username }}</small>
+                      </div>
+                    </div>
+                  </template>
                 </el-table-column>
-                <el-table-column :label="t('customers.username')">
-                  <template #default="{ row }"><b>{{ row.displayName || row.username }}</b><br><small>@{{ row.username }}</small></template>
-                </el-table-column>
+                <el-table-column prop="clientCode" :label="t('customers.userCode')" width="120" />
                 <el-table-column :label="t('customers.partyRole')" width="120">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.shipmentStatus')" width="100">
-                  <template #default="{ row }"><el-tag :type="row.status==='ACTIVE'?'success':'danger'" size="small">{{ statusLabel(row.status) }}</el-tag></template>
+                <el-table-column :label="t('customers.shipmentCount')" width="90" align="center">
+                  <template #default="{ row }">{{ row.shipmentCount || 0 }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.remark')" min-width="160" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.remark || '—' }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.status')" width="100">
+                  <template #default="{ row }">
+                    <el-tag :type="row.status==='ACTIVE'?'success':'danger'" size="small">{{ statusLabel(row.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('customers.createdAt')" width="160">
+                  <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.actions')" width="260" fixed="right">
+                  <template #default="{ row }">
+                    <div class="table-action-buttons">
+                      <el-button size="small" type="primary" link @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
+                      <el-button size="small" type="primary" link @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
+                      <el-button size="small" type="warning" link @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                      <el-button v-if="row.status==='ACTIVE'" size="small" type="danger" link @click.stop="toggleCustomerStatus(row)">{{ t("customers.disable") }}</el-button>
+                      <el-button v-else size="small" type="success" link @click.stop="toggleCustomerStatus(row)">{{ t("customers.enable") }}</el-button>
+                    </div>
+                  </template>
                 </el-table-column>
               </el-table>
             </div>
@@ -434,37 +463,43 @@
       </div>
     </section>
 
-    <div v-if="createDialogOpen" class="customer-code-overlay" role="presentation" @click.self="createDialogOpen = false">
-      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createTitle')">
-        <span class="customer-code-kicker">NEW CUSTOMER</span>
-        <h2>{{ t("customers.createTitle") }}</h2>
-        <p>{{ t("customers.createDescription") }}</p>
-        <form class="customer-dialog-form" @submit.prevent="createCustomer">
-          <label><span>{{ t("customers.createDisplayName") }}</span><input v-model.trim="createForm.displayName" :placeholder="t('customers.createDisplayNamePlaceholder')" required /></label>
-          <label><span>{{ t("customers.createAccount") }}</span><input v-model.trim="createForm.username" :placeholder="t('customers.createAccountPlaceholder')" required /></label>
-          <label>
-            <span>{{ t("customers.createPassword") }}</span>
+    <div v-if="createDialogOpen" class="customer-code-overlay" role="presentation">
+      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="isEditMode ? t('customers.editTitle') : t('customers.createTitle')">
+        <span class="customer-code-kicker">{{ isEditMode ? 'EDIT CUSTOMER' : 'NEW CUSTOMER' }}</span>
+        <h2>{{ isEditMode ? t("customers.editTitle") : t("customers.createTitle") }}</h2>
+        <p>{{ isEditMode ? t("customers.editDescription") : t("customers.createDescription") }}</p>
+        <form class="customer-dialog-form" @submit.prevent="submitCustomerForm">
+          <label><span>{{ t("customers.createDisplayName") }} <i class="required-star">*</i></span><input v-model.trim="createForm.displayName" :placeholder="t('customers.createDisplayNamePlaceholder')" required /></label>
+          <label><span>{{ t("customers.createAccount") }} <i class="required-star">*</i></span><input v-model.trim="createForm.username" :placeholder="t('customers.createAccountPlaceholder')" required /></label>
+          <label v-if="!isEditMode">
+            <span>{{ t("customers.createPassword") }} <i class="required-star">*</i></span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
           </label>
-          <label><span>{{ t("customers.userCode") }}</span><input v-model.trim="createForm.userCode" :placeholder="t('customers.userCodePlaceholder')" required /></label>
+          <label><span>{{ t("customers.userCode") }} <i class="required-star">*</i></span><input v-model.trim="createForm.userCode" :placeholder="t('customers.userCodePlaceholder')" required /></label>
           <label>
-            <span>{{ t("customers.createPartyRole") }}</span>
+            <span>{{ t("customers.createPartyRole") }} <i class="required-star">*</i></span>
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
               <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
             </el-select>
           </label>
+          <label>
+            <span>{{ t("customers.remark") }}</span>
+            <textarea v-model="createForm.remark" :placeholder="t('customers.remarkPlaceholder')" maxlength="500" rows="3"></textarea>
+          </label>
 
           <div class="customer-dialog-actions">
-            <button type="button" @click="createDialogOpen = false">{{ t("customers.cancel") }}</button>
-            <button class="customer-access-primary" type="submit" :disabled="creating">{{ creating ? t("customers.creating") : t("customers.create") }}</button>
+            <button type="button" @click="closeCreateDialog">{{ t("customers.cancel") }}</button>
+            <button class="customer-access-primary" type="submit" :disabled="creating">
+              {{ creating ? t("customers.saving") : (isEditMode ? t("customers.save") : t("customers.create")) }}
+            </button>
           </div>
         </form>
       </section>
     </div>
 
-    <div v-if="batchImportDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeBatchImport">
+    <div v-if="batchImportDialogOpen" class="customer-code-overlay" role="presentation">
       <section class="customer-code-dialog customer-batch-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchImport')">
         <span class="customer-code-kicker">{{ t("customers.dialogKickerProvisioning") }}</span>
         <h2>{{ t("customers.batchImport") }}</h2>
@@ -598,7 +633,7 @@
       </section>
     </div>
 
-    <div v-if="batchTrackDialogOpen" class="customer-code-overlay" role="presentation" @click.self="batchTrackDialogOpen = false">
+    <div v-if="batchTrackDialogOpen" class="customer-code-overlay" role="presentation">
       <section class="customer-code-dialog customer-batch-track-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchTrack')">
         <span class="customer-code-kicker">{{ t("customers.batchTrackKicker") }}</span>
         <h2>{{ t("customers.batchTrack") }}</h2>
@@ -621,16 +656,14 @@
               </el-select>
             </label>
           </div>
-          <label class="batch-track-textarea">
-            <span>{{ t("customers.batchTrackNumbers") }}</span>
-            <textarea
-              v-model="batchTrackText"
-              :placeholder="t('customers.batchTrackPlaceholder')"
-              :disabled="batchTrackRunning"
-              rows="8"
-            ></textarea>
-            <small>{{ t("customers.batchTrackHint") }}</small>
-          </label>
+          <div class="customer-excel-dropzone" :class="{ 'has-file': batchTrackFileName }">
+            <input ref="batchTrackFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleBatchTrackWorkbook" />
+            <b>{{ batchTrackFileName || t("customers.chooseTrackExcel") }}</b>
+            <small>{{ batchTrackFileName ? t("customers.trackRowsReady", { count: batchTrackNumbers.length }) : t("customers.trackExcelColumnsHint") }}</small>
+            <button v-if="batchTrackFileName" type="button" class="secondary" @click="clearBatchTrackFile">
+              {{ t("customers.clearFile") }}
+            </button>
+          </div>
         </div>
 
         <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
@@ -651,7 +684,7 @@
           <button
             class="customer-access-primary"
             type="button"
-            :disabled="batchTrackRunning || !batchTrackText.trim()"
+            :disabled="batchTrackRunning || !batchTrackNumbers.length"
             @click="startBatchTrack"
           >
             {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
@@ -707,6 +740,7 @@
         </label>
         <div class="customer-dialog-actions">
           <button type="button" @click="closeShipmentDetail">{{ t("customers.close") }}</button>
+          <button type="button" @click="refreshShipmentFromCarrier" :disabled="refreshingShipment">{{ refreshingShipment ? t("customers.refreshing") : t("customers.refreshFromCarrier") }}</button>
           <button type="button" @click="trackShipmentInWorkspace(detailShipment)">{{ t("customers.openLiveTracking") }}</button>
           <button type="button" class="is-danger" @click="removeShipment" :disabled="deletingShipment">{{ t("customers.deleteShipment") }}</button>
           <button type="button" class="is-danger" @click="invalidateSnapshot" :disabled="savingShipment">{{ t("customers.invalidateSnapshot") }}</button>
@@ -792,6 +826,7 @@ const detailShipment = ref(null);
 const savingShipment = ref(false);
 const creatingShipment = ref(false);
 const deletingShipment = ref(false);
+const refreshingShipment = ref(false);
 const batchTrackDialogOpen = ref(false);
 const batchTrackText = ref("");
 const batchTrackCarrier = ref("COSCO");
@@ -799,6 +834,9 @@ const batchTrackType = ref("BILLOFLADING");
 const batchTrackRunning = ref(false);
 const batchTrackResults = ref([]);
 const batchTrackProgress = ref({ total: 0, done: 0, success: 0, failed: 0 });
+const batchTrackFileInput = ref(null);
+const batchTrackFileName = ref("");
+const batchTrackNumbers = ref([]);
 const toastMessage = ref("");
 const loadingShipments = ref(false);
 const creating = ref(false);
@@ -815,8 +853,11 @@ const createForm = reactive({
   username: "",
   password: "",
   userCode: "",
-  partyRole: "SHIPPER"
+  partyRole: "SHIPPER",
+  remark: ""
 });
+const isEditMode = ref(false);
+const editingCustomerId = ref("");
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
@@ -1078,12 +1119,7 @@ async function loadAvailableShipments() {
 }
 
 async function startBatchTrack() {
-  const raw = batchTrackText.value.trim();
-  if (!raw) return;
-  const numbers = raw
-    .split(/[\n,;\s]+/)
-    .map((s) => s.trim().toUpperCase())
-    .filter((s) => s.length >= 4);
+  const numbers = batchTrackNumbers.value;
   if (!numbers.length) return;
 
   batchTrackRunning.value = true;
@@ -1128,10 +1164,53 @@ async function startBatchTrack() {
   loadAvailableShipments();
 }
 
+async function handleBatchTrackWorkbook(event) {
+  const file = event.target.files?.[0];
+  batchTrackNumbers.value = [];
+  batchTrackFileName.value = "";
+  batchTrackResults.value = [];
+  if (!file) return;
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
+    const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
+    const numberColumnAliases = [
+      "单号", "订舱号", "提单号", "箱号", "业务单号", "追踪号",
+      "number", "reference no", "reference number", "booking no", "booking number",
+      "bl no", "bill of lading", "container no", "container number"
+    ];
+    const hasHeader = headers.some((h) => numberColumnAliases.includes(h));
+    const findColumn = (aliases) => headers.findIndex((header) => aliases.includes(header));
+    const numberIndex = findColumn(numberColumnAliases);
+    const startIndex = hasHeader ? 1 : 0;
+    const colIndex = numberIndex >= 0 ? numberIndex : 0;
+    const extracted = rows.slice(startIndex)
+      .map((row) => String(row[colIndex] || "").trim().toUpperCase())
+      .filter((s) => s.length >= 4);
+    if (!extracted.length) throw new Error(t("customers.noTrackNumbers"));
+    batchTrackNumbers.value = [...new Set(extracted)];
+    batchTrackFileName.value = file.name;
+  } catch (error) {
+    batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.excelReadFailed") }];
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function clearBatchTrackFile() {
+  batchTrackFileName.value = "";
+  batchTrackNumbers.value = [];
+  batchTrackResults.value = [];
+  if (batchTrackFileInput.value) batchTrackFileInput.value.value = "";
+}
+
 function clearBatchTrack() {
   batchTrackText.value = "";
   batchTrackResults.value = [];
   batchTrackProgress.value = { total: 0, done: 0, success: 0, failed: 0 };
+  batchTrackFileName.value = "";
+  batchTrackNumbers.value = [];
 }
 
 function handleCloseBatchTrack() {
@@ -1180,20 +1259,111 @@ async function createCustomer() {
       displayName: createForm.displayName,
       password: createForm.password,
       partyRole: createForm.partyRole,
-      clientCode: createForm.userCode
+      clientCode: createForm.userCode,
+      remark: createForm.remark || null
     });
     const customer = normalizeCustomer(response);
-    createForm.displayName = "";
-    createForm.username = "";
-    createForm.password = "";
-    createForm.userCode = "";
-    createForm.partyRole = "SHIPPER";
+    resetCreateForm();
     createDialogOpen.value = false;
     await loadCustomers(customer.id);
   } catch (error) {
     showError(error, "customers.createFailed");
   } finally {
     creating.value = false;
+  }
+}
+
+function resetCreateForm() {
+  createForm.displayName = "";
+  createForm.username = "";
+  createForm.password = "";
+  createForm.userCode = "";
+  createForm.partyRole = "SHIPPER";
+  createForm.remark = "";
+}
+
+function closeCreateDialog() {
+  resetCreateForm();
+  isEditMode.value = false;
+  editingCustomerId.value = "";
+  createDialogOpen.value = false;
+}
+
+function openEditCustomer(row) {
+  isEditMode.value = true;
+  editingCustomerId.value = row.id;
+  createForm.displayName = row.displayName || "";
+  createForm.username = row.username || "";
+  createForm.password = "";
+  createForm.userCode = row.clientCode || "";
+  createForm.partyRole = row.partyRole || "SHIPPER";
+  createForm.remark = row.remark || "";
+  createDialogOpen.value = true;
+}
+
+async function submitCustomerForm() {
+  if (isEditMode.value) {
+    await updateCustomer();
+  } else {
+    await createCustomer();
+  }
+}
+
+async function updateCustomer() {
+  if (creating.value || !editingCustomerId.value) return;
+  creating.value = true;
+  clearMessage();
+  try {
+    const response = await updateBusinessCustomer(editingCustomerId.value, {
+      username: createForm.username,
+      displayName: createForm.displayName,
+      partyRole: createForm.partyRole,
+      clientCode: createForm.userCode,
+      remark: createForm.remark || null
+    });
+    replaceCustomer(normalizeCustomer(response));
+    closeCreateDialog();
+    showSuccess("customers.saved");
+  } catch (error) {
+    showError(error, "customers.saveFailed");
+  } finally {
+    creating.value = false;
+  }
+}
+
+function viewCustomerDetail(row) {
+  selectedCustomerId.value = row.id;
+  subView.value = "detail";
+}
+
+async function toggleCustomerStatus(row) {
+  if (mutatingCustomer.value) return;
+  const targetStatus = row.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+  const confirmMsg = targetStatus === "DISABLED"
+    ? t("customers.confirmDisable", { name: row.displayName || row.username })
+    : t("customers.confirmEnable", { name: row.displayName || row.username });
+  if (!window.confirm(confirmMsg)) return;
+  mutatingCustomer.value = true;
+  try {
+    const response = await updateBusinessCustomer(row.id, { status: targetStatus });
+    replaceCustomer(normalizeCustomer(response));
+    showSuccess(targetStatus === "DISABLED" ? "customers.disabled" : "customers.enabled");
+  } catch (error) {
+    showError(error, "customers.saveFailed");
+  } finally {
+    mutatingCustomer.value = false;
+  }
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return value;
   }
 }
 
@@ -1216,6 +1386,13 @@ function closeResetPasswordDialog() {
   resetPasswordDialogOpen.value = false;
   passwordResetForm.password = "";
   passwordResetForm.confirmPassword = "";
+}
+
+function openResetPassword(row) {
+  selectedCustomerId.value = row.id;
+  passwordResetForm.password = "";
+  passwordResetForm.confirmPassword = "";
+  resetPasswordDialogOpen.value = true;
 }
 
 async function resetPassword() {
@@ -1465,6 +1642,51 @@ async function saveShipmentDetail() {
     showError(error, "customers.shipmentSaveFailed");
   } finally {
     savingShipment.value = false;
+  }
+}
+
+async function refreshShipmentFromCarrier() {
+  const shipment = detailShipment.value;
+  if (!shipment?.carrier || !shipment?.referenceType || !shipment?.referenceNo || refreshingShipment.value) return;
+  refreshingShipment.value = true;
+  try {
+    const token = localStorage.getItem("business_token") || sessionStorage.getItem("business_token") || "";
+    const apiBase = import.meta.env.VITE_API_BASE_URL || "";
+    const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": token
+      },
+      body: JSON.stringify({
+        carrier: shipment.carrier,
+        channel: "AUTO",
+        type: shipment.referenceType,
+        number: shipment.referenceNo,
+        forceRefresh: true
+      })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+    await loadAvailableShipments();
+    if (shipments.value.length) {
+      await loadShipments();
+    }
+    const updated = [...availableShipments.value, ...shipments.value]
+      .find((s) => s.shipmentId === shipment.shipmentId);
+    if (updated) {
+      detailShipment.value = { ...detailShipment.value, ...updated };
+      Object.assign(detailForm, {
+        referenceType: updated.referenceType || detailForm.referenceType,
+        referenceNo: updated.referenceNo || detailForm.referenceNo,
+        trackingStatus: updated.trackingStatus || detailForm.trackingStatus
+      });
+    }
+    showSuccess("customers.refreshSuccess");
+  } catch (error) {
+    showError(error, "customers.refreshFailed");
+  } finally {
+    refreshingShipment.value = false;
   }
 }
 
@@ -1973,6 +2195,33 @@ function showError(error, fallbackKey) {
   background: #bfdbfe;
   font-weight: 800;
   font-size: 11px;
+}
+
+.customer-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.customer-name-cell > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+}
+.customer-name-cell small {
+  color: #6b7e96;
+  font-size: 11px;
+}
+
+.table-action-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.required-star {
+  color: #f56c6c;
+  font-style: normal;
+  margin-left: 2px;
 }
 
 /* ---- Back Button ---- */

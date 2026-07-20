@@ -104,16 +104,33 @@ public class BusinessCustomerService {
             ? username
             : request.displayName()
     );
-    String clientCode = normalizeOptionalClientCode(request == null ? null : request.clientCode());
+    String clientCodeRaw = normalizeOptionalClientCode(request == null ? null : request.clientCode());
+    final String clientCode;
+    final String customerCodeHash;
+    final String customerCodePrefix;
+    final String customerCodeMode;
+    if (clientCodeRaw != null && !clientCodeRaw.isBlank()) {
+      clientCode = clientCodeRaw;
+      customerCodeHash = tokenCodec.hash(clientCode);
+      customerCodePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
+      customerCodeMode = "MANUAL";
+    } else {
+      GeneratedCustomerCode generated = tokenCodec.newCustomerCode();
+      clientCode = generated.plainText();
+      customerCodeHash = generated.hash();
+      customerCodePrefix = generated.prefix();
+      customerCodeMode = "RANDOM";
+    }
     String partyRole = normalizePartyRole(
         request == null ? null : request.partyRole(), "CONSIGNEE"
     );
-    if (clientCode == null || clientCode.isBlank()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "User code is required");
-    }
+    String remarkRaw = request == null || request.remark() == null || request.remark().isBlank()
+        ? null
+        : request.remark().trim();
+    final String remark = remarkRaw != null && remarkRaw.length() > 500
+        ? remarkRaw.substring(0, 500)
+        : remarkRaw;
     PasswordHash passwordHash = passwordHasher.hash(password);
-    String customerCodeHash = tokenCodec.hash(clientCode);
-    String customerCodePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
     String publicId = UUID.randomUUID().toString();
     KeyHolder keyHolder = new GeneratedKeyHolder();
     try {
@@ -124,8 +141,8 @@ public class BusinessCustomerService {
               public_id, username, display_name, client_code, party_role,
               password_salt, password_hash, password_iterations,
               customer_code_hash, customer_code_prefix, customer_code_mode,
-              provisioning_source, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'MANUAL', 'ACTIVE', ?)
+              provisioning_source, status, remark, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'ACTIVE', ?, ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -139,7 +156,9 @@ public class BusinessCustomerService {
         statement.setInt(8, passwordHash.iterations());
         statement.setString(9, customerCodeHash);
         statement.setString(10, customerCodePrefix);
-        statement.setLong(11, actor.id());
+        statement.setString(11, customerCodeMode);
+        statement.setString(12, remark);
+        statement.setLong(13, actor.id());
         return statement;
       }, keyHolder);
     } catch (DuplicateKeyException error) {
@@ -189,6 +208,7 @@ public class BusinessCustomerService {
                 password,
                 username,
                 "CONSIGNEE",
+                null,
                 null
             ),
             actor,
@@ -237,6 +257,12 @@ public class BusinessCustomerService {
         request == null ? null : request.partyRole(), existing.partyRole()
     );
     String status = normalizeStatus(request == null ? null : request.status(), existing.status());
+    String newRemark = request == null || request.remark() == null
+        ? existing.remark()
+        : (request.remark().isBlank() ? null : request.remark().trim());
+    if (newRemark != null && newRemark.length() > 500) {
+      newRemark = newRemark.substring(0, 500);
+    }
     try {
       boolean codeChanged = clientCode != null && !clientCode.equals(existing.clientCode());
       if (codeChanged) {
@@ -244,7 +270,7 @@ public class BusinessCustomerService {
         String codePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
         jdbcTemplate.update(
             """
-            UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?,
+            UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ?,
               customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'MANUAL'
             WHERE id = ?
             """,
@@ -253,18 +279,20 @@ public class BusinessCustomerService {
             clientCode,
             partyRole,
             status,
+            newRemark,
             codeHash,
             codePrefix,
             existing.id()
         );
       } else {
         jdbcTemplate.update(
-            "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ? WHERE id = ?",
+            "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ? WHERE id = ?",
             username,
             displayName,
             clientCode,
             partyRole,
             status,
+            newRemark,
             existing.id()
         );
       }
@@ -1253,7 +1281,7 @@ public class BusinessCustomerService {
         SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
                c.party_role, c.customer_code_prefix, c.customer_code_mode,
                c.provisioning_source,
-               c.status, c.created_by, c.created_at, c.updated_at,
+               c.status, c.remark, c.created_by, c.created_at, c.updated_at,
                u.display_name AS created_by_display_name,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.customer_id = c.id) AS shipment_count
         FROM cp_customers c
@@ -1309,6 +1337,7 @@ public class BusinessCustomerService {
         rs.getString("customer_code_mode"),
         rs.getString("provisioning_source"),
         rs.getString("status"),
+        rs.getString("remark"),
         nullableLong(rs, "created_by"),
         rs.getString("created_by_display_name"),
         instantString(rs, "created_at"),
@@ -1411,6 +1440,7 @@ public class BusinessCustomerService {
     value.put("customerCodeMode", record.customerCodeMode());
     value.put("provisioningSource", record.provisioningSource());
     value.put("status", record.status());
+    value.put("remark", record.remark());
     value.put("createdBy", record.createdBy());
     value.put("createdByDisplayName", record.createdByDisplayName());
     value.put("createdAt", record.createdAt());
@@ -1680,6 +1710,7 @@ public class BusinessCustomerService {
       String customerCodeMode,
       String provisioningSource,
       String status,
+      String remark,
       Long createdBy,
       String createdByDisplayName,
       String createdAt,

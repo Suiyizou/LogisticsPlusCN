@@ -532,10 +532,18 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.execute("""
         CREATE TABLE cp_customers (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          public_id CHAR(36),
+          username VARCHAR(64),
+          display_name VARCHAR(80),
           created_by BIGINT,
           status VARCHAR(24) NOT NULL,
           client_code VARCHAR(64),
-          party_role VARCHAR(20)
+          party_role VARCHAR(20),
+          customer_code_hash CHAR(64),
+          customer_code_prefix VARCHAR(16),
+          customer_code_mode VARCHAR(20) DEFAULT 'RANDOM',
+          provisioning_source VARCHAR(20) DEFAULT 'MANUAL',
+          remark VARCHAR(500)
         )
         """);
     jdbcTemplate.execute("""

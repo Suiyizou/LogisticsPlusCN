@@ -330,6 +330,8 @@ const MESSAGES = {
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
     "account.menu": "Open account menu",
     "account.home": "Platform home",
+    "account.workbench": "Workbench",
+    "account.signIn": "Sign in",
     "account.signOut": "Sign out",
     "account.customer": "Customer access",
     "account.roleAdmin": "Administrator",
@@ -727,6 +729,8 @@ const MESSAGES = {
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
     "account.menu": "打开账户菜单",
     "account.home": "返回平台首页",
+    "account.workbench": "返回工作台",
+    "account.signIn": "登录",
     "account.signOut": "退出登录",
     "account.customer": "客户身份",
     "account.roleAdmin": "系统管理员",
@@ -1525,6 +1529,8 @@ function setTrackingAccountMenuOpen(open) {
 function renderTrackingAccount(session = readFileSession()) {
   const portalReturnLink = document.querySelector("#portal-return-link");
   const portalReturnLabel = document.querySelector("#portal-return-label");
+  const signInButton = document.querySelector("#sign-in-button");
+  const workbenchLink = document.querySelector("#account-workbench-link");
   const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
@@ -1538,6 +1544,12 @@ function renderTrackingAccount(session = readFileSession()) {
   document.body.classList.toggle("is-customer-session", isCustomer);
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
   trackingAccount.hidden = !authenticated;
+  if (signInButton) {
+    signInButton.hidden = authenticated;
+  }
+  if (workbenchLink) {
+    workbenchLink.hidden = !returnsToWorkbenches;
+  }
   if (!authenticated) {
     trackingAccountName.textContent = "";
     trackingAccountRole.textContent = "";

@@ -301,9 +301,13 @@ public class ShipmentTrackingService {
     // identities. Never resolve a long-lived shipment aggregate from a container-only alias.
     CachedShipment cached = user != null && isDurableReferenceType(request.type()) ? findCached(request) : null;
     Instant now = clock.instant();
-    if (!forceRefresh && importedDetails == null && cached != null
-        && cached.freshUntil() != null && cached.freshUntil().isAfter(now)) {
-      return cachedResponse(cached, user, false);
+    if (!forceRefresh && importedDetails == null && cached != null) {
+      boolean stale = cached.freshUntil() == null || cached.freshUntil().isBefore(now);
+      ObjectNode response = cachedResponse(cached, user, stale);
+      if (stale) {
+        response.put("cacheStale", true);
+      }
+      return response;
     }
 
     JsonNode upstream;

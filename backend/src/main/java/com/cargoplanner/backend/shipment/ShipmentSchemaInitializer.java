@@ -78,6 +78,11 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "client_code",
         "ALTER TABLE cp_customers ADD COLUMN client_code VARCHAR(64) NULL AFTER display_name"
     );
+    addColumnIfMissing(
+        "cp_customers",
+        "remark",
+        "ALTER TABLE cp_customers ADD COLUMN remark VARCHAR(500) NULL AFTER status"
+    );
     addIndexIfMissing(
         "cp_customers",
         "idx_cp_customers_creator_client_code",
@@ -343,6 +348,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
           provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
           status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          remark VARCHAR(500) NULL,
           created_by BIGINT NOT NULL,
           created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
           updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),

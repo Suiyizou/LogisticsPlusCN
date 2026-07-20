@@ -53,8 +53,8 @@
             <span data-i18n="nav.profile">Personal information</span>
           </a>
 
-          <p class="nav-title internal-carrier-navigation" data-i18n="nav.carriers">Carrier adapters</p>
-          <div class="carrier-nav-item internal-carrier-navigation is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO">
+          <p class="nav-title internal-carrier-navigation" data-i18n="nav.carriers" hidden>Carrier adapters</p>
+          <div class="carrier-nav-item internal-carrier-navigation is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO" hidden>
             <span class="carrier-monogram cosco">CO</span>
             <span>
               COSCO
@@ -62,7 +62,7 @@
             </span>
             <i></i>
           </div>
-          <div class="carrier-nav-item internal-carrier-navigation is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA">
+          <div class="carrier-nav-item internal-carrier-navigation is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA" hidden>
             <span class="carrier-monogram cma">CM</span>
             <span>
               CMA CGM
@@ -94,6 +94,9 @@
               <button type="button" data-language="en" class="is-active">EN</button>
               <button type="button" data-language="zh">中文</button>
             </div>
+            <a class="sign-in-button" id="sign-in-button" href="/workbenches" data-home-link>
+              <span data-i18n="account.signIn">Sign in</span>
+            </a>
             <div class="tracking-account" id="tracking-account" hidden>
               <button
                 class="tracking-account-trigger"
@@ -114,6 +117,10 @@
                 <a href="/" role="menuitem" data-home-link>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-5v-6H9v6H4z" /></svg>
                   <span data-i18n="account.home">Platform home</span>
+                </a>
+                <a id="account-workbench-link" href="/workbenches" role="menuitem" data-workbench-link>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v4H3zM3 11h18v10H3z" /></svg>
+                  <span data-i18n="account.workbench">Workbench</span>
                 </a>
                 <button id="tracking-account-logout" type="button" role="menuitem">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9" /></svg>
