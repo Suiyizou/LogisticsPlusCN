@@ -194,6 +194,9 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "uk_cp_tracking_snapshots_user_query",
         "ALTER TABLE cp_tracking_snapshots ADD UNIQUE INDEX uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)"
     );
+    jdbcTemplate.update("DELETE FROM cp_tracking_snapshots WHERE queried_by IS NULL");
+    jdbcTemplate.execute("ALTER TABLE cp_tracking_snapshots MODIFY queried_by BIGINT NOT NULL");
+    jdbcTemplate.execute("ALTER TABLE cp_tracking_snapshots MODIFY queried_by_username VARCHAR(128) NOT NULL");
   }
 
   private void addColumnIfMissing(String table, String column, String ddl) {
@@ -294,8 +297,8 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
-          queried_by BIGINT NULL,
-          queried_by_username VARCHAR(128) NULL,
+          queried_by BIGINT NOT NULL,
+          queried_by_username VARCHAR(128) NOT NULL,
           source_channel VARCHAR(32) NULL,
           snapshot_json LONGTEXT NOT NULL,
           strategy_json LONGTEXT NULL,

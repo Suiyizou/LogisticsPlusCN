@@ -406,7 +406,77 @@ public class BusinessCustomerService {
     value.put("boundRoles", List.of());
     value.put("snapshotJson", snapshotJson);
     value.put("sourceChannel", rs.getString("source_channel"));
+
+    if (snapshotJson != null && !snapshotJson.isBlank()) {
+      try {
+        JsonNode snap = objectMapper.readTree(snapshotJson);
+        JsonNode summary = snap.path("summary");
+        JsonNode keyTimes = snap.path("keyTimes");
+        JsonNode references = snap.path("references");
+        JsonNode businessRef = references.path("business");
+        JsonNode tracking = snap.path("tracking");
+
+        value.put("forwarderJobNumber", textOrNull(businessRef.path("forwarderJobNumber")));
+        value.put("clientPoNumber", textOrNull(businessRef.path("clientPoNumber")));
+        value.put("clientNameCode", textOrNull(businessRef.path("clientNameCode")));
+
+        JsonNode origin = summary.path("origin");
+        JsonNode destination = summary.path("destination");
+        value.put("portOfLoading", textOrNull(origin.path("name")));
+        value.put("portOfDischarge", textOrNull(destination.path("name")));
+
+        value.put("vesselVoyage", textOrNull(summary.path("vesselVoyage")));
+        value.put("volume", textOrNull(summary.path("volume")));
+        value.put("containerType", textOrNull(summary.path("containerType")));
+        value.put("trafficTerm", textOrNull(summary.path("trafficTerm")));
+
+        value.put("estimatedDeparture", textOrNull(keyTimes.path("estimatedDeparture").path("time")));
+        value.put("estimatedArrival", textOrNull(keyTimes.path("estimatedArrival").path("time")));
+        value.put("actualDeparture", textOrNull(keyTimes.path("actualDeparture").path("time")));
+        value.put("actualArrival", textOrNull(keyTimes.path("actualArrival").path("time")));
+        value.put("actualDelivery", textOrNull(keyTimes.path("actualDelivery").path("time")));
+        value.put("estimatedDelivery", textOrNull(keyTimes.path("estimatedDelivery").path("time")));
+
+        JsonNode latestEvent = summary.path("latestEvent");
+        value.put("currentLocation", textOrNull(latestEvent.path("location")));
+
+        value.put("masterBill", textOrNull(references.path("masterBill")));
+        value.put("bookingNumber", textOrNull(references.path("booking")));
+
+        JsonNode containers = snap.path("containers");
+        if (containers.isArray() && containers.size() > 0) {
+          value.put("containerCount", containers.size());
+          JsonNode firstContainer = containers.get(0);
+          value.put("containerNumber", textOrNull(firstContainer.path("number")));
+          value.put("containerType", firstContainer.has("type") ? firstContainer.path("type").asText(null) : (String) value.get("containerType"));
+        } else {
+          JsonNode summaryContainers = summary.path("containers");
+          if (summaryContainers.isArray() && summaryContainers.size() > 0) {
+            value.put("containerCount", summaryContainers.size());
+          }
+        }
+
+        JsonNode routingLegs = snap.path("routingLegs");
+        if (routingLegs.isArray() && routingLegs.size() > 0) {
+          JsonNode firstLeg = routingLegs.get(0);
+          if (!value.containsKey("vesselVoyage") || value.get("vesselVoyage") == null) {
+            String vessel = textOrNull(firstLeg.path("vessel"));
+            String voyage = textOrNull(firstLeg.path("voyage"));
+            if (vessel != null || voyage != null) {
+              value.put("vesselVoyage", (vessel != null ? vessel : "") + (voyage != null ? " / " + voyage : ""));
+            }
+          }
+        }
+      } catch (Exception ignored) {
+      }
+    }
     return value;
+  }
+
+  private static String textOrNull(JsonNode node) {
+    if (node == null || node.isNull() || !node.isTextual()) return null;
+    String text = node.asText();
+    return text.isBlank() ? null : text.trim();
   }
 
   public Map<String, Object> listPendingClientMatches(AuthenticatedUser actor) {
