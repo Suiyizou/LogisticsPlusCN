@@ -387,23 +387,35 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listAvailableShipments(AuthenticatedUser actor) {
+    return listShipmentSnapshots(actor);
+  }
+
+  /**
+   * Returns one read model per shipment that the current business user owns or participates in.
+   * Snapshot provenance ({@code queried_by}) is deliberately not an authorization boundary.
+   */
+  public Map<String, Object> listShipmentSnapshots(AuthenticatedUser actor) {
     requireManager(actor);
     String baseSql = snapshotShipmentSelect();
     List<Map<String, Object>> items = actor.isAdmin()
         ? jdbcTemplate.query(
-            baseSql + " WHERE t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 500",
+            baseSql + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
             this::mapSnapshotShipment
         )
         : jdbcTemplate.query(
-            baseSql + " WHERE t.queried_by = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 500",
+            baseSql + " WHERE (s.created_by = ? OR EXISTS ("
+                + "SELECT 1 FROM cp_shipment_participants p "
+                + "WHERE p.shipment_id = s.id AND p.user_id = ?)) "
+                + "ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
             this::mapSnapshotShipment,
+            actor.id(),
             actor.id()
         );
-    enrichBoundRoles(items, actor);
+    enrichShipmentRelations(items);
     return Map.of("items", items, "total", items.size());
   }
 
-  private void enrichBoundRoles(List<Map<String, Object>> items, AuthenticatedUser actor) {
+  private void enrichShipmentRelations(List<Map<String, Object>> items) {
     if (items.isEmpty()) return;
     List<String> publicIds = items.stream()
         .map(item -> (String) item.get("shipmentId"))
@@ -412,45 +424,145 @@ public class BusinessCustomerService {
         .toList();
     if (publicIds.isEmpty()) return;
 
-    StringBuilder sql = new StringBuilder(
+    String placeholders = String.join(", ", publicIds.stream().map(id -> "?").toList());
+    String customerSql =
         """
-        SELECT s.public_id AS shipment_public_id, a.relationship_role
+        SELECT s.public_id AS shipment_public_id, c.public_id AS customer_public_id,
+               c.username, c.display_name, c.client_code, c.party_role,
+               a.relationship_role, a.publication_status
         FROM cp_customer_shipment_access a
         JOIN cp_shipments s ON s.id = a.shipment_id
         JOIN cp_customers c ON c.id = a.customer_id
         WHERE s.public_id IN (
         """
-    );
-    for (int i = 0; i < publicIds.size(); i++) {
-      if (i > 0) sql.append(", ");
-      sql.append("?");
-    }
-    sql.append(") AND c.status = 'ACTIVE'");
-    List<Object> params = new ArrayList<>(publicIds);
-    if (!actor.isAdmin()) {
-      sql.append(" AND c.created_by = ?");
-      params.add(actor.id());
-    }
-
-    Map<String, List<String>> rolesByShipment = new LinkedHashMap<>();
+        + placeholders + ") AND c.status = 'ACTIVE' ORDER BY a.assigned_at, c.id";
+    Map<String, List<Map<String, Object>>> customersByShipment = new LinkedHashMap<>();
     jdbcTemplate.query(
-        sql.toString(),
+        customerSql,
         (rs, rowNum) -> {
           String shipmentPublicId = rs.getString("shipment_public_id");
-          String role = rs.getString("relationship_role");
-          rolesByShipment
+          Map<String, Object> customer = new LinkedHashMap<>();
+          customer.put("id", rs.getString("customer_public_id"));
+          customer.put("clientCode", rs.getString("client_code"));
+          customer.put("displayName", rs.getString("display_name"));
+          customer.put("partyRole", rs.getString("party_role"));
+          customer.put("publicationStatus", rs.getString("publication_status"));
+          customer.put("username", rs.getString("username"));
+          customer.put("relationshipRole", rs.getString("relationship_role"));
+          customersByShipment
               .computeIfAbsent(shipmentPublicId, key -> new ArrayList<>())
-              .add(role);
+              .add(customer);
           return null;
         },
-        params.toArray()
+        publicIds.toArray()
+    );
+
+    Map<String, LinkedHashMap<String, Map<String, Object>>> internalByShipment =
+        new LinkedHashMap<>();
+    String creatorSql = """
+        SELECT s.public_id AS shipment_public_id, u.id AS user_id, u.username,
+               u.display_name, u.role AS account_role, u.party_role
+        FROM cp_shipments s
+        JOIN cp_users u ON u.id = s.created_by
+        WHERE s.public_id IN (
+        """ + placeholders + ") ORDER BY s.id";
+    jdbcTemplate.query(
+        creatorSql,
+        (rs, rowNum) -> {
+          addInternalBoundUser(internalByShipment, rs, "CREATOR");
+          return null;
+        },
+        publicIds.toArray()
+    );
+    String participantSql = """
+        SELECT s.public_id AS shipment_public_id, u.id AS user_id, u.username,
+               u.display_name, u.role AS account_role, u.party_role, p.participant_role
+        FROM cp_shipment_participants p
+        JOIN cp_shipments s ON s.id = p.shipment_id
+        JOIN cp_users u ON u.id = p.user_id
+        WHERE s.public_id IN (
+        """ + placeholders + ") ORDER BY s.id, p.user_id";
+    jdbcTemplate.query(
+        participantSql,
+        (rs, rowNum) -> {
+          addInternalBoundUser(internalByShipment, rs, rs.getString("participant_role"));
+          return null;
+        },
+        publicIds.toArray()
     );
 
     for (Map<String, Object> item : items) {
       String shipmentId = (String) item.get("shipmentId");
-      List<String> roles = rolesByShipment.getOrDefault(shipmentId, List.of());
-      item.put("boundRoles", roles.stream().distinct().toList());
+      List<Map<String, Object>> customers = customersByShipment.getOrDefault(
+          shipmentId, List.of()
+      );
+      List<Map<String, Object>> internalUsers = new ArrayList<>(
+          internalByShipment.getOrDefault(shipmentId, new LinkedHashMap<>()).values()
+      );
+      List<Map<String, Object>> boundUsers = new ArrayList<>(internalUsers);
+      for (Map<String, Object> customer : customers) {
+        Map<String, Object> user = new LinkedHashMap<>();
+        user.put("id", customer.get("id"));
+        user.put("username", customer.get("username"));
+        user.put("displayName", customer.get("displayName"));
+        user.put("kind", "CUSTOMER");
+        user.put("role", customer.get("partyRole"));
+        user.put("relationshipRole", customer.get("relationshipRole"));
+        user.put("clientCode", customer.get("clientCode"));
+        boundUsers.add(user);
+      }
+      item.put("boundCustomers", customers);
+      item.put("participants", internalUsers);
+      item.put("boundUsers", boundUsers);
+      item.put("customerCount", customers.size());
+      item.put(
+          "boundRoles",
+          customers.stream().map(customer -> (String) customer.get("relationshipRole"))
+              .filter(role -> role != null && !role.isBlank()).distinct().toList()
+      );
+
+      String snapshotClientCode = (String) item.get("clientNameCode");
+      Map<String, Object> matchedCustomer = customers.stream()
+          .filter(customer -> snapshotClientCode != null
+              && (snapshotClientCode.equalsIgnoreCase((String) customer.get("clientCode"))
+                  || snapshotClientCode.equalsIgnoreCase((String) customer.get("displayName"))))
+          .findFirst()
+          .orElse(null);
+      Map<String, Object> fallbackCustomer = customers.isEmpty() ? null : customers.get(0);
+      item.put(
+          "clientNo",
+          snapshotClientCode != null
+              ? snapshotClientCode
+              : fallbackCustomer == null ? null : fallbackCustomer.get("clientCode")
+      );
+      item.put(
+          "clientName",
+          snapshotClientCode != null
+              ? matchedCustomer == null ? null : matchedCustomer.get("displayName")
+              : fallbackCustomer == null ? null : fallbackCustomer.get("displayName")
+      );
     }
+  }
+
+  private void addInternalBoundUser(
+      Map<String, LinkedHashMap<String, Map<String, Object>>> usersByShipment,
+      ResultSet rs,
+      String bindingRole
+  ) throws SQLException {
+    String shipmentId = rs.getString("shipment_public_id");
+    String userId = Long.toString(rs.getLong("user_id"));
+    Map<String, Object> user = new LinkedHashMap<>();
+    user.put("id", rs.getLong("user_id"));
+    user.put("username", rs.getString("username"));
+    user.put("displayName", rs.getString("display_name"));
+    user.put("kind", "INTERNAL");
+    String partyRole = rs.getString("party_role");
+    user.put("role", "AGENT".equalsIgnoreCase(partyRole) ? "OVERSEA_AGENT" : partyRole);
+    user.put("bindingRole", bindingRole);
+    user.put("accountRole", rs.getString("account_role"));
+    user.put("clientCode", null);
+    usersByShipment.computeIfAbsent(shipmentId, key -> new LinkedHashMap<>())
+        .putIfAbsent(userId, user);
   }
 
   public Map<String, Object> getShipmentSnapshot(AuthenticatedUser actor, String shipmentPublicId) {
@@ -458,28 +570,40 @@ public class BusinessCustomerService {
     String baseSql = snapshotShipmentSelect();
     List<Map<String, Object>> items = actor.isAdmin()
         ? jdbcTemplate.query(
-            baseSql + " WHERE s.public_id = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 1",
+            baseSql + " WHERE s.public_id = ? LIMIT 1",
             this::mapSnapshotShipment,
             shipmentPublicId
         )
         : jdbcTemplate.query(
-            baseSql + " WHERE s.public_id = ? AND t.queried_by = ? AND t.invalidated_at IS NULL ORDER BY t.fetched_at DESC LIMIT 1",
+            baseSql + " WHERE s.public_id = ? AND (s.created_by = ? OR EXISTS ("
+                + "SELECT 1 FROM cp_shipment_participants p "
+                + "WHERE p.shipment_id = s.id AND p.user_id = ?)) LIMIT 1",
             this::mapSnapshotShipment,
-            shipmentPublicId, actor.id()
+            shipmentPublicId, actor.id(), actor.id()
         );
     if (items.isEmpty()) {
       throw new ApiException(HttpStatus.NOT_FOUND, "Shipment snapshot not found");
     }
+    enrichShipmentRelations(items);
     return items.get(0);
   }
 
   private String snapshotShipmentSelect() {
     return """
-        SELECT t.id, t.shipment_id, t.query_reference_type, t.query_reference_no,
+        SELECT t.id, s.id AS shipment_id,
+               COALESCE(r.reference_type, t.query_reference_type) AS query_reference_type,
+               COALESCE(r.reference_no_raw, t.query_reference_no) AS query_reference_no,
                t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
-               s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status
-        FROM cp_tracking_snapshots t
-        LEFT JOIN cp_shipments s ON s.id = t.shipment_id
+               s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
+               s.business_note, s.last_tracked_at, s.updated_at
+        FROM cp_shipments s
+        LEFT JOIN cp_tracking_snapshots t
+          ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        LEFT JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+        )
         """;
   }
 
@@ -491,6 +615,8 @@ public class BusinessCustomerService {
     String referenceNo = rs.getString("query_reference_no");
     String trackingStatus = rs.getString("tracking_status");
     String fetchedAt = instantString(rs, "fetched_at");
+    String lastTrackedAt = instantString(rs, "last_tracked_at");
+    String updatedAt = instantString(rs, "updated_at");
     String snapshotJson = rs.getString("snapshot_json");
 
     value.put("shipmentId", shipmentPublicId);
@@ -498,17 +624,22 @@ public class BusinessCustomerService {
     value.put("referenceType", referenceType);
     value.put("referenceNo", referenceNo);
     value.put("trackingStatus", trackingStatus);
-    value.put("note", null);
-    value.put("lastTrackedAt", fetchedAt);
-    value.put("updatedAt", fetchedAt);
+    value.put("note", rs.getString("business_note"));
+    value.put("lastTrackedAt", lastTrackedAt != null ? lastTrackedAt : fetchedAt);
+    value.put("updatedAt", updatedAt != null ? updatedAt : fetchedAt);
     value.put("customerCount", 0L);
     value.put("boundRoles", List.of());
     value.put("snapshotJson", snapshotJson);
     value.put("sourceChannel", rs.getString("source_channel"));
+    value.put("dataAvailable", false);
+    value.put("snapshot", null);
 
     if (snapshotJson != null && !snapshotJson.isBlank()) {
       try {
         JsonNode snap = objectMapper.readTree(snapshotJson);
+        if (snap == null || !snap.isObject()) return value;
+        value.put("dataAvailable", true);
+        value.put("snapshot", snap);
         JsonNode summary = snap.path("summary");
         JsonNode keyTimes = snap.path("keyTimes");
         JsonNode references = snap.path("references");
@@ -530,7 +661,13 @@ public class BusinessCustomerService {
         value.put("trafficTerm", textOrNull(summary.path("trafficTerm")));
 
         value.put("estimatedDeparture", textOrNull(keyTimes.path("estimatedDeparture").path("time")));
-        value.put("estimatedArrival", textOrNull(keyTimes.path("estimatedArrival").path("time")));
+        String estimatedArrival = textOrNull(
+            keyTimes.path("estimatedFinalArrival").path("time")
+        );
+        if (estimatedArrival == null) {
+          estimatedArrival = textOrNull(keyTimes.path("estimatedArrival").path("time"));
+        }
+        value.put("estimatedArrival", estimatedArrival);
         value.put("actualDeparture", textOrNull(keyTimes.path("actualDeparture").path("time")));
         value.put("actualArrival", textOrNull(keyTimes.path("actualArrival").path("time")));
         value.put("actualDelivery", textOrNull(keyTimes.path("actualDelivery").path("time")));
@@ -757,31 +894,47 @@ public class BusinessCustomerService {
     String volume = normalizeManualField(request.volume(), 80);
     String clientCode = normalizeManualField(request.clientNameCode(), 160);
 
-    ObjectNode snapshot = objectMapper.createObjectNode();
-    snapshot.putObject("provider").put("code", carrier);
+    ObjectNode snapshot = currentSnapshotCopy(shipmentId);
+    objectField(snapshot, "provider").put("code", carrier);
     snapshot.put("channel", "MANUAL");
     snapshot.put("fetchedAt", now.toString());
-    ObjectNode tracking = snapshot.putObject("tracking");
+    ObjectNode tracking = objectField(snapshot, "tracking");
     tracking.put("type", referenceType);
     tracking.put("number", referenceNo);
     tracking.put("status", status);
-    ObjectNode summary = snapshot.putObject("summary");
-    if ("BOOKING".equals(referenceType)) summary.putArray("bookingNumbers").add(referenceNo);
+    ObjectNode summary = objectField(snapshot, "summary");
+    if ("BOOKING".equals(referenceType)) {
+      ArrayNode bookingNumbers = arrayField(summary, "bookingNumbers");
+      boolean alreadyPresent = false;
+      for (JsonNode bookingNumber : bookingNumbers) {
+        if (referenceNo.equals(bookingNumber.asText())) {
+          alreadyPresent = true;
+          break;
+        }
+      }
+      if (!alreadyPresent) bookingNumbers.add(referenceNo);
+    }
     else summary.put("billOfLading", referenceNo);
-    ObjectNode latestEvent = summary.putObject("latestEvent");
+    ObjectNode latestEvent = objectField(summary, "latestEvent");
     latestEvent.put("name", status);
     putManualField(latestEvent, "location", currentLocation);
     putManualField(latestEvent, "occurredAt", actualDelivery != null
         ? actualDelivery : actualArrival != null ? actualArrival : actualDeparture);
-    if (loadingPort != null) summary.putObject("origin").put("name", loadingPort);
-    if (dischargePort != null) summary.putObject("destination").put("name", dischargePort);
+    if (loadingPort != null) objectField(summary, "origin").put("name", loadingPort);
+    if (dischargePort != null) objectField(summary, "destination").put("name", dischargePort);
+    putManualField(summary, "vesselVoyage", vesselVoyage);
+    putManualField(summary, "volume", volume);
 
-    ObjectNode business = snapshot.putObject("references").putObject("business");
+    ObjectNode business = objectField(objectField(snapshot, "references"), "business");
     putManualField(business, "forwarderJobNumber", jobNumber);
     putManualField(business, "clientPoNumber", clientPo);
     putManualField(business, "clientNameCode", clientCode);
-    if (vesselVoyage != null || etd != null || eta != null) {
-      ObjectNode leg = snapshot.putArray("routingLegs").addObject();
+    if (vesselVoyage != null || loadingPort != null || dischargePort != null
+        || etd != null || eta != null || actualDeparture != null || actualArrival != null) {
+      ArrayNode routingLegs = arrayField(snapshot, "routingLegs");
+      ObjectNode leg = routingLegs.size() > 0 && routingLegs.get(0).isObject()
+          ? (ObjectNode) routingLegs.get(0)
+          : routingLegs.insertObject(0);
       putManualField(leg, "vesselName", vesselVoyage);
       putManualField(leg, "estimatedDeparture", etd);
       putManualField(leg, "estimatedArrival", eta);
@@ -790,13 +943,16 @@ public class BusinessCustomerService {
       putManualField(leg, "portOfLoading", loadingPort);
       putManualField(leg, "portOfDischarge", dischargePort);
     }
-    ObjectNode keyTimes = snapshot.putObject("keyTimes");
-    if (etd != null) keyTimes.putObject("estimatedDeparture").put("time", etd);
-    if (eta != null) keyTimes.putObject("estimatedFinalArrival").put("time", eta);
-    if (actualDeparture != null) keyTimes.putObject("actualDeparture").put("time", actualDeparture);
-    if (actualArrival != null) keyTimes.putObject("actualArrival").put("time", actualArrival);
-    if (actualDelivery != null) keyTimes.putObject("actualDelivery").put("time", actualDelivery);
-    ArrayNode extra = snapshot.putArray("extraInformation");
+    if (etd != null || eta != null || actualDeparture != null
+        || actualArrival != null || actualDelivery != null) {
+      ObjectNode keyTimes = objectField(snapshot, "keyTimes");
+      if (etd != null) objectField(keyTimes, "estimatedDeparture").put("time", etd);
+      if (eta != null) objectField(keyTimes, "estimatedFinalArrival").put("time", eta);
+      if (actualDeparture != null) objectField(keyTimes, "actualDeparture").put("time", actualDeparture);
+      if (actualArrival != null) objectField(keyTimes, "actualArrival").put("time", actualArrival);
+      if (actualDelivery != null) objectField(keyTimes, "actualDelivery").put("time", actualDelivery);
+    }
+    ArrayNode extra = arrayField(snapshot, "extraInformation");
     addManualExtra(extra, "forwarderJobNumber", jobNumber);
     addManualExtra(extra, "vesselVoyage", vesselVoyage);
     addManualExtra(extra, "portOfLoading", loadingPort);
@@ -884,10 +1040,57 @@ public class BusinessCustomerService {
 
   private void addManualExtra(ArrayNode values, String key, String value) {
     if (value == null) return;
-    ObjectNode item = values.addObject();
+    ObjectNode item = null;
+    for (JsonNode existing : values) {
+      if (existing.isObject() && key.equals(existing.path("key").asText())) {
+        item = (ObjectNode) existing;
+        break;
+      }
+    }
+    if (item == null) item = values.addObject();
     item.put("key", key);
     item.put("value", value);
     item.put("source", "BUSINESS_MANUAL");
+  }
+
+  private ObjectNode currentSnapshotCopy(long shipmentId) {
+    List<String> values = jdbcTemplate.query(
+        """
+        SELECT t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t
+          ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        WHERE s.id = ?
+        LIMIT 1
+        """,
+        (rs, rowNumber) -> rs.getString("snapshot_json"),
+        shipmentId
+    );
+    if (!values.isEmpty() && values.get(0) != null && !values.get(0).isBlank()) {
+      try {
+        JsonNode current = objectMapper.readTree(values.get(0));
+        if (current != null && current.isObject()) return ((ObjectNode) current).deepCopy();
+      } catch (JsonProcessingException ignored) {
+        // A malformed payload cannot be used as a safe merge base.
+      }
+    }
+    return objectMapper.createObjectNode();
+  }
+
+  private ObjectNode objectField(ObjectNode parent, String field) {
+    JsonNode current = parent.get(field);
+    if (current != null && current.isObject()) return (ObjectNode) current;
+    ObjectNode created = objectMapper.createObjectNode();
+    parent.set(field, created);
+    return created;
+  }
+
+  private ArrayNode arrayField(ObjectNode parent, String field) {
+    JsonNode current = parent.get(field);
+    if (current != null && current.isArray()) return (ArrayNode) current;
+    ArrayNode created = objectMapper.createArrayNode();
+    parent.set(field, created);
+    return created;
   }
 
   private String sha256(String value) {
@@ -986,21 +1189,39 @@ public class BusinessCustomerService {
     ShipmentRecord shipment = requireShipment(shipmentPublicId);
     requireShipmentAssignmentAuthority(shipment, actor);
     BusinessShipmentRecord existing = requireBusinessShipment(shipment.id());
+    if (!hasManualSnapshotChanges(request)) {
+      return requireAvailableShipment(shipment.publicId(), actor);
+    }
     String status = normalizeTrackingStatus(request.trackingStatus(), existing.trackingStatus());
     Instant now = Instant.now();
     persistManualSnapshot(
         shipment.id(), shipment.carrier(), existing.referenceType(),
         normalizeReference(existing.referenceNo()), status, request, now, actor
     );
-    if (request.note() != null) {
-      jdbcTemplate.update(
-          "UPDATE cp_shipments SET business_note = ? WHERE id = ?",
-          normalizeShipmentNote(request.note(), existing.note()), shipment.id()
-      );
-    }
     auditShipment(actor, "UPDATE_MANUAL_SHIPMENT_SNAPSHOT", shipment.id(),
         "Updated manual shipment data " + existing.referenceNo(), ipAddress);
     return requireAvailableShipment(shipment.publicId(), actor);
+  }
+
+  private boolean hasManualSnapshotChanges(CreateBusinessShipmentRequest request) {
+    return hasText(request.trackingStatus())
+        || hasText(request.forwarderJobNumber())
+        || hasText(request.vesselVoyage())
+        || hasText(request.portOfLoading())
+        || hasText(request.portOfDischarge())
+        || hasText(request.clientPoNumber())
+        || hasText(request.estimatedDeparture())
+        || hasText(request.estimatedArrival())
+        || hasText(request.actualDeparture())
+        || hasText(request.actualArrival())
+        || hasText(request.actualDelivery())
+        || hasText(request.currentLocation())
+        || hasText(request.volume())
+        || hasText(request.clientNameCode());
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   @Transactional

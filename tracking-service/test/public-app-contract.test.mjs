@@ -319,6 +319,40 @@ test("customer tracking is database-backed, assigned-only, and never falls back 
   assert.match(appSource, /if \(readFileSession\(\)\.kind === "CUSTOMER"\) item\.append\(toggle, details\);/);
 });
 
+test("opening shipment details never fetches files or silently re-tracks the shipment", () => {
+  const renderStart = appSource.indexOf("function renderResult(payload)");
+  const renderEnd = appSource.indexOf("function renderHistory()", renderStart);
+  const renderSource = appSource.slice(renderStart, renderEnd);
+  assert.doesNotMatch(renderSource, /preloadRelatedFilesForContext|loadRelatedFiles\(/);
+
+  const openStart = appSource.indexOf("function openHistoryEntry(entry)");
+  const openEnd = appSource.indexOf("function markBatchItemResult", openStart);
+  const openSource = appSource.slice(openStart, openEnd);
+  assert.match(openSource, /renderResult\(currentPayload\)/);
+  assert.doesNotMatch(openSource, /form\.requestSubmit\(\)|requestTracking\(/);
+
+  const filesStart = appSource.indexOf("function openRelatedFilesDrawer()");
+  const filesEnd = appSource.indexOf("function closeRelatedFilesDrawer", filesStart);
+  assert.match(appSource.slice(filesStart, filesEnd), /loadRelatedFiles\(\)/);
+});
+
+test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {
+  const loadStart = appSource.indexOf("async function loadInternalTrackedHistory()");
+  const loadEnd = appSource.indexOf("function migrateLegacyCache", loadStart);
+  const loadSource = appSource.slice(loadStart, loadEnd);
+  assert.match(loadSource, /fetch\("\/api\/business\/shipments"/);
+  assert.match(loadSource, /item\?\.snapshot && typeof item\.snapshot === "object"/);
+  assert.match(loadSource, /PENDING_MANUAL/);
+  assert.match(loadSource, /boundShipment: true/);
+  assert.doesNotMatch(loadSource, /snapshotJson/);
+
+  const historyStart = appSource.indexOf("function renderHistory()");
+  const historyEnd = appSource.indexOf("function cmaSessionErrorMessage", historyStart);
+  const historySource = appSource.slice(historyStart, historyEnd);
+  assert.match(historySource, /clearHistoryButton\.hidden = accountBound \|\| history\.length === 0/);
+  assert.match(indexSource, /id="history-title"[\s\S]*?id="history-subtitle"/);
+});
+
 test("exposes real carrier selection and restricts CMA session maintenance to managers", () => {
   assert.match(
     indexSource,

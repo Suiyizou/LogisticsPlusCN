@@ -156,11 +156,19 @@ const COSCO_PROXY_CONFIG = readCoscoProxyConfig();
 const coscoProxyDispatcher = createCoscoProxyDispatcher(COSCO_PROXY_CONFIG);
 const coscoQueryGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_QUERY_MIN_INTERVAL_MS,
+  maxIntervalMs: process.env.COSCO_QUERY_MAX_INTERVAL_MS,
   queueLimit: process.env.COSCO_QUERY_QUEUE_LIMIT,
   queueTimeoutMs: process.env.COSCO_QUERY_QUEUE_TIMEOUT_MS
 });
+const coscoUpstreamGate = createCoscoQueryGate({
+  minIntervalMs: process.env.COSCO_UPSTREAM_MIN_INTERVAL_MS ?? 3_000,
+  maxIntervalMs: process.env.COSCO_UPSTREAM_MAX_INTERVAL_MS ?? 6_000,
+  queueLimit: process.env.COSCO_UPSTREAM_QUEUE_LIMIT ?? 500,
+  queueTimeoutMs: process.env.COSCO_UPSTREAM_QUEUE_TIMEOUT_MS ?? 600_000
+});
 const coscoCircuitBreaker = createCoscoCircuitBreaker({
-  cooldownMs: process.env.COSCO_BLOCK_COOLDOWN_MS
+  cooldownMs: process.env.COSCO_BLOCK_COOLDOWN_MS,
+  failureThreshold: process.env.COSCO_CIRCUIT_FAILURE_THRESHOLD
 });
 const batchTaskRegistry = createBatchTaskRegistry({
   minIntervalMs: process.env.BATCH_QUERY_MIN_INTERVAL_MS,
@@ -170,6 +178,7 @@ const batchTaskRegistry = createBatchTaskRegistry({
 const cache = new Map();
 const inFlightTrackingRequests = new Map();
 let coscoPublicCookieCache = null;
+let coscoPublicCookiePromise = null;
 const channelCHealth = {
   status: CHANNEL_C_MONITOR_ENABLED ? "unknown" : "disabled",
   available: null,
@@ -210,12 +219,43 @@ function coscoBlockedHttpError() {
   });
 }
 
+export function parseRetryAfter(value, now = Date.now()) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return null;
+  const seconds = Number(normalized);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.max(1_000, Math.ceil(seconds * 1_000));
+  }
+  const date = Date.parse(normalized);
+  return Number.isFinite(date) ? Math.max(1_000, date - now) : null;
+}
+
+function coscoRateLimitedHttpError(retryAfterMs) {
+  const safeRetryAfterMs = Math.max(1_000, Number(retryAfterMs) || 60_000);
+  coscoCircuitBreaker.recordFailure({ retryAfterMs: safeRetryAfterMs, immediate: true });
+  return new HttpError(429, "COSCO temporarily rate-limited this server", {
+    code: "COSCO_UPSTREAM_RATE_LIMITED",
+    upstreamStatus: 429,
+    retryAfterMs: Math.max(safeRetryAfterMs, coscoCircuitBreaker.remainingMs())
+  });
+}
+
 function ensureCoscoCircuitAvailable() {
   if (coscoCircuitBreaker.remainingMs() > 0) throw coscoBlockedHttpError();
 }
 
 function isCoscoBlockedError(error) {
   return error?.details?.code === "COSCO_UPSTREAM_BLOCKED" || error?.upstreamStatus === 403;
+}
+
+function isCoscoProtectionError(error) {
+  return isCoscoBlockedError(error)
+    || error?.details?.code === "COSCO_UPSTREAM_RATE_LIMITED"
+    || error?.details?.code === "COSCO_UPSTREAM_UNAVAILABLE"
+    || error?.code === "COSCO_QUEUE_BUSY"
+    || error?.status === 429
+    || error?.httpStatus === 429
+    || error?.upstreamStatus === 429;
 }
 
 function signalForTimeout(timeoutController, externalSignal) {
@@ -562,7 +602,8 @@ export async function enrichCoscoShipmentContainers(containerInfo, fetchContaine
             ataAtLastPod: container.ataAtLastPod ?? detail.ataAtLastPod ?? null,
             detailSource: "CONTAINER_SUBQUERY"
           };
-        } catch {
+        } catch (error) {
+          if (isCoscoProtectionError(error)) throw error;
           return { ...container, detailSource: "SHIPMENT_QUERY" };
         }
       })
@@ -867,6 +908,17 @@ export function normalizeCoscoContainerSnapshot(
 }
 
 async function fetchCoscoEndpoint(endpoint, request, options = {}) {
+  ensureCoscoCircuitAvailable();
+  return coscoUpstreamGate.run(
+    () => {
+      ensureCoscoCircuitAvailable();
+      return fetchCoscoEndpointNow(endpoint, request, options);
+    },
+    { signal: options.signal }
+  );
+}
+
+async function fetchCoscoEndpointNow(endpoint, request, options = {}) {
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? UPSTREAM_TIMEOUT_MS;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -903,6 +955,26 @@ async function fetchCoscoEndpoint(endpoint, request, options = {}) {
         coscoCircuitBreaker.trip();
         throw coscoBlockedHttpError();
       }
+      if (upstream.status === 401) {
+        throw new HttpError(502, "COSCO public session expired", {
+          code: "COSCO_COOKIE_EXPIRED",
+          upstreamStatus: 401
+        });
+      }
+      if (upstream.status === 429) {
+        throw coscoRateLimitedHttpError(
+          parseRetryAfter(upstream.headers.get("retry-after"))
+        );
+      }
+      if (upstream.status === 503) {
+        const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after")) ?? 30_000;
+        coscoCircuitBreaker.recordFailure({ retryAfterMs, immediate: true });
+        throw new HttpError(503, "COSCO upstream is temporarily unavailable", {
+          code: "COSCO_UPSTREAM_UNAVAILABLE",
+          upstreamStatus: 503,
+          retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreaker.remainingMs())
+        });
+      }
       throw new HttpError(502, `COSCO 接口返回 HTTP ${upstream.status}`);
     }
 
@@ -913,6 +985,29 @@ async function fetchCoscoEndpoint(endpoint, request, options = {}) {
       throw new HttpError(502, "COSCO 响应解码失败", error.message);
     }
 
+    const decodedCode = String(decoded?.code ?? "");
+    if (decodedCode === "429") {
+      throw coscoRateLimitedHttpError(Number(decoded?.retryAfterMs) || 60_000);
+    }
+    if (decodedCode === "403") {
+      coscoCircuitBreaker.trip(Number(decoded?.retryAfterMs) || undefined);
+      throw coscoBlockedHttpError();
+    }
+    if (decodedCode === "503") {
+      const retryAfterMs = Math.max(1_000, Number(decoded?.retryAfterMs) || 30_000);
+      coscoCircuitBreaker.recordFailure({ retryAfterMs, immediate: true });
+      throw new HttpError(503, decoded?.message || "COSCO upstream is temporarily unavailable", {
+        code: "COSCO_UPSTREAM_UNAVAILABLE",
+        upstreamStatus: 503,
+        retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreaker.remainingMs())
+      });
+    }
+    if (decodedCode === "401") {
+      throw new HttpError(502, "COSCO public session expired", {
+        code: "COSCO_COOKIE_EXPIRED",
+        upstreamCode: decoded?.code
+      });
+    }
     if (decoded?.code !== "200" || decoded?.success !== true || decoded?.result == null) {
       const status = decoded?.code === "404" ? 404 : 502;
       throw new HttpError(
@@ -953,13 +1048,28 @@ async function getCoscoPublicCookies(request, options = {}) {
   if (coscoPublicCookieCache?.expiresAt > Date.now()) {
     return coscoPublicCookieCache.value;
   }
+  if (!coscoPublicCookiePromise) {
+    coscoPublicCookiePromise = getCoscoPublicCookiesOnce(request, options)
+      .finally(() => {
+        coscoPublicCookiePromise = null;
+      });
+  }
+  return coscoPublicCookiePromise;
+}
+
+async function getCoscoPublicCookiesOnce(request, options = {}) {
+  if (coscoPublicCookieCache?.expiresAt > Date.now()) {
+    return coscoPublicCookieCache.value;
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), NETWORK_CORE_TIMEOUT_MS);
   const pageUrl = `${COSCO_PUBLIC_TRACKING_PAGE}?lang=en&trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
 
   try {
-    const response = await fetch(pageUrl, {
+    const response = await coscoUpstreamGate.run(() => {
+      ensureCoscoCircuitAvailable();
+      return fetch(pageUrl, {
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "User-Agent":
@@ -967,7 +1077,20 @@ async function getCoscoPublicCookies(request, options = {}) {
       },
       signal: signalForTimeout(controller, options.signal),
       ...coscoFetchDispatcherOption()
-    });
+      });
+    }, { signal: options.signal });
+    if (response.status === 403) {
+      coscoCircuitBreaker.trip();
+      throw coscoBlockedHttpError();
+    }
+    if (response.status === 429) {
+      throw coscoRateLimitedHttpError(
+        parseRetryAfter(response.headers.get("retry-after"))
+      );
+    }
+    if (!response.ok) {
+      throw new HttpError(502, `COSCO public page returned HTTP ${response.status}`);
+    }
     const html = await response.text();
     const value = extractCoscoPageCookies(html, response.headers);
     coscoPublicCookieCache = {
@@ -1002,6 +1125,10 @@ async function fetchCoscoContainers(request, options = {}) {
       });
     } catch (error) {
       finalError = error;
+      if (options.signal?.aborted || isCoscoProtectionError(error)
+          || error?.details?.code !== "COSCO_COOKIE_EXPIRED") {
+        throw error;
+      }
       coscoPublicCookieCache = null;
     }
   }
@@ -1012,7 +1139,8 @@ async function fetchCoscoContainers(request, options = {}) {
 async function optionalCoscoEndpoint(endpoint, request, fallback, options = {}) {
   try {
     return await fetchCoscoEndpoint(endpoint, request, options);
-  } catch {
+  } catch (error) {
+    if (isCoscoProtectionError(error)) throw error;
     return fallback;
   }
 }
@@ -1037,21 +1165,36 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
     };
   }
 
-  const [detail, bookingInfo, containerInfo] = await Promise.all([
-    fetchCoscoEndpoint("detail", request, {
-      timeoutMs: NETWORK_CORE_TIMEOUT_MS,
-      signal: options.signal
-    }),
-    optionalCoscoEndpoint("bookingInfo", request, {}, {
-      timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
-      signal: options.signal
-    }),
-    fetchCoscoShipmentContainers(request, options).catch(() => [])
-  ]);
-  const enrichedContainerInfo = await enrichCoscoShipmentContainers(
-    containerInfo,
-    (containerRequest) => fetchCoscoContainers(containerRequest, options)
-  );
+  const detail = await fetchCoscoEndpoint("detail", request, {
+    timeoutMs: NETWORK_CORE_TIMEOUT_MS,
+    signal: options.signal
+  });
+  let bookingInfo = {};
+  let enrichedContainerInfo = [];
+  let enrichmentWarning = null;
+  if (!options.batch) {
+    try {
+      bookingInfo = await optionalCoscoEndpoint("bookingInfo", request, {}, {
+        timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
+        signal: options.signal
+      });
+      const containerInfo = await fetchCoscoShipmentContainers(request, options)
+        .catch((error) => {
+          if (isCoscoProtectionError(error)) throw error;
+          return [];
+        });
+      enrichedContainerInfo = await enrichCoscoShipmentContainers(
+        containerInfo,
+        (containerRequest) => fetchCoscoContainers(containerRequest, options)
+      );
+    } catch (error) {
+      if (!isCoscoProtectionError(error)) throw error;
+      enrichmentWarning = {
+        code: error?.details?.code ?? error?.code ?? "COSCO_ENRICHMENT_DEFERRED",
+        message: error?.message ?? "Optional COSCO enrichment was deferred"
+      };
+    }
+  }
   const fetchedAt = new Date().toISOString();
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
     queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
@@ -1062,7 +1205,9 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
   return {
     snapshot,
     enrichment: {
-      containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request)
+      containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request),
+      partial: Boolean(options.batch || enrichmentWarning),
+      warning: enrichmentWarning
     },
     raw: {
       detail,
@@ -1088,6 +1233,10 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
       coscoCircuitBreaker.trip();
       throw coscoBlockedHttpError();
     }
+    if (error?.upstreamStatus === 429
+        || error?.code === "COSCO_UPSTREAM_RATE_LIMITED") {
+      throw coscoRateLimitedHttpError(error?.retryAfterMs);
+    }
     const details = error?.code
       ? { code: error.code, retryAfterMs: error?.retryAfterMs ?? undefined }
       : error?.upstreamCode
@@ -1112,22 +1261,36 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
     };
   }
 
-  const enrichedContainerInfo = await enrichCoscoShipmentContainers(
-    containerInfo,
-    (containerRequest) => fetchCoscoContainers(containerRequest, options)
-  );
+  let enrichedContainerInfo = containerInfo;
+  let enrichmentWarning = null;
+  if (!options.batch) {
+    try {
+      enrichedContainerInfo = await enrichCoscoShipmentContainers(
+        containerInfo,
+        (containerRequest) => fetchCoscoContainers(containerRequest, options)
+      );
+    } catch (error) {
+      if (!isCoscoProtectionError(error)) throw error;
+      enrichmentWarning = {
+        code: error?.details?.code ?? error?.code ?? "COSCO_ENRICHMENT_DEFERRED",
+        message: error?.message ?? "Optional COSCO enrichment was deferred"
+      };
+    }
+  }
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
       queryChannel: COSCO_QUERY_CHANNELS.PLAYWRIGHT,
       bookingInfo,
       containerInfo: enrichedContainerInfo
     });
 
-  if (!snapshotHasCompleteContainerDetails(snapshot, request)) {
-    throw new HttpError(502, "COSCO DOM 通道未捕获到箱号明细");
-  }
-
   return {
     snapshot,
+    enrichment: {
+      containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request),
+      partial: Boolean(options.batch || enrichmentWarning)
+        || !snapshotHasCompleteContainerDetails(snapshot, request),
+      warning: enrichmentWarning
+    },
     raw: {
       detail,
       bookingInfo,
@@ -1142,12 +1305,6 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
   if (queryChannel.code === "AUTO") {
     try {
       const result = await fetchCoscoTrackingViaNetwork(request, options);
-      if (
-        request.type !== "CONTAINER" &&
-        result.enrichment?.containerDetailsComplete === false
-      ) {
-        throw new HttpError(502, "COSCO 网络接口未返回完整箱号明细");
-      }
       return {
         ...result,
         strategy: {
@@ -1157,9 +1314,10 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
         }
       };
     } catch (networkError) {
-      if (isCoscoBlockedError(networkError) || options.signal?.aborted) throw networkError;
+      if (isCoscoProtectionError(networkError) || options.signal?.aborted) throw networkError;
       try {
         const result = await fetchCoscoTrackingWithPlaywright(request, options);
+        coscoCircuitBreaker.recordSuccess();
         return {
           ...result,
           strategy: {
@@ -1170,12 +1328,16 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
           }
         };
       } catch (playwrightError) {
+        if (isCoscoProtectionError(playwrightError)) throw playwrightError;
         if (playwrightError instanceof HttpError && playwrightError.status === 429) {
           throw playwrightError;
         }
-        throw new HttpError(502, "COSCO 两个查询通道均不可用", {
-          network: networkError?.message ?? "网络接口失败",
-          playwright: playwrightError?.message ?? "DOM 通道失败"
+        const circuit = coscoCircuitBreaker.recordFailure({ retryAfterMs: 2 * 60_000 });
+        throw new HttpError(503, "Both COSCO tracking channels are temporarily unavailable", {
+          code: "COSCO_CHANNELS_UNAVAILABLE",
+          retryAfterMs: circuit.retryAfterMs || 15_000,
+          network: networkError?.message ?? "Network channel failed",
+          playwright: playwrightError?.message ?? "Playwright channel failed"
         });
       }
     }
@@ -1191,7 +1353,11 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
 function runCoscoTrackingRequest(request, queryChannel, options = {}) {
   ensureCoscoCircuitAvailable();
   return coscoQueryGate.run(
-    () => fetchCoscoTracking(request, queryChannel, options),
+    async () => {
+      const result = await fetchCoscoTracking(request, queryChannel, options);
+      coscoCircuitBreaker.recordSuccess();
+      return result;
+    },
     { signal: options.signal }
   );
 }
@@ -1474,7 +1640,10 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   if (!requestPromise) {
     requestPromise = carrierCode === "CMA"
       ? fetchCmaTracking(trackingRequest, cmaCredentials, { signal: batchLease?.signal })
-      : runCoscoTrackingRequest(trackingRequest, queryChannel, { signal: batchLease?.signal });
+      : runCoscoTrackingRequest(trackingRequest, queryChannel, {
+          signal: batchLease?.signal,
+          batch: Boolean(batchTaskId)
+        });
     if (!batchTaskId) inFlightTrackingRequests.set(cacheKey, requestPromise);
   }
 
@@ -1674,8 +1843,16 @@ export const server = createServer(async (request, response) => {
       : Number.isInteger(error?.httpStatus)
         ? error.httpStatus
         : 500;
+    const details = error instanceof HttpError
+      ? error.details
+      : (error?.code || error?.retryAfterMs)
+        ? {
+            code: error?.code ?? undefined,
+            retryAfterMs: error?.retryAfterMs ?? undefined
+          }
+        : undefined;
     if ([429, 503].includes(status)) {
-      const retryAfterMs = Number(error?.details?.retryAfterMs);
+      const retryAfterMs = Number(details?.retryAfterMs);
       response.setHeader(
         "Retry-After",
         String(Number.isFinite(retryAfterMs) ? Math.max(1, Math.ceil(retryAfterMs / 1_000)) : 5)
@@ -1684,7 +1861,7 @@ export const server = createServer(async (request, response) => {
     sendJson(response, status, {
       error: {
         message: error?.message || "服务器内部错误",
-        details: error instanceof HttpError ? error.details : undefined
+        details
       }
     });
   }

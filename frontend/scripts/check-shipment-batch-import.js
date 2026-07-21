@@ -68,6 +68,14 @@ const businessCustomerPage = readFileSync(
   new URL("../src/components/BusinessCustomerPage.vue", import.meta.url),
   "utf8"
 );
+const businessCustomerApi = readFileSync(
+  new URL("../src/services/businessCustomerApi.js", import.meta.url),
+  "utf8"
+);
+assert.match(businessCustomerApi, /request\("\/business\/shipments"\)/);
+assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}`\)/);
+assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
+assert.doesNotMatch(businessCustomerApi, /business\/customers\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/snapshot/);
 assert.match(
   businessCustomerPage,
   /batchTrackCancelRequested\.value = true;[\s\S]*?if \(!batchTrackTaskId\.value\) return;/
@@ -76,5 +84,38 @@ assert.match(
   businessCustomerPage,
   /if \(batchTrackCancelRequested\.value && task\.taskId\)[\s\S]*?cancelShipmentBatchTask\(task\.taskId\)/
 );
+assert.match(businessCustomerPage, /v-model="batchTrackDialogOpen"/);
+assert.match(businessCustomerPage, /batchTrackDialogOpen = false/);
+assert.doesNotMatch(businessCustomerPage, /@(?:close|closed)="cancelBatchTrack"/);
+assert.doesNotMatch(businessCustomerPage, /function viewShipmentDetail/);
+assert.doesNotMatch(businessCustomerPage, /<el-tag v-if="row\.note"/);
+assert.match(businessCustomerPage, /customers\.batchTrackStopConfirm/);
+assert.match(businessCustomerPage, /status === "RETRY_WAIT"/);
+
+const manualSaveSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf("async function saveManualSnapshot"),
+  businessCustomerPage.indexOf("function emptyManualShipmentFields")
+);
+const manualRequestSource = manualSaveSource.slice(
+  manualSaveSource.indexOf("updateBusinessShipmentManualSnapshot"),
+  manualSaveSource.indexOf("\n    );", manualSaveSource.indexOf("updateBusinessShipmentManualSnapshot"))
+);
+assert.match(manualRequestSource, /trackingStatus: detailForm\.trackingStatus/);
+assert.doesNotMatch(manualRequestSource, /note: detailForm\.note/);
+assert.doesNotMatch(manualRequestSource, /referenceNo: detailForm\.referenceNo/);
+assert.match(manualSaveSource, /Object\.assign\(detailForm, unsavedTicketFields\)/);
+
+const shipmentSaveSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf("async function saveShipmentDetail"),
+  businessCustomerPage.indexOf("async function refreshShipmentFromCarrier")
+);
+const shipmentRequestSource = shipmentSaveSource.slice(
+  shipmentSaveSource.indexOf("updateBusinessShipment"),
+  shipmentSaveSource.indexOf("\n    });", shipmentSaveSource.indexOf("updateBusinessShipment"))
+);
+assert.match(shipmentRequestSource, /referenceNo: detailForm\.referenceNo/);
+assert.match(shipmentRequestSource, /note: detailForm\.note/);
+assert.doesNotMatch(shipmentRequestSource, /trackingStatus: detailForm\.trackingStatus/);
+assert.match(shipmentSaveSource, /Object\.assign\(detailForm, unsavedManualFields\)/);
 
 console.log("shipment batch import checks passed");

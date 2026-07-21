@@ -55,7 +55,7 @@
           :key="item.key"
           type="button"
           :class="{ active: activeAdminPage === item.key }"
-          @click="activeAdminPage = item.key"
+          @click="selectAdminPage(item.key)"
         >
           <span>{{ item.no }}</span>
           <b>{{ item.label }}</b>
@@ -768,11 +768,16 @@
       </div>
     </div>
   </section>
+  <SystemWaitOverlay
+    :visible="initialLoading"
+    :message="t('app.loadingPage')"
+  />
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
+import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
   clearAdminToken,
   createEmployee,
@@ -815,6 +820,7 @@ const rawAdminPages = [
 ];
 
 const loading = ref(false);
+const initialLoading = ref(false);
 const message = ref("");
 const hasError = ref(false);
 const currentUser = ref(props.currentUser);
@@ -824,6 +830,7 @@ const adminWorkspaceFiles = ref([]);
 const adminWorkspaceFileTotal = ref(0);
 const adminShipmentFiles = ref([]);
 const adminShipmentFileTotal = ref(0);
+const adminFilesLoaded = ref(false);
 const includeExpiredFiles = ref(false);
 const activeAdminFileSection = ref("workspace");
 const monitoring = ref(null);
@@ -894,7 +901,12 @@ const heapPercent = computed(() => {
 
 onMounted(async () => {
   if (storedAdminToken()) {
-    await loadDashboard(false);
+    initialLoading.value = true;
+    try {
+      await loadDashboard(false, false);
+    } finally {
+      initialLoading.value = false;
+    }
   }
 });
 
@@ -924,42 +936,58 @@ async function handleLogout() {
   emit("logout");
 }
 
-async function loadDashboard(showSuccess = true) {
+async function loadDashboard(showSuccess = true, refreshUser = true) {
   await withLoading(async () => {
-    currentUser.value = normalizeDisplayName(await fetchAdminMe());
-    emit("user-updated", currentUser.value);
+    if (refreshUser) {
+      currentUser.value = normalizeDisplayName(await fetchAdminMe());
+      emit("user-updated", currentUser.value);
+    }
     const [
       employeeRows,
       deviceRows,
       monitoringData,
-      llmData,
-      workspaceFileData,
-      shipmentFileData
+      llmData
     ] = await Promise.all([
       fetchEmployees(),
       fetchDevices(),
       fetchMonitoring(),
-      fetchLlmSettings(),
-      fetchAdminWorkspaceFiles({ page: 0, size: 200, includeExpired: includeExpiredFiles.value })
-        .catch(() => null),
-      fetchAdminShipmentFiles({ page: 0, size: 200, includeDeleted: true })
-        .catch(() => null)
+      fetchLlmSettings()
     ]);
     employees.value = employeeRows;
     devices.value = deviceRows;
     monitoring.value = monitoringData;
     llmSettings.value = llmData;
-    if (workspaceFileData) {
-      adminWorkspaceFiles.value = Array.isArray(workspaceFileData.items) ? workspaceFileData.items : [];
-      adminWorkspaceFileTotal.value = Number(workspaceFileData.total ?? adminWorkspaceFiles.value.length);
-    }
-    if (shipmentFileData) {
-      adminShipmentFiles.value = Array.isArray(shipmentFileData.items) ? shipmentFileData.items : [];
-      adminShipmentFileTotal.value = Number(shipmentFileData.total ?? adminShipmentFiles.value.length);
-    }
+    if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     syncLlmForm(llmData);
     if (showSuccess) showMessage("后台数据已刷新");
   });
+}
+
+function selectAdminPage(page) {
+  activeAdminPage.value = page;
+  if (page === "files" && !adminFilesLoaded.value) {
+    void withLoading(loadAdminFileListsWithoutLoading);
+  }
+}
+
+async function loadAdminFileListsWithoutLoading() {
+  const [workspaceResult, shipmentResult] = await Promise.allSettled([
+    fetchAdminWorkspaceFiles({ page: 0, size: 200, includeExpired: includeExpiredFiles.value }),
+    fetchAdminShipmentFiles({ page: 0, size: 200, includeDeleted: true })
+  ]);
+  if (workspaceResult.status === "fulfilled") {
+    const data = workspaceResult.value;
+    adminWorkspaceFiles.value = Array.isArray(data?.items) ? data.items : [];
+    adminWorkspaceFileTotal.value = Number(data?.total ?? adminWorkspaceFiles.value.length);
+  }
+  if (shipmentResult.status === "fulfilled") {
+    const data = shipmentResult.value;
+    adminShipmentFiles.value = Array.isArray(data?.items) ? data.items : [];
+    adminShipmentFileTotal.value = Number(data?.total ?? adminShipmentFiles.value.length);
+  }
+  adminFilesLoaded.value = workspaceResult.status === "fulfilled" && shipmentResult.status === "fulfilled";
+  const failed = [workspaceResult, shipmentResult].find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
 }
 
 function openEmployeeDialog(user = null) {

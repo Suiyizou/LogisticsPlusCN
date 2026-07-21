@@ -312,7 +312,7 @@
                     </span>
                     <span>{{ formatDate(shipment.lastTrackedAt || shipment.updatedAt) }}</span>
                     <span class="candidate-row-actions">
-                      <el-button text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.details") }}</el-button>
+                      <el-button text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.edit") }}</el-button>
                       <el-button type="primary" size="small" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</el-button>
                     </span>
                   </div>
@@ -335,7 +335,6 @@
                     <template #default="{ row }">
                       <div class="table-status-cell">
                         <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || t("customers.bound") }}</span>
-                        <el-tag v-if="row.note" size="small" type="info" effect="plain">{{ row.note }}</el-tag>
                         <el-tag size="small" :type="row.publicationStatus === 'PUBLISHED' ? 'success' : 'warning'" effect="plain">
                           {{ row.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
                         </el-tag>
@@ -350,7 +349,7 @@
                   <el-table-column :label="t('customers.actions')" min-width="200" fixed="right">
                     <template #default="{ row }">
                       <div class="table-actions">
-                        <el-button text size="small" @click="openShipmentDetail(row)">{{ t("customers.details") }}</el-button>
+                        <el-button text size="small" @click="openShipmentDetail(row)">{{ t("customers.edit") }}</el-button>
                         <el-button
                           v-if="needsManualSupplement(row)"
                           text
@@ -392,7 +391,7 @@
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
-                    <el-button @click="toggleBatchTrackPanel" :type="batchTrackPanelOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ t("customers.batchTrack") }}</el-button>
+                    <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                   </div>
                 </div>
@@ -409,38 +408,67 @@
                   <el-table-column :label="t('customers.carrier')" width="120">
                     <template #default="{ row }">{{ row.carrier || '—' }}</template>
                   </el-table-column>
+                  <el-table-column :label="t('customers.clientNoName')" min-width="170" show-overflow-tooltip>
+                    <template #default="{ row }">{{ shipmentClientLabel(row) }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.boundUsers')" min-width="210">
+                    <template #default="{ row }">
+                      <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
+                        <el-tag
+                          v-for="user in shipmentBoundUsers(row).slice(0, 2)"
+                          :key="user.id || `${user.name}-${user.role}`"
+                          size="small"
+                          effect="plain"
+                        >{{ boundUserLabel(user) }}</el-tag>
+                        <el-tooltip
+                          v-if="shipmentBoundUsers(row).length > 2"
+                          :content="shipmentBoundUsers(row).map(boundUserLabel).join(', ')"
+                          placement="top"
+                        >
+                          <el-tag size="small" type="info" effect="plain">+{{ shipmentBoundUsers(row).length - 2 }}</el-tag>
+                        </el-tooltip>
+                      </div>
+                      <span v-else>—</span>
+                    </template>
+                  </el-table-column>
                   <el-table-column :label="t('customers.shipmentStatus')" width="160">
                     <template #default="{ row }">
                       <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('customers.remark')" min-width="180" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.remark || '—' }}</template>
+                    <template #default="{ row }">{{ row.note || row.remark || '—' }}</template>
                   </el-table-column>
                   <el-table-column :label="t('customers.lastTrackedAt')" width="160">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" width="400" fixed="right">
+                  <el-table-column :label="t('customers.actions')" width="300" fixed="right">
                     <template #default="{ row }">
                       <div class="table-action-buttons table-action-buttons--spacious">
                         <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
                         <el-button size="small" type="warning" plain @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
-                        <el-button size="small" type="info" plain @click.stop="viewShipmentDetail(row)">{{ t("customers.detail") }}</el-button>
                         <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
                       </div>
                     </template>
                   </el-table-column>
                 </el-table>
               </div>
-              <transition name="slide-fade">
-                <div v-if="batchTrackPanelOpen" class="shipment-workspace-side">
+              <el-dialog
+                v-model="batchTrackDialogOpen"
+                :title="t('customers.batchTrack')"
+                width="min(920px, 94vw)"
+                append-to-body
+                :destroy-on-close="false"
+                class="batch-track-task-dialog"
+              >
+                <div class="shipment-workspace-side batch-track-task-dialog-body">
                   <div class="batch-track-panel">
-                    <div class="batch-track-panel-header">
-                      <h3>{{ t("customers.batchTrack") }}</h3>
-                      <el-button size="small" link @click="toggleBatchTrackPanel">×</el-button>
-                    </div>
                     <div class="batch-track-form">
-                      <div class="customer-excel-dropzone batch-track-dropzone" :class="{ 'has-file': batchTrackFileName, 'is-dragover': batchTrackDropzoneActive }"
+                      <div
+                        v-loading="batchTrackFileParsing"
+                        :element-loading-text="t('app.loadingPage')"
+                        class="customer-excel-dropzone batch-track-dropzone"
+                        :class="{ 'has-file': batchTrackFileName, 'is-dragover': batchTrackDropzoneActive }"
                         @dragover.prevent="batchTrackDropzoneActive = true"
                         @dragleave.prevent="batchTrackDropzoneActive = false"
                         @drop.prevent="handleBatchTrackDrop"
@@ -504,6 +532,12 @@
                         <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
                         <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
                       </div>
+                      <el-alert
+                        v-if="batchTrackProgress.nextAttemptAt"
+                        type="warning"
+                        :closable="false"
+                        :title="t('customers.batchTrackRetryWait', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
+                      />
                       <div v-if="batchTrackResults.length" class="batch-track-result-list">
                         <div v-for="(r, idx) in batchTrackResults" :key="`${r.number}-${idx}`" class="batch-track-result-row" :class="r.status">
                           <span class="batch-track-result-meta">
@@ -515,6 +549,7 @@
                       </div>
                     </div>
 
+                    <p class="batch-track-close-hint">{{ t("customers.batchTrackCloseHint") }}</p>
                     <div class="batch-track-actions">
                       <button
                         class="customer-access-primary"
@@ -524,18 +559,21 @@
                       >
                         {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
                       </button>
-                      <button
+                      <el-button native-type="button" @click="batchTrackDialogOpen = false">
+                        {{ t("customers.close") }}
+                      </el-button>
+                      <el-button
                         v-if="batchTrackRunning"
-                        type="button"
-                        class="secondary"
+                        type="danger"
+                        :disabled="batchTrackCancelRequested || batchTrackProgress.status === 'STOPPING'"
                         @click="cancelBatchTrack"
                       >
-                        {{ t("customers.cancel") }}
-                      </button>
+                        {{ t("customers.batchTrackStop") }}
+                      </el-button>
                     </div>
                   </div>
                 </div>
-              </transition>
+              </el-dialog>
             </div>
           </template>
           <!-- Detail view -->
@@ -546,7 +584,7 @@
               <template #header>
                 <div class="main-card-header">
                   <div>
-                    <span class="main-card-eyebrow">{{ t("customers.shipmentDetail") }}</span>
+                    <span class="main-card-eyebrow">{{ t("customers.editShipment") }}</span>
                     <h2 class="main-card-title">{{ selectedShipment?.referenceNo || selectedShipment?.shipmentId || "—" }}</h2>
                     <p class="main-card-subtitle">
                       <span class="detail-meta-pill">{{ selectedShipment?.carrier || "—" }}</span>
@@ -566,7 +604,7 @@
               </template>
 
               <section class="profile-section">
-                <div class="section-label">{{ t("customers.shipmentDetail") }}</div>
+                <div class="section-label">{{ t("customers.editShipment") }}</div>
                 <el-form class="profile-form" @submit.prevent="saveShipmentDetail" label-position="top">
                   <div class="shipment-detail-single-column">
                     <el-form-item :label="t('customers.referenceType')">
@@ -577,9 +615,6 @@
                     </el-form-item>
                     <el-form-item :label="t('customers.referenceNo')">
                       <el-input v-model.trim="detailForm.referenceNo" />
-                    </el-form-item>
-                    <el-form-item :label="t('customers.shipmentStatus')">
-                      <el-input v-model.trim="detailForm.trackingStatus" />
                     </el-form-item>
                   </div>
 
@@ -593,6 +628,9 @@
                       </div>
                     </template>
                     <div class="customer-manual-fields shipment-detail-fields">
+                      <el-form-item :label="t('customers.shipmentStatus')">
+                        <el-input v-model.trim="detailForm.trackingStatus" />
+                      </el-form-item>
                       <el-form-item :label="t('customers.jobNumber')">
                         <el-input v-model.trim="detailForm.forwarderJobNumber" />
                       </el-form-item>
@@ -646,10 +684,10 @@
                     <el-button @click="invalidateSnapshot" :disabled="savingShipment">
                       {{ t("customers.invalidateSnapshot") }}
                     </el-button>
-                    <el-button type="primary" @click="saveManualSnapshot" :disabled="savingShipment">
+                    <el-button type="primary" @click="saveManualSnapshot" :disabled="savingShipment" :title="t('customers.manualSaveHint')">
                       {{ t("customers.saveManualSnapshot") }}
                     </el-button>
-                    <el-button type="primary" native-type="submit" :disabled="savingShipment">
+                    <el-button type="primary" native-type="submit" :disabled="savingShipment" :title="t('customers.shipmentSaveHint')">
                       {{ savingShipment ? t("customers.savingShipment") : t("customers.saveShipment") }}
                     </el-button>
                   </div>
@@ -775,7 +813,12 @@
           <textarea v-model="quickImportText" :placeholder="t('customers.quickImportPlaceholder')"></textarea>
           <small>{{ t("customers.quickImportHint") }}</small>
         </label>
-        <div v-else class="customer-excel-dropzone" :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
+        <div
+          v-else
+          v-loading="customerFileParsing"
+          :element-loading-text="t('app.loadingPage')"
+          class="customer-excel-dropzone"
+          :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
           @dragover.prevent="batchDropzoneActive = true"
           @dragleave.prevent="batchDropzoneActive = false"
           @drop.prevent="handleBatchDrop"
@@ -810,7 +853,9 @@
           </div>
         </div>
         <div class="customer-dialog-actions">
-          <button type="button" @click="downloadCredentialWorkbook">{{ t("customers.exportCredentials") }}</button>
+          <button type="button" :disabled="exportingCredentials" @click="downloadCredentialWorkbook">
+            {{ exportingCredentials ? t("customers.preparingExport") : t("customers.exportCredentials") }}
+          </button>
           <button class="customer-access-primary" type="button" @click="closeBatchCredentials">{{ t("customers.confirmStored") }}</button>
         </div>
       </section>
@@ -904,9 +949,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import * as XLSX from "xlsx";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
@@ -952,6 +996,16 @@ const props = defineProps({
 });
 const emit = defineEmits(["logout"]);
 const { t } = useI18n();
+let xlsxModulePromise;
+
+function loadXlsxModule() {
+  if (!xlsxModulePromise) xlsxModulePromise = import("xlsx");
+  return xlsxModulePromise;
+}
+
+function waitForNextPaint() {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
 
 const customers = ref([]);
 const selectedCustomerId = ref("");
@@ -971,8 +1025,10 @@ const batchRows = ref([]);
 const batchPreviewError = ref("");
 const batchFileInput = ref(null);
 const batchDropzoneActive = ref(false);
+const customerFileParsing = ref(false);
 const importingCustomers = ref(false);
 const batchCredentialRows = ref([]);
+const exportingCredentials = ref(false);
 const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
@@ -984,8 +1040,8 @@ const creatingShipment = ref(false);
 const deletingShipment = ref(false);
 const refreshingShipment = ref(false);
 const batchTrackDialogOpen = ref(false);
-const batchTrackPanelOpen = ref(false);
 const batchTrackDropzoneActive = ref(false);
+const batchTrackFileParsing = ref(false);
 const batchTrackText = ref("");
 const batchTrackCarrier = ref("COSCO");
 const batchTrackType = ref("BILLOFLADING");
@@ -1050,6 +1106,12 @@ const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => ite
 const batchTrackTrackableCount = computed(() => batchTrackItems.value.filter((item) => !item.manualOnly).length);
 const batchTrackManualCount = computed(() => batchTrackItems.value.filter((item) => item.manualOnly).length);
 const batchTrackPreviewRows = computed(() => batchTrackSelectedSheet.value?.rows?.slice(1, 9) || []);
+const batchTrackToolbarLabel = computed(() => batchTrackRunning.value
+  ? t("customers.batchTrackToolbarProgress", {
+      done: batchTrackProgress.value.done,
+      total: batchTrackProgress.value.total
+    })
+  : t("customers.batchTrack"));
 const BATCH_TRACK_TASK_KEY = "business-shipment-batch-task-id";
 const BATCH_TRACK_TERMINAL = new Set(["COMPLETED", "STOPPED", "FAILED"]);
 let batchTrackPollTimer = 0;
@@ -1324,7 +1386,6 @@ onMounted(() => {
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
   void loadPendingClientMatches();
-  void buildShipmentCustomerMap();
   void restoreBatchTrackTask();
 });
 onUnmounted(() => {
@@ -1351,20 +1412,19 @@ function selectShipmentFromList(row) {
   subView.value = "detail";
 }
 
-async function buildShipmentCustomerMap() {
+function buildShipmentCustomerMap() {
   const map = {};
-  for (const customer of customers.value) {
-    try {
-      const response = await fetchBusinessCustomerShipments(customer.id);
-      const items = Array.isArray(response?.items) ? response.items : [];
-      for (const item of items) {
-        if (!map[item.shipmentId]) map[item.shipmentId] = [];
-        if (!map[item.shipmentId].includes(customer.id)) {
-          map[item.shipmentId].push(customer.id);
-        }
+  for (const shipment of availableShipments.value) {
+    const shipmentId = shipment?.shipmentId;
+    if (!shipmentId) continue;
+    const boundCustomers = Array.isArray(shipment.boundCustomers) ? shipment.boundCustomers : [];
+    for (const customer of boundCustomers) {
+      const customerId = typeof customer === "string" ? customer : customer?.id;
+      if (!customerId) continue;
+      if (!map[shipmentId]) map[shipmentId] = [];
+      if (!map[shipmentId].includes(customerId)) {
+        map[shipmentId].push(customerId);
       }
-    } catch (e) {
-      // skip failed customer loads
     }
   }
   shipmentCustomerMap.value = map;
@@ -1376,6 +1436,7 @@ async function loadCustomers(preferredId = "") {
   try {
     const response = await fetchBusinessCustomers();
     customers.value = Array.isArray(response?.items) ? response.items : [];
+    loadingCustomers.value = false;
     const nextId = preferredId || selectedCustomerId.value;
     if (nextId && customers.value.some((item) => item.id === nextId)) {
       await selectCustomer(nextId);
@@ -1392,12 +1453,73 @@ async function loadCustomers(preferredId = "") {
   }
 }
 
+function normalizeBusinessShipment(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const envelope = payload.item && typeof payload.item === "object" ? payload.item : payload;
+  const shipment = envelope.shipment && typeof envelope.shipment === "object"
+    ? envelope.shipment
+    : envelope;
+  const rawSnapshot = envelope.snapshot ?? shipment.snapshot ?? envelope.snapshotJson ?? shipment.snapshotJson;
+  let snapshot = rawSnapshot;
+  if (typeof rawSnapshot === "string") {
+    try {
+      snapshot = JSON.parse(rawSnapshot);
+    } catch (_error) {
+      snapshot = null;
+    }
+  }
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) snapshot = null;
+
+  const normalized = {
+    ...shipment,
+    ...(envelope.shipment ? envelope : {}),
+    snapshot,
+    dataAvailable: envelope.dataAvailable ?? shipment.dataAvailable ?? Boolean(snapshot)
+  };
+  delete normalized.shipment;
+
+  if (!snapshot) return normalized;
+  const summary = snapshot.summary || {};
+  const keyTimes = snapshot.keyTimes || {};
+  const references = snapshot.references || {};
+  const business = references.business || {};
+  const firstContainer = Array.isArray(snapshot.containers) ? snapshot.containers[0] : null;
+  const firstLeg = Array.isArray(snapshot.routingLegs) ? snapshot.routingLegs[0] : null;
+  const vesselVoyage = [firstLeg?.vessel, firstLeg?.voyage].filter(Boolean).join(" / ");
+  const details = {
+    forwarderJobNumber: business.forwarderJobNumber,
+    clientPoNumber: business.clientPoNumber,
+    clientNameCode: business.clientNameCode,
+    portOfLoading: summary.origin?.name,
+    portOfDischarge: summary.destination?.name,
+    vesselVoyage: summary.vesselVoyage || vesselVoyage,
+    volume: summary.volume,
+    estimatedDeparture: keyTimes.estimatedDeparture?.time,
+    estimatedArrival: keyTimes.estimatedFinalArrival?.time || keyTimes.estimatedArrival?.time,
+    actualDeparture: keyTimes.actualDeparture?.time,
+    actualArrival: keyTimes.actualArrival?.time,
+    actualDelivery: keyTimes.actualDelivery?.time,
+    currentLocation: summary.latestEvent?.location,
+    containerNumber: firstContainer?.number,
+    containerType: firstContainer?.type
+  };
+  for (const [key, value] of Object.entries(details)) {
+    if ((normalized[key] === null || normalized[key] === undefined || normalized[key] === "") && value) {
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}
+
 async function loadAvailableShipments() {
   if (loadingAvailableShipments.value) return;
   loadingAvailableShipments.value = true;
   try {
     const response = await fetchAvailableBusinessShipments();
-    availableShipments.value = Array.isArray(response?.items) ? response.items : [];
+    availableShipments.value = Array.isArray(response?.items)
+      ? response.items.map(normalizeBusinessShipment)
+      : [];
+    buildShipmentCustomerMap();
   } catch (error) {
     showError(error, "customers.loadAvailableShipmentsFailed");
   } finally {
@@ -1414,7 +1536,7 @@ async function loadShipmentDetailSnapshot() {
   loadingShipmentDetail.value = true;
   try {
     const response = await fetchBusinessShipmentSnapshot(shipmentId);
-    detailShipmentSnapshot.value = response || null;
+    detailShipmentSnapshot.value = normalizeBusinessShipment(response?.item || response);
   } catch (error) {
     showError(error, "customers.loadShipmentDetailFailed");
     detailShipmentSnapshot.value = null;
@@ -1454,6 +1576,8 @@ async function startBatchTrack() {
 }
 
 async function cancelBatchTrack() {
+  if (batchTrackCancelRequested.value || batchTrackProgress.value.status === "STOPPING") return;
+  if (!window.confirm(t("customers.batchTrackStopConfirm"))) return;
   batchTrackCancelRequested.value = true;
   if (!batchTrackTaskId.value) return;
   try {
@@ -1473,7 +1597,10 @@ async function handleBatchTrackWorkbook(event) {
   batchTrackSelectedColumnIndex.value = null;
   batchTrackResults.value = [];
   if (!file) return;
+  batchTrackFileParsing.value = true;
   try {
+    await waitForNextPaint();
+    const XLSX = await loadXlsxModule();
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
     const sheets = parseShipmentBatchWorkbook(workbook, XLSX);
     if (!sheets.length) throw new Error(t("customers.noTrackNumbers"));
@@ -1485,6 +1612,7 @@ async function handleBatchTrackWorkbook(event) {
   } catch (error) {
     batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.excelReadFailed") }];
   } finally {
+    batchTrackFileParsing.value = false;
     event.target.value = "";
   }
 }
@@ -1524,7 +1652,11 @@ function applyBatchTrackTask(task) {
     manual: Number(task.manual || 0),
     failed: Number(task.failed || 0),
     pending: Number(task.pending || 0),
-    status
+    status,
+    nextAttemptAt: task.nextAttemptAt
+      || task.cooldownUntil
+      || (task.items || []).find((item) => String(item.status || "").toUpperCase() === "RETRY_WAIT")?.nextRetryAt
+      || null
   };
   batchTrackResults.value = (task.items || []).map((item) => {
     const itemStatus = String(item.status || "PENDING").toUpperCase();
@@ -1547,8 +1679,9 @@ function applyBatchTrackTask(task) {
 }
 
 function batchTrackItemMessage(item, taskStatus = "") {
-  if (item.error) return item.error;
   const status = String(item.status || "PENDING").toUpperCase();
+  if (status === "RETRY_WAIT") return t("customers.batchTrackRetryItem");
+  if (item.error) return item.error;
   if (taskStatus === "STOPPED" && ["PENDING", "RUNNING"].includes(status)) return t("customers.trackStopped");
   if (status === "SUCCEEDED") return t("customers.trackSucceeded");
   if (status === "MANUAL") return t("customers.trackManualPlaceholder");
@@ -1620,14 +1753,8 @@ function sheetRecommendationScore(sheet) {
   return Math.max(0, ...(sheet?.columns || []).map((column) => Number(column.score || 0)));
 }
 
-function handleCloseBatchTrack() {
-  if (batchTrackRunning.value) return;
-  batchTrackDialogOpen.value = false;
-  clearBatchTrack();
-}
-
 function toggleBatchTrackPanel() {
-  batchTrackPanelOpen.value = !batchTrackPanelOpen.value;
+  batchTrackDialogOpen.value = !batchTrackDialogOpen.value;
 }
 
 function handleBatchTrackDrop(event) {
@@ -1987,14 +2114,37 @@ async function createShipment() {
 async function saveManualSnapshot() {
   const shipment = activeDetailShipment.value;
   if (!shipment?.shipmentId || savingShipment.value) return;
+  const unsavedTicketFields = {
+    referenceType: detailForm.referenceType,
+    referenceNo: detailForm.referenceNo,
+    note: detailForm.note
+  };
   savingShipment.value = true;
   try {
     const updated = await updateBusinessShipmentManualSnapshot(
       shipment.shipmentId,
-      { ...detailForm }
+      {
+        trackingStatus: detailForm.trackingStatus,
+        forwarderJobNumber: detailForm.forwarderJobNumber,
+        vesselVoyage: detailForm.vesselVoyage,
+        portOfLoading: detailForm.portOfLoading,
+        portOfDischarge: detailForm.portOfDischarge,
+        clientPoNumber: detailForm.clientPoNumber,
+        estimatedDeparture: detailForm.estimatedDeparture,
+        estimatedArrival: detailForm.estimatedArrival,
+        actualDeparture: detailForm.actualDeparture,
+        actualArrival: detailForm.actualArrival,
+        actualDelivery: detailForm.actualDelivery,
+        currentLocation: detailForm.currentLocation,
+        volume: detailForm.volume,
+        clientNameCode: detailForm.clientNameCode
+      }
     );
-    replaceShipmentInLocalCollections(updated);
-    await loadShipmentDetailSnapshot();
+    const normalized = normalizeBusinessShipment(updated);
+    replaceShipmentInLocalCollections(normalized);
+    detailShipmentSnapshot.value = normalized;
+    await nextTick();
+    Object.assign(detailForm, unsavedTicketFields);
     showSuccess("customers.manualSnapshotSaved");
   } catch (error) {
     showError(error, "customers.manualSnapshotFailed");
@@ -2075,11 +2225,24 @@ function syncDetailFormFromShipment(shipment) {
 async function saveShipmentDetail() {
   const shipment = activeDetailShipment.value;
   if (!shipment?.shipmentId || savingShipment.value) return;
+  const unsavedManualFields = {
+    trackingStatus: detailForm.trackingStatus,
+    ...Object.fromEntries(
+      Object.keys(emptyManualShipmentFields()).map((key) => [key, detailForm[key]])
+    )
+  };
   savingShipment.value = true;
   try {
-    const updated = await updateBusinessShipment(shipment.shipmentId, { ...detailForm });
-    replaceShipmentInLocalCollections(updated);
-    await loadShipmentDetailSnapshot();
+    const updated = await updateBusinessShipment(shipment.shipmentId, {
+      referenceType: detailForm.referenceType,
+      referenceNo: detailForm.referenceNo,
+      note: detailForm.note
+    });
+    const normalized = normalizeBusinessShipment(updated);
+    replaceShipmentInLocalCollections(normalized);
+    detailShipmentSnapshot.value = normalized;
+    await nextTick();
+    Object.assign(detailForm, unsavedManualFields);
     showSuccess("customers.shipmentSaved");
   } catch (error) {
     showError(error, "customers.shipmentSaveFailed");
@@ -2204,10 +2367,6 @@ async function removeShipment() {
 }
 
 function editShipment(row) {
-  navigateToShipmentDetail(row);
-}
-
-function viewShipmentDetail(row) {
   navigateToShipmentDetail(row);
 }
 
@@ -2353,7 +2512,10 @@ async function handleCustomerWorkbook(event) {
   batchFileName.value = "";
   batchPreviewError.value = "";
   if (!file) return;
+  customerFileParsing.value = true;
   try {
+    await waitForNextPaint();
+    const XLSX = await loadXlsxModule();
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
@@ -2373,6 +2535,7 @@ async function handleCustomerWorkbook(event) {
   } catch (error) {
     batchPreviewError.value = error?.message || t("customers.excelReadFailed");
   } finally {
+    customerFileParsing.value = false;
     event.target.value = "";
   }
 }
@@ -2404,15 +2567,23 @@ async function submitBatchImport() {
   }
 }
 
-function downloadCredentialWorkbook() {
-  const rows = batchCredentialRows.value.map((row) => ({
-    [t("customers.customerName")]: row.username,
-    [t("customers.initialPassword")]: row.password || "",
-    [t("customers.importStatus")]: row.status === "CREATED" ? t("customers.importCreated") : row.message
-  }));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "Customer credentials");
-  XLSX.writeFile(workbook, `customer-credentials-${new Date().toISOString().slice(0, 10)}.xlsx`);
+async function downloadCredentialWorkbook() {
+  if (exportingCredentials.value) return;
+  exportingCredentials.value = true;
+  try {
+    await waitForNextPaint();
+    const XLSX = await loadXlsxModule();
+    const rows = batchCredentialRows.value.map((row) => ({
+      [t("customers.customerName")]: row.username,
+      [t("customers.initialPassword")]: row.password || "",
+      [t("customers.importStatus")]: row.status === "CREATED" ? t("customers.importCreated") : row.message
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "Customer credentials");
+    XLSX.writeFile(workbook, `customer-credentials-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  } finally {
+    exportingCredentials.value = false;
+  }
 }
 
 function closeBatchCredentials() {
@@ -2424,6 +2595,59 @@ function replaceShipmentInLocalCollections(shipment) {
     const index = collection.findIndex((candidate) => candidate.shipmentId === shipment.shipmentId);
     if (index >= 0) collection.splice(index, 1, { ...collection[index], ...shipment });
   }
+}
+
+function shipmentClientLabel(shipment) {
+  const direct = [shipment?.clientNo || shipment?.clientNameCode, shipment?.clientName]
+    .filter(Boolean)
+    .map(String)
+    .filter((value, index, values) => values.indexOf(value) === index);
+  if (direct.length) return direct.join(" / ");
+  const bound = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
+  const labels = bound.map((customer) => {
+    if (typeof customer === "string") return customer;
+    return [customer?.clientCode || customer?.clientNo, customer?.displayName || customer?.clientName || customer?.username]
+      .filter(Boolean)
+      .map(String)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join(" / ");
+  }).filter(Boolean);
+  return labels.length ? labels.join(" / ") : "—";
+}
+
+function shipmentBoundUsers(shipment) {
+  const direct = Array.isArray(shipment?.boundUsers)
+    ? shipment.boundUsers
+    : Array.isArray(shipment?.participants)
+      ? shipment.participants
+      : Array.isArray(shipment?.boundCustomers)
+        ? shipment.boundCustomers
+        : [];
+  const fallbackIds = shipment?.shipmentId ? shipmentCustomerMap.value[shipment.shipmentId] || [] : [];
+  const source = direct.length ? direct : fallbackIds.map((id) => customers.value.find((item) => item.id === id) || { id });
+  const seen = new Set();
+  return source.map((user, index) => {
+    const value = typeof user === "string" ? { id: user, name: user } : user || {};
+    const name = value.displayName || value.name || value.username || value.clientName || value.id || `#${index + 1}`;
+    const role = value.partyRole || value.relationshipRole || value.role || "";
+    return { ...value, name, role };
+  }).filter((user) => {
+    const key = String(user.id || `${user.name}:${user.role}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function boundUserLabel(user) {
+  const role = String(user?.role || "").toUpperCase();
+  let roleName = "";
+  if (["AGENT", "OVERSEA_AGENT", "SHIPPER", "CONSIGNEE"].includes(role)) {
+    roleName = partyRoleLabel(role);
+  } else if (role) {
+    roleName = role.replaceAll("_", " ");
+  }
+  return roleName ? `${user.name} (${roleName})` : user.name;
 }
 
 function boundRoleSummary(shipment) {
@@ -2878,7 +3102,7 @@ function showError(error, fallbackKey) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: hidden;
+  overflow: visible;
 }
 .batch-track-panel-header {
   display: flex;
@@ -2923,6 +3147,35 @@ function showError(error, fallbackKey) {
   justify-content: flex-end;
   padding-top: 8px;
   border-top: 1px solid #e2e8f0;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #fff;
+}
+.batch-track-close-hint {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
+}
+.shipment-bound-user-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.batch-track-task-dialog-body {
+  width: 100%;
+  max-width: none;
+  height: min(76vh, 760px);
+  flex: 1 1 auto;
+  position: static;
+  top: auto;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+:deep(.batch-track-task-dialog .el-dialog__body) {
+  padding-top: 8px;
+  overflow: hidden;
 }
 .batch-track-excel-rule {
   color: #6a8096;
@@ -3004,14 +3257,19 @@ function showError(error, fallbackKey) {
 
 .batch-track-result-row.succeeded,
 .batch-track-result-row.manual {
-  border-color: #9fd8bd;
+  border-left: 3px solid #22c55e;
   background: #f1fbf6;
 }
 
 .batch-track-result-row.stopped {
-  border-color: #cbd5e1;
+  border-left: 3px solid #94a3b8;
   background: #f8fafc;
   color: #64748b;
+}
+
+.batch-track-result-row.retry_wait {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
 }
 
 @media (max-width: 900px) {

@@ -599,7 +599,9 @@ public class ShipmentTrackingService {
         diagnostic.put("message", error.getMessage());
         return response;
       }
-      throw new ApiException(error.status(), failureCode, error.getMessage());
+      throw new ApiException(
+          error.status(), failureCode, error.getMessage(), error.retryAfterMs()
+      );
     }
 
     JsonNode snapshot = upstream.path("snapshot");

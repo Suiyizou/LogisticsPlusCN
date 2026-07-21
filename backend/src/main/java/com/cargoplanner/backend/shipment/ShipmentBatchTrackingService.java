@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,17 +28,25 @@ public class ShipmentBatchTrackingService {
   static final int MAX_ITEMS = 500;
   static final long DEFAULT_MIN_INTERVAL_MS = 3_000L;
   static final long DEFAULT_MAX_INTERVAL_MS = 6_000L;
+  static final int MAX_TRACK_ATTEMPTS = 3;
+  static final long DEFAULT_RETRY_BASE_MS = 15_000L;
+  static final long DEFAULT_RETRY_MAX_MS = 10 * 60_000L;
+  static final long CHANNEL_UNAVAILABLE_COOLDOWN_MS = 2 * 60_000L;
   private static final long TASK_RETENTION_SECONDS = 24 * 60 * 60;
 
   private final ShipmentTrackingService trackingService;
   private final ExecutorService executor;
   private final long minIntervalMs;
   private final long maxIntervalMs;
+  private final long retryBaseMs;
+  private final long retryMaxMs;
   private final Clock clock;
   private final Map<String, BatchTask> tasks = new ConcurrentHashMap<>();
   private final Map<Long, String> activeTaskByUser = new ConcurrentHashMap<>();
   private final Object throttleMonitor = new Object();
   private long lastTrackingStartedAt;
+  private volatile Instant carrierCooldownUntil;
+  private int consecutiveCarrierFailures;
 
   public ShipmentBatchTrackingService(ShipmentTrackingService trackingService) {
     this(
@@ -49,6 +58,8 @@ public class ShipmentBatchTrackingService {
         }),
         DEFAULT_MIN_INTERVAL_MS,
         DEFAULT_MAX_INTERVAL_MS,
+        DEFAULT_RETRY_BASE_MS,
+        DEFAULT_RETRY_MAX_MS,
         Clock.systemUTC()
     );
   }
@@ -60,10 +71,27 @@ public class ShipmentBatchTrackingService {
       long maxIntervalMs,
       Clock clock
   ) {
+    this(
+        trackingService, executor, minIntervalMs, maxIntervalMs,
+        DEFAULT_RETRY_BASE_MS, DEFAULT_RETRY_MAX_MS, clock
+    );
+  }
+
+  ShipmentBatchTrackingService(
+      ShipmentTrackingService trackingService,
+      ExecutorService executor,
+      long minIntervalMs,
+      long maxIntervalMs,
+      long retryBaseMs,
+      long retryMaxMs,
+      Clock clock
+  ) {
     this.trackingService = trackingService;
     this.executor = executor;
     this.minIntervalMs = Math.max(0, minIntervalMs);
     this.maxIntervalMs = Math.max(this.minIntervalMs, maxIntervalMs);
+    this.retryBaseMs = Math.max(0, retryBaseMs);
+    this.retryMaxMs = Math.max(this.retryBaseMs, retryMaxMs);
     this.clock = clock;
   }
 
@@ -126,11 +154,13 @@ public class ShipmentBatchTrackingService {
       if (!task.terminal()) task.status = "STOPPING";
       task.updatedAt = clock.instant();
     }
-    try {
-      trackingService.cancelBatchTask(task.id);
-    } catch (RuntimeException ignored) {
-      // Cancellation is still observed locally between and during queued items.
-    }
+    CompletableFuture.runAsync(() -> {
+      try {
+        trackingService.cancelBatchTask(task.id);
+      } catch (RuntimeException ignored) {
+        // Local cancellation remains authoritative if the adapter is unavailable.
+      }
+    });
     synchronized (throttleMonitor) {
       throttleMonitor.notifyAll();
     }
@@ -151,70 +181,29 @@ public class ShipmentBatchTrackingService {
     try {
       for (BatchItem item : task.items) {
         if (task.cancelRequested.get()) break;
-        synchronized (task) {
-          item.status = "RUNNING";
-          item.attempts++;
-          item.updatedAt = clock.instant();
-          task.updatedAt = item.updatedAt;
-        }
         try {
-          ObjectNode response;
           if (item.manualOnly) {
-            response = trackingService.recordImportedPlaceholder(item.request, task.owner);
+            markAttemptStarted(task, item);
+            ObjectNode response = trackingService.recordImportedPlaceholder(item.request, task.owner);
             synchronized (task) {
               item.status = "MANUAL";
               item.source = "IMPORTED_PLACEHOLDER";
+              item.shipmentId = response.path("shipmentId").asText(null);
+              item.error = null;
+              item.errorCode = null;
+              item.nextRetryAt = null;
+              item.updatedAt = clock.instant();
+              task.updatedAt = item.updatedAt;
             }
           } else {
-            waitForTrackingWindow(task);
-            if (task.cancelRequested.get()) {
-              synchronized (task) {
-                item.status = "PENDING";
-                item.updatedAt = clock.instant();
-                task.updatedAt = item.updatedAt;
-              }
-              break;
-            }
-            response = trackingService.track(
-                new ShipmentTrackRequest(
-                    "COSCO",
-                    "AUTO",
-                    "BILLOFLADING",
-                    item.queryNumber,
-                    false,
-                    item.request.importedDetails(),
-                    task.id
-                ),
-                task.owner
-            );
-            synchronized (task) {
-              item.status = "SUCCEEDED";
-              item.source = response.path("cacheSource").asText("LIVE");
-            }
-          }
-          synchronized (task) {
-            item.shipmentId = response.path("shipmentId").asText(null);
-            item.error = null;
-            item.updatedAt = clock.instant();
-            task.updatedAt = item.updatedAt;
+            trackWithRetry(task, item);
           }
         } catch (RuntimeException error) {
           if (task.cancelRequested.get() || isCancellation(error)) {
-            synchronized (task) {
-              item.status = "PENDING";
-              item.source = null;
-              item.error = null;
-              item.updatedAt = clock.instant();
-            }
+            markPendingAfterCancellation(task, item);
             break;
           }
-          synchronized (task) {
-            item.status = "FAILED";
-            item.source = null;
-            item.error = safeMessage(error);
-            item.updatedAt = clock.instant();
-            task.updatedAt = item.updatedAt;
-          }
+          markFinalFailure(task, item, error);
         }
       }
     } finally {
@@ -222,13 +211,254 @@ public class ShipmentBatchTrackingService {
     }
   }
 
+  private void trackWithRetry(BatchTask task, BatchItem item) {
+    while (!task.cancelRequested.get()) {
+      waitForCarrierCooldown(task, item);
+      if (task.cancelRequested.get()) break;
+      markWaitingForTrackingWindow(task, item);
+      waitForTrackingWindow(task);
+      if (task.cancelRequested.get()) break;
+      markAttemptStarted(task, item);
+      try {
+        ObjectNode response = trackingService.track(
+            new ShipmentTrackRequest(
+                "COSCO",
+                "AUTO",
+                "BILLOFLADING",
+                item.queryNumber,
+                false,
+                item.request.importedDetails(),
+                task.id
+            ),
+            task.owner
+        );
+        synchronized (throttleMonitor) {
+          consecutiveCarrierFailures = 0;
+          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(clock.instant())) {
+            carrierCooldownUntil = null;
+          }
+        }
+        synchronized (task) {
+          item.status = "SUCCEEDED";
+          item.source = response.path("cacheSource").asText("LIVE");
+          item.shipmentId = response.path("shipmentId").asText(null);
+          item.error = null;
+          item.errorCode = null;
+          item.nextRetryAt = null;
+          task.nextAttemptAt = null;
+          item.updatedAt = clock.instant();
+          task.updatedAt = item.updatedAt;
+        }
+        return;
+      } catch (RuntimeException error) {
+        if (task.cancelRequested.get() || isCancellation(error)) throw error;
+        if (!isRetryable(error)) throw error;
+        if (item.attempts >= MAX_TRACK_ATTEMPTS && !isProtectionFailure(error)) {
+          registerCarrierFailure(error, item.attempts);
+          throw error;
+        }
+        Instant retryAt = registerCarrierFailure(error, item.attempts);
+        synchronized (task) {
+          item.status = "RETRY_WAIT";
+          item.source = null;
+          item.error = safeMessage(error);
+          item.errorCode = errorCode(error);
+          item.nextRetryAt = retryAt;
+          task.nextAttemptAt = retryAt;
+          task.updatedAt = clock.instant();
+        }
+      }
+    }
+    if (task.cancelRequested.get()) markPendingAfterCancellation(task, item);
+  }
+
+  private void markWaitingForTrackingWindow(BatchTask task, BatchItem item) {
+    synchronized (task) {
+      task.status = "RUNNING";
+      item.status = "RUNNING";
+      item.nextRetryAt = null;
+      task.nextAttemptAt = null;
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
+  private void markAttemptStarted(BatchTask task, BatchItem item) {
+    synchronized (task) {
+      task.status = "RUNNING";
+      item.status = "RUNNING";
+      item.attempts++;
+      item.nextRetryAt = null;
+      task.nextAttemptAt = null;
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
+  private void markPendingAfterCancellation(BatchTask task, BatchItem item) {
+    synchronized (task) {
+      item.status = "PENDING";
+      item.source = null;
+      item.error = null;
+      item.errorCode = null;
+      item.nextRetryAt = null;
+      task.nextAttemptAt = null;
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
+  private void markFinalFailure(BatchTask task, BatchItem item, RuntimeException error) {
+    synchronized (task) {
+      item.status = "FAILED";
+      item.source = null;
+      item.error = safeMessage(error);
+      item.errorCode = errorCode(error);
+      item.nextRetryAt = null;
+      task.nextAttemptAt = null;
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
   private void finish(BatchTask task, String status) {
     synchronized (task) {
       task.status = status;
+      task.nextAttemptAt = null;
+      task.cooldownUntil = null;
       task.finishedAt = clock.instant();
       task.updatedAt = task.finishedAt;
     }
     activeTaskByUser.remove(task.owner.id(), task.id);
+  }
+
+  private void waitForCarrierCooldown(BatchTask task, BatchItem item) {
+    while (!task.cancelRequested.get()) {
+      Instant until = carrierCooldownUntil;
+      Instant now = clock.instant();
+      if (until == null || !until.isAfter(now)) {
+        synchronized (throttleMonitor) {
+          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(now)) {
+            carrierCooldownUntil = null;
+          }
+        }
+        synchronized (task) {
+          task.cooldownUntil = null;
+          if (item.nextRetryAt != null && !item.nextRetryAt.isAfter(now)) {
+            item.nextRetryAt = null;
+          }
+        }
+        return;
+      }
+      synchronized (task) {
+        task.status = "COOLDOWN";
+        item.status = "RETRY_WAIT";
+        item.nextRetryAt = until;
+        task.cooldownUntil = until;
+        task.nextAttemptAt = until;
+        task.updatedAt = now;
+      }
+      waitUntil(task, until);
+    }
+  }
+
+  private Instant registerCarrierFailure(RuntimeException error, int attempt) {
+    long delayMs = retryDelayMs(error, attempt);
+    synchronized (throttleMonitor) {
+      consecutiveCarrierFailures++;
+      if (isImmediateProtectionFailure(error)
+          || (consecutiveCarrierFailures >= 2 && isChannelUnavailable(error))) {
+        delayMs = Math.max(
+            delayMs,
+            Math.min(CHANNEL_UNAVAILABLE_COOLDOWN_MS, retryMaxMs)
+        );
+      }
+      Instant candidate = clock.instant().plusMillis(delayMs);
+      if (carrierCooldownUntil == null || candidate.isAfter(carrierCooldownUntil)) {
+        carrierCooldownUntil = candidate;
+      }
+      throttleMonitor.notifyAll();
+      return carrierCooldownUntil;
+    }
+  }
+
+  long retryDelayMs(RuntimeException error, int attempt) {
+    long exponent = Math.max(0, Math.min(10, attempt - 1));
+    long exponential;
+    try {
+      exponential = Math.multiplyExact(retryBaseMs, 1L << exponent);
+    } catch (ArithmeticException overflow) {
+      exponential = retryMaxMs;
+    }
+    exponential = Math.min(retryMaxMs, exponential);
+    double jitter = 0.75D + ThreadLocalRandom.current().nextDouble() * 0.5D;
+    long delayMs = Math.min(retryMaxMs, Math.max(0L, Math.round(exponential * jitter)));
+    if (error instanceof ApiException apiError && apiError.retryAfterMs() != null) {
+      delayMs = Math.max(delayMs, Math.min(retryMaxMs, apiError.retryAfterMs()));
+    }
+    return delayMs;
+  }
+
+  private boolean isRetryable(RuntimeException error) {
+    if (!(error instanceof ApiException apiError)) return false;
+    return apiError.status() == HttpStatus.TOO_MANY_REQUESTS
+        || apiError.status() == HttpStatus.BAD_GATEWAY
+        || apiError.status() == HttpStatus.SERVICE_UNAVAILABLE
+        || apiError.status() == HttpStatus.GATEWAY_TIMEOUT;
+  }
+
+  private boolean isChannelUnavailable(RuntimeException error) {
+    String code = errorCode(error);
+    return "COSCO_CHANNELS_UNAVAILABLE".equals(code)
+        || "COSCO_UPSTREAM_BLOCKED".equals(code)
+        || "COSCO_UPSTREAM_RATE_LIMITED".equals(code)
+        || "RATE_LIMITED".equals(code)
+        || "ADAPTER_FAILURE".equals(code);
+  }
+
+  private boolean isImmediateProtectionFailure(RuntimeException error) {
+    if (error instanceof ApiException apiError
+        && apiError.status() == HttpStatus.TOO_MANY_REQUESTS) {
+      return true;
+    }
+    String code = errorCode(error);
+    return "COSCO_UPSTREAM_BLOCKED".equals(code)
+        || "COSCO_UPSTREAM_RATE_LIMITED".equals(code)
+        || "RATE_LIMITED".equals(code)
+        || "HTTP_429".equals(code);
+  }
+
+  private boolean isProtectionFailure(RuntimeException error) {
+    String code = errorCode(error);
+    return isImmediateProtectionFailure(error)
+        || "COSCO_CHANNELS_UNAVAILABLE".equals(code)
+        || "COSCO_UPSTREAM_UNAVAILABLE".equals(code);
+  }
+
+  private String errorCode(RuntimeException error) {
+    if (error instanceof ApiException apiError
+        && apiError.code() != null && !apiError.code().isBlank()) {
+      return apiError.code();
+    }
+    return error instanceof ApiException apiError
+        ? "HTTP_" + apiError.status().value()
+        : "TRACKING_FAILED";
+  }
+
+  private void waitUntil(BatchTask task, Instant until) {
+    synchronized (throttleMonitor) {
+      while (!task.cancelRequested.get()) {
+        long remaining = until.toEpochMilli() - clock.instant().toEpochMilli();
+        if (remaining <= 0) return;
+        try {
+          throttleMonitor.wait(Math.min(remaining, 250L));
+        } catch (InterruptedException interrupted) {
+          Thread.currentThread().interrupt();
+          task.cancelRequested.set(true);
+          return;
+        }
+      }
+    }
   }
 
   private void waitForTrackingWindow(BatchTask task) {
@@ -253,7 +483,8 @@ public class ShipmentBatchTrackingService {
 
   private long randomInterval() {
     if (maxIntervalMs <= minIntervalMs) return minIntervalMs;
-    return ThreadLocalRandom.current().nextLong(minIntervalMs, maxIntervalMs + 1);
+    double highBiasedJitter = Math.sqrt(ThreadLocalRandom.current().nextDouble());
+    return minIntervalMs + Math.round((maxIntervalMs - minIntervalMs) * highBiasedJitter);
   }
 
   private BatchItem normalizeItem(ShipmentBatchItemRequest request, int index) {
@@ -373,7 +604,9 @@ public class ShipmentBatchTrackingService {
         value.put("status", item.status);
         value.put("source", item.source);
         value.put("error", item.error);
+        value.put("errorCode", item.errorCode);
         value.put("attempts", item.attempts);
+        value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
         value.put("updatedAt", iso(item.updatedAt));
         items.add(value);
@@ -393,6 +626,8 @@ public class ShipmentBatchTrackingService {
       value.put("startedAt", iso(task.startedAt));
       value.put("updatedAt", iso(task.updatedAt));
       value.put("finishedAt", iso(task.finishedAt));
+      value.put("cooldownUntil", iso(task.cooldownUntil));
+      value.put("nextAttemptAt", iso(task.nextAttemptAt));
       value.put("items", items);
       return value;
     }
@@ -470,6 +705,8 @@ public class ShipmentBatchTrackingService {
     private volatile Instant startedAt;
     private volatile Instant updatedAt;
     private volatile Instant finishedAt;
+    private volatile Instant cooldownUntil;
+    private volatile Instant nextAttemptAt;
 
     private BatchTask(
         String id,
@@ -498,7 +735,9 @@ public class ShipmentBatchTrackingService {
     private String status = "PENDING";
     private String source;
     private String error;
+    private String errorCode;
     private int attempts;
+    private Instant nextRetryAt;
     private String shipmentId;
     private Instant updatedAt;
 

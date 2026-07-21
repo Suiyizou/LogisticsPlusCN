@@ -7,6 +7,8 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -39,11 +41,11 @@ class CustomerAccessFlowTest {
     createSchema();
     jdbcTemplate.update(
         """
-        INSERT INTO cp_users (id, display_name, role, party_role) VALUES
-          (1, 'Business One', 'BUSINESS', 'AGENT'),
-          (2, 'Business Two', 'BUSINESS', 'AGENT'),
-          (3, 'Employee', 'EMPLOYEE', 'SHIPPER'),
-          (4, 'Administrator', 'ADMIN', 'AGENT')
+        INSERT INTO cp_users (id, username, display_name, role, party_role) VALUES
+          (1, 'sales-1', 'Business One', 'BUSINESS', 'OVERSEA_AGENT'),
+          (2, 'sales-2', 'Business Two', 'BUSINESS', 'OVERSEA_AGENT'),
+          (3, 'employee', 'Employee', 'EMPLOYEE', 'SHIPPER'),
+          (4, 'admin', 'Administrator', 'ADMIN', 'OVERSEA_AGENT')
         """
     );
     jdbcTemplate.update(
@@ -54,7 +56,8 @@ class CustomerAccessFlowTest {
           (10, 'shipment-public-id', 'COSCO', 'In transit', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
           (11, 'anonymous-shipment-id', 'COSCO', 'Tracked', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
           (12, 'other-business-shipment', 'COSCO', 'Tracked', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (13, 'participant-shipment', 'COSCO', 'Tracked', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          (13, 'participant-shipment', 'COSCO', 'Tracked', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (14, 'empty-owned-shipment', 'CMA', 'Pending update', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
     );
     jdbcTemplate.update(
@@ -65,7 +68,8 @@ class CustomerAccessFlowTest {
         ) VALUES
           (100, 10, 'COSCO', 'BOOKING', 'BK-10001', 'BK-10001', TRUE),
           (101, 11, 'COSCO', 'BOOKING', 'ANON-10001', 'ANON-10001', TRUE),
-          (102, 12, 'COSCO', 'BOOKING', 'OTHER-10001', 'OTHER-10001', TRUE)
+          (102, 12, 'COSCO', 'BOOKING', 'OTHER-10001', 'OTHER-10001', TRUE),
+          (103, 14, 'CMA', 'BILLOFLADING', 'EMPTY-10001', 'EMPTY-10001', TRUE)
         """
     );
     jdbcTemplate.update(
@@ -83,10 +87,19 @@ class CustomerAccessFlowTest {
           (12, 'BOOKING', 'OTHER-10001', 2, 'sales-2', 'AUTO',
            '{}', '0000000000000000000000000000000000000000000000000000000000000000',
            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (13, 'BOOKING', 'PART-10001', 1, 'sales-1', 'AUTO',
+          (13, 'BOOKING', 'PART-10001', 2, 'sales-2', 'AUTO',
            '{}', '0000000000000000000000000000000000000000000000000000000000000000',
            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = (SELECT id FROM cp_tracking_snapshots WHERE shipment_id = 10 LIMIT 1) WHERE id = 10"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = (SELECT id FROM cp_tracking_snapshots WHERE shipment_id = 12 LIMIT 1) WHERE id = 12"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = (SELECT id FROM cp_tracking_snapshots WHERE shipment_id = 13 LIMIT 1) WHERE id = 13"
     );
 
     CustomerTokenCodec tokenCodec = new CustomerTokenCodec();
@@ -94,8 +107,12 @@ class CustomerAccessFlowTest {
     customerService = new BusinessCustomerService(jdbcTemplate, tokenCodec, passwordHasher);
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
-    business = new AuthenticatedUser(1, "sales-1", "Business One", "BUSINESS", "ACTIVE", "AGENT");
-    otherBusiness = new AuthenticatedUser(2, "sales-2", "Business Two", "BUSINESS", "ACTIVE", "AGENT");
+    business = new AuthenticatedUser(
+        1, "sales-1", "Business One", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    otherBusiness = new AuthenticatedUser(
+        2, "sales-2", "Business Two", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
     employee = new AuthenticatedUser(3, "employee", "Employee", "EMPLOYEE", "ACTIVE", "SHIPPER");
     httpRequest = new MockHttpServletRequest();
     httpRequest.setRemoteAddr("127.0.0.1");
@@ -234,7 +251,7 @@ class CustomerAccessFlowTest {
     );
     String customerId = (String) created.get("id");
     AuthenticatedUser admin = new AuthenticatedUser(
-        4, "admin", "Administrator", "ADMIN", "ACTIVE", "AGENT"
+        4, "admin", "Administrator", "ADMIN", "ACTIVE", "OVERSEA_AGENT"
     );
 
     assertThat(customerService.bindShipment(
@@ -287,13 +304,68 @@ class CustomerAccessFlowTest {
 
   @Test
   void listsAuthorizedShipmentsAndPersistsOperatorNotes() {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_tracking_snapshots (
+          shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
+          source_channel, snapshot_json, payload_sha256, fetched_at, fresh_until, created_at
+        ) VALUES
+          (10, 'BOOKING', 'BK-HISTORY', 2, 'sales-2', 'AUTO',
+           '{"marker":"old-not-current"}', REPEAT('1', 64),
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (12, 'BOOKING', 'OTHER-HISTORY', 1, 'sales-1', 'AUTO',
+           '{"marker":"queried-by-is-not-access"}', REPEAT('2', 64),
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> available =
         (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
 
     assertThat(available).extracting(item -> item.get("shipmentId"))
-        .contains("shipment-public-id", "participant-shipment")
+        .containsExactlyInAnyOrder(
+            "shipment-public-id", "participant-shipment", "empty-owned-shipment"
+        )
         .doesNotContain("anonymous-shipment-id", "other-business-shipment");
+    assertThat(available).extracting(item -> item.get("shipmentId")).doesNotHaveDuplicates();
+
+    Map<String, Object> participantShipment = available.stream()
+        .filter(item -> "participant-shipment".equals(item.get("shipmentId")))
+        .findFirst().orElseThrow();
+    assertThat(participantShipment).containsEntry("dataAvailable", true);
+    assertThat(participantShipment.get("snapshot")).isInstanceOf(com.fasterxml.jackson.databind.JsonNode.class);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> participants =
+        (List<Map<String, Object>>) participantShipment.get("participants");
+    assertThat(participants).extracting(item -> item.get("role"))
+        .containsOnly("OVERSEA_AGENT");
+    assertThat(participants).extracting(item -> item.get("bindingRole"))
+        .containsExactlyInAnyOrder("CREATOR", "OPERATOR");
+
+    Map<String, Object> emptyShipment = available.stream()
+        .filter(item -> "empty-owned-shipment".equals(item.get("shipmentId")))
+        .findFirst().orElseThrow();
+    assertThat(emptyShipment).containsEntry("dataAvailable", false).containsEntry("snapshot", null);
+    assertThat(emptyShipment).containsEntry("referenceNo", "EMPTY-10001");
+
+    Map<String, Object> detail = customerService.getShipmentSnapshot(business, "participant-shipment");
+    assertThat(detail).containsEntry("shipmentId", "participant-shipment");
+    assertThat(detail.get("boundUsers")).isEqualTo(participantShipment.get("boundUsers"));
+    assertThatThrownBy(() -> customerService.getShipmentSnapshot(business, "other-business-shipment"))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.NOT_FOUND)
+        );
+
+    AuthenticatedUser admin = new AuthenticatedUser(
+        4, "admin", "Administrator", "ADMIN", "ACTIVE", "AGENT"
+    );
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> adminItems =
+        (List<Map<String, Object>>) customerService.listShipmentSnapshots(admin).get("items");
+    assertThat(adminItems).hasSize(5);
+    assertThat(adminItems).extracting(item -> item.get("shipmentId")).doesNotHaveDuplicates();
+    assertThat(customerService.getShipmentSnapshot(admin, "other-business-shipment"))
+        .containsEntry("shipmentId", "other-business-shipment");
 
     Map<String, Object> updated = customerService.updateShipmentNote(
         "shipment-public-id",
@@ -320,12 +392,16 @@ class CustomerAccessFlowTest {
   @Test
   void bindsShipperAndConsigneeToTheSameShipmentButRejectsDuplicatePartyRoles() {
     String shipperId = (String) customerService.create(
-        new CreateCustomerRequest("primary-shipper", "SecurePass!23", "Primary Shipper", "SHIPPER"),
+        new CreateCustomerRequest(
+            "primary-shipper", "SecurePass!23", "Primary Shipper", "SHIPPER", "CLIENT-001"
+        ),
         business,
         "127.0.0.1"
     ).get("id");
     String consigneeId = (String) customerService.create(
-        new CreateCustomerRequest("primary-consignee", "SecurePass!23", "Primary Consignee", "CONSIGNEE"),
+        new CreateCustomerRequest(
+            "primary-consignee", "SecurePass!23", "Primary Consignee", "CONSIGNEE", "CLIENT-002"
+        ),
         business,
         "127.0.0.1"
     ).get("id");
@@ -355,8 +431,37 @@ class CustomerAccessFlowTest {
         (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
     assertThat(available).filteredOn(item -> "shipment-public-id".equals(item.get("shipmentId")))
         .singleElement()
-        .satisfies(item -> assertThat(item.get("boundRoles"))
-            .isEqualTo(List.of("SHIPPER", "CONSIGNEE")));
+        .satisfies(item -> {
+          assertThat(item.get("boundRoles")).isEqualTo(List.of("SHIPPER", "CONSIGNEE"));
+          assertThat(item).containsEntry("clientNo", "CLIENT-001")
+              .containsEntry("clientName", "Primary Shipper")
+              .containsEntry("customerCount", 2);
+          @SuppressWarnings("unchecked")
+          List<Map<String, Object>> boundCustomers =
+              (List<Map<String, Object>>) item.get("boundCustomers");
+          assertThat(boundCustomers).extracting(customer -> customer.get("partyRole"))
+              .containsExactly("SHIPPER", "CONSIGNEE");
+          @SuppressWarnings("unchecked")
+          List<Map<String, Object>> boundUsers =
+              (List<Map<String, Object>>) item.get("boundUsers");
+          assertThat(boundUsers).extracting(user -> user.get("role"))
+              .containsExactly("OVERSEA_AGENT", "SHIPPER", "CONSIGNEE");
+        });
+
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ? WHERE id = "
+            + "(SELECT current_snapshot_id FROM cp_shipments WHERE id = 10)",
+        "{\"references\":{\"business\":{\"clientNameCode\":\"UNMATCHED-CLIENT\"}}}"
+    );
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> unmatchedItems =
+        (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
+    assertThat(unmatchedItems)
+        .filteredOn(item -> "shipment-public-id".equals(item.get("shipmentId")))
+        .singleElement()
+        .satisfies(item -> assertThat(item)
+            .containsEntry("clientNo", "UNMATCHED-CLIENT")
+            .containsEntry("clientName", null));
   }
 
   @Test
@@ -432,6 +537,103 @@ class CustomerAccessFlowTest {
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = '1234567890'",
         Integer.class
     )).isZero();
+  }
+
+  @Test
+  void manualSnapshotUpdatesMergeIntoCurrentPayloadAndNoteOnlyWritesDoNotTouchIt()
+      throws Exception {
+    String carrierSnapshot = """
+        {
+          "channel":"AUTO",
+          "tracking":{"type":"BOOKING","number":"BK-10001","status":"In transit"},
+          "summary":{
+            "origin":{"name":"Shanghai","countryCode":"CN"},
+            "destination":{"name":"Los Angeles","countryCode":"US"},
+            "latestEvent":{"name":"Loaded","location":"Shanghai"}
+          },
+          "keyTimes":{"estimatedFinalArrival":{"time":"2026-08-01 12:00:00"}},
+          "routingLegs":[{"vessel":"COSCO STAR","routeMarker":"keep-me"}],
+          "references":{"business":{"clientPoNumber":"PO-KEEP"}},
+          "extraInformation":[{"key":"carrierField","value":"KEEP","source":"CARRIER"}]
+        }
+        """;
+    jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_snapshots
+        SET snapshot_json = ?
+        WHERE id = (SELECT current_snapshot_id FROM cp_shipments WHERE id = 10)
+        """,
+        carrierSnapshot
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET business_note = 'Original note' WHERE id = 10"
+    );
+
+    customerService.updateManualSnapshot(
+        "shipment-public-id",
+        new CreateBusinessShipmentRequest(
+            null, null, null, null, "Must not replace note",
+            null, null, "Ningbo", null, null, null, null,
+            null, null, null, null, null, null
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    Long mergedSnapshotId = jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = 10", Long.class
+    );
+    String mergedJson = jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE id = ?",
+        String.class,
+        mergedSnapshotId
+    );
+    JsonNode merged = new ObjectMapper().readTree(mergedJson);
+    assertThat(merged.path("summary").path("origin").path("name").asText())
+        .isEqualTo("Ningbo");
+    assertThat(merged.path("summary").path("origin").path("countryCode").asText())
+        .isEqualTo("CN");
+    assertThat(merged.path("summary").path("destination").path("countryCode").asText())
+        .isEqualTo("US");
+    assertThat(merged.path("routingLegs").get(0).path("routeMarker").asText())
+        .isEqualTo("keep-me");
+    assertThat(merged.path("references").path("business").path("clientPoNumber").asText())
+        .isEqualTo("PO-KEEP");
+    assertThat(merged.path("extraInformation").toString()).contains("carrierField");
+    assertThat(customerService.getShipmentSnapshot(business, "shipment-public-id"))
+        .containsEntry("estimatedArrival", "2026-08-01 12:00:00");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT business_note FROM cp_shipments WHERE id = 10", String.class
+    )).isEqualTo("Original note");
+
+    customerService.updateManualSnapshot(
+        "shipment-public-id",
+        new CreateBusinessShipmentRequest(null, null, null, null, "Ignored note-only request"),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = 10", Long.class
+    )).isEqualTo(mergedSnapshotId);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE id = ?", String.class, mergedSnapshotId
+    )).isEqualTo(mergedJson);
+
+    customerService.updateShipment(
+        "shipment-public-id",
+        new UpdateBusinessShipmentRequest(null, null, null, "Saved through shipment endpoint"),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = 10", Long.class
+    )).isEqualTo(mergedSnapshotId);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE id = ?", String.class, mergedSnapshotId
+    )).isEqualTo(mergedJson);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT business_note FROM cp_shipments WHERE id = 10", String.class
+    )).isEqualTo("Saved through shipment endpoint");
   }
 
   @Test
@@ -539,6 +741,7 @@ class CustomerAccessFlowTest {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
           id BIGINT PRIMARY KEY,
+          username VARCHAR(64) NOT NULL,
           display_name VARCHAR(80) NOT NULL,
           role VARCHAR(24) NOT NULL,
           party_role VARCHAR(20) NOT NULL

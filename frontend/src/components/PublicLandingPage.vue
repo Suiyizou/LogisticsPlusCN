@@ -63,21 +63,21 @@
               rel="noopener noreferrer"
               @click="navigateWithTransition($event, platformEntryPath)"
             >
-              <el-icon><Box /></el-icon>
+              <i class="el-icon"><Box /></i>
               <span>
                 <strong>{{ t("landing.capabilities.planning.title") }}</strong>
                 <small>{{ t("landing.status.available") }}</small>
               </span>
             </a>
             <a href="#landing-roadmap" @click="navigateWithTransition($event, '#landing-roadmap')">
-              <el-icon><Ship /></el-icon>
+              <i class="el-icon"><Ship /></i>
               <span>
                 <strong>{{ t("landing.capabilities.booking.title") }}</strong>
                 <small>{{ t("landing.status.planned") }}</small>
               </span>
             </a>
             <a href="#landing-roadmap" @click="navigateWithTransition($event, '#landing-roadmap')">
-              <el-icon><Connection /></el-icon>
+              <i class="el-icon"><Connection /></i>
               <span>
                 <strong>{{ t("landing.capabilities.erp.title") }}</strong>
                 <small>{{ t("landing.status.planned") }}</small>
@@ -108,7 +108,7 @@
           @click="navigateWithTransition($event, platformEntryPath)"
         >
           <span>{{ platformEntryLabel }}</span>
-          <el-icon><ArrowRight /></el-icon>
+          <i class="el-icon"><ArrowRight /></i>
         </a>
       </div>
     </header>
@@ -150,7 +150,7 @@
                     @click="navigateWithTransition($event, currentSlide.primaryHref)"
                   >
                     {{ currentSlide.primaryLabel }}
-                    <el-icon><ArrowRight /></el-icon>
+                    <i class="el-icon"><ArrowRight /></i>
                   </a>
                   <a class="landing-button landing-button--ghost" href="#landing-capabilities">
                     {{ t("landing.hero.explore") }}
@@ -178,10 +178,10 @@
           </div>
           <div class="landing-hero__arrows">
             <button type="button" :aria-label="t('landing.hero.previous')" @click="previousSlide">
-              <el-icon><ArrowLeft /></el-icon>
+              <i class="el-icon"><ArrowLeft /></i>
             </button>
             <button type="button" :aria-label="t('landing.hero.next')" @click="nextSlide">
-              <el-icon><ArrowRight /></el-icon>
+              <i class="el-icon"><ArrowRight /></i>
             </button>
           </div>
         </div>
@@ -203,7 +203,7 @@
             >
               <span class="landing-capability-card__number">{{ item.number }}</span>
               <span v-if="item.id === 'tracking'" class="landing-capability-card__free">FREE</span>
-              <span class="landing-capability-card__icon"><el-icon><component :is="item.icon" /></el-icon></span>
+              <span class="landing-capability-card__icon"><i class="el-icon"><component :is="item.icon" /></i></span>
               <div class="landing-capability-card__status">
                 <i></i>
                 {{ item.statusLabel }}
@@ -212,7 +212,7 @@
               <p>{{ item.description }}</p>
               <span class="landing-capability-card__link">
                 {{ item.actionLabel }}
-                <el-icon><ArrowRight /></el-icon>
+                <i class="el-icon"><ArrowRight /></i>
               </span>
             </a>
           </div>
@@ -250,7 +250,7 @@
             rel="noopener noreferrer"
             @click="navigateWithTransition($event, trackingEntryPath)"
           >
-            <el-icon><Search /></el-icon>
+            <i class="el-icon"><Search /></i>
             {{ t("landing.statement.track") }}
           </a>
           <a
@@ -260,7 +260,7 @@
             rel="noopener noreferrer"
             @click="navigateWithTransition($event, platformEntryPath)"
           >
-            <el-icon><Monitor /></el-icon>
+            <i class="el-icon"><Monitor /></i>
             {{ platformEntryLabel }}
           </a>
         </div>
@@ -309,7 +309,7 @@
                 href="#landing-capabilities"
               >
                 {{ t("landing.company.platformAction") }}
-                <el-icon><ArrowRight /></el-icon>
+                <i class="el-icon"><ArrowRight /></i>
               </a>
               <span class="landing-company__credit-code">
                 {{ t("landing.company.creditCodeLabel") }} · 91310109MACBQ4CP2M
@@ -334,9 +334,9 @@
               <span><b>GLOBAL</b><small>{{ t("landing.company.operationsGlobal") }}</small></span>
             </div>
             <div class="landing-company__operations-modes">
-              <span><el-icon><Ship /></el-icon> SEA</span>
-              <span><el-icon><Connection /></el-icon> ROAD</span>
-              <span><el-icon><Box /></el-icon> AIR</span>
+              <span><i class="el-icon"><Ship /></i> SEA</span>
+              <span><i class="el-icon"><Connection /></i> ROAD</span>
+              <span><i class="el-icon"><Box /></i> AIR</span>
             </div>
             <div class="landing-company__operations-foot">
               <span>{{ t("landing.company.operationsStatus") }}</span>
@@ -374,7 +374,7 @@
                 '--service-index': index
               }"
             >
-              <span class="landing-company__service-icon"><el-icon><component :is="service.icon" /></el-icon></span>
+              <span class="landing-company__service-icon"><i class="el-icon"><component :is="service.icon" /></i></span>
               <div>
                 <small>{{ service.number }}</small>
                 <h3>{{ service.title }}</h3>
@@ -398,10 +398,10 @@
               <span>01</span><i></i><span>02</span><i></i><span>03</span><i></i><span>04</span>
             </div>
             <div class="landing-roadmap__modules">
-              <div class="is-live"><el-icon><Box /></el-icon><span>LOAD</span></div>
-              <div class="is-public"><el-icon><Search /></el-icon><span>TRACK</span></div>
-              <div><el-icon><Ship /></el-icon><span>BOOK</span></div>
-              <div><el-icon><Connection /></el-icon><span>ERP</span></div>
+              <div class="is-live"><i class="el-icon"><Box /></i><span>LOAD</span></div>
+              <div class="is-public"><i class="el-icon"><Search /></i><span>TRACK</span></div>
+              <div><i class="el-icon"><Ship /></i><span>BOOK</span></div>
+              <div><i class="el-icon"><Connection /></i><span>ERP</span></div>
             </div>
             <div class="landing-roadmap__console-foot">
               <span>{{ t("landing.roadmap.currentLabel") }}</span>
@@ -436,7 +436,7 @@
             @click="navigateWithTransition($event, platformEntryPath)"
           >
             {{ t("landing.roadmap.viewWorkspaces") }}
-            <el-icon><ArrowRight /></el-icon>
+            <i class="el-icon"><ArrowRight /></i>
           </a>
         </div>
       </section>

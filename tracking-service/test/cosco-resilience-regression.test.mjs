@@ -1,0 +1,263 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import {
+  createCoscoCircuitBreaker,
+  createCoscoQueryGate
+} from "../lib/cosco-request-guard.mjs";
+import {
+  enrichCoscoShipmentContainers,
+  normalizeCoscoSnapshot,
+  normalizeTrackingRequest,
+  parseRetryAfter
+} from "../server.mjs";
+
+class VirtualTimers {
+  constructor(now = 1_000) {
+    this.now = now;
+    this.nextId = 1;
+    this.timers = new Map();
+    this.scheduledDelays = [];
+  }
+
+  setTimer = (callback, delayMs = 0) => {
+    const id = this.nextId++;
+    const delay = Math.max(0, Number(delayMs) || 0);
+    this.scheduledDelays.push(delay);
+    this.timers.set(id, { callback, dueAt: this.now + delay });
+    return id;
+  };
+
+  clearTimer = (id) => {
+    this.timers.delete(id);
+  };
+
+  async runNext() {
+    const next = [...this.timers.entries()]
+      .sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
+    assert.ok(next, "Expected a pending virtual timer");
+    const [id, timer] = next;
+    this.timers.delete(id);
+    this.now = timer.dueAt;
+    timer.callback();
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+  }
+}
+
+test("query gate applies deterministic 3-6 second jitter while keeping operations serial", async () => {
+  const timers = new VirtualTimers();
+  const randomValues = [0.5, 0, 0.999999];
+  const gate = createCoscoQueryGate({
+    minIntervalMs: 3_000,
+    maxIntervalMs: 6_000,
+    queueTimeoutMs: 600_000,
+    random: () => randomValues.shift() ?? 0,
+    now: () => timers.now,
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer
+  });
+  let active = 0;
+  let maximumActive = 0;
+  const startTimes = [];
+  const operation = (id) => async () => {
+    active += 1;
+    maximumActive = Math.max(maximumActive, active);
+    startTimes.push([id, timers.now]);
+    await Promise.resolve();
+    active -= 1;
+    return id;
+  };
+
+  const jobs = [gate.run(operation(1)), gate.run(operation(2)), gate.run(operation(3))];
+  await timers.runNext();
+  await timers.runNext();
+  await timers.runNext();
+
+  assert.deepEqual(await Promise.all(jobs), [1, 2, 3]);
+  assert.equal(maximumActive, 1);
+  assert.deepEqual(startTimes, [[1, 1_000], [2, 4_000], [3, 10_000]]);
+  assert.deepEqual(
+    timers.scheduledDelays.filter((delay) => delay <= 6_000),
+    [0, 3_000, 6_000]
+  );
+  assert.deepEqual(gate.stats(), {
+    active: 0,
+    queued: 0,
+    minIntervalMs: 3_000,
+    maxIntervalMs: 6_000,
+    queueLimit: 50,
+    queueTimeoutMs: 600_000
+  });
+});
+
+test("aborting during a delayed start rejects immediately without running the operation", async () => {
+  const timers = new VirtualTimers();
+  const gate = createCoscoQueryGate({
+    minIntervalMs: 3_000,
+    maxIntervalMs: 3_000,
+    queueTimeoutMs: 600_000,
+    now: () => timers.now,
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer
+  });
+
+  const first = gate.run(async () => "first");
+  await timers.runNext();
+  assert.equal(await first, "first");
+
+  const controller = new AbortController();
+  let ran = false;
+  const delayed = gate.run(async () => {
+    ran = true;
+  }, { signal: controller.signal });
+  controller.abort();
+
+  await assert.rejects(delayed, (error) => error.code === "BATCH_CANCELLED");
+  assert.equal(ran, false);
+  assert.equal(gate.stats().active, 0);
+  assert.equal(gate.stats().queued, 0);
+});
+
+test("query gate preserves upstream error metadata for retry and cooldown decisions", async () => {
+  const timers = new VirtualTimers();
+  const gate = createCoscoQueryGate({
+    minIntervalMs: 0,
+    maxIntervalMs: 0,
+    queueTimeoutMs: 600_000,
+    now: () => timers.now,
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer
+  });
+  const upstream = Object.assign(new Error("rate limited"), {
+    httpStatus: 429,
+    code: "COSCO_UPSTREAM_RATE_LIMITED",
+    retryAfterMs: 45_000
+  });
+
+  const pending = gate.run(async () => {
+    throw upstream;
+  });
+  await timers.runNext();
+
+  await assert.rejects(pending, (error) => {
+    assert.equal(error, upstream);
+    assert.equal(error.httpStatus, 429);
+    assert.equal(error.code, "COSCO_UPSTREAM_RATE_LIMITED");
+    assert.equal(error.retryAfterMs, 45_000);
+    return true;
+  });
+});
+
+test("circuit breaker honors immediate Retry-After and reset clears the circuit", () => {
+  let now = Date.parse("2026-07-21T00:00:00Z");
+  const breaker = createCoscoCircuitBreaker({
+    cooldownMs: 60_000,
+    failureThreshold: 2,
+    now: () => now
+  });
+
+  const opened = breaker.recordFailure({ retryAfterMs: 45_000, immediate: true });
+  assert.equal(opened.blocked, true);
+  assert.equal(opened.retryAfterMs, 45_000);
+  assert.equal(opened.consecutiveFailures, 1);
+
+  now += 20_000;
+  assert.equal(breaker.remainingMs(), 25_000);
+  breaker.reset();
+  assert.deepEqual(breaker.status(), {
+    blocked: false,
+    blockedUntil: null,
+    retryAfterMs: 0,
+    cooldownMs: 60_000,
+    consecutiveFailures: 0,
+    failureThreshold: 2
+  });
+});
+
+test("Retry-After parser supports seconds and HTTP dates without real waiting", () => {
+  const now = Date.parse("2026-07-21T00:00:00Z");
+  assert.equal(parseRetryAfter("2.5", now), 2_500);
+  assert.equal(parseRetryAfter("Tue, 21 Jul 2026 00:00:09 GMT", now), 9_000);
+  assert.equal(parseRetryAfter("Tue, 21 Jul 2026 00:00:00 GMT", now), 1_000);
+  assert.equal(parseRetryAfter("not-a-retry-value", now), null);
+  assert.equal(parseRetryAfter("", now), null);
+});
+
+test("optional container enrichment remains partial on an ordinary child failure", async () => {
+  const request = normalizeTrackingRequest({ type: "BILLOFLADING", number: "6502406170" });
+  const originalContainer = {
+    containerNumberWithCheckDigit: "TEMU6003424",
+    containerType: "40HQ",
+    milestones: []
+  };
+  let childCalls = 0;
+  const containers = await enrichCoscoShipmentContainers(
+    [originalContainer],
+    async () => {
+      childCalls += 1;
+      throw Object.assign(new Error("optional container endpoint failed"), {
+        httpStatus: 502,
+        code: "OPTIONAL_ENRICHMENT_FAILED"
+      });
+    }
+  );
+  const snapshot = normalizeCoscoSnapshot(
+    {
+      cargoTrackingSummary: {
+        blNumber: "6502406170",
+        containerSummaryInfos: [{ cntrType: "40HQ", quantity: "1" }]
+      },
+      cargoTrackingFullChain: [],
+      cargoTrackingSailingSchedule: []
+    },
+    request,
+    "2026-07-21T00:00:00.000Z",
+    { bookingInfo: {}, containerInfo: containers }
+  );
+
+  assert.equal(childCalls, 1);
+  assert.equal(snapshot.tracking.number, "6502406170");
+  assert.equal(snapshot.containers.length, 1);
+  assert.equal(snapshot.containers[0].number, "TEMU6003424");
+  assert.equal(snapshot.containers[0].detailSource, "SHIPMENT_QUERY");
+});
+
+test("optional enrichment propagates 403 and 429 protection errors", async () => {
+  const container = {
+    containerNumberWithCheckDigit: "TEMU6003424",
+    milestones: []
+  };
+  const blocked = Object.assign(new Error("blocked"), { upstreamStatus: 403 });
+  await assert.rejects(
+    enrichCoscoShipmentContainers([container], async () => { throw blocked; }),
+    (error) => error === blocked
+  );
+
+  const limited = Object.assign(new Error("limited"), {
+    code: "COSCO_UPSTREAM_RATE_LIMITED",
+    status: 429,
+    details: { code: "COSCO_UPSTREAM_RATE_LIMITED" },
+    retryAfterMs: 30_000
+  });
+  await assert.rejects(
+    enrichCoscoShipmentContainers([container], async () => { throw limited; }),
+    (error) => error === limited && error.retryAfterMs === 30_000
+  );
+});
+
+test("AUTO strategy does not enter Playwright fallback for protection failures", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const autoStrategy = source.slice(
+    source.indexOf("async function fetchCoscoTracking(request, queryChannel"),
+    source.indexOf("function runCoscoTrackingRequest", source.indexOf("async function fetchCoscoTracking"))
+  );
+  const protectionGuard = autoStrategy.indexOf(
+    "if (isCoscoProtectionError(networkError) || options.signal?.aborted) throw networkError;"
+  );
+  const playwrightFallback = autoStrategy.indexOf(
+    "fetchCoscoTrackingWithPlaywright(request, options)"
+  );
+
+  assert.ok(protectionGuard >= 0, "AUTO must rethrow 403/429 before fallback");
+  assert.ok(playwrightFallback > protectionGuard, "Playwright fallback must follow the protection guard");
+});

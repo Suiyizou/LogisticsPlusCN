@@ -15,7 +15,15 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, Object>> handleApiException(ApiException error) {
     Map<String, Object> body = body(error.status(), error.getMessage());
     if (error.code() != null && !error.code().isBlank()) body.put("code", error.code());
-    return ResponseEntity.status(error.status()).body(body);
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(error.status());
+    if (error.retryAfterMs() != null && error.retryAfterMs() > 0) {
+      body.put("retryAfterMs", error.retryAfterMs());
+      response.header(
+          "Retry-After",
+          Long.toString(Math.max(1L, (error.retryAfterMs() + 999L) / 1_000L))
+      );
+    }
+    return response.body(body);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -41,7 +41,7 @@ export function fetchBusinessCustomerShipments(customerId) {
 }
 
 export function fetchAvailableBusinessShipments() {
-  return request("/business/customers/available-shipments");
+  return request("/business/shipments");
 }
 
 export function createShipmentBatchTask(payload) {
@@ -57,7 +57,7 @@ export function cancelShipmentBatchTask(taskId) {
 }
 
 export function fetchBusinessShipmentSnapshot(shipmentId) {
-  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/snapshot`);
+  return request(`/business/shipments/${encodeURIComponent(shipmentId)}`);
 }
 
 export function fetchPendingClientMatches() {

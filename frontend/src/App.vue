@@ -844,7 +844,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 import {
@@ -867,11 +867,9 @@ import {
   Tickets,
   Upload
 } from "@element-plus/icons-vue";
+import AsyncPageError from "./components/AsyncPageError.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
-import LoginPage from "./components/LoginPage.vue";
 import SystemWaitOverlay from "./components/SystemWaitOverlay.vue";
-import WorkbenchPortal from "./components/WorkbenchPortal.vue";
-import { exportPackingReportsZip, exportPackingReport } from "./services/exportReport";
 import { assignCargoModels } from "./utils/cargoModels";
 import { buildPreviewInWorker, readWorkbookInWorker } from "./services/excelImportClient";
 import { calculatePacking, estimatePackingWorkload } from "./services/packingClient";
@@ -884,12 +882,32 @@ import { translateUiText } from "./i18n/uiText";
 import { cargoLabel, fmt, shortType, uid } from "./utils/format";
 import { cargoConstraintFlags, cargoHandlingUnitType, normalizeCargoConstraints } from "./utils/cargoConstraints";
 
-const AdminDashboard = defineAsyncComponent(() => import("./components/AdminDashboard.vue"));
-const AlgorithmPage = defineAsyncComponent(() => import("./components/AlgorithmPage.vue"));
-const ExcelTemplatePage = defineAsyncComponent(() => import("./components/ExcelTemplatePage.vue"));
-const HomePage = defineAsyncComponent(() => import("./components/HomePage.vue"));
-const PublicLandingPage = defineAsyncComponent(() => import("./components/PublicLandingPage.vue"));
-const BusinessCustomerPage = defineAsyncComponent(() => import("./components/BusinessCustomerPage.vue"));
+const asyncPageLoading = {
+  name: "AsyncPageLoading",
+  inheritAttrs: false,
+  setup() {
+    return () => h(SystemWaitOverlay, {
+      visible: true,
+      message: t("app.loadingPage")
+    });
+  }
+};
+const lazyPage = (loader) => defineAsyncComponent({
+  loader,
+  delay: 120,
+  timeout: 30000,
+  loadingComponent: asyncPageLoading,
+  errorComponent: AsyncPageError
+});
+
+const AdminDashboard = lazyPage(() => import("./components/AdminDashboard.vue"));
+const LoginPage = lazyPage(() => import("./components/LoginPage.vue"));
+const AlgorithmPage = lazyPage(() => import("./components/AlgorithmPage.vue"));
+const ExcelTemplatePage = lazyPage(() => import("./components/ExcelTemplatePage.vue"));
+const HomePage = lazyPage(() => import("./components/HomePage.vue"));
+const PublicLandingPage = lazyPage(() => import("./components/PublicLandingPage.vue"));
+const BusinessCustomerPage = lazyPage(() => import("./components/BusinessCustomerPage.vue"));
+const WorkbenchPortal = lazyPage(() => import("./components/WorkbenchPortal.vue"));
 const CargoModal = defineAsyncComponent(() => import("./components/CargoModal.vue"));
 const ContainerModal = defineAsyncComponent(() => import("./components/ContainerModal.vue"));
 const ContainerReferencePage = defineAsyncComponent(() => import("./components/ContainerReferencePage.vue"));
@@ -1214,11 +1232,12 @@ const plannerWorkflowSteps = computed(() => [
   }
 ]);
 
-onMounted(async () => {
-  window.addEventListener("auth-expired", handleAuthExpired);
-  window.addEventListener("pageshow", resetGlobalWaitState);
-  window.addEventListener("pagehide", resetGlobalWaitState);
-  await initializeAuth();
+function needsPlannerWorkspace(page) {
+  return ["home", "planner", "algorithm", "containers"].includes(page);
+}
+
+function initializePlannerWorkspace() {
+  if (workspaceReady.value || !currentUser.value || !needsPlannerWorkspace(activePage.value)) return;
   restoreState();
   restoreCargoTemplates();
   cargos.value = normalizeCargoModels(cargos.value);
@@ -1228,6 +1247,14 @@ onMounted(async () => {
   if (!cargos.value.length && !hasStoredWorkspace.value) loadSample(false);
   workspaceReady.value = true;
   recalculate();
+}
+
+onMounted(async () => {
+  window.addEventListener("auth-expired", handleAuthExpired);
+  window.addEventListener("pageshow", resetGlobalWaitState);
+  window.addEventListener("pagehide", resetGlobalWaitState);
+  await initializeAuth();
+  initializePlannerWorkspace();
 });
 
 onUnmounted(() => {
@@ -1245,6 +1272,7 @@ watch([cargos, containers, priorityContainerIds, utilizationPercent, globalGapCm
 }, { deep: true });
 
 watch([showRemaining, showMassBalance], persistState);
+watch([activePage, currentUser], initializePlannerWorkspace);
 watch([workspaceReady, activePage, plannerMode, cargoTypeCount], () => {
   if (workspaceReady.value && activePage.value === "planner" && plannerMode.value === "results" && !cargos.value.length) {
     router.replace("/planner/config");
@@ -1290,11 +1318,8 @@ async function handleLoggedIn(user) {
   const target = isAdmin ? "/admin" : "/workbenches";
   loginRedirectText.value = t(isAdmin ? "portal.enteringAdmin" : "portal.entering");
   loginRedirecting.value = true;
-  await new Promise((resolve) => window.setTimeout(resolve, 520));
   await router.replace(target);
-  window.setTimeout(() => {
-    loginRedirecting.value = false;
-  }, 260);
+  loginRedirecting.value = false;
 }
 
 async function handleLogout() {
@@ -2560,6 +2585,7 @@ async function exportCurrentReport(format) {
   exportingReport.value = true;
   showToast(format === "pdf" ? "正在生成 PDF 报告..." : "正在生成剖析图片...");
   try {
+    const { exportPackingReport } = await import("./services/exportReport");
     await exportPackingReport({
       format,
       container: selectedContainer.value,
@@ -2595,6 +2621,7 @@ async function exportAllReportsZip() {
   exportingReport.value = true;
   showToast(hasUndetailedBoxes.value ? "正在打包已详算货舱报告..." : "正在打包整套装箱报告...");
   try {
+    const { exportPackingReportsZip } = await import("./services/exportReport");
     await exportPackingReportsZip({
       container: selectedContainer.value,
       evaluation: normalizeEvaluationForExport(selectedEvaluation.value),

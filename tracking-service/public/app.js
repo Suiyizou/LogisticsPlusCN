@@ -25,6 +25,10 @@ const historyEmpty = document.querySelector("#history-empty");
 const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
 const clearHistoryButton = document.querySelector("#clear-history-button");
+const historyTitle = document.querySelector("#history-title");
+const historySubtitle = document.querySelector("#history-subtitle");
+const historyEmptyTitle = document.querySelector("#history-empty-title");
+const historyEmptyDescription = document.querySelector("#history-empty-description");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -321,9 +325,13 @@ const MESSAGES = {
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest carrier snapshots stored on this browser",
+    "history.accountTitle": "My shipments",
+    "history.accountSubtitle": "Shipments bound to the current account",
     "history.clear": "Clear history",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
+    "history.accountEmptyTitle": "No shipments are bound to this account yet",
+    "history.accountEmptyDescription": "Assigned shipments will appear here.",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
     "history.route": "Route",
@@ -738,9 +746,13 @@ const MESSAGES = {
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
     "history.subtitle": "当前浏览器保存的最新船司快照",
+    "history.accountTitle": "我的票单",
+    "history.accountSubtitle": "绑定到当前账户的票单",
     "history.clear": "清空记录",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
+    "history.accountEmptyTitle": "当前账户还没有绑定票单",
+    "history.accountEmptyDescription": "绑定到当前账户的票单会显示在这里。",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1791,11 +1803,6 @@ function setRelatedFilesContext(payload) {
   }
 
   renderRelatedFilesDrawer();
-}
-
-function preloadRelatedFilesForContext() {
-  const session = readFileSession();
-  if (session.token && relatedFilesShipmentId) void loadRelatedFiles();
 }
 
 function formatFileSize(value) {
@@ -3536,7 +3543,7 @@ async function loadInternalTrackedHistory() {
     return;
   }
   try {
-    const response = await fetch("/api/business/customers/available-shipments", {
+    const response = await fetch("/api/business/shipments", {
       headers: { "X-Auth-Token": session.token }
     });
     const payload = await response.json().catch(() => ({}));
@@ -3551,40 +3558,57 @@ async function loadInternalTrackedHistory() {
     internalTrackedHistory = items
       .filter((item) => item?.referenceNo || item?.shipmentId)
       .map((item) => {
-        const carrier = String(item.carrier || "COSCO").toUpperCase();
-        const referenceType = String(item.referenceType || "BILLOFLADING").toUpperCase();
-        const referenceNo = String(item.referenceNo || "").trim();
+        const serverSnapshot = item?.snapshot && typeof item.snapshot === "object"
+          ? item.snapshot
+          : null;
+        const carrier = String(
+          item.carrier || serverSnapshot?.tracking?.carrier || serverSnapshot?.provider?.code || "COSCO"
+        ).toUpperCase();
+        const referenceType = String(
+          item.referenceType || serverSnapshot?.tracking?.type || "BILLOFLADING"
+        ).toUpperCase();
+        const referenceNo = String(
+          item.referenceNo || item.trackingNumber || serverSnapshot?.tracking?.number || ""
+        ).trim();
         const trackingStatus = String(item.trackingStatus || "").trim();
-        const lastTrackedAt = item.lastTrackedAt || item.updatedAt || new Date().toISOString();
-
-        let parsedSnapshot = null;
-        if (item.snapshotJson && typeof item.snapshotJson === "string") {
-          try { parsedSnapshot = JSON.parse(item.snapshotJson); } catch {}
-        }
-
-        let snapshot;
-        if (parsedSnapshot && parsedSnapshot.summary) {
-          snapshot = parsedSnapshot;
-        } else {
-          snapshot = {
-            tracking: {
-              number: referenceNo,
-              type: referenceType,
-              carrier
-            },
-            summary: {
-              latestEvent: trackingStatus
-                ? { name: trackingStatus, occurredAt: lastTrackedAt, location: "" }
-                : null,
-              origin: {},
-              destination: {}
-            },
-            route: [],
-            keyTimes: {},
-            routingLegs: [],
-            containers: []
-          };
-        }
+        const lastTrackedAt = item.lastTrackedAt
+          || item.updatedAt
+          || serverSnapshot?.fetchedAt
+          || item.createdAt
+          || new Date().toISOString();
+        const pendingStatus = trackingStatus || "PENDING_MANUAL";
+        const snapshot = serverSnapshot
+          ? {
+              ...serverSnapshot,
+              tracking: {
+                ...serverSnapshot.tracking,
+                number: serverSnapshot.tracking?.number || referenceNo,
+                type: serverSnapshot.tracking?.type || referenceType,
+                carrier: serverSnapshot.tracking?.carrier || carrier
+              },
+              summary: serverSnapshot.summary || {
+                latestEvent: { name: pendingStatus, occurredAt: lastTrackedAt, location: "" },
+                origin: {},
+                destination: {}
+              }
+            }
+          : {
+              tracking: {
+                number: referenceNo,
+                type: referenceType,
+                carrier,
+                status: "PENDING_MANUAL"
+              },
+              summary: {
+                latestEvent: { name: "PENDING_MANUAL", occurredAt: lastTrackedAt, location: "" },
+                origin: {},
+                destination: {}
+              },
+              route: [],
+              keyTimes: {},
+              routingLegs: [],
+              containers: []
+            };
         return {
           query: normalizeQuery({
             carrier,
@@ -3595,7 +3619,7 @@ async function loadInternalTrackedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           shipmentId: item.shipmentId,
-          internalTracked: true
+          boundShipment: true
         };
       });
     renderHistory();
@@ -4878,7 +4902,6 @@ function renderResult(payload) {
 
   currentPayload = payload;
   setRelatedFilesContext(payload);
-  preloadRelatedFilesForContext();
   results.classList.toggle("is-container-only", isContainerOnly);
   sourceTag.textContent = t(resultChannel.sourceKey);
   elements["result-carrier"].textContent = providerCode;
@@ -5175,10 +5198,18 @@ function setHistoryDetailsExpanded({ item, toggle, details, entryKey, expanded, 
 
 function renderHistory() {
   const history = readHistory();
+  const session = readFileSession();
+  const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
 
+  historyTitle.textContent = t(accountBound ? "history.accountTitle" : "history.title");
+  historySubtitle.textContent = t(accountBound ? "history.accountSubtitle" : "history.subtitle");
+  historyEmptyTitle.textContent = t(accountBound ? "history.accountEmptyTitle" : "history.emptyTitle");
+  historyEmptyDescription.textContent = t(
+    accountBound ? "history.accountEmptyDescription" : "history.emptyDescription"
+  );
   historyEmpty.hidden = history.length > 0;
   historyTableWrap.hidden = history.length === 0;
-  clearHistoryButton.hidden = history.length === 0;
+  clearHistoryButton.hidden = accountBound || history.length === 0;
   historyTableBody.replaceChildren();
 
   let rowIndex = 0;
@@ -5383,7 +5414,7 @@ function renderHistory() {
     });
 
     if (readFileSession().kind === "CUSTOMER") item.append(toggle, details);
-    else if (entry.internalTracked) item.append(toggle, details);
+    else if (entry.boundShipment) item.append(toggle, details);
     else item.append(toggle, deleteButton, details);
     historyTableBody.append(item);
   }
@@ -5763,24 +5794,7 @@ function openHistoryEntry(entry) {
   };
   renderResult(currentPayload);
   updateUrl(entry.query, { push: true });
-  void showView("tracking", { updateLocation: false }).then(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const currentQuery = normalizeQuery({
-          carrier: carrierSelect.value,
-          channel: channelSelect?.value ?? "AUTO",
-          type: trackingType.value,
-          number: trackingNumber.value
-        });
-        if (
-          activeView === "tracking" &&
-          cacheKey(currentQuery) === cacheKey(entry.query)
-        ) {
-          form.requestSubmit();
-        }
-      });
-    });
-  });
+  void showView("tracking", { updateLocation: false });
 }
 
 function markBatchItemResult(query, { status, source = null, error = null }) {
@@ -6372,6 +6386,7 @@ document.querySelector("#start-tracking-button").addEventListener("click", () =>
 });
 
 clearHistoryButton.addEventListener("click", () => {
+  if (readFileSession().token) return;
   if (!window.confirm(t("history.confirmClear"))) return;
   for (const key of readCacheIndex()) localStorage.removeItem(key);
   localStorage.removeItem(CACHE_INDEX_KEY);
