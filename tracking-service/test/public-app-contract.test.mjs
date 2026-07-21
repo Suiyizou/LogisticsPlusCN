@@ -240,6 +240,9 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
   assert.match(appSource, /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/);
   assert.match(appSource, /\/api\/business\/shipment-batch-tasks\/\$\{encodedTaskId\}\/cancel/);
   assert.match(appSource, /status === "manual" \|\| item\.manualOnly[\s\S]*?batch\.itemManual/);
+  assert.match(appSource, /subtasks: normalizeBatchSubtasks\(remote\.subtasks/);
+  assert.match(appSource, /batch-subtask-details[\s\S]*?batch\.childProgress/);
+  assert.match(stylesSource, /\.batch-subtask-list[\s\S]*?\.batch-subtask-item/);
   assert.match(
     appSource,
     /hasUnsubmittedWork[\s\S]*?item\.status === "pending"[\s\S]*?item\.status === "manual" && !item\.submitted/

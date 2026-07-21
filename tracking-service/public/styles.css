@@ -7490,6 +7490,11 @@ body.is-page-leaving .ambient {
   overflow: auto;
 }
 
+.batch-result-group {
+  display: grid;
+  gap: 4px;
+}
+
 .batch-result-item {
   display: grid;
   width: 100%;
@@ -7538,6 +7543,15 @@ body.is-page-leaving .ambient {
   font-size: 11px;
 }
 
+.batch-result-item > span:first-child em {
+  display: block;
+  margin-top: 2px;
+  color: #64809d;
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+
 .batch-result-item > span:last-child {
   display: flex;
   gap: 6px;
@@ -7566,12 +7580,86 @@ body.is-page-leaving .ambient {
   background: #25b97b;
 }
 
+.batch-result-item.is-core > span:last-child {
+  color: #286da8;
+}
+
+.batch-result-item.is-core > span:last-child i {
+  background: #4d96d1;
+}
+
 .batch-result-item.is-failed > span:last-child {
   color: #c84d55;
 }
 
 .batch-result-item.is-failed > span:last-child i {
   background: #df6770;
+}
+
+.batch-result-item.is-partial > span:last-child {
+  color: #a66b0c;
+}
+
+.batch-result-item.is-partial > span:last-child i {
+  background: #e1a331;
+}
+
+.batch-subtask-details {
+  margin: 0 4px 2px 16px;
+  color: #64809d;
+  font-size: 8.5px;
+}
+
+.batch-subtask-details > summary {
+  width: fit-content;
+  padding: 2px 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.batch-subtask-list {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+  padding: 5px 7px;
+  border-left: 2px solid #d8e6f5;
+  background: #f7faff;
+  border-radius: 0 7px 7px 0;
+}
+
+.batch-subtask-item {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  color: #5f748c;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 8.5px;
+}
+
+.batch-subtask-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-subtask-item b {
+  flex: 0 0 auto;
+  color: #8796a8;
+  font-size: 8px;
+}
+
+.batch-subtask-item.is-running b,
+.batch-subtask-item.is-retry b {
+  color: #1677ff;
+}
+
+.batch-subtask-item.is-success b {
+  color: #16845a;
+}
+
+.batch-subtask-item.is-failed b {
+  color: #c84d55;
 }
 
 .batch-import-message {

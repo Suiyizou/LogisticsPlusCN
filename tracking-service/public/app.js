@@ -507,7 +507,14 @@ const MESSAGES = {
     "batch.itemSuccess": "Succeeded",
     "batch.itemCached": "Reused device cache",
     "batch.itemFailed": "Failed",
+    "batch.itemCoreSaved": "Core saved · waiting for container pass",
+    "batch.itemPartial": "Core saved · container details partial",
     "batch.itemManual": "Saved · manual entry required",
+    "batch.childProgress": "{done}/{total} container tasks",
+    "batch.childContainerList": "Discover container numbers",
+    "batch.childContainer": "Container {number}",
+    "batch.childSkipped": "Already complete",
+    "batch.childRetry": "Waiting to retry",
     "batch.listAria": "Imported shipment queue",
     "batch.openItem": "Open and query {type} {number}",
     "batch.confirmClear": "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
@@ -928,7 +935,14 @@ const MESSAGES = {
     "batch.itemSuccess": "成功",
     "batch.itemCached": "复用本设备缓存",
     "batch.itemFailed": "失败",
+    "batch.itemCoreSaved": "主票已保存 · 等待箱级补全",
+    "batch.itemPartial": "主票已保存 · 箱级信息部分完成",
     "batch.itemManual": "已收录 · 待手工补录",
+    "batch.childProgress": "箱级任务 {done}/{total}",
+    "batch.childContainerList": "获取箱号清单",
+    "batch.childContainer": "箱号 {number}",
+    "batch.childSkipped": "已有信息，无需补查",
+    "batch.childRetry": "等待重试",
     "batch.listAria": "已导入的货物查询队列",
     "batch.openItem": "打开并查询{type} {number}",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
@@ -3754,7 +3768,7 @@ function batchCounts() {
   return items.reduce(
     (counts, item) => {
       if (item.status === "success") counts.success += 1;
-      else if (item.status === "failed") counts.failed += 1;
+      else if (item.status === "failed" || item.status === "partial") counts.failed += 1;
       else if (item.status === "manual") counts.manual += 1;
       else counts.pending += 1;
       return counts;
@@ -3820,6 +3834,7 @@ function restoreBatchState() {
           submitted: item?.submitted === true,
           shipmentId: item?.shipmentId ?? null,
           attempts: Number.isFinite(item?.attempts) ? item.attempts : 0,
+          subtasks: normalizeBatchSubtasks(item?.subtasks),
           updatedAt: item?.updatedAt ?? null
         };
       })
@@ -3866,9 +3881,45 @@ function batchStatusKey(item) {
     return item.source === "device-cache" ? "batch.itemCached" : "batch.itemSuccess";
   }
   if (item.status === "failed") return "batch.itemFailed";
+  if (item.status === "core") return "batch.itemCoreSaved";
+  if (item.status === "partial") return "batch.itemPartial";
   if (item.status === "manual" || item.manualOnly) return "batch.itemManual";
   if (item.status === "running") return "batch.itemRunning";
   return "batch.itemPending";
+}
+
+function normalizeBatchSubtaskStatus(value) {
+  const status = String(value ?? "").trim().toUpperCase();
+  if (status === "SUCCEEDED" || status === "SUCCESS") return "success";
+  if (status === "FAILED") return "failed";
+  if (status === "RUNNING") return "running";
+  if (status === "RETRY_WAIT") return "retry";
+  return "pending";
+}
+
+function normalizeBatchSubtasks(values) {
+  return (Array.isArray(values) ? values : []).map((subtask, index) => ({
+    id: String(subtask?.id ?? `subtask-${index}`),
+    type: String(subtask?.type ?? "CONTAINER"),
+    number: String(subtask?.number ?? ""),
+    status: normalizeBatchSubtaskStatus(subtask?.status),
+    source: subtask?.source ? String(subtask.source) : null,
+    error: subtask?.error ? String(subtask.error) : null,
+    errorCode: subtask?.errorCode ? String(subtask.errorCode) : null,
+    attempts: Number.isFinite(subtask?.attempts) ? subtask.attempts : 0,
+    nextRetryAt: subtask?.nextRetryAt ?? null,
+    updatedAt: subtask?.updatedAt ?? null
+  }));
+}
+
+function batchSubtaskStatusLabel(subtask) {
+  if (subtask.status === "success" && subtask.source === "CONTAINER_LIST"
+      && subtask.attempts === 0) return t("batch.childSkipped");
+  if (subtask.status === "retry") return t("batch.childRetry");
+  if (subtask.status === "failed") return t("batch.itemFailed");
+  if (subtask.status === "running") return t("batch.itemRunning");
+  if (subtask.status === "success") return t("batch.itemSuccess");
+  return t("batch.itemPending");
 }
 
 function renderBatchState() {
@@ -3932,6 +3983,8 @@ function renderBatchState() {
 
   const fragment = document.createDocumentFragment();
   for (const item of items) {
+    const group = document.createElement("article");
+    group.className = `batch-result-group is-${item.status}`;
     const row = document.createElement("button");
     row.type = "button";
     row.className = `batch-result-item is-${item.status}`;
@@ -3949,6 +4002,18 @@ function renderBatchState() {
     const number = document.createElement("strong");
     number.textContent = item.displayNumber ?? item.number;
     identity.append(type, number);
+    const subtasks = normalizeBatchSubtasks(item.subtasks);
+    if (subtasks.length > 0) {
+      const childProgress = document.createElement("em");
+      const done = subtasks.filter((subtask) =>
+        ["success", "failed"].includes(subtask.status)
+      ).length;
+      childProgress.textContent = t("batch.childProgress", {
+        done,
+        total: subtasks.length
+      });
+      identity.append(childProgress);
+    }
     const status = document.createElement("span");
     const statusDot = document.createElement("i");
     statusDot.setAttribute("aria-hidden", "true");
@@ -3962,7 +4027,42 @@ function renderBatchState() {
     }
     row.append(identity, status);
     row.addEventListener("click", () => openBatchItem(item));
-    fragment.append(row);
+    group.append(row);
+    if (subtasks.length > 0) {
+      const childDetails = document.createElement("details");
+      childDetails.className = "batch-subtask-details";
+      childDetails.open = subtasks.some((subtask) =>
+        ["running", "retry", "failed"].includes(subtask.status)
+      );
+      const childSummary = document.createElement("summary");
+      const done = subtasks.filter((subtask) =>
+        ["success", "failed"].includes(subtask.status)
+      ).length;
+      childSummary.textContent = t("batch.childProgress", {
+        done,
+        total: subtasks.length
+      });
+      const childList = document.createElement("div");
+      childList.className = "batch-subtask-list";
+      childList.setAttribute("role", "list");
+      for (const subtask of subtasks) {
+        const child = document.createElement("div");
+        child.className = `batch-subtask-item is-${subtask.status}`;
+        child.setAttribute("role", "listitem");
+        const childName = document.createElement("span");
+        childName.textContent = subtask.type === "CONTAINER_LIST"
+          ? t("batch.childContainerList")
+          : t("batch.childContainer", { number: subtask.number });
+        const childStatus = document.createElement("b");
+        childStatus.textContent = batchSubtaskStatusLabel(subtask);
+        if (subtask.error) childStatus.title = subtask.error;
+        child.append(childName, childStatus);
+        childList.append(child);
+      }
+      childDetails.append(childSummary, childList);
+      group.append(childDetails);
+    }
+    fragment.append(group);
   }
   batchResultList.replaceChildren(fragment);
 }
@@ -4274,8 +4374,10 @@ function batchItemStatusFromServer(value) {
   const status = String(value ?? "").trim().toUpperCase();
   if (status === "SUCCEEDED") return "success";
   if (status === "FAILED") return "failed";
+  if (status === "PARTIAL") return "partial";
   if (status === "MANUAL") return "manual";
-  if (status === "RUNNING") return "running";
+  if (status === "CORE_SUCCEEDED") return "core";
+  if (["RUNNING", "ENRICHING"].includes(status)) return "running";
   return "pending";
 }
 
@@ -4304,6 +4406,7 @@ function applyBusinessBatchTask(snapshot) {
       error: status === "failed" ? String(remote.error ?? t("error.generic")) : null,
       attempts: Number.isFinite(remote.attempts) ? remote.attempts : item.attempts,
       shipmentId: remote.shipmentId ?? item.shipmentId ?? null,
+      subtasks: normalizeBatchSubtasks(remote.subtasks ?? item.subtasks),
       updatedAt: remote.updatedAt ?? item.updatedAt ?? null
     };
   });

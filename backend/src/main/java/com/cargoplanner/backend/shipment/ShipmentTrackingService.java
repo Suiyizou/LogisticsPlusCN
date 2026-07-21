@@ -612,6 +612,7 @@ public class ShipmentTrackingService {
       );
     }
     upstream = enrichWithImportedDetails(upstream, importedDetails);
+    upstream = ensureRouteFallback(upstream, importedDetails);
     snapshot = upstream.path("snapshot");
     if (!hasMeaningfulTrackingData(snapshot)) {
       if (cached != null) {
@@ -729,6 +730,170 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Batch task id is invalid");
     }
     return adapterClient.cancelBatchTask(normalized);
+  }
+
+  ObjectNode discoverBatchContainers(
+      String shipmentPublicId,
+      String billNumber,
+      String batchTaskId,
+      AuthenticatedUser user
+  ) {
+    requireBatchShipmentAccess(shipmentPublicId, user);
+    NormalizedTrackRequest request = normalize(new ShipmentTrackRequest(
+        "COSCO", "AUTO", "BILLOFLADING", billNumber, false, null, batchTaskId
+    ));
+    JsonNode discovered = adapterClient.discoverContainers(request);
+    mergeContainersIntoCurrentSnapshot(
+        shipmentPublicId,
+        discovered.path("containers"),
+        false,
+        user
+    );
+    return discovered.isObject()
+        ? ((ObjectNode) discovered).deepCopy()
+        : objectMapper.createObjectNode();
+  }
+
+  ObjectNode enrichBatchContainer(
+      String shipmentPublicId,
+      String containerNumber,
+      String batchTaskId,
+      AuthenticatedUser user
+  ) {
+    requireBatchShipmentAccess(shipmentPublicId, user);
+    ObjectNode response = track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "CONTAINER", containerNumber, false, null, batchTaskId
+        ),
+        user
+    );
+    mergeContainersIntoCurrentSnapshot(
+        shipmentPublicId,
+        response.path("snapshot").path("containers"),
+        true,
+        user
+    );
+    return response;
+  }
+
+  private void requireBatchShipmentAccess(String shipmentPublicId, AuthenticatedUser user) {
+    if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "Sign in is required");
+    if (!user.canManageShipmentFiles()) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Business user or administrator permission is required"
+      );
+    }
+    if (shipmentPublicId == null || shipmentPublicId.isBlank()
+        || !accessService.hasAccess(shipmentPublicId, user)) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Shipment access has not been granted");
+    }
+  }
+
+  private synchronized void mergeContainersIntoCurrentSnapshot(
+      String shipmentPublicId,
+      JsonNode incomingContainers,
+      boolean detailed,
+      AuthenticatedUser user
+  ) {
+    requireBatchShipmentAccess(shipmentPublicId, user);
+    if (!incomingContainers.isArray()) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Container enrichment response is invalid");
+    }
+    List<MutableSnapshot> matches = jdbcTemplate.query(
+        """
+        SELECT s.id AS shipment_id, t.id AS snapshot_id, t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ? AND t.invalidated_at IS NULL
+        LIMIT 1
+        """,
+        (rs, rowNumber) -> new MutableSnapshot(
+            rs.getLong("shipment_id"),
+            rs.getLong("snapshot_id"),
+            rs.getString("snapshot_json")
+        ),
+        shipmentPublicId.trim()
+    );
+    if (matches.isEmpty()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+
+    MutableSnapshot stored = matches.get(0);
+    JsonNode parsed = readJson(stored.snapshotJson());
+    if (!parsed.isObject()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
+    }
+    ObjectNode snapshot = (ObjectNode) parsed;
+    Map<String, ObjectNode> mergedByNumber = new LinkedHashMap<>();
+    JsonNode currentContainers = snapshot.path("containers");
+    if (currentContainers.isArray()) {
+      for (JsonNode current : currentContainers) {
+        String number = normalizedContainerNumber(current);
+        if (number != null && current.isObject()) {
+          mergedByNumber.put(number, ((ObjectNode) current).deepCopy());
+        }
+      }
+    }
+    for (JsonNode incoming : incomingContainers) {
+      String number = normalizedContainerNumber(incoming);
+      if (number == null || !incoming.isObject()) continue;
+      ObjectNode target = mergedByNumber.computeIfAbsent(
+          number,
+          ignored -> objectMapper.createObjectNode().put("number", number)
+      );
+      mergeUsefulContainerFields(target, (ObjectNode) incoming);
+      if (detailed) target.put("detailSource", "CONTAINER_SUBQUERY");
+    }
+
+    ArrayNode merged = objectMapper.createArrayNode();
+    mergedByNumber.values().forEach(merged::add);
+    snapshot.set("containers", merged);
+    Instant now = clock.instant();
+    ObjectNode enrichment = childObject(snapshot, "containerEnrichment");
+    enrichment.put("discovered", merged.size());
+    enrichment.put(
+        "completed",
+        mergedByNumber.values().stream()
+            .filter(container -> "CONTAINER_SUBQUERY".equals(
+                container.path("detailSource").asText()
+            ))
+            .count()
+    );
+    enrichment.put("updatedAt", now.toString());
+
+    String snapshotJson = writeJson(snapshot);
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
+        snapshotJson,
+        sha256(snapshotJson),
+        stored.snapshotId()
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id = ?",
+        timestamp(now),
+        stored.shipmentId()
+    );
+    eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
+        stored.shipmentId(), shipmentPublicId, snapshot.deepCopy(), now
+    ));
+  }
+
+  private String normalizedContainerNumber(JsonNode container) {
+    String value = container == null ? null : container.path("number").asText(null);
+    if (value == null || value.isBlank()) return null;
+    String normalized = normalizeReference(value);
+    return normalized.matches("[A-Z]{4}[0-9]{7}") ? normalized : null;
+  }
+
+  private void mergeUsefulContainerFields(ObjectNode target, ObjectNode incoming) {
+    incoming.fields().forEachRemaining(entry -> {
+      JsonNode value = entry.getValue();
+      if (value == null || value.isNull() || value.isMissingNode()) return;
+      if (value.isTextual() && value.asText().isBlank()) return;
+      if ((value.isArray() || value.isObject()) && value.isEmpty()) return;
+      target.set(entry.getKey(), value.deepCopy());
+    });
   }
 
   private String trackingFailureCode(ApiException error) {
@@ -1118,6 +1283,10 @@ public class ShipmentTrackingService {
   private ObjectNode cachedResponse(CachedShipment cached, AuthenticatedUser user, boolean stale) {
     ObjectNode response = objectMapper.createObjectNode();
     response.set("snapshot", readJson(cached.snapshotJson()));
+    JsonNode routed = ensureRouteFallback(response, null);
+    if (routed.path("snapshot").isObject()) {
+      response.set("snapshot", routed.path("snapshot").deepCopy());
+    }
     if (cached.strategyJson() != null && !cached.strategyJson().isBlank()) {
       response.set("strategy", readJson(cached.strategyJson()));
     }
@@ -1352,6 +1521,92 @@ public class ShipmentTrackingService {
     return enriched;
   }
 
+  private JsonNode ensureRouteFallback(JsonNode upstream, ShipmentImportDetails details) {
+    if (!upstream.isObject() || !upstream.path("snapshot").isObject()
+        || arrayHasItems(upstream.path("snapshot").path("route"))) {
+      return upstream;
+    }
+    ObjectNode enriched = ((ObjectNode) upstream).deepCopy();
+    ObjectNode snapshot = (ObjectNode) enriched.path("snapshot");
+    JsonNode summary = snapshot.path("summary");
+    JsonNode routingLegs = snapshot.path("routingLegs");
+    JsonNode firstLeg = routingLegs.isArray() && !routingLegs.isEmpty()
+        ? routingLegs.get(0)
+        : objectMapper.createObjectNode();
+    JsonNode lastLeg = routingLegs.isArray() && !routingLegs.isEmpty()
+        ? routingLegs.get(routingLegs.size() - 1)
+        : objectMapper.createObjectNode();
+
+    String plannedLoadPort = cleanImported(
+        details == null ? null : details.portOfLoading(), 160
+    );
+    String plannedDischargePort = cleanImported(
+        details == null ? null : details.portOfDischarge(), 160
+    );
+    String origin = firstNonBlank(
+        firstLeg.path("loadPort").asText(null),
+        plannedLoadPort,
+        summary.path("origin").path("name").asText(null)
+    );
+    String destination = firstNonBlank(
+        lastLeg.path("dischargePort").asText(null),
+        plannedDischargePort,
+        summary.path("destination").path("name").asText(null)
+    );
+    if (origin == null && destination == null) return upstream;
+
+    String departure = firstNonBlank(
+        firstLeg.path("actualDeparture").asText(null),
+        firstLeg.path("estimatedDeparture").asText(null),
+        snapshot.path("keyTimes").path("estimatedDeparture").path("time").asText(null),
+        details == null ? null : details.estimatedDeparture()
+    );
+    String arrival = firstNonBlank(
+        lastLeg.path("actualArrival").asText(null),
+        lastLeg.path("estimatedArrival").asText(null),
+        snapshot.path("keyTimes").path("estimatedFinalArrival").path("time").asText(null),
+        snapshot.path("keyTimes").path("estimatedDelivery").path("time").asText(null),
+        details == null ? null : details.estimatedArrival()
+    );
+
+    ArrayNode route = snapshot.putArray("route");
+    if (origin != null) {
+      ObjectNode node = route.addObject();
+      node.put("sequence", route.size());
+      node.put("locationType", plannedLoadPort != null ? "FPOL" : "POR");
+      node.put("city", origin);
+      putIfBlank(
+          node,
+          "countryCode",
+          summary.path("origin").path("countryCode").asText(null)
+      );
+      putIfBlank(node, "estimatedTime", departure);
+      node.put("active", false);
+    }
+    if (destination != null) {
+      ObjectNode node = route.addObject();
+      node.put("sequence", route.size());
+      node.put("locationType", plannedDischargePort != null ? "LPOD" : "FND");
+      node.put("city", destination);
+      putIfBlank(
+          node,
+          "countryCode",
+          summary.path("destination").path("countryCode").asText(null)
+      );
+      putIfBlank(node, "estimatedTime", arrival);
+      node.put("active", false);
+    }
+    snapshot.put("routeSource", "SYNTHESIZED_FROM_PLAN");
+    return enriched;
+  }
+
+  private String firstNonBlank(String... values) {
+    for (String value : values) {
+      if (value != null && !value.isBlank()) return value.trim();
+    }
+    return null;
+  }
+
   private ObjectNode childObject(ObjectNode parent, String field) {
     JsonNode current = parent.path(field);
     if (current.isObject()) return (ObjectNode) current;
@@ -1501,6 +1756,8 @@ public class ShipmentTrackingService {
   private record SnapshotOwner(long userId, String username) {}
 
   private record CurrentSnapshot(long id, String snapshotJson) {}
+
+  private record MutableSnapshot(long shipmentId, long snapshotId, String snapshotJson) {}
 
   private record PersistedShipment(
       long shipmentId,

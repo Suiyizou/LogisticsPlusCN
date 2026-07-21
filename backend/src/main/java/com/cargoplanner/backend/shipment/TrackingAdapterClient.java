@@ -37,12 +37,7 @@ public class TrackingAdapterClient {
   }
 
   public JsonNode track(NormalizedTrackRequest request, CmaSessionCredentials credentials) {
-    Map<String, Object> body = new LinkedHashMap<>();
-    body.put("carrier", request.carrier());
-    body.put("channel", request.channel());
-    body.put("type", request.type());
-    body.put("number", request.number());
-    if (request.batchTaskId() != null) body.put("batchTaskId", request.batchTaskId());
+    Map<String, Object> body = requestBody(request);
     try {
       RestClient.RequestBodySpec requestSpec = restClient.post().uri("/api/track");
       if (credentials != null) {
@@ -90,12 +85,53 @@ public class TrackingAdapterClient {
     }
   }
 
+  public JsonNode discoverContainers(NormalizedTrackRequest request) {
+    try {
+      JsonNode response = restClient.post()
+          .uri("/api/track/cosco/container-list")
+          .body(requestBody(request))
+          .retrieve()
+          .body(JsonNode.class);
+      if (response == null || !response.path("containers").isArray()) {
+        throw new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "Tracking adapter returned an incomplete container list"
+        );
+      }
+      return response;
+    } catch (RestClientResponseException error) {
+      HttpStatus status = switch (error.getStatusCode().value()) {
+        case 400 -> HttpStatus.BAD_REQUEST;
+        case 404 -> HttpStatus.NOT_FOUND;
+        case 409 -> HttpStatus.CONFLICT;
+        case 429 -> HttpStatus.TOO_MANY_REQUESTS;
+        case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
+        case 504 -> HttpStatus.GATEWAY_TIMEOUT;
+        default -> HttpStatus.BAD_GATEWAY;
+      };
+      AdapterFailure failure = adapterFailure(error);
+      throw new ApiException(status, failure.code(), failure.message(), failure.retryAfterMs());
+    } catch (ResourceAccessException error) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
+    }
+  }
+
   private String adapterMessage(RestClientResponseException error) {
     String response = error.getResponseBodyAsString();
     if (response != null && !response.isBlank()) {
       return "Tracking adapter request failed: " + response.substring(0, Math.min(240, response.length()));
     }
     return "Tracking adapter request failed with status " + error.getStatusCode().value();
+  }
+
+  private Map<String, Object> requestBody(NormalizedTrackRequest request) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("carrier", request.carrier());
+    body.put("channel", request.channel());
+    body.put("type", request.type());
+    body.put("number", request.number());
+    if (request.batchTaskId() != null) body.put("batchTaskId", request.batchTaskId());
+    return body;
   }
 
   private AdapterFailure adapterFailure(RestClientResponseException error) {

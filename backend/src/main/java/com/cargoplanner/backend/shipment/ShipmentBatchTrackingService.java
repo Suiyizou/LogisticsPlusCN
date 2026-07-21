@@ -2,6 +2,7 @@ package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
@@ -212,6 +213,43 @@ public class ShipmentBatchTrackingService {
           markFinalFailure(task, item, error);
         }
       }
+      if (!task.cancelRequested.get() && !"PAUSED".equals(finalStatus)) {
+        for (BatchItem item : task.items) {
+          if (task.cancelRequested.get()) break;
+          if (!"CORE_SUCCEEDED".equals(item.status)) continue;
+          try {
+            boolean containersComplete = enrichBatchContainers(task, item);
+            synchronized (task) {
+              item.status = containersComplete ? "SUCCEEDED" : "PARTIAL";
+              item.error = containersComplete
+                  ? null
+                  : "One or more container subtasks failed";
+              item.errorCode = containersComplete
+                  ? null
+                  : "CONTAINER_ENRICHMENT_PARTIAL";
+              item.nextRetryAt = null;
+              task.nextAttemptAt = null;
+              item.updatedAt = clock.instant();
+              task.updatedAt = item.updatedAt;
+            }
+          } catch (ProtectionPauseException paused) {
+            finalStatus = "PAUSED";
+            break;
+          } catch (RuntimeException error) {
+            if (task.cancelRequested.get() || isCancellation(error)) {
+              markPendingAfterCancellation(task, item);
+              break;
+            }
+            synchronized (task) {
+              item.status = "PARTIAL";
+              item.error = safeMessage(error);
+              item.errorCode = errorCode(error);
+              item.updatedAt = clock.instant();
+              task.updatedAt = item.updatedAt;
+            }
+          }
+        }
+      }
     } finally {
       finish(task, task.cancelRequested.get() ? "STOPPED" : finalStatus);
     }
@@ -245,7 +283,10 @@ public class ShipmentBatchTrackingService {
           }
         }
         synchronized (task) {
-          item.status = "SUCCEEDED";
+          item.expectedContainerCount = expectedContainerCount(response.path("snapshot"));
+          item.enrichmentRequired = response.path("snapshot").isObject()
+              && response.path("shipmentId").isTextual();
+          item.status = item.enrichmentRequired ? "CORE_SUCCEEDED" : "SUCCEEDED";
           item.source = response.path("cacheSource").asText("LIVE");
           item.shipmentId = response.path("shipmentId").asText(null);
           item.error = null;
@@ -284,6 +325,251 @@ public class ShipmentBatchTrackingService {
     if (task.cancelRequested.get()) markPendingAfterCancellation(task, item);
   }
 
+  private boolean enrichBatchContainers(
+      BatchTask task,
+      BatchItem item
+  ) {
+    if (!item.enrichmentRequired || item.shipmentId == null) return true;
+
+    BatchSubtask discovery = new BatchSubtask(
+        "container-list",
+        "CONTAINER_LIST",
+        item.queryNumber,
+        clock.instant()
+    );
+    synchronized (task) {
+      item.subtasks.clear();
+      item.subtasks.add(discovery);
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+    ObjectNode discovered = runBatchSubtask(
+        task,
+        item,
+        discovery,
+        () -> trackingService.discoverBatchContainers(
+            item.shipmentId,
+            item.queryNumber,
+            task.id,
+            task.owner
+        )
+    );
+    if (discovered == null) return false;
+
+    List<String> containerNumbers = new ArrayList<>();
+    JsonNode containers = discovered.path("containers");
+    if (containers.isArray()) {
+      for (JsonNode container : containers) {
+        String number = compact(container.path("number").asText(null));
+        if (number.matches("[A-Z]{4}[0-9]{7}") && !containerNumbers.contains(number)) {
+          containerNumbers.add(number);
+        }
+      }
+    }
+    int expected = item.expectedContainerCount;
+    if (containerNumbers.isEmpty() && expected > 0) {
+      synchronized (task) {
+        discovery.status = "FAILED";
+        discovery.error = "Carrier reported " + expected
+            + " containers but returned no container numbers";
+        discovery.errorCode = "CONTAINER_LIST_EMPTY";
+        discovery.updatedAt = clock.instant();
+        item.updatedAt = discovery.updatedAt;
+        task.updatedAt = discovery.updatedAt;
+      }
+      return false;
+    }
+
+    boolean complete = true;
+    List<String> scheduledContainerNumbers = new ArrayList<>();
+    for (JsonNode container : containers) {
+      String containerNumber = compact(container.path("number").asText(null));
+      if (!containerNumbers.contains(containerNumber)
+          || scheduledContainerNumbers.contains(containerNumber)) continue;
+      scheduledContainerNumbers.add(containerNumber);
+      if (task.cancelRequested.get()) return false;
+      BatchSubtask child = new BatchSubtask(
+          "container:" + containerNumber,
+          "CONTAINER",
+          containerNumber,
+          clock.instant()
+      );
+      synchronized (task) {
+        item.subtasks.add(child);
+        item.updatedAt = clock.instant();
+        task.updatedAt = item.updatedAt;
+      }
+      if (!container.path("needsEnrichment").asBoolean(true)) {
+        synchronized (task) {
+          child.status = "SUCCEEDED";
+          child.source = "CONTAINER_LIST";
+          child.updatedAt = clock.instant();
+          item.updatedAt = child.updatedAt;
+          task.updatedAt = child.updatedAt;
+        }
+        continue;
+      }
+      ObjectNode result = runBatchSubtask(
+          task,
+          item,
+          child,
+          () -> trackingService.enrichBatchContainer(
+              item.shipmentId,
+              containerNumber,
+              task.id,
+              task.owner
+          )
+      );
+      if (result == null) complete = false;
+    }
+    return complete;
+  }
+
+  private int expectedContainerCount(JsonNode snapshot) {
+    int total = 0;
+    JsonNode summaries = snapshot.path("summary").path("containers");
+    if (!summaries.isArray()) return 0;
+    for (JsonNode summary : summaries) {
+      total += Math.max(0, summary.path("quantity").asInt(summary.path("count").asInt(0)));
+    }
+    return total;
+  }
+
+  private ObjectNode runBatchSubtask(
+      BatchTask task,
+      BatchItem item,
+      BatchSubtask subtask,
+      BatchSubtaskOperation operation
+  ) {
+    while (!task.cancelRequested.get()) {
+      waitForCarrierCooldown(task, item, subtask);
+      if (task.cancelRequested.get()) return null;
+      synchronized (task) {
+        item.status = "ENRICHING";
+        subtask.status = "RUNNING";
+        subtask.nextRetryAt = null;
+        task.nextAttemptAt = null;
+        subtask.updatedAt = clock.instant();
+        item.updatedAt = subtask.updatedAt;
+        task.updatedAt = subtask.updatedAt;
+      }
+      waitForTrackingWindow(task);
+      if (task.cancelRequested.get()) return null;
+      synchronized (task) {
+        subtask.attempts++;
+        subtask.updatedAt = clock.instant();
+        item.updatedAt = subtask.updatedAt;
+        task.updatedAt = subtask.updatedAt;
+      }
+      try {
+        ObjectNode response = operation.run();
+        synchronized (throttleMonitor) {
+          consecutiveCarrierFailures = 0;
+          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(clock.instant())) {
+            carrierCooldownUntil = null;
+          }
+        }
+        synchronized (task) {
+          subtask.status = "SUCCEEDED";
+          subtask.source = response.path("cacheSource").asText("LIVE");
+          subtask.error = null;
+          subtask.errorCode = null;
+          subtask.nextRetryAt = null;
+          subtask.updatedAt = clock.instant();
+          item.updatedAt = subtask.updatedAt;
+          task.updatedAt = subtask.updatedAt;
+        }
+        return response;
+      } catch (RuntimeException error) {
+        if (task.cancelRequested.get() || isCancellation(error)) throw error;
+        if (!isRetryable(error)) {
+          markSubtaskFailed(task, item, subtask, error);
+          return null;
+        }
+        boolean protectionFailure = isProtectionFailure(error);
+        if (subtask.attempts >= MAX_TRACK_ATTEMPTS && !protectionFailure) {
+          registerCarrierFailure(error, subtask.attempts);
+          markSubtaskFailed(task, item, subtask, error);
+          return null;
+        }
+        Instant retryAt = registerCarrierFailure(error, subtask.attempts);
+        synchronized (task) {
+          item.status = "ENRICHING";
+          subtask.status = "RETRY_WAIT";
+          subtask.source = null;
+          subtask.error = safeMessage(error);
+          subtask.errorCode = errorCode(error);
+          subtask.nextRetryAt = retryAt;
+          task.nextAttemptAt = retryAt;
+          subtask.updatedAt = clock.instant();
+          item.updatedAt = subtask.updatedAt;
+          task.updatedAt = subtask.updatedAt;
+        }
+        if (protectionFailure
+            && (subtask.attempts >= MAX_TRACK_ATTEMPTS
+                || retryAt.isAfter(clock.instant().plusMillis(MAX_INLINE_COOLDOWN_MS)))) {
+          throw new ProtectionPauseException(error);
+        }
+      }
+    }
+    return null;
+  }
+
+  private void markSubtaskFailed(
+      BatchTask task,
+      BatchItem item,
+      BatchSubtask subtask,
+      RuntimeException error
+  ) {
+    synchronized (task) {
+      subtask.status = "FAILED";
+      subtask.source = null;
+      subtask.error = safeMessage(error);
+      subtask.errorCode = errorCode(error);
+      subtask.nextRetryAt = null;
+      subtask.updatedAt = clock.instant();
+      item.updatedAt = subtask.updatedAt;
+      task.updatedAt = subtask.updatedAt;
+    }
+  }
+
+  private void waitForCarrierCooldown(
+      BatchTask task,
+      BatchItem item,
+      BatchSubtask subtask
+  ) {
+    while (!task.cancelRequested.get()) {
+      Instant until = carrierCooldownUntil;
+      Instant now = clock.instant();
+      if (until == null || !until.isAfter(now)) {
+        synchronized (throttleMonitor) {
+          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(now)) {
+            carrierCooldownUntil = null;
+          }
+        }
+        synchronized (task) {
+          task.cooldownUntil = null;
+          if (subtask.nextRetryAt != null && !subtask.nextRetryAt.isAfter(now)) {
+            subtask.nextRetryAt = null;
+          }
+        }
+        return;
+      }
+      synchronized (task) {
+        task.status = "COOLDOWN";
+        item.status = "ENRICHING";
+        subtask.status = "RETRY_WAIT";
+        subtask.nextRetryAt = until;
+        task.cooldownUntil = until;
+        task.nextAttemptAt = until;
+        subtask.updatedAt = now;
+        item.updatedAt = now;
+        task.updatedAt = now;
+      }
+      waitUntil(task, until);
+    }
+  }
+
   private void markWaitingForTrackingWindow(BatchTask task, BatchItem item) {
     synchronized (task) {
       task.status = "RUNNING";
@@ -314,6 +600,13 @@ public class ShipmentBatchTrackingService {
       item.error = null;
       item.errorCode = null;
       item.nextRetryAt = null;
+      for (BatchSubtask subtask : item.subtasks) {
+        if ("RUNNING".equals(subtask.status) || "RETRY_WAIT".equals(subtask.status)) {
+          subtask.status = "PENDING";
+          subtask.nextRetryAt = null;
+          subtask.updatedAt = clock.instant();
+        }
+      }
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
       task.updatedAt = item.updatedAt;
@@ -598,6 +891,7 @@ public class ShipmentBatchTrackingService {
     synchronized (task) {
       int succeeded = 0;
       int failed = 0;
+      int partial = 0;
       int manual = 0;
       int pending = 0;
       List<Map<String, Object>> items = new ArrayList<>();
@@ -605,6 +899,7 @@ public class ShipmentBatchTrackingService {
         switch (item.status) {
           case "SUCCEEDED" -> succeeded++;
           case "FAILED" -> failed++;
+          case "PARTIAL" -> partial++;
           case "MANUAL" -> manual++;
           default -> pending++;
         }
@@ -624,6 +919,29 @@ public class ShipmentBatchTrackingService {
         value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
         value.put("updatedAt", iso(item.updatedAt));
+        List<Map<String, Object>> subtasks = new ArrayList<>();
+        for (BatchSubtask subtask : item.subtasks) {
+          Map<String, Object> child = new LinkedHashMap<>();
+          child.put("id", subtask.id);
+          child.put("type", subtask.type);
+          child.put("number", subtask.number);
+          child.put("status", subtask.status);
+          child.put("source", subtask.source);
+          child.put("error", subtask.error);
+          child.put("errorCode", subtask.errorCode);
+          child.put("attempts", subtask.attempts);
+          child.put("nextRetryAt", iso(subtask.nextRetryAt));
+          child.put("updatedAt", iso(subtask.updatedAt));
+          subtasks.add(child);
+        }
+        value.put("subtasks", subtasks);
+        value.put("subtaskTotal", subtasks.size());
+        value.put(
+            "subtaskProcessed",
+            subtasks.stream().filter(child -> List.of("SUCCEEDED", "FAILED").contains(
+                child.get("status")
+            )).count()
+        );
         items.add(value);
       }
       Map<String, Object> value = new LinkedHashMap<>();
@@ -634,9 +952,10 @@ public class ShipmentBatchTrackingService {
       value.put("total", task.items.size());
       value.put("succeeded", succeeded);
       value.put("failed", failed);
+      value.put("partial", partial);
       value.put("manual", manual);
       value.put("pending", pending);
-      value.put("processed", succeeded + failed + manual);
+      value.put("processed", succeeded + failed + partial + manual);
       value.put("createdAt", iso(task.createdAt));
       value.put("startedAt", iso(task.startedAt));
       value.put("updatedAt", iso(task.updatedAt));
@@ -757,6 +1076,9 @@ public class ShipmentBatchTrackingService {
     private Instant nextRetryAt;
     private String shipmentId;
     private Instant updatedAt;
+    private boolean enrichmentRequired;
+    private int expectedContainerCount;
+    private final List<BatchSubtask> subtasks = new ArrayList<>();
 
     private BatchItem(
         ShipmentBatchItemRequest request,
@@ -767,6 +1089,31 @@ public class ShipmentBatchTrackingService {
       this.queryNumber = queryNumber;
       this.manualOnly = manualOnly;
     }
+  }
+
+  private static final class BatchSubtask {
+    private final String id;
+    private final String type;
+    private final String number;
+    private String status = "PENDING";
+    private String source;
+    private String error;
+    private String errorCode;
+    private int attempts;
+    private Instant nextRetryAt;
+    private Instant updatedAt;
+
+    private BatchSubtask(String id, String type, String number, Instant createdAt) {
+      this.id = id;
+      this.type = type;
+      this.number = number;
+      this.updatedAt = createdAt;
+    }
+  }
+
+  @FunctionalInterface
+  private interface BatchSubtaskOperation {
+    ObjectNode run();
   }
 
   private static final class ProtectionPauseException extends RuntimeException {

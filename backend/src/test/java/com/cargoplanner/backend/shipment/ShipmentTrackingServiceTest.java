@@ -428,10 +428,96 @@ class ShipmentTrackingServiceTest {
     assertThat(result.path("persisted").asBoolean()).isTrue();
     assertThat(result.path("snapshot").path("summary").path("origin").path("name").asText())
         .isEqualTo("SHA");
+    assertThat(result.path("snapshot").path("route")).hasSize(2);
+    assertThat(result.path("snapshot").path("route").get(0).path("locationType").asText())
+        .isEqualTo("FPOL");
+    assertThat(result.path("snapshot").path("route").get(1).path("locationType").asText())
+        .isEqualTo("LPOD");
+    assertThat(result.path("snapshot").path("routeSource").asText())
+        .isEqualTo("SYNTHESIZED_FROM_PLAN");
+    ObjectNode legacySnapshot = (ObjectNode) result.path("snapshot").deepCopy();
+    legacySnapshot.remove("route");
+    legacySnapshot.remove("routeSource");
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?",
+        objectMapper.writeValueAsString(legacySnapshot)
+    );
+    ObjectNode cached = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BOOKING", "IMPORT-EMPTY-1001", false
+        ),
+        business
+    );
+    assertThat(cached.path("cacheSource").asText()).isEqualTo("MYSQL");
+    assertThat(cached.path("snapshot").path("route")).hasSize(2);
     assertThat(jdbcTemplate.queryForObject(
         "SELECT match_reason FROM cp_shipment_client_match_queue WHERE match_status = 'PENDING'",
         String.class
     )).isEqualTo("NO_MATCH");
+  }
+
+  @Test
+  void discoversAndMergesContainerSubqueriesIntoTheParentShipment() throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    String taskId = "batch_1234567890abcdef";
+    NormalizedTrackRequest listRequest = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BILLOFLADING", "BL-90001", taskId
+    );
+    when(adapterClient.discoverContainers(listRequest)).thenReturn(objectMapper.readTree("""
+        {
+          "total": 1,
+          "containers": [{
+            "number": "CSNU1234567",
+            "type": "40HC",
+            "needsEnrichment": true,
+            "milestones": []
+          }]
+        }
+        """));
+
+    ObjectNode discovered = service.discoverBatchContainers(
+        shipmentId, "BL-90001", taskId, business
+    );
+    assertThat(discovered.path("containers")).hasSize(1);
+
+    NormalizedTrackRequest containerRequest = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "CONTAINER", "CSNU1234567", taskId
+    );
+    when(adapterClient.track(containerRequest)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:02:00Z",
+            "tracking": {"type": "CONTAINER", "number": "CSNU1234567"},
+            "summary": {"latestEvent": {"name": "Truck gate out"}},
+            "containers": [{
+              "number": "CSNU1234567",
+              "type": "40HC",
+              "transportMode": "TRUCK",
+              "currentLocation": "Shanghai depot",
+              "latestEvent": "Truck gate out",
+              "latestEventTime": "2026-07-16T09:30:00Z",
+              "milestones": [{"name": "Truck gate out", "transportMode": "TRUCK"}]
+            }]
+          },
+          "cached": false
+        }
+        """));
+
+    service.enrichBatchContainer(shipmentId, "CSNU1234567", taskId, business);
+
+    JsonNode stored = objectMapper.readTree(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots", String.class
+    ));
+    JsonNode container = stored.path("containers").get(0);
+    assertThat(container.path("currentLocation").asText()).isEqualTo("Shanghai depot");
+    assertThat(container.path("transportMode").asText()).isEqualTo("TRUCK");
+    assertThat(container.path("detailSource").asText()).isEqualTo("CONTAINER_SUBQUERY");
+    assertThat(stored.path("containerEnrichment").path("completed").asInt()).isEqualTo(1);
   }
 
   @Test

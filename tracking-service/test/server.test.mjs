@@ -10,6 +10,7 @@ import {
   listCoscoQueryChannels,
   normalizeCarrierCode,
   normalizeCmaSnapshot,
+  normalizeCoscoContainerList,
   normalizeCoscoContainerSnapshot,
   normalizeQueryChannel,
   parseCmaLocalDateTime,
@@ -273,6 +274,36 @@ test("uses the dedicated container payload without leaking other shipment record
   assert.deepEqual(snapshot.route, []);
 });
 
+test("container discovery marks only incomplete boxes for low-priority subqueries", () => {
+  const containers = normalizeCoscoContainerList([
+    {
+      containerNumberWithCheckDigit: "CSNU1234567",
+      containerType: "40HQ",
+      currentMilestone: {
+        eventName: "Gate out",
+        actualEventDateTime: "2026-07-21T08:00:00Z",
+        eventLocationName: "Shanghai",
+        transportMode: "TRUCK"
+      },
+      milestones: [{
+        eventName: "Gate out",
+        actualEventDateTime: "2026-07-21T08:00:00Z"
+      }]
+    },
+    {
+      containerNumberWithCheckDigit: "OOLU7654321",
+      containerType: "40HQ",
+      milestones: []
+    }
+  ]);
+
+  assert.equal(containers.length, 2);
+  assert.equal(containers[0].needsEnrichment, false);
+  assert.equal(containers[0].transportMode, "TRUCK");
+  assert.equal(containers[0].currentLocation, "Shanghai");
+  assert.equal(containers[1].needsEnrichment, true);
+});
+
 test("checks the primary network and fallback DOM channels independently", async () => {
   const result = await runCoscoChannelChecks(
     { type: "BILLOFLADING", number: "6502077380" },
@@ -345,7 +376,15 @@ test("maps business references and enriches missing container milestones with a 
       {
         containerNumber: "TEMU6003424",
         containerType: "40HQ",
-        trafficTerm: "CY | CY"
+        trafficTerm: "CY | CY",
+        currentMilestone: {
+          eventName: "Container Gated Out",
+          actualEventDateTime: "2026-07-14T20:21:00"
+        },
+        milestones: [{
+          eventName: "Container Gated Out",
+          actualEventDateTime: "2026-07-14T20:21:00"
+        }]
       }
     ],
     async (request) => {
@@ -396,6 +435,8 @@ test("maps business references and enriches missing container milestones with a 
   });
   assert.equal(snapshot.containers[0].detailSource, "CONTAINER_SUBQUERY");
   assert.equal(snapshot.containers[0].latestEvent, "Container Gated Out");
+  assert.equal(snapshot.containers[0].currentLocation, "Savannah");
+  assert.equal(snapshot.containers[0].transportMode, "Truck");
   assert.equal(snapshot.containers[0].milestones.length, 1);
 });
 

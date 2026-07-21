@@ -131,6 +131,144 @@ class ShipmentBatchTrackingServiceTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void runsOnlyNeededContainerSubtasksAndReportsTheirProgress()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectNode tracked = (ObjectNode) objectMapper.readTree("""
+        {
+          "shipmentId": "tracked-shipment",
+          "cacheSource": "LIVE",
+          "snapshot": {
+            "summary": {"containers": [{"containerType": "40HQ", "quantity": 2}]},
+            "containers": []
+          }
+        }
+        """);
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    when(trackingService.discoverBatchContainers(any(), any(), any(), any()))
+        .thenReturn((ObjectNode) objectMapper.readTree("""
+            {
+              "containers": [
+                {"number": "CSNU1234567", "needsEnrichment": false},
+                {"number": "OOLU7654321", "needsEnrichment": true}
+              ]
+            }
+            """));
+    when(trackingService.enrichBatchContainer(any(), any(), any(), any()))
+        .thenReturn((ObjectNode) objectMapper.readTree("""
+            {"cacheSource": "LIVE", "snapshot": {"containers": [{"number": "OOLU7654321"}]}}
+            """));
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        11L, "operator-children", "Operator Children", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "containers.xlsx",
+            List.of(new ShipmentBatchItemRequest(
+                "row-containers", "COSCO", "BILLOFLADING", "6502406170",
+                "COSU6502406170", false, details
+            ))
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) items.get(0).get("subtasks");
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("SUCCEEDED", items.get(0).get("status"));
+    assertEquals(3, subtasks.size());
+    assertTrue(subtasks.stream().allMatch(child -> "SUCCEEDED".equals(child.get("status"))));
+    assertEquals(0, subtasks.get(1).get("attempts"));
+    assertEquals("CONTAINER_LIST", subtasks.get(1).get("source"));
+    verify(trackingService).discoverBatchContainers(
+        any(), any(), any(), any()
+    );
+    verify(trackingService).enrichBatchContainer(
+        org.mockito.ArgumentMatchers.eq("tracked-shipment"),
+        org.mockito.ArgumentMatchers.eq("OOLU7654321"),
+        any(),
+        any()
+    );
+    verify(trackingService, times(1)).enrichBatchContainer(any(), any(), any(), any());
+  }
+
+  @Test
+  void finishesEveryCoreLookupBeforeStartingTheLowPriorityContainerPass()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    List<String> sequence = new java.util.concurrent.CopyOnWriteArrayList<>();
+    when(trackingService.track(any(), any())).thenAnswer(invocation -> {
+      ShipmentTrackRequest request = invocation.getArgument(0);
+      sequence.add("core:" + request.number());
+      ObjectNode response = objectMapper.createObjectNode();
+      response.put("shipmentId", "shipment-" + request.number());
+      response.put("cacheSource", "LIVE");
+      response.putObject("snapshot").putObject("summary").putArray("containers");
+      return response;
+    });
+    when(trackingService.discoverBatchContainers(any(), any(), any(), any()))
+        .thenAnswer(invocation -> {
+          sequence.add("containers:" + invocation.getArgument(1, String.class));
+          ObjectNode response = objectMapper.createObjectNode();
+          response.putArray("containers");
+          return response;
+        });
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        12L, "operator-order", "Operator Order", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails first = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, null
+    );
+    ShipmentImportDetails second = new ShipmentImportDetails(
+        "COSU", "COSU6502406171", null, null, null, null,
+        null, null, null, null, null
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest("order.xlsx", List.of(
+            new ShipmentBatchItemRequest(
+                "row-1", "COSCO", "BILLOFLADING", "6502406170",
+                "COSU6502406170", false, first
+            ),
+            new ShipmentBatchItemRequest(
+                "row-2", "COSCO", "BILLOFLADING", "6502406171",
+                "COSU6502406171", false, second
+            )
+        )),
+        user
+    );
+
+    awaitTerminal((String) started.get("taskId"), user);
+    assertEquals(List.of(
+        "core:6502406170",
+        "core:6502406171",
+        "containers:6502406170",
+        "containers:6502406171"
+    ), sequence);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void cancellingDuringTheNextQueryWindowLeavesTheUnqueriedRowPending()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
