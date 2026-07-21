@@ -150,6 +150,50 @@ class ShipmentBatchTrackingResilienceTest {
     verify(trackingService, times(2)).track(any(), any());
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  void persistentProtectionPausesWithoutFailuresAndReleasesTheUserTaskSlot()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.track(any(), any())).thenThrow(new ApiException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "COSCO_CHANNELS_UNAVAILABLE",
+        "Both COSCO channels are protected"
+    ));
+
+    createService(trackingService, 0, 0, 5, 5);
+    AuthenticatedUser user = businessUser(74L);
+    String firstTaskId = taskId(service.start(batch("COSU6502406174"), user));
+    Map<String, Object> paused = awaitTerminal(firstTaskId, user, 2_000);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) paused.get("items");
+
+    assertEquals("PAUSED", paused.get("status"));
+    assertEquals(0, paused.get("processed"));
+    assertEquals(0, paused.get("failed"));
+    assertEquals(1, paused.get("pending"));
+    assertEquals("RETRY_WAIT", items.get(0).get("status"));
+    assertEquals(3, items.get(0).get("attempts"));
+    verify(trackingService, times(3)).track(any(), any());
+
+    String secondTaskId = taskId(service.start(batch("COSU6502406175"), user));
+    assertTrue(!firstTaskId.equals(secondTaskId), "A paused task must release the active slot");
+    service.cancel(secondTaskId, user);
+  }
+
+  @Test
+  void explicitRetryAfterCanExceedTheExponentialBackoffCap() {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    createService(trackingService, 0, 0, 10, 10);
+    ApiException limited = new ApiException(
+        HttpStatus.TOO_MANY_REQUESTS,
+        "COSCO_UPSTREAM_RATE_LIMITED",
+        "Retry later",
+        45_000L
+    );
+
+    assertEquals(45_000L, service.retryDelayMs(limited, 1));
+  }
+
   private void createService(
       ShipmentTrackingService trackingService,
       long minIntervalMs,
@@ -237,7 +281,7 @@ class ShipmentBatchTrackingResilienceTest {
     Map<String, Object> status;
     do {
       status = service.status(taskId, user);
-      if (List.of("COMPLETED", "STOPPED").contains(status.get("status"))) return status;
+      if (List.of("COMPLETED", "STOPPED", "PAUSED").contains(status.get("status"))) return status;
       Thread.sleep(2);
     } while (System.nanoTime() < deadline);
     return service.status(taskId, user);

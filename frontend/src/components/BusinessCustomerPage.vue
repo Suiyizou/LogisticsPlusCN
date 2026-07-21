@@ -533,7 +533,13 @@
                         <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
                       </div>
                       <el-alert
-                        v-if="batchTrackProgress.nextAttemptAt"
+                        v-if="batchTrackProgress.status === 'PAUSED'"
+                        type="warning"
+                        :closable="false"
+                        :title="t('customers.batchTrackPaused', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
+                      />
+                      <el-alert
+                        v-else-if="batchTrackProgress.nextAttemptAt"
                         type="warning"
                         :closable="false"
                         :title="t('customers.batchTrackRetryWait', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
@@ -1113,7 +1119,7 @@ const batchTrackToolbarLabel = computed(() => batchTrackRunning.value
     })
   : t("customers.batchTrack"));
 const BATCH_TRACK_TASK_KEY = "business-shipment-batch-task-id";
-const BATCH_TRACK_TERMINAL = new Set(["COMPLETED", "STOPPED", "FAILED"]);
+const BATCH_TRACK_TERMINAL = new Set(["COMPLETED", "STOPPED", "FAILED", "PAUSED"]);
 let batchTrackPollTimer = 0;
 
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));

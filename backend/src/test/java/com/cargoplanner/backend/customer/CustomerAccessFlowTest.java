@@ -519,7 +519,7 @@ class CustomerAccessFlowTest {
     assertThat(updated)
         .containsEntry("referenceType", "BILLOFLADING")
         .containsEntry("referenceNo", "1234567890")
-        .containsEntry("trackingStatus", "In transit")
+        .containsEntry("trackingStatus", "Booking confirmed")
         .containsEntry("note", "Customer notified");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?",

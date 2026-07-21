@@ -1124,9 +1124,10 @@ public class BusinessCustomerService {
         : normalizeShipmentReference(shipment.carrier(), referenceType, request.referenceNo());
     boolean referenceChanged = !referenceType.equals(existing.referenceType())
         || !referenceNo.equals(normalizeReference(existing.referenceNo()));
-    String trackingStatus = request.trackingStatus() == null
-        ? existing.trackingStatus()
-        : normalizeTrackingStatus(request.trackingStatus(), null);
+    // Tracking status belongs to the manual/live snapshot workflow. The base shipment endpoint
+    // deliberately ignores legacy trackingStatus input so the row and current snapshot cannot
+    // diverge.
+    String trackingStatus = existing.trackingStatus();
     String note = request.note() == null
         ? existing.note()
         : normalizeShipmentNote(request.note(), null);

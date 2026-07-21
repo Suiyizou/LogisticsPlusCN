@@ -261,3 +261,32 @@ test("AUTO strategy does not enter Playwright fallback for protection failures",
   assert.ok(protectionGuard >= 0, "AUTO must rethrow 403/429 before fallback");
   assert.ok(playwrightFallback > protectionGuard, "Playwright fallback must follow the protection guard");
 });
+
+test("business-code 403 opens protection before the generic adapter failure path", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const endpoint = source.slice(
+    source.indexOf("async function fetchCoscoEndpointNow"),
+    source.indexOf("function extractCoscoPageCookies")
+  );
+  const blockedBranch = endpoint.indexOf('if (decodedCode === "403")');
+  const genericFailure = endpoint.indexOf('if (decoded?.code !== "200"');
+
+  assert.ok(blockedBranch >= 0, "Decoded COSCO 403 must have an explicit protection branch");
+  assert.ok(genericFailure > blockedBranch, "Decoded COSCO 403 must be handled before generic 502 fallback");
+  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoCircuitBreaker\.trip/);
+  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoBlockedHttpError/);
+});
+
+test("batch Playwright fallback skips per-container enrichment", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const playwright = source.slice(
+    source.indexOf("async function fetchCoscoTrackingWithPlaywright"),
+    source.indexOf("async function fetchCoscoTracking(request")
+  );
+  const batchGuard = playwright.indexOf("if (!options.batch)");
+  const childEnrichment = playwright.indexOf("enrichCoscoShipmentContainers(");
+
+  assert.ok(batchGuard >= 0, "Playwright enrichment must be guarded in batch mode");
+  assert.ok(childEnrichment > batchGuard, "Per-container enrichment must only occur inside the non-batch guard");
+  assert.match(playwright, /partial: Boolean\(options\.batch \|\| enrichmentWarning\)/);
+});

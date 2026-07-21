@@ -32,6 +32,8 @@ public class ShipmentBatchTrackingService {
   static final long DEFAULT_RETRY_BASE_MS = 15_000L;
   static final long DEFAULT_RETRY_MAX_MS = 10 * 60_000L;
   static final long CHANNEL_UNAVAILABLE_COOLDOWN_MS = 2 * 60_000L;
+  static final long MAX_INLINE_COOLDOWN_MS = 10 * 60_000L;
+  static final long MAX_EXPLICIT_RETRY_AFTER_MS = 24 * 60 * 60_000L;
   private static final long TASK_RETENTION_SECONDS = 24 * 60 * 60;
 
   private final ShipmentTrackingService trackingService;
@@ -178,6 +180,7 @@ public class ShipmentBatchTrackingService {
       task.updatedAt = task.startedAt;
     }
 
+    String finalStatus = "COMPLETED";
     try {
       for (BatchItem item : task.items) {
         if (task.cancelRequested.get()) break;
@@ -198,6 +201,9 @@ public class ShipmentBatchTrackingService {
           } else {
             trackWithRetry(task, item);
           }
+        } catch (ProtectionPauseException paused) {
+          finalStatus = "PAUSED";
+          break;
         } catch (RuntimeException error) {
           if (task.cancelRequested.get() || isCancellation(error)) {
             markPendingAfterCancellation(task, item);
@@ -207,7 +213,7 @@ public class ShipmentBatchTrackingService {
         }
       }
     } finally {
-      finish(task, task.cancelRequested.get() ? "STOPPED" : "COMPLETED");
+      finish(task, task.cancelRequested.get() ? "STOPPED" : finalStatus);
     }
   }
 
@@ -253,7 +259,8 @@ public class ShipmentBatchTrackingService {
       } catch (RuntimeException error) {
         if (task.cancelRequested.get() || isCancellation(error)) throw error;
         if (!isRetryable(error)) throw error;
-        if (item.attempts >= MAX_TRACK_ATTEMPTS && !isProtectionFailure(error)) {
+        boolean protectionFailure = isProtectionFailure(error);
+        if (item.attempts >= MAX_TRACK_ATTEMPTS && !protectionFailure) {
           registerCarrierFailure(error, item.attempts);
           throw error;
         }
@@ -266,6 +273,11 @@ public class ShipmentBatchTrackingService {
           item.nextRetryAt = retryAt;
           task.nextAttemptAt = retryAt;
           task.updatedAt = clock.instant();
+        }
+        if (protectionFailure
+            && (item.attempts >= MAX_TRACK_ATTEMPTS
+                || retryAt.isAfter(clock.instant().plusMillis(MAX_INLINE_COOLDOWN_MS)))) {
+          throw new ProtectionPauseException(error);
         }
       }
     }
@@ -394,7 +406,10 @@ public class ShipmentBatchTrackingService {
     double jitter = 0.75D + ThreadLocalRandom.current().nextDouble() * 0.5D;
     long delayMs = Math.min(retryMaxMs, Math.max(0L, Math.round(exponential * jitter)));
     if (error instanceof ApiException apiError && apiError.retryAfterMs() != null) {
-      delayMs = Math.max(delayMs, Math.min(retryMaxMs, apiError.retryAfterMs()));
+      delayMs = Math.max(
+          delayMs,
+          Math.min(MAX_EXPLICIT_RETRY_AFTER_MS, apiError.retryAfterMs())
+      );
     }
     return delayMs;
   }
@@ -724,7 +739,9 @@ public class ShipmentBatchTrackingService {
     }
 
     private boolean terminal() {
-      return "COMPLETED".equals(status) || "STOPPED".equals(status);
+      return "COMPLETED".equals(status)
+          || "STOPPED".equals(status)
+          || "PAUSED".equals(status);
     }
   }
 
@@ -749,6 +766,12 @@ public class ShipmentBatchTrackingService {
       this.request = request;
       this.queryNumber = queryNumber;
       this.manualOnly = manualOnly;
+    }
+  }
+
+  private static final class ProtectionPauseException extends RuntimeException {
+    private ProtectionPauseException(RuntimeException cause) {
+      super(cause);
     }
   }
 }
