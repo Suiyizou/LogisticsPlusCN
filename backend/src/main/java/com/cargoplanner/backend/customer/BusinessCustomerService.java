@@ -1335,7 +1335,7 @@ public class BusinessCustomerService {
     ShipmentRecord shipment = requireShipment(shipmentPublicId);
     requireShipmentAssignmentAuthority(shipment, actor);
     Integer fileCount = jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_files WHERE shipment_id = ?",
+        "SELECT COUNT(*) FROM cp_shipment_files WHERE shipment_id = ? AND status <> 'DELETED'",
         Integer.class,
         shipment.id()
     );
@@ -1344,6 +1344,14 @@ public class BusinessCustomerService {
     }
     auditShipment(actor, "DELETE_BUSINESS_SHIPMENT", shipment.id(),
         "Deleted shipment " + shipment.publicId(), ipAddress);
+    jdbcTemplate.update(
+        "DELETE FROM cp_shipment_file_audit WHERE shipment_id = ?",
+        shipment.id()
+    );
+    jdbcTemplate.update(
+        "DELETE FROM cp_shipment_files WHERE shipment_id = ? AND status = 'DELETED'",
+        shipment.id()
+    );
     jdbcTemplate.update("DELETE FROM cp_shipments WHERE id = ?", shipment.id());
     return Map.of("deleted", true, "shipmentId", shipment.publicId());
   }

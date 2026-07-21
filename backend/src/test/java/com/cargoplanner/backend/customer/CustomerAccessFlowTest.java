@@ -564,6 +564,29 @@ class CustomerAccessFlowTest {
         shipmentId
     )).isNull();
 
+    Long internalShipmentId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE public_id = ?", Long.class, shipmentId
+    );
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipment_files (shipment_id, status) VALUES (?, 'READY')",
+        internalShipmentId
+    );
+    Long fileId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipment_files WHERE shipment_id = ?", Long.class, internalShipmentId
+    );
+    assertThatThrownBy(() -> customerService.deleteShipment(
+        shipmentId, business, "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT)
+    );
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipment_file_audit (shipment_file_id, shipment_id) VALUES (?, ?)",
+        fileId, internalShipmentId
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipment_files SET status = 'DELETED' WHERE id = ?", fileId
+    );
+
     assertThat(customerService.deleteShipment(shipmentId, business, "127.0.0.1"))
         .containsEntry("deleted", true)
         .containsEntry("shipmentId", shipmentId);
@@ -573,6 +596,16 @@ class CustomerAccessFlowTest {
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = '1234567890'",
         Integer.class
+    )).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_files WHERE shipment_id = ?",
+        Integer.class,
+        internalShipmentId
+    )).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_file_audit WHERE shipment_id = ?",
+        Integer.class,
+        internalShipmentId
     )).isZero();
   }
 
@@ -919,6 +952,14 @@ class CustomerAccessFlowTest {
     jdbcTemplate.execute("""
         CREATE TABLE cp_shipment_files (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'READY'
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_file_audit (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_file_id BIGINT NOT NULL,
           shipment_id BIGINT NOT NULL
         )
         """);
