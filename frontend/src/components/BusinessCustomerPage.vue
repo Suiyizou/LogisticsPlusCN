@@ -440,23 +440,6 @@
                       <el-button size="small" link @click="toggleBatchTrackPanel">×</el-button>
                     </div>
                     <div class="batch-track-form">
-                      <div class="batch-track-row">
-                        <label>
-                          <span>{{ t("customers.carrier") }}</span>
-                          <el-select v-model="batchTrackCarrier" class="business-select" popper-class="business-select-popper">
-                            <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-                            <el-option value="CMA" :label="t('customers.carrierCMA')" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>{{ t("customers.referenceType") }}</span>
-                          <el-select v-model="batchTrackType" class="business-select" popper-class="business-select-popper">
-                            <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                            <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-                            <el-option value="CONTAINER" :label="t('customers.referenceContainer')" />
-                          </el-select>
-                        </label>
-                      </div>
                       <div class="customer-excel-dropzone batch-track-dropzone" :class="{ 'has-file': batchTrackFileName, 'is-dragover': batchTrackDropzoneActive }"
                         @dragover.prevent="batchTrackDropzoneActive = true"
                         @dragleave.prevent="batchTrackDropzoneActive = false"
@@ -472,6 +455,48 @@
                         </button>
                         <button v-else type="button" @click.stop="batchTrackFileInput?.click()">{{ t("customers.chooseFile") }}</button>
                       </div>
+                      <section v-if="batchTrackSelectedSheet" class="batch-track-preview">
+                        <div class="batch-track-preview-controls">
+                          <label>
+                            <span>{{ t("customers.trackSheet") }}</span>
+                            <el-select v-model="batchTrackSelectedSheetName" class="business-select" popper-class="business-select-popper">
+                              <el-option v-for="sheet in batchTrackSheets" :key="sheet.name" :value="sheet.name" :label="sheet.name" />
+                            </el-select>
+                          </label>
+                          <label>
+                            <span>{{ t("customers.trackColumn") }}</span>
+                            <el-select v-model="batchTrackSelectedColumnIndex" class="business-select" popper-class="business-select-popper">
+                              <el-option
+                                v-for="column in batchTrackSelectedSheet.columns"
+                                :key="column.index"
+                                :value="column.index"
+                                :label="`${column.label} (${column.nonEmptyCount})`"
+                              />
+                            </el-select>
+                          </label>
+                        </div>
+                        <p class="batch-track-preview-note">
+                          {{ t("customers.trackColumnDecision", { trackable: batchTrackTrackableCount, manual: batchTrackManualCount }) }}
+                        </p>
+                        <div class="batch-track-preview-table-wrap">
+                          <table class="batch-track-preview-table">
+                            <thead>
+                              <tr>
+                                <th v-for="column in batchTrackSelectedSheet.columns" :key="column.index" :class="{ selected: column.index === batchTrackSelectedColumnIndex }">
+                                  {{ column.label }}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="(row, rowIndex) in batchTrackPreviewRows" :key="rowIndex">
+                                <td v-for="column in batchTrackSelectedSheet.columns" :key="column.index" :class="{ selected: column.index === batchTrackSelectedColumnIndex }">
+                                  {{ row[column.index] || "—" }}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
                     </div>
 
                     <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
@@ -494,7 +519,7 @@
                       <button
                         class="customer-access-primary"
                         type="button"
-                        :disabled="batchTrackRunning || !batchTrackNumbers.length"
+                        :disabled="batchTrackRunning || !batchTrackSelectedSheet || !batchTrackNumbers.length"
                         @click="startBatchTrack"
                       >
                         {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
@@ -887,8 +912,10 @@ import { currentLocale } from "../i18n";
 import {
   bindBusinessCustomerShipment,
   batchCreateBusinessCustomers,
+  cancelShipmentBatchTask,
   createBusinessCustomer,
   createBusinessShipment,
+  createShipmentBatchTask,
   deleteBusinessCustomer,
   deleteBusinessShipment,
   fetchAvailableBusinessShipments,
@@ -896,6 +923,7 @@ import {
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
   fetchPendingClientMatches,
+  fetchShipmentBatchTask,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
   resolvePendingClientMatch,
@@ -905,6 +933,7 @@ import {
   updateBusinessShipment,
   updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
+import { buildShipmentBatchItems, parseShipmentBatchWorkbook } from "../services/shipmentBatchImport";
 import { storedToken } from "../services/authSession";
 import {
   User,
@@ -962,10 +991,14 @@ const batchTrackCarrier = ref("COSCO");
 const batchTrackType = ref("BILLOFLADING");
 const batchTrackRunning = ref(false);
 const batchTrackResults = ref([]);
-const batchTrackProgress = ref({ total: 0, done: 0, success: 0, failed: 0 });
+const batchTrackProgress = ref({ total: 0, done: 0, succeeded: 0, manual: 0, failed: 0, pending: 0, status: "" });
 const batchTrackFileInput = ref(null);
 const batchTrackFileName = ref("");
-const batchTrackNumbers = ref([]);
+const batchTrackSheets = ref([]);
+const batchTrackSelectedSheetName = ref("");
+const batchTrackSelectedColumnIndex = ref(null);
+const batchTrackTaskId = ref("");
+const batchTrackCancelRequested = ref(false);
 const batchTrackAbortController = ref(null);
 const refreshTrackingStatus = ref("");
 const refreshTrackingResponse = ref(null);
@@ -1006,6 +1039,20 @@ const selectedCustomerIds = ref([]);
 const batchBinding = ref(false);
 const batchBindingProgress = ref("");
 const shipmentCustomerMap = ref({});
+
+const batchTrackSelectedSheet = computed(() =>
+  batchTrackSheets.value.find((sheet) => sheet.name === batchTrackSelectedSheetName.value) || null
+);
+const batchTrackItems = computed(() =>
+  buildShipmentBatchItems(batchTrackSelectedSheet.value, batchTrackSelectedColumnIndex.value)
+);
+const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => item.displayNumber));
+const batchTrackTrackableCount = computed(() => batchTrackItems.value.filter((item) => !item.manualOnly).length);
+const batchTrackManualCount = computed(() => batchTrackItems.value.filter((item) => item.manualOnly).length);
+const batchTrackPreviewRows = computed(() => batchTrackSelectedSheet.value?.rows?.slice(1, 9) || []);
+const BATCH_TRACK_TASK_KEY = "business-shipment-batch-task-id";
+const BATCH_TRACK_TERMINAL = new Set(["COMPLETED", "STOPPED", "FAILED"]);
+let batchTrackPollTimer = 0;
 
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
@@ -1278,9 +1325,11 @@ onMounted(() => {
   void loadAvailableShipments();
   void loadPendingClientMatches();
   void buildShipmentCustomerMap();
+  void restoreBatchTrackTask();
 });
 onUnmounted(() => {
   window.clearTimeout(toastTimer);
+  window.clearTimeout(batchTrackPollTimer);
 });
 
 function navigateTo(item) {
@@ -1375,141 +1424,63 @@ async function loadShipmentDetailSnapshot() {
 }
 
 async function startBatchTrack() {
-  const numbers = batchTrackNumbers.value;
-  if (!numbers.length) return;
-
+  if (!batchTrackItems.value.length || batchTrackRunning.value) return;
   batchTrackRunning.value = true;
-  batchTrackResults.value = numbers.map((number) => ({ number, status: "pending", message: t("customers.trackPending") }));
-  batchTrackProgress.value = { total: numbers.length, done: 0, success: 0, failed: 0 };
-  const controller = new AbortController();
-  batchTrackAbortController.value = controller;
-
-  const token = storedToken();
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "";
-
-  for (let i = 0; i < numbers.length; i++) {
-    const number = numbers[i];
-    batchTrackResults.value[i] = { number, status: "running", message: t("customers.trackRunning") };
-
-    const delayMs = Math.floor(Math.random() * 3000) + 3000;
-    try {
-      await new Promise((resolve, reject) => {
-        const timer = window.setTimeout(resolve, delayMs);
-        const abortHandler = () => {
-          window.clearTimeout(timer);
-          controller.signal.removeEventListener("abort", abortHandler);
-          reject(new DOMException("Aborted", "AbortError"));
-        };
-        controller.signal.addEventListener("abort", abortHandler);
-      });
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        batchTrackResults.value[i] = { number, status: "cancelled", message: t("customers.trackCancelled") };
-        break;
-      }
-      throw err;
+  batchTrackCancelRequested.value = false;
+  batchTrackResults.value = batchTrackItems.value.map((item) => ({
+    number: item.displayNumber,
+    carrier: item.carrier,
+    status: "pending",
+    message: t("customers.trackPending")
+  }));
+  try {
+    const task = await createShipmentBatchTask({
+      sourceFileName: batchTrackFileName.value,
+      items: batchTrackItems.value
+    });
+    rememberBatchTrackTask(task.taskId);
+    applyBatchTrackTask(task);
+    if (batchTrackCancelRequested.value && task.taskId) {
+      applyBatchTrackTask(await cancelShipmentBatchTask(task.taskId));
+      scheduleBatchTrackPoll(task.taskId, 500);
+    } else {
+      scheduleBatchTrackPoll(task.taskId, 800);
     }
-
-    const request = resolveBatchTrackRequest(number, batchTrackCarrier.value, batchTrackType.value);
-    try {
-      const resp = await fetch(`${apiBase}/api/public/shipments/track`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Auth-Token": token
-        },
-        body: JSON.stringify({
-          carrier: request.carrier,
-          channel: "AUTO",
-          type: request.type,
-          number: request.number
-        })
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (resp.ok) {
-        const hasDetails = Boolean(data?.snapshot?.details || data?.details);
-        batchTrackProgress.value.success++;
-        batchTrackResults.value[i] = {
-          number,
-          carrier: request.carrier,
-          status: hasDetails ? "success" : "empty",
-          message: hasDetails
-            ? (data?.snapshot?.summary?.latestEvent?.name || "OK")
-            : t("customers.batchTrackNoDetails")
-        };
-      } else {
-        batchTrackProgress.value.failed++;
-        batchTrackResults.value[i] = {
-          number,
-          carrier: request.carrier,
-          status: "failed",
-          message: data?.message || data?.error?.message || `HTTP ${resp.status}`,
-          code: data?.code || "-",
-          httpStatus: resp.status
-        };
-      }
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        batchTrackResults.value[i] = { number, status: "cancelled", message: t("customers.trackCancelled") };
-        break;
-      }
-      batchTrackProgress.value.failed++;
-      batchTrackResults.value[i] = {
-        number,
-        carrier: request.carrier,
-        status: "failed",
-        message: err?.message || "Network error"
-      };
-    }
-    batchTrackProgress.value.done++;
+  } catch (error) {
+    batchTrackRunning.value = false;
+    batchTrackCancelRequested.value = false;
+    batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.batchTrackStartFailed") }];
   }
-
-  batchTrackRunning.value = false;
-  batchTrackAbortController.value = null;
-  loadAvailableShipments();
 }
 
-function cancelBatchTrack() {
-  if (batchTrackAbortController.value) {
-    batchTrackAbortController.value.abort();
+async function cancelBatchTrack() {
+  batchTrackCancelRequested.value = true;
+  if (!batchTrackTaskId.value) return;
+  try {
+    applyBatchTrackTask(await cancelShipmentBatchTask(batchTrackTaskId.value));
+    scheduleBatchTrackPoll(batchTrackTaskId.value, 500);
+  } catch (error) {
+    batchTrackCancelRequested.value = false;
+    batchTrackResults.value.unshift({ number: "-", status: "failed", message: error?.message || t("customers.batchTrackCancelFailed") });
   }
 }
 
 async function handleBatchTrackWorkbook(event) {
   const file = event.target.files?.[0];
-  batchTrackNumbers.value = [];
   batchTrackFileName.value = "";
+  batchTrackSheets.value = [];
+  batchTrackSelectedSheetName.value = "";
+  batchTrackSelectedColumnIndex.value = null;
   batchTrackResults.value = [];
   if (!file) return;
   try {
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
-    const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
-    // i18n-ignore
-    const numberColumnAliases = [
-      "单号", "订单号", "订舱号", "提单号", "箱号", "业务单号", "追踪号",
-      "number", "reference no", "reference number", "booking no", "booking number",
-      "bl no", "bill of lading", "container no", "container number"
-    ];
-    const hasHeader = headers.some((h) => numberColumnAliases.includes(h));
-    const findColumn = (aliases) => headers.findIndex((header) => aliases.includes(header));
-    const numberIndex = findColumn(numberColumnAliases);
-    const startIndex = hasHeader ? 1 : 0;
-    const colIndex = numberIndex >= 0 ? numberIndex : 0;
-    const extracted = rows.slice(startIndex)
-      .map((row) => {
-        /* prefer the detected reference column, fall back to scanning the whole row */
-        const fromPrimary = extractReferenceToken(row[colIndex]);
-        if (fromPrimary && fromPrimary.length >= 8 && /[A-Z]/.test(fromPrimary) && /\d/.test(fromPrimary)) {
-          return fromPrimary;
-        }
-        return findReferenceInRow(row);
-      })
-      .filter((s) => s && s.length >= 8 && /[A-Z]/.test(s) && /\d/.test(s));
-    if (!extracted.length) throw new Error(t("customers.noTrackNumbers"));
-    batchTrackNumbers.value = [...new Set(extracted)];
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const sheets = parseShipmentBatchWorkbook(workbook, XLSX);
+    if (!sheets.length) throw new Error(t("customers.noTrackNumbers"));
+    const suggestedSheet = [...sheets].sort((a, b) => sheetRecommendationScore(b) - sheetRecommendationScore(a))[0];
+    batchTrackSheets.value = sheets;
+    batchTrackSelectedSheetName.value = suggestedSheet.name;
+    batchTrackSelectedColumnIndex.value = suggestedSheet.suggestedColumnIndex;
     batchTrackFileName.value = file.name;
   } catch (error) {
     batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.excelReadFailed") }];
@@ -1520,7 +1491,9 @@ async function handleBatchTrackWorkbook(event) {
 
 function clearBatchTrackFile() {
   batchTrackFileName.value = "";
-  batchTrackNumbers.value = [];
+  batchTrackSheets.value = [];
+  batchTrackSelectedSheetName.value = "";
+  batchTrackSelectedColumnIndex.value = null;
   batchTrackResults.value = [];
   if (batchTrackFileInput.value) batchTrackFileInput.value.value = "";
 }
@@ -1528,9 +1501,123 @@ function clearBatchTrackFile() {
 function clearBatchTrack() {
   batchTrackText.value = "";
   batchTrackResults.value = [];
-  batchTrackProgress.value = { total: 0, done: 0, success: 0, failed: 0 };
+  batchTrackProgress.value = { total: 0, done: 0, succeeded: 0, manual: 0, failed: 0, pending: 0, status: "" };
   batchTrackFileName.value = "";
-  batchTrackNumbers.value = [];
+  batchTrackSheets.value = [];
+  batchTrackSelectedSheetName.value = "";
+  batchTrackSelectedColumnIndex.value = null;
+}
+
+watch(batchTrackSelectedSheetName, () => {
+  const sheet = batchTrackSelectedSheet.value;
+  if (sheet) batchTrackSelectedColumnIndex.value = sheet.suggestedColumnIndex;
+});
+
+function applyBatchTrackTask(task) {
+  if (!task?.taskId) return;
+  batchTrackTaskId.value = task.taskId;
+  const status = String(task.status || "").toUpperCase();
+  batchTrackProgress.value = {
+    total: Number(task.total || 0),
+    done: Number(task.processed || 0),
+    succeeded: Number(task.succeeded || 0),
+    manual: Number(task.manual || 0),
+    failed: Number(task.failed || 0),
+    pending: Number(task.pending || 0),
+    status
+  };
+  batchTrackResults.value = (task.items || []).map((item) => {
+    const itemStatus = String(item.status || "PENDING").toUpperCase();
+    const stopped = status === "STOPPED" && ["PENDING", "RUNNING"].includes(itemStatus);
+    return {
+      number: item.displayNumber || item.number,
+      carrier: item.carrier,
+      status: stopped ? "stopped" : itemStatus.toLowerCase(),
+      message: batchTrackItemMessage(item, status)
+    };
+  });
+  batchTrackRunning.value = !BATCH_TRACK_TERMINAL.has(status);
+  if (!batchTrackRunning.value) {
+    batchTrackCancelRequested.value = false;
+    forgetBatchTrackTask();
+    window.clearTimeout(batchTrackPollTimer);
+    void loadAvailableShipments();
+    void loadPendingClientMatches();
+  }
+}
+
+function batchTrackItemMessage(item, taskStatus = "") {
+  if (item.error) return item.error;
+  const status = String(item.status || "PENDING").toUpperCase();
+  if (taskStatus === "STOPPED" && ["PENDING", "RUNNING"].includes(status)) return t("customers.trackStopped");
+  if (status === "SUCCEEDED") return t("customers.trackSucceeded");
+  if (status === "MANUAL") return t("customers.trackManualPlaceholder");
+  if (status === "FAILED") return t("customers.trackFailed");
+  if (status === "RUNNING") return t("customers.trackRunning");
+  return t("customers.trackPending");
+}
+
+function scheduleBatchTrackPoll(taskId, delay = 1500) {
+  window.clearTimeout(batchTrackPollTimer);
+  batchTrackPollTimer = window.setTimeout(() => void pollBatchTrackTask(taskId), delay);
+}
+
+async function pollBatchTrackTask(taskId) {
+  if (!taskId || taskId !== batchTrackTaskId.value) return;
+  try {
+    const task = await fetchShipmentBatchTask(taskId);
+    applyBatchTrackTask(task);
+    if (batchTrackRunning.value) scheduleBatchTrackPoll(taskId);
+  } catch (error) {
+    if (error?.status === 404 || error?.status === 403) {
+      forgetBatchTrackTask();
+      batchTrackTaskId.value = "";
+      batchTrackRunning.value = false;
+      return;
+    }
+    scheduleBatchTrackPoll(taskId, 3000);
+  }
+}
+
+async function restoreBatchTrackTask() {
+  const taskId = rememberedBatchTrackTask();
+  if (!taskId) return;
+  batchTrackTaskId.value = taskId;
+  batchTrackRunning.value = true;
+  await pollBatchTrackTask(taskId);
+}
+
+function batchTrackStorageKey() {
+  const owner = props.currentUser?.id || props.currentUser?.username || "current";
+  return `${BATCH_TRACK_TASK_KEY}:${owner}`;
+}
+
+function rememberBatchTrackTask(taskId) {
+  try {
+    localStorage.setItem(batchTrackStorageKey(), taskId);
+  } catch {
+    // The backend task still runs when browser storage is unavailable.
+  }
+}
+
+function rememberedBatchTrackTask() {
+  try {
+    return localStorage.getItem(batchTrackStorageKey()) || "";
+  } catch {
+    return "";
+  }
+}
+
+function forgetBatchTrackTask() {
+  try {
+    localStorage.removeItem(batchTrackStorageKey());
+  } catch {
+    // Non-critical persistence cleanup failure.
+  }
+}
+
+function sheetRecommendationScore(sheet) {
+  return Math.max(0, ...(sheet?.columns || []).map((column) => Number(column.score || 0)));
 }
 
 function handleCloseBatchTrack() {
@@ -2843,6 +2930,94 @@ function showError(error, fallbackKey) {
   line-height: 1.5;
   max-width: 100%;
   text-align: center;
+}
+
+.batch-track-preview {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7e3f2;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.batch-track-preview-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+}
+
+.batch-track-preview-controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #40566f;
+  font-size: 12px;
+}
+
+.batch-track-preview-note {
+  margin: 0;
+  color: #526d89;
+  font-size: 12px;
+}
+
+.batch-track-preview-table-wrap {
+  max-width: 100%;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #dce6f1;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.batch-track-preview-table {
+  min-width: 920px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.batch-track-preview-table th,
+.batch-track-preview-table td {
+  max-width: 180px;
+  padding: 7px 8px;
+  border-bottom: 1px solid #edf2f7;
+  color: #43566b;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.batch-track-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef4fb;
+  color: #263b53;
+}
+
+.batch-track-preview-table .selected {
+  background: #e5f1ff;
+  color: #0b63ce;
+}
+
+.batch-track-result-row.succeeded,
+.batch-track-result-row.manual {
+  border-color: #9fd8bd;
+  background: #f1fbf6;
+}
+
+.batch-track-result-row.stopped {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .batch-track-preview-controls {
+    grid-template-columns: 1fr;
+  }
 }
 .slide-fade-enter-active {
   transition: all 0.3s ease;

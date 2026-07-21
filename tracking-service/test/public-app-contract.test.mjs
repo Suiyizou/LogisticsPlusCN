@@ -27,7 +27,7 @@ function loadContractHelpers() {
   const context = vm.createContext({});
   vm.runInContext(
     `${appSource.slice(start + startMarker.length, end)}\n` +
-      "globalThis.contract = { fileSessionFingerprint, trackingResponseMessage, isPublicTrackingRouteUnavailable };",
+      "globalThis.contract = { fileSessionFingerprint, trackingResponseMessage, isPublicTrackingRouteUnavailable, isRestorableBatchNumber };",
     context
   );
   return context.contract;
@@ -150,18 +150,20 @@ test("auth storage changes invoke the centralized sensitive related-file reset",
   );
 });
 
-test("directed sharing exposes a required customer selector only through server permissions", () => {
-  assert.match(indexSource, /id="related-files-target-customer-field"[\s\S]*?id="related-files-target-customer"/);
-  assert.match(indexSource, /id="related-files-target-customer-hint"[\s\S]*?data-i18n="files\.targetRequired"/);
+test("shipment files expose a three-role multi-select governed by server permissions", () => {
+  for (const role of ["OVERSEA_AGENT", "SHIPPER", "CONSIGNEE"]) {
+    assert.match(indexSource, new RegExp(`type="checkbox" value="${role}" data-related-files-upload-role`));
+  }
+  assert.match(indexSource, /class="visibility-role-picker" id="related-files-upload-visibility"/);
   assert.match(
     appSource,
-    /function canAssignRelatedFilesCustomer[\s\S]*?canManageFileVisibility\(session\)[\s\S]*?relatedFilesPermissions\?\.canAssignCustomer === true/
+    /function allowedRelatedFileVisibilityRoles[\s\S]*?allowedVisibilityRoles[\s\S]*?FILE_VISIBILITY_ROLES/
   );
   assert.match(
     appSource,
-    /session\.kind === "INTERNAL"[\s\S]*?relatedFilesPermissions\?\.canAssignCustomer === true[\s\S]*?Array\.isArray\(payload\?\.assignableCustomers\)/
+    /function normalizeFileVisibilityRoles[\s\S]*?legacy === "INTERNAL"[\s\S]*?legacy === "PARTIES"/
   );
-  assert.match(stylesSource, /\.related-files-target-customer,[\s\S]*?grid-column: 1 \/ -1/);
+  assert.match(stylesSource, /\.visibility-role-picker[\s\S]*?\.visibility-role-menu/);
 });
 
 test("session and shipment changes discard target-customer candidates", () => {
@@ -175,28 +177,120 @@ test("session and shipment changes discard target-customer candidates", () => {
   );
 });
 
-test("shared uploads and visibility updates require a concrete customer target", () => {
+test("uploads and per-file edits send role arrays while retaining legacy visibility", () => {
   const uploadStart = appSource.indexOf("async function uploadRelatedFiles()");
   const uploadEnd = appSource.indexOf("async function downloadRelatedFile", uploadStart);
   const uploadSource = appSource.slice(uploadStart, uploadEnd);
   assert.match(
     uploadSource,
-    /internalVisibility === "PARTIES"[\s\S]*?!targetCustomerId[\s\S]*?return;/
+    /selectedRelatedFilesUploadRoles\(\)[\s\S]*?visibilityRoles\.length === 0[\s\S]*?return;/
   );
   assert.match(
     uploadSource,
-    /if \(session\.kind === "INTERNAL"\)[\s\S]*?formData\.append\("visibility", internalVisibility\)[\s\S]*?formData\.append\("targetCustomerId", targetCustomerId\)/
+    /for \(const role of visibilityRoles\) formData\.append\("visibilityRoles", role\)[\s\S]*?formData\.append\("visibility", internalVisibility\)/
   );
   assert.match(
     appSource,
-    /method: "PATCH",[\s\S]*?visibility: nextVisibility,[\s\S]*?targetCustomerId:[\s\S]*?nextVisibility === "PARTIES" \? nextTargetCustomerId : null/
+    /method: "PATCH",[\s\S]*?visibilityRoles: nextRoles,[\s\S]*?visibility: legacyVisibilityForRoles\(nextRoles\)/
   );
 });
 
 test("customer file cards never disclose another customer's display name", () => {
   assert.match(
     appSource,
-    /function relatedFileSharingLabel\(file, session = readFileSession\(\)\) \{[\s\S]*?if \(session\.kind === "CUSTOMER"\) return t\("files\.sharedWithSelf"\);[\s\S]*?relatedFileTargetDisplayName\(file\)/
+    /function relatedFileSharingLabel\(file, session = readFileSession\(\)\) \{[\s\S]*?if \(session\.kind === "CUSTOMER"\) return t\("files\.sharedWithSelf"\);[\s\S]*?fileVisibilityRolesLabel\(file\.visibilityRoles\)/
+  );
+  const labelStart = appSource.indexOf("function relatedFileSharingLabel");
+  const labelEnd = appSource.indexOf("function createRelatedFileItem", labelStart);
+  assert.doesNotMatch(appSource.slice(labelStart, labelEnd), /relatedFileTargetDisplayName/);
+});
+
+test("documents use one shipment-file drawer and sensitive bill metadata is always hidden", () => {
+  assert.match(indexSource, /id="related-files-button"[\s\S]*?data-i18n="files\.trigger"/);
+  assert.doesNotMatch(indexSource, /id="open-document-drawer"/);
+  assert.match(
+    appSource,
+    /const internalReferencePattern =[\s\S]*?surrender[\s\S]*?filter\(\(item\) =>[\s\S]*?!internalReferencePattern\.test/
+  );
+});
+
+test("file preview uses a same-origin preview endpoint and safe blob rendering", () => {
+  assert.match(indexSource, /id="file-preview-dialog"[\s\S]*?id="file-preview-download"/);
+  assert.match(
+    appSource,
+    /function safeSameOriginFileUrl[\s\S]*?resolved\.origin !== window\.location\.origin[\s\S]*?!resolved\.pathname\.startsWith\("\/api\/"\)/
+  );
+  assert.match(appSource, /shipmentFilePath\(session, file\.id, "\/preview"\)/);
+  assert.match(appSource, /iframe\.setAttribute\("sandbox", ""\)/);
+});
+
+test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
+  assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
+  assert.match(appSource, /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/);
+  assert.match(appSource, /\/api\/business\/shipment-batch-tasks\/\$\{encodedTaskId\}\/cancel/);
+  assert.match(appSource, /status === "manual" \|\| item\.manualOnly[\s\S]*?batch\.itemManual/);
+  assert.match(
+    appSource,
+    /hasUnsubmittedWork[\s\S]*?item\.status === "pending"[\s\S]*?item\.status === "manual" && !item\.submitted/
+  );
+  assert.match(
+    appSource,
+    /batchResumeButton\.hidden =[\s\S]*?item\.status === "pending" \|\| \(item\.status === "manual" && !item\.submitted\)/
+  );
+});
+
+test("batch recovery clears missing tasks and defers stop until task creation", () => {
+  assert.match(
+    appSource,
+    /error\.status = response\.status[\s\S]*?function recoverMissingBusinessBatchTask\(\)/
+  );
+  assert.match(
+    appSource,
+    /error\?\.status === 404 && batchState\.taskId[\s\S]*?recoverMissingBusinessBatchTask\(\)/
+  );
+  assert.match(
+    appSource,
+    /if \(batchStopRequested\) \{[\s\S]*?snapshot = await cancelBatchTask\(submittedTaskId\)/
+  );
+  assert.match(
+    appSource,
+    /backend returns the newly allocated task id\.[\s\S]*?if \(!taskId\) return;/
+  );
+  const statusStart = appSource.indexOf("function batchItemStatusFromServer");
+  const statusEnd = appSource.indexOf("function applyBusinessBatchTask", statusStart);
+  assert.doesNotMatch(appSource.slice(statusStart, statusEnd), /\|\| manualOnly/);
+});
+
+test("batch restore preserves safe manual reference punctuation", () => {
+  const { isRestorableBatchNumber } = loadContractHelpers();
+  assert.equal(isRestorableBatchNumber("ABC/123.45"), true);
+  assert.equal(isRestorableBatchNumber("784-84422343"), true);
+  assert.equal(isRestorableBatchNumber("../unsafe"), false);
+  assert.equal(isRestorableBatchNumber("ABC/123."), false);
+  assert.match(
+    appSource,
+    /if \(!isRestorableBatchNumber\(number\)\) return null;/
+  );
+});
+
+test("batch resume waits for the previous polling loop to settle", () => {
+  assert.match(appSource, /let batchRunPromise = null;/);
+  assert.match(
+    appSource,
+    /batchResumeButton\.hidden =[\s\S]*?Boolean\(batchRunPromise\)/
+  );
+  assert.match(
+    appSource,
+    /function runBatchQueue\(\) \{[\s\S]*?if \(batchRunPromise\) return batchRunPromise;[\s\S]*?const currentRun = executeBatchQueue\(\);[\s\S]*?batchRunPromise = null;[\s\S]*?renderBatchState\(\);/
+  );
+});
+
+test("spreadsheet import previews the detected sheet and column before starting", () => {
+  assert.match(indexSource, /id="batch-column-preview"[\s\S]*?id="batch-preview-sheet"[\s\S]*?id="batch-preview-column"/);
+  assert.match(appSource, /const preview = await parseBatchFile\(file\)[\s\S]*?showBatchColumnPreview\(file, preview\)/);
+  assert.match(
+    appSource,
+    /batchPreviewConfirm\?\.addEventListener\("click"[\s\S]*?parseBatchFile\(file, \{[\s\S]*?sheetName: sheet\.name,[\s\S]*?columnIndex,[\s\S]*?type: batchPreviewType\.value[\s\S]*?startImportedBatch\(fileName, imported\)/
   );
 });
 

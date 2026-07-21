@@ -199,9 +199,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "uk_cp_tracking_snapshots_user_query",
         "ALTER TABLE cp_tracking_snapshots ADD UNIQUE INDEX uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)"
     );
-    jdbcTemplate.update("DELETE FROM cp_tracking_snapshots WHERE queried_by IS NULL");
-    jdbcTemplate.execute("ALTER TABLE cp_tracking_snapshots MODIFY queried_by BIGINT NOT NULL");
-    jdbcTemplate.execute("ALTER TABLE cp_tracking_snapshots MODIFY queried_by_username VARCHAR(128) NOT NULL");
+    migrateLegacyFileVisibilityForMySql();
   }
 
   private void addColumnIfMissing(String table, String column, String ddl) {
@@ -215,6 +213,55 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         column
     );
     if (count == null || count == 0) jdbcTemplate.execute(ddl);
+  }
+
+  private void migrateLegacyFileVisibilityForMySql() {
+    jdbcTemplate.update(
+        """
+        INSERT IGNORE INTO cp_shipment_file_visibility_roles (
+          shipment_file_id, visibility_role, created_at
+        )
+        SELECT f.id,
+               CASE
+                 WHEN UPPER(f.visibility) IN ('INTERNAL', 'INTERNAL_ONLY') THEN 'OVERSEA_AGENT'
+                 WHEN UPPER(COALESCE(a.relationship_role, c.party_role, '')) = 'CONSIGNEE'
+                   THEN 'CONSIGNEE'
+                 WHEN UPPER(COALESCE(a.relationship_role, c.party_role, '')) = 'AGENT'
+                   THEN 'OVERSEA_AGENT'
+                 ELSE 'SHIPPER'
+               END,
+               f.created_at
+        FROM cp_shipment_files f
+        LEFT JOIN cp_customers c ON c.id = f.target_customer_id
+        LEFT JOIN cp_customer_shipment_access a
+          ON a.customer_id = f.target_customer_id AND a.shipment_id = f.shipment_id
+        WHERE (UPPER(f.visibility) IN ('INTERNAL', 'INTERNAL_ONLY')
+               OR f.target_customer_id IS NOT NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM cp_shipment_file_visibility_roles existing
+            WHERE existing.shipment_file_id = f.id
+          )
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT IGNORE INTO cp_shipment_file_visibility_roles (
+          shipment_file_id, visibility_role, created_at
+        )
+        SELECT f.id, legacy_role.visibility_role, f.created_at
+        FROM cp_shipment_files f
+        JOIN (
+          SELECT 'SHIPPER' AS visibility_role
+          UNION ALL SELECT 'CONSIGNEE'
+        ) legacy_role
+        WHERE UPPER(f.visibility) = 'PARTIES'
+          AND f.target_customer_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM cp_shipment_file_visibility_roles existing
+            WHERE existing.shipment_file_id = f.id
+          )
+        """
+    );
   }
 
   private void addIndexIfMissing(String table, String index, String ddl) {
@@ -302,8 +349,8 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
-          queried_by BIGINT NOT NULL,
-          queried_by_username VARCHAR(128) NOT NULL,
+          queried_by BIGINT NULL,
+          queried_by_username VARCHAR(128) NULL,
           source_channel VARCHAR(32) NULL,
           snapshot_json LONGTEXT NOT NULL,
           strategy_json LONGTEXT NULL,
@@ -445,6 +492,17 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           CONSTRAINT fk_cp_shipment_files_deleted_by FOREIGN KEY (deleted_by) REFERENCES cp_users(id) ON DELETE SET NULL,
           CONSTRAINT fk_cp_shipment_files_deleted_customer FOREIGN KEY (deleted_by_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL,
           CONSTRAINT ck_cp_shipment_files_one_uploader CHECK ((uploader_user_id IS NULL) <> (uploader_customer_id IS NULL))
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_shipment_file_visibility_roles (
+          shipment_file_id BIGINT NOT NULL,
+          visibility_role VARCHAR(24) NOT NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (shipment_file_id, visibility_role),
+          INDEX idx_cp_shipment_file_visibility_role (visibility_role, shipment_file_id),
+          CONSTRAINT fk_cp_shipment_file_visibility_file
+            FOREIGN KEY (shipment_file_id) REFERENCES cp_shipment_files(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """

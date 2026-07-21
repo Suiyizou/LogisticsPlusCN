@@ -71,6 +71,17 @@ test("normalizes and validates tracking input", () => {
   assert.throws(() => normalizeTrackingRequest({ type: "BILLOFLADING", number: "@@" }));
 });
 
+test("removes the COSU display prefix before a bill reaches the tracking adapter", () => {
+  assert.equal(
+    normalizeTrackingRequest({ type: "BILLOFLADING", number: " COSU 6502406170 " }).number,
+    "6502406170"
+  );
+  assert.equal(
+    normalizeTrackingRequest({ type: "BOOKING", number: "COSU6502406170" }).number,
+    "COSU6502406170"
+  );
+});
+
 test("exposes a multi-carrier adapter registry", () => {
   assert.equal(normalizeCarrierCode("cosco"), "COSCO");
   assert.equal(normalizeCarrierCode("cma"), "CMA");

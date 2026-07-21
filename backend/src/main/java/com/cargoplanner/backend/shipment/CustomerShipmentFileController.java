@@ -17,8 +17,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -70,6 +72,7 @@ public class CustomerShipmentFileController {
       @RequestParam(value = "files", required = false) List<MultipartFile> files,
       @RequestParam(value = "file", required = false) MultipartFile singleFile,
       @RequestParam(value = "category", defaultValue = "RELATED") String category,
+      @RequestParam(value = "visibilityRoles", required = false) List<String> visibilityRoles,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer,
       HttpServletRequest request
   ) {
@@ -82,13 +85,14 @@ public class CustomerShipmentFileController {
     }
     List<Map<String, Object>> items = new ArrayList<>();
     for (MultipartFile upload : uploads) {
-      ShipmentFileService.SavedShipmentFile saved = fileService.storeCustomer(
-          upload,
-          shipmentId,
-          customer,
-          category,
-          ClientInfo.ip(request)
-      );
+      ShipmentFileService.SavedShipmentFile saved = visibilityRoles == null
+          || visibilityRoles.isEmpty()
+          ? fileService.storeCustomer(
+              upload, shipmentId, customer, category, ClientInfo.ip(request)
+          )
+          : fileService.storeCustomer(
+              upload, shipmentId, customer, category, visibilityRoles, ClientInfo.ip(request)
+          );
       items.add(fileService.metadataCustomer(saved, customer));
     }
     Map<String, Object> response = new LinkedHashMap<>();
@@ -105,6 +109,32 @@ public class CustomerShipmentFileController {
   ) {
     return ShipmentFileController.fileResponse(
         fileService.contentCustomer(fileId, customer, ClientInfo.ip(request))
+    );
+  }
+
+  @GetMapping("/shipment-files/{fileId}/preview")
+  public ResponseEntity<Resource> preview(
+      @PathVariable String fileId,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer,
+      HttpServletRequest request
+  ) {
+    return ShipmentFileController.previewResponse(
+        fileService.previewCustomer(fileId, customer, ClientInfo.ip(request))
+    );
+  }
+
+  @PatchMapping("/shipment-files/{fileId}/visibility")
+  public Map<String, Object> updateVisibility(
+      @PathVariable String fileId,
+      @RequestBody ShipmentFileVisibilityRequest visibility,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer,
+      HttpServletRequest request
+  ) {
+    return fileService.updateVisibilityRolesCustomer(
+        fileId,
+        visibility == null ? null : visibility.visibilityRoles(),
+        customer,
+        ClientInfo.ip(request)
     );
   }
 

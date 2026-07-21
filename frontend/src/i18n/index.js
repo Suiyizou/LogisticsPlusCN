@@ -3,6 +3,11 @@ import { createI18n } from "vue-i18n";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import en from "element-plus/es/locale/lang/en";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, localeOptions, messages } from "./messages";
+import { shipmentBatchMessages } from "./shipmentBatchMessages";
+
+for (const locale of SUPPORTED_LOCALES) {
+  Object.assign(messages[locale].customers, shipmentBatchMessages[locale]);
+}
 
 const STORAGE_KEY = "cargo-planner-locale";
 

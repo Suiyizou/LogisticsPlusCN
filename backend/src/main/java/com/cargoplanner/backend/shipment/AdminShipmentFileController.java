@@ -46,6 +46,17 @@ public class AdminShipmentFileController {
     );
   }
 
+  @GetMapping("/{fileId}/preview")
+  public ResponseEntity<Resource> preview(
+      @PathVariable String fileId,
+      @RequestAttribute(AdminAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser admin,
+      HttpServletRequest request
+  ) {
+    return ShipmentFileController.previewResponse(
+        fileService.preview(fileId, admin, ClientInfo.ip(request))
+    );
+  }
+
   @DeleteMapping("/{fileId}")
   public Map<String, Object> delete(
       @PathVariable String fileId,

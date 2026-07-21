@@ -44,6 +44,18 @@ export function fetchAvailableBusinessShipments() {
   return request("/business/customers/available-shipments");
 }
 
+export function createShipmentBatchTask(payload) {
+  return request("/business/shipment-batch-tasks", { method: "POST", body: payload });
+}
+
+export function fetchShipmentBatchTask(taskId) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}`);
+}
+
+export function cancelShipmentBatchTask(taskId) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" });
+}
+
 export function fetchBusinessShipmentSnapshot(shipmentId) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/snapshot`);
 }

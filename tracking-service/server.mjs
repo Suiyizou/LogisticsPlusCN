@@ -162,7 +162,10 @@ const coscoQueryGate = createCoscoQueryGate({
 const coscoCircuitBreaker = createCoscoCircuitBreaker({
   cooldownMs: process.env.COSCO_BLOCK_COOLDOWN_MS
 });
-const batchTaskRegistry = createBatchTaskRegistry();
+const batchTaskRegistry = createBatchTaskRegistry({
+  minIntervalMs: process.env.BATCH_QUERY_MIN_INTERVAL_MS,
+  maxIntervalMs: process.env.BATCH_QUERY_MAX_INTERVAL_MS
+});
 
 const cache = new Map();
 const inFlightTrackingRequests = new Map();
@@ -373,10 +376,15 @@ export function normalizeTrackingRequest(input) {
     throw new HttpError(400, "不支持的查询类型");
   }
 
-  const number = String(input?.number ?? "")
+  const normalizedNumber = String(input?.number ?? "")
     .trim()
     .replace(/\s+/g, "")
     .toUpperCase();
+  // COSU is the SCAC prefix carried in imported B/L cells. COSCO's tracking
+  // endpoints expect the numeric bill value, not the prefixed display value.
+  const number = type === "BILLOFLADING"
+    ? normalizedNumber.replace(/^COSU(?=[0-9]{4,31}$)/, "")
+    : normalizedNumber;
 
   if (!/^[A-Z0-9-]{4,35}$/.test(number)) {
     throw new HttpError(400, `${typeConfig.label}格式不正确`);
@@ -1459,6 +1467,8 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   }
 
   if (cached) cache.delete(cacheKey);
+
+  await batchLease?.waitForTurn();
 
   let requestPromise = batchTaskId ? null : inFlightTrackingRequests.get(cacheKey);
   if (!requestPromise) {

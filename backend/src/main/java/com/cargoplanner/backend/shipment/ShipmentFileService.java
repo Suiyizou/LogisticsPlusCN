@@ -13,6 +13,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,13 +28,22 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -48,7 +58,13 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class ShipmentFileService {
   private static final int MAX_PAGE_SIZE = 200;
+  private static final int MAX_TEXT_PREVIEW_CHARS = 500_000;
   private static final Set<String> VISIBILITIES = Set.of("PARTIES", "INTERNAL");
+  private static final List<String> VISIBILITY_ROLE_ORDER = List.of(
+      ShipmentAccessService.OVERSEA_AGENT,
+      ShipmentAccessService.SHIPPER,
+      ShipmentAccessService.CONSIGNEE
+  );
   private static final DateTimeFormatter MONTH_PATH = DateTimeFormatter
       .ofPattern("yyyy/MM")
       .withZone(ZoneOffset.UTC);
@@ -123,18 +139,45 @@ public class ShipmentFileService {
   ) {
     if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "Sign in is required");
     ShipmentAccess access = accessService.requireAccess(shipmentPublicId, user);
+    requireFileActor(access);
     Long targetCustomerId = resolveInternalTargetCustomer(
         access.shipmentId(),
         user,
         targetCustomerPublicId
+    );
+    List<String> visibilityRoles = legacyVisibilityRoles(
+        requestedVisibility, targetCustomerId, access.shipmentId()
     );
     return storeForActor(
         file,
         access,
         FileActor.internal(user),
         category,
-        requestedVisibility,
+        visibilityRoles,
         targetCustomerId,
+        ipAddress
+    );
+  }
+
+  @Transactional
+  public SavedShipmentFile store(
+      MultipartFile file,
+      String shipmentPublicId,
+      AuthenticatedUser user,
+      String category,
+      List<String> requestedVisibilityRoles,
+      String ipAddress
+  ) {
+    if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "Sign in is required");
+    ShipmentAccess access = accessService.requireAccess(shipmentPublicId, user);
+    requireFileActor(access);
+    return storeForActor(
+        file,
+        access,
+        FileActor.internal(user),
+        category,
+        normalizeVisibilityRoles(requestedVisibilityRoles, access.fileRoles()),
+        null,
         ipAddress
     );
   }
@@ -153,7 +196,28 @@ public class ShipmentFileService {
         access,
         FileActor.customer(customer),
         category,
-        "PARTIES",
+        List.copyOf(access.fileRoles()),
+        customer.id(),
+        ipAddress
+    );
+  }
+
+  @Transactional
+  public SavedShipmentFile storeCustomer(
+      MultipartFile file,
+      String shipmentPublicId,
+      CustomerPrincipal customer,
+      String category,
+      List<String> requestedVisibilityRoles,
+      String ipAddress
+  ) {
+    ShipmentAccess access = accessService.requireCustomerAccess(shipmentPublicId, customer);
+    return storeForActor(
+        file,
+        access,
+        FileActor.customer(customer),
+        category,
+        normalizeVisibilityRoles(requestedVisibilityRoles, access.fileRoles()),
         customer.id(),
         ipAddress
     );
@@ -164,7 +228,7 @@ public class ShipmentFileService {
       ShipmentAccess access,
       FileActor actor,
       String category,
-      String requestedVisibility,
+      List<String> requestedVisibilityRoles,
       Long targetCustomerId,
       String ipAddress
   ) {
@@ -174,25 +238,8 @@ public class ShipmentFileService {
     String originalName = safeOriginalFileName(file.getOriginalFilename());
     String extension = extensionOf(originalName);
     validateExtension(extension);
-    String requested = normalizeVisibility(requestedVisibility, "PARTIES");
-    String visibility;
-    if (actor.customerId() != null) {
-      visibility = "PARTIES";
-      targetCustomerId = actor.customerId();
-    } else {
-      if ("PARTIES".equals(requested)) {
-        if (targetCustomerId == null) {
-          throw new ApiException(
-              HttpStatus.BAD_REQUEST,
-              "Target customer is required when visibility is PARTIES"
-          );
-        }
-        visibility = "PARTIES";
-      } else {
-        visibility = "INTERNAL";
-        targetCustomerId = null;
-      }
-    }
+    List<String> visibilityRoles = normalizeVisibilityRoles(requestedVisibilityRoles, Set.of());
+    String visibility = legacyVisibility(visibilityRoles);
     String safeCategory = normalizeCategory(category);
     Instant now = clock.instant();
     String relativeDirectory = MONTH_PATH.format(now) + "/" + access.shipmentPublicId();
@@ -220,7 +267,7 @@ public class ShipmentFileService {
       registerRollbackCleanup(finalPath);
 
       String publicId = UUID.randomUUID().toString();
-      insertRecord(
+      long recordId = insertRecord(
           publicId,
             access.shipmentId(),
             actor,
@@ -234,6 +281,7 @@ public class ShipmentFileService {
           visibility,
           now
       );
+      insertVisibilityRoles(recordId, visibilityRoles, now);
       ShipmentFileRecord record = requireRecord(publicId, false);
       String scope = actor.customerId() == null ? "internal" : "customer";
       audit(record, actor, "UPLOAD", null, metadata(record, actor, scope), ipAddress);
@@ -255,7 +303,7 @@ public class ShipmentFileService {
 
   public Map<String, Object> list(String shipmentPublicId, AuthenticatedUser user) {
     ShipmentAccess access = accessService.requireAccess(shipmentPublicId, user);
-    String visibilityFilter = access.canManageFiles() ? "" : " AND f.visibility = 'PARTIES'";
+    requireFileActor(access);
     List<ShipmentFileRecord> records = jdbcTemplate.query(
         """
         SELECT f.*, s.public_id AS shipment_public_id,
@@ -277,17 +325,23 @@ public class ShipmentFileService {
           LIMIT 1
         )
         WHERE f.shipment_id = ? AND f.status = 'READY'
-        """ + visibilityFilter + " ORDER BY f.created_at DESC, f.id DESC",
+        ORDER BY f.created_at DESC, f.id DESC
+        """,
         this::mapRecord,
         access.shipmentId()
     );
+    Map<Long, List<String>> rolesByFile = visibilityRolesFor(records);
     List<Map<String, Object>> items = records.stream()
-        .map(record -> metadata(record, FileActor.internal(user), "internal"))
+        .filter(record -> canInternalView(record, access, user, rolesByFile.get(record.id())))
+        .map(record -> metadata(
+            record, FileActor.internal(user), "internal", rolesByFile.get(record.id())
+        ))
         .toList();
     Map<String, Object> permissions = new LinkedHashMap<>();
     permissions.put("canUpload", true);
     permissions.put("canChangeVisibility", access.canManageFiles());
     permissions.put("canAssignCustomer", access.canManageFiles());
+    permissions.put("allowedVisibilityRoles", VISIBILITY_ROLE_ORDER);
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("items", items);
     result.put("total", items.size());
@@ -326,23 +380,24 @@ public class ShipmentFileService {
           ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
-        WHERE f.shipment_id = ? AND f.status = 'READY' AND f.visibility = 'PARTIES'
-          AND f.target_customer_id = ?
+        WHERE f.shipment_id = ? AND f.status = 'READY'
         ORDER BY f.created_at DESC, f.id DESC
         """,
         this::mapRecord,
-        access.shipmentId(),
-        customer.id()
+        access.shipmentId()
     );
+    Map<Long, List<String>> rolesByFile = visibilityRolesFor(records);
     FileActor actor = FileActor.customer(customer);
     List<Map<String, Object>> items = records.stream()
-        .map(record -> metadata(record, actor, "customer"))
+        .filter(record -> canView(access, rolesByFile.get(record.id()))
+            || isCustomerUploader(record, customer))
+        .map(record -> metadata(record, actor, "customer", rolesByFile.get(record.id())))
         .toList();
-    return Map.of(
-        "items", items,
-        "total", items.size(),
-        "permissions", Map.of("canUpload", true, "canChangeVisibility", false)
-    );
+    Map<String, Object> permissions = new LinkedHashMap<>();
+    permissions.put("canUpload", true);
+    permissions.put("canChangeVisibility", true);
+    permissions.put("allowedVisibilityRoles", VISIBILITY_ROLE_ORDER);
+    return Map.of("items", items, "total", items.size(), "permissions", permissions);
   }
 
   public Map<String, Object> metadata(SavedShipmentFile saved, AuthenticatedUser user) {
@@ -361,18 +416,36 @@ public class ShipmentFileService {
       AuthenticatedUser user,
       String ipAddress
   ) {
+    return content(filePublicId, user, ipAddress, "DOWNLOAD");
+  }
+
+  public ShipmentFilePreview preview(
+      String filePublicId,
+      AuthenticatedUser user,
+      String ipAddress
+  ) {
+    return preview(content(filePublicId, user, ipAddress, "PREVIEW"));
+  }
+
+  private ShipmentFileContent content(
+      String filePublicId,
+      AuthenticatedUser user,
+      String ipAddress,
+      String auditAction
+  ) {
     ShipmentFileRecord record = requireRecord(filePublicId, false);
     ShipmentAccess access = accessService.requireAccess(record.shipmentPublicId(), user);
-    if ("INTERNAL".equals(record.visibility()) && !access.canManageFiles()) {
-      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
-    }
+    requireFileActor(access);
+    requireInternalVisible(record, access, user);
     Path path = secureResolve(record.relativePath());
     if (!Files.isRegularFile(path)) {
       throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file content not found");
     }
     FileActor actor = FileActor.internal(user);
-    audit(record, actor, "DOWNLOAD", metadata(record, actor, "internal"), null, ipAddress);
-    return new ShipmentFileContent(path, record.originalFileName(), record.contentType(), record.sizeBytes());
+    audit(record, actor, auditAction, metadata(record, actor, "internal"), null, ipAddress);
+    return new ShipmentFileContent(
+        path, record.originalFileName(), record.contentType(), record.extension(), record.sizeBytes()
+    );
   }
 
   public ShipmentFileContent contentCustomer(
@@ -380,21 +453,35 @@ public class ShipmentFileService {
       CustomerPrincipal customer,
       String ipAddress
   ) {
+    return contentCustomer(filePublicId, customer, ipAddress, "DOWNLOAD");
+  }
+
+  public ShipmentFilePreview previewCustomer(
+      String filePublicId,
+      CustomerPrincipal customer,
+      String ipAddress
+  ) {
+    return preview(contentCustomer(filePublicId, customer, ipAddress, "PREVIEW"));
+  }
+
+  private ShipmentFileContent contentCustomer(
+      String filePublicId,
+      CustomerPrincipal customer,
+      String ipAddress,
+      String auditAction
+  ) {
     ShipmentFileRecord record = requireRecord(filePublicId, false);
-    accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
-    if (!"PARTIES".equals(record.visibility())) {
-      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
-    }
-    if (!Long.valueOf(customer.id()).equals(record.targetCustomerId())) {
-      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
-    }
+    ShipmentAccess access = accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
+    requireCustomerVisible(record, access, customer);
     Path path = secureResolve(record.relativePath());
     if (!Files.isRegularFile(path)) {
       throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file content not found");
     }
     FileActor actor = FileActor.customer(customer);
-    audit(record, actor, "DOWNLOAD", metadata(record, actor, "customer"), null, ipAddress);
-    return new ShipmentFileContent(path, record.originalFileName(), record.contentType(), record.sizeBytes());
+    audit(record, actor, auditAction, metadata(record, actor, "customer"), null, ipAddress);
+    return new ShipmentFileContent(
+        path, record.originalFileName(), record.contentType(), record.extension(), record.sizeBytes()
+    );
   }
 
   public Map<String, Object> updateVisibility(
@@ -415,6 +502,7 @@ public class ShipmentFileService {
   ) {
     ShipmentFileRecord record = requireRecord(filePublicId, false);
     ShipmentAccess access = accessService.requireAccess(record.shipmentPublicId(), user);
+    requireInternalVisible(record, access, user);
     if (!access.canManageFiles()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Business permission is required");
     }
@@ -433,18 +521,87 @@ public class ShipmentFileService {
           targetCustomerPublicId
       );
     }
+    List<String> visibilityRoles = legacyVisibilityRoles(
+        visibility, targetCustomerId, record.shipmentId()
+    );
+    return updateVisibilityRoles(record, visibilityRoles, targetCustomerId, user, ipAddress);
+  }
+
+  @Transactional
+  public Map<String, Object> updateVisibilityRoles(
+      String filePublicId,
+      List<String> requestedVisibilityRoles,
+      AuthenticatedUser user,
+      String ipAddress
+  ) {
+    ShipmentFileRecord record = requireRecord(filePublicId, false);
+    ShipmentAccess access = accessService.requireAccess(record.shipmentPublicId(), user);
+    requireFileActor(access);
+    requireInternalVisible(record, access, user);
+    if (!access.canManageFiles()) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Business permission is required");
+    }
+    return updateVisibilityRoles(
+        record,
+        normalizeVisibilityRoles(requestedVisibilityRoles, Set.of()),
+        null,
+        user,
+        ipAddress
+    );
+  }
+
+  private Map<String, Object> updateVisibilityRoles(
+      ShipmentFileRecord record,
+      List<String> visibilityRoles,
+      Long targetCustomerId,
+      AuthenticatedUser user,
+      String ipAddress
+  ) {
     FileActor actor = FileActor.internal(user);
     Map<String, Object> before = metadata(record, actor, "internal");
+    Instant now = clock.instant();
     jdbcTemplate.update(
         "UPDATE cp_shipment_files SET visibility = ?, target_customer_id = ?, updated_at = ? "
             + "WHERE id = ? AND status = 'READY'",
-        visibility,
+        legacyVisibility(visibilityRoles),
         targetCustomerId,
-        timestamp(clock.instant()),
+        timestamp(now),
         record.id()
     );
-    ShipmentFileRecord updated = requireRecord(filePublicId, false);
+    replaceVisibilityRoles(record.id(), visibilityRoles, now);
+    ShipmentFileRecord updated = requireRecord(record.publicId(), false);
     Map<String, Object> after = metadata(updated, actor, "internal");
+    audit(updated, actor, "VISIBILITY_CHANGE", before, after, ipAddress);
+    return after;
+  }
+
+  @Transactional
+  public Map<String, Object> updateVisibilityRolesCustomer(
+      String filePublicId,
+      List<String> requestedVisibilityRoles,
+      CustomerPrincipal customer,
+      String ipAddress
+  ) {
+    ShipmentFileRecord record = requireRecord(filePublicId, false);
+    accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
+    if (!Long.valueOf(customer.id()).equals(record.uploaderCustomerId())) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Customers may only edit their own uploads");
+    }
+    List<String> visibilityRoles = normalizeVisibilityRoles(requestedVisibilityRoles, Set.of());
+    FileActor actor = FileActor.customer(customer);
+    Map<String, Object> before = metadata(record, actor, "customer");
+    Instant now = clock.instant();
+    jdbcTemplate.update(
+        "UPDATE cp_shipment_files SET visibility = ?, target_customer_id = ?, updated_at = ? "
+            + "WHERE id = ? AND status = 'READY'",
+        legacyVisibility(visibilityRoles),
+        customer.id(),
+        timestamp(now),
+        record.id()
+    );
+    replaceVisibilityRoles(record.id(), visibilityRoles, now);
+    ShipmentFileRecord updated = requireRecord(filePublicId, false);
+    Map<String, Object> after = metadata(updated, actor, "customer");
     audit(updated, actor, "VISIBILITY_CHANGE", before, after, ipAddress);
     return after;
   }
@@ -456,6 +613,8 @@ public class ShipmentFileService {
   ) {
     ShipmentFileRecord record = requireDeletableRecord(filePublicId);
     ShipmentAccess access = accessService.requireAccess(record.shipmentPublicId(), user);
+    requireFileActor(access);
+    requireInternalVisible(record, access, user);
     if (!access.canManageFiles() && !Long.valueOf(user.id()).equals(record.uploaderUserId())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Only the uploader may delete this file");
     }
@@ -474,10 +633,8 @@ public class ShipmentFileService {
       String ipAddress
   ) {
     ShipmentFileRecord record = requireDeletableRecord(filePublicId);
-    accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
-    if (!"PARTIES".equals(record.visibility())) {
-      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
-    }
+    ShipmentAccess access = accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
+    requireCustomerVisible(record, access, customer);
     if (!Long.valueOf(customer.id()).equals(record.uploaderCustomerId())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Customers may only delete their own uploads");
     }
@@ -544,7 +701,13 @@ public class ShipmentFileService {
     );
     Map<String, Object> result = new LinkedHashMap<>();
     FileActor actor = FileActor.internal(admin);
-    result.put("items", records.stream().map(record -> metadata(record, actor, "admin")).toList());
+    Map<Long, List<String>> rolesByFile = visibilityRolesFor(records);
+    result.put(
+        "items",
+        records.stream()
+            .map(record -> metadata(record, actor, "admin", rolesByFile.get(record.id())))
+            .toList()
+    );
     result.put("total", totalValue == null ? 0 : totalValue);
     result.put("page", page);
     result.put("size", size);
@@ -928,11 +1091,21 @@ public class ShipmentFileService {
       FileActor actor,
       String scope
   ) {
+    return metadata(record, actor, scope, visibilityRolesFor(record));
+  }
+
+  private Map<String, Object> metadata(
+      ShipmentFileRecord record,
+      FileActor actor,
+      String scope,
+      List<String> visibilityRoles
+  ) {
     boolean canManage = actor != null && actor.canManageFiles();
+    boolean customerUploader = actor != null && actor.customerId() != null
+        && actor.customerId().equals(record.uploaderCustomerId());
     boolean canDelete = canManage
         || (actor != null && actor.userId() != null && actor.userId().equals(record.uploaderUserId()))
-        || (actor != null && actor.customerId() != null
-        && actor.customerId().equals(record.uploaderCustomerId()));
+        || customerUploader;
     Map<String, Object> value = new LinkedHashMap<>();
     value.put("id", record.publicId());
     value.put("shipmentId", record.shipmentPublicId());
@@ -951,6 +1124,7 @@ public class ShipmentFileService {
     value.put("sha256", record.sha256());
     value.put("category", record.category());
     value.put("visibility", record.visibility());
+    value.put("visibilityRoles", visibilityRoles == null ? List.of() : visibilityRoles);
     value.put("status", record.status());
     value.put("uploaderUserId", record.uploaderUserId());
     value.put("uploaderCustomerId", record.uploaderCustomerId());
@@ -968,8 +1142,10 @@ public class ShipmentFileService {
       default -> "/api/shipment-files/";
     };
     value.put("downloadUrl", downloadPrefix + record.publicId() + "/download");
+    value.put("previewUrl", downloadPrefix + record.publicId() + "/preview");
+    value.put("previewMode", previewMode(record.extension()));
     value.put("canDelete", canDelete);
-    value.put("canChangeVisibility", canManage);
+    value.put("canChangeVisibility", canManage || customerUploader);
     return value;
   }
 
@@ -1097,6 +1273,306 @@ public class ShipmentFileService {
     }
   }
 
+  private void requireFileActor(ShipmentAccess access) {
+    if (access == null || (!access.administrative() && access.fileRoles().isEmpty())) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Shipment role cannot access files");
+    }
+  }
+
+  private boolean canView(ShipmentAccess access, Collection<String> fileRoles) {
+    if (access == null) return false;
+    if (access.administrative()) return true;
+    if (fileRoles == null || fileRoles.isEmpty()) return false;
+    return access.fileRoles().stream().anyMatch(fileRoles::contains);
+  }
+
+  private boolean canInternalView(
+      ShipmentFileRecord record,
+      ShipmentAccess access,
+      AuthenticatedUser user,
+      Collection<String> fileRoles
+  ) {
+    return isInternalUploader(record, user) || canView(access, fileRoles);
+  }
+
+  private void requireInternalVisible(
+      ShipmentFileRecord record,
+      ShipmentAccess access,
+      AuthenticatedUser user
+  ) {
+    if (!canInternalView(record, access, user, visibilityRolesFor(record))) {
+      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
+    }
+  }
+
+  private void requireVisible(ShipmentFileRecord record, ShipmentAccess access) {
+    if (!canView(access, visibilityRolesFor(record))) {
+      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
+    }
+  }
+
+  private void requireCustomerVisible(
+      ShipmentFileRecord record,
+      ShipmentAccess access,
+      CustomerPrincipal customer
+  ) {
+    if (!isCustomerUploader(record, customer)) requireVisible(record, access);
+  }
+
+  private boolean isCustomerUploader(
+      ShipmentFileRecord record,
+      CustomerPrincipal customer
+  ) {
+    return record != null && customer != null && record.uploaderCustomerId() != null
+        && record.uploaderCustomerId().equals(customer.id());
+  }
+
+  private boolean isInternalUploader(
+      ShipmentFileRecord record,
+      AuthenticatedUser user
+  ) {
+    return record != null && user != null && record.uploaderUserId() != null
+        && record.uploaderUserId().equals(user.id());
+  }
+
+  private Map<Long, List<String>> visibilityRolesFor(Collection<ShipmentFileRecord> records) {
+    Map<Long, LinkedHashSet<String>> collected = new LinkedHashMap<>();
+    for (ShipmentFileRecord record : records) {
+      collected.put(record.id(), new LinkedHashSet<>());
+    }
+    if (!collected.isEmpty()) {
+      String placeholders = String.join(",", java.util.Collections.nCopies(collected.size(), "?"));
+      jdbcTemplate.query(
+          "SELECT shipment_file_id, visibility_role "
+              + "FROM cp_shipment_file_visibility_roles "
+              + "WHERE shipment_file_id IN (" + placeholders + ")",
+          rs -> {
+            long fileId = rs.getLong("shipment_file_id");
+            String role = ShipmentAccessService.normalizeFileRole(rs.getString("visibility_role"));
+            if (role != null && collected.containsKey(fileId)) collected.get(fileId).add(role);
+          },
+          collected.keySet().toArray()
+      );
+    }
+    Map<Long, List<String>> result = new LinkedHashMap<>();
+    for (ShipmentFileRecord record : records) {
+      Set<String> roles = collected.getOrDefault(record.id(), new LinkedHashSet<>());
+      List<String> effective = roles.isEmpty()
+          ? legacyVisibilityRoles(record)
+          : orderedVisibilityRoles(roles);
+      result.put(record.id(), effective);
+    }
+    return result;
+  }
+
+  private List<String> visibilityRolesFor(ShipmentFileRecord record) {
+    return visibilityRolesFor(List.of(record)).getOrDefault(record.id(), List.of());
+  }
+
+  private List<String> legacyVisibilityRoles(ShipmentFileRecord record) {
+    String visibility = normalizeVisibility(record.visibility(), "PARTIES");
+    if ("INTERNAL".equals(visibility)) {
+      return List.of(ShipmentAccessService.OVERSEA_AGENT);
+    }
+    if (record.targetCustomerId() == null) {
+      return List.of(ShipmentAccessService.SHIPPER, ShipmentAccessService.CONSIGNEE);
+    }
+    return legacyVisibilityRoles(record.visibility(), record.targetCustomerId(), record.shipmentId());
+  }
+
+  private List<String> legacyVisibilityRoles(
+      String requestedVisibility,
+      Long targetCustomerId,
+      long shipmentId
+  ) {
+    String visibility = normalizeVisibility(requestedVisibility, "PARTIES");
+    if ("INTERNAL".equals(visibility)) {
+      return List.of(ShipmentAccessService.OVERSEA_AGENT);
+    }
+    if (targetCustomerId == null) {
+      if (requestedVisibility != null && !requestedVisibility.isBlank()) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Target customer is required for legacy PARTIES visibility; use visibilityRoles"
+        );
+      }
+      return List.of(ShipmentAccessService.SHIPPER, ShipmentAccessService.CONSIGNEE);
+    }
+    List<String> roles = jdbcTemplate.query(
+        """
+        SELECT COALESCE(a.relationship_role, c.party_role) AS file_role
+        FROM cp_customers c
+        LEFT JOIN cp_customer_shipment_access a
+          ON a.customer_id = c.id AND a.shipment_id = ?
+        WHERE c.id = ?
+        """,
+        (rs, rowNumber) -> rs.getString("file_role"),
+        shipmentId,
+        targetCustomerId
+    );
+    String role = roles.isEmpty() ? null : ShipmentAccessService.normalizeFileRole(roles.get(0));
+    if (role == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target customer has no supported shipment role");
+    }
+    return List.of(role);
+  }
+
+  private List<String> normalizeVisibilityRoles(
+      Collection<String> requestedRoles,
+      Collection<String> fallbackRoles
+  ) {
+    Collection<String> source = requestedRoles == null || requestedRoles.isEmpty()
+        ? fallbackRoles
+        : requestedRoles;
+    LinkedHashSet<String> roles = new LinkedHashSet<>();
+    if (source != null) {
+      for (String raw : source) {
+        if (raw == null) continue;
+        String cleaned = raw.replace("[", "").replace("]", "")
+            .replace("\"", "").replace("'", "");
+        for (String token : cleaned.split("[,;|]")) {
+          if (token.isBlank()) continue;
+          String role = ShipmentAccessService.normalizeFileRole(token);
+          if (role == null) {
+            throw new ApiException(
+                HttpStatus.BAD_REQUEST,
+                "Visibility roles must be OVERSEA_AGENT, SHIPPER, or CONSIGNEE"
+            );
+          }
+          roles.add(role);
+        }
+      }
+    }
+    if (roles.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one visibility role is required");
+    }
+    return orderedVisibilityRoles(roles);
+  }
+
+  private List<String> orderedVisibilityRoles(Collection<String> roles) {
+    return VISIBILITY_ROLE_ORDER.stream().filter(roles::contains).toList();
+  }
+
+  private String legacyVisibility(Collection<String> roles) {
+    return roles.size() == 1 && roles.contains(ShipmentAccessService.OVERSEA_AGENT)
+        ? "INTERNAL"
+        : "PARTIES";
+  }
+
+  private void insertVisibilityRoles(long fileId, Collection<String> roles, Instant now) {
+    for (String role : roles) {
+      jdbcTemplate.update(
+          "INSERT INTO cp_shipment_file_visibility_roles "
+              + "(shipment_file_id, visibility_role, created_at) VALUES (?, ?, ?)",
+          fileId,
+          role,
+          timestamp(now)
+      );
+    }
+  }
+
+  private void replaceVisibilityRoles(long fileId, Collection<String> roles, Instant now) {
+    jdbcTemplate.update(
+        "DELETE FROM cp_shipment_file_visibility_roles WHERE shipment_file_id = ?",
+        fileId
+    );
+    insertVisibilityRoles(fileId, roles, now);
+  }
+
+  private String previewMode(String extension) {
+    return switch (extension == null ? "" : extension) {
+      case "pdf", "jpg", "jpeg", "png", "txt", "csv" -> "INLINE";
+      default -> "TEXT_FALLBACK";
+    };
+  }
+
+  private ShipmentFilePreview preview(ShipmentFileContent content) {
+    String mode = previewMode(content.extension());
+    if ("INLINE".equals(mode)) {
+      return new ShipmentFilePreview(
+          content.path(), null, content.originalFileName(), content.contentType(),
+          content.sizeBytes(), mode
+      );
+    }
+    String text = extractTextPreview(content);
+    byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+    return new ShipmentFilePreview(
+        null,
+        bytes,
+        content.originalFileName() + ".txt",
+        "text/plain;charset=UTF-8",
+        bytes.length,
+        mode
+    );
+  }
+
+  private String extractTextPreview(ShipmentFileContent content) {
+    try {
+      return switch (content.extension()) {
+        case "xlsx", "xls" -> spreadsheetText(content.path());
+        case "docx" -> wordText(content.path());
+        case "doc" -> "This legacy Word .doc file cannot be safely rendered in the browser. "
+            + "Download the original file to view its contents.";
+        default -> "A browser-safe text preview is not available for this file type. "
+            + "Download the original file to view its contents.";
+      };
+    } catch (Exception error) {
+      return "The file could not be converted to a safe text preview. "
+          + "Download the original file to view its contents.";
+    }
+  }
+
+  private String spreadsheetText(Path path) throws IOException {
+    StringBuilder text = new StringBuilder();
+    DataFormatter formatter = new DataFormatter(Locale.ROOT);
+    try (InputStream input = Files.newInputStream(path);
+         Workbook workbook = WorkbookFactory.create(input)) {
+      for (int sheetIndex = 0;
+           sheetIndex < workbook.getNumberOfSheets() && text.length() < MAX_TEXT_PREVIEW_CHARS;
+           sheetIndex++) {
+        Sheet sheet = workbook.getSheetAt(sheetIndex);
+        appendPreview(text, "# " + sheet.getSheetName() + "\n");
+        for (Row row : sheet) {
+          int lastCell = Math.max(0, row.getLastCellNum());
+          for (int cellIndex = 0; cellIndex < lastCell; cellIndex++) {
+            if (cellIndex > 0) appendPreview(text, "\t");
+            appendPreview(text, formatter.formatCellValue(row.getCell(cellIndex)));
+          }
+          appendPreview(text, "\n");
+          if (text.length() >= MAX_TEXT_PREVIEW_CHARS) break;
+        }
+        appendPreview(text, "\n");
+      }
+    }
+    return text.toString();
+  }
+
+  private String wordText(Path path) throws IOException {
+    StringBuilder text = new StringBuilder();
+    try (InputStream input = Files.newInputStream(path);
+         XWPFDocument document = new XWPFDocument(input)) {
+      document.getParagraphs().forEach(paragraph -> {
+        appendPreview(text, paragraph.getText());
+        appendPreview(text, "\n");
+      });
+      document.getTables().forEach(table -> table.getRows().forEach(row -> {
+        List<XWPFTableCell> cells = row.getTableCells();
+        for (int index = 0; index < cells.size(); index++) {
+          if (index > 0) appendPreview(text, "\t");
+          appendPreview(text, cells.get(index).getText());
+        }
+        appendPreview(text, "\n");
+      }));
+    }
+    return text.toString();
+  }
+
+  private void appendPreview(StringBuilder target, String value) {
+    if (value == null || target.length() >= MAX_TEXT_PREVIEW_CHARS) return;
+    int remaining = MAX_TEXT_PREVIEW_CHARS - target.length();
+    target.append(value, 0, Math.min(value.length(), remaining));
+  }
+
   private String normalizeVisibility(String value, String fallback) {
     String normalized = value == null || value.isBlank()
         ? fallback
@@ -1164,7 +1640,17 @@ public class ShipmentFileService {
       Path path,
       String originalFileName,
       String contentType,
+      String extension,
       long sizeBytes
+  ) {}
+
+  public record ShipmentFilePreview(
+      Path path,
+      byte[] textContent,
+      String originalFileName,
+      String contentType,
+      long sizeBytes,
+      String mode
   ) {}
 
   public record ShipmentFileRecord(

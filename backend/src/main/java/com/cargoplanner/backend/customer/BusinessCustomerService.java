@@ -9,7 +9,6 @@ import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCod
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
@@ -474,25 +473,6 @@ public class BusinessCustomerService {
     return items.get(0);
   }
 
-  public Map<String, Object> listCustomerShipments(CustomerPrincipal customer) {
-    if (customer == null) {
-      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
-    }
-    String baseSql = snapshotShipmentSelect();
-    List<Map<String, Object>> items = jdbcTemplate.query(
-        baseSql + """
-             JOIN cp_customer_shipment_access a ON a.shipment_id = s.id
-             JOIN cp_customers c ON c.id = a.customer_id
-             WHERE a.customer_id = ? AND c.status = 'ACTIVE' AND a.publication_status = 'PUBLISHED'
-               AND t.invalidated_at IS NULL
-             ORDER BY t.fetched_at DESC LIMIT 500
-            """,
-        this::mapCustomerSnapshotShipment,
-        customer.id()
-    );
-    return Map.of("items", items, "total", items.size());
-  }
-
   private String snapshotShipmentSelect() {
     return """
         SELECT t.id, t.shipment_id, t.query_reference_type, t.query_reference_no,
@@ -589,23 +569,6 @@ public class BusinessCustomerService {
       } catch (Exception ignored) {
       }
     }
-    return value;
-  }
-
-  private Map<String, Object> mapCustomerSnapshotShipment(ResultSet rs, int rowNumber) throws SQLException {
-    Map<String, Object> value = mapSnapshotShipment(rs, rowNumber);
-    String snapshotJson = (String) value.get("snapshotJson");
-    boolean dataAvailable = snapshotJson != null && !snapshotJson.isBlank();
-    Map<String, Object> snapshot = null;
-    if (dataAvailable) {
-      try {
-        snapshot = objectMapper.readValue(snapshotJson, new TypeReference<Map<String, Object>>() {});
-      } catch (Exception ignored) {
-        dataAvailable = false;
-      }
-    }
-    value.put("dataAvailable", dataAvailable);
-    value.put("snapshot", snapshot);
     return value;
   }
 

@@ -317,6 +317,10 @@
                         <small data-i18n="batch.failed">Failed</small>
                       </span>
                       <span>
+                        <b id="batch-manual-count">0</b>
+                        <small data-i18n="batch.manual">Manual entry</small>
+                      </span>
+                      <span>
                         <b id="batch-pending-count">0</b>
                         <small data-i18n="batch.pending">Pending</small>
                       </span>
@@ -326,6 +330,45 @@
                   </div>
                 </div>
               </div>
+              <section class="batch-column-preview" id="batch-column-preview" hidden aria-live="polite">
+                <header>
+                  <div>
+                    <strong data-i18n="batch.previewTitle">Confirm the tracking column</strong>
+                    <p data-i18n="batch.previewDescription">Review the spreadsheet and choose the one column that contains the shipment numbers.</p>
+                  </div>
+                  <span id="batch-preview-file-name">—</span>
+                </header>
+                <div class="batch-column-preview-controls">
+                  <label>
+                    <span data-i18n="batch.previewSheet">Worksheet</span>
+                    <select id="batch-preview-sheet"></select>
+                  </label>
+                  <label>
+                    <span data-i18n="batch.previewColumn">Track column</span>
+                    <select id="batch-preview-column"></select>
+                  </label>
+                  <label>
+                    <span data-i18n="batch.previewType">Number type</span>
+                    <select id="batch-preview-type">
+                      <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
+                      <option value="BOOKING" data-i18n="type.booking">Booking number</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="batch-column-preview-table-wrap">
+                  <table class="batch-column-preview-table">
+                    <thead id="batch-preview-table-head"></thead>
+                    <tbody id="batch-preview-table-body"></tbody>
+                  </table>
+                </div>
+                <footer>
+                  <small data-i18n="batch.previewRows">The first rows are shown only for confirmation; your selected column is the final source.</small>
+                  <div>
+                    <button type="button" id="batch-preview-cancel" data-i18n="common.cancel">Cancel</button>
+                    <button type="button" id="batch-preview-confirm" data-i18n="batch.previewConfirm">Use this column and start</button>
+                  </div>
+                </footer>
+              </section>
               <p class="batch-import-message" id="batch-import-message" hidden></p>
             </section>
 
@@ -403,16 +446,12 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8.5 12.5 13.8 7a3.2 3.2 0 0 1 4.6 4.5l-7.1 7.2a5 5 0 0 1-7.1-7.1l7.2-7.2" />
                     </svg>
-                    <span data-i18n="files.trigger">Related files</span>
+                    <span data-i18n="files.trigger">Shipment files</span>
                     <b id="related-files-count" hidden>0</b>
                   </button>
                   <div class="result-meta">
                     <span id="cache-status">Live result</span>
                     <time id="fetched-at">—</time>
-                    <button type="button" class="document-drawer-trigger" id="open-document-drawer">
-                      <span data-i18n="documents.open">Documents</span>
-                      <b id="document-filled-count">0/8</b>
-                    </button>
                   </div>
                 </div>
 
@@ -672,7 +711,7 @@
       <header class="related-files-drawer-header">
         <div>
           <p data-i18n="files.kicker">SHIPMENT DOCUMENTS</p>
-          <h2 id="related-files-title" data-i18n="files.title">Related files</h2>
+          <h2 id="related-files-title" data-i18n="files.title">Shipment files</h2>
           <span id="related-files-shipment-reference">—</span>
         </div>
         <button
@@ -755,14 +794,27 @@
               <input id="related-files-category" type="hidden" value="CARGO_DETAIL" />
             </div>
           </div>
-          <label id="related-files-upload-visibility-field" hidden>
-            <span data-i18n="files.visibility">Visibility</span>
-            <select id="related-files-upload-visibility">
-              <option value="SHIPPER" data-i18n="files.visibilityShipper" selected>Shipper</option>
-              <option value="CONSIGNEE" data-i18n="files.visibilityConsignee">Consignee</option>
-              <option value="OVERSEA_AGENT" data-i18n="files.visibilityOverseaAgent">Overseas agent</option>
-            </select>
-          </label>
+          <fieldset class="related-files-option-field related-files-visibility-field" id="related-files-upload-visibility-field" hidden>
+            <legend data-i18n="files.visibility">Visible to</legend>
+            <details class="visibility-role-picker" id="related-files-upload-visibility">
+              <summary id="related-files-upload-visibility-summary" data-i18n="files.visibilityAllRoles">All shipment roles</summary>
+              <div class="visibility-role-menu">
+                <label>
+                  <input type="checkbox" value="OVERSEA_AGENT" data-related-files-upload-role checked />
+                  <span data-i18n="files.visibilityOverseaAgent">Overseas agent</span>
+                </label>
+                <label>
+                  <input type="checkbox" value="SHIPPER" data-related-files-upload-role checked />
+                  <span data-i18n="files.visibilityShipper">Shipper</span>
+                </label>
+                <label>
+                  <input type="checkbox" value="CONSIGNEE" data-related-files-upload-role checked />
+                  <span data-i18n="files.visibilityConsignee">Consignee</span>
+                </label>
+              </div>
+            </details>
+            <small id="related-files-upload-visibility-hint" data-i18n="files.visibilityRequired">Select at least one role.</small>
+          </fieldset>
           <label class="related-files-target-customer" id="related-files-target-customer-field" hidden>
             <span data-i18n="files.targetCustomer">Share with customer</span>
             <select
@@ -939,6 +991,7 @@
         <div class="file-preview-content" id="file-preview-content"></div>
       </div>
       <footer>
+        <button type="button" class="primary-dialog-button" id="file-preview-download" data-i18n="files.download">Download</button>
         <button type="button" class="secondary-dialog-button" id="file-preview-cancel" data-i18n="common.cancel">Cancel</button>
       </footer>
     </dialog>

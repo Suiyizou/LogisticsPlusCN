@@ -200,7 +200,8 @@ class ShipmentAutoRefreshServiceTest {
         """);
     jdbcTemplate.execute("""
         CREATE TABLE cp_tracking_snapshots (
-          id BIGINT PRIMARY KEY, shipment_id BIGINT NOT NULL, snapshot_json CLOB NOT NULL
+          id BIGINT PRIMARY KEY, shipment_id BIGINT NOT NULL, source_channel VARCHAR(32),
+          snapshot_json CLOB NOT NULL
         )
         """);
     jdbcTemplate.execute("""

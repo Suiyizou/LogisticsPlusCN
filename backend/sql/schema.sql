@@ -170,6 +170,8 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   shipment_id BIGINT NOT NULL,
   query_reference_type VARCHAR(24) NOT NULL,
   query_reference_no VARCHAR(128) NOT NULL,
+  queried_by BIGINT NULL,
+  queried_by_username VARCHAR(128) NULL,
   source_channel VARCHAR(32) NULL,
   snapshot_json LONGTEXT NOT NULL,
   strategy_json LONGTEXT NULL,
@@ -182,6 +184,7 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   invalidation_reason VARCHAR(500) NULL,
   INDEX idx_cp_tracking_snapshots_shipment_time (shipment_id, fetched_at),
   INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
+  UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
   CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -306,6 +309,16 @@ CREATE TABLE IF NOT EXISTS cp_shipment_files (
   CONSTRAINT fk_cp_shipment_files_deleted_by FOREIGN KEY (deleted_by) REFERENCES cp_users(id) ON DELETE SET NULL,
   CONSTRAINT fk_cp_shipment_files_deleted_customer FOREIGN KEY (deleted_by_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL,
   CONSTRAINT ck_cp_shipment_files_one_uploader CHECK ((uploader_user_id IS NULL) <> (uploader_customer_id IS NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_shipment_file_visibility_roles (
+  shipment_file_id BIGINT NOT NULL,
+  visibility_role VARCHAR(24) NOT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (shipment_file_id, visibility_role),
+  INDEX idx_cp_shipment_file_visibility_role (visibility_role, shipment_file_id),
+  CONSTRAINT fk_cp_shipment_file_visibility_file
+    FOREIGN KEY (shipment_file_id) REFERENCES cp_shipment_files(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_shipment_file_audit (

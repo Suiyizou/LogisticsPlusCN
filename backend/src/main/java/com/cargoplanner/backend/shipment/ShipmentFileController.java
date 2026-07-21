@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -56,6 +57,7 @@ public class ShipmentFileController {
       @RequestParam(value = "file", required = false) MultipartFile singleFile,
       @RequestParam(value = "category", defaultValue = "RELATED") String category,
       @RequestParam(value = "visibility", defaultValue = "INTERNAL") String visibility,
+      @RequestParam(value = "visibilityRoles", required = false) List<String> visibilityRoles,
       @RequestParam(value = "targetCustomerId", required = false) String targetCustomerId,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user,
       HttpServletRequest request
@@ -69,15 +71,15 @@ public class ShipmentFileController {
     }
     List<Map<String, Object>> items = new ArrayList<>();
     for (MultipartFile upload : uploads) {
-      ShipmentFileService.SavedShipmentFile saved = fileService.store(
-          upload,
-          shipmentId,
-          user,
-          category,
-          visibility,
-          targetCustomerId,
-          ClientInfo.ip(request)
-      );
+      ShipmentFileService.SavedShipmentFile saved = visibilityRoles == null
+          || visibilityRoles.isEmpty()
+          ? fileService.store(
+              upload, shipmentId, user, category, visibility, targetCustomerId,
+              ClientInfo.ip(request)
+          )
+          : fileService.store(
+              upload, shipmentId, user, category, visibilityRoles, ClientInfo.ip(request)
+          );
       items.add(fileService.metadata(saved, user));
     }
     Map<String, Object> response = new LinkedHashMap<>();
@@ -95,6 +97,15 @@ public class ShipmentFileController {
     return fileResponse(fileService.content(fileId, user, ClientInfo.ip(request)));
   }
 
+  @GetMapping("/shipment-files/{fileId}/preview")
+  public ResponseEntity<Resource> preview(
+      @PathVariable String fileId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user,
+      HttpServletRequest request
+  ) {
+    return previewResponse(fileService.preview(fileId, user, ClientInfo.ip(request)));
+  }
+
   @PatchMapping("/shipment-files/{fileId}/visibility")
   public Map<String, Object> updateVisibility(
       @PathVariable String fileId,
@@ -102,12 +113,14 @@ public class ShipmentFileController {
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user,
       HttpServletRequest httpRequest
   ) {
+    if (request != null && request.visibilityRoles() != null) {
+      return fileService.updateVisibilityRoles(
+          fileId, request.visibilityRoles(), user, ClientInfo.ip(httpRequest)
+      );
+    }
     return fileService.updateVisibility(
-        fileId,
-        request == null ? null : request.visibility(),
-        request == null ? null : request.targetCustomerId(),
-        user,
-        ClientInfo.ip(httpRequest)
+        fileId, request == null ? null : request.visibility(),
+        request == null ? null : request.targetCustomerId(), user, ClientInfo.ip(httpRequest)
     );
   }
 
@@ -132,6 +145,24 @@ public class ShipmentFileController {
         .contentLength(content.sizeBytes())
         .contentType(MediaType.parseMediaType(content.contentType()))
         .body(new FileSystemResource(content.path()));
+  }
+
+  static ResponseEntity<Resource> previewResponse(ShipmentFileService.ShipmentFilePreview preview) {
+    ContentDisposition disposition = ContentDisposition.inline()
+        .filename(preview.originalFileName(), StandardCharsets.UTF_8)
+        .build();
+    Resource resource = preview.path() == null
+        ? new ByteArrayResource(preview.textContent())
+        : new FileSystemResource(preview.path());
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cross-Origin-Resource-Policy", "same-origin")
+        .header("Content-Security-Policy", "sandbox; default-src 'none'")
+        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+        .contentLength(preview.sizeBytes())
+        .contentType(MediaType.parseMediaType(preview.contentType()))
+        .body(resource);
   }
 
 }

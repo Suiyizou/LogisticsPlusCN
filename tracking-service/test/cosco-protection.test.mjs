@@ -50,6 +50,54 @@ test("cancels an active batch request and rejects further work for the cancelled
   assert.throws(() => registry.begin(taskId), (error) => error.code === "BATCH_CANCELLED");
 });
 
+test("spaces requests in one batch task by a random interval between three and six seconds", async () => {
+  let currentTime = 1_000;
+  const waits = [];
+  const registry = createBatchTaskRegistry({
+    now: () => currentTime,
+    random: () => 0.5,
+    wait: async (delayMs) => {
+      waits.push(delayMs);
+      currentTime += delayMs;
+    }
+  });
+  const taskId = "batch_interval_1234567890";
+
+  const first = registry.begin(taskId);
+  assert.deepEqual(await first.waitForTurn(), { delayMs: 0, intervalMs: 0 });
+  first.finish();
+
+  currentTime += 500;
+  const second = registry.begin(taskId);
+  assert.deepEqual(await second.waitForTurn(), { delayMs: 4_000, intervalMs: 4_500 });
+  second.finish();
+  assert.deepEqual(waits, [0, 4_000]);
+});
+
+test("cancels a batch request while it is waiting for its query window", async () => {
+  let currentTime = 1_000;
+  const registry = createBatchTaskRegistry({
+    now: () => currentTime,
+    random: () => 0,
+    wait(delayMs, signal) {
+      if (delayMs === 0) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }
+  });
+  const taskId = "batch_waiting_1234567890";
+  const first = registry.begin(taskId);
+  await first.waitForTurn();
+  first.finish();
+
+  currentTime += 100;
+  const second = registry.begin(taskId);
+  const waiting = second.waitForTurn();
+  registry.cancel(taskId);
+  await assert.rejects(waiting, (error) => error.code === "BATCH_CANCELLED");
+});
+
 test("removes an aborted queued query without running it", async () => {
   const gate = createCoscoQueryGate({ minIntervalMs: 0, queueLimit: 3, queueTimeoutMs: 2_000 });
   let releaseFirst;
@@ -75,7 +123,7 @@ test("opens a cooldown circuit after COSCO returns 403", () => {
   assert.equal(breaker.status().blocked, false);
 });
 
-test("public batch UI sends task ids and exposes a stop control", async () => {
+test("public batch UI delegates work and cancellation to the Spring background task", async () => {
   const [html, source] = await Promise.all([
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
     readFile(new URL("../public/app.js", import.meta.url), "utf8")
@@ -83,5 +131,7 @@ test("public batch UI sends task ids and exposes a stop control", async () => {
   assert.match(html, /id="batch-stop-button"/);
   assert.match(source, /batchTaskId/);
   assert.match(source, /cancelBatchTask/);
-  assert.match(source, /batchAbortController\?\.abort\(\)/);
+  assert.match(source, /\/api\/business\/shipment-batch-tasks/);
+  assert.match(source, /applyBusinessBatchTask/);
+  assert.doesNotMatch(source, /beginSystemWait\("batch"/);
 });

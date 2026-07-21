@@ -50,10 +50,20 @@ const batchProgressLabel = document.querySelector("#batch-progress-label");
 const batchProgressTrack = document.querySelector("#batch-progress-track");
 const batchSuccessCount = document.querySelector("#batch-success-count");
 const batchFailedCount = document.querySelector("#batch-failed-count");
+const batchManualCount = document.querySelector("#batch-manual-count");
 const batchPendingCount = document.querySelector("#batch-pending-count");
 const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
+const batchColumnPreview = document.querySelector("#batch-column-preview");
+const batchPreviewFileName = document.querySelector("#batch-preview-file-name");
+const batchPreviewSheet = document.querySelector("#batch-preview-sheet");
+const batchPreviewColumn = document.querySelector("#batch-preview-column");
+const batchPreviewType = document.querySelector("#batch-preview-type");
+const batchPreviewTableHead = document.querySelector("#batch-preview-table-head");
+const batchPreviewTableBody = document.querySelector("#batch-preview-table-body");
+const batchPreviewCancel = document.querySelector("#batch-preview-cancel");
+const batchPreviewConfirm = document.querySelector("#batch-preview-confirm");
 const extraInformationSection = document.querySelector("#extra-information-section");
 const extraInformationList = document.querySelector("#extra-information-list");
 const relatedFilesButton = document.querySelector("#related-files-button");
@@ -90,6 +100,11 @@ const relatedFilesCategoryMenu = document.querySelector("#related-files-category
 const relatedFilesCategoryOptions = Array.from(document.querySelectorAll("[data-category-value]"));
 const relatedFilesUploadVisibilityField = document.querySelector("#related-files-upload-visibility-field");
 const relatedFilesUploadVisibility = document.querySelector("#related-files-upload-visibility");
+const relatedFilesUploadVisibilitySummary = document.querySelector("#related-files-upload-visibility-summary");
+const relatedFilesUploadVisibilityHint = document.querySelector("#related-files-upload-visibility-hint");
+const relatedFilesUploadRoleInputs = Array.from(
+  document.querySelectorAll("[data-related-files-upload-role]")
+);
 const relatedFilesTargetCustomerField = document.querySelector("#related-files-target-customer-field");
 const relatedFilesTargetCustomer = document.querySelector("#related-files-target-customer");
 const relatedFilesTargetCustomerHint = document.querySelector("#related-files-target-customer-hint");
@@ -127,10 +142,11 @@ const BATCH_STORAGE_KEY = "shipment-track:batch-import:v2";
 const BATCH_VERSION = 2;
 const BATCH_IMPORT_LIMIT = 50;
 const BATCH_FILE_SIZE_LIMIT = 2 * 1024 * 1024;
-const BATCH_REQUEST_INTERVAL_MS = 2_100;
+const BATCH_REQUEST_INTERVAL_MS = 4_000;
 const BATCH_RETRY_BASE_MS = 2_200;
 const BATCH_RETRY_LIMIT = 2;
 const BATCH_RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+const BATCH_TASK_POLL_INTERVAL_MS = 1_500;
 const PLATFORM_AUTH_TOKEN_KEY = "cargo-planner-auth-token";
 const PLATFORM_AUTH_USER_KEY = "cargo-planner-auth-user";
 const CUSTOMER_AUTH_TOKEN_KEY = "cargo-planner-customer-token";
@@ -150,6 +166,11 @@ function requireAuthorizedResponse(response) {
 }
 const BUSINESS_REFERENCE_PREFIX = "shipment-track:business-references:";
 const DOCUMENT_METADATA_PREFIX = "shipment-track:documents:";
+const FILE_VISIBILITY_ROLES = Object.freeze([
+  "OVERSEA_AGENT",
+  "SHIPPER",
+  "CONSIGNEE"
+]);
 
 const DOCUMENT_TYPES = Object.freeze([
   {
@@ -339,11 +360,11 @@ const MESSAGES = {
     "account.roleUser": "Internal user",
     "welcome.greeting": "Welcome",
     "welcome.subtitle": ", welcome to the tracking platform.",
-    "files.trigger": "Related files",
-    "files.unavailable": "Related files will be available after this shipment is saved by the platform.",
+    "files.trigger": "Shipment files",
+    "files.unavailable": "Shipment files will be available after this shipment is saved by the platform.",
     "files.kicker": "SHIPMENT DOCUMENTS",
-    "files.title": "Related files",
-    "files.close": "Close related files",
+    "files.title": "Shipment files",
+    "files.close": "Close shipment files",
     "files.loginTitle": "Sign in to manage shipment files",
     "files.loginDescription": "Shipment documents are available to authenticated enterprise users.",
     "files.loginAction": "Sign in to the platform",
@@ -375,6 +396,8 @@ const MESSAGES = {
     "files.visibilityShipper": "Shipper",
     "files.visibilityConsignee": "Consignee",
     "files.visibilityOverseaAgent": "Overseas agent",
+    "files.visibilityAllRoles": "All shipment roles",
+    "files.visibilityRequired": "Select at least one role.",
     "files.targetCustomer": "Share with customer",
     "files.targetPlaceholder": "Select a customer",
     "files.targetRequired": "Select a specific customer before uploading a shared file.",
@@ -409,6 +432,7 @@ const MESSAGES = {
     "files.previewNotSupported": "Preview is not supported for this file type. Please download the file to view it.",
     "files.previewDownloadTip": "If the preview is incomplete, please download the file to view the original content.",
     "files.previewTextFallback": "Showing extracted text content for {name}.",
+    "files.previewTooLarge": "This file is too large for an in-browser text preview. Download it to view the original.",
     "result.transportTerms": "Transport terms",
     "result.containerType": "Container type",
     "summary.services": "Selected services",
@@ -429,13 +453,13 @@ const MESSAGES = {
     "wait.batch": "Processing the imported shipment queue…",
     "wait.complete": "Request completed",
     "batch.title": "Batch tracking import",
-    "batch.subtitle": "Import an Excel or CSV list and query shipments one at a time",
-    "batch.localBadge": "This device only",
+    "batch.subtitle": "Import an Excel or CSV list and process it as a background task",
+    "batch.localBadge": "Background task",
     "batch.selectFile": "Select Excel / CSV",
     "batch.columns": "Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.",
-    "batch.localNotice": "Queue and result status are stored only in this browser on this device.",
+    "batch.localNotice": "After it starts, the task continues in the background. Use Terminate task below to stop pending queries.",
     "batch.resume": "Continue pending queries",
-    "batch.stop": "Stop current task",
+    "batch.stop": "Terminate task",
     "batch.stopping": "Stopping the current batch query…",
     "batch.stopped": "Batch task stopped. Pending items can be resumed.",
     "batch.clear": "Clear imported queue",
@@ -444,6 +468,7 @@ const MESSAGES = {
     "batch.file": "Imported file",
     "batch.success": "Succeeded",
     "batch.failed": "Failed",
+    "batch.manual": "Manual entry",
     "batch.pending": "Pending",
     "batch.parsing": "Reading {name}…",
     "batch.unsupportedFile": "Choose an .xlsx, .xls, or .csv file no larger than 2 MB.",
@@ -452,17 +477,29 @@ const MESSAGES = {
     "batch.workerUnsupported": "This browser cannot process spreadsheets in a background worker.",
     "batch.workerFailed": "The background spreadsheet parser stopped unexpectedly.",
     "batch.parseTimeout": "Spreadsheet parsing took too long. Try a smaller file.",
+    "batch.previewTitle": "Confirm the tracking column",
+    "batch.previewDescription": "Review the spreadsheet and choose the one column that contains the shipment numbers.",
+    "batch.previewSheet": "Worksheet",
+    "batch.previewColumn": "Track column",
+    "batch.previewType": "Number type",
+    "batch.previewRecommended": "Recommended",
+    "batch.previewRows": "The first rows are shown only for confirmation; your selected column is the final source.",
+    "batch.previewConfirm": "Use this column and start",
+    "batch.previewRequired": "Choose a worksheet and tracking column before starting.",
     "batch.limit": "Found {found} unique rows. The first {limit} were imported to keep this browser responsive.",
     "batch.ready": "{count} unique shipment numbers imported.",
     "batch.running": "Querying {current} of {total}: {number}",
-    "batch.completed": "Batch complete: {success} succeeded and {failed} failed.",
+    "batch.completed": "Batch complete: {success} tracked, {manual} saved for manual entry and {failed} failed.",
     "batch.restored": "The locally saved queue is ready to continue.",
     "batch.importFailed": "The spreadsheet could not be read: {message}",
+    "batch.backgroundFailed": "The background task could not be refreshed: {message}",
+    "batch.requiresBusiness": "Sign in as a business operator or administrator to start a batch task.",
     "batch.itemPending": "Pending",
     "batch.itemRunning": "Querying",
     "batch.itemSuccess": "Succeeded",
     "batch.itemCached": "Reused device cache",
     "batch.itemFailed": "Failed",
+    "batch.itemManual": "Saved · manual entry required",
     "batch.listAria": "Imported shipment queue",
     "batch.openItem": "Open and query {type} {number}",
     "batch.confirmClear": "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
@@ -740,11 +777,11 @@ const MESSAGES = {
     "account.roleUser": "内部用户",
     "welcome.greeting": "欢迎",
     "welcome.subtitle": "，欢迎使用追踪平台。",
-    "files.trigger": "相关文件",
-    "files.unavailable": "平台保存这票货物后即可使用相关文件。",
+    "files.trigger": "票单文件",
+    "files.unavailable": "平台保存这票货物后即可管理票单文件。",
     "files.kicker": "货物文档",
-    "files.title": "相关文件",
-    "files.close": "关闭相关文件",
+    "files.title": "票单文件",
+    "files.close": "关闭票单文件",
     "files.loginTitle": "登录后管理货物文件",
     "files.loginDescription": "货物明细、账单和寄运文件仅向已登录企业用户开放。",
     "files.loginAction": "登录平台",
@@ -776,6 +813,8 @@ const MESSAGES = {
     "files.visibilityShipper": "发货人可见",
     "files.visibilityConsignee": "收货人可见",
     "files.visibilityOverseaAgent": "海外代理可见",
+    "files.visibilityAllRoles": "全部业务角色",
+    "files.visibilityRequired": "请至少选择一个可见角色。",
     "files.targetCustomer": "共享给客户",
     "files.targetPlaceholder": "请选择客户",
     "files.targetRequired": "共享文件前，请先选择一个具体客户。",
@@ -810,6 +849,7 @@ const MESSAGES = {
     "files.previewNotSupported": "此文件类型不支持预览，请下载后查看。",
     "files.previewDownloadTip": "如预览不完整，请下载文件查看原始内容。",
     "files.previewTextFallback": "正在以文本方式展示 {name} 的内容。",
+    "files.previewTooLarge": "文件过大，无法在浏览器中以文本预览，请下载原文件查看。",
     "result.transportTerms": "运输条款",
     "result.containerType": "箱型",
     "summary.services": "已选服务",
@@ -830,13 +870,13 @@ const MESSAGES = {
     "wait.batch": "正在逐条处理导入的货物队列…",
     "wait.complete": "请求已完成",
     "batch.title": "批量导入查询",
-    "batch.subtitle": "导入 Excel 或 CSV 清单，按顺序逐票查询",
-    "batch.localBadge": "仅保存在本设备",
+    "batch.subtitle": "导入 Excel 或 CSV 清单后，以后台任务逐票处理",
+    "batch.localBadge": "后台任务",
     "batch.selectFile": "选择 Excel / CSV",
     "batch.columns": "支持 M/B/L NO.、提单号和订舱号列；同时导入 Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code。",
-    "batch.localNotice": "队列和处理状态仅保存在本设备的当前浏览器中。",
+    "batch.localNotice": "任务开始后在后台运行；如需停止后续查询，请点击下方“终止任务”。",
     "batch.resume": "继续查询待处理项目",
-    "batch.stop": "停止当前任务",
+    "batch.stop": "终止任务",
     "batch.stopping": "正在停止当前批量查询…",
     "batch.stopped": "批量任务已停止，待处理项目可以继续查询。",
     "batch.clear": "清除导入队列",
@@ -845,6 +885,7 @@ const MESSAGES = {
     "batch.file": "导入文件",
     "batch.success": "成功",
     "batch.failed": "失败",
+    "batch.manual": "待手工补录",
     "batch.pending": "待处理",
     "batch.parsing": "正在读取 {name}…",
     "batch.unsupportedFile": "请选择不超过 2 MB 的 .xlsx、.xls 或 .csv 文件。",
@@ -853,17 +894,29 @@ const MESSAGES = {
     "batch.workerUnsupported": "当前浏览器无法在后台线程中处理表格。",
     "batch.workerFailed": "后台表格解析器意外停止。",
     "batch.parseTimeout": "表格解析时间过长，请尝试更小的文件。",
+    "batch.previewTitle": "确认批量追踪列",
+    "batch.previewDescription": "请预览表格并人工选择唯一的追踪单号列，系统建议仅作为默认值。",
+    "batch.previewSheet": "工作表",
+    "batch.previewColumn": "追踪单号列",
+    "batch.previewType": "单号类型",
+    "batch.previewRecommended": "建议",
+    "batch.previewRows": "这里只展示前几行供确认；您选择的列将作为最终解析来源。",
+    "batch.previewConfirm": "使用此列并启动任务",
+    "batch.previewRequired": "请先选择工作表和追踪单号列。",
     "batch.limit": "共识别 {found} 条唯一记录。为保持页面流畅，本次导入前 {limit} 条。",
     "batch.ready": "已导入 {count} 条唯一运输单号。",
     "batch.running": "正在查询第 {current}/{total} 条：{number}",
-    "batch.completed": "批量查询完成：成功 {success} 条，失败 {failed} 条。",
+    "batch.completed": "批量任务完成：查询成功 {success} 条，已收录待手工补录 {manual} 条，失败 {failed} 条。",
     "batch.restored": "本设备保存的队列已恢复，可以继续处理。",
     "batch.importFailed": "无法读取表格：{message}",
+    "batch.backgroundFailed": "无法刷新后台任务状态：{message}",
+    "batch.requiresBusiness": "请使用业务员或管理员账号登录后再启动批量任务。",
     "batch.itemPending": "待处理",
     "batch.itemRunning": "查询中",
     "batch.itemSuccess": "成功",
     "batch.itemCached": "复用本设备缓存",
     "batch.itemFailed": "失败",
+    "batch.itemManual": "已收录 · 待手工补录",
     "batch.listAria": "已导入的货物查询队列",
     "batch.openItem": "打开并查询{type} {number}",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
@@ -1136,7 +1189,10 @@ let batchRunning = false;
 let batchAbortController = null;
 let batchTaskId = null;
 let batchStopRequested = false;
+let batchRunPromise = null;
 let batchImportNotice = null;
+let pendingBatchFile = null;
+let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 const expandedHistoryKeys = new Set();
 let relatedFilesShipmentId = null;
@@ -1360,6 +1416,12 @@ function isPublicTrackingRouteUnavailable(result) {
     targetsPublicRoute &&
     !hasSpecificMessage &&
     /^not found$/i.test(genericError)
+  );
+}
+
+function isRestorableBatchNumber(value) {
+  return /^(?=.{4,64}$)[A-Z0-9](?:[A-Z0-9./-]*[A-Z0-9])$/.test(
+    String(value ?? "").trim().toUpperCase()
   );
 }
 /* TRACKING_CONTRACT_HELPERS_END */
@@ -1624,6 +1686,7 @@ function customerLogisticsRoleLabel(session = readFileSession()) {
 function logisticsPartyRoleLabel(value) {
   const key = {
     AGENT: "files.logisticsRoleAgent",
+    OVERSEA_AGENT: "files.logisticsRoleAgent",
     SHIPPER: "files.logisticsRoleShipper",
     CONSIGNEE: "files.logisticsRoleConsignee"
   }[String(value ?? "").trim().toUpperCase()];
@@ -1796,8 +1859,107 @@ function fileVisibilityLabel(value) {
   return t(key || "files.visibilityShipper");
 }
 
+function normalizeFileVisibilityRoles(value, legacyVisibility = "") {
+  let candidates = value;
+  if (typeof candidates === "string") {
+    const trimmed = candidates.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        candidates = JSON.parse(trimmed);
+      } catch {
+        candidates = trimmed.split(",");
+      }
+    } else {
+      candidates = trimmed.split(",");
+    }
+  }
+  if (!Array.isArray(candidates)) candidates = [];
+
+  const normalized = new Set(
+    candidates
+      .map((role) => String(role ?? "").trim().toUpperCase())
+      .filter((role) => FILE_VISIBILITY_ROLES.includes(role))
+  );
+  const legacy = String(legacyVisibility ?? "").trim().toUpperCase();
+  if (normalized.size === 0 && FILE_VISIBILITY_ROLES.includes(legacy)) {
+    normalized.add(legacy);
+  } else if (normalized.size === 0 && legacy === "INTERNAL") {
+    normalized.add("OVERSEA_AGENT");
+  } else if (normalized.size === 0 && legacy === "PARTIES") {
+    normalized.add("SHIPPER");
+    normalized.add("CONSIGNEE");
+  }
+  return FILE_VISIBILITY_ROLES.filter((role) => normalized.has(role));
+}
+
+function legacyVisibilityForRoles(roles) {
+  const normalized = normalizeFileVisibilityRoles(roles);
+  return normalized.length === 1 && normalized[0] === "OVERSEA_AGENT"
+    ? "INTERNAL"
+    : "PARTIES";
+}
+
+function fileVisibilityRolesLabel(roles) {
+  const normalized = normalizeFileVisibilityRoles(roles);
+  if (normalized.length === FILE_VISIBILITY_ROLES.length) {
+    return t("files.visibilityAllRoles");
+  }
+  return normalized.map(fileVisibilityLabel).join(", ") || t("files.visibilityRequired");
+}
+
+function allowedRelatedFileVisibilityRoles() {
+  const configured = normalizeFileVisibilityRoles(
+    relatedFilesPermissions?.allowedVisibilityRoles ??
+      relatedFilesPermissions?.visibleToRoles
+  );
+  return configured.length > 0 ? configured : [...FILE_VISIBILITY_ROLES];
+}
+
+function selectedRelatedFilesUploadRoles() {
+  return FILE_VISIBILITY_ROLES.filter((role) =>
+    relatedFilesUploadRoleInputs.some((input) => input.value === role && input.checked)
+  );
+}
+
+function setRelatedFilesUploadRoles(roles) {
+  const selected = new Set(normalizeFileVisibilityRoles(roles));
+  for (const input of relatedFilesUploadRoleInputs) {
+    input.checked = selected.has(input.value);
+  }
+}
+
+function updateRelatedFilesUploadVisibility({ disabled = false } = {}) {
+  const allowed = new Set(allowedRelatedFileVisibilityRoles());
+  let selected = selectedRelatedFilesUploadRoles().filter((role) => allowed.has(role));
+  if (selected.length === 0 && allowed.size > 0) {
+    selected = [...allowed];
+    setRelatedFilesUploadRoles(selected);
+  }
+  for (const input of relatedFilesUploadRoleInputs) {
+    input.disabled = disabled || !allowed.has(input.value);
+    input.closest("label")?.toggleAttribute("hidden", !allowed.has(input.value));
+  }
+  relatedFilesUploadVisibilitySummary.textContent = fileVisibilityRolesLabel(selected);
+  relatedFilesUploadVisibilityHint.hidden = selected.length > 0;
+  relatedFilesUploadVisibility.classList.toggle("is-disabled", disabled);
+  relatedFilesUploadVisibility.setAttribute("aria-disabled", String(disabled));
+  if (disabled) relatedFilesUploadVisibility.open = false;
+}
+
+for (const input of relatedFilesUploadRoleInputs) {
+  input.addEventListener("change", () => {
+    if (selectedRelatedFilesUploadRoles().length === 0) input.checked = true;
+    updateRelatedFilesUploadVisibility({ disabled: relatedFilesUploading });
+    updateRelatedFilesSelection();
+  });
+}
+
 function normalizeRelatedFileItem(item) {
   const rawVisibility = String(item?.visibility ?? "SHIPPER").toUpperCase();
+  const visibilityRoles = normalizeFileVisibilityRoles(
+    item?.visibilityRoles ?? item?.visibleToRoles ?? item?.visibleTo,
+    rawVisibility
+  );
   return {
     ...item,
     id: item?.id ?? item?.publicId ?? item?.fileId,
@@ -1811,6 +1973,7 @@ function normalizeRelatedFileItem(item) {
     sizeBytes: Number(item?.sizeBytes ?? item?.size ?? 0),
     category: String(item?.category ?? "OTHER").toUpperCase(),
     visibility: rawVisibility === "INTERNAL_ONLY" ? "INTERNAL" : rawVisibility,
+    visibilityRoles,
     targetCustomerId: String(item?.targetCustomerId ?? "").trim(),
     targetCustomerDisplayName: String(
       item?.targetCustomerDisplayName ?? item?.targetCustomerName ?? ""
@@ -1822,6 +1985,9 @@ function normalizeRelatedFileItem(item) {
       item?.uploaderName ??
       "",
     uploadedAt: item?.uploadedAt ?? item?.createdAt ?? null,
+    contentType: String(item?.contentType ?? item?.mimeType ?? "").trim(),
+    previewUrl: String(item?.previewUrl ?? "").trim(),
+    previewMode: String(item?.previewMode ?? "").trim().toUpperCase(),
     canDelete: item?.canDelete === true,
     canChangeVisibility: item?.canChangeVisibility === true
   };
@@ -1902,8 +2068,11 @@ function updateRelatedFilesSelection() {
   const session = readFileSession();
   const files = Array.from(relatedFilesUploadInput.files ?? []);
   const totalSize = files.reduce((total, file) => total + Number(file.size ?? 0), 0);
+  const visibilityReady =
+    !canManageFileVisibility(session) || selectedRelatedFilesUploadRoles().length > 0;
   relatedFilesTargetCustomerField.hidden = true;
   relatedFilesTargetCustomerHint.hidden = true;
+  relatedFilesUploadVisibilityHint.hidden = visibilityReady;
   relatedFilesSelection.textContent =
     files.length > 0
       ? t("files.selection", { count: files.length, size: formatFileSize(totalSize) })
@@ -1912,7 +2081,8 @@ function updateRelatedFilesSelection() {
   relatedFilesUploadButton.disabled =
     relatedFilesUploading ||
     files.length === 0 ||
-    !relatedFilesShipmentId;
+    !relatedFilesShipmentId ||
+    !visibilityReady;
 }
 
 function relatedFileActionButton(labelKey, className, handler) {
@@ -1941,9 +2111,8 @@ function relatedFileTargetDisplayName(file) {
 }
 
 function relatedFileSharingLabel(file, session = readFileSession()) {
-  if (file.visibility === "INTERNAL") return t("files.visibilityInternal");
   if (session.kind === "CUSTOMER") return t("files.sharedWithSelf");
-  return relatedFileTargetDisplayName(file) || fileVisibilityLabel(file.visibility);
+  return fileVisibilityRolesLabel(file.visibilityRoles);
 }
 
 function createRelatedFileItem(file) {
@@ -1976,71 +2145,96 @@ function createRelatedFileItem(file) {
   badges.append(category);
 
   const sharing = document.createElement("span");
-  sharing.className = `related-file-sharing is-${file.visibility.toLowerCase()}`;
+  sharing.className = "related-file-sharing is-role-set";
   sharing.textContent = relatedFileSharingLabel(file, session);
   badges.append(sharing);
 
-  if (file.canChangeVisibility && canManageFileVisibility(session)) {
+  if (
+    file.canChangeVisibility &&
+    (canManageFileVisibility(session) || relatedFilesPermissions?.canChangeVisibility === true)
+  ) {
     const editor = document.createElement("div");
     editor.className = "related-file-sharing-editor";
-    const visibility = document.createElement("select");
-    visibility.className = "related-file-visibility-select";
-    visibility.setAttribute("aria-label", t("files.visibility"));
-    for (const value of ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"]) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = fileVisibilityLabel(value);
-      visibility.append(option);
-    }
-    const knownVisibility = ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"].includes(
-      String(file.visibility ?? "").toUpperCase()
-    );
-    visibility.value = knownVisibility ? file.visibility : "SHIPPER";
+    const picker = document.createElement("details");
+    picker.className = "visibility-role-picker related-file-visibility-picker";
+    const summary = document.createElement("summary");
+    summary.setAttribute("aria-label", t("files.visibility"));
+    const menu = document.createElement("div");
+    menu.className = "visibility-role-menu";
+    const allowedRoles = allowedRelatedFileVisibilityRoles();
+    let committedRoles = normalizeFileVisibilityRoles(file.visibilityRoles, file.visibility);
+    if (committedRoles.length === 0) committedRoles = [allowedRoles[0] ?? "OVERSEA_AGENT"];
+    const controls = [];
+    const updatePicker = (roles) => {
+      const selected = new Set(normalizeFileVisibilityRoles(roles));
+      for (const control of controls) control.checked = selected.has(control.value);
+      summary.textContent = fileVisibilityRolesLabel([...selected]);
+    };
 
-    const persistVisibility = async (nextVisibility) => {
+    const persistVisibility = async (nextRoles) => {
       if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-      const previousVisibility = file.visibility;
-      const nextTargetCustomerId = relatedFilesSelectedTargetCustomerId;
-      visibility.disabled = true;
+      const previousRoles = [...committedRoles];
+      picker.classList.add("is-disabled", "is-saving");
+      controls.forEach((control) => { control.disabled = true; });
       try {
         await requestRelatedFilesApi(
           shipmentFilePath(session, file.id, "/visibility"),
           {
             method: "PATCH",
             body: {
-              visibility: nextVisibility,
-              targetCustomerId: nextVisibility === "PARTIES" ? nextTargetCustomerId : null
+              visibilityRoles: nextRoles,
+              visibility: legacyVisibilityForRoles(nextRoles)
             },
             session
           }
         );
         if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-        file.visibility = nextVisibility;
-        file.targetCustomerId = "";
-        file.targetCustomerDisplayName = "";
-        sharing.className = `related-file-sharing is-${file.visibility.toLowerCase()}`;
+        committedRoles = [...nextRoles];
+        file.visibilityRoles = [...nextRoles];
+        file.visibility = legacyVisibilityForRoles(nextRoles);
         sharing.textContent = relatedFileSharingLabel(file, session);
         setRelatedFilesUploadMessage();
       } catch (error) {
         if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-        file.visibility = previousVisibility;
-        visibility.value = previousVisibility || "SHIPPER";
+        committedRoles = previousRoles;
+        file.visibilityRoles = [...previousRoles];
+        updatePicker(previousRoles);
         setRelatedFilesUploadMessage(
           t("files.visibilityUpdateFailed", { message: error?.message || t("error.generic") }),
           "error"
         );
       } finally {
         if (isCurrentRelatedFilesSession(sessionFingerprint)) {
-          visibility.disabled = false;
+          picker.classList.remove("is-disabled", "is-saving");
+          controls.forEach((control) => { control.disabled = false; });
         }
       }
     };
 
-    visibility.addEventListener("change", () => {
-      if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
-      void persistVisibility(visibility.value);
-    });
-    editor.append(visibility);
+    for (const role of allowedRoles) {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      const copy = document.createElement("span");
+      checkbox.type = "checkbox";
+      checkbox.value = role;
+      copy.textContent = fileVisibilityLabel(role);
+      checkbox.addEventListener("change", () => {
+        const nextRoles = controls.filter((control) => control.checked).map((control) => control.value);
+        if (nextRoles.length === 0) {
+          checkbox.checked = true;
+          setRelatedFilesUploadMessage(t("files.visibilityRequired"), "error");
+          return;
+        }
+        updatePicker(nextRoles);
+        void persistVisibility(nextRoles);
+      });
+      controls.push(checkbox);
+      label.append(checkbox, copy);
+      menu.append(label);
+    }
+    updatePicker(committedRoles);
+    picker.append(summary, menu);
+    editor.append(picker);
     badges.append(editor);
   }
   content.append(name, metadata, badges);
@@ -2078,11 +2272,8 @@ function renderRelatedFilesDrawer() {
   renderTrackingAccount(session);
   setRelatedFilesCategory(relatedFilesCategory.value);
 
-  if (
-    session.kind !== "INTERNAL" ||
-    !canManageVisibility
-  ) {
-    relatedFilesUploadVisibility.value = "SHIPPER";
+  if (session.kind !== "INTERNAL" && session.kind !== "CUSTOMER") {
+    setRelatedFilesUploadRoles(["SHIPPER"]);
     relatedFilesSelectedTargetCustomerId = "";
   }
   renderRelatedFilesTargetOptions();
@@ -2119,7 +2310,8 @@ function renderRelatedFilesDrawer() {
     relatedFilesPermissions?.canUpload === false;
   relatedFilesUserName.textContent =
     fileSessionDisplayName(session);
-  relatedFilesUploadVisibilityField.hidden = !canManageVisibility;
+  relatedFilesUploadVisibilityField.hidden =
+    !authenticated || relatedFilesPermissions?.canUpload === false;
 
   relatedFilesLoading.hidden = !relatedFilesLoadingState;
   relatedFilesError.hidden = !relatedFilesErrorText || relatedFilesLoadingState;
@@ -2139,7 +2331,7 @@ function renderRelatedFilesDrawer() {
   relatedFilesCategory.disabled = relatedFilesUploading;
   relatedFilesCategoryTrigger.disabled = relatedFilesUploading;
   if (relatedFilesUploading) setRelatedFilesCategoryOpen(false);
-  relatedFilesUploadVisibility.disabled = relatedFilesUploading;
+  updateRelatedFilesUploadVisibility({ disabled: relatedFilesUploading });
   relatedFilesTargetCustomer.disabled = relatedFilesUploading;
   updateRelatedFilesSelection();
 }
@@ -2271,16 +2463,19 @@ async function uploadRelatedFiles() {
     return;
   }
 
-  const internalVisibility =
-    canManageFileVisibility(session)
-      ? relatedFilesUploadVisibility.value || "SHIPPER"
-      : "SHIPPER";
-  const targetCustomerId = relatedFilesSelectedTargetCustomerId;
-  if (internalVisibility === "PARTIES" && !targetCustomerId) {
-    setRelatedFilesUploadMessage(t("files.targetRequired"), "error");
+  const visibilityRoles = selectedRelatedFilesUploadRoles().length > 0
+    ? selectedRelatedFilesUploadRoles()
+    : normalizeFileVisibilityRoles(
+        session.principal?.partyRole ?? session.storedSession?.partyRole,
+        "SHIPPER"
+      );
+  if (visibilityRoles.length === 0) {
+    setRelatedFilesUploadMessage(t("files.visibilityRequired"), "error");
     renderRelatedFilesDrawer();
     return;
   }
+  const internalVisibility = legacyVisibilityForRoles(visibilityRoles);
+  const targetCustomerId = relatedFilesSelectedTargetCustomerId;
 
   const sessionFingerprint = relatedFilesSessionFingerprint;
   relatedFilesUploading = true;
@@ -2289,9 +2484,10 @@ async function uploadRelatedFiles() {
   const formData = new FormData();
   for (const file of files) formData.append("files", file);
   formData.append("category", relatedFilesCategory.value || "OTHER");
+  for (const role of visibilityRoles) formData.append("visibilityRoles", role);
   if (session.kind === "INTERNAL") {
     formData.append("visibility", internalVisibility);
-    formData.append("targetCustomerId", targetCustomerId);
+    if (targetCustomerId) formData.append("targetCustomerId", targetCustomerId);
   }
 
   try {
@@ -2371,7 +2567,7 @@ async function downloadRelatedFile(file, button) {
   }
 }
 
-const PREVIEW_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"]);
+const PREVIEW_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"]);
 const PREVIEW_PDF_EXTENSIONS = new Set(["pdf"]);
 const PREVIEW_TEXT_EXTENSIONS = new Set([
   "txt", "csv", "log", "json", "xml", "md", "markdown", "html", "htm",
@@ -2381,6 +2577,7 @@ const PREVIEW_TEXT_EXTENSIONS = new Set([
   "php", "swift", "kt", "dart", "toml", "env", "gitignore"
 ]);
 const PREVIEW_OFFICE_EXTENSIONS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"]);
+const PREVIEW_TEXT_BYTE_LIMIT = 2 * 1024 * 1024;
 
 const filePreviewDialog = document.querySelector("#file-preview-dialog");
 const filePreviewName = document.querySelector("#file-preview-name");
@@ -2389,7 +2586,9 @@ const filePreviewMessage = document.querySelector("#file-preview-message");
 const filePreviewContent = document.querySelector("#file-preview-content");
 const filePreviewClose = document.querySelector("#file-preview-close");
 const filePreviewCancel = document.querySelector("#file-preview-cancel");
+const filePreviewDownload = document.querySelector("#file-preview-download");
 let filePreviewObjectUrls = [];
+let currentPreviewFile = null;
 
 function getFileExtension(fileName) {
   const name = String(fileName || "").trim().toLowerCase();
@@ -2426,6 +2625,7 @@ function closeFilePreviewDialog() {
   if (typeof filePreviewDialog?.close === "function") {
     filePreviewDialog.close();
   }
+  currentPreviewFile = null;
   clearFilePreviewContent();
 }
 
@@ -2451,32 +2651,90 @@ function renderFilePreviewText(text, { asTextarea = false } = {}) {
   filePreviewContent.replaceChildren(pre);
 }
 
-function renderFilePreviewBlob(blob, extension) {
+function renderFilePreviewBlob(blob, extension, contentType = "") {
   const url = URL.createObjectURL(blob);
   filePreviewObjectUrls.push(url);
-  if (PREVIEW_PDF_EXTENSIONS.has(extension)) {
+  if (PREVIEW_PDF_EXTENSIONS.has(extension) || contentType === "application/pdf") {
     const iframe = document.createElement("iframe");
     iframe.src = url;
     iframe.title = filePreviewName.textContent || t("files.previewTitle");
+    iframe.setAttribute("sandbox", "");
+    iframe.referrerPolicy = "no-referrer";
     filePreviewContent.replaceChildren(iframe);
     return;
   }
-  if (PREVIEW_IMAGE_EXTENSIONS.has(extension)) {
+  if (
+    PREVIEW_IMAGE_EXTENSIONS.has(extension) &&
+    contentType !== "image/svg+xml"
+  ) {
     const img = document.createElement("img");
     img.src = url;
     img.alt = filePreviewName.textContent || t("files.previewTitle");
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
     filePreviewContent.replaceChildren(img);
     return;
   }
   renderFilePreviewFallback("files.previewNotSupported");
 }
 
-async function readBlobAsText(blob) {
+async function readBlobAsText(blob, { force = false } = {}) {
+  if (blob.size > PREVIEW_TEXT_BYTE_LIMIT) return { text: null, tooLarge: true };
   try {
-    return await blob.text();
+    const text = await blob.text();
+    if (!force) {
+      const sample = text.slice(0, 4_096);
+      const controlCharacters = Array.from(sample).filter((character) => {
+        const code = character.charCodeAt(0);
+        return code === 0 || (code < 9 || (code > 13 && code < 32));
+      }).length;
+      if (sample.length > 0 && controlCharacters / sample.length > 0.02) {
+        return { text: null, tooLarge: false };
+      }
+    }
+    return { text, tooLarge: false };
   } catch {
-    return null;
+    return { text: null, tooLarge: false };
   }
+}
+
+function safeSameOriginFileUrl(candidate, fallback) {
+  const fallbackUrl = new URL(fallback, window.location.origin);
+  try {
+    const resolved = new URL(candidate || fallbackUrl, window.location.origin);
+    if (
+      resolved.origin !== window.location.origin ||
+      !resolved.pathname.startsWith("/api/")
+    ) {
+      return fallbackUrl.toString();
+    }
+    return resolved.toString();
+  } catch {
+    return fallbackUrl.toString();
+  }
+}
+
+async function fetchRelatedFilePreview(file, session) {
+  const previewPath = safeSameOriginFileUrl(
+    file.previewUrl,
+    shipmentFilePath(session, file.id, "/preview")
+  );
+  let response = await fetch(previewPath, {
+    headers: { ...fileAuthHeaders(session) },
+    credentials: "same-origin",
+    redirect: "error"
+  });
+  if ([404, 405].includes(response.status)) {
+    response = await fetch(
+      safeSameOriginFileUrl("", shipmentFilePath(session, file.id, "/download")),
+      {
+        headers: { ...fileAuthHeaders(session) },
+        credentials: "same-origin",
+        redirect: "error"
+      }
+    );
+  }
+  return response;
 }
 
 async function previewRelatedFile(file, button) {
@@ -2488,16 +2746,14 @@ async function previewRelatedFile(file, button) {
   button.disabled = true;
   button.textContent = t("files.previewing");
   clearFilePreviewContent();
+  currentPreviewFile = file;
   filePreviewName.textContent = file.originalFileName || t("files.previewTitle");
   if (typeof filePreviewDialog?.showModal === "function") {
     filePreviewDialog.showModal();
   }
   setFilePreviewMessage(t("files.previewing"));
   try {
-    const response = await fetch(
-      shipmentFilePath(session, file.id, "/download"),
-      { headers: { ...fileAuthHeaders(session) } }
-    );
+    const response = await fetchRelatedFilePreview(file, session);
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       closeFilePreviewDialog();
@@ -2515,20 +2771,38 @@ async function previewRelatedFile(file, button) {
       );
     }
     const extension = getFileExtension(file.originalFileName);
+    const contentType = String(
+      response.headers.get("Content-Type") || file.contentType || ""
+    ).split(";", 1)[0].trim().toLowerCase();
+    const previewMode = String(file.previewMode || "").toUpperCase();
     const blob = await response.blob();
     if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
 
     clearFilePreviewContent();
 
-    if (PREVIEW_PDF_EXTENSIONS.has(extension) || PREVIEW_IMAGE_EXTENSIONS.has(extension)) {
-      renderFilePreviewBlob(blob, extension);
+    if (
+      previewMode === "PDF" ||
+      previewMode === "IMAGE" ||
+      contentType === "application/pdf" ||
+      (contentType.startsWith("image/") && contentType !== "image/svg+xml") ||
+      PREVIEW_PDF_EXTENSIONS.has(extension) ||
+      PREVIEW_IMAGE_EXTENSIONS.has(extension)
+    ) {
+      renderFilePreviewBlob(blob, extension, contentType);
       setFilePreviewMessage(t("files.previewDownloadTip"));
       return;
     }
 
-    if (PREVIEW_TEXT_EXTENSIONS.has(extension)) {
-      const text = await readBlobAsText(blob);
-      if (text != null) {
+    const responseIsText =
+      previewMode === "TEXT" ||
+      contentType.startsWith("text/") ||
+      /(?:json|xml|javascript|yaml|csv)/i.test(contentType);
+    if (responseIsText || PREVIEW_TEXT_EXTENSIONS.has(extension)) {
+      const { text, tooLarge } = await readBlobAsText(blob, { force: responseIsText });
+      if (tooLarge) {
+        renderFilePreviewFallback("files.previewTooLarge");
+        setFilePreviewMessage(t("files.previewDownloadTip"));
+      } else if (text != null) {
         renderFilePreviewText(text, { asTextarea: false });
         setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
       } else {
@@ -2538,19 +2812,16 @@ async function previewRelatedFile(file, button) {
     }
 
     if (PREVIEW_OFFICE_EXTENSIONS.has(extension)) {
-      const text = await readBlobAsText(blob);
-      if (text != null && /[\x09\x0A\x0D\x20-\x7E]/.test(text)) {
-        renderFilePreviewText(text, { asTextarea: true });
-        setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
-      } else {
-        renderFilePreviewFallback("files.previewNotSupported");
-        setFilePreviewMessage(t("files.previewDownloadTip"));
-      }
+      renderFilePreviewFallback("files.previewNotSupported");
+      setFilePreviewMessage(t("files.previewDownloadTip"));
       return;
     }
 
-    const text = await readBlobAsText(blob);
-    if (text != null && text.length > 0 && /[\x09\x0A\x0D\x20-\x7E]/.test(text)) {
+    const { text, tooLarge } = await readBlobAsText(blob);
+    if (tooLarge) {
+      renderFilePreviewFallback("files.previewTooLarge");
+      setFilePreviewMessage(t("files.previewDownloadTip"));
+    } else if (text != null && text.length > 0) {
       renderFilePreviewText(text, { asTextarea: true });
       setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
     } else {
@@ -2578,6 +2849,11 @@ if (filePreviewClose) {
 }
 if (filePreviewCancel) {
   filePreviewCancel.addEventListener("click", closeFilePreviewDialog);
+}
+if (filePreviewDownload) {
+  filePreviewDownload.addEventListener("click", () => {
+    if (currentPreviewFile) void downloadRelatedFile(currentPreviewFile, filePreviewDownload);
+  });
 }
 if (filePreviewDialog) {
   filePreviewDialog.addEventListener("cancel", (event) => {
@@ -3458,10 +3734,11 @@ function batchCounts() {
     (counts, item) => {
       if (item.status === "success") counts.success += 1;
       else if (item.status === "failed") counts.failed += 1;
+      else if (item.status === "manual") counts.manual += 1;
       else counts.pending += 1;
       return counts;
     },
-    { success: 0, failed: 0, pending: 0 }
+    { success: 0, failed: 0, manual: 0, pending: 0 }
   );
 }
 
@@ -3497,10 +3774,13 @@ function restoreBatchState() {
           .trim()
           .replace(/\s+/g, "")
           .toUpperCase();
-        if (!/^[A-Z0-9-]{4,35}$/.test(number)) return null;
-        const status = ["success", "failed"].includes(item?.status)
+        if (!isRestorableBatchNumber(number)) return null;
+        const manualOnly = item?.manualOnly === true || item?.status === "manual";
+        const status = ["success", "failed", "manual"].includes(item?.status)
           ? item.status
-          : "pending";
+          : manualOnly
+            ? "manual"
+            : "pending";
         return {
           id: `${carrier ?? "UNKNOWN"}:${type}:${number}:${index}`,
           carrier,
@@ -3509,8 +3789,15 @@ function restoreBatchState() {
           displayNumber: String(item?.displayNumber ?? number).trim().slice(0, 64),
           importedDetails: normalizeImportedDetails(item?.importedDetails),
           status,
-          source: status === "success" ? String(item?.source ?? "live") : null,
+          source: status === "success"
+            ? String(item?.source ?? "live")
+            : status === "manual"
+              ? "manual"
+              : null,
           error: status === "failed" ? String(item?.error ?? "") : null,
+          manualOnly,
+          submitted: item?.submitted === true,
+          shipmentId: item?.shipmentId ?? null,
           attempts: Number.isFinite(item?.attempts) ? item.attempts : 0,
           updatedAt: item?.updatedAt ?? null
         };
@@ -3518,12 +3805,20 @@ function restoreBatchState() {
       .filter(Boolean);
 
     if (items.length === 0) return null;
+    const storedStatus = String(stored.status ?? "").toLowerCase();
+    const hasActiveTask =
+      Boolean(stored.taskId) && ["running", "stopping", "paused"].includes(storedStatus);
     return {
       version: BATCH_VERSION,
       fileName: String(stored.fileName ?? "Imported queue"),
       createdAt: stored.createdAt ?? new Date().toISOString(),
       updatedAt: stored.updatedAt ?? null,
-      status: items.some((item) => item.status === "pending") ? "paused" : "complete",
+      taskId: String(stored.taskId ?? "").trim() || null,
+      status: hasActiveTask
+        ? storedStatus
+        : items.some((item) => item.status === "pending")
+          ? storedStatus === "stopped" ? "stopped" : "paused"
+          : "complete",
       items
     };
   } catch {
@@ -3550,6 +3845,7 @@ function batchStatusKey(item) {
     return item.source === "device-cache" ? "batch.itemCached" : "batch.itemSuccess";
   }
   if (item.status === "failed") return "batch.itemFailed";
+  if (item.status === "manual" || item.manualOnly) return "batch.itemManual";
   if (item.status === "running") return "batch.itemRunning";
   return "batch.itemPending";
 }
@@ -3561,7 +3857,9 @@ function renderBatchState() {
   batchImportEmpty.hidden = hasQueue;
   batchImportSummary.hidden = !hasQueue;
   batchResumeButton.hidden =
-    !hasQueue || batchRunning || !items.some((item) => item.status === "pending");
+    !hasQueue || batchRunning || Boolean(batchRunPromise) || !items.some(
+      (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
+    );
   batchStopButton.hidden = !hasQueue || !batchRunning;
   batchStopButton.disabled = batchStopRequested;
   batchClearButton.hidden = !hasQueue || batchRunning;
@@ -3580,7 +3878,7 @@ function renderBatchState() {
   }
 
   const counts = batchCounts();
-  const processed = counts.success + counts.failed;
+  const processed = counts.success + counts.failed + counts.manual;
   const progress = Math.round((processed / items.length) * 100);
   const runningIndex = items.findIndex((item) => item.status === "running");
   batchFileName.textContent = batchState.fileName;
@@ -3590,6 +3888,7 @@ function renderBatchState() {
   batchProgressTrack.style.setProperty("--batch-progress", `${progress}%`);
   batchSuccessCount.textContent = String(counts.success);
   batchFailedCount.textContent = String(counts.failed);
+  if (batchManualCount) batchManualCount.textContent = String(counts.manual);
   batchPendingCount.textContent = String(counts.pending);
 
   if (batchStopRequested) {
@@ -3615,7 +3914,7 @@ function renderBatchState() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = `batch-result-item is-${item.status}`;
-    row.disabled = batchRunning || !item.carrier;
+    row.disabled = batchRunning || !item.carrier || item.status === "manual" || item.manualOnly;
     row.setAttribute(
       "aria-label",
       t("batch.openItem", {
@@ -3647,7 +3946,7 @@ function renderBatchState() {
   batchResultList.replaceChildren(fragment);
 }
 
-async function parseBatchFile(file) {
+async function parseBatchFile(file, selection = null) {
   const extension = file.name.split(".").pop()?.toLowerCase();
   if (
     !["xlsx", "xls", "csv"].includes(extension) ||
@@ -3677,10 +3976,7 @@ async function parseBatchFile(file) {
       (event) => {
         cleanup();
         if (event.data?.ok) {
-          resolve({
-            items: Array.isArray(event.data.items) ? event.data.items : [],
-            found: Number(event.data.found) || 0
-          });
+          resolve(event.data);
           return;
         }
         const code = event.data?.error?.code;
@@ -3689,6 +3985,8 @@ async function parseBatchFile(file) {
             ? t("batch.noRecognizedColumns")
             : code === "no_rows"
               ? t("batch.noRows")
+              : code === "invalid_selection"
+                ? t("batch.previewRequired")
               : event.data?.error?.message || t("batch.workerFailed");
         reject(new Error(message));
       },
@@ -3702,8 +4000,146 @@ async function parseBatchFile(file) {
       },
       { once: true }
     );
-    worker.postMessage({ file, limit: BATCH_IMPORT_LIMIT });
+    worker.postMessage({
+      file,
+      limit: BATCH_IMPORT_LIMIT,
+      ...(selection ? { selection } : {})
+    });
   });
+}
+
+function spreadsheetColumnName(index) {
+  let value = Number(index) + 1;
+  let name = "";
+  while (value > 0) {
+    value -= 1;
+    name = String.fromCharCode(65 + (value % 26)) + name;
+    value = Math.floor(value / 26);
+  }
+  return name || "?";
+}
+
+function activeBatchPreviewSheet() {
+  return batchPreviewSheets.find((sheet) => sheet.name === batchPreviewSheet.value)
+    ?? batchPreviewSheets[0]
+    ?? null;
+}
+
+function renderBatchPreviewTable(sheet = activeBatchPreviewSheet()) {
+  if (!sheet) {
+    batchPreviewTableHead.replaceChildren();
+    batchPreviewTableBody.replaceChildren();
+    return;
+  }
+  const selectedColumnIndex = Number(batchPreviewColumn.value);
+  const heading = document.createElement("tr");
+  const rowNumberHeading = document.createElement("th");
+  rowNumberHeading.textContent = "#";
+  heading.append(rowNumberHeading);
+  for (const column of sheet.columns ?? []) {
+    const cell = document.createElement("th");
+    cell.textContent = `${spreadsheetColumnName(column.index)} · ${column.label}`;
+    cell.classList.toggle("is-selected", column.index === selectedColumnIndex);
+    heading.append(cell);
+  }
+  batchPreviewTableHead.replaceChildren(heading);
+
+  const rows = (sheet.previewRows ?? []).map((previewRow) => {
+    const row = document.createElement("tr");
+    const rowNumber = document.createElement("th");
+    rowNumber.scope = "row";
+    rowNumber.textContent = String(Number(previewRow.rowIndex) + 1);
+    row.append(rowNumber);
+    for (const column of sheet.columns ?? []) {
+      const cell = document.createElement("td");
+      cell.textContent = String(previewRow.values?.[column.index] ?? "");
+      cell.classList.toggle("is-selected", column.index === selectedColumnIndex);
+      row.append(cell);
+    }
+    return row;
+  });
+  batchPreviewTableBody.replaceChildren(...rows);
+}
+
+function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
+  if (!sheet) return;
+  const options = (sheet.columns ?? []).map((column) => {
+    const option = document.createElement("option");
+    option.value = String(column.index);
+    const recommended = column.index === sheet.suggestedColumnIndex
+      ? ` · ${t("batch.previewRecommended")}`
+      : "";
+    option.textContent = `${spreadsheetColumnName(column.index)} · ${column.label}${recommended}`;
+    option.dataset.suggestedType = column.suggestedType ?? column.type ?? "BILLOFLADING";
+    return option;
+  });
+  batchPreviewColumn.replaceChildren(...options);
+  const suggested = Number(sheet.suggestedColumnIndex);
+  batchPreviewColumn.value = Number.isInteger(suggested) && suggested >= 0
+    ? String(suggested)
+    : options[0]?.value ?? "";
+  const selectedOption = batchPreviewColumn.selectedOptions[0];
+  batchPreviewType.value = selectedOption?.dataset.suggestedType === "BOOKING"
+    ? "BOOKING"
+    : "BILLOFLADING";
+  batchPreviewConfirm.disabled = !batchPreviewColumn.value;
+  renderBatchPreviewTable(sheet);
+}
+
+function showBatchColumnPreview(file, preview) {
+  pendingBatchFile = file;
+  batchPreviewSheets = Array.isArray(preview?.sheets) ? preview.sheets : [];
+  batchPreviewFileName.textContent = file.name;
+  const sheetOptions = batchPreviewSheets.map((sheet) => {
+    const option = document.createElement("option");
+    option.value = sheet.name;
+    option.textContent = sheet.name;
+    return option;
+  });
+  batchPreviewSheet.replaceChildren(...sheetOptions);
+  batchPreviewSheet.value = batchPreviewSheets.some(
+    (sheet) => sheet.name === preview?.suggestedSheetName
+  )
+    ? preview.suggestedSheetName
+    : sheetOptions[0]?.value ?? "";
+  renderBatchPreviewColumns();
+  batchColumnPreview.hidden = false;
+  batchColumnPreview.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function hideBatchColumnPreview({ clearFile = true } = {}) {
+  batchColumnPreview.hidden = true;
+  batchPreviewSheets = [];
+  batchPreviewSheet.replaceChildren();
+  batchPreviewColumn.replaceChildren();
+  batchPreviewTableHead.replaceChildren();
+  batchPreviewTableBody.replaceChildren();
+  if (clearFile) pendingBatchFile = null;
+}
+
+function startImportedBatch(fileName, imported) {
+  const items = Array.isArray(imported?.items) ? imported.items : [];
+  batchState = {
+    version: BATCH_VERSION,
+    fileName,
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    status: "ready",
+    taskId: null,
+    items
+  };
+  if (Number(imported?.found) > BATCH_IMPORT_LIMIT) {
+    setBatchImportNotice(
+      "batch.limit",
+      { found: Number(imported.found), limit: BATCH_IMPORT_LIMIT },
+      "warning"
+    );
+  } else {
+    setBatchImportNotice();
+  }
+  persistBatchState();
+  renderBatchState();
+  void runBatchQueue();
 }
 
 function batchAbortError() {
@@ -3777,12 +4213,115 @@ async function cancelBatchTask(taskId) {
   if (!taskId) return null;
   const encodedTaskId = encodeURIComponent(taskId);
   const session = readFileSession();
-  const platformResponse = await fetch(`/api/public/shipments/batch-tasks/${encodedTaskId}/cancel`, {
+  const response = await fetch(`/api/business/shipment-batch-tasks/${encodedTaskId}/cancel`, {
     method: "POST",
     headers: fileAuthHeaders(session)
   });
-  if (![404, 405].includes(platformResponse.status)) return platformResponse;
-  return fetch(appUrl(`/api/batch-tasks/${encodedTaskId}/cancel`), { method: "POST" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(relatedFilesApiMessage(payload, response));
+  }
+  return payload;
+}
+
+async function requestBusinessBatchTask(path, options = {}) {
+  const session = readFileSession();
+  if (session.kind !== "INTERNAL" || !session.token) {
+    throw new Error(t("batch.requiresBusiness"));
+  }
+  const response = await fetch(path, {
+    method: options.method ?? "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...fileAuthHeaders(session)
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.status === 401) clearFileSession(session, { expired: true });
+  if (!response.ok) {
+    const error = new Error(relatedFilesApiMessage(payload, response));
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function batchItemStatusFromServer(value) {
+  const status = String(value ?? "").trim().toUpperCase();
+  if (status === "SUCCEEDED") return "success";
+  if (status === "FAILED") return "failed";
+  if (status === "MANUAL") return "manual";
+  if (status === "RUNNING") return "running";
+  return "pending";
+}
+
+function applyBusinessBatchTask(snapshot) {
+  if (!batchState || !snapshot || typeof snapshot !== "object") return false;
+  const remoteItems = new Map(
+    (Array.isArray(snapshot.items) ? snapshot.items : [])
+      .map((item) => [String(item?.id ?? ""), item])
+      .filter(([id]) => id)
+  );
+  batchState.items = batchState.items.map((item) => {
+    const remote = remoteItems.get(String(item.id));
+    if (!remote) return item;
+    const manualOnly = remote.manualOnly === true || item.manualOnly === true;
+    const status = batchItemStatusFromServer(remote.status);
+    return {
+      ...item,
+      carrier: remote.carrier ?? item.carrier,
+      number: String(remote.number ?? item.number),
+      displayNumber: String(remote.displayNumber ?? item.displayNumber ?? item.number),
+      importedDetails: normalizeImportedDetails(remote.importedDetails ?? item.importedDetails),
+      manualOnly,
+      submitted: true,
+      status,
+      source: status === "manual" ? "manual" : remote.source ?? item.source ?? null,
+      error: status === "failed" ? String(remote.error ?? t("error.generic")) : null,
+      attempts: Number.isFinite(remote.attempts) ? remote.attempts : item.attempts,
+      shipmentId: remote.shipmentId ?? item.shipmentId ?? null,
+      updatedAt: remote.updatedAt ?? item.updatedAt ?? null
+    };
+  });
+
+  const taskStatus = String(snapshot.status ?? "").trim().toUpperCase();
+  const active = ["QUEUED", "RUNNING", "STOPPING"].includes(taskStatus);
+  batchState.taskId = String(snapshot.taskId ?? batchState.taskId ?? "").trim() || null;
+  batchState.status = taskStatus === "COMPLETED"
+    ? "complete"
+    : taskStatus === "STOPPED"
+      ? "stopped"
+      : taskStatus === "STOPPING"
+        ? "stopping"
+        : active
+          ? "running"
+          : "paused";
+  batchTaskId = batchState.taskId;
+  batchRunning = active;
+  batchStopRequested = taskStatus === "STOPPING";
+  persistBatchState();
+  renderBatchState();
+  return active;
+}
+
+function recoverMissingBusinessBatchTask() {
+  if (!batchState) return;
+  batchState.taskId = null;
+  batchTaskId = null;
+  batchState.items = batchState.items.map((item) =>
+    ["pending", "running"].includes(item.status)
+      ? {
+          ...item,
+          status: "pending",
+          submitted: false,
+          source: null,
+          error: null
+        }
+      : item
+  );
 }
 
 function batchItemForQuery(query) {
@@ -3808,96 +4347,108 @@ function queryForBatchItem(item) {
   });
 }
 
-async function runBatchQueue() {
-  if (batchRunning || !batchState?.items?.some((item) => item.status === "pending")) return;
+function runBatchQueue() {
+  if (batchRunPromise) return batchRunPromise;
+  const currentRun = executeBatchQueue();
+  batchRunPromise = currentRun;
+  void currentRun.finally(() => {
+    if (batchRunPromise !== currentRun) return;
+    batchRunPromise = null;
+    renderBatchState();
+  });
+  return currentRun;
+}
 
+async function executeBatchQueue() {
+  const hasUnsubmittedWork = batchState?.items?.some(
+    (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
+  );
+  const canReconnectTask = Boolean(batchState?.taskId) &&
+    ["running", "stopping", "paused"].includes(batchState?.status);
+  if (batchRunning || (!hasUnsubmittedWork && !canReconnectTask)) return;
+
+  const previousBatchStatus = batchState.status;
   batchRunning = true;
   batchAbortController = new AbortController();
-  batchTaskId = createBatchTaskId();
   batchStopRequested = false;
   const signal = batchAbortController.signal;
-  const taskId = batchTaskId;
   batchState.status = "running";
   persistBatchState();
   renderBatchState();
-  const waitToken = beginSystemWait("batch", "wait.batch");
-  let completed = false;
 
   try {
-    for (const item of batchState.items) {
-      if (item.status !== "pending") continue;
-      item.status = "running";
-      item.attempts += 1;
-      item.updatedAt = new Date().toISOString();
-      persistBatchState();
-      renderBatchState();
-
-      const query = queryForBatchItem(item);
-
-      try {
-        const localPayload = loadSnapshot(query);
-        if (localPayload && !query.importedDetails) {
-          const mergedPayload = mergeImportedDetailsIntoPayload(
-            localPayload,
-            item.importedDetails
-          );
-          saveSnapshot(query, mergedPayload);
-          item.status = "success";
-          item.source = "device-cache";
-          item.error = null;
-        } else {
-          const { response, payload: upstreamPayload } = await requestBatchTracking(query, {
-            signal,
-            taskId
-          });
-          if (!response.ok) {
-            throw new Error(trackingDiagnosticMessage(upstreamPayload, response));
-          }
-          const payload = mergeImportedDetailsIntoPayload(
-            upstreamPayload,
-            item.importedDetails
-          );
-          saveSnapshot(query, payload);
-          item.status = "success";
-          item.source = payload?.cached ? "server-cache" : "live";
-          item.error = null;
-        }
-      } catch (error) {
-        if (signal.aborted || error?.name === "AbortError") {
-          item.status = "pending";
-          item.source = null;
-          item.error = null;
-          throw error;
-        }
-        item.status = "failed";
-        item.source = null;
-        item.error = canManageFileVisibility(readFileSession())
-          ? (error?.message || t("error.generic"))
-          : customerFacingTrackingError();
-        if (error?.message === "Platform session expired") throw error;
+    const reconnectExistingTask =
+      Boolean(batchState.taskId) &&
+      ["running", "stopping", "paused"].includes(previousBatchStatus);
+    let snapshot;
+    if (reconnectExistingTask) {
+      snapshot = await requestBusinessBatchTask(
+        `/api/business/shipment-batch-tasks/${encodeURIComponent(batchState.taskId)}`,
+        { signal }
+      );
+    } else {
+      const submittedItems = batchState.items.filter(
+        (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
+      );
+      snapshot = await requestBusinessBatchTask("/api/business/shipment-batch-tasks", {
+        method: "POST",
+        body: {
+          sourceFileName: batchState.fileName,
+          items: submittedItems.map((item) => ({
+            id: item.id,
+            carrier: item.carrier,
+            type: item.type,
+            number: item.number,
+            displayNumber: item.displayNumber ?? item.number,
+            manualOnly: item.manualOnly === true || item.status === "manual",
+            importedDetails: item.importedDetails ?? null
+          }))
+        },
+        signal
+      });
+      const submittedIds = new Set(submittedItems.map((item) => String(item.id)));
+      for (const item of batchState.items) {
+        if (submittedIds.has(String(item.id))) item.submitted = true;
       }
-
-      item.updatedAt = new Date().toISOString();
-      persistBatchState();
-      renderBatchState();
-      await yieldToBrowser(80, signal);
     }
 
-    batchState.status = "complete";
-    completed = batchCounts().failed === 0;
-  } catch {
-    if (batchState) batchState.status = signal.aborted ? "stopped" : "paused";
+    if (batchStopRequested) {
+      const submittedTaskId = String(snapshot?.taskId ?? "").trim();
+      if (submittedTaskId) snapshot = await cancelBatchTask(submittedTaskId);
+    }
+
+    while (applyBusinessBatchTask(snapshot)) {
+      await yieldToBrowser(BATCH_TASK_POLL_INTERVAL_MS, signal);
+      snapshot = await requestBusinessBatchTask(
+        `/api/business/shipment-batch-tasks/${encodeURIComponent(batchTaskId)}`,
+        { signal }
+      );
+    }
+    if (batchState?.status === "complete") {
+      await loadInternalTrackedHistory();
+    }
+  } catch (error) {
+    if (batchState) {
+      if (error?.status === 404 && batchState.taskId) {
+        recoverMissingBusinessBatchTask();
+      }
+      batchState.status = signal.aborted && batchStopRequested ? "stopped" : "paused";
+      setBatchImportNotice(
+        "batch.backgroundFailed",
+        { message: error?.message || t("error.generic") },
+        "error"
+      );
+    }
   } finally {
     batchRunning = false;
     batchAbortController = null;
-    batchTaskId = null;
+    batchTaskId = batchState?.taskId ?? null;
     batchStopRequested = false;
     if (batchState) {
       persistBatchState();
       renderBatchState();
     }
     renderHistory();
-    endSystemWait(waitToken, { complete: completed });
   }
 }
 
@@ -4178,10 +4729,9 @@ function renderReferences(references) {
 
   const list = elements["reference-information"];
   list.replaceChildren();
-  const customerSession = readFileSession().kind === "CUSTOMER";
   const internalReferencePattern = /(?:b\/?l\s*type|bill\s*of\s*lading\s*type|surrender(?:ed)?\s*status)/i;
   const visible = (references.information ?? []).filter((item) =>
-    item.name && item.value && (!customerSession || !internalReferencePattern.test(String(item.name)))
+    item.name && item.value && !internalReferencePattern.test(String(item.name))
   );
 
   for (const information of visible) {
@@ -4985,8 +5535,10 @@ function updateCarrierUI({ resetResult = false } = {}) {
   const channel = CHANNELS[channelSelect?.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : "query.helper");
-  carrierNotice.hidden = carrier.enabled;
-  carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
+  if (carrierNotice) {
+    carrierNotice.hidden = carrier.enabled;
+    carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
+  }
   carrierNavItems.forEach((item) => {
     item.classList.toggle("is-current", item.dataset.carrierSelect === carrier.code);
   });
@@ -5196,7 +5748,7 @@ function showView(name, { updateLocation = true } = {}) {
 
 function openHistoryEntry(entry) {
   carrierSelect.value = entry.query.carrier;
-  channelSelect.value = entry.query.channel ?? "AUTO";
+  if (channelSelect) channelSelect.value = entry.query.channel ?? "AUTO";
   trackingType.value = entry.query.type;
   trackingNumber.value = entry.query.number;
   updateCarrierUI();
@@ -5216,7 +5768,7 @@ function openHistoryEntry(entry) {
       requestAnimationFrame(() => {
         const currentQuery = normalizeQuery({
           carrier: carrierSelect.value,
-          channel: channelSelect.value,
+          channel: channelSelect?.value ?? "AUTO",
           type: trackingType.value,
           number: trackingNumber.value
         });
@@ -5257,7 +5809,7 @@ function openBatchItem(item) {
   if (batchRunning) return;
   const query = queryForBatchItem(item);
   carrierSelect.value = query.carrier;
-  channelSelect.value = query.channel;
+  if (channelSelect) channelSelect.value = query.channel ?? "AUTO";
   trackingType.value = query.type;
   trackingNumber.value = query.number;
   updateCarrierUI();
@@ -5278,7 +5830,7 @@ function openBatchItem(item) {
       requestAnimationFrame(() => {
         const currentQuery = normalizeQuery({
           carrier: carrierSelect.value,
-          channel: channelSelect.value,
+          channel: channelSelect?.value ?? "AUTO",
           type: trackingType.value,
           number: trackingNumber.value
         });
@@ -5379,7 +5931,6 @@ async function requestTracking(query, options = {}) {
   if (!isPublicTrackingRouteUnavailable(platform)) return platform;
 
   const primary = await postTrackingRequest("/api/track", query, options);
-
   if (
     query.carrier === "COSCO" &&
     [404, 405].includes(primary.response.status)
@@ -5390,7 +5941,6 @@ async function requestTracking(query, options = {}) {
         : "/api/track/cosco";
     return postTrackingRequest(compatibilityPath, query, options);
   }
-
   return primary;
 }
 
@@ -5443,7 +5993,7 @@ form.addEventListener("submit", async (event) => {
 
   const baseQuery = normalizeQuery({
     carrier: carrierSelect.value,
-    channel: channelSelect.value,
+    channel: channelSelect?.value ?? "AUTO",
     type: trackingType.value,
     number: trackingNumber.value
   });
@@ -5553,28 +6103,14 @@ batchFileInput?.addEventListener("change", async () => {
   setBatchImportNotice("batch.parsing", { name: file.name });
 
   try {
-    const imported = await parseBatchFile(file);
-    const items = imported.items;
-    batchState = {
-      version: BATCH_VERSION,
-      fileName: file.name,
-      createdAt: new Date().toISOString(),
-      updatedAt: null,
-      status: "ready",
-      items
-    };
-    if (imported.found > BATCH_IMPORT_LIMIT) {
-      setBatchImportNotice(
-        "batch.limit",
-        { found: imported.found, limit: BATCH_IMPORT_LIMIT },
-        "warning"
-      );
-    } else {
+    const preview = await parseBatchFile(file);
+    if (preview?.phase === "preview") {
       setBatchImportNotice();
+      showBatchColumnPreview(file, preview);
+    } else {
+      hideBatchColumnPreview();
+      startImportedBatch(file.name, preview);
     }
-    persistBatchState();
-    renderBatchState();
-    void runBatchQueue();
   } catch (error) {
     setBatchImportNotice(
       "batch.importFailed",
@@ -5588,6 +6124,60 @@ batchFileInput?.addEventListener("change", async () => {
   }
 });
 
+batchPreviewSheet?.addEventListener("change", () => {
+  renderBatchPreviewColumns();
+});
+
+batchPreviewColumn?.addEventListener("change", () => {
+  const selectedOption = batchPreviewColumn.selectedOptions[0];
+  batchPreviewType.value = selectedOption?.dataset.suggestedType === "BOOKING"
+    ? "BOOKING"
+    : "BILLOFLADING";
+  renderBatchPreviewTable();
+});
+
+batchPreviewCancel?.addEventListener("click", () => {
+  hideBatchColumnPreview();
+  setBatchImportNotice();
+});
+
+batchPreviewConfirm?.addEventListener("click", async () => {
+  const file = pendingBatchFile;
+  const sheet = activeBatchPreviewSheet();
+  const columnIndex = Number(batchPreviewColumn.value);
+  if (!file || !sheet || !Number.isInteger(columnIndex)) {
+    setBatchImportNotice("batch.previewRequired", {}, "error");
+    return;
+  }
+
+  batchPreviewConfirm.disabled = true;
+  batchSelectButton.disabled = true;
+  setBatchImportNotice("batch.parsing", { name: file.name });
+  try {
+    const imported = await parseBatchFile(file, {
+      sheetName: sheet.name,
+      headerRowIndex: sheet.headerRowIndex,
+      columnIndex,
+      type: batchPreviewType.value
+    });
+    if (imported?.phase !== "items" || !Array.isArray(imported.items)) {
+      throw new Error(t("batch.noRows"));
+    }
+    const fileName = file.name;
+    hideBatchColumnPreview();
+    startImportedBatch(fileName, imported);
+  } catch (error) {
+    setBatchImportNotice(
+      "batch.importFailed",
+      { message: error?.message || t("error.generic") },
+      "error"
+    );
+  } finally {
+    batchPreviewConfirm.disabled = false;
+    batchSelectButton.disabled = false;
+  }
+});
+
 batchResumeButton?.addEventListener("click", () => {
   void runBatchQueue();
 });
@@ -5597,11 +6187,20 @@ batchStopButton?.addEventListener("click", async () => {
   batchStopRequested = true;
   const taskId = batchTaskId;
   renderBatchState();
-  batchAbortController?.abort();
+  // A stop can arrive while the create request is still pending. runBatchQueue observes the
+  // flag and cancels immediately after the backend returns the newly allocated task id.
+  if (!taskId) return;
   try {
-    await cancelBatchTask(taskId);
-  } catch {
-    // The local abort already stops this browser queue; server cancellation is best effort.
+    const snapshot = await cancelBatchTask(taskId);
+    applyBusinessBatchTask(snapshot);
+  } catch (error) {
+    batchStopRequested = false;
+    setBatchImportNotice(
+      "batch.backgroundFailed",
+      { message: error?.message || t("error.generic") },
+      "error"
+    );
+    renderBatchState();
   }
 });
 
@@ -5609,6 +6208,7 @@ batchClearButton?.addEventListener("click", () => {
   if (batchRunning || !window.confirm(t("batch.confirmClear"))) return;
   batchState = null;
   batchImportNotice = null;
+  hideBatchColumnPreview();
   persistBatchState();
   renderBatchState();
   setBatchImportNotice();
@@ -5803,7 +6403,7 @@ businessReferenceForm.addEventListener("submit", (event) => {
   renderHistory();
 });
 
-document.querySelector("#open-document-drawer").addEventListener("click", openDocumentDrawer);
+document.querySelector("#open-document-drawer")?.addEventListener("click", openRelatedFilesDrawer);
 document.querySelector("#close-document-drawer").addEventListener("click", closeDocumentDrawer);
 document.querySelector("#document-drawer-backdrop").addEventListener("click", closeDocumentDrawer);
 
@@ -5900,6 +6500,12 @@ if (batchState) persistBatchState();
 applyLanguage(currentLanguage, { persist: false });
 void loadCustomerAssignedHistory();
 void loadInternalTrackedHistory();
+if (
+  batchState?.taskId &&
+  ["running", "stopping", "paused"].includes(batchState.status)
+) {
+  window.setTimeout(() => void runBatchQueue(), 0);
+}
 
 const initial = new URLSearchParams(window.location.search);
 const initialNumber = initial.get("number");
@@ -5911,7 +6517,7 @@ if (initialNumber) {
     number: initialNumber
   });
   carrierSelect.value = CARRIERS[initialQuery.carrier] ? initialQuery.carrier : "COSCO";
-  channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "AUTO";
+  if (channelSelect) channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "AUTO";
   trackingType.value = TYPE_KEYS[initialQuery.type] ? initialQuery.type : "BILLOFLADING";
   trackingNumber.value = initialQuery.number;
   updateCarrierUI();

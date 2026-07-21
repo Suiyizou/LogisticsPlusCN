@@ -1,3 +1,9 @@
 package com.cargoplanner.backend.shipment;
 
-public record ShipmentFileVisibilityRequest(String visibility, String targetCustomerId) {}
+import java.util.List;
+
+public record ShipmentFileVisibilityRequest(
+    String visibility,
+    String targetCustomerId,
+    List<String> visibilityRoles
+) {}

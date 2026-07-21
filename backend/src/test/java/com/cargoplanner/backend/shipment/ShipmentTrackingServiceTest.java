@@ -21,6 +21,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -463,6 +467,172 @@ class ShipmentTrackingServiceTest {
         .isEqualTo("Loaded on board");
     assertThat(refreshed.path("warning").asText()).contains("last valid snapshot");
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isEqualTo(1);
+  }
+
+  @Test
+  void automaticRefreshReusesTheExistingSnapshotOwner() throws Exception {
+    ObjectNode first = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        employee
+    );
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:05:00Z",
+            "tracking": {"type": "BOOKING", "number": "BK-10001"},
+            "summary": {
+              "billOfLading": "BL-90001",
+              "bookingNumbers": ["BK-10001"],
+              "latestEvent": {"name": "Discharged"}
+            },
+            "containers": [{"number": "CSNU1234567"}]
+          },
+          "cached": false
+        }
+        """));
+
+    ObjectNode refreshed = service.refreshAutomatically("COSCO", "BOOKING", "BK-10001");
+
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(first.path("shipmentId").asText());
+    assertThat(refreshed.path("snapshot").path("summary").path("latestEvent").path("name").asText())
+        .isEqualTo("Discharged");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT queried_by FROM cp_tracking_snapshots LIMIT 1", Long.class
+    )).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class
+    )).isEqualTo(1);
+  }
+
+  @Test
+  void manualImportIsDurableMergeableAndDoesNotGrantAnotherBusinessUserAccess()
+      throws Exception {
+    ShipmentImportDetails firstDetails = new ShipmentImportDetails(
+        null, "784-84422343", "LJSH26060018", null, "SHA", "IAH",
+        "HW202600059", "6-Jun-26", "11-Jun-26", null, "Hayden US"
+    );
+    ShipmentBatchItemRequest firstRequest = new ShipmentBatchItemRequest(
+        "row-1", null, "BILLOFLADING", "784-84422343",
+        "784-84422343 空运", true, firstDetails
+    );
+
+    ObjectNode first = service.recordImportedPlaceholder(firstRequest, business);
+
+    assertThat(first.path("created").asBoolean()).isTrue();
+    String storedJson = jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots", String.class
+    );
+    JsonNode stored = objectMapper.readTree(storedJson);
+    assertThat(stored.path("extraInformation").findValuesAsText("key"))
+        .contains("forwarderJobNumber", "clientNameCode");
+    assertThat(stored.path("extraInformation").findValuesAsText("name")).isEmpty();
+
+    ShipmentImportDetails secondDetails = new ShipmentImportDetails(
+        null, "784-84422343", "LJSH26060018", "CZ5221 / 22059.74-100",
+        "SHA", "IAH", "HW202600059", "6-Jun-26", "11-Jun-26", "AIR", "Hayden US"
+    );
+    ObjectNode second = service.recordImportedPlaceholder(
+        new ShipmentBatchItemRequest(
+            "row-1", null, "BILLOFLADING", "784-84422343",
+            "784-84422343 空运", true, secondDetails
+        ),
+        business
+    );
+    assertThat(second.path("created").asBoolean()).isFalse();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments", Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class
+    )).isEqualTo(1);
+    JsonNode merged = objectMapper.readTree(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots", String.class
+    ));
+    assertThat(merged.path("references").path("business").path("vesselVoyage").asText())
+        .isEqualTo("CZ5221 / 22059.74-100");
+
+    jdbcTemplate.update(
+        "INSERT INTO cp_users (id, display_name, role) VALUES (3, 'Other Business', 'BUSINESS')"
+    );
+    AuthenticatedUser otherBusiness = new AuthenticatedUser(
+        3, "other", "Other Business", "BUSINESS", "ACTIVE"
+    );
+    assertThatThrownBy(() -> service.recordImportedPlaceholder(firstRequest, otherBusiness))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+        );
+
+    ObjectNode punctuationReference = service.recordImportedPlaceholder(
+        new ShipmentBatchItemRequest(
+            "row-punctuation", "UNSUPPORTED", "BILLOFLADING", "ABC/123.45",
+            "ABC/123.45 manual note", true,
+            new ShipmentImportDetails(
+                null, "ABC/123.45", "LJSH26060099", null, null, null,
+                null, null, null, null, "Hayden US"
+            )
+        ),
+        business
+    );
+    assertThat(punctuationReference.path("created").asBoolean()).isTrue();
+  }
+
+  @Test
+  void concurrentManualImportsAcrossServiceInstancesKeepOneOwnedShipment() throws Exception {
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties.setCacheTtl(Duration.ofMinutes(15));
+    ShipmentTrackingService competingService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        adapterClient,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
+    );
+    ShipmentBatchItemRequest request = new ShipmentBatchItemRequest(
+        "race-row", "UNSUPPORTED", "BILLOFLADING", "RACE/123.45",
+        "RACE/123.45", true,
+        new ShipmentImportDetails(
+            null, "RACE/123.45", "JOB-RACE", null, null, null,
+            null, null, null, null, "Hayden US"
+        )
+    );
+    ExecutorService workers = Executors.newFixedThreadPool(2);
+    CountDownLatch ready = new CountDownLatch(2);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      var first = workers.submit(() -> {
+        ready.countDown();
+        start.await(2, TimeUnit.SECONDS);
+        return service.recordImportedPlaceholder(request, business);
+      });
+      var second = workers.submit(() -> {
+        ready.countDown();
+        start.await(2, TimeUnit.SECONDS);
+        return competingService.recordImportedPlaceholder(request, business);
+      });
+      assertThat(ready.await(2, TimeUnit.SECONDS)).isTrue();
+      start.countDown();
+      assertThat(first.get(5, TimeUnit.SECONDS).path("shipmentId").asText())
+          .isEqualTo(second.get(5, TimeUnit.SECONDS).path("shipmentId").asText());
+    } finally {
+      workers.shutdownNow();
+    }
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments", Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references", Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class
+    )).isEqualTo(1);
   }
 
   private void createSchema() {

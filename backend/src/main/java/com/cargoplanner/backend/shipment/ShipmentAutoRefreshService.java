@@ -1,5 +1,6 @@
 package com.cargoplanner.backend.shipment;
 
+import com.cargoplanner.backend.common.ApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -85,6 +86,8 @@ public class ShipmentAutoRefreshService {
         JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
         LEFT JOIN cp_tracking_refresh_jobs j ON j.shipment_id = s.id
         WHERE j.shipment_id IS NULL
+          AND s.carrier_code IN ('COSCO', 'CMA')
+          AND COALESCE(t.source_channel, '') <> 'IMPORTED_MANUAL'
         ORDER BY s.id
         LIMIT ?
         """,
@@ -181,7 +184,10 @@ public class ShipmentAutoRefreshService {
         SELECT j.shipment_id, j.failure_count, s.public_id
         FROM cp_tracking_refresh_jobs j
         JOIN cp_shipments s ON s.id = j.shipment_id
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
         WHERE j.auto_refresh_enabled = TRUE
+          AND s.carrier_code IN ('COSCO', 'CMA')
+          AND COALESCE(t.source_channel, '') <> 'IMPORTED_MANUAL'
           AND j.next_attempt_at IS NOT NULL
           AND j.next_attempt_at <= ?
           AND (j.lease_until IS NULL OR j.lease_until < ?)
@@ -265,8 +271,35 @@ public class ShipmentAutoRefreshService {
       boolean terminal = TrackingTerminalState.isEmptyReturned(response.path("snapshot"));
       completeClaim(claim, terminal);
     } catch (RuntimeException error) {
-      recordFailure(claim, safeMessage(error));
+      if (error instanceof ApiException apiError
+          && "MISSING_SNAPSHOT_OWNER".equals(apiError.code())) {
+        disableClaim(claim, "OWNER_REQUIRED", safeMessage(error));
+      } else {
+        recordFailure(claim, safeMessage(error));
+      }
     }
+  }
+
+  private void disableClaim(RefreshClaim claim, String terminalStatus, String message) {
+    Instant now = clock.instant();
+    jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_refresh_jobs
+        SET auto_refresh_enabled = FALSE, terminal_status = ?, next_attempt_at = NULL,
+            lease_token = NULL, lease_until = NULL, last_error = ?, updated_at = ?
+        WHERE shipment_id = ? AND lease_token = ?
+        """,
+        terminalStatus,
+        trim(message, 500),
+        timestamp(now),
+        claim.candidate().shipmentId(),
+        claim.token()
+    );
+    log.warn(
+        "Shipment {} auto-refresh disabled: {}",
+        claim.candidate().shipmentId(),
+        terminalStatus
+    );
   }
 
   private void completeClaim(RefreshClaim claim, boolean terminal) {

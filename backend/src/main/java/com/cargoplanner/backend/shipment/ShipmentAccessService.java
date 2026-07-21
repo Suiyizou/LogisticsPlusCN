@@ -3,13 +3,23 @@ package com.cargoplanner.backend.shipment;
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.customer.CustomerPrincipal;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ShipmentAccessService {
+  public static final String OVERSEA_AGENT = "OVERSEA_AGENT";
+  public static final String SHIPPER = "SHIPPER";
+  public static final String CONSIGNEE = "CONSIGNEE";
+  public static final Set<String> FILE_VISIBILITY_ROLES = Set.of(
+      OVERSEA_AGENT, SHIPPER, CONSIGNEE
+  );
+
   private final JdbcTemplate jdbcTemplate;
 
   public ShipmentAccessService(JdbcTemplate jdbcTemplate) {
@@ -22,7 +32,9 @@ public class ShipmentAccessService {
     }
     ShipmentIdentity shipment = requireShipment(shipmentPublicId);
     if (user.isAdmin()) {
-      return new ShipmentAccess(shipment.id(), shipment.publicId(), "ADMIN", true);
+      return new ShipmentAccess(
+          shipment.id(), shipment.publicId(), "ADMIN", FILE_VISIBILITY_ROLES, true, true
+      );
     }
     List<String> roles = jdbcTemplate.query(
         """
@@ -37,17 +49,26 @@ public class ShipmentAccessService {
     boolean isShipmentCreator = user.isBusiness()
         && shipment.createdBy() != null
         && shipment.createdBy() == user.id();
-    boolean managesCustomerRelationship = user.isBusiness() && managesCustomerRelationship(
-        shipment.id(), user.id()
-    );
-    if (roles.isEmpty() && !managesCustomerRelationship && !isShipmentCreator) {
+    if (roles.isEmpty() && !isShipmentCreator) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment file access has not been granted");
+    }
+    Set<String> fileRoles = new LinkedHashSet<>();
+    if (user.isBusiness()) {
+      // An internal business/operator account represents the overseas agent party. Do not
+      // leak the implementation-level BUSINESS/OPERATOR names into file visibility rules.
+      fileRoles.add(OVERSEA_AGENT);
+    } else {
+      roles.stream().map(ShipmentAccessService::normalizeFileRole)
+          .filter(role -> role != null)
+          .forEach(fileRoles::add);
     }
     return new ShipmentAccess(
         shipment.id(),
         shipment.publicId(),
         roles.isEmpty() ? "OPERATOR" : roles.get(0),
-        user.isBusiness()
+        Set.copyOf(fileRoles),
+        user.isBusiness(),
+        false
     );
   }
 
@@ -59,22 +80,28 @@ public class ShipmentAccessService {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
     ShipmentIdentity shipment = requireShipment(shipmentPublicId);
-    Integer count = jdbcTemplate.queryForObject(
+    List<String> relationshipRoles = jdbcTemplate.query(
         """
-        SELECT COUNT(*)
+        SELECT a.relationship_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id
         WHERE a.shipment_id = ? AND a.customer_id = ? AND c.status = 'ACTIVE'
           AND a.publication_status = 'PUBLISHED'
         """,
-        Integer.class,
+        (rs, rowNumber) -> rs.getString("relationship_role"),
         shipment.id(),
         customer.id()
     );
-    if (count == null || count == 0) {
+    if (relationshipRoles.isEmpty()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment has not been assigned to this customer");
     }
-    return new ShipmentAccess(shipment.id(), shipment.publicId(), "CUSTOMER", false);
+    String fileRole = normalizeFileRole(relationshipRoles.get(0));
+    if (fileRole == null) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Customer shipment role cannot access files");
+    }
+    return new ShipmentAccess(
+        shipment.id(), shipment.publicId(), relationshipRoles.get(0), Set.of(fileRole), false, false
+    );
   }
 
   public boolean hasAccess(String shipmentPublicId, AuthenticatedUser user) {
@@ -95,21 +122,6 @@ public class ShipmentAccessService {
     } catch (ApiException ignored) {
       return false;
     }
-  }
-
-  private boolean managesCustomerRelationship(long shipmentId, long businessUserId) {
-    Integer count = jdbcTemplate.queryForObject(
-        """
-        SELECT COUNT(*)
-        FROM cp_customer_shipment_access a
-        JOIN cp_customers c ON c.id = a.customer_id
-        WHERE a.shipment_id = ? AND c.created_by = ? AND c.status = 'ACTIVE'
-        """,
-        Integer.class,
-        shipmentId,
-        businessUserId
-    );
-    return count != null && count > 0;
   }
 
   public ShipmentIdentity requireShipment(String shipmentPublicId) {
@@ -136,12 +148,23 @@ public class ShipmentAccessService {
     return rs.wasNull() ? null : value;
   }
 
+  static String normalizeFileRole(String value) {
+    if (value == null || value.isBlank()) return null;
+    String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+    if ("AGENT".equals(normalized) || "OVERSEAS_AGENT".equals(normalized)) {
+      return OVERSEA_AGENT;
+    }
+    return FILE_VISIBILITY_ROLES.contains(normalized) ? normalized : null;
+  }
+
   public record ShipmentIdentity(long id, String publicId, Long createdBy) {}
 
   public record ShipmentAccess(
       long shipmentId,
       String shipmentPublicId,
       String participantRole,
-      boolean canManageFiles
+      Set<String> fileRoles,
+      boolean canManageFiles,
+      boolean administrative
   ) {}
 }

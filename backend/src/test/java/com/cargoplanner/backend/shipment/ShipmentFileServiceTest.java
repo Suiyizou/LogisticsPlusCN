@@ -150,7 +150,11 @@ class ShipmentFileServiceTest {
     assertThat(saved.record().visibility()).isEqualTo("PARTIES");
     assertThat(saved.record().targetCustomerId()).isEqualTo(20L);
     assertThat(Files.readString(saved.path())).isEqualTo("invoice-data");
-    assertThat(((List<?>) service.list("shipment-public-id", customer).get("items"))).hasSize(1);
+    assertThatThrownBy(() -> service.list("shipment-public-id", customer))
+        .isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .hasSize(1);
     assertThatThrownBy(() -> service.list("shipment-public-id", outsider))
         .isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
@@ -160,7 +164,7 @@ class ShipmentFileServiceTest {
         customer,
         "127.0.0.1"
     )).isInstanceOf(ApiException.class)
-        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.NOT_FOUND));
 
     Map<String, Object> updated = service.updateVisibility(
         saved.record().publicId(),
@@ -169,7 +173,8 @@ class ShipmentFileServiceTest {
         "127.0.0.1"
     );
     assertThat(updated.get("visibility")).isEqualTo("INTERNAL");
-    assertThat(((List<?>) service.list("shipment-public-id", customer).get("items"))).isEmpty();
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .isEmpty();
     assertThat(service.content(saved.record().publicId(), business, "127.0.0.1").path())
         .isEqualTo(saved.path());
 
@@ -190,7 +195,7 @@ class ShipmentFileServiceTest {
   }
 
   @Test
-  void customerCanOnlyUseAssignedPartiesFilesAndDeleteOwnUpload() throws Exception {
+  void customerCanManageVisibilityAndDeleteOwnUpload() throws Exception {
     ShipmentFileService.SavedShipmentFile saved = service.storeCustomer(
         upload("cargo-detail.xlsx", "customer-cargo"),
         "shipment-public-id",
@@ -205,12 +210,27 @@ class ShipmentFileServiceTest {
     assertThat(saved.record().visibility()).isEqualTo("PARTIES");
     Map<String, Object> metadata = service.metadataCustomer(saved, portalCustomer);
     assertThat(metadata.get("uploaderType")).isEqualTo("CUSTOMER");
-    assertThat(metadata.get("canChangeVisibility")).isEqualTo(false);
-    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+    assertThat(metadata.get("canChangeVisibility")).isEqualTo(true);
+    Map<String, Object> customerFiles = service.listCustomer(
+        "shipment-public-id", portalCustomer
+    );
+    assertThat(((Map<?, ?>) customerFiles.get("permissions")).get("canChangeVisibility"))
+        .isEqualTo(true);
+    assertThat(((List<?>) customerFiles.get("items")))
         .hasSize(1);
     assertThatThrownBy(() -> service.listCustomer("shipment-public-id", otherPortalCustomer))
         .isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+
+    Map<String, Object> changed = service.updateVisibilityRolesCustomer(
+        saved.record().publicId(), List.of("CONSIGNEE"), portalCustomer, "127.0.0.1"
+    );
+    assertThat(changed.get("visibilityRoles")).isEqualTo(List.of("CONSIGNEE"));
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .hasSize(1);
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), portalCustomer, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
 
     service.deleteCustomer(saved.record().publicId(), portalCustomer, "127.0.0.1");
 
@@ -352,7 +372,75 @@ class ShipmentFileServiceTest {
         .satisfies(error -> assertThat(((ApiException) error).status())
             .isEqualTo(HttpStatus.BAD_REQUEST));
     assertThat((List<?>) service.list("shipment-public-id", business).get("items"))
-        .hasSize(3);
+        .hasSize(1);
+  }
+
+  @Test
+  void enforcesMultiRoleVisibilityFromShipmentBindings() {
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (21, 10, 'CONSIGNEE', 2)"
+    );
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("shared.pdf", "shared"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        List.of("OVERSEA_AGENT", "CONSIGNEE"),
+        "127.0.0.1"
+    );
+
+    assertThat(service.metadata(saved, business).get("visibilityRoles"))
+        .isEqualTo(List.of("OVERSEA_AGENT", "CONSIGNEE"));
+    assertThat((List<?>) service.list("shipment-public-id", business).get("items")).hasSize(1);
+    assertThat((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .isEmpty();
+    assertThat((List<?>) service.listCustomer("shipment-public-id", otherPortalCustomer).get("items"))
+        .hasSize(1);
+    assertThatThrownBy(() -> service.contentCustomer(
+        saved.record().publicId(), portalCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.NOT_FOUND));
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), otherPortalCustomer, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
+
+    Map<String, Object> changed = service.updateVisibilityRoles(
+        saved.record().publicId(), List.of("SHIPPER"), business, "127.0.0.1"
+    );
+    assertThat(changed.get("visibilityRoles")).isEqualTo(List.of("SHIPPER"));
+    assertThat((List<?>) service.list("shipment-public-id", business).get("items")).hasSize(1);
+    assertThat(service.content(saved.record().publicId(), business, "127.0.0.1").path())
+        .isEqualTo(saved.path());
+    assertThat((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .hasSize(1);
+  }
+
+  @Test
+  void providesSafeInlineAndTextFallbackPreviews() {
+    ShipmentFileService.SavedShipmentFile pdf = service.store(
+        upload("invoice.pdf", "pdf"), "shipment-public-id", business,
+        "RELATED", "INTERNAL", "127.0.0.1"
+    );
+    ShipmentFileService.ShipmentFilePreview inline = service.preview(
+        pdf.record().publicId(), business, "127.0.0.1"
+    );
+    assertThat(inline.mode()).isEqualTo("INLINE");
+    assertThat(inline.path()).isEqualTo(pdf.path());
+    assertThat(inline.contentType()).isEqualTo("application/pdf");
+
+    ShipmentFileService.SavedShipmentFile legacyWord = service.store(
+        upload("legacy.doc", "binary"), "shipment-public-id", business,
+        "RELATED", "INTERNAL", "127.0.0.1"
+    );
+    ShipmentFileService.ShipmentFilePreview fallback = service.preview(
+        legacyWord.record().publicId(), business, "127.0.0.1"
+    );
+    assertThat(fallback.mode()).isEqualTo("TEXT_FALLBACK");
+    assertThat(fallback.path()).isNull();
+    assertThat(new String(fallback.textContent(), StandardCharsets.UTF_8))
+        .contains("cannot be safely rendered");
   }
 
   @Test
@@ -626,6 +714,14 @@ class ShipmentFileServiceTest {
           deleted_at TIMESTAMP,
           deleted_by BIGINT,
           deleted_by_customer_id BIGINT
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_file_visibility_roles (
+          shipment_file_id BIGINT NOT NULL,
+          visibility_role VARCHAR(24) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_file_id, visibility_role)
         )
         """);
     jdbcTemplate.execute("""
