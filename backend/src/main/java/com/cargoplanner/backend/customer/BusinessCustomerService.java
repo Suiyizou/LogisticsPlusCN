@@ -6,6 +6,8 @@ import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
+import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
+import com.cargoplanner.backend.shipment.TrackingTerminalState;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -415,6 +417,92 @@ public class BusinessCustomerService {
     return Map.of("items", items, "total", items.size());
   }
 
+  /**
+   * Builds a refresh queue from shipments the current user owns or participates in. A booking
+   * reference wins whenever both booking and bill-of-lading references exist. Shipments whose
+   * empty equipment has already been returned are terminal and are deliberately excluded.
+   */
+  public List<ShipmentBatchItemRequest> listUnfinishedTrackingItems(AuthenticatedUser actor) {
+    requireManager(actor);
+    String baseSql = """
+        SELECT s.public_id AS shipment_public_id, s.carrier_code, t.snapshot_json,
+               r.reference_type, r.reference_no_normalized, r.reference_no_raw
+        FROM cp_shipments s
+        LEFT JOIN cp_tracking_snapshots t
+          ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+            AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC
+          LIMIT 1
+        )
+        WHERE s.carrier_code IN ('COSCO', 'CMA')
+        """;
+    List<RefreshableShipment> candidates = actor.isAdmin()
+        ? jdbcTemplate.query(
+            baseSql + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
+            this::mapRefreshableShipment
+        )
+        : jdbcTemplate.query(
+            baseSql + " AND (s.created_by = ? OR EXISTS ("
+                + "SELECT 1 FROM cp_shipment_participants p "
+                + "WHERE p.shipment_id = s.id AND p.user_id = ?)) "
+                + "ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
+            this::mapRefreshableShipment,
+            actor.id(), actor.id()
+        );
+    List<ShipmentBatchItemRequest> items = new ArrayList<>();
+    for (RefreshableShipment candidate : candidates) {
+      if (candidate.referenceNo() == null || candidate.referenceNo().isBlank()) continue;
+      if (TrackingTerminalState.isEmptyReturned(candidate.snapshot())) continue;
+      String queryType = preferredRefreshType(candidate);
+      items.add(new ShipmentBatchItemRequest(
+          "refresh-" + candidate.shipmentPublicId(),
+          candidate.carrier(),
+          queryType,
+          candidate.referenceNo(),
+          candidate.displayReferenceNo(),
+          false,
+          null
+      ));
+    }
+    return items;
+  }
+
+  private static String preferredRefreshType(RefreshableShipment candidate) {
+    if ("COSCO".equalsIgnoreCase(candidate.carrier())
+        && "BILLOFLADING".equalsIgnoreCase(candidate.referenceType())
+        && candidate.referenceNo().matches("[0-9]{8,12}")) {
+      return "BOOKING";
+    }
+    return candidate.referenceType();
+  }
+
+  private RefreshableShipment mapRefreshableShipment(ResultSet rs, int rowNumber)
+      throws SQLException {
+    JsonNode snapshot = objectMapper.createObjectNode();
+    String snapshotJson = rs.getString("snapshot_json");
+    if (snapshotJson != null && !snapshotJson.isBlank()) {
+      try {
+        snapshot = objectMapper.readTree(snapshotJson);
+      } catch (JsonProcessingException ignored) {
+        // A malformed old snapshot is not considered terminal and can be repaired by refresh.
+      }
+    }
+    String normalized = rs.getString("reference_no_normalized");
+    String raw = rs.getString("reference_no_raw");
+    return new RefreshableShipment(
+        rs.getString("shipment_public_id"),
+        rs.getString("carrier_code"),
+        rs.getString("reference_type"),
+        normalized,
+        raw == null || raw.isBlank() ? normalized : raw,
+        snapshot
+    );
+  }
+
   private void enrichShipmentRelations(List<Map<String, Object>> items) {
     if (items.isEmpty()) return;
     List<String> publicIds = items.stream()
@@ -602,7 +690,8 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
   }
@@ -613,6 +702,13 @@ public class BusinessCustomerService {
     String carrier = rs.getString("carrier_code");
     String referenceType = rs.getString("query_reference_type");
     String referenceNo = rs.getString("query_reference_no");
+    if ("COSCO".equalsIgnoreCase(carrier)
+        && "BILLOFLADING".equalsIgnoreCase(referenceType)
+        && referenceNo != null
+        && referenceNo.replaceFirst("(?i)^COSU", "").matches("[0-9]{8,12}")) {
+      referenceType = "BOOKING";
+      referenceNo = referenceNo.replaceFirst("(?i)^COSU", "");
+    }
     String trackingStatus = rs.getString("tracking_status");
     String fetchedAt = instantString(rs, "fetched_at");
     String lastTrackedAt = instantString(rs, "last_tracked_at");
@@ -677,7 +773,11 @@ public class BusinessCustomerService {
         value.put("currentLocation", textOrNull(latestEvent.path("location")));
 
         value.put("masterBill", textOrNull(references.path("masterBill")));
-        value.put("bookingNumber", textOrNull(references.path("booking")));
+        value.put("bookingNumber", firstTextValue(
+            references.path("bookingNumbers"),
+            summary.path("bookingNumbers"),
+            references.path("booking")
+        ));
 
         JsonNode containers = snap.path("containers");
         if (containers.isArray() && containers.size() > 0) {
@@ -713,6 +813,22 @@ public class BusinessCustomerService {
     if (node == null || node.isNull() || !node.isTextual()) return null;
     String text = node.asText();
     return text.isBlank() ? null : text.trim();
+  }
+
+  private static String firstTextValue(JsonNode... candidates) {
+    for (JsonNode candidate : candidates) {
+      if (candidate == null || candidate.isNull() || candidate.isMissingNode()) continue;
+      if (candidate.isArray()) {
+        for (JsonNode value : candidate) {
+          String text = textOrNull(value);
+          if (text != null) return text;
+        }
+        continue;
+      }
+      String text = textOrNull(candidate);
+      if (text != null) return text;
+    }
+    return null;
   }
 
   public Map<String, Object> listPendingClientMatches(AuthenticatedUser actor) {
@@ -2012,6 +2128,14 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long createdBy) {}
+  private record RefreshableShipment(
+      String shipmentPublicId,
+      String carrier,
+      String referenceType,
+      String referenceNo,
+      String displayReferenceNo,
+      JsonNode snapshot
+  ) {}
   private record PendingClientMatch(long id, long shipmentId, String shipmentPublicId) {}
   private record BusinessShipmentRecord(
       long referenceId,

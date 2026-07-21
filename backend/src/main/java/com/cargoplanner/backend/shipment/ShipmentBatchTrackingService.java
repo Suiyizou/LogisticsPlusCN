@@ -102,6 +102,27 @@ public class ShipmentBatchTrackingService {
       ShipmentBatchTaskRequest request,
       AuthenticatedUser user
   ) {
+    return startInternal(request, user, false, false);
+  }
+
+  public synchronized Map<String, Object> startRefreshAll(
+      List<ShipmentBatchItemRequest> requestedItems,
+      AuthenticatedUser user
+  ) {
+    return startInternal(
+        new ShipmentBatchTaskRequest("One-click active shipment refresh", requestedItems),
+        user,
+        true,
+        true
+    );
+  }
+
+  private Map<String, Object> startInternal(
+      ShipmentBatchTaskRequest request,
+      AuthenticatedUser user,
+      boolean trustedExistingReferences,
+      boolean forceRefresh
+  ) {
     requireManager(user);
     pruneExpiredTasks();
     List<ShipmentBatchItemRequest> requestedItems = request == null || request.items() == null
@@ -125,7 +146,9 @@ public class ShipmentBatchTrackingService {
 
     List<BatchItem> items = new ArrayList<>();
     for (int index = 0; index < requestedItems.size(); index++) {
-      items.add(normalizeItem(requestedItems.get(index), index));
+      items.add(trustedExistingReferences
+          ? normalizeExistingReference(requestedItems.get(index), index)
+          : normalizeItem(requestedItems.get(index), index));
     }
     String taskId = "batch_" + UUID.randomUUID().toString().replace("-", "");
     Instant now = clock.instant();
@@ -134,6 +157,7 @@ public class ShipmentBatchTrackingService {
         user,
         clean(request == null ? null : request.sourceFileName(), 255, "Imported spreadsheet"),
         items,
+        forceRefresh,
         now
     );
     tasks.put(taskId, task);
@@ -229,11 +253,11 @@ public class ShipmentBatchTrackingService {
       try {
         ObjectNode response = trackingService.track(
             new ShipmentTrackRequest(
-                "COSCO",
+                item.request.carrier(),
                 "AUTO",
-                "BILLOFLADING",
+                item.request.type(),
                 item.queryNumber,
-                false,
+                task.forceRefresh,
                 item.request.importedDetails(),
                 task.id
             ),
@@ -563,6 +587,39 @@ public class ShipmentBatchTrackingService {
     return new BatchItem(normalized, queryNumber, manualOnly);
   }
 
+  private BatchItem normalizeExistingReference(ShipmentBatchItemRequest request, int index) {
+    if (request == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row " + (index + 1) + " is empty");
+    }
+    String carrier = clean(request.carrier(), 32, "").toUpperCase(Locale.ROOT);
+    String type = clean(request.type(), 24, "").toUpperCase(Locale.ROOT);
+    String number = compact(clean(request.number(), 128, null));
+    if (!List.of("COSCO", "CMA").contains(carrier)
+        || !List.of("BOOKING", "BILLOFLADING").contains(type)
+        || number.isBlank()) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Shipment row " + (index + 1) + " has no supported booking or bill reference"
+      );
+    }
+    String queryNumber = "COSCO".equals(carrier)
+        && "BILLOFLADING".equals(type)
+        && number.startsWith("COSU")
+        ? number.substring(4)
+        : number;
+    String displayNumber = clean(request.displayNumber(), 128, number);
+    ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
+        clean(request.id(), 120, "refresh-" + (index + 1)),
+        carrier,
+        type,
+        number,
+        displayNumber,
+        false,
+        null
+    );
+    return new BatchItem(normalized, queryNumber, false);
+  }
+
   private ShipmentImportDetails sanitizeImportedDetails(ShipmentImportDetails details) {
     if (details == null) return null;
     String prefix = clean(details.carrierPrefix(), 8, null);
@@ -640,6 +697,7 @@ public class ShipmentBatchTrackingService {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("taskId", task.id);
       value.put("sourceFileName", task.sourceFileName);
+      value.put("mode", task.forceRefresh ? "REFRESH_ALL" : "IMPORT");
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
       value.put("total", task.items.size());
@@ -726,6 +784,7 @@ public class ShipmentBatchTrackingService {
     private final AuthenticatedUser owner;
     private final String sourceFileName;
     private final List<BatchItem> items;
+    private final boolean forceRefresh;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
     private volatile String status = "QUEUED";
@@ -740,12 +799,14 @@ public class ShipmentBatchTrackingService {
         AuthenticatedUser owner,
         String sourceFileName,
         List<BatchItem> items,
+        boolean forceRefresh,
         Instant createdAt
     ) {
       this.id = id;
       this.owner = owner;
       this.sourceFileName = sourceFileName;
       this.items = items;
+      this.forceRefresh = forceRefresh;
       this.createdAt = createdAt;
       this.updatedAt = createdAt;
     }

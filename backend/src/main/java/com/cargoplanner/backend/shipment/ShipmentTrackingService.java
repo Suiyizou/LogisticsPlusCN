@@ -576,6 +576,9 @@ public class ShipmentTrackingService {
     // identities. Never resolve a long-lived shipment aggregate from a container-only alias.
     CachedShipment cached = (user != null || trustedAutomaticRefresh)
         && isDurableReferenceType(request.type()) ? findCached(request) : null;
+    if (cached == null && forceRefresh && canReuseCoscoBillAsBooking(request)) {
+      cached = findCachedByReferenceType(request, "BILLOFLADING");
+    }
     Instant now = clock.instant();
     if (!forceRefresh && cached != null) {
       if (importedDetails != null) {
@@ -1051,6 +1054,13 @@ public class ShipmentTrackingService {
   }
 
   private CachedShipment findCached(NormalizedTrackRequest request) {
+    return findCachedByReferenceType(request, request.type());
+  }
+
+  private CachedShipment findCachedByReferenceType(
+      NormalizedTrackRequest request,
+      String referenceType
+  ) {
     List<CachedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
@@ -1063,12 +1073,18 @@ public class ShipmentTrackingService {
         """,
         this::mapCachedShipment,
         request.carrier(),
-        request.type(),
+        referenceType,
         normalizeReference(request.number())
     );
     CachedShipment record = records.isEmpty() ? null : records.get(0);
     return record == null || record.snapshotJson() == null
         || !isUsableCachedSnapshot(record.snapshotJson()) ? null : record;
+  }
+
+  private boolean canReuseCoscoBillAsBooking(NormalizedTrackRequest request) {
+    return "COSCO".equals(request.carrier())
+        && "BOOKING".equals(request.type())
+        && normalizeReference(request.number()).matches("[0-9]{8,12}");
   }
 
   private boolean isUsableCachedSnapshot(String snapshotJson) {

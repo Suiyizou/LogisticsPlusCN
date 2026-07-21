@@ -244,8 +244,8 @@ public class ShipmentAutoRefreshService {
         FROM cp_shipments s
         JOIN cp_shipment_references r ON r.shipment_id = s.id
         WHERE s.id = ? AND r.reference_type IN ('BILLOFLADING', 'BOOKING')
-        ORDER BY r.primary_reference DESC,
-                 CASE WHEN r.reference_type = 'BILLOFLADING' THEN 0 ELSE 1 END,
+        ORDER BY CASE WHEN r.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                 r.primary_reference DESC,
                  r.id
         LIMIT 1
         """,

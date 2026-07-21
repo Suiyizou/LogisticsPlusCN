@@ -262,6 +262,18 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
   );
 });
 
+test("one-click update submits unfinished shipments to the shared background queue", () => {
+  assert.match(indexSource, /id="history-refresh-all"[\s\S]*?data-i18n="history\.refreshAll"/);
+  assert.match(
+    appSource,
+    /async function startRefreshAllHistory\(\)[\s\S]*?requestBusinessBatchTask\("\/api\/business\/shipments\/refresh-all", \{[\s\S]*?method: "POST"[\s\S]*?batchStateFromRefreshAllTask\(snapshot\)[\s\S]*?openBatchWorkspace\(\)[\s\S]*?runBatchQueue\(\)/
+  );
+  assert.match(
+    appSource,
+    /historyRefreshAllButton\.hidden = session\.kind !== "INTERNAL"/
+  );
+});
+
 test("batch recovery clears missing tasks and defers stop until task creation", () => {
   assert.match(
     appSource,
@@ -379,6 +391,19 @@ test("view navigation keeps browser back-forward state and restores stored track
   );
 });
 
+test("tracking sidebar returns to the safe caller page and uses the light workspace style", () => {
+  assert.match(indexSource, /id="portal-return-link"[\s\S]*?data-i18n="nav\.back"/);
+  assert.doesNotMatch(indexSource, /id="portal-return-link"[\s\S]{0,180}?data-home-link/);
+  assert.match(
+    appSource,
+    /requestedReturn\.startsWith\("\/"\) && !requestedReturn\.startsWith\("\/\/"\)[\s\S]*?window\.location\.assign\(safeReturn\)[\s\S]*?window\.history\.back\(\)/
+  );
+  assert.match(
+    stylesSource,
+    /body\.is-customer-session \.sidebar \{[\s\S]*?background: #fff;/
+  );
+});
+
 test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {
   const loadStart = appSource.indexOf("async function loadInternalTrackedHistory()");
   const loadEnd = appSource.indexOf("function appendCell", loadStart);
@@ -396,6 +421,12 @@ test("signed-in overview loads account-bound snapshot objects and never offers b
   assert.doesNotMatch(indexSource, /id="clear-history-button"/);
   assert.match(indexSource, /id="history-search-input"[\s\S]*?id="history-search-clear"/);
   assert.match(indexSource, /id="history-title"[\s\S]*?id="history-subtitle"/);
+  assert.doesNotMatch(historySource, /t\(\(CHANNELS\[entry\.query\.channel\]/);
+  assert.doesNotMatch(historySource, /t\("history\.updated"\)/);
+  assert.match(
+    historySource,
+    /const timelineItems = historyTimeline\(snapshot\);[\s\S]*?if \(timelineItems\.length > 0\)[\s\S]*?if \(timelineSection\) details\.append\(timelineSection\)/
+  );
 });
 
 test("exposes real carrier selection and restricts CMA session maintenance to managers", () => {

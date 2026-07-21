@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-final class TrackingTerminalState {
+public final class TrackingTerminalState {
   private TrackingTerminalState() {}
 
-  static boolean isEmptyReturned(JsonNode snapshot) {
+  public static boolean isEmptyReturned(JsonNode snapshot) {
     if (snapshot == null || !snapshot.isObject()) return false;
     JsonNode containers = snapshot.path("containers");
     if (containers.isArray() && !containers.isEmpty()) {
@@ -27,7 +27,7 @@ final class TrackingTerminalState {
         || isEquivalentStatus(eventText(snapshot.path("tracking").path("status")));
   }
 
-  static boolean isEquivalentStatus(String value) {
+  public static boolean isEquivalentStatus(String value) {
     String normalized = normalize(value);
     if (normalized.isEmpty()) return false;
     if (normalized.contains("还空箱") || normalized.contains("空箱返还")

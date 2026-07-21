@@ -185,6 +185,70 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void bookingFirstRefreshReusesTheExistingNumericBillShipment() throws Exception {
+    NormalizedTrackRequest bill = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BILLOFLADING", "6507943350"
+    );
+    when(adapterClient.track(bill)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BILLOFLADING", "number": "6507943350"},
+            "summary": {
+              "billOfLading": "6507943350",
+              "origin": {"name": "Shanghai"},
+              "destination": {"name": "Long Beach"},
+              "latestEvent": {"name": "Booking confirmed"}
+            }
+          }
+        }
+        """));
+    ObjectNode initial = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "6507943350", false),
+        business
+    );
+
+    NormalizedTrackRequest booking = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "6507943350"
+    );
+    when(adapterClient.track(booking, true)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:05:00Z",
+            "tracking": {"type": "BOOKING", "number": "6507943350"},
+            "summary": {
+              "billOfLading": "6507943350",
+              "bookingNumbers": ["6507943350"],
+              "origin": {"name": "Shanghai"},
+              "destination": {"name": "Long Beach"},
+              "latestEvent": {"name": "EIR order"},
+              "containers": [{"containerType": "45HQ", "quantity": 7}]
+            },
+            "route": [{"location": {"name": "Shanghai"}}, {"location": {"name": "Long Beach"}}]
+          }
+        }
+        """));
+
+    ObjectNode refreshed = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "6507943350", true),
+        business
+    );
+
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(initial.path("shipmentId").asText());
+    assertThat(refreshed.path("snapshot").path("summary").path("latestEvent").path("name").asText())
+        .isEqualTo("EIR order");
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class))
+        .isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_type = 'BOOKING'",
+        Integer.class
+    )).isEqualTo(1);
+    verify(adapterClient).track(booking, true);
+  }
+
+  @Test
   void batchSpreadsheetDetailsMergeIntoMysqlWithoutAnotherCarrierRequest() {
     ObjectNode first = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),

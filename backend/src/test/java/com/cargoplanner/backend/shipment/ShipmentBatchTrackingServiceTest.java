@@ -258,6 +258,42 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
+  void oneClickRefreshUsesBookingTypeAndForcesLiveRefresh() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        14L, "operator-refresh", "Operator Refresh", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshAll(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing", "COSCO", "BOOKING", "6507943350",
+            "6507943350", false, null
+        )),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("REFRESH_ALL", completed.get("mode"));
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).track(requestCaptor.capture(), any());
+    ShipmentTrackRequest request = requestCaptor.getValue();
+    assertEquals("BOOKING", request.type());
+    assertEquals("6507943350", request.number());
+    assertEquals(Boolean.TRUE, request.forceRefresh());
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void keepsTwentyContainerOverviewWithoutStartingIndividualQueries()
       throws Exception {

@@ -30,6 +30,8 @@ const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
 const historyEmptyDescription = document.querySelector("#history-empty-description");
+const historyRefreshAllButton = document.querySelector("#history-refresh-all");
+const historyRefreshStatus = document.querySelector("#history-refresh-status");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -272,6 +274,7 @@ const MESSAGES = {
     "nav.workspace": "Workspace",
     "nav.portal": "Open workbenches",
     "nav.home": "Return to homepage",
+    "nav.back": "Back",
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
     "nav.tracking": "Shipment tracking",
@@ -351,6 +354,12 @@ const MESSAGES = {
     "history.expand": "Expand shipment {number}",
     "history.collapse": "Collapse shipment {number}",
     "history.noTimeline": "No confirmed movement events yet.",
+    "history.refreshAll": "Update all active",
+    "history.refreshAllQueue": "One-click update",
+    "history.refreshAllStarting": "Starting update task…",
+    "history.refreshAllEmpty": "No active shipments need updating.",
+    "history.refreshAllStarted": "Updating {count} active shipments in the background.",
+    "history.refreshAllFailed": "Could not start the update task: {message}",
     "tracking.kicker": "SHIPMENT INTELLIGENCE",
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
@@ -709,6 +718,7 @@ const MESSAGES = {
     "nav.workspace": "工作区",
     "nav.portal": "进入业务工作台",
     "nav.home": "返回主页",
+    "nav.back": "返回上一页",
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
     "nav.tracking": "货物跟踪",
@@ -788,6 +798,12 @@ const MESSAGES = {
     "history.expand": "展开运输任务 {number}",
     "history.collapse": "收起运输任务 {number}",
     "history.noTimeline": "船司尚未提供已确认的运输动态。",
+    "history.refreshAll": "一键更新",
+    "history.refreshAllQueue": "一键更新任务",
+    "history.refreshAllStarting": "正在创建更新任务…",
+    "history.refreshAllEmpty": "当前没有需要更新的未结束票单。",
+    "history.refreshAllStarted": "已在后台更新 {count} 个未结束票单。",
+    "history.refreshAllFailed": "无法启动更新任务：{message}",
     "tracking.kicker": "货运信息",
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
@@ -1679,15 +1695,17 @@ function renderTrackingAccount(session = readFileSession()) {
   const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
-  const destinationKey = returnsToWorkbenches ? "nav.portal" : "nav.home";
   portalReturnLink.href = returnsToWorkbenches ? "/workbenches" : "/";
-  portalReturnLink.setAttribute("aria-label", t(destinationKey));
-  if (portalReturnLabel) portalReturnLabel.textContent = t(destinationKey);
+  portalReturnLink.setAttribute("aria-label", t("nav.back"));
+  if (portalReturnLabel) portalReturnLabel.textContent = t("nav.back");
 
   const authenticated = Boolean(session.token);
   const isCustomer = session.kind === "CUSTOMER";
   document.body.classList.toggle("is-customer-session", isCustomer);
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
+  if (historyRefreshAllButton) {
+    historyRefreshAllButton.hidden = session.kind !== "INTERNAL";
+  }
   trackingAccount.hidden = !authenticated;
   if (signInButton) {
     signInButton.hidden = authenticated;
@@ -4287,6 +4305,76 @@ function startImportedBatch(fileName, imported) {
   void runBatchQueue();
 }
 
+function batchStateFromRefreshAllTask(snapshot) {
+  const remoteItems = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  return {
+    version: BATCH_VERSION,
+    mode: "REFRESH_ALL",
+    fileName: t("history.refreshAllQueue"),
+    createdAt: snapshot?.createdAt ?? new Date().toISOString(),
+    updatedAt: null,
+    status: "paused",
+    taskId: String(snapshot?.taskId ?? "").trim() || null,
+    items: remoteItems.map((item, index) => ({
+      id: String(item?.id ?? `refresh-all-${index}`),
+      carrier: String(item?.carrier ?? "COSCO").trim().toUpperCase(),
+      type: String(item?.type ?? "BILLOFLADING").trim().toUpperCase(),
+      number: String(item?.number ?? "").trim().toUpperCase(),
+      displayNumber: String(item?.displayNumber ?? item?.number ?? "").trim(),
+      importedDetails: normalizeImportedDetails(item?.importedDetails),
+      manualOnly: item?.manualOnly === true,
+      submitted: true,
+      status: batchItemStatusFromServer(item?.status),
+      source: item?.source ?? null,
+      error: item?.error ? String(item.error) : null,
+      attempts: Number(item?.attempts ?? 0),
+      shipmentId: item?.shipmentId ?? null,
+      subtasks: normalizeBatchSubtasks(item?.subtasks),
+      updatedAt: item?.updatedAt ?? null
+    }))
+  };
+}
+
+function setHistoryRefreshStatus(message = "", variant = "info") {
+  if (!historyRefreshStatus) return;
+  historyRefreshStatus.textContent = message;
+  historyRefreshStatus.dataset.variant = variant;
+  historyRefreshStatus.hidden = !message;
+}
+
+async function startRefreshAllHistory() {
+  const session = readFileSession();
+  if (session.kind !== "INTERNAL" || !session.token || batchRunning || batchRunPromise) return;
+  historyRefreshAllButton.disabled = true;
+  setHistoryRefreshStatus(t("history.refreshAllStarting"));
+  try {
+    const snapshot = await requestBusinessBatchTask("/api/business/shipments/refresh-all", {
+      method: "POST"
+    });
+    const total = Number(snapshot?.total ?? snapshot?.items?.length ?? 0);
+    if (!snapshot?.taskId || total === 0) {
+      setHistoryRefreshStatus(t("history.refreshAllEmpty"));
+      return;
+    }
+    batchRunning = false;
+    batchStopRequested = false;
+    batchTaskId = String(snapshot.taskId);
+    batchState = batchStateFromRefreshAllTask(snapshot);
+    persistBatchState();
+    renderBatchState();
+    setHistoryRefreshStatus(t("history.refreshAllStarted", { count: total }), "success");
+    openBatchWorkspace();
+    void runBatchQueue();
+  } catch (error) {
+    setHistoryRefreshStatus(
+      t("history.refreshAllFailed", { message: error?.message || t("error.generic") }),
+      "error"
+    );
+  } finally {
+    historyRefreshAllButton.disabled = Boolean(batchRunning || batchRunPromise);
+  }
+}
+
 function batchAbortError() {
   return new DOMException("Batch tracking task was cancelled", "AbortError");
 }
@@ -5495,6 +5583,10 @@ function renderHistory() {
     }
   }
   if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
+  if (historyRefreshAllButton) {
+    historyRefreshAllButton.hidden = session.kind !== "INTERNAL";
+    historyRefreshAllButton.disabled = Boolean(batchRunning || batchRunPromise);
+  }
   historyTableBody.replaceChildren();
 
   let rowIndex = 0;
@@ -5556,8 +5648,7 @@ function renderHistory() {
         ? `${t("business.forwarderJob")} ${businessReferences.forwarderJobNumber}`
         : null,
       trackingTypeLabel(entry.query.type),
-      entry.query.carrier,
-      t((CHANNELS[entry.query.channel] ?? CHANNELS.NETWORK).labelKey)
+      entry.query.carrier
     ]
       .filter(Boolean)
       .join(" · ");
@@ -5615,8 +5706,7 @@ function renderHistory() {
       [t("business.clientCode"), businessReferences.clientNameCode],
       [t("business.clientPo"), businessReferences.clientPoNumber],
       [t("business.forwarderJob"), businessReferences.forwarderJobNumber],
-      [t("history.currentLocation"), summary.latestEvent?.location],
-      [t("history.updated"), formatLocalDateTime(entry.savedAt)]
+      [t("history.currentLocation"), summary.latestEvent?.location]
     ];
     for (const [label, value] of factEntries) {
       const fact = document.createElement("div");
@@ -5628,19 +5718,16 @@ function renderHistory() {
       facts.append(fact);
     }
 
-    const timelineSection = document.createElement("section");
-    timelineSection.className = "shipment-timeline-section";
-    const timelineTitle = document.createElement("strong");
-    timelineTitle.className = "shipment-detail-title";
-    timelineTitle.textContent = t("history.recentMovement");
-    const timeline = document.createElement("div");
-    timeline.className = "shipment-mini-timeline";
     const timelineItems = historyTimeline(snapshot);
-    if (timelineItems.length === 0) {
-      const empty = document.createElement("p");
-      empty.textContent = t("history.noTimeline");
-      timeline.append(empty);
-    } else {
+    let timelineSection = null;
+    if (timelineItems.length > 0) {
+      timelineSection = document.createElement("section");
+      timelineSection.className = "shipment-timeline-section";
+      const timelineTitle = document.createElement("strong");
+      timelineTitle.className = "shipment-detail-title";
+      timelineTitle.textContent = t("history.recentMovement");
+      const timeline = document.createElement("div");
+      timeline.className = "shipment-mini-timeline";
       for (const event of timelineItems) {
         const eventNode = document.createElement("div");
         const marker = document.createElement("i");
@@ -5655,8 +5742,8 @@ function renderHistory() {
         eventNode.append(marker, copy);
         timeline.append(eventNode);
       }
+      timelineSection.append(timelineTitle, timeline);
     }
-    timelineSection.append(timelineTitle, timeline);
 
     const detailActions = document.createElement("div");
     detailActions.className = "shipment-detail-actions";
@@ -5669,7 +5756,9 @@ function renderHistory() {
       openHistoryEntry(entry);
     });
     detailActions.append(openButton);
-    details.append(facts, timelineSection, detailActions);
+    details.append(facts);
+    if (timelineSection) details.append(timelineSection);
+    details.append(detailActions);
 
     toggle.addEventListener("click", () => {
       const expanded = toggle.getAttribute("aria-expanded") === "true";
@@ -6661,15 +6750,39 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
     ) return;
 
     event.preventDefault();
-    if (link.classList.contains("portal-return-link") && !window.confirm(t("nav.confirmReturn"))) {
-      return;
-    }
     if (document.body.classList.contains("is-page-leaving")) return;
     showPlatformRouteWait();
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.setTimeout(() => window.location.assign(link.href), reduceMotion ? 0 : 180);
     window.setTimeout(hidePlatformRouteWait, 6000);
   });
+});
+
+document.querySelector("#portal-return-link")?.addEventListener("click", (event) => {
+  if (
+    event.defaultPrevented
+    || event.button !== 0
+    || event.metaKey
+    || event.ctrlKey
+    || event.shiftKey
+    || event.altKey
+  ) return;
+  event.preventDefault();
+  const requestedReturn = new URLSearchParams(window.location.search).get("returnTo") ?? "";
+  const safeReturn = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//")
+    ? requestedReturn
+    : "";
+  if (safeReturn) {
+    showPlatformRouteWait();
+    window.location.assign(safeReturn);
+    return;
+  }
+  if (window.history.length > 1) {
+    window.history.back();
+    return;
+  }
+  showPlatformRouteWait();
+  window.location.assign(event.currentTarget.href);
 });
 
 document.querySelector("#start-tracking-button").addEventListener("click", () => {
@@ -6691,6 +6804,10 @@ historySearchClear?.addEventListener("click", () => {
   historySearchInput.value = "";
   renderHistory();
   historySearchInput.focus();
+});
+
+historyRefreshAllButton?.addEventListener("click", () => {
+  void startRefreshAllHistory();
 });
 
 document.querySelector("#edit-business-references").addEventListener("click", () => {

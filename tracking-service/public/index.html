@@ -33,12 +33,11 @@
           <a
             id="portal-return-link"
             class="nav-item portal-return-link"
-            href="/"
-            data-home-link
-            aria-label="Return to homepage"
+            href="/workbenches"
+            aria-label="Back"
           >
             <span class="nav-icon" aria-hidden="true">&#8592;</span>
-            <span id="portal-return-label">Return to homepage</span>
+            <span id="portal-return-label" data-i18n="nav.back">Back</span>
           </a>
           <a class="nav-item is-active" href="#overview" data-view-target="overview">
             <span class="nav-icon">◫</span>
@@ -172,6 +171,14 @@
                   </span>
                 </div>
                 <div class="history-heading-actions">
+                  <button
+                    id="history-refresh-all"
+                    class="history-refresh-all"
+                    type="button"
+                    data-i18n="history.refreshAll"
+                    hidden
+                  >Update all active</button>
+                  <span id="history-refresh-status" class="history-refresh-status" hidden></span>
                   <div class="history-search">
                     <span aria-hidden="true">⌕</span>
                     <input

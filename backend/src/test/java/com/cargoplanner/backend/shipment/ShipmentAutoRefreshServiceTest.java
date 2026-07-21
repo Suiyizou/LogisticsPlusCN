@@ -102,6 +102,27 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
+  void prefersBookingReferenceWhenBookingAndBillBothExist() throws Exception {
+    insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
+    jdbcTemplate.update("""
+        INSERT INTO cp_shipment_references (
+          id, shipment_id, carrier_code, reference_type, reference_no_normalized, primary_reference
+        ) VALUES (101, 1, 'COSCO', 'BOOKING', 'BK1', FALSE)
+        """);
+    insertDueJob(1, NOW.minusSeconds(1));
+    ObjectNode response = (ObjectNode) objectMapper.readTree("""
+        {"snapshot":{"summary":{"latestEvent":{"name":"Booking confirmed"}}},"stale":false}
+        """);
+    when(trackingService.refreshAutomatically("COSCO", "BOOKING", "BK1"))
+        .thenReturn(response);
+
+    assertThat(service.refreshDueShipments()).isEqualTo(1);
+
+    verify(trackingService, times(1)).refreshAutomatically("COSCO", "BOOKING", "BK1");
+    verify(trackingService, never()).refreshAutomatically("COSCO", "BILLOFLADING", "BL1");
+  }
+
+  @Test
   void activeLeasePreventsASecondWorkerFromQueryingTheSameShipment() {
     insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
     insertDueJob(1, NOW.minusSeconds(1));

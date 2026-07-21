@@ -391,6 +391,7 @@
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                    <el-button type="success" plain :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}</el-button>
                     <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                   </div>
@@ -442,9 +443,10 @@
                   <el-table-column :label="t('customers.lastTrackedAt')" width="160">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" width="300" fixed="right">
+                  <el-table-column :label="t('customers.actions')" width="380" fixed="right">
                     <template #default="{ row }">
                       <div class="table-action-buttons table-action-buttons--spacious">
+                        <el-button size="small" type="info" plain @click.stop="trackShipmentInWorkspace(row)">{{ t("customers.view") }}</el-button>
                         <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
                         <el-button size="small" type="warning" plain :disabled="refreshingShipment" @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
                         <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
@@ -970,6 +972,7 @@ import {
   createBusinessCustomer,
   createBusinessShipment,
   createShipmentBatchTask,
+  createShipmentRefreshAllTask,
   deleteBusinessCustomer,
   deleteBusinessShipment,
   fetchAvailableBusinessShipments,
@@ -1497,6 +1500,9 @@ function normalizeBusinessShipment(payload) {
   const firstLeg = Array.isArray(snapshot.routingLegs) ? snapshot.routingLegs[0] : null;
   const vesselVoyage = [firstLeg?.vessel, firstLeg?.voyage].filter(Boolean).join(" / ");
   const details = {
+    bookingNumber: (Array.isArray(references.bookingNumbers) ? references.bookingNumbers[0] : null)
+      || (Array.isArray(summary.bookingNumbers) ? summary.bookingNumbers[0] : null)
+      || references.booking,
     forwarderJobNumber: business.forwarderJobNumber,
     clientPoNumber: business.clientPoNumber,
     clientNameCode: business.clientNameCode,
@@ -1582,6 +1588,50 @@ async function startBatchTrack() {
     batchTrackRunning.value = false;
     batchTrackCancelRequested.value = false;
     batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.batchTrackStartFailed") }];
+  }
+}
+
+async function startRefreshAllShipments() {
+  if (batchTrackRunning.value || refreshingShipment.value) return;
+  batchTrackDialogOpen.value = true;
+  batchTrackRunning.value = true;
+  batchTrackCancelRequested.value = false;
+  batchTrackResults.value = [];
+  batchTrackProgress.value = {
+    total: 0,
+    done: 0,
+    succeeded: 0,
+    manual: 0,
+    failed: 0,
+    pending: 0,
+    status: "QUEUED"
+  };
+  try {
+    const task = await createShipmentRefreshAllTask();
+    if (!task?.taskId) {
+      batchTrackRunning.value = false;
+      batchTrackProgress.value = {
+        total: 0,
+        done: 0,
+        succeeded: 0,
+        manual: 0,
+        failed: 0,
+        pending: 0,
+        status: "COMPLETED"
+      };
+      showSuccess("customers.refreshAllEmpty");
+      return;
+    }
+    rememberBatchTrackTask(task.taskId);
+    applyBatchTrackTask(task);
+    scheduleBatchTrackPoll(task.taskId, 800);
+  } catch (error) {
+    batchTrackRunning.value = false;
+    batchTrackResults.value = [{
+      number: "-",
+      status: "failed",
+      message: error?.message || t("customers.refreshAllFailed")
+    }];
   }
 }
 
@@ -2263,7 +2313,8 @@ async function saveShipmentDetail() {
 
 async function refreshShipmentFromCarrier() {
   const shipment = activeDetailShipment.value;
-  if (!shipment?.carrier || !shipment?.referenceType || !shipment?.referenceNo || refreshingShipment.value) return;
+  const preferredReference = preferredTrackingReference(shipment);
+  if (!shipment?.carrier || !preferredReference.number || refreshingShipment.value) return;
   refreshingShipment.value = true;
   refreshTrackingStatus.value = t("customers.updateTrackingNodeService");
   refreshTrackingResponse.value = null;
@@ -2282,8 +2333,8 @@ async function refreshShipmentFromCarrier() {
       body: JSON.stringify({
         carrier: shipment.carrier,
         channel: "AUTO",
-        type: shipment.referenceType,
-        number: shipment.referenceNo,
+        type: preferredReference.type,
+        number: preferredReference.number,
         forceRefresh: true
       })
     });
@@ -2303,14 +2354,15 @@ async function refreshShipmentFromCarrier() {
       ok: resp.ok,
       code: data?.code || data?.diagnostic?.code || (resp.ok ? "SUCCESS" : data?.error) || "-",
       message:
-        data?.message ||
-        data?.diagnostic?.message ||
-        data?.warning ||
-        (resp.ok ? t("customers.updateTrackingSuccessDefault") : resp.statusText) ||
-        "-",
+        data?.warning || data?.diagnostic?.code === "UPSTREAM_EMPTY"
+          ? t("customers.refreshReturnedNoData")
+          : data?.message ||
+            data?.diagnostic?.message ||
+            (resp.ok ? t("customers.updateTrackingSuccessDefault") : resp.statusText) ||
+            "-",
       carrier: shipment.carrier,
-      type: shipment.referenceType,
-      number: shipment.referenceNo,
+      type: preferredReference.type,
+      number: preferredReference.number,
       hasDetails
     };
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
@@ -2408,7 +2460,8 @@ async function deleteShipmentRow(row) {
 }
 
 async function updateShipmentTracking(row) {
-  if (!row?.carrier || !row?.referenceType || !row?.referenceNo || refreshingShipment.value) return;
+  const preferredReference = preferredTrackingReference(row);
+  if (!row?.carrier || !preferredReference.number || refreshingShipment.value) return;
   refreshingShipment.value = true;
   try {
     const token = storedToken();
@@ -2422,8 +2475,8 @@ async function updateShipmentTracking(row) {
       body: JSON.stringify({
         carrier: row.carrier,
         channel: "AUTO",
-        type: row.referenceType,
-        number: row.referenceNo,
+        type: preferredReference.type,
+        number: preferredReference.number,
         forceRefresh: true
       })
     });
@@ -2441,6 +2494,26 @@ async function updateShipmentTracking(row) {
   }
 }
 
+function preferredTrackingReference(row) {
+  const bookingNumber = String(row?.bookingNumber || "").trim();
+  if (bookingNumber) return { type: "BOOKING", number: bookingNumber };
+  const carrier = String(row?.carrier || "").trim().toUpperCase();
+  const originalType = String(row?.referenceType || "BOOKING").trim().toUpperCase();
+  const originalNumber = String(row?.referenceNo || "").trim();
+  const numericCoscoReference = originalNumber.replace(/^COSU/i, "");
+  if (
+    carrier === "COSCO"
+    && originalType === "BILLOFLADING"
+    && /^[0-9]{8,12}$/.test(numericCoscoReference)
+  ) {
+    return { type: "BOOKING", number: numericCoscoReference };
+  }
+  return {
+    type: originalType,
+    number: originalNumber
+  };
+}
+
 function trackShipmentInWorkspace(shipment) {
   openTrackingWorkspace(shipment);
 }
@@ -2450,10 +2523,11 @@ function openTrackingWorkspace(shipment = null) {
     ? `/customers?customer=${encodeURIComponent(selectedCustomerId.value)}`
     : "/customers";
   const parameters = new URLSearchParams({ returnTo });
-  const referenceNo = String(shipment?.referenceNo || "").trim();
+  const preferredReference = preferredTrackingReference(shipment);
+  const referenceNo = preferredReference.number;
   if (referenceNo) {
     parameters.set("carrier", shipment?.carrier || "COSCO");
-    parameters.set("type", shipment?.referenceType || "BOOKING");
+    parameters.set("type", preferredReference.type);
     parameters.set("number", referenceNo);
   }
   window.location.assign(`/tracking/?${parameters.toString()}${referenceNo ? "#tracking" : "#overview"}`);
@@ -2731,7 +2805,9 @@ function showSuccess(key) {
 
 function showError(error, fallbackKey) {
   const message = String(error?.message || "");
-  if (/Tracked shipment not found|Shipment not found/i.test(message)) {
+  if (/operational data|last valid snapshot was kept/i.test(message)) {
+    pageMessage.value = t("customers.refreshReturnedNoData");
+  } else if (/Tracked shipment not found|Shipment not found/i.test(message)) {
     pageMessage.value = t("customers.trackedShipmentNotFound");
   } else if (/explicit operator access|permission|forbidden/i.test(message)) {
     pageMessage.value = t("customers.shipmentAccessRequired");
