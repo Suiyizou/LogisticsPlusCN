@@ -236,6 +236,7 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
 });
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
+  assert.match(indexSource, /id="batch-import-panel" hidden/);
   assert.match(indexSource, /id="batch-container-details"/);
   assert.doesNotMatch(indexSource, /id="batch-container-details"[^>]*checked/);
   assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
