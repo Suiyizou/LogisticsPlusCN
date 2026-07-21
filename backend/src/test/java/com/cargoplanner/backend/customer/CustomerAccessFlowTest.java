@@ -7,6 +7,7 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
+import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -387,6 +388,42 @@ class CustomerAccessFlowTest {
         "127.0.0.1"
     )).isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+  }
+
+  @Test
+  void preservesTheExactQueryIdentityForNumericCoscoBills() {
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipment_references
+        SET reference_type = 'BILLOFLADING', reference_no_raw = 'COSU9508434560',
+            reference_no_normalized = 'COSU9508434560'
+        WHERE shipment_id = 10
+        """
+    );
+    jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_snapshots
+        SET query_reference_type = 'BILLOFLADING', query_reference_no = '9508434560'
+        WHERE shipment_id = 10
+        """
+    );
+
+    Map<String, Object> detail = customerService.getShipmentSnapshot(
+        business, "shipment-public-id"
+    );
+    assertThat(detail)
+        .containsEntry("carrier", "COSCO")
+        .containsEntry("referenceType", "BILLOFLADING")
+        .containsEntry("referenceNo", "9508434560");
+
+    ShipmentBatchItemRequest refresh = customerService.listUnfinishedTrackingItems(business)
+        .stream()
+        .filter(item -> "refresh-shipment-public-id".equals(item.id()))
+        .findFirst()
+        .orElseThrow();
+    assertThat(refresh.carrier()).isEqualTo("COSCO");
+    assertThat(refresh.type()).isEqualTo("BILLOFLADING");
+    assertThat(refresh.number()).isEqualTo("9508434560");
   }
 
   @Test

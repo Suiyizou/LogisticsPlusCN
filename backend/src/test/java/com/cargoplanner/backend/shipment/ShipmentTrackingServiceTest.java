@@ -185,7 +185,7 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void bookingFirstRefreshReusesTheExistingNumericBillShipment() throws Exception {
+  void bookingRefreshDoesNotInferAssociationFromANumericBillNumber() throws Exception {
     NormalizedTrackRequest bill = new NormalizedTrackRequest(
         "COSCO", "AUTO", "BILLOFLADING", "6507943350"
     );
@@ -219,7 +219,6 @@ class ShipmentTrackingServiceTest {
             "fetchedAt": "2026-07-16T10:05:00Z",
             "tracking": {"type": "BOOKING", "number": "6507943350"},
             "summary": {
-              "billOfLading": "6507943350",
               "bookingNumbers": ["6507943350"],
               "origin": {"name": "Shanghai"},
               "destination": {"name": "Long Beach"},
@@ -236,11 +235,11 @@ class ShipmentTrackingServiceTest {
         business
     );
 
-    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(initial.path("shipmentId").asText());
+    assertThat(refreshed.path("shipmentId").asText()).isNotEqualTo(initial.path("shipmentId").asText());
     assertThat(refreshed.path("snapshot").path("summary").path("latestEvent").path("name").asText())
         .isEqualTo("EIR order");
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class))
-        .isEqualTo(1);
+        .isEqualTo(2);
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_type = 'BOOKING'",
         Integer.class
@@ -271,6 +270,29 @@ class ShipmentTrackingServiceTest {
     assertThat(cached.path("snapshot").path("references").path("business")
         .path("forwarderJobNumber").asText()).isEqualTo("JOB-100");
     assertThat(cached.path("snapshot").path("route")).hasSize(2);
+
+    ObjectNode unchanged = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, imported
+        ),
+        business
+    );
+    assertThat(unchanged.path("importedDetailsUpdated").asBoolean()).isFalse();
+    assertThat(unchanged.path("importedDetailsUnchanged").asBoolean()).isTrue();
+
+    ShipmentImportDetails changed = new ShipmentImportDetails(
+        null, "BL-90001", "JOB-101", null, "SHA", "LAX",
+        "PO-100", "2026-07-20", "2026-08-02", "1*40HC", null
+    );
+    ObjectNode overwritten = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, changed
+        ),
+        business
+    );
+    assertThat(overwritten.path("importedDetailsUpdated").asBoolean()).isTrue();
+    assertThat(overwritten.path("snapshot").path("references").path("business")
+        .path("forwarderJobNumber").asText()).isEqualTo("JOB-101");
     verify(adapterClient, times(1))
         .track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
   }
@@ -762,7 +784,7 @@ class ShipmentTrackingServiceTest {
     assertThat(stored.path("extraInformation").findValuesAsText("name")).isEmpty();
 
     ShipmentImportDetails secondDetails = new ShipmentImportDetails(
-        null, "784-84422343", "LJSH26060018", "CZ5221 / 22059.74-100",
+        null, "784-84422343", "LJSH26060018-UPDATED", "CZ5221 / 22059.74-100",
         "SHA", "IAH", "HW202600059", "6-Jun-26", "11-Jun-26", "AIR", "Hayden US"
     );
     ObjectNode second = service.recordImportedPlaceholder(
@@ -773,6 +795,8 @@ class ShipmentTrackingServiceTest {
         business
     );
     assertThat(second.path("created").asBoolean()).isFalse();
+    assertThat(second.path("updated").asBoolean()).isTrue();
+    assertThat(second.path("unchanged").asBoolean()).isFalse();
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipments", Integer.class
     )).isEqualTo(1);
@@ -784,6 +808,21 @@ class ShipmentTrackingServiceTest {
     ));
     assertThat(merged.path("references").path("business").path("vesselVoyage").asText())
         .isEqualTo("CZ5221 / 22059.74-100");
+    assertThat(merged.path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("LJSH26060018-UPDATED");
+
+    ObjectNode unchanged = service.recordImportedPlaceholder(
+        new ShipmentBatchItemRequest(
+            "row-1", null, "BILLOFLADING", "784-84422343",
+            "784-84422343 绌鸿繍", true, secondDetails
+        ),
+        business
+    );
+    assertThat(unchanged.path("updated").asBoolean()).isFalse();
+    assertThat(unchanged.path("unchanged").asBoolean()).isTrue();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots", String.class
+    )).isEqualTo(merged.toString());
 
     jdbcTemplate.update(
         "INSERT INTO cp_users (id, display_name, role) VALUES (3, 'Other Business', 'BUSINESS')"

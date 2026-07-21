@@ -418,15 +418,18 @@ public class BusinessCustomerService {
   }
 
   /**
-   * Builds a refresh queue from shipments the current user owns or participates in. A booking
-   * reference wins whenever both booking and bill-of-lading references exist. Shipments whose
-   * empty equipment has already been returned are terminal and are deliberately excluded.
+   * Builds a refresh queue from shipments the current user owns or participates in. The current
+   * snapshot query identity wins; otherwise the shipment's primary durable reference is used.
+   * Shipments whose empty equipment has already been returned are terminal and are deliberately
+   * excluded.
    */
   public List<ShipmentBatchItemRequest> listUnfinishedTrackingItems(AuthenticatedUser actor) {
     requireManager(actor);
     String baseSql = """
         SELECT s.public_id AS shipment_public_id, s.carrier_code, t.snapshot_json,
-               r.reference_type, r.reference_no_normalized, r.reference_no_raw
+               COALESCE(t.query_reference_type, r.reference_type) AS reference_type,
+               COALESCE(t.query_reference_no, r.reference_no_normalized) AS reference_no_normalized,
+               COALESCE(t.query_reference_no, r.reference_no_raw) AS reference_no_raw
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -434,8 +437,7 @@ public class BusinessCustomerService {
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
             AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC
+          ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
@@ -457,11 +459,10 @@ public class BusinessCustomerService {
     for (RefreshableShipment candidate : candidates) {
       if (candidate.referenceNo() == null || candidate.referenceNo().isBlank()) continue;
       if (TrackingTerminalState.isEmptyReturned(candidate.snapshot())) continue;
-      String queryType = preferredRefreshType(candidate);
       items.add(new ShipmentBatchItemRequest(
           "refresh-" + candidate.shipmentPublicId(),
           candidate.carrier(),
-          queryType,
+          candidate.referenceType(),
           candidate.referenceNo(),
           candidate.displayReferenceNo(),
           false,
@@ -469,15 +470,6 @@ public class BusinessCustomerService {
       ));
     }
     return items;
-  }
-
-  private static String preferredRefreshType(RefreshableShipment candidate) {
-    if ("COSCO".equalsIgnoreCase(candidate.carrier())
-        && "BILLOFLADING".equalsIgnoreCase(candidate.referenceType())
-        && candidate.referenceNo().matches("[0-9]{8,12}")) {
-      return "BOOKING";
-    }
-    return candidate.referenceType();
   }
 
   private RefreshableShipment mapRefreshableShipment(ResultSet rs, int rowNumber)
@@ -679,8 +671,8 @@ public class BusinessCustomerService {
   private String snapshotShipmentSelect() {
     return """
         SELECT t.id, s.id AS shipment_id,
-               COALESCE(r.reference_type, t.query_reference_type) AS query_reference_type,
-               COALESCE(r.reference_no_raw, t.query_reference_no) AS query_reference_no,
+               COALESCE(t.query_reference_type, r.reference_type) AS query_reference_type,
+               COALESCE(t.query_reference_no, r.reference_no_raw) AS query_reference_no,
                t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
                s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
                s.business_note, s.last_tracked_at, s.updated_at
@@ -690,8 +682,7 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
   }
@@ -702,13 +693,6 @@ public class BusinessCustomerService {
     String carrier = rs.getString("carrier_code");
     String referenceType = rs.getString("query_reference_type");
     String referenceNo = rs.getString("query_reference_no");
-    if ("COSCO".equalsIgnoreCase(carrier)
-        && "BILLOFLADING".equalsIgnoreCase(referenceType)
-        && referenceNo != null
-        && referenceNo.replaceFirst("(?i)^COSU", "").matches("[0-9]{8,12}")) {
-      referenceType = "BOOKING";
-      referenceNo = referenceNo.replaceFirst("(?i)^COSU", "");
-    }
     String trackingStatus = rs.getString("tracking_status");
     String fetchedAt = instantString(rs, "fetched_at");
     String lastTrackedAt = instantString(rs, "last_tracked_at");

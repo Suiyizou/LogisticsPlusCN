@@ -203,6 +203,7 @@ public class ShipmentTrackingService {
       );
     }
 
+    boolean importedDetailsChanged = false;
     if (created || !hasCurrentSnapshot(shipment.id())) {
       ObjectNode snapshot = objectMapper.createObjectNode();
       snapshot.putObject("provider").put("code", carrier);
@@ -254,7 +255,7 @@ public class ShipmentTrackingService {
           shipment.id()
       );
     } else {
-      mergeImportedDetailsIntoCurrentSnapshot(shipment.id(), details, now);
+      importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(shipment.id(), details, now);
     }
 
     PersistedShipment persisted = new PersistedShipment(shipment.id(), shipment.publicId(), now, now);
@@ -264,6 +265,8 @@ public class ShipmentTrackingService {
     response.put("persisted", true);
     response.put("manualEntry", true);
     response.put("created", created);
+    response.put("updated", created || importedDetailsChanged);
+    response.put("unchanged", !created && !importedDetailsChanged);
     response.put("cacheSource", "IMPORTED_PLACEHOLDER");
     return response;
   }
@@ -296,12 +299,12 @@ public class ShipmentTrackingService {
     return count != null && count > 0;
   }
 
-  private void mergeImportedDetailsIntoCurrentSnapshot(
+  private boolean mergeImportedDetailsIntoCurrentSnapshot(
       long shipmentId,
       ShipmentImportDetails details,
       Instant now
   ) {
-    if (details == null) return;
+    if (details == null) return false;
     List<CurrentSnapshot> current = jdbcTemplate.query(
         """
         SELECT t.id, t.snapshot_json
@@ -315,7 +318,7 @@ public class ShipmentTrackingService {
         ),
         shipmentId
     );
-    if (current.isEmpty()) return;
+    if (current.isEmpty()) return false;
     ObjectNode envelope = objectMapper.createObjectNode();
     envelope.set("snapshot", readJson(current.get(0).snapshotJson()));
     JsonNode enriched = ensureRouteFallback(
@@ -349,6 +352,7 @@ public class ShipmentTrackingService {
       mergeImportedBusinessField(business, extra, "clientNameCode", details.clientNameCode());
     }
     String snapshotJson = writeJson(enriched);
+    if (snapshotJson.equals(current.get(0).snapshotJson())) return false;
     jdbcTemplate.update(
         "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
         snapshotJson,
@@ -360,6 +364,7 @@ public class ShipmentTrackingService {
         timestamp(now),
         shipmentId
     );
+    return true;
   }
 
   private void mergeImportedBusinessField(
@@ -369,8 +374,23 @@ public class ShipmentTrackingService {
       String value
   ) {
     if (value == null || value.isBlank()) return;
-    putIfBlank(business, key, value);
-    addExtra(extra, key, value);
+    business.put(key, value);
+    upsertSpreadsheetExtra(extra, key, value);
+  }
+
+  private void upsertSpreadsheetExtra(ArrayNode extra, String key, String value) {
+    for (JsonNode item : extra) {
+      if (!key.equals(item.path("key").asText())
+          || !"SPREADSHEET".equals(item.path("source").asText())) {
+        continue;
+      }
+      if (item.isObject()) ((ObjectNode) item).put("value", value);
+      return;
+    }
+    ObjectNode item = extra.addObject();
+    item.put("key", key);
+    item.put("value", value);
+    item.put("source", "SPREADSHEET");
   }
 
   private ShipmentImportDetails sanitizeImportedDetails(
@@ -576,13 +596,13 @@ public class ShipmentTrackingService {
     // identities. Never resolve a long-lived shipment aggregate from a container-only alias.
     CachedShipment cached = (user != null || trustedAutomaticRefresh)
         && isDurableReferenceType(request.type()) ? findCached(request) : null;
-    if (cached == null && forceRefresh && canReuseCoscoBillAsBooking(request)) {
-      cached = findCachedByReferenceType(request, "BILLOFLADING");
-    }
     Instant now = clock.instant();
     if (!forceRefresh && cached != null) {
+      boolean importedDetailsChanged = false;
       if (importedDetails != null) {
-        mergeImportedDetailsIntoCurrentSnapshot(cached.shipmentId(), importedDetails, now);
+        importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(
+            cached.shipmentId(), importedDetails, now
+        );
         matchImportedClientCode(
             new PersistedShipment(
                 cached.shipmentId(),
@@ -601,6 +621,10 @@ public class ShipmentTrackingService {
       ObjectNode response = cachedResponse(cached, user, stale);
       if (stale) {
         response.put("cacheStale", true);
+      }
+      if (importedDetails != null) {
+        response.put("importedDetailsUpdated", importedDetailsChanged);
+        response.put("importedDetailsUnchanged", !importedDetailsChanged);
       }
       return response;
     }
@@ -780,11 +804,13 @@ public class ShipmentTrackingService {
         SELECT COUNT(*)
         FROM cp_shipments s
         JOIN cp_shipment_references r ON r.shipment_id = s.id
-        WHERE s.public_id = ? AND r.carrier_code = ? AND r.reference_no_normalized = ?
+        WHERE s.public_id = ? AND r.carrier_code = ? AND r.reference_type = ?
+          AND r.reference_no_normalized = ?
         """,
         Integer.class,
         shipmentPublicId.trim(),
         request.carrier(),
+        request.type(),
         normalizeReference(request.number())
     );
     if (referenceMatches == null || referenceMatches == 0) {
@@ -1271,12 +1297,6 @@ public class ShipmentTrackingService {
     CachedShipment record = records.isEmpty() ? null : records.get(0);
     return record == null || record.snapshotJson() == null
         || !isUsableCachedSnapshot(record.snapshotJson()) ? null : record;
-  }
-
-  private boolean canReuseCoscoBillAsBooking(NormalizedTrackRequest request) {
-    return "COSCO".equals(request.carrier())
-        && "BOOKING".equals(request.type())
-        && normalizeReference(request.number()).matches("[0-9]{8,12}");
   }
 
   private boolean isUsableCachedSnapshot(String snapshotJson) {
