@@ -372,7 +372,7 @@ class ShipmentFileServiceTest {
         .satisfies(error -> assertThat(((ApiException) error).status())
             .isEqualTo(HttpStatus.BAD_REQUEST));
     assertThat((List<?>) service.list("shipment-public-id", business).get("items"))
-        .hasSize(1);
+        .hasSize(3);
   }
 
   @Test

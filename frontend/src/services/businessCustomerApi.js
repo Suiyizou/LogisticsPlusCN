@@ -113,6 +113,13 @@ export function deleteBusinessShipment(shipmentId) {
   });
 }
 
+export function batchDeleteBusinessShipments(shipmentIds) {
+  return request("/business/shipments/batch-delete", {
+    method: "POST",
+    body: { shipmentIds }
+  });
+}
+
 export function updateBusinessShipmentNote(shipmentId, note) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/note`, {
     method: "PATCH",
@@ -125,6 +132,13 @@ export function bindBusinessCustomerShipment(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`, {
     method: "POST",
     body: payload
+  });
+}
+
+export function batchBindBusinessCustomerShipments(customerId, shipmentIds) {
+  return request(`/business/customers/${encodeURIComponent(customerId)}/shipments/batch`, {
+    method: "POST",
+    body: { shipmentIds }
   });
 }
 

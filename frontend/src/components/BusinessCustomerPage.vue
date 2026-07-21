@@ -292,6 +292,12 @@
                       <small>{{ t("customers.availableShipmentsHint") }}</small>
                     </div>
                     <div class="candidate-header-actions">
+                      <el-button
+                        type="primary"
+                        size="small"
+                        :disabled="!selectedCandidateShipmentIds.length || bindingShipment"
+                        @click="batchBindSelectedShipments"
+                      >{{ t("customers.batchBindSelected", { count: selectedCandidateShipmentIds.length }) }}</el-button>
                       <el-button type="primary" size="small" @click="shipmentCreateDialogOpen = true">
                         {{ t("customers.createShipment") }}
                       </el-button>
@@ -305,6 +311,11 @@
                 <div v-else-if="!unboundAvailableShipments.length" class="empty-hint-compact">{{ t("customers.emptyAvailableShipments") }}</div>
                 <div v-else class="candidate-list">
                   <div v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="candidate-row">
+                    <el-checkbox
+                      :model-value="selectedCandidateShipmentIds.includes(shipment.shipmentId)"
+                      :aria-label="t('customers.selectShipment')"
+                      @change="(checked) => toggleCandidateShipment(shipment.shipmentId, checked)"
+                    />
                     <span><b>{{ shipment.referenceNo || shipment.shipmentId }}</b><small>{{ shipment.carrier }} · {{ referenceTypeLabel(shipment.referenceType) }}</small></span>
                     <span>
                       <i class="shipment-status-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}
@@ -319,7 +330,7 @@
                 </div>
               </el-card>
 
-              <el-card class="bound-table-card" shadow="never">
+              <el-card v-if="false" class="bound-table-card" shadow="never">
                 <div v-if="loadingShipments" class="empty-hint-compact">{{ t("customers.loadingShipments") }}</div>
                 <div v-else-if="!shipments.length" class="empty-hint-compact">{{ t("customers.emptyShipments") }}</div>
                 <el-table v-else :data="shipments" class="bound-table" size="small" stripe>
@@ -391,12 +402,25 @@
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                    <el-button
+                      type="danger"
+                      plain
+                      :disabled="!selectedShipmentRows.length || batchDeletingShipments"
+                      @click="batchDeleteSelectedShipments"
+                    >{{ t("customers.batchDeleteSelected", { count: selectedShipmentRows.length }) }}</el-button>
                     <el-button type="success" plain :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}</el-button>
                     <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                   </div>
                 </div>
-                <el-table :data="availableShipments" stripe v-loading="loadingAvailableShipments" style="width:100%">
+                <el-table
+                  :data="availableShipments"
+                  stripe
+                  v-loading="loadingAvailableShipments"
+                  style="width:100%"
+                  @selection-change="handleShipmentSelectionChange"
+                >
+                  <el-table-column type="selection" width="48" />
                   <el-table-column type="index" :label="t('customers.index')" width="60" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="200">
                     <template #default="{ row }">
@@ -966,6 +990,8 @@ import { useI18n } from "vue-i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
+  batchBindBusinessCustomerShipments,
+  batchDeleteBusinessShipments,
   bindBusinessCustomerShipment,
   batchCreateBusinessCustomers,
   cancelShipmentBatchTask,
@@ -1076,6 +1102,9 @@ const loadingShipments = ref(false);
 const creating = ref(false);
 const mutatingCustomer = ref(false);
 const bindingShipment = ref(false);
+const selectedCandidateShipmentIds = ref([]);
+const selectedShipmentRows = ref([]);
+const batchDeletingShipments = ref(false);
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
 const resolvingMatchId = ref(0);
@@ -1368,11 +1397,18 @@ async function unbindCustomerFromShipment(customerId) {
 }
 
 watch(selectedCustomer, (customer) => {
+  selectedCandidateShipmentIds.value = [];
   editForm.username = customer?.username || "";
   editForm.displayName = customer?.displayName || "";
   editForm.clientCode = customer?.clientCode || "";
   editForm.partyRole = customer?.partyRole || "SHIPPER";
 }, { immediate: true });
+
+watch(unboundAvailableShipments, (items) => {
+  const availableIds = new Set(items.map((item) => item.shipmentId));
+  selectedCandidateShipmentIds.value = selectedCandidateShipmentIds.value
+    .filter((shipmentId) => availableIds.has(shipmentId));
+});
 
 watch(availableShipments, (list) => {
   if (!list || !selectedShipmentId.value) return;
@@ -1744,6 +1780,13 @@ function batchTrackItemMessage(item, taskStatus = "") {
   if (item.error) return item.error;
   if (taskStatus === "STOPPED" && ["PENDING", "RUNNING"].includes(status)) return t("customers.trackStopped");
   if (status === "SUCCEEDED") return t("customers.trackSucceeded");
+  if (status === "PARTIAL") {
+    const details = (item.subtasks || [])
+      .filter((subtask) => String(subtask.status || "").toUpperCase() === "FAILED")
+      .map((subtask) => subtask.error)
+      .filter(Boolean);
+    return details.join("; ") || t("customers.trackPartial");
+  }
   if (status === "MANUAL") return t("customers.trackManualPlaceholder");
   if (status === "FAILED") return t("customers.trackFailed");
   if (status === "RUNNING") return t("customers.trackRunning");
@@ -2092,6 +2135,36 @@ async function quickBindShipment(shipment) {
     showSuccess("customers.boundSuccess");
   } catch (error) {
     showError(error, "customers.bindFailed");
+  } finally {
+    bindingShipment.value = false;
+  }
+}
+
+function toggleCandidateShipment(shipmentId, checked) {
+  const selected = new Set(selectedCandidateShipmentIds.value);
+  if (checked) selected.add(shipmentId);
+  else selected.delete(shipmentId);
+  selectedCandidateShipmentIds.value = [...selected];
+}
+
+async function batchBindSelectedShipments() {
+  if (!selectedCustomer.value || !selectedCandidateShipmentIds.value.length || bindingShipment.value) return;
+  bindingShipment.value = true;
+  clearMessage();
+  try {
+    const shipmentIds = [...selectedCandidateShipmentIds.value];
+    const result = await batchBindBusinessCustomerShipments(selectedCustomer.value.id, shipmentIds);
+    selectedCandidateShipmentIds.value = [];
+    await Promise.all([
+      selectCustomer(selectedCustomer.value.id),
+      loadAvailableShipments()
+    ]);
+    showSuccess("customers.batchBoundSuccess", {
+      bound: result?.bound ?? shipmentIds.length,
+      skipped: result?.skipped ?? 0
+    });
+  } catch (error) {
+    showError(error, "customers.batchBindFailed");
   } finally {
     bindingShipment.value = false;
   }
@@ -2459,6 +2532,33 @@ async function deleteShipmentRow(row) {
   }
 }
 
+function handleShipmentSelectionChange(rows) {
+  selectedShipmentRows.value = Array.isArray(rows) ? rows : [];
+}
+
+async function batchDeleteSelectedShipments() {
+  if (!selectedShipmentRows.value.length || batchDeletingShipments.value) return;
+  const shipmentIds = [...new Set(
+    selectedShipmentRows.value.map((row) => row?.shipmentId).filter(Boolean)
+  )];
+  if (!shipmentIds.length) return;
+  if (!window.confirm(t("customers.batchDeleteConfirm", { count: shipmentIds.length }))) return;
+  batchDeletingShipments.value = true;
+  try {
+    await batchDeleteBusinessShipments(shipmentIds);
+    const deleted = new Set(shipmentIds);
+    shipments.value = shipments.value.filter((item) => !deleted.has(item.shipmentId));
+    availableShipments.value = availableShipments.value.filter((item) => !deleted.has(item.shipmentId));
+    selectedShipmentRows.value = [];
+    if (deleted.has(selectedShipmentId.value)) selectedShipmentId.value = "";
+    showSuccess("customers.batchDeleteSuccess", { count: shipmentIds.length });
+  } catch (error) {
+    showError(error, "customers.batchDeleteFailed");
+  } finally {
+    batchDeletingShipments.value = false;
+  }
+}
+
 async function updateShipmentTracking(row) {
   const preferredReference = preferredTrackingReference(row);
   if (!row?.carrier || !preferredReference.number || refreshingShipment.value) return;
@@ -2794,9 +2894,9 @@ function clearMessage() {
   messageIsError.value = false;
 }
 
-function showSuccess(key) {
+function showSuccess(key, params) {
   clearMessage();
-  toastMessage.value = t(key);
+  toastMessage.value = t(key, params);
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => {
     toastMessage.value = "";
@@ -3705,7 +3805,7 @@ function showError(error, fallbackKey) {
 }
 .candidate-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.3fr) minmax(110px, 0.8fr) minmax(100px, 0.6fr) auto;
+  grid-template-columns: 24px minmax(160px, 1.3fr) minmax(110px, 0.8fr) minmax(100px, 0.6fr) auto;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
@@ -3714,7 +3814,7 @@ function showError(error, fallbackKey) {
   background: #fff;
   font-size: 11px;
 }
-.candidate-row > span:first-child {
+.candidate-row > span:nth-of-type(1) {
   display: grid;
   gap: 2px;
 }

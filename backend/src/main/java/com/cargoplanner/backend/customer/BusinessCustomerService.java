@@ -7,7 +7,6 @@ import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
-import com.cargoplanner.backend.shipment.TrackingTerminalState;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -418,18 +417,19 @@ public class BusinessCustomerService {
   }
 
   /**
-   * Builds a refresh queue from shipments the current user owns or participates in. The current
-   * snapshot query identity wins; otherwise the shipment's primary durable reference is used.
+   * Builds a refresh queue from shipments the current user owns or participates in. The shipment's
+   * durable reference is always used; stale snapshot query identities must never
+   * steer a refresh back to an obsolete or empty query.
    * Shipments whose empty equipment has already been returned are terminal and are deliberately
    * excluded.
    */
   public List<ShipmentBatchItemRequest> listUnfinishedTrackingItems(AuthenticatedUser actor) {
     requireManager(actor);
     String baseSql = """
-        SELECT s.public_id AS shipment_public_id, s.carrier_code, t.snapshot_json,
-               COALESCE(t.query_reference_type, r.reference_type) AS reference_type,
-               COALESCE(t.query_reference_no, r.reference_no_normalized) AS reference_no_normalized,
-               COALESCE(t.query_reference_no, r.reference_no_raw) AS reference_no_raw
+        SELECT s.public_id AS shipment_public_id, s.carrier_code,
+               r.reference_type,
+               r.reference_no_normalized,
+               r.reference_no_raw
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -441,6 +441,7 @@ public class BusinessCustomerService {
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
+          AND UPPER(COALESCE(s.tracking_status, '')) <> 'EMPTY_RETURNED'
         """;
     List<RefreshableShipment> candidates = actor.isAdmin()
         ? jdbcTemplate.query(
@@ -458,7 +459,6 @@ public class BusinessCustomerService {
     List<ShipmentBatchItemRequest> items = new ArrayList<>();
     for (RefreshableShipment candidate : candidates) {
       if (candidate.referenceNo() == null || candidate.referenceNo().isBlank()) continue;
-      if (TrackingTerminalState.isEmptyReturned(candidate.snapshot())) continue;
       items.add(new ShipmentBatchItemRequest(
           "refresh-" + candidate.shipmentPublicId(),
           candidate.carrier(),
@@ -474,24 +474,21 @@ public class BusinessCustomerService {
 
   private RefreshableShipment mapRefreshableShipment(ResultSet rs, int rowNumber)
       throws SQLException {
-    JsonNode snapshot = objectMapper.createObjectNode();
-    String snapshotJson = rs.getString("snapshot_json");
-    if (snapshotJson != null && !snapshotJson.isBlank()) {
-      try {
-        snapshot = objectMapper.readTree(snapshotJson);
-      } catch (JsonProcessingException ignored) {
-        // A malformed old snapshot is not considered terminal and can be repaired by refresh.
-      }
-    }
     String normalized = rs.getString("reference_no_normalized");
     String raw = rs.getString("reference_no_raw");
+    String carrier = rs.getString("carrier_code");
+    String referenceType = rs.getString("reference_type");
+    if ("COSCO".equalsIgnoreCase(carrier)
+        && "BILLOFLADING".equalsIgnoreCase(referenceType)
+        && normalized != null && normalized.matches("COSU[0-9]{6,20}")) {
+      normalized = normalized.substring(4);
+    }
     return new RefreshableShipment(
         rs.getString("shipment_public_id"),
-        rs.getString("carrier_code"),
-        rs.getString("reference_type"),
+        carrier,
+        referenceType,
         normalized,
-        raw == null || raw.isBlank() ? normalized : raw,
-        snapshot
+        raw == null || raw.isBlank() ? normalized : raw
     );
   }
 
@@ -675,7 +672,8 @@ public class BusinessCustomerService {
                COALESCE(t.query_reference_no, r.reference_no_raw) AS query_reference_no,
                t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
                s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note, s.last_tracked_at, s.updated_at
+               s.business_note, s.job_number, s.client_po_number, s.client_name_code,
+               s.original_bill_of_lading, s.last_tracked_at, s.updated_at
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -711,6 +709,10 @@ public class BusinessCustomerService {
     value.put("boundRoles", List.of());
     value.put("snapshotJson", snapshotJson);
     value.put("sourceChannel", rs.getString("source_channel"));
+    value.put("forwarderJobNumber", rs.getString("job_number"));
+    value.put("clientPoNumber", rs.getString("client_po_number"));
+    value.put("clientNameCode", rs.getString("client_name_code"));
+    value.put("originalBillOfLading", rs.getString("original_bill_of_lading"));
     value.put("dataAvailable", false);
     value.put("snapshot", null);
 
@@ -726,9 +728,15 @@ public class BusinessCustomerService {
         JsonNode businessRef = references.path("business");
         JsonNode tracking = snap.path("tracking");
 
-        value.put("forwarderJobNumber", textOrNull(businessRef.path("forwarderJobNumber")));
-        value.put("clientPoNumber", textOrNull(businessRef.path("clientPoNumber")));
-        value.put("clientNameCode", textOrNull(businessRef.path("clientNameCode")));
+        if (value.get("forwarderJobNumber") == null) {
+          value.put("forwarderJobNumber", textOrNull(businessRef.path("forwarderJobNumber")));
+        }
+        if (value.get("clientPoNumber") == null) {
+          value.put("clientPoNumber", textOrNull(businessRef.path("clientPoNumber")));
+        }
+        if (value.get("clientNameCode") == null) {
+          value.put("clientNameCode", textOrNull(businessRef.path("clientNameCode")));
+        }
 
         JsonNode origin = summary.path("origin");
         JsonNode destination = summary.path("destination");
@@ -979,6 +987,7 @@ public class BusinessCustomerService {
       Instant now,
       AuthenticatedUser actor
   ) {
+    lockShipment(shipmentId);
     String status = requestedStatus == null ? "Pending update" : requestedStatus;
     String jobNumber = normalizeManualField(request.forwarderJobNumber(), 160);
     String vesselVoyage = normalizeManualField(request.vesselVoyage(), 240);
@@ -993,6 +1002,22 @@ public class BusinessCustomerService {
     String currentLocation = normalizeManualField(request.currentLocation(), 160);
     String volume = normalizeManualField(request.volume(), 80);
     String clientCode = normalizeManualField(request.clientNameCode(), 160);
+
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET job_number = COALESCE(?, job_number),
+            client_po_number = COALESCE(?, client_po_number),
+            client_name_code = COALESCE(?, client_name_code),
+            original_bill_of_lading = COALESCE(?, original_bill_of_lading)
+        WHERE id = ?
+        """,
+        jobNumber,
+        clientPo,
+        clientCode,
+        "BILLOFLADING".equals(referenceType) ? referenceNo : null,
+        shipmentId
+    );
 
     ObjectNode snapshot = currentSnapshotCopy(shipmentId);
     objectField(snapshot, "provider").put("code", carrier);
@@ -1025,10 +1050,6 @@ public class BusinessCustomerService {
     putManualField(summary, "vesselVoyage", vesselVoyage);
     putManualField(summary, "volume", volume);
 
-    ObjectNode business = objectField(objectField(snapshot, "references"), "business");
-    putManualField(business, "forwarderJobNumber", jobNumber);
-    putManualField(business, "clientPoNumber", clientPo);
-    putManualField(business, "clientNameCode", clientCode);
     if (vesselVoyage != null || loadingPort != null || dischargePort != null
         || etd != null || eta != null || actualDeparture != null || actualArrival != null) {
       ArrayNode routingLegs = arrayField(snapshot, "routingLegs");
@@ -1053,11 +1074,9 @@ public class BusinessCustomerService {
       if (actualDelivery != null) objectField(keyTimes, "actualDelivery").put("time", actualDelivery);
     }
     ArrayNode extra = arrayField(snapshot, "extraInformation");
-    addManualExtra(extra, "forwarderJobNumber", jobNumber);
     addManualExtra(extra, "vesselVoyage", vesselVoyage);
     addManualExtra(extra, "portOfLoading", loadingPort);
     addManualExtra(extra, "portOfDischarge", dischargePort);
-    addManualExtra(extra, "clientPoNumber", clientPo);
     addManualExtra(extra, "estimatedDeparture", etd);
     addManualExtra(extra, "estimatedArrival", eta);
     addManualExtra(extra, "actualDeparture", actualDeparture);
@@ -1065,7 +1084,6 @@ public class BusinessCustomerService {
     addManualExtra(extra, "actualDelivery", actualDelivery);
     addManualExtra(extra, "currentLocation", currentLocation);
     addManualExtra(extra, "volume", volume);
-    addManualExtra(extra, "clientNameCode", clientCode);
 
     String snapshotJson;
     try {
@@ -1074,39 +1092,60 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize manual shipment data");
     }
     String payloadSha = sha256(snapshotJson);
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_tracking_snapshots (
-          shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
-          source_channel, snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
-        ) VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, NULL, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          shipment_id = VALUES(shipment_id),
-          source_channel = VALUES(source_channel),
-          snapshot_json = VALUES(snapshot_json),
-          strategy_json = VALUES(strategy_json),
-          payload_sha256 = VALUES(payload_sha256),
-          fetched_at = VALUES(fetched_at),
-          fresh_until = VALUES(fresh_until),
-          invalidated_at = NULL,
-          invalidated_by = NULL,
-          invalidation_reason = NULL
-        """,
-        shipmentId, referenceType, referenceNo, actor.id(), actor.username(),
-        snapshotJson, payloadSha,
-        Timestamp.from(now), Timestamp.from(now), Timestamp.from(now)
-    );
-    Long snapshotId = jdbcTemplate.queryForObject(
+    List<Long> activeSnapshotIds = jdbcTemplate.query(
         """
         SELECT id FROM cp_tracking_snapshots
         WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
-        LIMIT 1
+          AND invalidated_at IS NULL
+        ORDER BY id DESC LIMIT 1 FOR UPDATE
         """,
-        Long.class,
+        (rs, rowNumber) -> rs.getLong("id"),
         actor.id(), referenceType, referenceNo
     );
-    if (snapshotId == null) {
-      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save manual shipment data");
+    long snapshotId;
+    if (activeSnapshotIds.isEmpty()) {
+      KeyHolder snapshotKeyHolder = new GeneratedKeyHolder();
+      jdbcTemplate.update(connection -> {
+        PreparedStatement statement = connection.prepareStatement(
+            """
+            INSERT INTO cp_tracking_snapshots (
+              shipment_id, query_reference_type, query_reference_no, queried_by,
+              queried_by_username, source_channel, snapshot_json, strategy_json,
+              payload_sha256, fetched_at, fresh_until, created_at
+            ) VALUES (?, ?, ?, ?, ?, 'MANUAL', ?, NULL, ?, ?, ?, ?)
+            """,
+            Statement.RETURN_GENERATED_KEYS
+        );
+        statement.setLong(1, shipmentId);
+        statement.setString(2, referenceType);
+        statement.setString(3, referenceNo);
+        statement.setLong(4, actor.id());
+        statement.setString(5, actor.username());
+        statement.setString(6, snapshotJson);
+        statement.setString(7, payloadSha);
+        statement.setTimestamp(8, Timestamp.from(now));
+        statement.setTimestamp(9, Timestamp.from(now));
+        statement.setTimestamp(10, Timestamp.from(now));
+        return statement;
+      }, snapshotKeyHolder);
+      Number key = snapshotKeyHolder.getKey();
+      if (key == null) {
+        throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save manual shipment data");
+      }
+      snapshotId = key.longValue();
+    } else {
+      snapshotId = activeSnapshotIds.get(0);
+      jdbcTemplate.update(
+          """
+          UPDATE cp_tracking_snapshots
+          SET shipment_id = ?, queried_by_username = ?, source_channel = 'MANUAL',
+              snapshot_json = ?, strategy_json = NULL, payload_sha256 = ?,
+              fetched_at = ?, fresh_until = ?
+          WHERE id = ?
+          """,
+          shipmentId, actor.username(), snapshotJson, payloadSha,
+          Timestamp.from(now), Timestamp.from(now), snapshotId
+      );
     }
     jdbcTemplate.update(
         """
@@ -1423,6 +1462,113 @@ public class BusinessCustomerService {
         ipAddress
     );
     return requireBinding(customer.id(), shipment.publicId());
+  }
+
+  @Transactional
+  public Map<String, Object> bindShipments(
+      String customerPublicId,
+      CustomerShipmentBatchBindingRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord customer = requireManaged(customerPublicId, actor);
+    List<String> shipmentIds = normalizeShipmentIds(
+        request == null ? null : request.shipmentIds()
+    );
+    int bound = 0;
+    int skipped = 0;
+    List<String> boundShipmentIds = new ArrayList<>();
+    for (String shipmentPublicId : shipmentIds) {
+      ShipmentRecord shipment = requireShipment(shipmentPublicId);
+      requireShipmentAssignmentAuthority(shipment, actor);
+      lockShipment(shipment.id());
+      Integer existing = jdbcTemplate.queryForObject(
+          "SELECT COUNT(*) FROM cp_customer_shipment_access WHERE customer_id = ? AND shipment_id = ?",
+          Integer.class,
+          customer.id(),
+          shipment.id()
+      );
+      if (existing != null && existing > 0) {
+        skipped++;
+        continue;
+      }
+      ensureShipmentRoleAvailable(shipment.id(), customer.id(), customer.partyRole());
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_shipment_access (
+            customer_id, shipment_id, relationship_role, publication_status, assigned_by
+          ) VALUES (?, ?, ?, 'DRAFT', ?)
+          """,
+          customer.id(), shipment.id(), customer.partyRole(), actor.id()
+      );
+      bound++;
+      boundShipmentIds.add(shipment.publicId());
+    }
+    audit(
+        actor,
+        "BATCH_BIND_CUSTOMER_SHIPMENTS",
+        customer.id(),
+        "Bound " + bound + " shipments; skipped " + skipped + " existing bindings",
+        ipAddress
+    );
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("customerId", customer.publicId());
+    response.put("requested", shipmentIds.size());
+    response.put("bound", bound);
+    response.put("skipped", skipped);
+    response.put("shipmentIds", boundShipmentIds);
+    return response;
+  }
+
+  @Transactional
+  public Map<String, Object> deleteShipments(
+      com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest request,
+      AuthenticatedUser actor
+  ) {
+    requireManager(actor);
+    List<String> shipmentIds = normalizeShipmentIds(
+        request == null ? null : request.shipmentIds()
+    );
+    List<ShipmentRecord> shipmentsToDelete = new ArrayList<>();
+    for (String shipmentPublicId : shipmentIds) {
+      ShipmentRecord shipment = requireShipment(shipmentPublicId);
+      requireShipmentAssignmentAuthority(shipment, actor);
+      shipmentsToDelete.add(shipment);
+    }
+    for (ShipmentRecord shipment : shipmentsToDelete) {
+      auditShipment(
+          actor,
+          "BATCH_DELETE_BUSINESS_SHIPMENT",
+          shipment.id(),
+          "Deleted shipment " + shipment.publicId(),
+          null
+      );
+      // The audit table predates the cascade constraints used by shipment files.
+      jdbcTemplate.update("DELETE FROM cp_shipment_file_audit WHERE shipment_id = ?", shipment.id());
+      jdbcTemplate.update("DELETE FROM cp_shipments WHERE id = ?", shipment.id());
+    }
+    return Map.of(
+        "deleted", shipmentsToDelete.size(),
+        "shipmentIds", shipmentIds
+    );
+  }
+
+  private List<String> normalizeShipmentIds(List<String> rawShipmentIds) {
+    if (rawShipmentIds == null || rawShipmentIds.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one shipment id is required");
+    }
+    if (rawShipmentIds.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A shipment batch cannot exceed 500 items");
+    }
+    List<String> shipmentIds = rawShipmentIds.stream()
+        .map(value -> value == null ? "" : value.trim())
+        .filter(value -> !value.isBlank())
+        .distinct()
+        .toList();
+    if (shipmentIds.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one shipment id is required");
+    }
+    return shipmentIds;
   }
 
   @Transactional
@@ -2125,8 +2271,7 @@ public class BusinessCustomerService {
       String carrier,
       String referenceType,
       String referenceNo,
-      String displayReferenceNo,
-      JsonNode snapshot
+      String displayReferenceNo
   ) {}
   private record PendingClientMatch(long id, long shipmentId, String shipmentPublicId) {}
   private record BusinessShipmentRecord(

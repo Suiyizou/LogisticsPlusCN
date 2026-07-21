@@ -268,7 +268,10 @@ class ShipmentTrackingServiceTest {
     assertThat(cached.path("shipmentId").asText()).isEqualTo(first.path("shipmentId").asText());
     assertThat(cached.path("cacheSource").asText()).isEqualTo("MYSQL");
     assertThat(cached.path("snapshot").path("references").path("business")
-        .path("forwarderJobNumber").asText()).isEqualTo("JOB-100");
+        .has("forwarderJobNumber")).isFalse();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments", String.class
+    )).isEqualTo("JOB-100");
     assertThat(cached.path("snapshot").path("route")).hasSize(2);
 
     ObjectNode unchanged = service.track(
@@ -291,8 +294,9 @@ class ShipmentTrackingServiceTest {
         business
     );
     assertThat(overwritten.path("importedDetailsUpdated").asBoolean()).isTrue();
-    assertThat(overwritten.path("snapshot").path("references").path("business")
-        .path("forwarderJobNumber").asText()).isEqualTo("JOB-101");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments", String.class
+    )).isEqualTo("JOB-101");
     verify(adapterClient, times(1))
         .track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
   }
@@ -357,21 +361,17 @@ class ShipmentTrackingServiceTest {
 
     JsonNode snapshot = response.path("snapshot");
     assertThat(snapshot.path("tracking").path("number").asText()).isEqualTo("6502406170");
-    assertThat(snapshot.path("tracking").path("carrierPrefix").asText()).isEqualTo("COSU");
-    assertThat(snapshot.path("tracking").path("originalNumber").asText())
-        .isEqualTo("COSU6502406170");
-    assertThat(snapshot.path("references").path("originalBillOfLading").asText())
-        .isEqualTo("COSU6502406170");
+    assertThat(snapshot.path("tracking").has("carrierPrefix")).isFalse();
+    assertThat(snapshot.path("tracking").has("originalNumber")).isFalse();
+    assertThat(snapshot.path("references").has("originalBillOfLading")).isFalse();
     assertThat(snapshot.path("references").path("business").path("clientNameCode").asText())
         .isEqualTo("API-CODE");
-    assertThat(snapshot.path("references").path("business").path("clientPoNumber").asText())
-        .isEqualTo("HW202600057-2");
-    assertThat(snapshot.path("references").path("business").path("forwarderJobNumber").asText())
-        .isEqualTo("JSH2606003");
+    assertThat(snapshot.path("references").path("business").has("clientPoNumber")).isFalse();
+    assertThat(snapshot.path("references").path("business").has("forwarderJobNumber")).isFalse();
     assertThat(snapshot.path("extraInformation").findValuesAsText("key"))
-        .contains("carrierPrefix", "originalBillOfLading", "clientPoNumber", "forwarderJobNumber")
         .doesNotContain(
-            "clientNameCode", "vesselVoyage", "portOfLoading", "portOfDischarge", "volume"
+            "carrierPrefix", "originalBillOfLading", "clientPoNumber", "forwarderJobNumber",
+            "clientNameCode"
         );
     verify(adapterClient).track(normalized);
 
@@ -380,12 +380,23 @@ class ShipmentTrackingServiceTest {
         String.class
     );
     JsonNode stored = objectMapper.readTree(storedJson);
-    assertThat(stored.path("tracking").path("originalNumber").asText())
-        .isEqualTo("COSU6502406170");
+    assertThat(stored.path("tracking").has("originalNumber")).isFalse();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments", String.class
+    )).isEqualTo("JSH2606003");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_po_number FROM cp_shipments", String.class
+    )).isEqualTo("HW202600057-2");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_name_code FROM cp_shipments", String.class
+    )).isEqualTo("FILE-CODE");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT original_bill_of_lading FROM cp_shipments", String.class
+    )).isEqualTo("COSU6502406170");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = 'COSU6502406170'",
         Integer.class
-    )).isEqualTo(1);
+    )).isZero();
     assertThat(jdbcTemplate.queryForObject(
         "SELECT publication_status FROM cp_customer_shipment_access",
         String.class
@@ -780,7 +791,13 @@ class ShipmentTrackingServiceTest {
     );
     JsonNode stored = objectMapper.readTree(storedJson);
     assertThat(stored.path("extraInformation").findValuesAsText("key"))
-        .contains("forwarderJobNumber", "clientNameCode");
+        .doesNotContain("forwarderJobNumber", "clientNameCode");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments", String.class
+    )).isEqualTo("LJSH26060018");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_name_code FROM cp_shipments", String.class
+    )).isEqualTo("Hayden US");
     assertThat(stored.path("extraInformation").findValuesAsText("name")).isEmpty();
 
     ShipmentImportDetails secondDetails = new ShipmentImportDetails(
@@ -806,10 +823,12 @@ class ShipmentTrackingServiceTest {
     JsonNode merged = objectMapper.readTree(jdbcTemplate.queryForObject(
         "SELECT snapshot_json FROM cp_tracking_snapshots", String.class
     ));
-    assertThat(merged.path("references").path("business").path("vesselVoyage").asText())
-        .isEqualTo("CZ5221 / 22059.74-100");
-    assertThat(merged.path("references").path("business").path("forwarderJobNumber").asText())
-        .isEqualTo("LJSH26060018-UPDATED");
+    assertThat(merged.path("extraInformation").findValuesAsText("value"))
+        .contains("CZ5221 / 22059.74-100");
+    assertThat(merged.toString()).doesNotContain("LJSH26060018-UPDATED");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments", String.class
+    )).isEqualTo("LJSH26060018-UPDATED");
 
     ObjectNode unchanged = service.recordImportedPlaceholder(
         new ShipmentBatchItemRequest(
@@ -904,6 +923,89 @@ class ShipmentTrackingServiceTest {
     )).isEqualTo(1);
   }
 
+  @Test
+  void forcedRefreshInvalidatesEmptyShellAndPointsShipmentAtNewSnapshot() throws Exception {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipments (
+          public_id, carrier_code, tracking_status, created_by, created_at, updated_at
+        ) VALUES ('shell-shipment', 'COSCO', 'Needs review', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
+    Long shipmentId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE public_id = 'shell-shipment'", Long.class
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_references (
+          shipment_id, carrier_code, reference_type, reference_no_raw,
+          reference_no_normalized, primary_reference
+        ) VALUES (?, 'COSCO', 'BILLOFLADING', 'COSU6502406170', 'COSU6502406170', TRUE)
+        """,
+        shipmentId
+    );
+    String shellJson = "{\"provider\":{\"code\":\"COSCO\"},\"tracking\":{\"status\":\"EMPTY\"}}";
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_tracking_snapshots (
+          shipment_id, query_reference_type, query_reference_no, queried_by,
+          queried_by_username, source_channel, snapshot_json, payload_sha256,
+          fetched_at, fresh_until, created_at
+        ) VALUES (?, 'BILLOFLADING', 'COSU6502406170', 2, 'business', 'NETWORK', ?,
+                  ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """,
+        shipmentId, shellJson, "0".repeat(64)
+    );
+    Long shellSnapshotId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_tracking_snapshots WHERE shipment_id = ?", Long.class, shipmentId
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = ? WHERE id = ?",
+        shellSnapshotId, shipmentId
+    );
+
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BILLOFLADING", "6502406170"
+    );
+    when(adapterClient.track(normalized, true)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "provider": {"code": "COSCO"},
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:05:00Z",
+            "tracking": {"type": "BILLOFLADING", "number": "6502406170"},
+            "summary": {
+              "billOfLading": "6502406170",
+              "origin": {"name": "Shanghai"},
+              "destination": {"name": "Long Beach"},
+              "latestEvent": {"name": "Loaded on board"}
+            },
+            "containers": [{"number": "CSNU1234567"}]
+          }
+        }
+        """));
+
+    ObjectNode refreshed = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BILLOFLADING", "COSU6502406170", true
+        ),
+        business
+    );
+
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo("shell-shipment");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots WHERE shipment_id = ?",
+        Integer.class, shipmentId
+    )).isEqualTo(2);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT invalidation_reason FROM cp_tracking_snapshots WHERE id = ?",
+        String.class, shellSnapshotId
+    )).contains("empty or unusable");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = ?", Long.class, shipmentId
+    )).isNotEqualTo(shellSnapshotId);
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
@@ -919,6 +1021,10 @@ class ShipmentTrackingServiceTest {
           carrier_code VARCHAR(32) NOT NULL,
           current_snapshot_id BIGINT,
           tracking_status VARCHAR(80),
+          job_number VARCHAR(160),
+          client_po_number VARCHAR(160),
+          client_name_code VARCHAR(160),
+          original_bill_of_lading VARCHAR(64),
           last_tracked_at TIMESTAMP,
           fresh_until TIMESTAMP,
           created_by BIGINT,
@@ -957,7 +1063,7 @@ class ShipmentTrackingServiceTest {
           invalidated_at TIMESTAMP,
           invalidated_by BIGINT,
           invalidation_reason VARCHAR(500),
-          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)
+          INDEX idx_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no, invalidated_at)
         )
         """);
     jdbcTemplate.execute("""

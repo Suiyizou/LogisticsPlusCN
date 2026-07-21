@@ -8,6 +8,7 @@ import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
+import com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -424,6 +425,21 @@ class CustomerAccessFlowTest {
     assertThat(refresh.carrier()).isEqualTo("COSCO");
     assertThat(refresh.type()).isEqualTo("BILLOFLADING");
     assertThat(refresh.number()).isEqualTo("9508434560");
+
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ? WHERE shipment_id = 10",
+        "{\"tracking\":{\"status\":\"Empty Returned\"}}"
+    );
+    assertThat(customerService.listUnfinishedTrackingItems(business))
+        .extracting(ShipmentBatchItemRequest::id)
+        .contains("refresh-shipment-public-id");
+
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET tracking_status = 'EMPTY_RETURNED' WHERE id = 10"
+    );
+    assertThat(customerService.listUnfinishedTrackingItems(business))
+        .extracting(ShipmentBatchItemRequest::id)
+        .doesNotContain("refresh-shipment-public-id");
   }
 
   @Test
@@ -529,12 +545,20 @@ class CustomerAccessFlowTest {
     );
     assertThat(manualSnapshot)
         .contains("\"channel\":\"MANUAL\"")
-        .contains("LJSH26050019")
         .contains("Shanghai")
         .contains("Long Beach")
         .contains("2026-06-29 18:32:00")
         .contains("5*40HC")
-        .contains("HAYDEN");
+        .doesNotContain("LJSH26050019", "HW202600057-1", "HAYDEN");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
+    )).isEqualTo("LJSH26050019");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_po_number FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
+    )).isEqualTo("HW202600057-1");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_name_code FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
+    )).isEqualTo("HAYDEN");
     jdbcTemplate.update(
         """
         UPDATE cp_shipments
@@ -807,6 +831,65 @@ class CustomerAccessFlowTest {
     });
   }
 
+  @Test
+  void batchBindingIsIdempotentAndBatchDeleteRemovesAllSelectedShipments() {
+    String customerId = (String) customerService.create(
+        new CreateCustomerRequest(
+            "batch-customer", "SecurePass!23", "Batch Customer", "SHIPPER", "BATCH-001"
+        ),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    String firstShipmentId = (String) customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "BATCH-BOOKING-001", "Booked", null
+        ),
+        business,
+        "127.0.0.1"
+    ).get("shipmentId");
+    String secondShipmentId = (String) customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "BATCH-BOOKING-002", "Booked", null
+        ),
+        business,
+        "127.0.0.1"
+    ).get("shipmentId");
+
+    Map<String, Object> first = customerService.bindShipments(
+        customerId,
+        new CustomerShipmentBatchBindingRequest(List.of(firstShipmentId, secondShipmentId)),
+        business,
+        "127.0.0.1"
+    );
+    Map<String, Object> repeated = customerService.bindShipments(
+        customerId,
+        new CustomerShipmentBatchBindingRequest(List.of(firstShipmentId, secondShipmentId)),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(first).containsEntry("bound", 2).containsEntry("skipped", 0);
+    assertThat(repeated).containsEntry("bound", 0).containsEntry("skipped", 2);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_shipment_access WHERE customer_id = "
+            + "(SELECT id FROM cp_customers WHERE public_id = ?)",
+        Integer.class,
+        customerId
+    )).isEqualTo(2);
+
+    Map<String, Object> deleted = customerService.deleteShipments(
+        new ShipmentBatchDeleteRequest(List.of(firstShipmentId, secondShipmentId)),
+        business
+    );
+    assertThat(deleted).containsEntry("deleted", 2);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments WHERE public_id IN (?, ?)",
+        Integer.class,
+        firstShipmentId,
+        secondShipmentId
+    )).isZero();
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
@@ -837,6 +920,10 @@ class CustomerAccessFlowTest {
           current_snapshot_id BIGINT,
           tracking_status VARCHAR(80),
           business_note TEXT,
+          job_number VARCHAR(160),
+          client_po_number VARCHAR(160),
+          client_name_code VARCHAR(160),
+          original_bill_of_lading VARCHAR(64),
           last_tracked_at TIMESTAMP,
           fresh_until TIMESTAMP,
           created_by BIGINT,
@@ -875,7 +962,7 @@ class CustomerAccessFlowTest {
           invalidated_at TIMESTAMP,
           invalidated_by BIGINT,
           invalidation_reason VARCHAR(500),
-          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
+          INDEX idx_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no, invalidated_at),
           FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         )
         """);

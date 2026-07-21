@@ -141,6 +141,10 @@ CREATE TABLE IF NOT EXISTS cp_shipments (
   current_snapshot_id BIGINT NULL,
   tracking_status VARCHAR(80) NULL,
   business_note TEXT NULL,
+  job_number VARCHAR(160) NULL,
+  client_po_number VARCHAR(160) NULL,
+  client_name_code VARCHAR(160) NULL,
+  original_bill_of_lading VARCHAR(64) NULL,
   last_tracked_at DATETIME(6) NULL,
   fresh_until DATETIME(6) NULL,
   created_by BIGINT NULL,
@@ -184,7 +188,7 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   invalidation_reason VARCHAR(500) NULL,
   INDEX idx_cp_tracking_snapshots_shipment_time (shipment_id, fetched_at),
   INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
-  UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
+  INDEX idx_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no, invalidated_at),
   CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

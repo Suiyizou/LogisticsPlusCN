@@ -203,7 +203,13 @@ public class ShipmentTrackingService {
       );
     }
 
-    boolean importedDetailsChanged = false;
+    jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE id = ? FOR UPDATE",
+        Long.class,
+        shipment.id()
+    );
+
+    boolean importedDetailsChanged = persistImportedBusinessFields(shipment.id(), details, now);
     if (created || !hasCurrentSnapshot(shipment.id())) {
       ObjectNode snapshot = objectMapper.createObjectNode();
       snapshot.putObject("provider").put("code", carrier);
@@ -213,28 +219,24 @@ public class ShipmentTrackingService {
       tracking.put("type", type);
       tracking.put("number", referenceNo);
       tracking.put("status", "PENDING_MANUAL");
-      ObjectNode business = snapshot.putObject("references").putObject("business");
       ArrayNode extra = snapshot.putArray("extraInformation");
-      putImportedField(business, extra, "carrierPrefix", prefix);
-      putImportedField(business, extra, "originalBillOfLading", originalBill);
-      putImportedField(business, extra, "forwarderJobNumber",
-          cleanImported(details == null ? null : details.forwarderJobNumber(), 160));
-      putImportedField(business, extra, "vesselVoyage",
+      addExtra(extra, "vesselVoyage",
           cleanImported(details == null ? null : details.vesselVoyage(), 240));
-      putImportedField(business, extra, "portOfLoading",
+      addExtra(extra, "portOfLoading",
           cleanImported(details == null ? null : details.portOfLoading(), 160));
-      putImportedField(business, extra, "portOfDischarge",
+      addExtra(extra, "portOfDischarge",
           cleanImported(details == null ? null : details.portOfDischarge(), 160));
-      putImportedField(business, extra, "clientPoNumber",
-          cleanImported(details == null ? null : details.clientPoNumber(), 160));
-      putImportedField(business, extra, "estimatedDeparture",
+      addExtra(extra, "estimatedDeparture",
           cleanImported(details == null ? null : details.estimatedDeparture(), 80));
-      putImportedField(business, extra, "estimatedArrival",
+      addExtra(extra, "estimatedArrival",
           cleanImported(details == null ? null : details.estimatedArrival(), 80));
-      putImportedField(business, extra, "volume",
+      addExtra(extra, "volume",
           cleanImported(details == null ? null : details.volume(), 80));
-      putImportedField(business, extra, "clientNameCode",
-          cleanImported(details == null ? null : details.clientNameCode(), 160));
+
+      ObjectNode envelope = objectMapper.createObjectNode();
+      envelope.set("snapshot", snapshot);
+      JsonNode routed = ensureRouteFallback(envelope, details).path("snapshot");
+      if (routed.isObject()) snapshot = (ObjectNode) routed;
 
       String snapshotJson = writeJson(snapshot);
       long snapshotId = insertSnapshot(
@@ -255,7 +257,8 @@ public class ShipmentTrackingService {
           shipment.id()
       );
     } else {
-      importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(shipment.id(), details, now);
+      importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(shipment.id(), details, now)
+          || importedDetailsChanged;
     }
 
     PersistedShipment persisted = new PersistedShipment(shipment.id(), shipment.publicId(), now, now);
@@ -269,20 +272,6 @@ public class ShipmentTrackingService {
     response.put("unchanged", !created && !importedDetailsChanged);
     response.put("cacheSource", "IMPORTED_PLACEHOLDER");
     return response;
-  }
-
-  private void putImportedField(
-      ObjectNode business,
-      ArrayNode extra,
-      String name,
-      String value
-  ) {
-    if (value == null || value.isBlank()) return;
-    business.put(name, value);
-    ObjectNode item = extra.addObject();
-    item.put("key", name);
-    item.put("value", value);
-    item.put("source", "SPREADSHEET");
   }
 
   private boolean hasCurrentSnapshot(long shipmentId) {
@@ -325,32 +314,6 @@ public class ShipmentTrackingService {
         enrichWithImportedDetails(envelope, details),
         details
     ).path("snapshot");
-    if (enriched.isObject()) {
-      ObjectNode snapshot = (ObjectNode) enriched;
-      ObjectNode business = childObject(childObject(snapshot, "references"), "business");
-      ArrayNode extra = snapshot.withArray("extraInformation");
-      mergeImportedBusinessField(business, extra, "carrierPrefix", details.carrierPrefix());
-      mergeImportedBusinessField(
-          business, extra, "originalBillOfLading", details.originalBillOfLading()
-      );
-      mergeImportedBusinessField(
-          business, extra, "forwarderJobNumber", details.forwarderJobNumber()
-      );
-      mergeImportedBusinessField(business, extra, "vesselVoyage", details.vesselVoyage());
-      mergeImportedBusinessField(business, extra, "portOfLoading", details.portOfLoading());
-      mergeImportedBusinessField(
-          business, extra, "portOfDischarge", details.portOfDischarge()
-      );
-      mergeImportedBusinessField(business, extra, "clientPoNumber", details.clientPoNumber());
-      mergeImportedBusinessField(
-          business, extra, "estimatedDeparture", details.estimatedDeparture()
-      );
-      mergeImportedBusinessField(
-          business, extra, "estimatedArrival", details.estimatedArrival()
-      );
-      mergeImportedBusinessField(business, extra, "volume", details.volume());
-      mergeImportedBusinessField(business, extra, "clientNameCode", details.clientNameCode());
-    }
     String snapshotJson = writeJson(enriched);
     if (snapshotJson.equals(current.get(0).snapshotJson())) return false;
     jdbcTemplate.update(
@@ -367,30 +330,47 @@ public class ShipmentTrackingService {
     return true;
   }
 
-  private void mergeImportedBusinessField(
-      ObjectNode business,
-      ArrayNode extra,
-      String key,
-      String value
+  private boolean persistImportedBusinessFields(
+      long shipmentId,
+      ShipmentImportDetails details,
+      Instant now
   ) {
-    if (value == null || value.isBlank()) return;
-    business.put(key, value);
-    upsertSpreadsheetExtra(extra, key, value);
+    if (details == null) return false;
+    ImportedBusinessFields current = jdbcTemplate.queryForObject(
+        """
+        SELECT job_number, client_po_number, client_name_code, original_bill_of_lading
+        FROM cp_shipments WHERE id = ?
+        """,
+        (rs, rowNumber) -> new ImportedBusinessFields(
+            rs.getString("job_number"),
+            rs.getString("client_po_number"),
+            rs.getString("client_name_code"),
+            rs.getString("original_bill_of_lading")
+        ),
+        shipmentId
+    );
+    ImportedBusinessFields updated = new ImportedBusinessFields(
+        firstNonNull(details.forwarderJobNumber(), current.jobNumber()),
+        firstNonNull(details.clientPoNumber(), current.clientPoNumber()),
+        firstNonNull(details.clientNameCode(), current.clientNameCode()),
+        firstNonNull(details.originalBillOfLading(), current.originalBillOfLading())
+    );
+    if (updated.equals(current)) return false;
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET job_number = ?, client_po_number = ?, client_name_code = ?,
+            original_bill_of_lading = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        updated.jobNumber(), updated.clientPoNumber(), updated.clientNameCode(),
+        updated.originalBillOfLading(), timestamp(now), shipmentId
+    );
+    return true;
   }
 
-  private void upsertSpreadsheetExtra(ArrayNode extra, String key, String value) {
-    for (JsonNode item : extra) {
-      if (!key.equals(item.path("key").asText())
-          || !"SPREADSHEET".equals(item.path("source").asText())) {
-        continue;
-      }
-      if (item.isObject()) ((ObjectNode) item).put("value", value);
-      return;
-    }
-    ObjectNode item = extra.addObject();
-    item.put("key", key);
-    item.put("value", value);
-    item.put("source", "SPREADSHEET");
+  private String firstNonNull(String preferred, String fallback) {
+    return preferred == null ? fallback : preferred;
   }
 
   private ShipmentImportDetails sanitizeImportedDetails(
@@ -600,9 +580,12 @@ public class ShipmentTrackingService {
     if (!forceRefresh && cached != null) {
       boolean importedDetailsChanged = false;
       if (importedDetails != null) {
-        importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(
+        importedDetailsChanged = persistImportedBusinessFields(
             cached.shipmentId(), importedDetails, now
         );
+        importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(
+            cached.shipmentId(), importedDetails, now
+        ) || importedDetailsChanged;
         matchImportedClientCode(
             new PersistedShipment(
                 cached.shipmentId(),
@@ -691,7 +674,9 @@ public class ShipmentTrackingService {
       return transientLiveResponse(upstream);
     }
 
-    PersistedShipment persisted = persistAtomically(request, upstream, cached, user, now);
+    PersistedShipment persisted = persistAtomically(
+        request, upstream, cached, importedDetails, user, now
+    );
     if (persisted == null) {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist tracking result");
     }
@@ -1198,15 +1183,20 @@ public class ShipmentTrackingService {
       NormalizedTrackRequest request,
       JsonNode upstream,
       CachedShipment existingQuery,
+      ShipmentImportDetails importedDetails,
       AuthenticatedUser user,
       Instant now
   ) {
     try {
-      return transactionTemplate.execute(status -> persist(request, upstream, existingQuery, user, now));
+      return transactionTemplate.execute(
+          status -> persist(request, upstream, existingQuery, importedDetails, user, now)
+      );
     } catch (DuplicateKeyException race) {
       CachedShipment winner = findCached(request);
       if (winner == null) throw race;
-      return transactionTemplate.execute(status -> persist(request, upstream, winner, user, now));
+      return transactionTemplate.execute(
+          status -> persist(request, upstream, winner, importedDetails, user, now)
+      );
     }
   }
 
@@ -1214,6 +1204,7 @@ public class ShipmentTrackingService {
       NormalizedTrackRequest request,
       JsonNode upstream,
       CachedShipment existingQuery,
+      ShipmentImportDetails importedDetails,
       AuthenticatedUser user,
       Instant now
   ) {
@@ -1228,9 +1219,16 @@ public class ShipmentTrackingService {
     if (shipment == null) {
       shipment = createShipment(request.carrier(), user, now);
     }
+    jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE id = ? FOR UPDATE",
+        Long.class,
+        shipment.id()
+    );
     for (ShipmentReference reference : references) {
       attachReference(shipment.id(), reference);
     }
+    persistImportedBusinessFields(shipment.id(), importedDetails, now);
+    invalidateUnusableCurrentSnapshot(shipment.id(), user, now);
 
     String snapshotJson = writeJson(snapshot);
     JsonNode strategy = upstream.path("strategy");
@@ -1279,6 +1277,10 @@ public class ShipmentTrackingService {
       NormalizedTrackRequest request,
       String referenceType
   ) {
+    String normalizedNumber = normalizeReference(request.number());
+    String alternateNumber = alternateCosuReference(
+        request.carrier(), referenceType, normalizedNumber
+    );
     List<CachedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
@@ -1286,13 +1288,17 @@ public class ShipmentTrackingService {
         FROM cp_shipment_references r
         JOIN cp_shipments s ON s.id = r.shipment_id
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE r.carrier_code = ? AND r.reference_type = ? AND r.reference_no_normalized = ?
+        WHERE r.carrier_code = ? AND r.reference_type = ?
+          AND r.reference_no_normalized IN (?, ?)
+        ORDER BY CASE WHEN r.reference_no_normalized = ? THEN 0 ELSE 1 END
         LIMIT 1
         """,
         this::mapCachedShipment,
         request.carrier(),
         referenceType,
-        normalizeReference(request.number())
+        normalizedNumber,
+        alternateNumber,
+        normalizedNumber
     );
     CachedShipment record = records.isEmpty() ? null : records.get(0);
     return record == null || record.snapshotJson() == null
@@ -1311,17 +1317,24 @@ public class ShipmentTrackingService {
 
   private ShipmentIdentity findShipmentByAnyReference(List<ShipmentReference> references) {
     for (ShipmentReference reference : references) {
+      String alternateNumber = alternateCosuReference(
+          reference.carrier(), reference.type(), reference.normalizedNumber()
+      );
       List<ShipmentIdentity> shipments = jdbcTemplate.query(
           """
           SELECT s.id, s.public_id
           FROM cp_shipment_references r
           JOIN cp_shipments s ON s.id = r.shipment_id
-          WHERE r.carrier_code = ? AND r.reference_type = ? AND r.reference_no_normalized = ?
+          WHERE r.carrier_code = ? AND r.reference_type = ?
+            AND r.reference_no_normalized IN (?, ?)
+          ORDER BY CASE WHEN r.reference_no_normalized = ? THEN 0 ELSE 1 END
           LIMIT 1
           """,
           (rs, rowNumber) -> new ShipmentIdentity(rs.getLong("id"), rs.getString("public_id")),
           reference.carrier(),
           reference.type(),
+          reference.normalizedNumber(),
+          alternateNumber,
           reference.normalizedNumber()
       );
       if (!shipments.isEmpty()) return shipments.get(0);
@@ -1407,41 +1420,93 @@ public class ShipmentTrackingService {
     String payloadSha = sha256(snapshotJson);
     String sourceChannel = trim(snapshot.path("channel").asText(request.channel()), 32);
 
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_tracking_snapshots (
-          shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
-          source_channel, snapshot_json, strategy_json, payload_sha256, fetched_at, fresh_until, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          shipment_id = VALUES(shipment_id),
-          source_channel = VALUES(source_channel),
-          snapshot_json = VALUES(snapshot_json),
-          strategy_json = VALUES(strategy_json),
-          payload_sha256 = VALUES(payload_sha256),
-          fetched_at = VALUES(fetched_at),
-          fresh_until = VALUES(fresh_until),
-          invalidated_at = NULL,
-          invalidated_by = NULL,
-          invalidation_reason = NULL
-        """,
-        shipmentId, request.type(), request.number(), queriedBy, queriedByUsername,
-        sourceChannel, snapshotJson, strategyJson, payloadSha,
-        timestamp(fetchedAt), timestamp(freshUntil), timestamp(now)
-    );
-    Long id = jdbcTemplate.queryForObject(
+    List<Long> currentIds = jdbcTemplate.query(
         """
         SELECT id FROM cp_tracking_snapshots
         WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
-        LIMIT 1
+          AND invalidated_at IS NULL
+        ORDER BY id DESC
+        LIMIT 1 FOR UPDATE
         """,
-        Long.class,
+        (rs, rowNumber) -> rs.getLong("id"),
         queriedBy, request.type(), request.number()
     );
-    if (id == null) {
-      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save tracking snapshot");
+    if (!currentIds.isEmpty()) {
+      long id = currentIds.get(0);
+      jdbcTemplate.update(
+          """
+          UPDATE cp_tracking_snapshots
+          SET shipment_id = ?, queried_by_username = ?, source_channel = ?, snapshot_json = ?,
+              strategy_json = ?, payload_sha256 = ?, fetched_at = ?, fresh_until = ?
+          WHERE id = ?
+          """,
+          shipmentId, queriedByUsername, sourceChannel, snapshotJson, strategyJson, payloadSha,
+          timestamp(fetchedAt), timestamp(freshUntil), id
+      );
+      return id;
     }
-    return id;
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+    jdbcTemplate.update(connection -> {
+      PreparedStatement statement = connection.prepareStatement(
+          """
+          INSERT INTO cp_tracking_snapshots (
+            shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
+            source_channel, snapshot_json, strategy_json, payload_sha256,
+            fetched_at, fresh_until, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+          Statement.RETURN_GENERATED_KEYS
+      );
+      statement.setLong(1, shipmentId);
+      statement.setString(2, request.type());
+      statement.setString(3, request.number());
+      statement.setLong(4, queriedBy);
+      statement.setString(5, queriedByUsername);
+      statement.setString(6, sourceChannel);
+      statement.setString(7, snapshotJson);
+      statement.setString(8, strategyJson);
+      statement.setString(9, payloadSha);
+      statement.setTimestamp(10, timestamp(fetchedAt));
+      statement.setTimestamp(11, timestamp(freshUntil));
+      statement.setTimestamp(12, timestamp(now));
+      return statement;
+    }, keyHolder);
+    Number key = keyHolder.getKey();
+    if (key == null) throw new ApiException(
+        HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save tracking snapshot"
+    );
+    return key.longValue();
+  }
+
+  private void invalidateUnusableCurrentSnapshot(
+      long shipmentId,
+      AuthenticatedUser user,
+      Instant now
+  ) {
+    List<CurrentSnapshot> current = jdbcTemplate.query(
+        """
+        SELECT t.id, t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.id = ? AND t.invalidated_at IS NULL
+        LIMIT 1
+        """,
+        (rs, rowNumber) -> new CurrentSnapshot(
+            rs.getLong("id"), rs.getString("snapshot_json")
+        ),
+        shipmentId
+    );
+    if (current.isEmpty() || isUsableCachedSnapshot(current.get(0).snapshotJson())) return;
+    jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_snapshots
+        SET invalidated_at = ?, invalidated_by = ?, invalidation_reason = ?
+        WHERE id = ?
+        """,
+        timestamp(now), user == null ? null : user.id(),
+        "Replaced empty or unusable snapshot during forced live refresh",
+        current.get(0).id()
+    );
   }
 
   private SnapshotOwner resolveSnapshotOwner(long shipmentId, AuthenticatedUser user) {
@@ -1710,33 +1775,8 @@ public class ShipmentTrackingService {
     }
     ObjectNode enriched = ((ObjectNode) upstream).deepCopy();
     ObjectNode snapshot = (ObjectNode) enriched.path("snapshot");
-    ObjectNode tracking = childObject(snapshot, "tracking");
     ObjectNode summary = childObject(snapshot, "summary");
-    ObjectNode references = childObject(snapshot, "references");
-    ObjectNode business = childObject(references, "business");
     ArrayNode extra = snapshot.withArray("extraInformation");
-
-    putIfBlank(tracking, "carrierPrefix", details.carrierPrefix());
-    putIfBlank(tracking, "originalNumber", details.originalBillOfLading());
-    putIfBlank(references, "carrierPrefix", details.carrierPrefix());
-    putIfBlank(references, "originalBillOfLading", details.originalBillOfLading());
-    putIfBlank(references, "masterBill", details.originalBillOfLading());
-    putIfBlank(summary, "billOfLading", details.originalBillOfLading());
-    addExtra(extra, "carrierPrefix", details.carrierPrefix());
-    addExtra(extra, "originalBillOfLading", details.originalBillOfLading());
-
-    if (isBlank(business.path("forwarderJobNumber"))) {
-      putIfBlank(business, "forwarderJobNumber", details.forwarderJobNumber());
-      addExtra(extra, "forwarderJobNumber", details.forwarderJobNumber());
-    }
-    if (isBlank(business.path("clientPoNumber"))) {
-      putIfBlank(business, "clientPoNumber", details.clientPoNumber());
-      addExtra(extra, "clientPoNumber", details.clientPoNumber());
-    }
-    if (isBlank(business.path("clientNameCode"))) {
-      putIfBlank(business, "clientNameCode", details.clientNameCode());
-      addExtra(extra, "clientNameCode", details.clientNameCode());
-    }
     if (!arrayHasText(snapshot.path("routingLegs"), "vesselName", "voyage")
         && !arrayHasText(snapshot.path("sailingSchedule"), "vesselName", "voyage")) {
       addExtra(extra, "vesselVoyage", details.vesselVoyage());
@@ -1860,6 +1900,14 @@ public class ShipmentTrackingService {
       if (value != null && !value.isBlank()) return value.trim();
     }
     return null;
+  }
+
+  private String alternateCosuReference(String carrier, String type, String normalizedNumber) {
+    if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)
+        && normalizedNumber != null && normalizedNumber.matches("[0-9]{6,20}")) {
+      return "COSU" + normalizedNumber;
+    }
+    return normalizedNumber;
   }
 
   private ObjectNode childObject(ObjectNode parent, String field) {
@@ -2011,6 +2059,13 @@ public class ShipmentTrackingService {
   private record SnapshotOwner(long userId, String username) {}
 
   private record CurrentSnapshot(long id, String snapshotJson) {}
+
+  private record ImportedBusinessFields(
+      String jobNumber,
+      String clientPoNumber,
+      String clientNameCode,
+      String originalBillOfLading
+  ) {}
 
   private record MutableSnapshot(long shipmentId, long snapshotId, String snapshotJson) {}
 

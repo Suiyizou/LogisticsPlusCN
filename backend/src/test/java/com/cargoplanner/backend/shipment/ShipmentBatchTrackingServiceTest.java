@@ -258,12 +258,19 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void oneClickRefreshUsesBookingTypeAndForcesLiveRefresh() throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "existing-shipment");
     tracked.put("cacheSource", "LIVE");
     when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
 
     executor = Executors.newSingleThreadExecutor();
     service = new ShipmentBatchTrackingService(
@@ -284,6 +291,10 @@ class ShipmentBatchTrackingServiceTest {
     Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
     assertEquals("COMPLETED", completed.get("status"));
     assertEquals("REFRESH_ALL", completed.get("mode"));
+    List<Map<String, Object>> completedItems =
+        (List<Map<String, Object>>) completed.get("items");
+    assertEquals(2, completedItems.get(0).get("subtaskTotal"));
+    assertEquals(2L, completedItems.get(0).get("subtaskProcessed"));
     ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
         ArgumentCaptor.forClass(ShipmentTrackRequest.class);
     verify(trackingService).track(requestCaptor.capture(), any());
@@ -291,6 +302,7 @@ class ShipmentBatchTrackingServiceTest {
     assertEquals("BOOKING", request.type());
     assertEquals("6507943350", request.number());
     assertEquals(Boolean.TRUE, request.forceRefresh());
+    verify(trackingService).loadSupplementalDetails(any(), any(), any());
   }
 
   @Test

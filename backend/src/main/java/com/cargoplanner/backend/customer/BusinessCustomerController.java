@@ -208,6 +208,16 @@ public class BusinessCustomerController {
     return service.bindShipment(customerId, request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/{customerId}/shipments/batch")
+  public Map<String, Object> bindShipments(
+      @PathVariable String customerId,
+      @RequestBody CustomerShipmentBatchBindingRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.bindShipments(customerId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @DeleteMapping("/{customerId}/shipments/{shipmentId}")
   public Map<String, Object> unbindShipment(
       @PathVariable String customerId,

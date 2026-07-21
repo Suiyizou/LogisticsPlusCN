@@ -198,7 +198,7 @@ public class ShipmentFileService {
         access,
         FileActor.customer(customer),
         category,
-        List.copyOf(access.fileRoles()),
+        customerUploadVisibility(access),
         customer.id(),
         ipAddress
     );
@@ -219,10 +219,17 @@ public class ShipmentFileService {
         access,
         FileActor.customer(customer),
         category,
-        normalizeVisibilityRoles(requestedVisibilityRoles, access.fileRoles()),
+        customerUploadVisibility(access),
         customer.id(),
         ipAddress
     );
+  }
+
+  private List<String> customerUploadVisibility(ShipmentAccess access) {
+    LinkedHashSet<String> roles = new LinkedHashSet<>();
+    roles.add(ShipmentAccessService.OVERSEA_AGENT);
+    roles.addAll(access.fileRoles());
+    return List.copyOf(roles);
   }
 
   private SavedShipmentFile storeForActor(

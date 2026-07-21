@@ -2,6 +2,7 @@ package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
@@ -270,9 +271,12 @@ public class ShipmentBatchTrackingService {
           }
         }
         synchronized (task) {
-          item.status = "SUCCEEDED";
-          item.source = response.path("cacheSource").asText("LIVE");
           item.shipmentId = response.path("shipmentId").asText(null);
+        }
+        boolean supplementalComplete = refreshSupplementalDetails(task, item);
+        synchronized (task) {
+          item.status = supplementalComplete ? "SUCCEEDED" : "PARTIAL";
+          item.source = response.path("cacheSource").asText("LIVE");
           item.error = null;
           item.errorCode = null;
           item.nextRetryAt = null;
@@ -308,6 +312,79 @@ public class ShipmentBatchTrackingService {
       }
     }
     if (task.cancelRequested.get()) markPendingAfterCancellation(task, item);
+  }
+
+  private boolean refreshSupplementalDetails(BatchTask task, BatchItem item) {
+    if (!task.forceRefresh || !"COSCO".equals(item.request.carrier())) return true;
+    if (item.shipmentId == null || item.shipmentId.isBlank()) {
+      setFailedSupplementalSubtasks(task, item, "Main refresh did not return a shipment id");
+      return false;
+    }
+    try {
+      ObjectNode response = trackingService.loadSupplementalDetails(
+          item.shipmentId,
+          new ShipmentTrackRequest(
+              item.request.carrier(),
+              "AUTO",
+              item.request.type(),
+              item.queryNumber,
+              true,
+              null,
+              task.id
+          ),
+          task.owner
+      );
+      Map<String, String> failures = new LinkedHashMap<>();
+      JsonNode warnings = response == null ? null : response.path("warnings");
+      if (warnings != null && warnings.isArray()) {
+        for (JsonNode warning : warnings) {
+          String source = warning.path("source").asText("");
+          String message = warning.path("message").asText("Supplemental query failed");
+          failures.put(source, message);
+        }
+      }
+      synchronized (task) {
+        item.subtasks.clear();
+        item.subtasks.add(subtask(
+            "BOOKING_REFERENCE",
+            failures.containsKey("bookingInfo") ? "FAILED" : "SUCCEEDED",
+            failures.get("bookingInfo")
+        ));
+        item.subtasks.add(subtask(
+            "TRANSPORT_DETAILS",
+            failures.containsKey("containerInfo") ? "FAILED" : "SUCCEEDED",
+            failures.get("containerInfo")
+        ));
+        item.updatedAt = clock.instant();
+        task.updatedAt = item.updatedAt;
+      }
+      return failures.isEmpty();
+    } catch (RuntimeException error) {
+      setFailedSupplementalSubtasks(task, item, safeMessage(error));
+      return false;
+    }
+  }
+
+  private void setFailedSupplementalSubtasks(
+      BatchTask task,
+      BatchItem item,
+      String message
+  ) {
+    synchronized (task) {
+      item.subtasks.clear();
+      item.subtasks.add(subtask("BOOKING_REFERENCE", "FAILED", message));
+      item.subtasks.add(subtask("TRANSPORT_DETAILS", "FAILED", message));
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
+  private Map<String, Object> subtask(String type, String status, String error) {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("type", type);
+    value.put("status", status);
+    value.put("error", error);
+    return value;
   }
 
   private void markWaitingForTrackingWindow(BatchTask task, BatchItem item) {
@@ -689,9 +766,14 @@ public class ShipmentBatchTrackingService {
         value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
         value.put("updatedAt", iso(item.updatedAt));
-        value.put("subtasks", List.of());
-        value.put("subtaskTotal", 0);
-        value.put("subtaskProcessed", 0);
+        value.put("subtasks", item.subtasks.stream().map(LinkedHashMap::new).toList());
+        value.put("subtaskTotal", item.subtasks.size());
+        value.put(
+            "subtaskProcessed",
+            item.subtasks.stream()
+                .filter(subtask -> !"PENDING".equals(subtask.get("status")))
+                .count()
+        );
         items.add(value);
       }
       Map<String, Object> value = new LinkedHashMap<>();
@@ -830,6 +912,7 @@ public class ShipmentBatchTrackingService {
     private Instant nextRetryAt;
     private String shipmentId;
     private Instant updatedAt;
+    private final List<Map<String, Object>> subtasks = new ArrayList<>();
 
     private BatchItem(
         ShipmentBatchItemRequest request,

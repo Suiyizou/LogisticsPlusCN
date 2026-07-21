@@ -1127,6 +1127,15 @@ Object.assign(messages["en-US"].portal, {
 });
 
 messages["zh-CN"].customers = {
+  batchBindSelected: "批量绑定已选票单（{count}）",
+  selectShipment: "选择票单",
+  batchBoundSuccess: "批量绑定完成：新增 {bound} 条，跳过 {skipped} 条已绑定票单。",
+  batchBindFailed: "批量绑定票单失败。",
+  batchDeleteSelected: "批量删除（{count}）",
+  batchDeleteConfirm: "确认删除已选中的 {count} 张票单吗？关联数据也会一并删除。",
+  batchDeleteSuccess: "已批量删除 {count} 张票单。",
+  batchDeleteFailed: "批量删除票单失败。",
+  trackPartial: "主查询已更新，但部分补充详情查询失败。",
   createShipment: "新建票单",
   createShipmentDescription: "手动新增一张可管理的订舱号或提单记录，后续仍可执行实时追踪。",
   saveShipment: "保存票单基础信息",
@@ -1367,6 +1376,15 @@ messages["zh-CN"].customers = {
 };
 
 messages["en-US"].customers = {
+  batchBindSelected: "Assign selected ({count})",
+  selectShipment: "Select shipment",
+  batchBoundSuccess: "Assignment complete: {bound} added and {skipped} already assigned.",
+  batchBindFailed: "Could not assign the selected shipments.",
+  batchDeleteSelected: "Delete selected ({count})",
+  batchDeleteConfirm: "Delete the {count} selected shipments and their related records?",
+  batchDeleteSuccess: "Deleted {count} shipments.",
+  batchDeleteFailed: "Could not delete the selected shipments.",
+  trackPartial: "The main snapshot was updated, but some supplemental queries failed.",
   createShipment: "New shipment",
   createShipmentDescription: "Create a manageable booking or bill record. It can still be refreshed through live tracking later.",
   saveShipment: "Save shipment details",

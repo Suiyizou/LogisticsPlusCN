@@ -94,6 +94,26 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "ALTER TABLE cp_shipments ADD COLUMN business_note TEXT NULL AFTER tracking_status"
     );
     addColumnIfMissing(
+        "cp_shipments",
+        "job_number",
+        "ALTER TABLE cp_shipments ADD COLUMN job_number VARCHAR(160) NULL AFTER business_note"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "client_po_number",
+        "ALTER TABLE cp_shipments ADD COLUMN client_po_number VARCHAR(160) NULL AFTER job_number"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "client_name_code",
+        "ALTER TABLE cp_shipments ADD COLUMN client_name_code VARCHAR(160) NULL AFTER client_po_number"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "original_bill_of_lading",
+        "ALTER TABLE cp_shipments ADD COLUMN original_bill_of_lading VARCHAR(64) NULL AFTER client_name_code"
+    );
+    addColumnIfMissing(
         "cp_shipment_files",
         "uploader_customer_id",
         "ALTER TABLE cp_shipment_files ADD COLUMN uploader_customer_id BIGINT NULL AFTER uploader_user_id"
@@ -194,11 +214,8 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "queried_by_username",
         "ALTER TABLE cp_tracking_snapshots ADD COLUMN queried_by_username VARCHAR(128) NULL AFTER queried_by"
     );
-    addIndexIfMissing(
-        "cp_tracking_snapshots",
-        "uk_cp_tracking_snapshots_user_query",
-        "ALTER TABLE cp_tracking_snapshots ADD UNIQUE INDEX uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no)"
-    );
+    migrateLegacyShipmentBusinessFieldsForMySql();
+    upgradeSnapshotUserQueryIndexForMySql();
     migrateLegacyFileVisibilityForMySql();
   }
 
@@ -264,6 +281,46 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
     );
   }
 
+  private void migrateLegacyShipmentBusinessFieldsForMySql() {
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        SET s.job_number = COALESCE(
+              s.job_number,
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.references.business.forwarderJobNumber'
+              )), 'null')
+            ),
+            s.client_po_number = COALESCE(
+              s.client_po_number,
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.references.business.clientPoNumber'
+              )), 'null')
+            ),
+            s.client_name_code = COALESCE(
+              s.client_name_code,
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.references.business.clientNameCode'
+              )), 'null')
+            ),
+            s.original_bill_of_lading = COALESCE(
+              s.original_bill_of_lading,
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.references.business.originalBillOfLading'
+              )), 'null'),
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.references.originalBillOfLading'
+              )), 'null'),
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(
+                t.snapshot_json, '$.tracking.originalNumber'
+              )), 'null')
+            )
+        WHERE JSON_VALID(t.snapshot_json)
+        """
+    );
+  }
+
   private void addIndexIfMissing(String table, String index, String ddl) {
     Integer count = jdbcTemplate.queryForObject(
         """
@@ -275,6 +332,28 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         index
     );
     if (count == null || count == 0) jdbcTemplate.execute(ddl);
+  }
+
+  private void upgradeSnapshotUserQueryIndexForMySql() {
+    Integer legacyUnique = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cp_tracking_snapshots'
+          AND INDEX_NAME = 'uk_cp_tracking_snapshots_user_query' AND NON_UNIQUE = 0
+        """,
+        Integer.class
+    );
+    if (legacyUnique != null && legacyUnique > 0) {
+      jdbcTemplate.execute(
+          "ALTER TABLE cp_tracking_snapshots DROP INDEX uk_cp_tracking_snapshots_user_query"
+      );
+    }
+    addIndexIfMissing(
+        "cp_tracking_snapshots",
+        "idx_cp_tracking_snapshots_user_query",
+        "ALTER TABLE cp_tracking_snapshots ADD INDEX idx_cp_tracking_snapshots_user_query "
+            + "(queried_by, query_reference_type, query_reference_no, invalidated_at)"
+    );
   }
 
   private void addConstraintIfMissing(String table, String constraint, String ddl) {
@@ -318,6 +397,10 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           current_snapshot_id BIGINT NULL,
           tracking_status VARCHAR(80) NULL,
           business_note TEXT NULL,
+          job_number VARCHAR(160) NULL,
+          client_po_number VARCHAR(160) NULL,
+          client_name_code VARCHAR(160) NULL,
+          original_bill_of_lading VARCHAR(64) NULL,
           last_tracked_at DATETIME(6) NULL,
           fresh_until DATETIME(6) NULL,
           created_by BIGINT NULL,
@@ -363,7 +446,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           invalidation_reason VARCHAR(500) NULL,
           INDEX idx_cp_tracking_snapshots_shipment_time (shipment_id, fetched_at),
           INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
-          UNIQUE KEY uk_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no),
+          INDEX idx_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no, invalidated_at),
           CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
