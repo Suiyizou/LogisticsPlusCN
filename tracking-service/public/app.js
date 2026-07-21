@@ -60,12 +60,14 @@ const batchPendingCount = document.querySelector("#batch-pending-count");
 const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
+const batchWorkspaceDialog = document.querySelector("#batch-workspace-dialog");
+const batchWorkspaceTrigger = document.querySelector("#batch-workspace-trigger");
+const batchWorkspaceClose = document.querySelector("#batch-workspace-close");
 const batchColumnPreview = document.querySelector("#batch-column-preview");
 const batchPreviewFileName = document.querySelector("#batch-preview-file-name");
 const batchPreviewSheet = document.querySelector("#batch-preview-sheet");
 const batchPreviewColumn = document.querySelector("#batch-preview-column");
 const batchPreviewType = document.querySelector("#batch-preview-type");
-const batchContainerDetails = document.querySelector("#batch-container-details");
 const batchPreviewTableHead = document.querySelector("#batch-preview-table-head");
 const batchPreviewTableBody = document.querySelector("#batch-preview-table-body");
 const batchPreviewCancel = document.querySelector("#batch-preview-cancel");
@@ -475,6 +477,8 @@ const MESSAGES = {
     "batch.clear": "Clear imported queue",
     "batch.emptyTitle": "No imported queue",
     "batch.emptyDescription": "Choose a spreadsheet to begin batch tracking.",
+    "batch.workspaceOpen": "Batch tracking",
+    "batch.workspaceClose": "Close batch tracking",
     "batch.file": "Imported file",
     "batch.success": "Succeeded",
     "batch.core": "Core saved",
@@ -493,8 +497,6 @@ const MESSAGES = {
     "batch.previewSheet": "Worksheet",
     "batch.previewColumn": "Track column",
     "batch.previewType": "Number type",
-    "batch.containerDetails": "Enrich container details",
-    "batch.containerDetailsHint": "Off by default. This adds carrier requests for container locations and transport modes.",
     "batch.previewRecommended": "Recommended",
     "batch.previewRows": "The first rows are shown only for confirmation; your selected column is the final source.",
     "batch.previewConfirm": "Use this column and start",
@@ -521,8 +523,12 @@ const MESSAGES = {
     "batch.childContainer": "Container {number}",
     "batch.childSkipped": "Already complete",
     "batch.childRetry": "Waiting to retry",
+    "batch.childAttempts": "{count} attempts",
+    "batch.childRetryAt": "Retry at {time}",
+    "batch.childError": "Reason: {message}",
     "batch.listAria": "Imported shipment queue",
-    "batch.openItem": "Open and query {type} {number}",
+    "batch.openItem": "Open saved details for {type} {number}",
+    "batch.detailUnavailable": "This task does not have a saved shipment result yet.",
     "batch.confirmClear": "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
     "query.helper": "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
     "query.cmaHelper": "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
@@ -564,6 +570,8 @@ const MESSAGES = {
     "empty.description": "Enter a bill, booking or container number to begin.",
     "metrics.actualDeparture": "Actual departure",
     "metrics.actualArrival": "Actual arrival",
+    "metrics.estimatedDeparture": "Estimated departure",
+    "metrics.estimatedArrival": "Estimated final arrival",
     "metrics.notDeparted": "Not departed",
     "metrics.notArrived": "Not arrived",
     "metrics.estimatedDelivery": "Estimated final delivery",
@@ -907,6 +915,8 @@ const MESSAGES = {
     "batch.clear": "清除导入队列",
     "batch.emptyTitle": "尚未导入查询队列",
     "batch.emptyDescription": "请选择表格文件开始批量货物查询。",
+    "batch.workspaceOpen": "批量追踪",
+    "batch.workspaceClose": "关闭批量追踪",
     "batch.file": "导入文件",
     "batch.success": "成功",
     "batch.core": "主票已完成",
@@ -925,8 +935,6 @@ const MESSAGES = {
     "batch.previewSheet": "工作表",
     "batch.previewColumn": "追踪单号列",
     "batch.previewType": "单号类型",
-    "batch.containerDetails": "补充箱级详细信息",
-    "batch.containerDetailsHint": "默认关闭；开启后会额外请求箱号地点、运输方式和箱级动态，官网请求次数会增加。",
     "batch.previewRecommended": "建议",
     "batch.previewRows": "这里只展示前几行供确认；您选择的列将作为最终解析来源。",
     "batch.previewConfirm": "使用此列并启动任务",
@@ -953,8 +961,12 @@ const MESSAGES = {
     "batch.childContainer": "箱号 {number}",
     "batch.childSkipped": "已有信息，无需补查",
     "batch.childRetry": "等待重试",
+    "batch.childAttempts": "已尝试 {count} 次",
+    "batch.childRetryAt": "预计重试：{time}",
+    "batch.childError": "原因：{message}",
     "batch.listAria": "已导入的货物查询队列",
-    "batch.openItem": "打开并查询{type} {number}",
+    "batch.openItem": "查看{type} {number}的已保存详情",
+    "batch.detailUnavailable": "该任务暂时没有可查看的已保存结果。",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
     "query.helper": "自动模式优先调用网络接口，失败后才启用 Playwright 浏览器托底。",
     "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
@@ -996,6 +1008,8 @@ const MESSAGES = {
     "empty.description": "输入提单号、订舱号或箱号即可开始。",
     "metrics.actualDeparture": "实际离港",
     "metrics.actualArrival": "实际到港",
+    "metrics.estimatedDeparture": "预计离港",
+    "metrics.estimatedArrival": "预计最终到港",
     "metrics.notDeparted": "未离港",
     "metrics.notArrived": "未到港",
     "metrics.estimatedDelivery": "预计到达最终目的地",
@@ -1159,6 +1173,8 @@ const elements = Object.fromEntries(
     "result-container-types-fact",
     "result-container-types",
     "summary-booking-number",
+    "summary-booking-reference",
+    "summary-services",
     "summary-origin-name",
     "summary-destination-name",
     "summary-latest-detail",
@@ -1170,12 +1186,19 @@ const elements = Object.fromEntries(
     "fetched-at",
     "actual-departure",
     "actual-departure-location",
+    "departure-metric-card",
+    "departure-metric-label",
     "actual-arrival",
     "actual-arrival-location",
+    "arrival-metric-card",
+    "arrival-metric-label",
     "estimated-delivery",
     "estimated-delivery-location",
+    "delivery-metric-card",
     "latest-event",
     "latest-event-detail",
+    "latest-metric-card",
+    "metric-grid",
     "origin-flag",
     "origin-name",
     "origin-code",
@@ -1184,19 +1207,31 @@ const elements = Object.fromEntries(
     "destination-code",
     "route-count",
     "route-flow",
+    "route-panel",
     "route-summary-line",
     "route-summary-marker",
     "master-bill",
+    "master-bill-reference",
     "booking-numbers",
+    "booking-number-reference",
     "external-references",
+    "external-reference",
+    "reference-core",
     "client-name-code",
+    "client-name-code-reference",
     "client-po-number",
+    "client-po-number-reference",
     "forwarder-job-number",
+    "forwarder-job-number-reference",
+    "business-reference-grid",
     "reference-information",
     "routing-count",
     "routing-table-body",
+    "routing-panel",
     "container-count",
     "container-table-body",
+    "container-panel",
+    "secondary-grid",
     "document-drawer-shipment",
     "raw-json"
   ].map((id) => [id, document.querySelector(`#${id}`)])
@@ -3047,9 +3082,19 @@ function businessReferencesForSnapshot(snapshot) {
 
 function renderBusinessReferences(snapshot) {
   const references = businessReferencesForSnapshot(snapshot);
-  elements["client-name-code"].textContent = valueOrDash(references.clientNameCode);
-  elements["client-po-number"].textContent = valueOrDash(references.clientPoNumber);
-  elements["forwarder-job-number"].textContent = valueOrDash(references.forwarderJobNumber);
+  const rows = [
+    ["client-name-code", "client-name-code-reference", references.clientNameCode],
+    ["client-po-number", "client-po-number-reference", references.clientPoNumber],
+    ["forwarder-job-number", "forwarder-job-number-reference", references.forwarderJobNumber]
+  ];
+  let visibleCount = 0;
+  for (const [valueId, rowId, value] of rows) {
+    const visible = hasText(value);
+    elements[valueId].textContent = visible ? String(value).trim() : "—";
+    elements[rowId].hidden = !visible;
+    if (visible) visibleCount += 1;
+  }
+  elements["business-reference-grid"].hidden = visibleCount === 0;
 }
 
 function hasText(value) {
@@ -3060,6 +3105,85 @@ function hasArrayField(snapshot, collections, fields) {
   return collections.some((collection) =>
     (snapshot?.[collection] ?? []).some((item) => fields.some((field) => hasText(item?.[field])))
   );
+}
+
+function canonicalExtraInformationKeys(snapshot) {
+  const keys = new Set();
+  const business = businessReferencesForSnapshot(snapshot);
+  const references = snapshot?.references ?? {};
+  const keyTimes = snapshot?.keyTimes ?? {};
+  const addWhen = (key, value) => {
+    if (hasText(value)) keys.add(key.toLowerCase());
+  };
+
+  addWhen("carrierPrefix", snapshot?.tracking?.carrierPrefix ?? references.carrierPrefix);
+  addWhen(
+    "originalBillOfLading",
+    snapshot?.tracking?.originalNumber ??
+      references.originalBillOfLading ??
+      snapshot?.summary?.billOfLading ??
+      references.masterBill
+  );
+  addWhen("clientNameCode", business.clientNameCode);
+  addWhen("clientPoNumber", business.clientPoNumber);
+  addWhen("forwarderJobNumber", business.forwarderJobNumber);
+  addWhen("portOfLoading", snapshot?.summary?.origin?.name);
+  addWhen("portOfDischarge", snapshot?.summary?.destination?.name);
+
+  if (
+    hasText(keyTimes.actualDeparture?.time ?? keyTimes.actualDeparture?.actualTime) ||
+    hasText(keyTimes.estimatedDeparture?.time ?? keyTimes.estimatedDeparture?.actualTime) ||
+    hasArrayField(snapshot, ["routingLegs"], ["estimatedDeparture", "actualDeparture"])
+  ) {
+    keys.add("estimateddeparture");
+  }
+  if (
+    hasText(keyTimes.actualArrival?.time ?? keyTimes.actualArrival?.actualTime) ||
+    hasText(keyTimes.estimatedFinalArrival?.time ?? keyTimes.estimatedFinalArrival?.actualTime) ||
+    hasText(keyTimes.estimatedArrival?.time ?? keyTimes.estimatedArrival?.actualTime) ||
+    hasText(keyTimes.estimatedDelivery?.time ?? keyTimes.estimatedDelivery?.actualTime) ||
+    hasArrayField(snapshot, ["routingLegs"], ["estimatedArrival", "actualArrival"])
+  ) {
+    keys.add("estimatedarrival");
+  }
+  if (hasArrayField(snapshot, ["routingLegs", "sailingSchedule"], ["vesselName", "voyage"])) {
+    keys.add("vesselvoyage");
+  }
+  addWhen("volume", containerTypeSummary(snapshot));
+  return keys;
+}
+
+function deduplicatedExtraInformation(snapshot) {
+  const canonicalKeys = canonicalExtraInformationKeys(snapshot);
+  const groups = new Map();
+  for (const item of snapshot?.extraInformation ?? []) {
+    if (!hasText(item?.key) || !hasText(item?.value)) continue;
+    const key = String(item.key).trim();
+    const normalizedKey = key.toLowerCase();
+    if (canonicalKeys.has(normalizedKey)) continue;
+    const value = String(item.value).trim();
+    const normalizedValue = value.replace(/\s+/g, " ").toLocaleLowerCase();
+    const group = groups.get(normalizedKey) ?? { key, values: [], seen: new Set() };
+    if (!group.seen.has(normalizedValue)) {
+      group.seen.add(normalizedValue);
+      group.values.push(value);
+    }
+    groups.set(normalizedKey, group);
+  }
+  return [...groups.values()].map((group) => ({
+    key: group.key,
+    value: group.values.join(" · ")
+  }));
+}
+
+function extraInformationLabel(key) {
+  const messageKey = `extraInformation.${key}`;
+  const translated = t(messageKey);
+  if (translated !== messageKey) return translated;
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function mergeImportedDetailsIntoPayload(payload, importedDetails) {
@@ -3136,16 +3260,14 @@ function mergeImportedDetailsIntoPayload(payload, importedDetails) {
 }
 
 function renderExtraInformation(snapshot) {
-  const entries = Array.isArray(snapshot?.extraInformation)
-    ? snapshot.extraInformation.filter((item) => hasText(item?.key) && hasText(item?.value))
-    : [];
+  const entries = deduplicatedExtraInformation(snapshot);
   extraInformationSection.hidden = entries.length === 0;
   const fragment = document.createDocumentFragment();
   for (const entry of entries) {
     const row = document.createElement("div");
     const term = document.createElement("dt");
     const description = document.createElement("dd");
-    term.textContent = t(`extraInformation.${entry.key}`);
+    term.textContent = extraInformationLabel(entry.key);
     description.textContent = String(entry.value);
     row.append(term, description);
     fragment.append(row);
@@ -3861,7 +3983,6 @@ function restoreBatchState() {
       createdAt: stored.createdAt ?? new Date().toISOString(),
       updatedAt: stored.updatedAt ?? null,
       taskId: String(stored.taskId ?? "").trim() || null,
-      includeContainerDetails: stored.includeContainerDetails === true,
       status: hasActiveTask
         ? storedStatus
         : items.some((item) => item.status === "pending")
@@ -4004,7 +4125,10 @@ function renderBatchState() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = `batch-result-item is-${item.status}`;
-    row.disabled = batchRunning || !item.carrier || item.status === "manual" || item.manualOnly;
+    row.disabled =
+      !item.carrier ||
+      item.manualOnly ||
+      !["success", "core", "partial"].includes(item.status);
     row.setAttribute(
       "aria-label",
       t("batch.openItem", {
@@ -4042,8 +4166,18 @@ function renderBatchState() {
         : customerFacingTrackingError();
     }
     row.append(identity, status);
-    row.addEventListener("click", () => openBatchItem(item));
+    row.addEventListener("click", () => void openBatchItem(item));
     group.append(row);
+    if (item.error) {
+      const issue = document.createElement("p");
+      issue.className = "batch-result-error";
+      issue.textContent = t("batch.childError", {
+        message: canManageFileVisibility(readFileSession())
+          ? item.error
+          : customerFacingTrackingError()
+      });
+      group.append(issue);
+    }
     if (subtasks.length > 0) {
       const childDetails = document.createElement("details");
       childDetails.className = "batch-subtask-details";
@@ -4065,14 +4199,29 @@ function renderBatchState() {
         const child = document.createElement("div");
         child.className = `batch-subtask-item is-${subtask.status}`;
         child.setAttribute("role", "listitem");
-        const childName = document.createElement("span");
+        const childCopy = document.createElement("span");
+        const childName = document.createElement("strong");
         childName.textContent = subtask.type === "CONTAINER_LIST"
           ? t("batch.childContainerList")
           : t("batch.childContainer", { number: subtask.number });
+        const childMeta = document.createElement("small");
+        childMeta.textContent = [
+          subtask.error
+            ? t("batch.childError", { message: subtask.error })
+            : null,
+          subtask.attempts > 0
+            ? t("batch.childAttempts", { count: subtask.attempts })
+            : null,
+          subtask.nextRetryAt
+            ? t("batch.childRetryAt", { time: formatLocalDateTime(subtask.nextRetryAt) })
+            : null
+        ].filter(Boolean).join(" · ");
+        childMeta.hidden = !childMeta.textContent;
+        childCopy.append(childName, childMeta);
         const childStatus = document.createElement("b");
         childStatus.textContent = batchSubtaskStatusLabel(subtask);
         if (subtask.error) childStatus.title = subtask.error;
-        child.append(childName, childStatus);
+        child.append(childCopy, childStatus);
         childList.append(child);
       }
       childDetails.append(childSummary, childList);
@@ -4223,7 +4372,24 @@ function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
   renderBatchPreviewTable(sheet);
 }
 
+function openBatchWorkspace() {
+  if (!batchWorkspaceDialog || batchWorkspaceDialog.open) return;
+  renderBatchState();
+  batchWorkspaceDialog.showModal();
+  requestAnimationFrame(() => {
+    const focusTarget = batchState?.items?.length
+      ? batchResultList?.querySelector("button:not(:disabled), summary") ?? batchWorkspaceClose
+      : batchSelectButton;
+    focusTarget?.focus({ preventScroll: true });
+  });
+}
+
+function closeBatchWorkspace() {
+  if (batchWorkspaceDialog?.open) batchWorkspaceDialog.close();
+}
+
 function showBatchColumnPreview(file, preview) {
+  openBatchWorkspace();
   pendingBatchFile = file;
   batchPreviewSheets = Array.isArray(preview?.sheets) ? preview.sheets : [];
   batchPreviewFileName.textContent = file.name;
@@ -4240,13 +4406,13 @@ function showBatchColumnPreview(file, preview) {
     ? preview.suggestedSheetName
     : sheetOptions[0]?.value ?? "";
   renderBatchPreviewColumns();
-  if (batchContainerDetails) batchContainerDetails.checked = false;
+  batchWorkspaceDialog?.classList.add("is-previewing");
   batchColumnPreview.hidden = false;
-  batchColumnPreview.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function hideBatchColumnPreview({ clearFile = true } = {}) {
   batchColumnPreview.hidden = true;
+  batchWorkspaceDialog?.classList.remove("is-previewing");
   batchPreviewSheets = [];
   batchPreviewSheet.replaceChildren();
   batchPreviewColumn.replaceChildren();
@@ -4264,7 +4430,6 @@ function startImportedBatch(fileName, imported) {
     updatedAt: null,
     status: "ready",
     taskId: null,
-    includeContainerDetails: batchContainerDetails?.checked === true,
     items
   };
   if (Number(imported?.found) > BATCH_IMPORT_LIMIT) {
@@ -4432,9 +4597,6 @@ function applyBusinessBatchTask(snapshot) {
   const taskStatus = String(snapshot.status ?? "").trim().toUpperCase();
   const active = ["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"].includes(taskStatus);
   batchState.taskId = String(snapshot.taskId ?? batchState.taskId ?? "").trim() || null;
-  if (typeof snapshot.includeContainerDetails === "boolean") {
-    batchState.includeContainerDetails = snapshot.includeContainerDetails;
-  }
   batchState.status = taskStatus === "COMPLETED"
     ? "complete"
     : taskStatus === "STOPPED"
@@ -4539,7 +4701,6 @@ async function executeBatchQueue() {
         method: "POST",
         body: {
           sourceFileName: batchState.fileName,
-          includeContainerDetails: batchState.includeContainerDetails === true,
           items: submittedItems.map((item) => ({
             id: item.id,
             carrier: item.carrier,
@@ -4855,23 +5016,54 @@ function renderRoutingLegs(legs) {
   }
 }
 
-function renderReferences(references) {
-  elements["master-bill"].textContent = valueOrDash(references.masterBill);
-  const bookingNumbers = Array.isArray(references.bookingNumbers)
-    ? references.bookingNumbers
-    : references.bookingNumbers
-      ? [references.bookingNumbers]
-      : [];
-  elements["booking-numbers"].textContent =
-    bookingNumbers.length > 0 ? bookingNumbers.join(", ") : "—";
-
-  if (references.external?.length > 0) {
-    elements["external-references"].className = "";
-    elements["external-references"].textContent = references.external.join(", ");
-  } else {
-    elements["external-references"].className = "missing-value";
-    elements["external-references"].textContent = t("common.notProvided");
+function uniqueTextValues(...sources) {
+  const values = [];
+  const seen = new Set();
+  for (const source of sources) {
+    const items = Array.isArray(source) ? source : hasText(source) ? [source] : [];
+    for (const item of items) {
+      if (!hasText(item)) continue;
+      const value = String(item).trim();
+      const identity = value.replace(/[^a-z0-9]/gi, "").toUpperCase();
+      if (!identity || seen.has(identity)) continue;
+      seen.add(identity);
+      values.push(value);
+    }
   }
+  return values;
+}
+
+function bookingNumbersForSnapshot(snapshot) {
+  return uniqueTextValues(
+    snapshot?.summary?.bookingNumbers,
+    snapshot?.references?.bookingNumbers
+  );
+}
+
+function renderReferences(snapshot) {
+  const references = snapshot?.references ?? {};
+  const masterBill = hasText(references.masterBill) ? String(references.masterBill).trim() : "";
+  const identityValues = uniqueTextValues(
+    snapshot?.tracking?.originalNumber,
+    snapshot?.summary?.billOfLading,
+    references.originalBillOfLading,
+    snapshot?.tracking?.number
+  ).map((value) => value.replace(/[^a-z0-9]/gi, "").toUpperCase());
+  const masterIdentity = masterBill.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const showMasterBill = Boolean(masterBill) && !identityValues.includes(masterIdentity);
+  elements["master-bill"].textContent = masterBill || "—";
+  elements["master-bill-reference"].hidden = !showMasterBill;
+
+  const bookingNumbers = bookingNumbersForSnapshot(snapshot);
+  elements["booking-numbers"].textContent = bookingNumbers.join(", ") || "—";
+  elements["booking-number-reference"].hidden = true;
+
+  const externalReferences = uniqueTextValues(references.external);
+  const showExternalReferences = externalReferences.length > 0;
+  elements["external-references"].className = "";
+  elements["external-references"].textContent = externalReferences.join(", ") || "—";
+  elements["external-reference"].hidden = !showExternalReferences;
+  elements["reference-core"].hidden = !showMasterBill && !showExternalReferences;
 
   const list = elements["reference-information"];
   list.replaceChildren();
@@ -4890,6 +5082,7 @@ function renderReferences(references) {
     row.append(name, value);
     list.append(row);
   }
+  list.hidden = visible.length === 0;
 }
 
 function renderContainerMilestones(cell, container) {
@@ -5013,6 +5206,42 @@ function setSummaryService(element, enabled) {
   element.setAttribute("aria-checked", String(enabled));
 }
 
+function metricTimeValue(record) {
+  if (!record) return "";
+  if (typeof record === "object") return record.actualTime ?? record.time ?? "";
+  return record;
+}
+
+function firstTimedRecord(...records) {
+  return records.find((record) => hasText(metricTimeValue(record))) ?? null;
+}
+
+function renderTimeMetric({ cardId, labelId, valueId, locationId, record, labelKey }) {
+  const time = metricTimeValue(record);
+  const visible = hasText(time);
+  elements[cardId].hidden = !visible;
+  if (labelId) {
+    elements[labelId].dataset.i18n = labelKey;
+    elements[labelId].textContent = t(labelKey);
+  }
+  elements[valueId].textContent = visible
+    ? formatDateTime(time, record?.timezone)
+    : "—";
+  const location = typeof record === "object" ? record?.location : "";
+  elements[locationId].textContent = hasText(location) ? String(location).trim() : "";
+  elements[locationId].hidden = !hasText(location);
+  return visible;
+}
+
+function metricRecordsMatch(left, right) {
+  const leftTime = String(metricTimeValue(left) ?? "").trim().toUpperCase();
+  const rightTime = String(metricTimeValue(right) ?? "").trim().toUpperCase();
+  if (!leftTime || leftTime !== rightTime) return false;
+  const leftLocation = String(left?.location ?? "").trim().toUpperCase();
+  const rightLocation = String(right?.location ?? "").trim().toUpperCase();
+  return !leftLocation || !rightLocation || leftLocation === rightLocation;
+}
+
 function renderResult(payload) {
   const snapshot = payload.snapshot;
   const summary = snapshot.summary;
@@ -5028,28 +5257,29 @@ function renderResult(payload) {
   sourceTag.textContent = t(resultChannel.sourceKey);
   elements["result-carrier"].textContent = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
-  elements["result-number"].textContent = snapshot.tracking.number;
+  elements["result-number"].textContent = valueOrDash(
+    snapshot.tracking.originalNumber ?? summary.billOfLading ?? snapshot.tracking.number
+  );
   renderPrimaryFacts(snapshot);
 
-  const bookingNumbers = Array.isArray(summary.bookingNumbers)
-    ? summary.bookingNumbers
-    : summary.bookingNumbers
-      ? [summary.bookingNumbers]
-      : [];
+  const bookingNumbers = bookingNumbersForSnapshot(snapshot);
   elements["summary-booking-number"].textContent =
     bookingNumbers.length > 0 ? bookingNumbers.join(", ") : "—";
+  elements["summary-booking-reference"].hidden = bookingNumbers.length === 0;
   elements["summary-origin-name"].textContent = valueOrDash(
     [summary.origin?.name, summary.origin?.countryCode].filter(Boolean).join(", ")
   );
   elements["summary-destination-name"].textContent = valueOrDash(
     [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
   );
-  elements["summary-latest-detail"].textContent = [
+  const summaryLatestDetail = [
     latest?.location,
     formatDateTime(latest?.occurredAt)
   ]
     .filter((value) => value && value !== "—")
-    .join(" · ") || "—";
+    .join(" · ");
+  elements["summary-latest-detail"].textContent = summaryLatestDetail;
+  elements["summary-latest-detail"].hidden = !summaryLatestDetail;
 
   const transportModes = new Set(
     (snapshot.routingLegs ?? [])
@@ -5059,23 +5289,19 @@ function renderResult(payload) {
   const serviceScopes = (summary.serviceScopes ?? []).map((scope) =>
     String(scope).trim().toLowerCase()
   );
-  setSummaryService(
-    elements["summary-service-sea"],
-    transportModes.has("SEA") || serviceScopes.some((scope) => scope.includes("ocean"))
-  );
-  setSummaryService(
-    elements["summary-service-inland"],
-    ["TRUCK", "RAIL", "ROAD", "INLAND"].some((mode) => transportModes.has(mode)) ||
-      serviceScopes.some((scope) => scope.includes("truck") || scope.includes("inland"))
-  );
-  setSummaryService(
-    elements["summary-service-customs"],
-    serviceScopes.some((scope) => scope.includes("custom"))
-  );
-  setSummaryService(
-    elements["summary-service-warehouse"],
-    serviceScopes.some((scope) => scope.includes("warehouse") || scope.includes("storage"))
-  );
+  const enabledServices = {
+    sea: transportModes.has("SEA") || serviceScopes.some((scope) => scope.includes("ocean")),
+    inland:
+      ["TRUCK", "RAIL", "ROAD", "INLAND"].some((mode) => transportModes.has(mode)) ||
+      serviceScopes.some((scope) => scope.includes("truck") || scope.includes("inland")),
+    customs: serviceScopes.some((scope) => scope.includes("custom")),
+    warehouse: serviceScopes.some((scope) => scope.includes("warehouse") || scope.includes("storage"))
+  };
+  setSummaryService(elements["summary-service-sea"], enabledServices.sea);
+  setSummaryService(elements["summary-service-inland"], enabledServices.inland);
+  setSummaryService(elements["summary-service-customs"], enabledServices.customs);
+  setSummaryService(elements["summary-service-warehouse"], enabledServices.warehouse);
+  elements["summary-services"].hidden = !Object.values(enabledServices).some(Boolean);
 
   const source = payload.browserCached ? "browser" : payload.cached ? "server" : "live";
   elements["cache-status"].dataset.source = source;
@@ -5085,29 +5311,50 @@ function renderResult(payload) {
     : "";
   elements["fetched-at"].textContent = formatLocalDateTime(snapshot.fetchedAt);
 
-  elements["actual-departure"].textContent = keyTimes.actualDeparture?.time
-    ? formatDateTime(keyTimes.actualDeparture.time)
-    : t("metrics.notDeparted");
-  elements["actual-departure-location"].textContent = valueOrDash(
-    keyTimes.actualDeparture?.location,
-    t("common.notProvided")
+  const departureRecord = firstTimedRecord(
+    keyTimes.actualDeparture,
+    keyTimes.estimatedDeparture
   );
-  elements["actual-arrival"].textContent = keyTimes.actualArrival?.time
-    ? formatDateTime(keyTimes.actualArrival.time)
-    : t("metrics.notArrived");
-  elements["actual-arrival-location"].textContent = valueOrDash(
-    keyTimes.actualArrival?.location,
-    t("common.notProvided")
+  const arrivalRecord = firstTimedRecord(
+    keyTimes.actualArrival,
+    keyTimes.estimatedFinalArrival,
+    keyTimes.estimatedArrival
   );
-  elements["estimated-delivery"].textContent = formatDateTime(
-    keyTimes.estimatedDelivery?.actualTime ?? keyTimes.estimatedDelivery?.time,
-    keyTimes.estimatedDelivery?.timezone
-  );
-  elements["estimated-delivery-location"].textContent = valueOrDash(
-    keyTimes.estimatedDelivery?.location,
-    t("common.notProvided")
-  );
-  elements["latest-event"].textContent = valueOrDash(latest?.name, t("metrics.noLatestEvent"));
+  const deliveryRecord = firstTimedRecord(keyTimes.estimatedDelivery);
+  const visibleMetrics = [];
+  visibleMetrics.push(renderTimeMetric({
+    cardId: "departure-metric-card",
+    labelId: "departure-metric-label",
+    valueId: "actual-departure",
+    locationId: "actual-departure-location",
+    record: departureRecord,
+    labelKey: departureRecord === keyTimes.actualDeparture
+      ? "metrics.actualDeparture"
+      : "metrics.estimatedDeparture"
+  }));
+  visibleMetrics.push(renderTimeMetric({
+    cardId: "arrival-metric-card",
+    labelId: "arrival-metric-label",
+    valueId: "actual-arrival",
+    locationId: "actual-arrival-location",
+    record: arrivalRecord,
+    labelKey: arrivalRecord === keyTimes.actualArrival
+      ? "metrics.actualArrival"
+      : "metrics.estimatedArrival"
+  }));
+  const showDelivery = Boolean(deliveryRecord) && !metricRecordsMatch(deliveryRecord, arrivalRecord);
+  visibleMetrics.push(renderTimeMetric({
+    cardId: "delivery-metric-card",
+    labelId: null,
+    valueId: "estimated-delivery",
+    locationId: "estimated-delivery-location",
+    record: showDelivery ? deliveryRecord : null,
+    labelKey: "metrics.estimatedDelivery"
+  }));
+  const hasLatestEvent = [latest?.name, latest?.location, latest?.occurredAt, latest?.transportMode]
+    .some(hasText);
+  elements["latest-metric-card"].hidden = !hasLatestEvent;
+  elements["latest-event"].textContent = hasText(latest?.name) ? String(latest.name) : "—";
   elements["latest-event-detail"].textContent = [
     latest?.location,
     formatDateTime(latest?.occurredAt),
@@ -5115,21 +5362,33 @@ function renderResult(payload) {
   ]
     .filter((item) => item && item !== "—")
     .join(" · ");
+  elements["latest-event-detail"].hidden = !elements["latest-event-detail"].textContent;
+  visibleMetrics.push(hasLatestEvent);
+  elements["metric-grid"].hidden = !visibleMetrics.some(Boolean);
 
-  setCountryFlag(elements["origin-flag"], summary.origin.countryCode);
-  elements["origin-name"].textContent = valueOrDash(summary.origin.name);
-  elements["origin-code"].textContent = valueOrDash(summary.origin.countryCode);
-  setCountryFlag(elements["destination-flag"], summary.destination.countryCode);
-  elements["destination-name"].textContent = valueOrDash(summary.destination.name);
-  elements["destination-code"].textContent = valueOrDash(summary.destination.countryCode);
+  setCountryFlag(elements["origin-flag"], summary.origin?.countryCode);
+  elements["origin-name"].textContent = valueOrDash(summary.origin?.name);
+  elements["origin-code"].textContent = valueOrDash(summary.origin?.countryCode);
+  setCountryFlag(elements["destination-flag"], summary.destination?.countryCode);
+  elements["destination-name"].textContent = valueOrDash(summary.destination?.name);
+  elements["destination-code"].textContent = valueOrDash(summary.destination?.countryCode);
 
-  renderRoute(snapshot.route ?? [], snapshot);
+  const route = selectDisplayRouteNodes(snapshot.route ?? []);
+  const routingLegs = snapshot.routingLegs ?? [];
+  const containers = snapshot.containers ?? [];
+  elements["route-panel"].hidden = route.length === 0;
+  elements["routing-panel"].hidden = routingLegs.length === 0;
+  elements["container-panel"].hidden = containers.length === 0;
+  elements["secondary-grid"].classList.toggle("is-single-panel", containers.length === 0);
+  elements["secondary-grid"].hidden = containers.length === 0 && readFileSession().kind === "CUSTOMER";
+
+  renderRoute(route, snapshot);
   renderJourney(snapshot);
-  renderRoutingLegs(snapshot.routingLegs ?? []);
-  renderReferences(snapshot.references ?? {});
+  renderRoutingLegs(routingLegs);
+  renderReferences(snapshot);
   renderBusinessReferences(snapshot);
   renderExtraInformation(snapshot);
-  renderContainers(snapshot.containers ?? []);
+  renderContainers(containers);
   renderDocumentDrawer(snapshot);
   elements["raw-json"].textContent = payload.raw
     ? JSON.stringify(payload.raw, null, 2)
@@ -5828,9 +6087,11 @@ function updateUrl(query, { push = false } = {}) {
   window.history[push ? "pushState" : "replaceState"]({}, "", url);
 }
 
-function showView(name, { updateLocation = true } = {}) {
+function showView(name, { updateLocation = true, pushLocation = false } = {}) {
   const nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
-  if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") return showView("overview", { updateLocation });
+  if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") {
+    return showView("overview", { updateLocation, pushLocation });
+  }
   const incoming = document.querySelector(`[data-view="${nextView}"]`);
   if (!incoming) return Promise.resolve();
   const outgoing = document.querySelector(".app-view:not([hidden])");
@@ -5850,13 +6111,24 @@ function showView(name, { updateLocation = true } = {}) {
   if (updateLocation) {
     const url = new URL(window.location.href);
     url.hash = activeView;
-    if (activeView === "overview") {
+    if (activeView !== "tracking") {
       url.searchParams.delete("carrier");
       url.searchParams.delete("channel");
       url.searchParams.delete("type");
       url.searchParams.delete("number");
+    } else if (currentPayload?.snapshot?.tracking?.number) {
+      const query = normalizeQuery({
+        carrier: carrierSelect.value,
+        channel: channelSelect?.value ?? "AUTO",
+        type: trackingType.value,
+        number: trackingNumber.value
+      });
+      url.searchParams.set("carrier", query.carrier);
+      url.searchParams.set("channel", query.channel);
+      url.searchParams.set("type", query.type);
+      url.searchParams.set("number", query.number);
     }
-    window.history.replaceState({}, "", url);
+    window.history[pushLocation ? "pushState" : "replaceState"]({}, "", url);
   }
 
   const revealIncoming = () => {
@@ -5899,22 +6171,53 @@ function showView(name, { updateLocation = true } = {}) {
   return shown;
 }
 
-function openHistoryEntry(entry) {
-  carrierSelect.value = entry.query.carrier;
-  if (channelSelect) channelSelect.value = entry.query.channel ?? "AUTO";
-  trackingType.value = entry.query.type;
-  trackingNumber.value = entry.query.number;
+function historyEntryForQuery(query, shipmentId = null) {
+  const normalized = normalizeQuery(query);
+  return readHistory().find((entry) => {
+    if (shipmentId && String(entry.shipmentId ?? "") === String(shipmentId)) return true;
+    return cacheKey(entry.query) === cacheKey(normalized);
+  }) ?? null;
+}
+
+function showStoredTrackingQuery(
+  query,
+  { entry = null, importedDetails = null, clearWhenMissing = false } = {}
+) {
+  const normalized = normalizeQuery(query);
+  carrierSelect.value = normalized.carrier;
+  if (channelSelect) channelSelect.value = normalized.channel ?? "AUTO";
+  trackingType.value = normalized.type;
+  trackingNumber.value = normalized.number;
   updateCarrierUI();
-  currentPayload = {
-    snapshot: entry.snapshot,
-    raw: null,
-    cached: false,
-    browserCached: true,
-    browserCachedAt: entry.savedAt,
-    shipmentId: entry.shipmentId ?? entry.shipmentRecord?.publicId ?? null,
-    shipmentRecord: entry.shipmentRecord ?? null
-  };
+  const storedEntry = entry ?? historyEntryForQuery(normalized);
+  const payload = storedEntry?.snapshot
+    ? {
+        snapshot: storedEntry.snapshot,
+        raw: null,
+        cached: false,
+        browserCached: true,
+        browserCachedAt: storedEntry.savedAt,
+        shipmentId: storedEntry.shipmentId ?? storedEntry.shipmentRecord?.publicId ?? null,
+        shipmentRecord: storedEntry.shipmentRecord ?? null
+      }
+    : loadSnapshot(normalized);
+  if (!payload) {
+    if (clearWhenMissing) {
+      currentPayload = null;
+      setRelatedFilesContext(null);
+      results.hidden = true;
+      emptyState.hidden = false;
+      clearError();
+    }
+    return false;
+  }
+  currentPayload = mergeImportedDetailsIntoPayload(payload, importedDetails);
   renderResult(currentPayload);
+  return true;
+}
+
+function openHistoryEntry(entry) {
+  showStoredTrackingQuery(entry.query, { entry });
   updateUrl(entry.query, { push: true });
   void showView("tracking", { updateLocation: false });
 }
@@ -5941,41 +6244,26 @@ function markBatchItemResult(query, { status, source = null, error = null }) {
   renderBatchState();
 }
 
-function openBatchItem(item) {
-  if (batchRunning) return;
+async function openBatchItem(item) {
   const query = queryForBatchItem(item);
-  carrierSelect.value = query.carrier;
-  if (channelSelect) channelSelect.value = query.channel ?? "AUTO";
-  trackingType.value = query.type;
-  trackingNumber.value = query.number;
-  updateCarrierUI();
-  const localPayload = loadSnapshot(query);
-  if (localPayload) {
-    currentPayload = mergeImportedDetailsIntoPayload(localPayload, item.importedDetails);
-    renderResult(currentPayload);
-  } else {
-    currentPayload = null;
-    setRelatedFilesContext(null);
-    results.hidden = true;
-    emptyState.hidden = false;
-    clearError();
+  let entry = historyEntryForQuery(query, item.shipmentId);
+  if (!entry && readFileSession().kind === "INTERNAL") {
+    await loadInternalTrackedHistory();
+    entry = historyEntryForQuery(query, item.shipmentId);
   }
-  updateUrl(query, { push: true });
-  void showView("tracking", { updateLocation: false }).then(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const currentQuery = normalizeQuery({
-          carrier: carrierSelect.value,
-          channel: channelSelect?.value ?? "AUTO",
-          type: trackingType.value,
-          number: trackingNumber.value
-        });
-        if (activeView === "tracking" && cacheKey(currentQuery) === cacheKey(query)) {
-          form.requestSubmit();
-        }
-      });
-    });
+  const available = showStoredTrackingQuery(query, {
+    entry,
+    importedDetails: item.importedDetails
   });
+  if (!available) {
+    setBatchImportNotice("batch.detailUnavailable", {}, "warning");
+    renderBatchState();
+    return;
+  }
+  setBatchImportNotice();
+  closeBatchWorkspace();
+  updateUrl(query, { push: true });
+  await showView("tracking", { updateLocation: false });
 }
 
 function applyLanguage(language, { persist = true } = {}) {
@@ -6210,7 +6498,7 @@ carrierNavItems.forEach((item) => {
   const selectCarrier = () => {
     carrierSelect.value = item.dataset.carrierSelect;
     carrierSelect.dispatchEvent(new Event("change"));
-    void showView("tracking");
+    void showView("tracking", { pushLocation: activeView !== "tracking" });
   };
   item.addEventListener("click", selectCarrier);
   item.addEventListener("keydown", (event) => {
@@ -6225,6 +6513,12 @@ cmaSessionForm.addEventListener("submit", (event) => {
 });
 cmaSessionClear.addEventListener("click", () => void clearCmaSession());
 channelSelect?.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
+
+batchWorkspaceTrigger?.addEventListener("click", openBatchWorkspace);
+batchWorkspaceClose?.addEventListener("click", closeBatchWorkspace);
+batchWorkspaceDialog?.addEventListener("click", (event) => {
+  if (event.target === batchWorkspaceDialog) closeBatchWorkspace();
+});
 
 batchSelectButton?.addEventListener("click", () => {
   if (!batchRunning) batchFileInput?.click();
@@ -6471,7 +6765,8 @@ document.querySelectorAll("[data-language]").forEach((button) => {
 document.querySelectorAll("[data-view-target]").forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();
-    showView(link.dataset.viewTarget);
+    if (link.dataset.viewTarget === activeView) return;
+    showView(link.dataset.viewTarget, { pushLocation: true });
   });
 });
 
@@ -6499,7 +6794,7 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
 });
 
 document.querySelector("#start-tracking-button").addEventListener("click", () => {
-  showView("tracking").then(() => {
+  showView("tracking", { pushLocation: activeView !== "tracking" }).then(() => {
     if (trackingNumber && !trackingNumber.hidden) {
       trackingNumber.focus();
       trackingNumber.select();
@@ -6607,11 +6902,36 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !documentDrawerLayer.hidden) closeDocumentDrawer();
 });
 
+function trackingQueryFromLocation() {
+  const search = new URLSearchParams(window.location.search);
+  const number = search.get("number");
+  if (!number) return null;
+  return normalizeQuery({
+    carrier: search.get("carrier") || "COSCO",
+    channel: search.get("channel") || "AUTO",
+    type: search.get("type") || "BILLOFLADING",
+    number
+  });
+}
+
 function syncViewFromLocation() {
   const requestedView = window.location.hash.replace(/^#/, "");
   const nextView = ["overview", "tracking", "profile"].includes(requestedView)
     ? requestedView
     : "overview";
+  if (nextView === "tracking") {
+    const query = trackingQueryFromLocation();
+    if (query) {
+      showStoredTrackingQuery(query, { clearWhenMissing: true });
+    } else {
+      currentPayload = null;
+      trackingNumber.value = "";
+      setRelatedFilesContext(null);
+      results.hidden = true;
+      emptyState.hidden = false;
+      clearError();
+    }
+  }
   if (nextView === activeView) return;
   showView(nextView, { updateLocation: false });
 }
@@ -6644,22 +6964,11 @@ if (
   window.setTimeout(() => void runBatchQueue(), 0);
 }
 
-const initial = new URLSearchParams(window.location.search);
-const initialNumber = initial.get("number");
-if (initialNumber) {
-  const initialQuery = normalizeQuery({
-    carrier: initial.get("carrier") || "COSCO",
-    channel: initial.get("channel") || "AUTO",
-    type: initial.get("type") || "BILLOFLADING",
-    number: initialNumber
-  });
-  carrierSelect.value = CARRIERS[initialQuery.carrier] ? initialQuery.carrier : "COSCO";
-  if (channelSelect) channelSelect.value = CHANNELS[initialQuery.channel] ? initialQuery.channel : "AUTO";
-  trackingType.value = TYPE_KEYS[initialQuery.type] ? initialQuery.type : "BILLOFLADING";
-  trackingNumber.value = initialQuery.number;
-  updateCarrierUI();
+const initialQuery = trackingQueryFromLocation();
+if (initialQuery) {
+  const restored = showStoredTrackingQuery(initialQuery);
   showView("tracking", { updateLocation: false });
-  form.requestSubmit();
+  if (!restored) form.requestSubmit();
 } else {
   showView(["overview", "tracking", "profile"].includes(window.location.hash.slice(1))
     ? window.location.hash.slice(1)

@@ -221,7 +221,19 @@
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
                 <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
               </div>
-              <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
+              <div class="tracking-heading-actions">
+                <button
+                  class="batch-workspace-trigger"
+                  id="batch-workspace-trigger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-controls="batch-workspace-dialog"
+                >
+                  <span aria-hidden="true">☰</span>
+                  <span data-i18n="batch.workspaceOpen">Batch tracking</span>
+                </button>
+                <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
+              </div>
             </section>
 
             <section class="query-panel">
@@ -262,16 +274,26 @@
               </div>
             </section>
 
-            <section class="panel batch-import-panel" id="batch-import-panel" hidden>
+            <dialog class="batch-workspace-dialog" id="batch-workspace-dialog" aria-labelledby="batch-workspace-title">
+            <section class="panel batch-import-panel" id="batch-import-panel">
               <div class="panel-header batch-import-heading">
                 <div>
                   <span class="panel-icon">☰</span>
                   <span>
-                    <strong data-i18n="batch.title">Batch tracking import</strong>
+                    <strong id="batch-workspace-title" data-i18n="batch.title">Batch tracking import</strong>
                     <small data-i18n="batch.subtitle">Import an Excel or CSV list and query shipments one at a time</small>
                   </span>
                 </div>
-                <span class="batch-local-badge" data-i18n="batch.localBadge">This device only</span>
+                <div class="batch-workspace-heading-actions">
+                  <span class="batch-local-badge" data-i18n="batch.localBadge">This device only</span>
+                  <button
+                    class="batch-workspace-close"
+                    id="batch-workspace-close"
+                    type="button"
+                    data-i18n-aria-label="batch.workspaceClose"
+                    aria-label="Close batch tracking"
+                  >×</button>
+                </div>
               </div>
               <div class="batch-import-body">
                 <div class="batch-import-intro">
@@ -358,13 +380,6 @@
                       <option value="BOOKING" data-i18n="type.booking">Booking number</option>
                     </select>
                   </label>
-                  <label class="batch-container-detail-option">
-                    <input type="checkbox" id="batch-container-details" />
-                    <span>
-                      <strong data-i18n="batch.containerDetails">Enrich container details</strong>
-                      <small data-i18n="batch.containerDetailsHint">Off by default. This adds carrier requests for container locations and transport modes.</small>
-                    </span>
-                  </label>
                 </div>
                 <div class="batch-column-preview-table-wrap">
                   <table class="batch-column-preview-table">
@@ -382,6 +397,7 @@
               </section>
               <p class="batch-import-message" id="batch-import-message" hidden></p>
             </section>
+            </dialog>
 
             <section class="cma-session-panel" id="cma-session-panel" hidden>
               <div class="cma-session-heading">
@@ -442,7 +458,7 @@
                       <h2 id="result-number">—</h2>
                     </span>
                   </div>
-                  <div class="summary-booking-number">
+                  <div class="summary-booking-number" id="summary-booking-reference">
                     <small data-i18n="references.booking">Booking number</small>
                     <strong id="summary-booking-number">—</strong>
                   </div>
@@ -506,7 +522,7 @@
                     </div>
                   </section>
 
-                  <div class="summary-services">
+                  <div class="summary-services" id="summary-services">
                     <small data-i18n="summary.services">Selected services</small>
                     <div>
                       <span id="summary-service-sea"><i>✓</i><b data-i18n="summary.sea">Ocean</b></span>
@@ -518,24 +534,24 @@
                 </div>
               </section>
 
-              <section class="metric-grid" aria-label="Key shipment events">
-                <article class="metric-card departure-card">
+              <section class="metric-grid" id="metric-grid" aria-label="Key shipment events">
+                <article class="metric-card departure-card" id="departure-metric-card">
                   <div class="metric-head">
                     <span class="metric-icon">↗</span>
-                    <p data-i18n="metrics.actualDeparture">Actual departure</p>
+                    <p id="departure-metric-label" data-i18n="metrics.actualDeparture">Actual departure</p>
                   </div>
                   <strong id="actual-departure">—</strong>
                   <span id="actual-departure-location">Not provided</span>
                 </article>
-                <article class="metric-card arrival-card">
+                <article class="metric-card arrival-card" id="arrival-metric-card">
                   <div class="metric-head">
                     <span class="metric-icon">↘</span>
-                    <p data-i18n="metrics.actualArrival">Actual arrival</p>
+                    <p id="arrival-metric-label" data-i18n="metrics.actualArrival">Actual arrival</p>
                   </div>
                   <strong id="actual-arrival">—</strong>
                   <span id="actual-arrival-location">Not provided</span>
                 </article>
-                <article class="metric-card estimate-card">
+                <article class="metric-card estimate-card" id="delivery-metric-card">
                   <div class="metric-head">
                     <span class="metric-icon">◷</span>
                     <p data-i18n="metrics.estimatedDelivery">Estimated final delivery</p>
@@ -543,7 +559,7 @@
                   <strong id="estimated-delivery">—</strong>
                   <span id="estimated-delivery-location">Not provided</span>
                 </article>
-                <article class="metric-card latest-card">
+                <article class="metric-card latest-card" id="latest-metric-card">
                   <div class="metric-head">
                     <span class="live-dot"></span>
                     <p data-i18n="metrics.latestEvent">Latest event</p>
@@ -554,7 +570,7 @@
               </section>
 
               <div class="primary-grid">
-                <section class="panel route-panel">
+                <section class="panel route-panel" id="route-panel">
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">⌖</span>
@@ -597,30 +613,30 @@
                       Edit business references
                     </button>
                   </div>
-                  <dl class="business-reference-grid">
-                    <div>
+                  <dl class="business-reference-grid" id="business-reference-grid">
+                    <div id="client-name-code-reference">
                       <dt data-i18n="business.clientCode">Client name code</dt>
                       <dd id="client-name-code">—</dd>
                     </div>
-                    <div>
+                    <div id="client-po-number-reference">
                       <dt data-i18n="business.clientPo">Client PO number</dt>
                       <dd id="client-po-number">—</dd>
                     </div>
-                    <div>
+                    <div id="forwarder-job-number-reference">
                       <dt data-i18n="business.forwarderJob">Forwarder job number</dt>
                       <dd id="forwarder-job-number">—</dd>
                     </div>
                   </dl>
-                  <dl class="reference-core">
-                    <div>
+                  <dl class="reference-core" id="reference-core">
+                    <div id="master-bill-reference">
                       <dt data-i18n="references.masterBill">Master bill</dt>
                       <dd id="master-bill">—</dd>
                     </div>
-                    <div>
+                    <div id="booking-number-reference">
                       <dt data-i18n="references.booking">Booking number</dt>
                       <dd id="booking-numbers">—</dd>
                     </div>
-                    <div class="reference-wide">
+                    <div class="reference-wide" id="external-reference">
                       <dt data-i18n="references.external">Other carrier references</dt>
                       <dd id="external-references">Not provided</dd>
                     </div>
@@ -633,7 +649,7 @@
                 </aside>
               </div>
 
-              <section class="panel table-panel routing-panel">
+              <section class="panel table-panel routing-panel" id="routing-panel">
                 <div class="panel-header">
                   <div>
                     <span class="panel-icon">⇄</span>
@@ -662,8 +678,8 @@
                 </div>
               </section>
 
-              <div class="secondary-grid">
-                <section class="panel table-panel">
+              <div class="secondary-grid" id="secondary-grid">
+                <section class="panel table-panel" id="container-panel">
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">▣</span>

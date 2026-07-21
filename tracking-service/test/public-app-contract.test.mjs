@@ -236,11 +236,13 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
 });
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
-  assert.match(indexSource, /id="batch-import-panel" hidden/);
-  assert.match(indexSource, /id="batch-container-details"/);
-  assert.doesNotMatch(indexSource, /id="batch-container-details"[^>]*checked/);
+  assert.match(
+    indexSource,
+    /id="batch-workspace-trigger"[\s\S]*?<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/
+  );
+  assert.doesNotMatch(indexSource, /id="batch-container-details"/);
   assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
-  assert.match(appSource, /includeContainerDetails: batchState\.includeContainerDetails === true/);
+  assert.doesNotMatch(appSource, /includeContainerDetails/);
   assert.match(appSource, /\["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"\]/);
   assert.match(appSource, /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/);
   assert.match(appSource, /\/api\/business\/shipment-batch-tasks\/\$\{encodedTaskId\}\/cancel/);
@@ -248,6 +250,10 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
   assert.match(appSource, /subtasks: normalizeBatchSubtasks\(remote\.subtasks/);
   assert.match(appSource, /batch-subtask-details[\s\S]*?batch\.childProgress/);
   assert.match(stylesSource, /\.batch-subtask-list[\s\S]*?\.batch-subtask-item/);
+  assert.match(
+    stylesSource,
+    /\.batch-workspace-dialog \{[\s\S]*?width: min\(1440px,[\s\S]*?height: min\(900px/
+  );
   assert.match(
     appSource,
     /hasUnsubmittedWork[\s\S]*?item\.status === "pending"[\s\S]*?item\.status === "manual" && !item\.submitted/
@@ -347,12 +353,34 @@ test("opening shipment details never fetches files or silently re-tracks the shi
   const openStart = appSource.indexOf("function openHistoryEntry(entry)");
   const openEnd = appSource.indexOf("function markBatchItemResult", openStart);
   const openSource = appSource.slice(openStart, openEnd);
-  assert.match(openSource, /renderResult\(currentPayload\)/);
+  assert.match(openSource, /showStoredTrackingQuery\(entry\.query, \{ entry \}\)/);
   assert.doesNotMatch(openSource, /form\.requestSubmit\(\)|requestTracking\(/);
+
+  const batchOpenStart = appSource.indexOf("async function openBatchItem(item)");
+  const batchOpenEnd = appSource.indexOf("function applyLanguage", batchOpenStart);
+  const batchOpenSource = appSource.slice(batchOpenStart, batchOpenEnd);
+  assert.match(batchOpenSource, /showStoredTrackingQuery\(query/);
+  assert.match(batchOpenSource, /closeBatchWorkspace\(\)/);
+  assert.doesNotMatch(batchOpenSource, /form\.requestSubmit\(\)|requestTracking\(/);
 
   const filesStart = appSource.indexOf("function openRelatedFilesDrawer()");
   const filesEnd = appSource.indexOf("function closeRelatedFilesDrawer", filesStart);
   assert.match(appSource.slice(filesStart, filesEnd), /loadRelatedFiles\(\)/);
+});
+
+test("view navigation keeps browser back-forward state and restores stored tracking details", () => {
+  assert.match(
+    appSource,
+    /function showView\(name, \{ updateLocation = true, pushLocation = false \} = \{\}\)[\s\S]*?window\.history\[pushLocation \? "pushState" : "replaceState"\]/
+  );
+  assert.match(
+    appSource,
+    /function syncViewFromLocation\(\)[\s\S]*?trackingQueryFromLocation\(\)[\s\S]*?showStoredTrackingQuery\(query, \{ clearWhenMissing: true \}\)/
+  );
+  assert.match(
+    appSource,
+    /showView\(link\.dataset\.viewTarget, \{ pushLocation: true \}\)/
+  );
 });
 
 test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {
@@ -388,4 +416,82 @@ test("exposes real carrier selection and restricts CMA session maintenance to ma
     /fetch\("\/api\/tracking\/cma-session"[\s\S]*?method: "PATCH"[\s\S]*?fileAuthHeaders\(session\)/
   );
   assert.doesNotMatch(appSource, /localStorage\.setItem\([^\n]*cma[^\n]*sessionCookie/i);
+});
+
+test("open details prefers structured facts and removes repeated spreadsheet fields", () => {
+  const start = appSource.indexOf("function canonicalExtraInformationKeys(snapshot)");
+  const end = appSource.indexOf("function mergeImportedDetailsIntoPayload", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const context = vm.createContext({
+    hasText(value) {
+      return value !== null && value !== undefined && String(value).trim() !== "";
+    },
+    hasArrayField(snapshot, collections, fields) {
+      return collections.some((collection) =>
+        (snapshot?.[collection] ?? []).some((item) =>
+          fields.some((field) => context.hasText(item?.[field]))
+        )
+      );
+    },
+    businessReferencesForSnapshot(snapshot) {
+      return snapshot?.references?.business ?? {};
+    },
+    containerTypeSummary() {
+      return "";
+    },
+    t(key) {
+      return key;
+    }
+  });
+  vm.runInContext(
+    `${appSource.slice(start, end)}\n` +
+      "globalThis.detailContract = { deduplicatedExtraInformation };",
+    context
+  );
+
+  const snapshot = {
+    tracking: { carrierPrefix: "COSU", originalNumber: "COSU9508426860" },
+    summary: {
+      billOfLading: "COSU9508426860",
+      origin: { name: "SHANGHAI" },
+      destination: { name: "LONG BEACH" }
+    },
+    keyTimes: {
+      estimatedDeparture: { time: "22-Jul-26" },
+      estimatedFinalArrival: { time: "9-Aug-26" }
+    },
+    references: {
+      business: { clientNameCode: "Hayden US", forwarderJobNumber: "LJSH26070068" }
+    },
+    routingLegs: [],
+    sailingSchedule: [],
+    containers: [],
+    extraInformation: [
+      { key: "carrierPrefix", value: "COSU" },
+      { key: "originalBillOfLading", value: "COSU9508426860" },
+      { key: "clientNameCode", value: "Hayden US" },
+      { key: "forwarderJobNumber", value: "LJSH26070068" },
+      { key: "portOfLoading", value: "SHANGHAI" },
+      { key: "portOfDischarge", value: "LONG BEACH" },
+      { key: "estimatedDeparture", value: "22-Jul-26" },
+      { key: "estimatedArrival", value: "9-Aug-26" },
+      { key: "vesselVoyage", value: "COSCO EUROPE 114E" },
+      { key: "volume", value: "20*40HC" },
+      { key: "volume", value: "20*40HC" }
+    ]
+  };
+  const displayed = JSON.parse(
+    JSON.stringify(context.detailContract.deduplicatedExtraInformation(snapshot))
+  );
+  assert.deepEqual(displayed, [
+    { key: "vesselVoyage", value: "COSCO EUROPE 114E" },
+    { key: "volume", value: "20*40HC" }
+  ]);
+  assert.match(
+    appSource,
+    /firstTimedRecord\([\s\S]*?keyTimes\.actualArrival,[\s\S]*?keyTimes\.estimatedFinalArrival/
+  );
+  assert.match(indexSource, /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/);
 });
