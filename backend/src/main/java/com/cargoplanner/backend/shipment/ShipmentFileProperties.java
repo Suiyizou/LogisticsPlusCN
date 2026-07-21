@@ -15,7 +15,7 @@ public class ShipmentFileProperties {
   private long maxBytesPerCustomer = 5L * 1024L * 1024L * 1024L;
   private long minFreeSpaceBytes = 1024L * 1024L * 1024L;
   private Set<String> allowedExtensions = new LinkedHashSet<>(
-      Set.of("pdf", "xlsx", "xls", "csv", "doc", "docx", "jpg", "jpeg", "png", "txt")
+      Set.of("pdf", "xlsx", "xls", "csv", "doc", "docx", "jpg", "jpeg", "png", "txt", "md", "markdown")
   );
 
   public String getRoot() {

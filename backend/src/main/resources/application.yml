@@ -66,7 +66,7 @@ app:
     max-bytes-per-shipment: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_SHIPMENT:2147483648}
     max-bytes-per-customer: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_CUSTOMER:5368709120}
     min-free-space-bytes: ${APP_SHIPMENT_FILE_MIN_FREE_SPACE_BYTES:1073741824}
-    allowed-extensions: ${APP_SHIPMENT_FILE_ALLOWED_EXTENSIONS:pdf,xlsx,xls,csv,doc,docx,jpg,jpeg,png,txt}
+    allowed-extensions: ${APP_SHIPMENT_FILE_ALLOWED_EXTENSIONS:pdf,xlsx,xls,csv,doc,docx,jpg,jpeg,png,txt,md,markdown}
   text-recognition:
     # Agent providers commonly rate-limit parallel calls. Keep this bounded to 1-4;
     # use 1 to restore serial execution when a provider has a strict quota.

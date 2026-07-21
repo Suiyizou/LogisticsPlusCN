@@ -34,9 +34,14 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api")
 public class ShipmentFileController {
   private final ShipmentFileService fileService;
+  private final ShipmentFileCommentService commentService;
 
-  public ShipmentFileController(ShipmentFileService fileService) {
+  public ShipmentFileController(
+      ShipmentFileService fileService,
+      ShipmentFileCommentService commentService
+  ) {
     this.fileService = fileService;
+    this.commentService = commentService;
   }
 
   @GetMapping("/shipments/{shipmentId}/files")
@@ -45,6 +50,23 @@ public class ShipmentFileController {
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user
   ) {
     return fileService.list(shipmentId, user);
+  }
+
+  @GetMapping("/shipments/{shipmentId}/file-comments")
+  public Map<String, Object> listComments(
+      @PathVariable String shipmentId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user
+  ) {
+    return commentService.list(shipmentId, user);
+  }
+
+  @PostMapping("/shipments/{shipmentId}/file-comments")
+  public Map<String, Object> createComment(
+      @PathVariable String shipmentId,
+      @RequestBody ShipmentFileCommentRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user
+  ) {
+    return commentService.create(shipmentId, user, request);
   }
 
   @PostMapping(

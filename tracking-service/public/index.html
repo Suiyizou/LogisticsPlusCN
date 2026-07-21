@@ -171,14 +171,6 @@
                   </span>
                 </div>
                 <div class="history-heading-actions">
-                  <button
-                    id="history-refresh-all"
-                    class="history-refresh-all"
-                    type="button"
-                    data-i18n="history.refreshAll"
-                    hidden
-                  >Update all active</button>
-                  <span id="history-refresh-status" class="history-refresh-status" hidden></span>
                   <div class="history-search">
                     <span aria-hidden="true">⌕</span>
                     <input
@@ -199,6 +191,14 @@
                     >×</button>
                   </div>
                 </div>
+              </div>
+
+              <div class="history-loading" id="history-loading" role="status" aria-live="polite" hidden>
+                <span class="history-loading-spinner" aria-hidden="true"></span>
+                <span>
+                  <strong data-i18n="history.loadingTitle">Retrieving shipment list</strong>
+                  <small data-i18n="history.loadingDescription">Loading the latest records from the database…</small>
+                </span>
               </div>
 
               <div class="history-empty" id="history-empty">
@@ -807,6 +807,36 @@
         <ul class="related-files-list" id="related-files-list" aria-live="polite"></ul>
       </div>
 
+      <section class="related-file-comments" id="related-file-comments" hidden>
+        <header>
+          <span>
+            <strong data-i18n="files.commentsTitle">File messages</strong>
+            <small data-i18n="files.commentsDescription">Messages shared with people who can access this shipment.</small>
+          </span>
+          <span class="related-file-comments-count" id="related-file-comments-count">0</span>
+        </header>
+        <div class="related-file-comments-loading" id="related-file-comments-loading" hidden>
+          <span aria-hidden="true"></span>
+          <small data-i18n="files.commentsLoading">Loading messages…</small>
+        </div>
+        <p class="related-file-comments-empty" id="related-file-comments-empty" data-i18n="files.commentsEmpty">No messages yet.</p>
+        <ul class="related-file-comments-list" id="related-file-comments-list" aria-live="polite"></ul>
+        <form class="related-file-comment-form" id="related-file-comment-form">
+          <label for="related-file-comment-input" data-i18n="files.commentLabel">Add a message</label>
+          <div>
+            <textarea
+              id="related-file-comment-input"
+              maxlength="2000"
+              rows="2"
+              data-i18n-placeholder="files.commentPlaceholder"
+              placeholder="Leave a note about the shipment documents"
+            ></textarea>
+            <button id="related-file-comment-send" type="submit" data-i18n="files.commentSend">Send</button>
+          </div>
+          <p id="related-file-comment-message" role="status" aria-live="polite" hidden></p>
+        </form>
+      </section>
+
       <footer class="related-files-upload" id="related-files-upload-panel" hidden>
         <div class="related-files-upload-heading">
           <div>
@@ -827,16 +857,20 @@
                 aria-haspopup="listbox"
                 aria-expanded="false"
               >
-                <span id="related-files-category-label" data-i18n="files.categoryCargo">Cargo details</span>
+                <span id="related-files-category-label" data-i18n="documents.type.exportCivPl">CIV and PL</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
               </button>
               <div class="related-files-custom-select-menu" id="related-files-category-menu" role="listbox" aria-hidden="true">
-                <button type="button" role="option" data-category-value="CARGO_DETAIL" data-i18n="files.categoryCargo">Cargo details</button>
-                <button type="button" role="option" data-category-value="INVOICE" data-i18n="files.categoryInvoice">Invoice</button>
-                <button type="button" role="option" data-category-value="SHIPPING" data-i18n="files.categoryShipping">Shipping document</button>
-                <button type="button" role="option" data-category-value="OTHER" data-i18n="files.categoryOther">Other</button>
+                <button type="button" role="option" data-category-value="EXPORT_CIV_PL" data-i18n="documents.type.exportCivPl">CIV and PL</button>
+                <button type="button" role="option" data-category-value="HOUSE_BILL" data-i18n="documents.type.houseBill">House Bill of Lading</button>
+                <button type="button" role="option" data-category-value="MASTER_BILL" data-i18n="documents.type.masterBill">MB/L</button>
+                <button type="button" role="option" data-category-value="ARRIVAL_NOTICE" data-i18n="documents.type.arrivalNotice">Arrival Notice</button>
+                <button type="button" role="option" data-category-value="DELIVERY_ORDER" data-i18n="documents.type.deliveryOrder">Delivery Order</button>
+                <button type="button" role="option" data-category-value="POD" data-i18n="documents.type.pod">POD</button>
+                <button type="button" role="option" data-category-value="DUTY_SUMMARY" data-i18n="documents.type.dutySummary">Duty Summary</button>
+                <button type="button" role="option" data-category-value="IMPORT_CIV_PL" data-i18n="documents.type.importCivPl">Import CIV and PL</button>
               </div>
-              <input id="related-files-category" type="hidden" value="CARGO_DETAIL" />
+              <input id="related-files-category" type="hidden" value="EXPORT_CIV_PL" />
             </div>
           </div>
           <fieldset class="related-files-option-field related-files-visibility-field" id="related-files-upload-visibility-field" hidden>
@@ -883,7 +917,7 @@
         <input
           id="related-files-upload-input"
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx,.txt,.zip"
+          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx,.txt,.md,.markdown"
           multiple
           hidden
         />
@@ -923,7 +957,7 @@
         <span class="system-wait-complete" aria-hidden="true">
           <svg viewBox="0 0 32 32"><path d="m8 16.5 5 5L24 10.5" /></svg>
         </span>
-        <span class="sr-only" id="system-wait-message" data-i18n="wait.tracking">Retrieving the latest shipment data…</span>
+        <span class="system-wait-message" id="system-wait-message" data-i18n="wait.tracking">Retrieving the latest shipment data…</span>
       </div>
     </div>
 

@@ -495,6 +495,23 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_shipment_file_comments (
+          id BIGINT PRIMARY KEY AUTO_INCREMENT,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          shipment_id BIGINT NOT NULL,
+          author_user_id BIGINT NULL,
+          author_customer_id BIGINT NULL,
+          author_display_name_snapshot VARCHAR(120) NOT NULL,
+          author_role_snapshot VARCHAR(24) NOT NULL,
+          body VARCHAR(2000) NOT NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          INDEX idx_cp_shipment_file_comments_shipment_time (shipment_id, created_at, id),
+          CONSTRAINT fk_cp_shipment_file_comments_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_shipment_file_comments_user FOREIGN KEY (author_user_id) REFERENCES cp_users(id) ON DELETE SET NULL,
+          CONSTRAINT fk_cp_shipment_file_comments_customer FOREIGN KEY (author_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_shipment_file_visibility_roles (
           shipment_file_id BIGINT NOT NULL,
           visibility_role VARCHAR(24) NOT NULL,

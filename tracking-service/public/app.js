@@ -30,8 +30,7 @@ const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
 const historyEmptyDescription = document.querySelector("#history-empty-description");
-const historyRefreshAllButton = document.querySelector("#history-refresh-all");
-const historyRefreshStatus = document.querySelector("#history-refresh-status");
+const historyLoading = document.querySelector("#history-loading");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -123,6 +122,15 @@ const relatedFilesSelectButton = document.querySelector("#related-files-select-b
 const relatedFilesUploadButton = document.querySelector("#related-files-upload-button");
 const relatedFilesSelection = document.querySelector("#related-files-selection");
 const relatedFilesUploadMessage = document.querySelector("#related-files-upload-message");
+const relatedFileComments = document.querySelector("#related-file-comments");
+const relatedFileCommentsCount = document.querySelector("#related-file-comments-count");
+const relatedFileCommentsLoading = document.querySelector("#related-file-comments-loading");
+const relatedFileCommentsEmpty = document.querySelector("#related-file-comments-empty");
+const relatedFileCommentsList = document.querySelector("#related-file-comments-list");
+const relatedFileCommentForm = document.querySelector("#related-file-comment-form");
+const relatedFileCommentInput = document.querySelector("#related-file-comment-input");
+const relatedFileCommentSend = document.querySelector("#related-file-comment-send");
+const relatedFileCommentMessage = document.querySelector("#related-file-comment-message");
 const documentDrawerLayer = document.querySelector("#document-drawer-layer");
 const documentDrawer = document.querySelector("#document-drawer");
 const documentList = document.querySelector("#document-list");
@@ -327,6 +335,8 @@ const MESSAGES = {
     "history.subtitle": "Latest shipment snapshots stored in the database",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
+    "history.loadingTitle": "Retrieving shipment list",
+    "history.loadingDescription": "Loading the latest records from the database…",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.accountEmptyTitle": "No shipments are bound to this account yet",
@@ -354,12 +364,6 @@ const MESSAGES = {
     "history.expand": "Expand shipment {number}",
     "history.collapse": "Collapse shipment {number}",
     "history.noTimeline": "No confirmed movement events yet.",
-    "history.refreshAll": "Update all active",
-    "history.refreshAllQueue": "One-click update",
-    "history.refreshAllStarting": "Starting update task…",
-    "history.refreshAllEmpty": "No active shipments need updating.",
-    "history.refreshAllStarted": "Updating {count} active shipments in the background.",
-    "history.refreshAllFailed": "Could not start the update task: {message}",
     "tracking.kicker": "SHIPMENT INTELLIGENCE",
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
@@ -447,6 +451,16 @@ const MESSAGES = {
     "files.previewDownloadTip": "If the preview is incomplete, please download the file to view the original content.",
     "files.previewTextFallback": "Showing extracted text content for {name}.",
     "files.previewTooLarge": "This file is too large for an in-browser text preview. Download it to view the original.",
+    "files.commentsTitle": "File messages",
+    "files.commentsDescription": "Messages shared with people who can access this shipment.",
+    "files.commentsLoading": "Loading messages…",
+    "files.commentsEmpty": "No messages yet.",
+    "files.commentLabel": "Add a message",
+    "files.commentPlaceholder": "Leave a note about the shipment documents",
+    "files.commentSend": "Send",
+    "files.commentSending": "Sending…",
+    "files.commentSent": "Message sent.",
+    "files.commentFailed": "Message could not be sent: {message}",
     "result.transportTerms": "Transport terms",
     "result.containerType": "Container type",
     "summary.services": "Selected services",
@@ -461,6 +475,7 @@ const MESSAGES = {
     "query.enterNumber": "Enter a shipment number first.",
     "query.submit": "Track shipment",
     "query.loading": "Tracking…",
+    "wait.history": "Retrieving the shipment record from the database…",
     "wait.tracking": "Retrieving the latest shipment data…",
     "wait.channels": "Checking carrier channels…",
     "wait.home": "Returning to the DrewesLogistics home page…",
@@ -775,6 +790,8 @@ const MESSAGES = {
     "history.subtitle": "数据库保存的最新货运快照",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
+    "history.loadingTitle": "正在获取票单列表",
+    "history.loadingDescription": "正在从数据库读取最新票单，请稍候…",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.accountEmptyTitle": "当前账户还没有绑定票单",
@@ -802,12 +819,6 @@ const MESSAGES = {
     "history.expand": "展开运输任务 {number}",
     "history.collapse": "收起运输任务 {number}",
     "history.noTimeline": "船司尚未提供已确认的运输动态。",
-    "history.refreshAll": "一键更新",
-    "history.refreshAllQueue": "一键更新任务",
-    "history.refreshAllStarting": "正在创建更新任务…",
-    "history.refreshAllEmpty": "当前没有需要更新的未结束票单。",
-    "history.refreshAllStarted": "已在后台更新 {count} 个未结束票单。",
-    "history.refreshAllFailed": "无法启动更新任务：{message}",
     "tracking.kicker": "货运信息",
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
@@ -895,6 +906,16 @@ const MESSAGES = {
     "files.previewDownloadTip": "如预览不完整，请下载文件查看原始内容。",
     "files.previewTextFallback": "正在以文本方式展示 {name} 的内容。",
     "files.previewTooLarge": "文件过大，无法在浏览器中以文本预览，请下载原文件查看。",
+    "files.commentsTitle": "文件留言",
+    "files.commentsDescription": "留言将对有权查看本票单文件的人员显示。",
+    "files.commentsLoading": "正在获取留言…",
+    "files.commentsEmpty": "还没有留言。",
+    "files.commentLabel": "添加留言",
+    "files.commentPlaceholder": "填写与票单文件有关的说明",
+    "files.commentSend": "发送",
+    "files.commentSending": "正在发送…",
+    "files.commentSent": "留言已发送。",
+    "files.commentFailed": "留言发送失败：{message}",
     "result.transportTerms": "运输条款",
     "result.containerType": "箱型",
     "summary.services": "已选服务",
@@ -909,6 +930,7 @@ const MESSAGES = {
     "query.enterNumber": "请先输入运输单号。",
     "query.submit": "查询运输信息",
     "query.loading": "查询中…",
+    "wait.history": "正在从数据库获取票单记录…",
     "wait.tracking": "正在获取最新货物信息…",
     "wait.channels": "正在检测船司查询通道…",
     "wait.home": "正在返回 DrewesLogistics 首页…",
@@ -1282,12 +1304,18 @@ let pendingBatchFile = null;
 let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
+let historyLoadingState = false;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
 let relatedFilesShipmentId = null;
 let relatedFilesShipmentNumber = "";
 let relatedFilesItems = [];
+let relatedFileCommentItems = [];
+let relatedFileCommentsLoadingState = false;
+let relatedFileCommentsSending = false;
+let relatedFileCommentsErrorText = "";
+let relatedFileCommentsRequestSequence = 0;
 let relatedFilesPermissions = {};
 let relatedFilesAssignableCustomers = [];
 let relatedFilesSelectedTargetCustomerId = "";
@@ -1518,6 +1546,11 @@ function isRestorableBatchNumber(value) {
 
 function clearSensitiveRelatedFilesDom() {
   relatedFilesList.replaceChildren();
+  relatedFileCommentsList.replaceChildren();
+  relatedFileCommentsCount.textContent = "0";
+  relatedFileComments.hidden = true;
+  relatedFileCommentInput.value = "";
+  relatedFileCommentMessage.hidden = true;
   relatedFilesCount.textContent = "0";
   relatedFilesCount.hidden = true;
   relatedFilesUserName.textContent = "";
@@ -1532,7 +1565,12 @@ function clearSensitiveRelatedFilesDom() {
 
 function resetRelatedFilesSessionState({ expiredKind = "" } = {}) {
   relatedFilesRequestSequence += 1;
+  relatedFileCommentsRequestSequence += 1;
   relatedFilesItems = [];
+  relatedFileCommentItems = [];
+  relatedFileCommentsLoadingState = false;
+  relatedFileCommentsSending = false;
+  relatedFileCommentsErrorText = "";
   relatedFilesPermissions = {};
   relatedFilesAssignableCustomers = [];
   relatedFilesSelectedTargetCustomerId = "";
@@ -1542,7 +1580,7 @@ function resetRelatedFilesSessionState({ expiredKind = "" } = {}) {
   relatedFilesUploading = false;
   relatedFilesExpiredSessionKind = expiredKind;
   relatedFilesUploadInput.value = "";
-  setRelatedFilesCategory("CARGO_DETAIL");
+  setRelatedFilesCategory("EXPORT_CIV_PL");
   setRelatedFilesCategoryOpen(false);
   setTrackingAccountMenuOpen(false);
   relatedFilesUploadVisibility.value = "SHIPPER";
@@ -1646,6 +1684,13 @@ function shipmentFilesPath(session, shipmentId) {
     : `/api/shipments/${encodedShipmentId}/files`;
 }
 
+function shipmentFileCommentsPath(session, shipmentId) {
+  const encodedShipmentId = encodeURIComponent(shipmentId);
+  return session.kind === "CUSTOMER"
+    ? `/api/customer/shipments/${encodedShipmentId}/file-comments`
+    : `/api/shipments/${encodedShipmentId}/file-comments`;
+}
+
 function shipmentFilePath(session, fileId, suffix = "") {
   const encodedFileId = encodeURIComponent(fileId);
   const base = session.kind === "CUSTOMER"
@@ -1715,9 +1760,6 @@ function renderTrackingAccount(session = readFileSession()) {
   const isCustomer = session.kind === "CUSTOMER";
   document.body.classList.toggle("is-customer-session", isCustomer);
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
-  if (historyRefreshAllButton) {
-    historyRefreshAllButton.hidden = session.kind !== "INTERNAL";
-  }
   trackingAccount.hidden = !authenticated;
   if (signInButton) {
     signInButton.hidden = authenticated;
@@ -1871,7 +1913,12 @@ function setRelatedFilesContext(payload) {
 
   if (contextChanged) {
     relatedFilesRequestSequence += 1;
+    relatedFileCommentsRequestSequence += 1;
     relatedFilesItems = [];
+    relatedFileCommentItems = [];
+    relatedFileCommentsLoadingState = false;
+    relatedFileCommentsSending = false;
+    relatedFileCommentsErrorText = "";
     relatedFilesPermissions = {};
     relatedFilesAssignableCustomers = [];
     relatedFilesSelectedTargetCustomerId = "";
@@ -1909,14 +1956,18 @@ function fileCategoryLabel(value) {
 }
 
 const RELATED_FILE_CATEGORY_KEYS = Object.freeze({
-  CARGO_DETAIL: "files.categoryCargo",
-  INVOICE: "files.categoryInvoice",
-  SHIPPING: "files.categoryShipping",
-  OTHER: "files.categoryOther"
+  EXPORT_CIV_PL: "documents.type.exportCivPl",
+  HOUSE_BILL: "documents.type.houseBill",
+  MASTER_BILL: "documents.type.masterBill",
+  ARRIVAL_NOTICE: "documents.type.arrivalNotice",
+  DELIVERY_ORDER: "documents.type.deliveryOrder",
+  POD: "documents.type.pod",
+  DUTY_SUMMARY: "documents.type.dutySummary",
+  IMPORT_CIV_PL: "documents.type.importCivPl"
 });
 
 function setRelatedFilesCategory(value) {
-  const category = Object.hasOwn(RELATED_FILE_CATEGORY_KEYS, value) ? value : "OTHER";
+  const category = Object.hasOwn(RELATED_FILE_CATEGORY_KEYS, value) ? value : "EXPORT_CIV_PL";
   relatedFilesCategory.value = category;
   const key = RELATED_FILE_CATEGORY_KEYS[category];
   relatedFilesCategoryLabel.dataset.i18n = key;
@@ -2348,6 +2399,159 @@ function createRelatedFileItem(file) {
   return item;
 }
 
+function normalizeRelatedFileComment(item) {
+  return {
+    id: String(item?.id ?? ""),
+    body: String(item?.body ?? "").trim(),
+    authorDisplayName: String(item?.authorDisplayName ?? item?.authorName ?? "").trim(),
+    authorType: String(item?.authorType ?? "").trim().toUpperCase(),
+    authorRole: String(item?.authorRole ?? "").trim().toUpperCase(),
+    createdAt: item?.createdAt ?? null
+  };
+}
+
+function setRelatedFileCommentMessage(message = "", variant = "") {
+  relatedFileCommentMessage.hidden = !message;
+  relatedFileCommentMessage.textContent = message;
+  relatedFileCommentMessage.dataset.variant = variant;
+}
+
+function createRelatedFileCommentItem(comment) {
+  const item = document.createElement("li");
+  item.className = "related-file-comment-item";
+
+  const mark = document.createElement("span");
+  mark.className = "related-file-comment-mark";
+  mark.textContent = (comment.authorDisplayName || "U").slice(0, 1).toUpperCase();
+
+  const content = document.createElement("div");
+  const header = document.createElement("p");
+  const author = document.createElement("strong");
+  author.textContent = comment.authorDisplayName || t("files.unknownUploader");
+  const time = document.createElement("time");
+  time.dateTime = comment.createdAt || "";
+  time.textContent = formatLocalDateTime(comment.createdAt);
+  header.append(author, time);
+
+  const body = document.createElement("p");
+  body.textContent = comment.body;
+  content.append(header, body);
+  item.append(mark, content);
+  return item;
+}
+
+function renderRelatedFileComments() {
+  const session = readFileSession();
+  const available = Boolean(
+    session.token &&
+    relatedFilesShipmentId &&
+    !(session.kind === "CUSTOMER" && relatedFilesCustomerAccess === false)
+  );
+  relatedFileComments.hidden = !available;
+  if (!available) return;
+
+  const hasItems = relatedFileCommentItems.length > 0;
+  relatedFileCommentsCount.textContent = String(relatedFileCommentItems.length);
+  relatedFileCommentsLoading.hidden = !relatedFileCommentsLoadingState;
+  relatedFileCommentsEmpty.hidden =
+    relatedFileCommentsLoadingState || Boolean(relatedFileCommentsErrorText) || hasItems;
+  relatedFileCommentsList.hidden =
+    relatedFileCommentsLoadingState || Boolean(relatedFileCommentsErrorText) || !hasItems;
+  relatedFileCommentsList.replaceChildren(
+    ...relatedFileCommentItems.map(createRelatedFileCommentItem)
+  );
+  relatedFileCommentInput.disabled = relatedFileCommentsSending;
+  relatedFileCommentSend.disabled =
+    relatedFileCommentsSending || !relatedFileCommentInput.value.trim();
+  relatedFileCommentSend.textContent = t(
+    relatedFileCommentsSending ? "files.commentSending" : "files.commentSend"
+  );
+  if (relatedFileCommentsErrorText) {
+    setRelatedFileCommentMessage(relatedFileCommentsErrorText, "error");
+  }
+}
+
+async function loadRelatedFileComments() {
+  const session = readFileSession();
+  synchronizeRelatedFilesSession(session);
+  if (!relatedFilesShipmentId || !session.token) {
+    renderRelatedFileComments();
+    return;
+  }
+  const sessionFingerprint = relatedFilesSessionFingerprint;
+  const requestSequence = ++relatedFileCommentsRequestSequence;
+  relatedFileCommentsLoadingState = true;
+  relatedFileCommentsErrorText = "";
+  if (relatedFileCommentMessage.dataset.variant === "error") {
+    setRelatedFileCommentMessage();
+  }
+  renderRelatedFileComments();
+  try {
+    const payload = await requestRelatedFilesApi(
+      shipmentFileCommentsPath(session, relatedFilesShipmentId),
+      { session }
+    );
+    if (
+      requestSequence !== relatedFileCommentsRequestSequence ||
+      !isCurrentRelatedFilesSession(sessionFingerprint)
+    ) return;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    relatedFileCommentItems = items.map(normalizeRelatedFileComment).filter((item) => item.body);
+    if (session.kind === "CUSTOMER") relatedFilesCustomerAccess = true;
+  } catch (error) {
+    if (
+      requestSequence !== relatedFileCommentsRequestSequence ||
+      !isCurrentRelatedFilesSession(sessionFingerprint)
+    ) return;
+    if (session.kind === "CUSTOMER" && error?.status === 403) {
+      relatedFilesCustomerAccess = false;
+    }
+    if (error?.status !== 401) {
+      relatedFileCommentsErrorText = error?.message || t("error.generic");
+    }
+  } finally {
+    if (
+      requestSequence === relatedFileCommentsRequestSequence &&
+      isCurrentRelatedFilesSession(sessionFingerprint)
+    ) {
+      relatedFileCommentsLoadingState = false;
+      renderRelatedFileComments();
+    }
+  }
+}
+
+async function sendRelatedFileComment() {
+  const body = relatedFileCommentInput.value.trim();
+  const session = readFileSession();
+  if (!body || !relatedFilesShipmentId || !session.token || relatedFileCommentsSending) return;
+  const sessionFingerprint = relatedFilesSessionFingerprint;
+  relatedFileCommentsSending = true;
+  relatedFileCommentsErrorText = "";
+  setRelatedFileCommentMessage();
+  renderRelatedFileComments();
+  try {
+    await requestRelatedFilesApi(
+      shipmentFileCommentsPath(session, relatedFilesShipmentId),
+      { method: "POST", body: { body }, session }
+    );
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    relatedFileCommentInput.value = "";
+    setRelatedFileCommentMessage(t("files.commentSent"), "success");
+    await loadRelatedFileComments();
+  } catch (error) {
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    setRelatedFileCommentMessage(
+      t("files.commentFailed", { message: error?.message || t("error.generic") }),
+      "error"
+    );
+  } finally {
+    if (isCurrentRelatedFilesSession(sessionFingerprint)) {
+      relatedFileCommentsSending = false;
+      renderRelatedFileComments();
+    }
+  }
+}
+
 function renderRelatedFilesDrawer() {
   const session = readFileSession();
   synchronizeRelatedFilesSession(session);
@@ -2410,6 +2614,7 @@ function renderRelatedFilesDrawer() {
   relatedFilesList.replaceChildren(
     ...relatedFilesItems.map((item) => createRelatedFileItem(item))
   );
+  renderRelatedFileComments();
 
   relatedFilesSelectButton.disabled = relatedFilesUploading;
   relatedFilesUploadInput.disabled = relatedFilesUploading;
@@ -2433,6 +2638,7 @@ function openRelatedFilesDrawer() {
   }
   relatedFilesBackdrop.hidden = false;
   relatedFilesDrawer.hidden = false;
+  setRelatedFileCommentMessage();
   relatedFilesButton.setAttribute("aria-expanded", "true");
   document.body.classList.add("related-files-open");
   requestAnimationFrame(() => {
@@ -2445,7 +2651,7 @@ function openRelatedFilesDrawer() {
     relatedFilesErrorText = t("files.customerNotAssigned");
     renderRelatedFilesDrawer();
   } else {
-    void loadRelatedFiles();
+    void Promise.all([loadRelatedFiles(), loadRelatedFileComments()]);
   }
 }
 
@@ -2570,7 +2776,7 @@ async function uploadRelatedFiles() {
   renderRelatedFilesDrawer();
   const formData = new FormData();
   for (const file of files) formData.append("files", file);
-  formData.append("category", relatedFilesCategory.value || "OTHER");
+  formData.append("category", relatedFilesCategory.value || "EXPORT_CIV_PL");
   for (const role of visibilityRoles) formData.append("visibilityRoles", role);
   if (session.kind === "INTERNAL") {
     formData.append("visibility", internalVisibility);
@@ -2738,6 +2944,185 @@ function renderFilePreviewText(text, { asTextarea = false } = {}) {
   filePreviewContent.replaceChildren(pre);
 }
 
+function renderFilePreviewTable(rows, { caption = "" } = {}) {
+  const normalizedRows = rows
+    .slice(0, 500)
+    .map((row) => row.slice(0, 80).map((cell) => String(cell ?? "")));
+  if (normalizedRows.length === 0) {
+    renderFilePreviewFallback("files.previewNotSupported");
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "file-preview-table-wrap";
+  const table = document.createElement("table");
+  table.className = "file-preview-table";
+  if (caption) {
+    const captionNode = document.createElement("caption");
+    captionNode.textContent = caption;
+    table.append(captionNode);
+  }
+  const body = document.createElement("tbody");
+  normalizedRows.forEach((row, rowIndex) => {
+    const tr = document.createElement("tr");
+    row.forEach((cell) => {
+      const element = document.createElement(rowIndex === 0 ? "th" : "td");
+      element.textContent = cell;
+      tr.append(element);
+    });
+    body.append(tr);
+  });
+  table.append(body);
+  wrap.append(table);
+  filePreviewContent.replaceChildren(wrap);
+}
+
+function parseCsvPreview(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length && rows.length < 500; index += 1) {
+    const character = text[index];
+    if (character === '"') {
+      if (quoted && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((character === "\n" || character === "\r") && !quoted) {
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  if (cell || row.length > 0) {
+    row.push(cell);
+    if (row.some((value) => value !== "")) rows.push(row);
+  }
+  return rows;
+}
+
+function renderFilePreviewSpreadsheet(text) {
+  const sheets = [];
+  let current = { name: "Sheet", rows: [] };
+  for (const line of String(text).split(/\r?\n/)) {
+    if (line.startsWith("# ")) {
+      if (current.rows.length > 0) sheets.push(current);
+      current = { name: line.slice(2).trim() || "Sheet", rows: [] };
+    } else if (line.trim() || current.rows.length > 0) {
+      current.rows.push(line.split("\t"));
+    }
+  }
+  if (current.rows.length > 0) sheets.push(current);
+  const workbook = document.createElement("div");
+  workbook.className = "file-preview-workbook";
+  for (const sheet of sheets.slice(0, 20)) {
+    const section = document.createElement("section");
+    const heading = document.createElement("h3");
+    heading.textContent = sheet.name;
+    const wrap = document.createElement("div");
+    wrap.className = "file-preview-table-wrap";
+    const table = document.createElement("table");
+    table.className = "file-preview-table";
+    const body = document.createElement("tbody");
+    sheet.rows.slice(0, 500).forEach((row, rowIndex) => {
+      const tr = document.createElement("tr");
+      row.slice(0, 80).forEach((cell) => {
+        const element = document.createElement(rowIndex === 0 ? "th" : "td");
+        element.textContent = cell;
+        tr.append(element);
+      });
+      body.append(tr);
+    });
+    table.append(body);
+    wrap.append(table);
+    section.append(heading, wrap);
+    workbook.append(section);
+  }
+  if (workbook.childElementCount === 0) {
+    renderFilePreviewText(text);
+  } else {
+    filePreviewContent.replaceChildren(workbook);
+  }
+}
+
+function renderFilePreviewMarkdown(text) {
+  const article = document.createElement("article");
+  article.className = "file-preview-markdown";
+  let codeBlock = null;
+  for (const rawLine of String(text).split(/\r?\n/)) {
+    if (rawLine.trim().startsWith("```")) {
+      if (codeBlock) {
+        codeBlock = null;
+      } else {
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        pre.append(code);
+        article.append(pre);
+        codeBlock = code;
+      }
+      continue;
+    }
+    if (codeBlock) {
+      codeBlock.textContent += `${rawLine}\n`;
+      continue;
+    }
+    const heading = rawLine.match(/^(#{1,6})\s+(.+)$/);
+    const bullet = rawLine.match(/^\s*[-*+]\s+(.+)$/);
+    const quote = rawLine.match(/^>\s?(.*)$/);
+    let element;
+    if (heading) {
+      element = document.createElement(`h${heading[1].length}`);
+      element.textContent = heading[2];
+    } else if (bullet) {
+      element = document.createElement("p");
+      element.className = "file-preview-markdown-bullet";
+      element.textContent = bullet[1];
+    } else if (quote) {
+      element = document.createElement("blockquote");
+      element.textContent = quote[1];
+    } else if (rawLine.trim()) {
+      element = document.createElement("p");
+      element.textContent = rawLine;
+    } else {
+      element = document.createElement("br");
+    }
+    article.append(element);
+  }
+  filePreviewContent.replaceChildren(article);
+}
+
+function renderFilePreviewWord(text) {
+  const article = document.createElement("article");
+  article.className = "file-preview-word";
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    if (line.includes("\t")) {
+      const row = document.createElement("div");
+      row.className = "file-preview-word-row";
+      line.split("\t").forEach((value) => {
+        const cell = document.createElement("span");
+        cell.textContent = value;
+        row.append(cell);
+      });
+      article.append(row);
+    } else {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = line;
+      article.append(paragraph);
+    }
+  }
+  filePreviewContent.replaceChildren(article);
+}
+
 function renderFilePreviewBlob(blob, extension, contentType = "") {
   const url = URL.createObjectURL(blob);
   filePreviewObjectUrls.push(url);
@@ -2877,6 +3262,50 @@ async function previewRelatedFile(file, button) {
     ) {
       renderFilePreviewBlob(blob, extension, contentType);
       setFilePreviewMessage(t("files.previewDownloadTip"));
+      return;
+    }
+
+    if (previewMode === "MARKDOWN" || ["md", "markdown"].includes(extension)) {
+      const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (tooLarge || text == null) {
+        renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
+      } else {
+        renderFilePreviewMarkdown(text);
+      }
+      setFilePreviewMessage(t("files.previewDownloadTip"));
+      return;
+    }
+
+    if (previewMode === "CSV" || extension === "csv") {
+      const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (tooLarge || text == null) {
+        renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
+      } else {
+        renderFilePreviewTable(parseCsvPreview(text), { caption: file.originalFileName || "CSV" });
+      }
+      setFilePreviewMessage(t("files.previewDownloadTip"));
+      return;
+    }
+
+    if (previewMode === "SPREADSHEET" || ["xlsx", "xls"].includes(extension)) {
+      const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (tooLarge || text == null) {
+        renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
+      } else {
+        renderFilePreviewSpreadsheet(text);
+      }
+      setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
+      return;
+    }
+
+    if (previewMode === "WORD" || ["doc", "docx"].includes(extension)) {
+      const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (tooLarge || text == null) {
+        renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
+      } else {
+        renderFilePreviewWord(text);
+      }
+      setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
       return;
     }
 
@@ -3536,6 +3965,8 @@ async function loadCustomerAssignedHistory() {
     customerAssignedHistory = [];
     return;
   }
+  historyLoadingState = true;
+  renderHistory();
   try {
     const response = await fetch("/api/customer/shipments", {
       headers: { "X-Customer-Token": session.token }
@@ -3569,8 +4000,10 @@ async function loadCustomerAssignedHistory() {
     }
   } catch {
     customerAssignedHistory = [];
-    renderHistory();
     showError(customerFacingTrackingError(), "error");
+  } finally {
+    historyLoadingState = false;
+    renderHistory();
   }
 }
 
@@ -3580,6 +4013,8 @@ async function loadInternalTrackedHistory() {
     internalTrackedHistory = [];
     return;
   }
+  historyLoadingState = true;
+  renderHistory();
   try {
     const response = await fetch("/api/business/shipments", {
       headers: { "X-Auth-Token": session.token }
@@ -3663,6 +4098,8 @@ async function loadInternalTrackedHistory() {
     renderHistory();
   } catch {
     internalTrackedHistory = [];
+  } finally {
+    historyLoadingState = false;
     renderHistory();
   }
 }
@@ -4315,76 +4752,6 @@ function startImportedBatch(fileName, imported) {
   persistBatchState();
   renderBatchState();
   void runBatchQueue();
-}
-
-function batchStateFromRefreshAllTask(snapshot) {
-  const remoteItems = Array.isArray(snapshot?.items) ? snapshot.items : [];
-  return {
-    version: BATCH_VERSION,
-    mode: "REFRESH_ALL",
-    fileName: t("history.refreshAllQueue"),
-    createdAt: snapshot?.createdAt ?? new Date().toISOString(),
-    updatedAt: null,
-    status: "paused",
-    taskId: String(snapshot?.taskId ?? "").trim() || null,
-    items: remoteItems.map((item, index) => ({
-      id: String(item?.id ?? `refresh-all-${index}`),
-      carrier: String(item?.carrier ?? "COSCO").trim().toUpperCase(),
-      type: String(item?.type ?? "BILLOFLADING").trim().toUpperCase(),
-      number: String(item?.number ?? "").trim().toUpperCase(),
-      displayNumber: String(item?.displayNumber ?? item?.number ?? "").trim(),
-      importedDetails: normalizeImportedDetails(item?.importedDetails),
-      manualOnly: item?.manualOnly === true,
-      submitted: true,
-      status: batchItemStatusFromServer(item?.status),
-      source: item?.source ?? null,
-      error: item?.error ? String(item.error) : null,
-      attempts: Number(item?.attempts ?? 0),
-      shipmentId: item?.shipmentId ?? null,
-      subtasks: normalizeBatchSubtasks(item?.subtasks),
-      updatedAt: item?.updatedAt ?? null
-    }))
-  };
-}
-
-function setHistoryRefreshStatus(message = "", variant = "info") {
-  if (!historyRefreshStatus) return;
-  historyRefreshStatus.textContent = message;
-  historyRefreshStatus.dataset.variant = variant;
-  historyRefreshStatus.hidden = !message;
-}
-
-async function startRefreshAllHistory() {
-  const session = readFileSession();
-  if (session.kind !== "INTERNAL" || !session.token || batchRunning || batchRunPromise) return;
-  historyRefreshAllButton.disabled = true;
-  setHistoryRefreshStatus(t("history.refreshAllStarting"));
-  try {
-    const snapshot = await requestBusinessBatchTask("/api/business/shipments/refresh-all", {
-      method: "POST"
-    });
-    const total = Number(snapshot?.total ?? snapshot?.items?.length ?? 0);
-    if (!snapshot?.taskId || total === 0) {
-      setHistoryRefreshStatus(t("history.refreshAllEmpty"));
-      return;
-    }
-    batchRunning = false;
-    batchStopRequested = false;
-    batchTaskId = String(snapshot.taskId);
-    batchState = batchStateFromRefreshAllTask(snapshot);
-    persistBatchState();
-    renderBatchState();
-    setHistoryRefreshStatus(t("history.refreshAllStarted", { count: total }), "success");
-    openBatchWorkspace();
-    void runBatchQueue();
-  } catch (error) {
-    setHistoryRefreshStatus(
-      t("history.refreshAllFailed", { message: error?.message || t("error.generic") }),
-      "error"
-    );
-  } finally {
-    historyRefreshAllButton.disabled = Boolean(batchRunning || batchRunPromise);
-  }
 }
 
 function batchAbortError() {
@@ -5695,19 +6062,16 @@ function renderHistory() {
         ? "history.accountEmptyDescription"
         : "history.emptyDescription"
   );
-  historyEmpty.hidden = history.length > 0;
-  historyTableWrap.hidden = history.length === 0;
+  historyLoading.hidden = !historyLoadingState;
+  historyEmpty.hidden = historyLoadingState || history.length > 0;
+  historyTableWrap.hidden = historyLoadingState || history.length === 0;
   if (historySearchInput) {
-    historySearchInput.disabled = allHistory.length === 0;
+    historySearchInput.disabled = historyLoadingState || allHistory.length === 0;
     if (historySearchInput.value !== historySearchTerm) {
       historySearchInput.value = historySearchTerm;
     }
   }
   if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
-  if (historyRefreshAllButton) {
-    historyRefreshAllButton.hidden = session.kind !== "INTERNAL";
-    historyRefreshAllButton.disabled = Boolean(batchRunning || batchRunPromise);
-  }
   historyTableBody.replaceChildren();
 
   let rowIndex = 0;
@@ -6737,7 +7101,12 @@ relatedFilesButton.addEventListener("click", openRelatedFilesDrawer);
 relatedFilesCloseButton.addEventListener("click", closeRelatedFilesDrawer);
 relatedFilesBackdrop.addEventListener("click", closeRelatedFilesDrawer);
 relatedFilesRetryButton.addEventListener("click", () => {
-  void loadRelatedFiles();
+  void Promise.all([loadRelatedFiles(), loadRelatedFileComments()]);
+});
+relatedFileCommentInput.addEventListener("input", renderRelatedFileComments);
+relatedFileCommentForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void sendRelatedFileComment();
 });
 relatedFilesSelectButton.addEventListener("click", () => {
   if (!relatedFilesUploading) relatedFilesUploadInput.click();
@@ -6927,10 +7296,6 @@ historySearchClear?.addEventListener("click", () => {
   historySearchInput.focus();
 });
 
-historyRefreshAllButton?.addEventListener("click", () => {
-  void startRefreshAllHistory();
-});
-
 document.querySelector("#edit-business-references").addEventListener("click", () => {
   openBusinessReferenceDialog();
 });
@@ -7074,6 +7439,7 @@ window.addEventListener("pageshow", () => {
 clearLegacyBrowserSnapshots();
 batchState = restoreBatchState();
 if (batchState) persistBatchState();
+historyLoadingState = ["INTERNAL", "CUSTOMER"].includes(readFileSession().kind);
 applyLanguage(currentLanguage, { persist: false });
 if (
   batchState?.taskId &&
@@ -7085,10 +7451,16 @@ if (
 async function initializeTrackingPage() {
   const initialQuery = trackingQueryFromLocation();
   if (initialQuery) {
-    await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
-    const restored = showStoredTrackingQuery(initialQuery);
-    showView("tracking", { updateLocation: false });
-    if (!restored) form.requestSubmit();
+    showStoredTrackingQuery(initialQuery, { clearWhenMissing: true });
+    await showView("tracking", { updateLocation: false });
+    const waitToken = beginSystemWait("history", "wait.history");
+    try {
+      await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
+      const restored = showStoredTrackingQuery(initialQuery);
+      if (!restored) form.requestSubmit();
+    } finally {
+      endSystemWait(waitToken);
+    }
     return;
   }
   showView(["overview", "tracking", "profile"].includes(window.location.hash.slice(1))

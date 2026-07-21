@@ -42,6 +42,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -1481,14 +1483,20 @@ public class ShipmentFileService {
 
   private String previewMode(String extension) {
     return switch (extension == null ? "" : extension) {
-      case "pdf", "jpg", "jpeg", "png", "txt", "csv" -> "INLINE";
-      default -> "TEXT_FALLBACK";
+      case "pdf" -> "PDF";
+      case "jpg", "jpeg", "png" -> "IMAGE";
+      case "md", "markdown" -> "MARKDOWN";
+      case "csv" -> "CSV";
+      case "txt" -> "TEXT";
+      case "xlsx", "xls" -> "SPREADSHEET";
+      case "doc", "docx" -> "WORD";
+      default -> "UNSUPPORTED";
     };
   }
 
   private ShipmentFilePreview preview(ShipmentFileContent content) {
     String mode = previewMode(content.extension());
-    if ("INLINE".equals(mode)) {
+    if (Set.of("PDF", "IMAGE", "MARKDOWN", "CSV", "TEXT").contains(mode)) {
       return new ShipmentFilePreview(
           content.path(), null, content.originalFileName(), content.contentType(),
           content.sizeBytes(), mode
@@ -1511,8 +1519,7 @@ public class ShipmentFileService {
       return switch (content.extension()) {
         case "xlsx", "xls" -> spreadsheetText(content.path());
         case "docx" -> wordText(content.path());
-        case "doc" -> "This legacy Word .doc file cannot be safely rendered in the browser. "
-            + "Download the original file to view its contents.";
+        case "doc" -> legacyWordText(content.path());
         default -> "A browser-safe text preview is not available for this file type. "
             + "Download the original file to view its contents.";
       };
@@ -1567,6 +1574,17 @@ public class ShipmentFileService {
     return text.toString();
   }
 
+  private String legacyWordText(Path path) throws IOException {
+    try (InputStream input = Files.newInputStream(path);
+         HWPFDocument document = new HWPFDocument(input);
+         WordExtractor extractor = new WordExtractor(document)) {
+      String extracted = extractor.getText();
+      return extracted == null ? "" : extracted.substring(
+          0, Math.min(extracted.length(), MAX_TEXT_PREVIEW_CHARS)
+      );
+    }
+  }
+
   private void appendPreview(StringBuilder target, String value) {
     if (value == null || target.length() >= MAX_TEXT_PREVIEW_CHARS) return;
     int remaining = MAX_TEXT_PREVIEW_CHARS - target.length();
@@ -1602,6 +1620,7 @@ public class ShipmentFileService {
       case "jpg", "jpeg" -> "image/jpeg";
       case "png" -> "image/png";
       case "txt" -> "text/plain";
+      case "md", "markdown" -> "text/markdown;charset=UTF-8";
       default -> "application/octet-stream";
     };
   }

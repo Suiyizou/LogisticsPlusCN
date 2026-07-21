@@ -262,16 +262,38 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
   );
 });
 
-test("one-click update submits unfinished shipments to the shared background queue", () => {
-  assert.match(indexSource, /id="history-refresh-all"[\s\S]*?data-i18n="history\.refreshAll"/);
+test("overview shows a database loading state without exposing one-click update", () => {
+  assert.match(indexSource, /id="history-loading"[\s\S]*?data-i18n="history\.loadingTitle"/);
+  assert.doesNotMatch(indexSource, /id="history-refresh-all"/);
+  assert.doesNotMatch(appSource, /startRefreshAllHistory|historyRefreshAllButton/);
   assert.match(
     appSource,
-    /async function startRefreshAllHistory\(\)[\s\S]*?requestBusinessBatchTask\("\/api\/business\/shipments\/refresh-all", \{[\s\S]*?method: "POST"[\s\S]*?batchStateFromRefreshAllTask\(snapshot\)[\s\S]*?openBatchWorkspace\(\)[\s\S]*?runBatchQueue\(\)/
+    /historyLoadingState = true;[\s\S]*?historyLoading\.hidden = !historyLoadingState/
   );
+});
+
+test("shipment drawer exposes business document slots and database-backed messages", () => {
+  for (const category of [
+    "EXPORT_CIV_PL", "HOUSE_BILL", "MASTER_BILL", "ARRIVAL_NOTICE",
+    "DELIVERY_ORDER", "POD", "DUTY_SUMMARY", "IMPORT_CIV_PL"
+  ]) {
+    assert.match(indexSource, new RegExp(`data-category-value="${category}"`));
+  }
+  assert.match(indexSource, /id="related-file-comments"[\s\S]*?id="related-file-comment-form"/);
   assert.match(
     appSource,
-    /historyRefreshAllButton\.hidden = session\.kind !== "INTERNAL"/
+    /shipmentFileCommentsPath[\s\S]*?loadRelatedFileComments[\s\S]*?sendRelatedFileComment/
   );
+  assert.match(appSource, /await loadRelatedFileComments\(\)/);
+  assert.match(stylesSource, /\.related-files-drawer \{[\s\S]*?width: min\(50vw, 1040px\)/);
+});
+
+test("common document previews use structured safe renderers", () => {
+  assert.match(appSource, /function renderFilePreviewMarkdown[\s\S]*?textContent/);
+  assert.match(appSource, /function renderFilePreviewSpreadsheet[\s\S]*?file-preview-table/);
+  assert.match(appSource, /function renderFilePreviewWord/);
+  assert.match(appSource, /function parseCsvPreview/);
+  assert.doesNotMatch(appSource, /filePreviewContent\.innerHTML/);
 });
 
 test("batch recovery clears missing tasks and defers stop until task creation", () => {

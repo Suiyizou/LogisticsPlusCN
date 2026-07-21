@@ -30,13 +30,16 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/customer")
 public class CustomerShipmentFileController {
   private final ShipmentFileService fileService;
+  private final ShipmentFileCommentService commentService;
   private final ShipmentTrackingService trackingService;
 
   public CustomerShipmentFileController(
       ShipmentFileService fileService,
+      ShipmentFileCommentService commentService,
       ShipmentTrackingService trackingService
   ) {
     this.fileService = fileService;
+    this.commentService = commentService;
     this.trackingService = trackingService;
   }
 
@@ -61,6 +64,23 @@ public class CustomerShipmentFileController {
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
     return fileService.listCustomer(shipmentId, customer);
+  }
+
+  @GetMapping("/shipments/{shipmentId}/file-comments")
+  public Map<String, Object> listComments(
+      @PathVariable String shipmentId,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return commentService.listCustomer(shipmentId, customer);
+  }
+
+  @PostMapping("/shipments/{shipmentId}/file-comments")
+  public Map<String, Object> createComment(
+      @PathVariable String shipmentId,
+      @RequestBody ShipmentFileCommentRequest request,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return commentService.createCustomer(shipmentId, customer, request);
   }
 
   @PostMapping(

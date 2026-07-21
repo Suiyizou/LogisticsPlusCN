@@ -426,7 +426,7 @@ class ShipmentFileServiceTest {
     ShipmentFileService.ShipmentFilePreview inline = service.preview(
         pdf.record().publicId(), business, "127.0.0.1"
     );
-    assertThat(inline.mode()).isEqualTo("INLINE");
+    assertThat(inline.mode()).isEqualTo("PDF");
     assertThat(inline.path()).isEqualTo(pdf.path());
     assertThat(inline.contentType()).isEqualTo("application/pdf");
 
@@ -437,10 +437,10 @@ class ShipmentFileServiceTest {
     ShipmentFileService.ShipmentFilePreview fallback = service.preview(
         legacyWord.record().publicId(), business, "127.0.0.1"
     );
-    assertThat(fallback.mode()).isEqualTo("TEXT_FALLBACK");
+    assertThat(fallback.mode()).isEqualTo("WORD");
     assertThat(fallback.path()).isNull();
     assertThat(new String(fallback.textContent(), StandardCharsets.UTF_8))
-        .contains("cannot be safely rendered");
+        .contains("could not be converted");
   }
 
   @Test
