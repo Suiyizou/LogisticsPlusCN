@@ -277,16 +277,31 @@ test("business-code 403 opens protection before the generic adapter failure path
   assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoBlockedHttpError/);
 });
 
-test("batch Playwright fallback skips per-container enrichment", async () => {
+test("shipment queries never start per-container enrichment", async () => {
   const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const network = source.slice(
+    source.indexOf("async function fetchCoscoTrackingViaNetwork"),
+    source.indexOf("async function fetchCoscoTrackingWithPlaywright")
+  );
   const playwright = source.slice(
     source.indexOf("async function fetchCoscoTrackingWithPlaywright"),
     source.indexOf("async function fetchCoscoTracking(request")
   );
-  const batchGuard = playwright.indexOf("if (!options.batch)");
-  const childEnrichment = playwright.indexOf("enrichCoscoShipmentContainers(");
 
-  assert.ok(batchGuard >= 0, "Playwright enrichment must be guarded in batch mode");
-  assert.ok(childEnrichment > batchGuard, "Per-container enrichment must only occur inside the non-batch guard");
+  assert.doesNotMatch(network, /enrichCoscoShipmentContainers\(/);
+  assert.doesNotMatch(playwright, /enrichCoscoShipmentContainers\(/);
+  assert.match(network, /fetchCoscoShipmentContainers\(request, options\)/);
   assert.match(playwright, /partial: Boolean\(options\.batch \|\| enrichmentWarning\)/);
+});
+
+test("forced refresh bypasses the Node cache and in-flight reuse", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const handler = source.slice(
+    source.indexOf("async function handleTrackRequest"),
+    source.indexOf("export const server", source.indexOf("async function handleTrackRequest"))
+  );
+
+  assert.match(handler, /const forceRefresh = input\.forceRefresh === true/);
+  assert.match(handler, /!forceRefresh &&\s*cached/);
+  assert.match(handler, /batchTaskId \|\| forceRefresh\s*\? null/);
 });

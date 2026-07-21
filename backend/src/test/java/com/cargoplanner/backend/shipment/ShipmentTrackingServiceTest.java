@@ -556,7 +556,7 @@ class ShipmentTrackingServiceTest {
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO", "AUTO", "BOOKING", "BK-10001"
     );
-    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+    when(adapterClient.track(normalized, true)).thenReturn(objectMapper.readTree("""
         {
           "snapshot": {
             "channel": "NETWORK",
@@ -580,6 +580,7 @@ class ShipmentTrackingServiceTest {
         .isEqualTo("Loaded on board");
     assertThat(refreshed.path("warning").asText()).contains("last valid snapshot");
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isEqualTo(1);
+    verify(adapterClient).track(normalized, true);
   }
 
   @Test
@@ -591,7 +592,7 @@ class ShipmentTrackingServiceTest {
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO", "AUTO", "BOOKING", "BK-10001"
     );
-    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+    when(adapterClient.track(normalized, true)).thenReturn(objectMapper.readTree("""
         {
           "snapshot": {
             "channel": "NETWORK",
@@ -619,6 +620,7 @@ class ShipmentTrackingServiceTest {
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class
     )).isEqualTo(1);
+    verify(adapterClient).track(normalized, true);
   }
 
   @Test

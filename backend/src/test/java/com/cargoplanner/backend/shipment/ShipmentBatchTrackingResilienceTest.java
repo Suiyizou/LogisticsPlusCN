@@ -116,6 +116,46 @@ class ShipmentBatchTrackingResilienceTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void rateLimitCooldownAutomaticallyResumesTheSameShipment() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    AtomicInteger attempts = new AtomicInteger();
+    when(trackingService.track(any(), any())).thenAnswer(invocation -> {
+      if (attempts.incrementAndGet() == 1) {
+        throw new ApiException(
+            HttpStatus.TOO_MANY_REQUESTS,
+            "COSCO_UPSTREAM_RATE_LIMITED",
+            "COSCO rate limited this server"
+        );
+      }
+      return successfulResponse("shipment-after-rate-limit");
+    });
+
+    createService(trackingService, 0, 0, 20, 20);
+    AuthenticatedUser user = businessUser(75L);
+    String taskId = taskId(service.start(batch("COSU6502406176"), user));
+
+    Map<String, Object> retrying = awaitItemStatus(taskId, user, "RETRY_WAIT", 2_000);
+    assertEquals(0, retrying.get("processed"));
+    assertTrue(retrying.get("cooldownUntil") != null || retrying.get("nextAttemptAt") != null);
+
+    Map<String, Object> completed = awaitTerminal(taskId, user, 2_000);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("SUCCEEDED", items.get(0).get("status"));
+    assertEquals(2, items.get(0).get("attempts"));
+    verify(trackingService, times(2)).track(any(), any());
+  }
+
+  @Test
+  void productionRateLimitCooldownIsFifteenMinutes() {
+    assertEquals(
+        TimeUnit.MINUTES.toMillis(15),
+        ShipmentBatchTrackingService.RATE_LIMIT_COOLDOWN_MS
+    );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void invalid400IsNotRetriedAndDoesNotDelayTheNextShipment() throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     AtomicInteger calls = new AtomicInteger();

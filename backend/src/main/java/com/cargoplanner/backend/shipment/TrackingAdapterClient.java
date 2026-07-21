@@ -33,11 +33,24 @@ public class TrackingAdapterClient {
   }
 
   public JsonNode track(NormalizedTrackRequest request) {
-    return track(request, null);
+    return track(request, null, false);
+  }
+
+  public JsonNode track(NormalizedTrackRequest request, boolean forceRefresh) {
+    return track(request, null, forceRefresh);
   }
 
   public JsonNode track(NormalizedTrackRequest request, CmaSessionCredentials credentials) {
+    return track(request, credentials, false);
+  }
+
+  public JsonNode track(
+      NormalizedTrackRequest request,
+      CmaSessionCredentials credentials,
+      boolean forceRefresh
+  ) {
     Map<String, Object> body = requestBody(request);
+    if (forceRefresh) body.put("forceRefresh", true);
     try {
       RestClient.RequestBodySpec requestSpec = restClient.post().uri("/api/track");
       if (credentials != null) {

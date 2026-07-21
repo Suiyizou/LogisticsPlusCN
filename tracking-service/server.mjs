@@ -1195,7 +1195,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
     signal: options.signal
   });
   let bookingInfo = {};
-  let enrichedContainerInfo = [];
+  let containerInfo = [];
   let enrichmentWarning = null;
   if (!options.batch) {
     try {
@@ -1203,15 +1203,11 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
         timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
         signal: options.signal
       });
-      const containerInfo = await fetchCoscoShipmentContainers(request, options)
+      containerInfo = await fetchCoscoShipmentContainers(request, options)
         .catch((error) => {
           if (isCoscoProtectionError(error)) throw error;
           return [];
         });
-      enrichedContainerInfo = await enrichCoscoShipmentContainers(
-        containerInfo,
-        (containerRequest) => fetchCoscoContainers(containerRequest, options)
-      );
     } catch (error) {
       if (!isCoscoProtectionError(error)) throw error;
       enrichmentWarning = {
@@ -1224,7 +1220,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
     queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
     bookingInfo,
-    containerInfo: enrichedContainerInfo
+    containerInfo
   });
 
   return {
@@ -1237,7 +1233,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
     raw: {
       detail,
       bookingInfo,
-      containerInfo: enrichedContainerInfo
+      containerInfo
     }
   };
 }
@@ -1286,26 +1282,11 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
     };
   }
 
-  let enrichedContainerInfo = containerInfo;
   let enrichmentWarning = null;
-  if (!options.batch) {
-    try {
-      enrichedContainerInfo = await enrichCoscoShipmentContainers(
-        containerInfo,
-        (containerRequest) => fetchCoscoContainers(containerRequest, options)
-      );
-    } catch (error) {
-      if (!isCoscoProtectionError(error)) throw error;
-      enrichmentWarning = {
-        code: error?.details?.code ?? error?.code ?? "COSCO_ENRICHMENT_DEFERRED",
-        message: error?.message ?? "Optional COSCO enrichment was deferred"
-      };
-    }
-  }
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
       queryChannel: COSCO_QUERY_CHANNELS.PLAYWRIGHT,
       bookingInfo,
-      containerInfo: enrichedContainerInfo
+      containerInfo
     });
 
   return {
@@ -1319,7 +1300,7 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
     raw: {
       detail,
       bookingInfo,
-      containerInfo: enrichedContainerInfo,
+      containerInfo,
       browser
     }
   };
@@ -1653,6 +1634,7 @@ async function handleCoscoContainerListRequest(request, response) {
 
 async function handleTrackRequest(request, response, forcedCarrier, forcedChannel) {
   const input = await readJsonBody(request);
+  const forceRefresh = input.forceRefresh === true;
   const batchTaskId = normalizeBatchTaskId(input.batchTaskId);
   const carrierCode = normalizeCarrierCode(forcedCarrier ?? input.carrier ?? "COSCO");
   const carrier = CARRIER_ADAPTERS[carrierCode];
@@ -1680,6 +1662,7 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   const cached = cache.get(cacheKey);
 
   if (
+    !forceRefresh &&
     cached &&
     cached.expiresAt > Date.now() &&
     snapshotHasCompleteContainerDetails(cached.value?.snapshot, trackingRequest)
@@ -1692,7 +1675,9 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
 
   await batchLease?.waitForTurn();
 
-  let requestPromise = batchTaskId ? null : inFlightTrackingRequests.get(cacheKey);
+  let requestPromise = batchTaskId || forceRefresh
+    ? null
+    : inFlightTrackingRequests.get(cacheKey);
   if (!requestPromise) {
     requestPromise = carrierCode === "CMA"
       ? fetchCmaTracking(trackingRequest, cmaCredentials, { signal: batchLease?.signal })
@@ -1700,14 +1685,15 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
           signal: batchLease?.signal,
           batch: Boolean(batchTaskId)
         });
-    if (!batchTaskId) inFlightTrackingRequests.set(cacheKey, requestPromise);
+    if (!batchTaskId && !forceRefresh) inFlightTrackingRequests.set(cacheKey, requestPromise);
   }
 
   let value;
   try {
     value = await requestPromise;
   } finally {
-    if (!batchTaskId && inFlightTrackingRequests.get(cacheKey) === requestPromise) {
+    if (!batchTaskId && !forceRefresh
+        && inFlightTrackingRequests.get(cacheKey) === requestPromise) {
       inFlightTrackingRequests.delete(cacheKey);
     }
   }

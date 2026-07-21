@@ -604,9 +604,17 @@ public class ShipmentTrackingService {
 
     JsonNode upstream;
     try {
-      upstream = "CMA".equals(request.carrier())
-          ? adapterClient.track(request, cmaTrackingSessionService.requireCredentials())
-          : adapterClient.track(request);
+      if ("CMA".equals(request.carrier())) {
+        CmaTrackingSessionService.CmaSessionCredentials credentials =
+            cmaTrackingSessionService.requireCredentials();
+        upstream = forceRefresh
+            ? adapterClient.track(request, credentials, true)
+            : adapterClient.track(request, credentials);
+      } else {
+        upstream = forceRefresh
+            ? adapterClient.track(request, true)
+            : adapterClient.track(request);
+      }
     } catch (ApiException error) {
       String failureCode = trackingFailureCode(error);
       if (importedDetails == null && cached != null

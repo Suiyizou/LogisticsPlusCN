@@ -91,6 +91,16 @@ assert.doesNotMatch(businessCustomerPage, /function viewShipmentDetail/);
 assert.doesNotMatch(businessCustomerPage, /<el-tag v-if="row\.note"/);
 assert.match(businessCustomerPage, /customers\.batchTrackStopConfirm/);
 assert.match(businessCustomerPage, /status === "RETRY_WAIT"/);
+assert.match(businessCustomerPage, /v-show="!batchTrackRunning" class="batch-track-form"/);
+assert.match(businessCustomerPage, /customers\.batchTrackAllTasks/);
+assert.match(businessCustomerPage, /batch-track-result-index/);
+assert.doesNotMatch(businessCustomerPage, /includeContainerDetails/);
+const listRefreshSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf("async function updateShipmentTracking"),
+  businessCustomerPage.indexOf("function trackShipmentInWorkspace")
+);
+assert.match(listRefreshSource, /forceRefresh: true/);
+assert.match(listRefreshSource, /data\?\.cacheSource === "MYSQL_STALE" \|\| data\?\.warning/);
 
 const manualSaveSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function saveManualSnapshot"),

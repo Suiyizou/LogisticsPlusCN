@@ -446,7 +446,7 @@
                     <template #default="{ row }">
                       <div class="table-action-buttons table-action-buttons--spacious">
                         <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
-                        <el-button size="small" type="warning" plain @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
+                        <el-button size="small" type="warning" plain :disabled="refreshingShipment" @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
                         <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
                       </div>
                     </template>
@@ -463,7 +463,7 @@
               >
                 <div class="shipment-workspace-side batch-track-task-dialog-body">
                   <div class="batch-track-panel">
-                    <div class="batch-track-form">
+                    <div v-show="!batchTrackRunning" class="batch-track-form">
                       <div
                         v-loading="batchTrackFileParsing"
                         :element-loading-text="t('app.loadingPage')"
@@ -545,8 +545,12 @@
                         :title="t('customers.batchTrackRetryWait', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
                       />
                       <div v-if="batchTrackResults.length" class="batch-track-result-list">
+                        <div class="batch-track-result-list-head">
+                          {{ t("customers.batchTrackAllTasks", { count: batchTrackResults.length }) }}
+                        </div>
                         <div v-for="(r, idx) in batchTrackResults" :key="`${r.number}-${idx}`" class="batch-track-result-row" :class="r.status">
                           <span class="batch-track-result-meta">
+                            <span class="batch-track-result-index">{{ idx + 1 }}</span>
                             <b>{{ r.number }}</b>
                             <el-tag v-if="r.carrier" size="small" effect="plain" type="info">{{ r.carrier }}</el-tag>
                           </span>
@@ -2310,6 +2314,9 @@ async function refreshShipmentFromCarrier() {
       hasDetails
     };
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+    if (data?.cacheSource === "MYSQL_STALE" || data?.warning) {
+      throw new Error(data?.warning || t("customers.refreshFailed"));
+    }
     refreshTrackingStatus.value = t("customers.updateTrackingSaving");
     await loadAvailableShipments();
     await loadShipmentDetailSnapshot();
@@ -2422,6 +2429,9 @@ async function updateShipmentTracking(row) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data?.message || `HTTP ${resp.status}`);
+    if (data?.cacheSource === "MYSQL_STALE" || data?.warning) {
+      throw new Error(data?.warning || t("customers.refreshFailed"));
+    }
     await loadAvailableShipments();
     showSuccess("customers.refreshSuccess");
   } catch (error) {
@@ -4349,6 +4359,17 @@ button:disabled {
   display: grid;
   gap: 6px;
 }
+.batch-track-result-list-head {
+  position: sticky;
+  top: 72px;
+  z-index: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #334155;
+  background: #e8eef6;
+  font-size: 12px;
+  font-weight: 800;
+}
 .batch-track-result-row {
   display: flex;
   flex-direction: column;
@@ -4398,6 +4419,18 @@ button:disabled {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.batch-track-result-index {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #475569;
+  background: #e2e8f0;
+  font-size: 10px;
+  font-weight: 800;
 }
 .batch-track-result-meta b {
   font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;

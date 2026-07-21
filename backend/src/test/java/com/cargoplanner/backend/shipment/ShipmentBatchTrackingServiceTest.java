@@ -131,7 +131,7 @@ class ShipmentBatchTrackingServiceTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void runsOnlyNeededContainerSubtasksAndReportsTheirProgress()
+  void neverStartsPerContainerSubtasksAfterTheMainShipmentSucceeds()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectMapper objectMapper = new ObjectMapper();
@@ -178,8 +178,7 @@ class ShipmentBatchTrackingServiceTest {
             List.of(new ShipmentBatchItemRequest(
                 "row-containers", "COSCO", "BILLOFLADING", "6502406170",
                 "COSU6502406170", false, details
-            )),
-            true
+            ))
         ),
         user
     );
@@ -190,24 +189,13 @@ class ShipmentBatchTrackingServiceTest {
         (List<Map<String, Object>>) items.get(0).get("subtasks");
     assertEquals("COMPLETED", completed.get("status"));
     assertEquals("SUCCEEDED", items.get(0).get("status"));
-    assertEquals(3, subtasks.size());
-    assertTrue(subtasks.stream().allMatch(child -> "SUCCEEDED".equals(child.get("status"))));
-    assertEquals(0, subtasks.get(1).get("attempts"));
-    assertEquals("CONTAINER_LIST", subtasks.get(1).get("source"));
-    verify(trackingService).discoverBatchContainers(
-        any(), any(), any(), any()
-    );
-    verify(trackingService).enrichBatchContainer(
-        org.mockito.ArgumentMatchers.eq("tracked-shipment"),
-        org.mockito.ArgumentMatchers.eq("OOLU7654321"),
-        any(),
-        any()
-    );
-    verify(trackingService, times(1)).enrichBatchContainer(any(), any(), any(), any());
+    assertEquals(List.of(), subtasks);
+    verify(trackingService, times(0)).discoverBatchContainers(any(), any(), any(), any());
+    verify(trackingService, times(0)).enrichBatchContainer(any(), any(), any(), any());
   }
 
   @Test
-  void finishesEveryCoreLookupBeforeStartingTheLowPriorityContainerPass()
+  void processesEveryMainShipmentWithoutStartingAContainerPass()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectMapper objectMapper = new ObjectMapper();
@@ -257,8 +245,7 @@ class ShipmentBatchTrackingServiceTest {
                     "row-2", "COSCO", "BILLOFLADING", "6502406171",
                     "COSU6502406171", false, second
                 )
-            ),
-            true
+            )
         ),
         user
     );
@@ -266,15 +253,13 @@ class ShipmentBatchTrackingServiceTest {
     awaitTerminal((String) started.get("taskId"), user);
     assertEquals(List.of(
         "core:6502406170",
-        "core:6502406171",
-        "containers:6502406170",
-        "containers:6502406171"
+        "core:6502406171"
     ), sequence);
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void skipsContainerSubqueriesUnlessTheyWereExplicitlyRequested()
+  void keepsTwentyContainerOverviewWithoutStartingIndividualQueries()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectNode tracked = (ObjectNode) new ObjectMapper().readTree("""
@@ -314,7 +299,6 @@ class ShipmentBatchTrackingServiceTest {
     Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
     List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
     assertEquals("COMPLETED", completed.get("status"));
-    assertEquals(false, completed.get("includeContainerDetails"));
     assertEquals("SUCCEEDED", items.get(0).get("status"));
     assertEquals(List.of(), items.get(0).get("subtasks"));
     verify(trackingService, times(0)).discoverBatchContainers(any(), any(), any(), any());
