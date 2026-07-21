@@ -313,6 +313,10 @@
                         <small data-i18n="batch.success">Succeeded</small>
                       </span>
                       <span>
+                        <b id="batch-core-count">0</b>
+                        <small data-i18n="batch.core">Core saved</small>
+                      </span>
+                      <span>
                         <b id="batch-failed-count">0</b>
                         <small data-i18n="batch.failed">Failed</small>
                       </span>
@@ -353,6 +357,13 @@
                       <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
                       <option value="BOOKING" data-i18n="type.booking">Booking number</option>
                     </select>
+                  </label>
+                  <label class="batch-container-detail-option">
+                    <input type="checkbox" id="batch-container-details" />
+                    <span>
+                      <strong data-i18n="batch.containerDetails">Enrich container details</strong>
+                      <small data-i18n="batch.containerDetailsHint">Off by default. This adds carrier requests for container locations and transport modes.</small>
+                    </span>
                   </label>
                 </div>
                 <div class="batch-column-preview-table-wrap">

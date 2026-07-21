@@ -134,6 +134,7 @@ public class ShipmentBatchTrackingService {
         user,
         clean(request == null ? null : request.sourceFileName(), 255, "Imported spreadsheet"),
         items,
+        request != null && Boolean.TRUE.equals(request.includeContainerDetails()),
         now
     );
     tasks.put(taskId, task);
@@ -284,7 +285,8 @@ public class ShipmentBatchTrackingService {
         }
         synchronized (task) {
           item.expectedContainerCount = expectedContainerCount(response.path("snapshot"));
-          item.enrichmentRequired = response.path("snapshot").isObject()
+          item.enrichmentRequired = task.includeContainerDetails
+              && response.path("snapshot").isObject()
               && response.path("shipmentId").isTextual();
           item.status = item.enrichmentRequired ? "CORE_SUCCEEDED" : "SUCCEEDED";
           item.source = response.path("cacheSource").asText("LIVE");
@@ -947,6 +949,7 @@ public class ShipmentBatchTrackingService {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("taskId", task.id);
       value.put("sourceFileName", task.sourceFileName);
+      value.put("includeContainerDetails", task.includeContainerDetails);
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
       value.put("total", task.items.size());
@@ -1033,6 +1036,7 @@ public class ShipmentBatchTrackingService {
     private final AuthenticatedUser owner;
     private final String sourceFileName;
     private final List<BatchItem> items;
+    private final boolean includeContainerDetails;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
     private volatile String status = "QUEUED";
@@ -1047,12 +1051,14 @@ public class ShipmentBatchTrackingService {
         AuthenticatedUser owner,
         String sourceFileName,
         List<BatchItem> items,
+        boolean includeContainerDetails,
         Instant createdAt
     ) {
       this.id = id;
       this.owner = owner;
       this.sourceFileName = sourceFileName;
       this.items = items;
+      this.includeContainerDetails = includeContainerDetails;
       this.createdAt = createdAt;
       this.updatedAt = createdAt;
     }

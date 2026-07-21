@@ -318,7 +318,10 @@ public class ShipmentTrackingService {
     if (current.isEmpty()) return;
     ObjectNode envelope = objectMapper.createObjectNode();
     envelope.set("snapshot", readJson(current.get(0).snapshotJson()));
-    JsonNode enriched = enrichWithImportedDetails(envelope, details).path("snapshot");
+    JsonNode enriched = ensureRouteFallback(
+        enrichWithImportedDetails(envelope, details),
+        details
+    ).path("snapshot");
     if (enriched.isObject()) {
       ObjectNode snapshot = (ObjectNode) enriched;
       ObjectNode business = childObject(childObject(snapshot, "references"), "business");
@@ -574,7 +577,23 @@ public class ShipmentTrackingService {
     CachedShipment cached = (user != null || trustedAutomaticRefresh)
         && isDurableReferenceType(request.type()) ? findCached(request) : null;
     Instant now = clock.instant();
-    if (!forceRefresh && importedDetails == null && cached != null) {
+    if (!forceRefresh && cached != null) {
+      if (importedDetails != null) {
+        mergeImportedDetailsIntoCurrentSnapshot(cached.shipmentId(), importedDetails, now);
+        matchImportedClientCode(
+            new PersistedShipment(
+                cached.shipmentId(),
+                cached.shipmentPublicId(),
+                cached.fetchedAt(),
+                cached.freshUntil()
+            ),
+            importedDetails,
+            user,
+            now
+        );
+        CachedShipment updated = findCached(request);
+        if (updated != null) cached = updated;
+      }
       boolean stale = cached.freshUntil() == null || cached.freshUntil().isBefore(now);
       ObjectNode response = cachedResponse(cached, user, stale);
       if (stale) {

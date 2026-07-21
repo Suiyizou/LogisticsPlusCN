@@ -185,6 +185,33 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void batchSpreadsheetDetailsMergeIntoMysqlWithoutAnotherCarrierRequest() {
+    ObjectNode first = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    ShipmentImportDetails imported = new ShipmentImportDetails(
+        null, "BL-90001", "JOB-100", null, "SHA", "LAX",
+        "PO-100", "2026-07-20", "2026-08-02", "1*40HC", null
+    );
+
+    ObjectNode cached = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, imported
+        ),
+        business
+    );
+
+    assertThat(cached.path("shipmentId").asText()).isEqualTo(first.path("shipmentId").asText());
+    assertThat(cached.path("cacheSource").asText()).isEqualTo("MYSQL");
+    assertThat(cached.path("snapshot").path("references").path("business")
+        .path("forwarderJobNumber").asText()).isEqualTo("JOB-100");
+    assertThat(cached.path("snapshot").path("route")).hasSize(2);
+    verify(adapterClient, times(1))
+        .track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
+  }
+
+  @Test
   void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
     jdbcTemplate.update(
         "INSERT INTO cp_customers (created_by, status, client_code, party_role) VALUES (2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"

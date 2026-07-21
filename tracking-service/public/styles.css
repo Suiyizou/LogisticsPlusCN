@@ -9324,7 +9324,7 @@ body.is-embedded .content { width: min(100% - 32px, 1420px); margin: 0 auto; pad
 }
 
 .batch-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .batch-result-item.is-manual > span:last-child {
@@ -9395,6 +9395,45 @@ body.is-embedded .content { width: min(100% - 32px, 1420px); margin: 0 auto; pad
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin: 16px 0;
+}
+
+.batch-column-preview-controls .batch-container-detail-option {
+  display: grid;
+  min-height: 58px;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d5e3f2;
+  background: #f8fbff;
+  border-radius: 9px;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  cursor: pointer;
+}
+
+.batch-container-detail-option input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #1677ff;
+}
+
+.batch-container-detail-option > span,
+.batch-container-detail-option strong,
+.batch-container-detail-option small {
+  display: block;
+}
+
+.batch-container-detail-option strong {
+  color: #244260;
+  font-size: 11px;
+}
+
+.batch-container-detail-option small {
+  margin-top: 3px;
+  color: #738398;
+  font-size: 9.5px;
+  line-height: 1.45;
 }
 
 .batch-column-preview-controls label {

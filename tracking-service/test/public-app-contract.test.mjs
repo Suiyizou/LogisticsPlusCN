@@ -236,7 +236,11 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
 });
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
+  assert.match(indexSource, /id="batch-container-details"/);
+  assert.doesNotMatch(indexSource, /id="batch-container-details"[^>]*checked/);
   assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
+  assert.match(appSource, /includeContainerDetails: batchState\.includeContainerDetails === true/);
+  assert.match(appSource, /\["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"\]/);
   assert.match(appSource, /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/);
   assert.match(appSource, /\/api\/business\/shipment-batch-tasks\/\$\{encodedTaskId\}\/cancel/);
   assert.match(appSource, /status === "manual" \|\| item\.manualOnly[\s\S]*?batch\.itemManual/);

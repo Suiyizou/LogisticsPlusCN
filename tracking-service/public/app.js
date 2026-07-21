@@ -53,6 +53,7 @@ const batchFileName = document.querySelector("#batch-file-name");
 const batchProgressLabel = document.querySelector("#batch-progress-label");
 const batchProgressTrack = document.querySelector("#batch-progress-track");
 const batchSuccessCount = document.querySelector("#batch-success-count");
+const batchCoreCount = document.querySelector("#batch-core-count");
 const batchFailedCount = document.querySelector("#batch-failed-count");
 const batchManualCount = document.querySelector("#batch-manual-count");
 const batchPendingCount = document.querySelector("#batch-pending-count");
@@ -64,6 +65,7 @@ const batchPreviewFileName = document.querySelector("#batch-preview-file-name");
 const batchPreviewSheet = document.querySelector("#batch-preview-sheet");
 const batchPreviewColumn = document.querySelector("#batch-preview-column");
 const batchPreviewType = document.querySelector("#batch-preview-type");
+const batchContainerDetails = document.querySelector("#batch-container-details");
 const batchPreviewTableHead = document.querySelector("#batch-preview-table-head");
 const batchPreviewTableBody = document.querySelector("#batch-preview-table-body");
 const batchPreviewCancel = document.querySelector("#batch-preview-cancel");
@@ -475,6 +477,7 @@ const MESSAGES = {
     "batch.emptyDescription": "Choose a spreadsheet to begin batch tracking.",
     "batch.file": "Imported file",
     "batch.success": "Succeeded",
+    "batch.core": "Core saved",
     "batch.failed": "Failed",
     "batch.manual": "Manual entry",
     "batch.pending": "Pending",
@@ -490,6 +493,8 @@ const MESSAGES = {
     "batch.previewSheet": "Worksheet",
     "batch.previewColumn": "Track column",
     "batch.previewType": "Number type",
+    "batch.containerDetails": "Enrich container details",
+    "batch.containerDetailsHint": "Off by default. This adds carrier requests for container locations and transport modes.",
     "batch.previewRecommended": "Recommended",
     "batch.previewRows": "The first rows are shown only for confirmation; your selected column is the final source.",
     "batch.previewConfirm": "Use this column and start",
@@ -505,6 +510,7 @@ const MESSAGES = {
     "batch.itemPending": "Pending",
     "batch.itemRunning": "Querying",
     "batch.itemSuccess": "Succeeded",
+    "batch.itemDatabase": "Reused database snapshot",
     "batch.itemCached": "Reused device cache",
     "batch.itemFailed": "Failed",
     "batch.itemCoreSaved": "Core saved · waiting for container pass",
@@ -903,6 +909,7 @@ const MESSAGES = {
     "batch.emptyDescription": "请选择表格文件开始批量货物查询。",
     "batch.file": "导入文件",
     "batch.success": "成功",
+    "batch.core": "主票已完成",
     "batch.failed": "失败",
     "batch.manual": "待手工补录",
     "batch.pending": "待处理",
@@ -918,6 +925,8 @@ const MESSAGES = {
     "batch.previewSheet": "工作表",
     "batch.previewColumn": "追踪单号列",
     "batch.previewType": "单号类型",
+    "batch.containerDetails": "补充箱级详细信息",
+    "batch.containerDetailsHint": "默认关闭；开启后会额外请求箱号地点、运输方式和箱级动态，官网请求次数会增加。",
     "batch.previewRecommended": "建议",
     "batch.previewRows": "这里只展示前几行供确认；您选择的列将作为最终解析来源。",
     "batch.previewConfirm": "使用此列并启动任务",
@@ -933,6 +942,7 @@ const MESSAGES = {
     "batch.itemPending": "待处理",
     "batch.itemRunning": "查询中",
     "batch.itemSuccess": "成功",
+    "batch.itemDatabase": "已复用数据库快照",
     "batch.itemCached": "复用本设备缓存",
     "batch.itemFailed": "失败",
     "batch.itemCoreSaved": "主票已保存 · 等待箱级补全",
@@ -3768,12 +3778,13 @@ function batchCounts() {
   return items.reduce(
     (counts, item) => {
       if (item.status === "success") counts.success += 1;
+      else if (item.status === "core") counts.core += 1;
       else if (item.status === "failed" || item.status === "partial") counts.failed += 1;
       else if (item.status === "manual") counts.manual += 1;
       else counts.pending += 1;
       return counts;
     },
-    { success: 0, failed: 0, manual: 0, pending: 0 }
+    { success: 0, core: 0, failed: 0, manual: 0, pending: 0 }
   );
 }
 
@@ -3843,13 +3854,14 @@ function restoreBatchState() {
     if (items.length === 0) return null;
     const storedStatus = String(stored.status ?? "").toLowerCase();
     const hasActiveTask =
-      Boolean(stored.taskId) && ["running", "stopping", "paused"].includes(storedStatus);
+      Boolean(stored.taskId) && ["running", "stopping", "cooldown", "paused"].includes(storedStatus);
     return {
       version: BATCH_VERSION,
       fileName: String(stored.fileName ?? "Imported queue"),
       createdAt: stored.createdAt ?? new Date().toISOString(),
       updatedAt: stored.updatedAt ?? null,
       taskId: String(stored.taskId ?? "").trim() || null,
+      includeContainerDetails: stored.includeContainerDetails === true,
       status: hasActiveTask
         ? storedStatus
         : items.some((item) => item.status === "pending")
@@ -3878,6 +3890,9 @@ function setBatchImportNotice(key = null, variables = {}, variant = "info") {
 
 function batchStatusKey(item) {
   if (item.status === "success") {
+    if (String(item.source ?? "").toUpperCase().startsWith("MYSQL")) {
+      return "batch.itemDatabase";
+    }
     return item.source === "device-cache" ? "batch.itemCached" : "batch.itemSuccess";
   }
   if (item.status === "failed") return "batch.itemFailed";
@@ -3959,6 +3974,7 @@ function renderBatchState() {
   batchProgressTrack.setAttribute("aria-valuenow", String(processed));
   batchProgressTrack.style.setProperty("--batch-progress", `${progress}%`);
   batchSuccessCount.textContent = String(counts.success);
+  if (batchCoreCount) batchCoreCount.textContent = String(counts.core);
   batchFailedCount.textContent = String(counts.failed);
   if (batchManualCount) batchManualCount.textContent = String(counts.manual);
   batchPendingCount.textContent = String(counts.pending);
@@ -4224,6 +4240,7 @@ function showBatchColumnPreview(file, preview) {
     ? preview.suggestedSheetName
     : sheetOptions[0]?.value ?? "";
   renderBatchPreviewColumns();
+  if (batchContainerDetails) batchContainerDetails.checked = false;
   batchColumnPreview.hidden = false;
   batchColumnPreview.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -4247,6 +4264,7 @@ function startImportedBatch(fileName, imported) {
     updatedAt: null,
     status: "ready",
     taskId: null,
+    includeContainerDetails: batchContainerDetails?.checked === true,
     items
   };
   if (Number(imported?.found) > BATCH_IMPORT_LIMIT) {
@@ -4412,8 +4430,11 @@ function applyBusinessBatchTask(snapshot) {
   });
 
   const taskStatus = String(snapshot.status ?? "").trim().toUpperCase();
-  const active = ["QUEUED", "RUNNING", "STOPPING"].includes(taskStatus);
+  const active = ["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"].includes(taskStatus);
   batchState.taskId = String(snapshot.taskId ?? batchState.taskId ?? "").trim() || null;
+  if (typeof snapshot.includeContainerDetails === "boolean") {
+    batchState.includeContainerDetails = snapshot.includeContainerDetails;
+  }
   batchState.status = taskStatus === "COMPLETED"
     ? "complete"
     : taskStatus === "STOPPED"
@@ -4488,7 +4509,7 @@ async function executeBatchQueue() {
     (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
   );
   const canReconnectTask = Boolean(batchState?.taskId) &&
-    ["running", "stopping", "paused"].includes(batchState?.status);
+    ["running", "stopping", "cooldown", "paused"].includes(batchState?.status);
   if (batchRunning || (!hasUnsubmittedWork && !canReconnectTask)) return;
 
   const previousBatchStatus = batchState.status;
@@ -4503,7 +4524,7 @@ async function executeBatchQueue() {
   try {
     const reconnectExistingTask =
       Boolean(batchState.taskId) &&
-      ["running", "stopping", "paused"].includes(previousBatchStatus);
+      ["running", "stopping", "cooldown", "paused"].includes(previousBatchStatus);
     let snapshot;
     if (reconnectExistingTask) {
       snapshot = await requestBusinessBatchTask(
@@ -4518,6 +4539,7 @@ async function executeBatchQueue() {
         method: "POST",
         body: {
           sourceFileName: batchState.fileName,
+          includeContainerDetails: batchState.includeContainerDetails === true,
           items: submittedItems.map((item) => ({
             id: item.id,
             carrier: item.carrier,
