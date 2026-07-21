@@ -45,8 +45,8 @@ export function normalizeBatchTaskId(value, { required = false } = {}) {
 export function createBatchTaskRegistry(options = {}) {
   const now = options.now ?? Date.now;
   const cancelTtlMs = options.cancelTtlMs ?? 60 * 60_000;
-  const minIntervalMs = integer(options.minIntervalMs, 3_000, 0, 60_000);
-  const maxIntervalMs = integer(options.maxIntervalMs, 6_000, minIntervalMs, 60_000);
+  const minIntervalMs = integer(options.minIntervalMs, 10_000, 0, 60_000);
+  const maxIntervalMs = integer(options.maxIntervalMs, 12_000, minIntervalMs, 60_000);
   const random = options.random ?? Math.random;
   const wait = options.wait ?? waitWithSignal;
   const active = new Map();

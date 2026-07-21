@@ -44,12 +44,12 @@ class VirtualTimers {
   }
 }
 
-test("query gate applies deterministic 3-6 second jitter while keeping operations serial", async () => {
+test("query gate applies deterministic 10-12 second jitter while keeping operations serial", async () => {
   const timers = new VirtualTimers();
   const randomValues = [0.5, 0, 0.999999];
   const gate = createCoscoQueryGate({
-    minIntervalMs: 3_000,
-    maxIntervalMs: 6_000,
+    minIntervalMs: 10_000,
+    maxIntervalMs: 12_000,
     queueTimeoutMs: 600_000,
     random: () => randomValues.shift() ?? 0,
     now: () => timers.now,
@@ -75,16 +75,16 @@ test("query gate applies deterministic 3-6 second jitter while keeping operation
 
   assert.deepEqual(await Promise.all(jobs), [1, 2, 3]);
   assert.equal(maximumActive, 1);
-  assert.deepEqual(startTimes, [[1, 1_000], [2, 4_000], [3, 10_000]]);
+  assert.deepEqual(startTimes, [[1, 1_000], [2, 11_000], [3, 23_000]]);
   assert.deepEqual(
-    timers.scheduledDelays.filter((delay) => delay <= 6_000),
-    [0, 3_000, 6_000]
+    timers.scheduledDelays.filter((delay) => delay <= 12_000),
+    [0, 10_000, 12_000]
   );
   assert.deepEqual(gate.stats(), {
     active: 0,
     queued: 0,
-    minIntervalMs: 3_000,
-    maxIntervalMs: 6_000,
+    minIntervalMs: 10_000,
+    maxIntervalMs: 12_000,
     queueLimit: 50,
     queueTimeoutMs: 600_000
   });

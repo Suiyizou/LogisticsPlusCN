@@ -26,8 +26,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class ShipmentBatchTrackingService {
   static final int MAX_ITEMS = 500;
-  static final long DEFAULT_MIN_INTERVAL_MS = 3_000L;
-  static final long DEFAULT_MAX_INTERVAL_MS = 6_000L;
+  static final long DEFAULT_MIN_INTERVAL_MS = 10_000L;
+  static final long DEFAULT_MAX_INTERVAL_MS = 12_000L;
   static final int MAX_TRACK_ATTEMPTS = 3;
   static final long DEFAULT_RETRY_BASE_MS = 15_000L;
   static final long DEFAULT_RETRY_MAX_MS = 15 * 60_000L;

@@ -24,7 +24,8 @@ const activeViewTitle = document.querySelector("#active-view-title");
 const historyEmpty = document.querySelector("#history-empty");
 const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
-const clearHistoryButton = document.querySelector("#clear-history-button");
+const historySearchInput = document.querySelector("#history-search-input");
+const historySearchClear = document.querySelector("#history-search-clear");
 const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
@@ -61,7 +62,6 @@ const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
 const batchWorkspaceDialog = document.querySelector("#batch-workspace-dialog");
-const batchWorkspaceTrigger = document.querySelector("#batch-workspace-trigger");
 const batchWorkspaceClose = document.querySelector("#batch-workspace-close");
 const batchColumnPreview = document.querySelector("#batch-column-preview");
 const batchPreviewFileName = document.querySelector("#batch-preview-file-name");
@@ -138,19 +138,12 @@ const cmaSessionSave = document.querySelector("#cma-session-save");
 const cmaSessionClear = document.querySelector("#cma-session-clear");
 const cmaSessionMessage = document.querySelector("#cma-session-message");
 
-const CACHE_VERSION = 3;
-const CACHE_TTL_MS = 24 * 60 * 60_000;
-const CACHE_LIMIT = 20;
-const CACHE_PREFIX = "shipment-track:v3:";
-const CACHE_INDEX_KEY = "shipment-track:v3:index";
-const LEGACY_CACHE_INDEX_KEY = "shipment-track:v2:index";
-const MIGRATION_KEY = "shipment-track:v3:migrated";
 const LANGUAGE_KEY = "shipment-track:language";
 const BATCH_STORAGE_KEY = "shipment-track:batch-import:v2";
 const BATCH_VERSION = 2;
 const BATCH_IMPORT_LIMIT = 50;
 const BATCH_FILE_SIZE_LIMIT = 2 * 1024 * 1024;
-const BATCH_REQUEST_INTERVAL_MS = 4_000;
+const BATCH_REQUEST_INTERVAL_MS = 10_000;
 const BATCH_RETRY_BASE_MS = 2_200;
 const BATCH_RETRY_LIMIT = 2;
 const BATCH_RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
@@ -328,23 +321,24 @@ const MESSAGES = {
     "workbench.checkFailed": "Channel check failed: {message}",
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
-    "history.subtitle": "Latest carrier snapshots stored on this browser",
+    "history.subtitle": "Latest shipment snapshots stored in the database",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
-    "history.clear": "Clear history",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.accountEmptyTitle": "No shipments are bound to this account yet",
     "history.accountEmptyDescription": "Assigned shipments will appear here.",
+    "history.searchPlaceholder": "Search shipment, job, port or status",
+    "history.searchLabel": "Search shipments",
+    "history.searchClear": "Clear shipment search",
+    "history.searchEmptyTitle": "No matching shipments",
+    "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
     "history.route": "Route",
     "history.latestStatus": "Latest status",
     "history.queriedAt": "Queried at",
     "history.open": "Open details",
-    "history.delete": "Delete",
-    "history.deleteLabel": "Delete tracking history for {number}",
-    "history.confirmDelete": "Delete the saved tracking history for {number}? This only removes the browser snapshot.",
     "history.departed": "Departed",
     "history.etd": "ETD",
     "history.arrived": "Arrived",
@@ -357,7 +351,6 @@ const MESSAGES = {
     "history.expand": "Expand shipment {number}",
     "history.collapse": "Collapse shipment {number}",
     "history.noTimeline": "No confirmed movement events yet.",
-    "history.confirmClear": "Clear all locally saved shipment history?",
     "tracking.kicker": "SHIPMENT INTELLIGENCE",
     "tracking.title": "Shipment tracking",
     "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
@@ -564,7 +557,6 @@ const MESSAGES = {
     "error.generic": "Tracking failed. Please try again.",
     "error.customerFriendly": "Tracking failed. Please try again later or contact customer service.",
     "error.http": "Tracking failed (HTTP {status})",
-    "error.localFallback": "{message} Showing the latest browser snapshot instead.",
     "notice.cacheTitle": "Live refresh unavailable",
     "empty.title": "Ready when you are",
     "empty.description": "Enter a bill, booking or container number to begin.",
@@ -687,14 +679,14 @@ const MESSAGES = {
     "documents.visibility.CONSIGNEE": "Consignee",
     "documents.visibility.OVERSEA_AGENT": "Overseas agent",
     "raw.title": "Decoded source payload",
-    "raw.cacheNotice": "The browser cache stores the unified snapshot only, not the carrier's raw payload.",
+    "raw.cacheNotice": "The database stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
     "common.cancel": "Cancel",
     "common.save": "Save",
     "cache.live": "Live result",
     "cache.server": "Server cache",
-    "cache.browser": "Browser cache",
-    "cache.savedAt": "Saved {time}",
+    "cache.database": "Database snapshot",
+    "cache.savedAt": "Updated {time}",
     "status.available": "Channel 1 network available",
     "status.unavailable": "Channel 1 network unavailable",
     "status.checking": "Channel 1 network checking",
@@ -766,23 +758,24 @@ const MESSAGES = {
     "workbench.checkFailed": "通道检测失败：{message}",
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
-    "history.subtitle": "当前浏览器保存的最新船司快照",
+    "history.subtitle": "数据库保存的最新货运快照",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
-    "history.clear": "清空记录",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.accountEmptyTitle": "当前账户还没有绑定票单",
     "history.accountEmptyDescription": "绑定到当前账户的票单会显示在这里。",
+    "history.searchPlaceholder": "搜索单号、Job、港口或状态",
+    "history.searchLabel": "搜索票单",
+    "history.searchClear": "清除票单搜索",
+    "history.searchEmptyTitle": "没有匹配的票单",
+    "history.searchEmptyDescription": "请尝试其他运输单号、Job Number、客户、港口或状态。",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
     "history.latestStatus": "最新状态",
     "history.queriedAt": "查询时间",
     "history.open": "打开详情",
-    "history.delete": "删除",
-    "history.deleteLabel": "删除 {number} 的跟踪历史",
-    "history.confirmDelete": "确定删除 {number} 的本地跟踪历史吗？只会移除浏览器快照。",
     "history.departed": "已离港",
     "history.etd": "预计离港",
     "history.arrived": "已到达",
@@ -795,7 +788,6 @@ const MESSAGES = {
     "history.expand": "展开运输任务 {number}",
     "history.collapse": "收起运输任务 {number}",
     "history.noTimeline": "船司尚未提供已确认的运输动态。",
-    "history.confirmClear": "确定清空当前浏览器保存的全部查询记录吗？",
     "tracking.kicker": "货运信息",
     "tracking.title": "货物跟踪",
     "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
@@ -1002,7 +994,6 @@ const MESSAGES = {
     "error.generic": "查询失败，请稍后重试。",
     "error.customerFriendly": "查询失败，请稍后重试或联系客服。",
     "error.http": "查询失败（HTTP {status}）",
-    "error.localFallback": "{message} 当前展示最近一次浏览器缓存结果。",
     "notice.cacheTitle": "实时刷新暂不可用",
     "empty.title": "等待查询",
     "empty.description": "输入提单号、订舱号或箱号即可开始。",
@@ -1125,14 +1116,14 @@ const MESSAGES = {
     "documents.visibility.OVERSEA_AGENT": "海外代理可见",
     "documents.visibility.internal": "仅内部员工可见",
     "raw.title": "原始解码结果",
-    "raw.cacheNotice": "浏览器缓存仅保存统一快照，不保存船司原始报文。",
+    "raw.cacheNotice": "数据库仅保存统一快照，不保存船司原始报文。",
     "common.notProvided": "上游未提供",
     "common.cancel": "取消",
     "common.save": "保存",
     "cache.live": "实时查询",
     "cache.server": "服务端缓存",
-    "cache.browser": "浏览器缓存",
-    "cache.savedAt": "保存于 {time}",
+    "cache.database": "数据库快照",
+    "cache.savedAt": "更新于 {time}",
     "status.available": "通道一网络接口可用",
     "status.unavailable": "通道一网络接口异常",
     "status.checking": "通道一网络接口检测中",
@@ -1264,6 +1255,7 @@ let batchImportNotice = null;
 let pendingBatchFile = null;
 let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
+let historySearchTerm = "";
 const expandedHistoryKeys = new Set();
 let relatedFilesShipmentId = null;
 let relatedFilesShipmentNumber = "";
@@ -3034,9 +3026,9 @@ function normalizeQuery(query) {
   return normalized;
 }
 
-function cacheKey(query) {
+function trackingQueryKey(query) {
   const normalized = normalizeQuery(query);
-  return `${CACHE_PREFIX}${normalized.carrier}:${normalized.channel}:${normalized.type}:${normalized.number}`;
+  return `${normalized.carrier}:${normalized.type}:${normalized.number}`;
 }
 
 function snapshotStorageIdentity(snapshot) {
@@ -3483,156 +3475,29 @@ function openDocumentDrawer() {
   });
 }
 
-function legacyCacheKey(query) {
-  const normalized = normalizeQuery(query);
-  return `${CACHE_PREFIX}${normalized.carrier}:${normalized.type}:${normalized.number}`;
-}
-
-function readCacheIndex() {
+function clearLegacyBrowserSnapshots() {
   try {
-    const value = JSON.parse(localStorage.getItem(CACHE_INDEX_KEY) ?? "[]");
-    return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeCacheIndex(keys) {
-  localStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(keys.slice(0, CACHE_LIMIT)));
-}
-
-function rememberCacheKey(key) {
-  const keys = [key, ...readCacheIndex().filter((item) => item !== key)];
-  for (const oldKey of keys.slice(CACHE_LIMIT)) localStorage.removeItem(oldKey);
-  writeCacheIndex(keys);
-}
-
-function removeCacheKey(key) {
-  try {
-    localStorage.removeItem(key);
-    writeCacheIndex(readCacheIndex().filter((item) => item !== key));
-  } catch {
-    // Browser storage may be disabled.
-  }
-}
-
-function saveSnapshot(query, payload, savedAt = new Date().toISOString()) {
-  if (!payload?.snapshot) return;
-  const normalized = normalizeQuery(query);
-  const cacheQuery = {
-    carrier: normalized.carrier,
-    channel: normalized.channel,
-    type: normalized.type,
-    number: normalized.number
-  };
-
-  try {
-    const key = cacheKey(normalized);
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        version: CACHE_VERSION,
-        savedAt,
-        query: cacheQuery,
-        snapshot: payload.snapshot,
-        shipmentId: shipmentRecordId(payload),
-        shipmentRecord: payload.shipmentRecord ?? null
-      })
-    );
-    rememberCacheKey(key);
-  } catch {
-    // A successful live query must still render when LocalStorage is unavailable.
-  }
-}
-
-function readCacheEntry(key) {
-  try {
-    const stored = JSON.parse(localStorage.getItem(key) ?? "null");
-    const savedAt = Date.parse(stored?.savedAt ?? "");
-    const expectedContainerCount = (stored?.snapshot?.summary?.containers ?? []).reduce(
-      (total, container) => total + Number(container?.quantity ?? container?.count ?? 0),
-      0
-    );
-    const hasCompleteContainerDetails =
-      expectedContainerCount <= 0 || (stored?.snapshot?.containers?.length ?? 0) > 0;
-    const valid =
-      stored?.version === CACHE_VERSION &&
-      stored?.query &&
-      stored?.snapshot?.tracking &&
-      stored?.snapshot?.summary &&
-      hasCompleteContainerDetails &&
-      Number.isFinite(savedAt) &&
-      Date.now() - savedAt <= CACHE_TTL_MS;
-
-    if (!valid) {
-      if (stored) removeCacheKey(key);
-      return null;
+    for (const indexKey of ["shipment-track:v3:index", "shipment-track:v2:index"]) {
+      const keys = JSON.parse(localStorage.getItem(indexKey) ?? "[]");
+      if (Array.isArray(keys)) {
+        for (const key of keys) {
+          if (typeof key === "string" && key.startsWith("shipment-track:")) {
+            localStorage.removeItem(key);
+          }
+        }
+      }
+      localStorage.removeItem(indexKey);
     }
-    return { ...stored, query: normalizeQuery(stored.query) };
+    localStorage.removeItem("shipment-track:v3:migrated");
   } catch {
-    removeCacheKey(key);
-    return null;
+    // Browser snapshot cleanup is best-effort; database reads do not depend on it.
   }
-}
-
-function loadSnapshot(query) {
-  const stored = readCacheEntry(cacheKey(query)) ?? readCacheEntry(legacyCacheKey(query));
-  if (!stored) return null;
-  return {
-    snapshot: stored.snapshot,
-    raw: null,
-    cached: false,
-    browserCached: true,
-    browserCachedAt: stored.savedAt,
-    shipmentId: stored.shipmentId ?? stored.shipmentRecord?.publicId ?? null,
-    shipmentRecord: stored.shipmentRecord ?? null
-  };
 }
 
 function readHistory() {
   if (readFileSession().kind === "CUSTOMER") return customerAssignedHistory;
   if (readFileSession().kind === "INTERNAL") return internalTrackedHistory;
-  const records = readCacheIndex()
-    .map((key) => ({ key, entry: readCacheEntry(key) }))
-    .filter((record) => record.entry)
-    .sort((left, right) => Date.parse(right.entry.savedAt) - Date.parse(left.entry.savedAt));
-  const seenShipmentRecords = new Set();
-  const duplicateKeys = new Set();
-  const latestRecords = [];
-
-  for (const record of records) {
-    const shipmentNumber = String(
-      record.entry.snapshot?.tracking?.number ?? record.entry.query?.number ?? ""
-    )
-      .trim()
-      .replace(/\s+/g, "")
-      .toUpperCase();
-
-    const shipmentRecordKey = [
-      record.entry.query?.carrier ?? "COSCO",
-      record.entry.query?.type ?? record.entry.snapshot?.tracking?.type ?? "BILLOFLADING",
-      shipmentNumber
-    ].join(":");
-
-    if (shipmentNumber && seenShipmentRecords.has(shipmentRecordKey)) {
-      duplicateKeys.add(record.key);
-      continue;
-    }
-
-    if (shipmentNumber) seenShipmentRecords.add(shipmentRecordKey);
-    latestRecords.push(record);
-  }
-
-  if (duplicateKeys.size > 0) {
-    try {
-      for (const key of duplicateKeys) localStorage.removeItem(key);
-      writeCacheIndex(readCacheIndex().filter((key) => !duplicateKeys.has(key)));
-    } catch {
-      // Deduplication is best-effort when browser storage is unavailable.
-    }
-  }
-
-  return latestRecords.map((record) => record.entry);
+  return [];
 }
 
 async function loadCustomerAssignedHistory() {
@@ -3769,30 +3634,6 @@ async function loadInternalTrackedHistory() {
   } catch {
     internalTrackedHistory = [];
     renderHistory();
-  }
-}
-
-function migrateLegacyCache() {
-  try {
-    if (localStorage.getItem(MIGRATION_KEY)) return;
-    const legacyKeys = JSON.parse(localStorage.getItem(LEGACY_CACHE_INDEX_KEY) ?? "[]");
-    if (Array.isArray(legacyKeys)) {
-      for (const legacyKey of legacyKeys) {
-        const stored = JSON.parse(localStorage.getItem(legacyKey) ?? "null");
-        if (!stored?.snapshot?.tracking) continue;
-        if (stored.snapshot.tracking.type === "CONTAINER") continue;
-        const query = {
-          carrier: "COSCO",
-          channel: stored.query?.channel ?? stored.snapshot.channel ?? "AUTO",
-          type: stored.snapshot.tracking.type,
-          number: stored.snapshot.tracking.number
-        };
-        saveSnapshot(query, { snapshot: stored.snapshot }, stored.savedAt);
-      }
-    }
-    localStorage.setItem(MIGRATION_KEY, "1");
-  } catch {
-    // Migration is best-effort and never blocks the application.
   }
 }
 
@@ -5303,11 +5144,11 @@ function renderResult(payload) {
   setSummaryService(elements["summary-service-warehouse"], enabledServices.warehouse);
   elements["summary-services"].hidden = !Object.values(enabledServices).some(Boolean);
 
-  const source = payload.browserCached ? "browser" : payload.cached ? "server" : "live";
+  const source = payload.databaseStored ? "database" : payload.cached ? "server" : "live";
   elements["cache-status"].dataset.source = source;
   elements["cache-status"].textContent = t(`cache.${source}`);
-  elements["cache-status"].title = payload.browserCachedAt
-    ? t("cache.savedAt", { time: formatLocalDateTime(payload.browserCachedAt) })
+  elements["cache-status"].title = payload.databaseStoredAt
+    ? t("cache.savedAt", { time: formatLocalDateTime(payload.databaseStoredAt) })
     : "";
   elements["fetched-at"].textContent = formatLocalDateTime(snapshot.fetchedAt);
 
@@ -5577,20 +5418,83 @@ function setHistoryDetailsExpanded({ item, toggle, details, entryKey, expanded, 
   });
 }
 
+function normalizeHistorySearch(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function historySearchText(entry) {
+  const snapshot = entry?.snapshot ?? {};
+  const summary = snapshot.summary ?? {};
+  const businessReferences = businessReferencesForSnapshot(snapshot);
+  const extraInformation = Array.isArray(snapshot.extraInformation)
+    ? snapshot.extraInformation.flatMap((item) => [item?.key, item?.value])
+    : [];
+  return normalizeHistorySearch([
+    entry?.query?.number,
+    entry?.query?.carrier,
+    entry?.query?.type,
+    snapshot.tracking?.originalNumber,
+    summary.billOfLading,
+    ...(Array.isArray(summary.bookingNumbers) ? summary.bookingNumbers : []),
+    businessReferences.clientNameCode,
+    businessReferences.clientPoNumber,
+    businessReferences.forwarderJobNumber,
+    summary.origin?.name,
+    summary.origin?.countryCode,
+    summary.destination?.name,
+    summary.destination?.countryCode,
+    summary.latestEvent?.name,
+    summary.latestEvent?.location,
+    ...extraInformation
+  ].filter(Boolean).join(" "));
+}
+
+function historyMatchesSearch(entry, searchTerm) {
+  const tokens = normalizeHistorySearch(searchTerm).split(" ").filter(Boolean);
+  if (tokens.length === 0) return true;
+  const searchText = historySearchText(entry);
+  return tokens.every((token) => searchText.includes(token));
+}
+
 function renderHistory() {
-  const history = readHistory();
+  const allHistory = readHistory();
+  const normalizedSearch = normalizeHistorySearch(historySearchTerm);
+  const history = normalizedSearch
+    ? allHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
+    : allHistory;
   const session = readFileSession();
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
+  const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
 
   historyTitle.textContent = t(accountBound ? "history.accountTitle" : "history.title");
   historySubtitle.textContent = t(accountBound ? "history.accountSubtitle" : "history.subtitle");
-  historyEmptyTitle.textContent = t(accountBound ? "history.accountEmptyTitle" : "history.emptyTitle");
+  historyEmptyTitle.textContent = t(
+    searchHasNoResults
+      ? "history.searchEmptyTitle"
+      : accountBound
+        ? "history.accountEmptyTitle"
+        : "history.emptyTitle"
+  );
   historyEmptyDescription.textContent = t(
-    accountBound ? "history.accountEmptyDescription" : "history.emptyDescription"
+    searchHasNoResults
+      ? "history.searchEmptyDescription"
+      : accountBound
+        ? "history.accountEmptyDescription"
+        : "history.emptyDescription"
   );
   historyEmpty.hidden = history.length > 0;
   historyTableWrap.hidden = history.length === 0;
-  clearHistoryButton.hidden = accountBound || history.length === 0;
+  if (historySearchInput) {
+    historySearchInput.disabled = allHistory.length === 0;
+    if (historySearchInput.value !== historySearchTerm) {
+      historySearchInput.value = historySearchTerm;
+    }
+  }
+  if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
   historyTableBody.replaceChildren();
 
   let rowIndex = 0;
@@ -5607,7 +5511,7 @@ function renderHistory() {
     const timing = historyTiming(snapshot);
     const progress = historyProgress(snapshot, timing);
     const detailId = `shipment-history-detail-${rowIndex}`;
-    const entryKey = cacheKey(entry.query);
+    const entryKey = trackingQueryKey(entry.query);
     const initiallyExpanded = expandedHistoryKeys.has(entryKey);
 
     item.dataset.shipmentNumber = entry.query.number;
@@ -5698,22 +5602,6 @@ function renderHistory() {
       chevron
     );
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "history-delete-button";
-    deleteButton.textContent = t("history.delete");
-    deleteButton.setAttribute(
-      "aria-label",
-      t("history.deleteLabel", { number: entry.query.number })
-    );
-    deleteButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (!window.confirm(t("history.confirmDelete", { number: entry.query.number }))) return;
-      removeCacheKey(entryKey);
-      expandedHistoryKeys.delete(entryKey);
-      renderHistory();
-    });
-
     const details = document.createElement("div");
     details.className = "shipment-row-details";
     details.id = detailId;
@@ -5794,9 +5682,7 @@ function renderHistory() {
       });
     });
 
-    if (readFileSession().kind === "CUSTOMER") item.append(toggle, details);
-    else if (entry.boundShipment) item.append(toggle, details);
-    else item.append(toggle, deleteButton, details);
+    item.append(toggle, details);
     historyTableBody.append(item);
   }
 }
@@ -6175,7 +6061,7 @@ function historyEntryForQuery(query, shipmentId = null) {
   const normalized = normalizeQuery(query);
   return readHistory().find((entry) => {
     if (shipmentId && String(entry.shipmentId ?? "") === String(shipmentId)) return true;
-    return cacheKey(entry.query) === cacheKey(normalized);
+    return trackingQueryKey(entry.query) === trackingQueryKey(normalized);
   }) ?? null;
 }
 
@@ -6195,12 +6081,12 @@ function showStoredTrackingQuery(
         snapshot: storedEntry.snapshot,
         raw: null,
         cached: false,
-        browserCached: true,
-        browserCachedAt: storedEntry.savedAt,
+        databaseStored: true,
+        databaseStoredAt: storedEntry.savedAt,
         shipmentId: storedEntry.shipmentId ?? storedEntry.shipmentRecord?.publicId ?? null,
         shipmentRecord: storedEntry.shipmentRecord ?? null
       }
-    : loadSnapshot(normalized);
+    : null;
   if (!payload) {
     if (clearWhenMissing) {
       currentPayload = null;
@@ -6279,6 +6165,9 @@ function applyLanguage(language, { persist = true } = {}) {
   });
   document.querySelectorAll("[data-i18n-aria-label]").forEach((node) => {
     node.setAttribute("aria-label", t(node.dataset.i18nAriaLabel));
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
   });
   document.querySelectorAll("[data-language]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.language === currentLanguage);
@@ -6440,13 +6329,6 @@ form.addEventListener("submit", async (event) => {
   const waitToken = beginSystemWait("tracking", "wait.tracking");
   let completed = false;
   updateUrl(query);
-  const customerReadOnly = readFileSession().kind === "CUSTOMER";
-  const localPayload = customerReadOnly ? null : mergeImportedDetailsIntoPayload(
-    loadSnapshot(query),
-    importedItem?.importedDetails
-  );
-  if (localPayload) renderResult(localPayload);
-
   try {
     const { response, payload: upstreamPayload } = await requestTracking(query);
 
@@ -6458,12 +6340,13 @@ form.addEventListener("submit", async (event) => {
       upstreamPayload,
       importedItem?.importedDetails
     );
-    if (!customerReadOnly) saveSnapshot(query, payload);
     markBatchItemResult(query, {
       status: "success",
       source: payload?.cached ? "server-cache" : "live"
     });
-    renderHistory();
+    if (readFileSession().kind === "INTERNAL") await loadInternalTrackedHistory();
+    else if (readFileSession().kind === "CUSTOMER") await loadCustomerAssignedHistory();
+    else renderHistory();
     if (requestSequence !== trackingRequestSequence) return;
     renderResult(payload);
     completed = true;
@@ -6474,14 +6357,11 @@ form.addEventListener("submit", async (event) => {
       ? technicalMessage
       : customerFacingTrackingError();
     markBatchItemResult(query, {
-      status: localPayload ? "success" : "failed",
-      source: localPayload ? "device-cache" : null,
-      error: localPayload ? null : technicalMessage
+      status: "failed",
+      source: null,
+      error: technicalMessage
     });
-    showError(
-      localPayload ? t("error.localFallback", { message }) : message,
-      localPayload ? "warning" : "error"
-    );
+    showError(message, "error");
   } finally {
     if (requestSequence === trackingRequestSequence) setLoading(false);
     endSystemWait(waitToken, { complete: completed });
@@ -6514,7 +6394,6 @@ cmaSessionForm.addEventListener("submit", (event) => {
 cmaSessionClear.addEventListener("click", () => void clearCmaSession());
 channelSelect?.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
 
-batchWorkspaceTrigger?.addEventListener("click", openBatchWorkspace);
 batchWorkspaceClose?.addEventListener("click", closeBatchWorkspace);
 batchWorkspaceDialog?.addEventListener("click", (event) => {
   if (event.target === batchWorkspaceDialog) closeBatchWorkspace();
@@ -6802,13 +6681,16 @@ document.querySelector("#start-tracking-button").addEventListener("click", () =>
   });
 });
 
-clearHistoryButton.addEventListener("click", () => {
-  if (readFileSession().token) return;
-  if (!window.confirm(t("history.confirmClear"))) return;
-  for (const key of readCacheIndex()) localStorage.removeItem(key);
-  localStorage.removeItem(CACHE_INDEX_KEY);
-  expandedHistoryKeys.clear();
+historySearchInput?.addEventListener("input", () => {
+  historySearchTerm = historySearchInput.value;
   renderHistory();
+});
+
+historySearchClear?.addEventListener("click", () => {
+  historySearchTerm = "";
+  historySearchInput.value = "";
+  renderHistory();
+  historySearchInput.focus();
 });
 
 document.querySelector("#edit-business-references").addEventListener("click", () => {
@@ -6951,12 +6833,10 @@ window.addEventListener("pageshow", () => {
   renderTrackingAccount();
 });
 
-migrateLegacyCache();
+clearLegacyBrowserSnapshots();
 batchState = restoreBatchState();
 if (batchState) persistBatchState();
 applyLanguage(currentLanguage, { persist: false });
-void loadCustomerAssignedHistory();
-void loadInternalTrackedHistory();
 if (
   batchState?.taskId &&
   ["running", "stopping", "paused"].includes(batchState.status)
@@ -6964,18 +6844,24 @@ if (
   window.setTimeout(() => void runBatchQueue(), 0);
 }
 
-const initialQuery = trackingQueryFromLocation();
-if (initialQuery) {
-  const restored = showStoredTrackingQuery(initialQuery);
-  showView("tracking", { updateLocation: false });
-  if (!restored) form.requestSubmit();
-} else {
+async function initializeTrackingPage() {
+  const initialQuery = trackingQueryFromLocation();
+  if (initialQuery) {
+    await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
+    const restored = showStoredTrackingQuery(initialQuery);
+    showView("tracking", { updateLocation: false });
+    if (!restored) form.requestSubmit();
+    return;
+  }
   showView(["overview", "tracking", "profile"].includes(window.location.hash.slice(1))
     ? window.location.hash.slice(1)
     : "overview", {
     updateLocation: false
   });
+  await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
 }
+
+void initializeTrackingPage();
 
 renderTrackingAccount();
 // Re-render account after a short delay to catch any late session writes

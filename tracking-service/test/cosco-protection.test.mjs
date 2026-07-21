@@ -50,7 +50,7 @@ test("cancels an active batch request and rejects further work for the cancelled
   assert.throws(() => registry.begin(taskId), (error) => error.code === "BATCH_CANCELLED");
 });
 
-test("spaces requests in one batch task by a random interval between three and six seconds", async () => {
+test("spaces requests in one batch task by a random interval between ten and twelve seconds", async () => {
   let currentTime = 1_000;
   const waits = [];
   const registry = createBatchTaskRegistry({
@@ -69,9 +69,9 @@ test("spaces requests in one batch task by a random interval between three and s
 
   currentTime += 500;
   const second = registry.begin(taskId);
-  assert.deepEqual(await second.waitForTurn(), { delayMs: 4_000, intervalMs: 4_500 });
+  assert.deepEqual(await second.waitForTurn(), { delayMs: 10_500, intervalMs: 11_000 });
   second.finish();
-  assert.deepEqual(waits, [0, 4_000]);
+  assert.deepEqual(waits, [0, 10_500]);
 });
 
 test("cancels a batch request while it is waiting for its query window", async () => {

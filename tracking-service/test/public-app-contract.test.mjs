@@ -236,10 +236,8 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
 });
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
-  assert.match(
-    indexSource,
-    /id="batch-workspace-trigger"[\s\S]*?<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/
-  );
+  assert.doesNotMatch(indexSource, /id="batch-workspace-trigger"/);
+  assert.match(indexSource, /<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/);
   assert.doesNotMatch(indexSource, /id="batch-container-details"/);
   assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
   assert.doesNotMatch(appSource, /includeContainerDetails/);
@@ -337,11 +335,9 @@ test("customer tracking is database-backed, assigned-only, and never falls back 
     requestSource,
     /postPublicShipmentTrackingRequest\(query, options\);[\s\S]*?if \(customerReadOnly\) return platform;/
   );
-  assert.match(
-    appSource,
-    /const localPayload = customerReadOnly \? null : mergeImportedDetailsIntoPayload/
-  );
-  assert.match(appSource, /if \(readFileSession\(\)\.kind === "CUSTOMER"\) item\.append\(toggle, details\);/);
+  assert.doesNotMatch(appSource, /loadSnapshot|saveSnapshot|browserCached/);
+  assert.match(appSource, /databaseStored: true/);
+  assert.match(appSource, /item\.append\(toggle, details\);/);
 });
 
 test("opening shipment details never fetches files or silently re-tracks the shipment", () => {
@@ -385,7 +381,7 @@ test("view navigation keeps browser back-forward state and restores stored track
 
 test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {
   const loadStart = appSource.indexOf("async function loadInternalTrackedHistory()");
-  const loadEnd = appSource.indexOf("function migrateLegacyCache", loadStart);
+  const loadEnd = appSource.indexOf("function appendCell", loadStart);
   const loadSource = appSource.slice(loadStart, loadEnd);
   assert.match(loadSource, /fetch\("\/api\/business\/shipments"/);
   assert.match(loadSource, /item\?\.snapshot && typeof item\.snapshot === "object"/);
@@ -396,7 +392,9 @@ test("signed-in overview loads account-bound snapshot objects and never offers b
   const historyStart = appSource.indexOf("function renderHistory()");
   const historyEnd = appSource.indexOf("function cmaSessionErrorMessage", historyStart);
   const historySource = appSource.slice(historyStart, historyEnd);
-  assert.match(historySource, /clearHistoryButton\.hidden = accountBound \|\| history\.length === 0/);
+  assert.match(historySource, /allHistory\.filter\(\(entry\) => historyMatchesSearch/);
+  assert.doesNotMatch(indexSource, /id="clear-history-button"/);
+  assert.match(indexSource, /id="history-search-input"[\s\S]*?id="history-search-clear"/);
   assert.match(indexSource, /id="history-title"[\s\S]*?id="history-subtitle"/);
 });
 

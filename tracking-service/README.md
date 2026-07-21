@@ -36,9 +36,9 @@ npm test
 - 提单号、订舱号、箱号查询
 - 5 分钟内存缓存
 - 启动时立即探测通道一，之后每 6 小时绕过业务缓存复检
-- 浏览器 LocalStorage 保存最近 20 个统一快照，有效期 24 小时
-- Overview 总览展示本机查询记录、船司、路线国旗、最新状态和查询时间
-- 实时查询失败且本地快照仍有效时，自动显示浏览器缓存并提示数据来源
+- 浏览器不保存统一追踪快照；已登录用户直接读取数据库中的最新快照
+- Overview 总览展示账户票单，支持按单号、Job、客户、港口和状态搜索
+- 详情页优先使用已加载的数据库快照，不会因打开详情而静默重查船司
 - 实际离港、实际到港、预计最终到达、最新动态
 - 分段运输 Routing：船名/航次、装卸港、预计与实际离到时间
 - 集装箱状态、主提单号、订舱号和上游可用的其他参考信息
@@ -95,14 +95,15 @@ $env:COSCO_PROXY_ENABLED="true"
 $env:COSCO_PROXY_SERVER="http://proxy-host:8080"
 $env:COSCO_PROXY_USERNAME="proxy-user"
 $env:COSCO_PROXY_PASSWORD="proxy-password"
-$env:COSCO_QUERY_MIN_INTERVAL_MS="2500"
+$env:COSCO_QUERY_MIN_INTERVAL_MS="10000"
+$env:COSCO_QUERY_MAX_INTERVAL_MS="12000"
 $env:COSCO_QUERY_QUEUE_LIMIT="50"
 $env:COSCO_QUERY_QUEUE_TIMEOUT_MS="120000"
 $env:COSCO_BLOCK_COOLDOWN_MS="1800000"
 npm start
 ```
 
-COSCO 查询按进程串行并保持最小间隔，避免批量任务瞬时打满上游。任一通道确认上游返回 HTTP `403` 后会开启共享冷却，在冷却期内直接返回 `503` 与 `COSCO_UPSTREAM_BLOCKED`，不会继续用另一个通道重复冲击同一出口 IP。`GET /api/health` 只暴露脱敏后的代理状态、队列和熔断状态。
+COSCO 查询按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。任一通道确认上游返回 HTTP `403/429` 后会开启共享冷却，在冷却期内直接返回保护错误，不会继续用另一个通道重复冲击同一出口 IP。`GET /api/health` 只暴露脱敏后的代理状态、队列和熔断状态。
 
 也可以独立验证：
 
@@ -124,9 +125,9 @@ npm start
 
 DataDome 会话属于敏感信息，不要写入代码、日志、Git 或 `.env`。会话失效时接口会返回 `503` 和 `DATADOME` 标识，业务员或管理员在页面更新合法会话后即可重试。Node 仍保留 `CMA_CDP_URL`/`CMA_SESSION_COOKIE` 作为独立开发调试兼容项，不用于 Compose 生产部署。
 
-## 浏览器缓存
+## 快照存储
 
-LocalStorage 只保存后端转换后的统一 `snapshot`，不保存 COSCO 原始报文。查询时会先显示同一查询条件下的有效本地快照，同时向后端请求最新数据；实时查询成功后会覆盖本地快照。
+统一 `snapshot` 由 Spring Boot 持久化到 MySQL。页面加载账户票单与打开详情时直接使用数据库快照，不再将追踪结果写入 LocalStorage；历史版本遗留的浏览器快照会在页面初始化时清理。批量导入的待处理队列、语言偏好和登录会话仍按各自用途保留本机状态。
 
 ## 接口
 

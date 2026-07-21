@@ -168,12 +168,30 @@
                   <span class="panel-icon">↺</span>
                   <span>
                     <strong id="history-title" data-i18n="history.title">Tracked shipments</strong>
-                    <small id="history-subtitle" data-i18n="history.subtitle">Latest carrier snapshots stored on this browser</small>
+                    <small id="history-subtitle" data-i18n="history.subtitle">Latest shipment snapshots stored in the database</small>
                   </span>
                 </div>
-                <button type="button" class="text-button el-button el-button--primary is-link" id="clear-history-button" data-i18n="history.clear">
-                  Clear history
-                </button>
+                <div class="history-heading-actions">
+                  <div class="history-search">
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      id="history-search-input"
+                      type="search"
+                      autocomplete="off"
+                      data-i18n-placeholder="history.searchPlaceholder"
+                      data-i18n-aria-label="history.searchLabel"
+                      placeholder="Search shipment, job, port or status"
+                      aria-label="Search shipments"
+                    />
+                    <button
+                      id="history-search-clear"
+                      type="button"
+                      data-i18n-aria-label="history.searchClear"
+                      aria-label="Clear search"
+                      hidden
+                    >×</button>
+                  </div>
+                </div>
               </div>
 
               <div class="history-empty" id="history-empty">
@@ -221,19 +239,7 @@
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
                 <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
               </div>
-              <div class="tracking-heading-actions">
-                <button
-                  class="batch-workspace-trigger"
-                  id="batch-workspace-trigger"
-                  type="button"
-                  aria-haspopup="dialog"
-                  aria-controls="batch-workspace-dialog"
-                >
-                  <span aria-hidden="true">☰</span>
-                  <span data-i18n="batch.workspaceOpen">Batch tracking</span>
-                </button>
-                <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
-              </div>
+              <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
             </section>
 
             <section class="query-panel">

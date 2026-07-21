@@ -12,8 +12,8 @@ function cancelledError() {
 }
 
 export function createCoscoQueryGate(options = {}) {
-  const minIntervalMs = integer(options.minIntervalMs, 3_000, 0, 60_000);
-  const maxIntervalMs = integer(options.maxIntervalMs, 6_000, minIntervalMs, 60_000);
+  const minIntervalMs = integer(options.minIntervalMs, 10_000, 0, 60_000);
+  const maxIntervalMs = integer(options.maxIntervalMs, 12_000, minIntervalMs, 60_000);
   const random = options.random ?? Math.random;
   const now = options.now ?? Date.now;
   const setTimer = options.setTimer ?? setTimeout;

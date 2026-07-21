@@ -161,8 +161,8 @@ const coscoQueryGate = createCoscoQueryGate({
   queueTimeoutMs: process.env.COSCO_QUERY_QUEUE_TIMEOUT_MS
 });
 const coscoUpstreamGate = createCoscoQueryGate({
-  minIntervalMs: process.env.COSCO_UPSTREAM_MIN_INTERVAL_MS ?? 3_000,
-  maxIntervalMs: process.env.COSCO_UPSTREAM_MAX_INTERVAL_MS ?? 6_000,
+  minIntervalMs: process.env.COSCO_UPSTREAM_MIN_INTERVAL_MS ?? 10_000,
+  maxIntervalMs: process.env.COSCO_UPSTREAM_MAX_INTERVAL_MS ?? 12_000,
   queueLimit: process.env.COSCO_UPSTREAM_QUEUE_LIMIT ?? 500,
   queueTimeoutMs: process.env.COSCO_UPSTREAM_QUEUE_TIMEOUT_MS ?? 600_000
 });
