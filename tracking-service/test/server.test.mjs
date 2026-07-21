@@ -12,6 +12,7 @@ import {
   normalizeCmaSnapshot,
   normalizeCoscoContainerList,
   normalizeCoscoContainerSnapshot,
+  normalizeCoscoSupplementalDetails,
   normalizeQueryChannel,
   parseCmaLocalDateTime,
   runCoscoChannelChecks,
@@ -302,6 +303,36 @@ test("container discovery marks only incomplete boxes for low-priority subquerie
   assert.equal(containers[0].transportMode, "TRUCK");
   assert.equal(containers[0].currentLocation, "Shanghai");
   assert.equal(containers[1].needsEnrichment, true);
+});
+
+test("normalizes booking references and transport details for supplemental loading", () => {
+  const details = normalizeCoscoSupplementalDetails(
+    {
+      referenceInformation: [
+        { name: "POL", value: "Shanghai-Shanghai Shengdong (I), Yangshan", seq: 1 },
+        { name: "POD", value: "Long Beach-Pacific Container Terminal", seq: 2 }
+      ]
+    },
+    [{
+      containerNumberWithCheckDigit: "FBIU4832780",
+      trafficTerm: "CY | CY",
+      currentMilestone: {
+        eventName: "Empty pickup",
+        actualEventDateTime: "2026-07-16T07:49:00",
+        eventLocationName: "Shanghai Coscon Logistics Lin Gang",
+        transportMode: "Truck"
+      }
+    }],
+    normalizeTrackingRequest({ type: "BOOKING", number: "6508063160" }),
+    "2026-07-21T12:00:00.000Z"
+  );
+
+  assert.equal(details.tracking.number, "6508063160");
+  assert.equal(details.containers.length, 1);
+  assert.equal(details.containers[0].number, "FBIU4832780");
+  assert.equal(details.containers[0].currentLocation, "Shanghai Coscon Logistics Lin Gang");
+  assert.equal(details.references.information.length, 2);
+  assert.equal(details.references.information[0].name, "POL");
 });
 
 test("checks the primary network and fallback DOM channels independently", async () => {

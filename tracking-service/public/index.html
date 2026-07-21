@@ -582,6 +582,11 @@
                 </article>
               </section>
 
+              <div class="supplemental-details-status" id="supplemental-details-status" hidden>
+                <span class="supplemental-details-spinner" aria-hidden="true"></span>
+                <span id="supplemental-details-message">Loading transport details…</span>
+              </div>
+
               <div class="primary-grid">
                 <section class="panel route-panel" id="route-panel">
                   <div class="panel-header">
@@ -620,7 +625,7 @@
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">#</span>
-                      <strong data-i18n="references.title">Carrier identifiers</strong>
+                      <strong data-i18n="references.title">Booking information &amp; references</strong>
                     </div>
                     <button type="button" class="panel-edit-button" id="edit-business-references" data-i18n="business.edit">
                       Edit business references
@@ -696,7 +701,7 @@
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">▣</span>
-                      <strong data-i18n="containers.title">Container details</strong>
+                      <strong data-i18n="containers.title">Transport details</strong>
                     </div>
                     <span id="container-count">0 containers</span>
                   </div>

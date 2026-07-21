@@ -612,6 +612,57 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void loadsAndPersistsSupplementalTransportAndBookingDetails() throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    NormalizedTrackRequest request = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.loadSupplementalDetails(request)).thenReturn(objectMapper.readTree("""
+        {
+          "fetchedAt": "2026-07-16T10:02:00Z",
+          "partial": false,
+          "containers": [{
+            "number": "FBIU4832780",
+            "transportMode": "Truck",
+            "trafficTerm": "CY | CY",
+            "currentLocation": "Shanghai Coscon Logistics Lin Gang",
+            "latestEvent": "Empty pickup",
+            "latestEventTime": "2026-07-16T07:49:00"
+          }],
+          "references": {
+            "external": ["REF-1", "REF-1"],
+            "business": {},
+            "information": [
+              {"name": "POL", "value": "Old value", "sequence": 1},
+              {"name": "POL", "value": "Shanghai-Shanghai Shengdong (I), Yangshan", "sequence": 1},
+              {"name": "POD", "value": "Long Beach-Pacific Container Terminal", "sequence": 2}
+            ]
+          }
+        }
+        """));
+
+    ObjectNode result = service.loadSupplementalDetails(
+        shipmentId,
+        new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+        business
+    );
+
+    assertThat(result.path("databaseStored").asBoolean()).isTrue();
+    assertThat(result.path("snapshot").path("containers")).hasSize(2);
+    assertThat(result.path("snapshot").path("references").path("external")).hasSize(1);
+    assertThat(result.path("snapshot").path("references").path("information")).hasSize(2);
+    assertThat(result.path("snapshot").path("references").path("information").get(0)
+        .path("value").asText()).isEqualTo("Shanghai-Shanghai Shengdong (I), Yangshan");
+    assertThat(result.path("snapshot").path("supplementalDetails").path("containerCount").asInt())
+        .isEqualTo(2);
+    verify(adapterClient).loadSupplementalDetails(request);
+  }
+
+  @Test
   void keepsTheLastValidSnapshotWhenAForcedRefreshReturnsEmpty() throws Exception {
     ObjectNode first = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),

@@ -597,7 +597,7 @@ const MESSAGES = {
     "route.stage.arrival": "Arrival port",
     "route.stage.destination": "Final destination",
     "route.stage.waypoint": "Route waypoint",
-    "references.title": "Carrier identifiers",
+    "references.title": "Booking information & references",
     "references.masterBill": "Master bill",
     "references.booking": "Booking number",
     "references.external": "Other carrier references",
@@ -633,7 +633,7 @@ const MESSAGES = {
     "routing.actualArrival": "Actual arrival",
     "routing.masterBill": "Master bill",
     "routing.empty": "The carrier did not provide enough data to compose routing legs.",
-    "containers.title": "Container details",
+    "containers.title": "Transport details",
     "containers.count": "{count} containers",
     "containers.number": "Container",
     "containers.type": "Type",
@@ -648,6 +648,10 @@ const MESSAGES = {
     "containers.noMilestones": "No container-specific milestones were returned.",
     "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
+    "supplemental.loading": "Loading transport details and booking references. This may take about 20 seconds…",
+    "supplemental.complete": "Transport details and booking references are up to date.",
+    "supplemental.partial": "Available transport details were loaded; some carrier fields are temporarily unavailable.",
+    "supplemental.failed": "Transport details could not be loaded. Reopen the shipment to retry.",
     "documents.kicker": "SHIPMENT FILES",
     "documents.title": "Document details",
     "documents.open": "Documents",
@@ -1041,7 +1045,7 @@ const MESSAGES = {
     "route.stage.arrival": "到港节点",
     "route.stage.destination": "最终目的地",
     "route.stage.waypoint": "运输节点",
-    "references.title": "船司识别号",
+    "references.title": "订舱信息及参考号",
     "references.masterBill": "主提单号",
     "references.booking": "订舱号",
     "references.external": "其他船司参考号",
@@ -1077,7 +1081,7 @@ const MESSAGES = {
     "routing.actualArrival": "实际到港",
     "routing.masterBill": "主提单",
     "routing.empty": "船司未提供可组成分段运输的数据。",
-    "containers.title": "集装箱明细",
+    "containers.title": "运输详情",
     "containers.count": "{count} 个箱",
     "containers.number": "箱号",
     "containers.type": "箱型",
@@ -1092,6 +1096,10 @@ const MESSAGES = {
     "containers.noMilestones": "船司未返回该箱的独立轨迹。",
     "containers.enriched": "已通过箱号子查询补全",
     "containers.empty": "船司未提供箱级明细。",
+    "supplemental.loading": "正在补查运输详情与订舱参考号，预计约需 20 秒…",
+    "supplemental.complete": "运输详情与订舱参考号已更新。",
+    "supplemental.partial": "已载入可用运输详情，部分船司字段暂不可用。",
+    "supplemental.failed": "运输详情暂时无法载入，重新打开该票可重试。",
     "documents.kicker": "票单文件",
     "documents.title": "文件详情",
     "documents.open": "文件详情",
@@ -1239,6 +1247,8 @@ const elements = Object.fromEntries(
     "container-table-body",
     "container-panel",
     "secondary-grid",
+    "supplemental-details-status",
+    "supplemental-details-message",
     "document-drawer-shipment",
     "raw-json"
   ].map((id) => [id, document.querySelector(`#${id}`)])
@@ -1272,6 +1282,8 @@ let pendingBatchFile = null;
 let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
+const supplementalDetailRequests = new Map();
+let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
 let relatedFilesShipmentId = null;
 let relatedFilesShipmentNumber = "";
@@ -4997,8 +5009,16 @@ function renderReferences(snapshot) {
   const list = elements["reference-information"];
   list.replaceChildren();
   const internalReferencePattern = /(?:b\/?l\s*type|bill\s*of\s*lading\s*type|surrender(?:ed)?\s*status)/i;
-  const visible = (references.information ?? []).filter((item) =>
-    item.name && item.value && !internalReferencePattern.test(String(item.name))
+  const safeInformation = (references.information ?? []).filter((item) =>
+    item?.name && item?.value && !internalReferencePattern.test(String(item.name))
+  );
+  const visibleByName = new Map();
+  for (const item of safeInformation) {
+    const key = String(item.name).trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+    if (key) visibleByName.set(key, item);
+  }
+  const visible = [...visibleByName.values()].sort(
+    (left, right) => Number(left.sequence ?? 999) - Number(right.sequence ?? 999)
   );
 
   for (const information of visible) {
@@ -5171,6 +5191,106 @@ function metricRecordsMatch(left, right) {
   return !leftLocation || !rightLocation || leftLocation === rightLocation;
 }
 
+function shouldLoadSupplementalDetails(payload) {
+  const snapshot = payload?.snapshot;
+  const session = readFileSession();
+  if (!snapshot || session.kind !== "INTERNAL" || !session.token || !payload.shipmentId) {
+    return false;
+  }
+  const carrier = String(snapshot.provider?.code ?? snapshot.tracking?.carrier ?? "").toUpperCase();
+  const type = String(snapshot.tracking?.type ?? "").toUpperCase();
+  if (carrier !== "COSCO" || type === "CONTAINER" || snapshot.viewMode === "CONTAINER") {
+    return false;
+  }
+  if (snapshot.supplementalDetails?.updatedAt && !snapshot.supplementalDetails.partial) {
+    return false;
+  }
+  const containersMissing = !Array.isArray(snapshot.containers) || snapshot.containers.length === 0;
+  const referencesMissing = !Array.isArray(snapshot.references?.information)
+    || snapshot.references.information.length === 0;
+  return containersMissing || referencesMissing;
+}
+
+function setSupplementalDetailsStatus(state = "idle") {
+  window.clearTimeout(supplementalStatusTimer);
+  elements["supplemental-details-status"].dataset.state = state;
+  elements["supplemental-details-status"].hidden = state === "idle";
+  if (state !== "idle") {
+    elements["supplemental-details-message"].textContent = t(`supplemental.${state}`);
+  }
+  if (["complete", "partial"].includes(state)) {
+    supplementalStatusTimer = window.setTimeout(
+      () => setSupplementalDetailsStatus("idle"),
+      3_200
+    );
+  }
+}
+
+async function loadSupplementalDetails(payload) {
+  if (!shouldLoadSupplementalDetails(payload)) return;
+  const shipmentId = String(payload.shipmentId);
+  const key = `${shipmentId}:${trackingQueryKey(normalizeQuery({
+    carrier: payload.snapshot.provider?.code ?? "COSCO",
+    channel: "NETWORK",
+    type: payload.snapshot.tracking?.type,
+    number: payload.snapshot.tracking?.number
+  }))}`;
+  if (supplementalDetailRequests.has(key)) return supplementalDetailRequests.get(key);
+
+  const requestPayload = payload;
+  const session = readFileSession();
+  setSupplementalDetailsStatus("loading");
+  elements["container-panel"].hidden = false;
+  elements["secondary-grid"].hidden = false;
+  const promise = (async () => {
+    try {
+      const response = await fetch(
+        `/api/public/shipments/${encodeURIComponent(shipmentId)}/supplemental-details`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...fileAuthHeaders(session)
+          },
+          body: JSON.stringify({
+            carrier: "COSCO",
+            channel: "NETWORK",
+            type: requestPayload.snapshot.tracking?.type,
+            number: requestPayload.snapshot.tracking?.number
+          })
+        }
+      );
+      const details = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(trackingResponseMessage(details, response));
+      }
+      if (!details?.snapshot) throw new Error("Supplemental snapshot is missing");
+      if (String(currentPayload?.shipmentId ?? "") !== shipmentId) return;
+
+      currentPayload = {
+        ...requestPayload,
+        ...details,
+        snapshot: details.snapshot,
+        raw: requestPayload.raw ?? null
+      };
+      renderResult(currentPayload);
+      setSupplementalDetailsStatus(details.partial ? "partial" : "complete");
+      await loadInternalTrackedHistory();
+    } catch {
+      if (String(currentPayload?.shipmentId ?? "") !== shipmentId) return;
+      setSupplementalDetailsStatus("failed");
+      if ((currentPayload?.snapshot?.containers ?? []).length === 0) {
+        elements["container-panel"].hidden = true;
+        elements["secondary-grid"].classList.add("is-single-panel");
+      }
+    } finally {
+      supplementalDetailRequests.delete(key);
+    }
+  })();
+  supplementalDetailRequests.set(key, promise);
+  return promise;
+}
+
 function renderResult(payload) {
   const snapshot = payload.snapshot;
   const summary = snapshot.summary;
@@ -5327,6 +5447,7 @@ function renderResult(payload) {
   results.hidden = false;
   results.classList.toggle("is-refreshing", loading);
   restartResultAnimation();
+  void loadSupplementalDetails(payload);
 }
 
 function formatShipmentDate(value) {

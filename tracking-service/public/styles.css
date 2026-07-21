@@ -9961,3 +9961,87 @@ body.is-customer-session .nav-item.is-active {
     flex-basis: 100%;
   }
 }
+
+/* Square, data-first tracking detail treatment. */
+#tracking-view .query-panel,
+#tracking-view .shipment-summary-card,
+#tracking-view .metric-card,
+#tracking-view .panel,
+#tracking-view .result-primary-fact,
+#tracking-view .related-files-trigger,
+#tracking-view .panel-edit-button,
+#tracking-view .container-details-button,
+#tracking-view .query-panel input,
+#tracking-view .query-panel select,
+#tracking-view .query-panel button,
+#tracking-view .extra-information,
+#tracking-view .route-node.is-active {
+  border-radius: 3px;
+}
+
+.supplemental-details-status {
+  display: flex;
+  min-height: 42px;
+  margin: 0 0 10px;
+  padding: 9px 13px;
+  border: 1px solid #bed7f2;
+  color: #315c87;
+  background: #f5f9fe;
+  border-radius: 3px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.supplemental-details-status[hidden] {
+  display: none;
+}
+
+.supplemental-details-status[data-state="complete"] {
+  border-color: #a9ddc6;
+  color: #16704f;
+  background: #f2fbf7;
+}
+
+.supplemental-details-status[data-state="partial"] {
+  border-color: #efd39b;
+  color: #8a5a0d;
+  background: #fffaf0;
+}
+
+.supplemental-details-status[data-state="failed"] {
+  border-color: #efc0bd;
+  color: #a13d38;
+  background: #fff7f6;
+}
+
+.supplemental-details-spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: supplemental-details-spin 0.75s linear infinite;
+}
+
+.supplemental-details-status:not([data-state="loading"]) .supplemental-details-spinner {
+  width: 9px;
+  height: 9px;
+  flex-basis: 9px;
+  border: 0;
+  background: currentColor;
+  border-radius: 1px;
+  animation: none;
+}
+
+@keyframes supplemental-details-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .supplemental-details-spinner {
+    animation-duration: 1.6s;
+  }
+}

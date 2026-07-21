@@ -762,6 +762,54 @@ public class ShipmentTrackingService {
     return adapterClient.cancelBatchTask(normalized);
   }
 
+  ObjectNode loadSupplementalDetails(
+      String shipmentPublicId,
+      ShipmentTrackRequest input,
+      AuthenticatedUser user
+  ) {
+    requireBatchShipmentAccess(shipmentPublicId, user);
+    NormalizedTrackRequest request = normalize(input);
+    if (!"COSCO".equals(request.carrier()) || "CONTAINER".equals(request.type())) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Supplemental details are available for COSCO bill or booking queries only"
+      );
+    }
+    Integer referenceMatches = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM cp_shipments s
+        JOIN cp_shipment_references r ON r.shipment_id = s.id
+        WHERE s.public_id = ? AND r.carrier_code = ? AND r.reference_no_normalized = ?
+        """,
+        Integer.class,
+        shipmentPublicId.trim(),
+        request.carrier(),
+        normalizeReference(request.number())
+    );
+    if (referenceMatches == null || referenceMatches == 0) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "The requested carrier reference does not belong to this shipment"
+      );
+    }
+
+    JsonNode details = adapterClient.loadSupplementalDetails(request);
+    ObjectNode snapshot = mergeSupplementalDetailsIntoCurrentSnapshot(
+        shipmentPublicId,
+        details,
+        user
+    );
+    ObjectNode response = details.isObject()
+        ? ((ObjectNode) details).deepCopy()
+        : objectMapper.createObjectNode();
+    response.put("shipmentId", shipmentPublicId.trim());
+    response.put("databaseStored", true);
+    response.put("databaseStoredAt", clock.instant().toString());
+    response.set("snapshot", snapshot);
+    return response;
+  }
+
   ObjectNode discoverBatchContainers(
       String shipmentPublicId,
       String billNumber,
@@ -907,6 +955,150 @@ public class ShipmentTrackingService {
     eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
         stored.shipmentId(), shipmentPublicId, snapshot.deepCopy(), now
     ));
+  }
+
+  private synchronized ObjectNode mergeSupplementalDetailsIntoCurrentSnapshot(
+      String shipmentPublicId,
+      JsonNode details,
+      AuthenticatedUser user
+  ) {
+    requireBatchShipmentAccess(shipmentPublicId, user);
+    if (!details.path("containers").isArray() || !details.path("references").isObject()) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Supplemental detail response is invalid");
+    }
+    List<MutableSnapshot> matches = jdbcTemplate.query(
+        """
+        SELECT s.id AS shipment_id, t.id AS snapshot_id, t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ? AND t.invalidated_at IS NULL
+        LIMIT 1
+        """,
+        (rs, rowNumber) -> new MutableSnapshot(
+            rs.getLong("shipment_id"),
+            rs.getLong("snapshot_id"),
+            rs.getString("snapshot_json")
+        ),
+        shipmentPublicId.trim()
+    );
+    if (matches.isEmpty()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+
+    MutableSnapshot stored = matches.get(0);
+    JsonNode parsed = readJson(stored.snapshotJson());
+    if (!parsed.isObject()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
+    }
+    ObjectNode snapshot = (ObjectNode) parsed;
+
+    Map<String, ObjectNode> containersByNumber = new LinkedHashMap<>();
+    JsonNode currentContainers = snapshot.path("containers");
+    if (currentContainers.isArray()) {
+      for (JsonNode current : currentContainers) {
+        String number = normalizedContainerNumber(current);
+        if (number != null && current.isObject()) {
+          containersByNumber.put(number, ((ObjectNode) current).deepCopy());
+        }
+      }
+    }
+    for (JsonNode incoming : details.path("containers")) {
+      String number = normalizedContainerNumber(incoming);
+      if (number == null || !incoming.isObject()) continue;
+      ObjectNode target = containersByNumber.computeIfAbsent(
+          number,
+          ignored -> objectMapper.createObjectNode().put("number", number)
+      );
+      mergeUsefulContainerFields(target, (ObjectNode) incoming);
+    }
+    ArrayNode mergedContainers = objectMapper.createArrayNode();
+    containersByNumber.values().forEach(mergedContainers::add);
+    snapshot.set("containers", mergedContainers);
+
+    ObjectNode references = childObject(snapshot, "references");
+    ObjectNode incomingReferences = (ObjectNode) details.path("references");
+    mergeReferenceArray(references, incomingReferences, "external");
+    JsonNode incomingBusiness = incomingReferences.path("business");
+    if (incomingBusiness.isObject()) {
+      mergeUsefulContainerFields(
+          childObject(references, "business"),
+          (ObjectNode) incomingBusiness
+      );
+    }
+    mergeReferenceInformation(references, incomingReferences.path("information"));
+
+    Instant now = clock.instant();
+    ObjectNode enrichment = childObject(snapshot, "supplementalDetails");
+    enrichment.put("updatedAt", now.toString());
+    enrichment.put("containerCount", mergedContainers.size());
+    enrichment.put("partial", details.path("partial").asBoolean(false));
+
+    String snapshotJson = writeJson(snapshot);
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
+        snapshotJson,
+        sha256(snapshotJson),
+        stored.snapshotId()
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id = ?",
+        timestamp(now),
+        stored.shipmentId()
+    );
+    eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
+        stored.shipmentId(), shipmentPublicId, snapshot.deepCopy(), now
+    ));
+    return snapshot.deepCopy();
+  }
+
+  private void mergeReferenceArray(
+      ObjectNode target,
+      ObjectNode incoming,
+      String field
+  ) {
+    Map<String, String> values = new LinkedHashMap<>();
+    JsonNode currentValues = target.path(field);
+    if (currentValues.isArray()) {
+      for (JsonNode value : currentValues) {
+        String text = value.asText("").trim();
+        if (!text.isBlank()) values.putIfAbsent(normalizeReference(text), text);
+      }
+    }
+    JsonNode incomingValues = incoming.path(field);
+    if (incomingValues.isArray()) {
+      for (JsonNode value : incomingValues) {
+        String text = value.asText("").trim();
+        if (!text.isBlank()) values.putIfAbsent(normalizeReference(text), text);
+      }
+    }
+    ArrayNode merged = target.putArray(field);
+    values.values().forEach(merged::add);
+  }
+
+  private void mergeReferenceInformation(ObjectNode references, JsonNode incoming) {
+    Map<String, JsonNode> informationByName = new LinkedHashMap<>();
+    JsonNode current = references.path("information");
+    if (current.isArray()) {
+      for (JsonNode item : current) {
+        String key = referenceInformationKey(item);
+        if (key != null) informationByName.putIfAbsent(key, item.deepCopy());
+      }
+    }
+    if (incoming.isArray()) {
+      for (JsonNode item : incoming) {
+        String key = referenceInformationKey(item);
+        if (key != null) informationByName.put(key, item.deepCopy());
+      }
+    }
+    ArrayNode merged = references.putArray("information");
+    informationByName.values().forEach(merged::add);
+  }
+
+  private String referenceInformationKey(JsonNode item) {
+    String name = item.path("name").asText("").trim();
+    String value = item.path("value").asText("").trim();
+    if (name.isBlank() || value.isBlank()) return null;
+    return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9\\p{IsHan}]+", "");
   }
 
   private String normalizedContainerNumber(JsonNode container) {

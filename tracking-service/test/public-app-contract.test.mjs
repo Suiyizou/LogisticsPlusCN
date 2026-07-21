@@ -523,4 +523,8 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
     /firstTimedRecord\([\s\S]*?keyTimes\.actualArrival,[\s\S]*?keyTimes\.estimatedFinalArrival/
   );
   assert.match(indexSource, /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/);
+  assert.match(indexSource, /id="supplemental-details-status"/);
+  assert.match(appSource, /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/);
+  assert.match(appSource, /"references\.title": "订舱信息及参考号"/);
+  assert.match(appSource, /"containers\.title": "运输详情"/);
 });

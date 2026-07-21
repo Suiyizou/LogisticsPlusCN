@@ -51,6 +51,19 @@ public class ShipmentTrackingController {
     return trackingService.track(request, user);
   }
 
+  @PostMapping("/{shipmentId}/supplemental-details")
+  public ObjectNode loadSupplementalDetails(
+      @PathVariable String shipmentId,
+      @RequestBody ShipmentTrackRequest request,
+      @RequestHeader(value = "X-Auth-Token", required = false) String token,
+      HttpServletRequest httpRequest
+  ) {
+    AuthenticatedUser user = token == null || token.isBlank()
+        ? null
+        : authService.authenticate(token, httpRequest);
+    return trackingService.loadSupplementalDetails(shipmentId, request, user);
+  }
+
   @PostMapping("/batch-tasks/{taskId}/cancel")
   public ResponseEntity<JsonNode> cancelBatchTask(@PathVariable String taskId) {
     return ResponseEntity.accepted().body(trackingService.cancelBatchTask(taskId));

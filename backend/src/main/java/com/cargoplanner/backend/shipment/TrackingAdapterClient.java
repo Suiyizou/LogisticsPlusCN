@@ -129,6 +129,38 @@ public class TrackingAdapterClient {
     }
   }
 
+  public JsonNode loadSupplementalDetails(NormalizedTrackRequest request) {
+    try {
+      JsonNode response = restClient.post()
+          .uri("/api/track/cosco/supplemental-details")
+          .body(requestBody(request))
+          .retrieve()
+          .body(JsonNode.class);
+      if (response == null || !response.path("containers").isArray()
+          || !response.path("references").isObject()) {
+        throw new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "Tracking adapter returned incomplete supplemental details"
+        );
+      }
+      return response;
+    } catch (RestClientResponseException error) {
+      HttpStatus status = switch (error.getStatusCode().value()) {
+        case 400 -> HttpStatus.BAD_REQUEST;
+        case 404 -> HttpStatus.NOT_FOUND;
+        case 409 -> HttpStatus.CONFLICT;
+        case 429 -> HttpStatus.TOO_MANY_REQUESTS;
+        case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
+        case 504 -> HttpStatus.GATEWAY_TIMEOUT;
+        default -> HttpStatus.BAD_GATEWAY;
+      };
+      AdapterFailure failure = adapterFailure(error);
+      throw new ApiException(status, failure.code(), failure.message(), failure.retryAfterMs());
+    } catch (ResourceAccessException error) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
+    }
+  }
+
   private String adapterMessage(RestClientResponseException error) {
     String response = error.getResponseBodyAsString();
     if (response != null && !response.isBlank()) {

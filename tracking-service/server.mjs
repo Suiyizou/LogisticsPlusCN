@@ -517,6 +517,45 @@ export function normalizeCoscoContainerList(containerInfo) {
     .filter((container) => container.number);
 }
 
+function normalizeCoscoBookingReferences(bookingInfo = {}, containerInfo = []) {
+  const externalReferences = (bookingInfo.externalReferenceNumbers ?? [])
+    .map(normalizeReferenceValue)
+    .filter(Boolean);
+  const containerReferences = (Array.isArray(containerInfo) ? containerInfo : [])
+    .flatMap((container) =>
+      (container.refNumbers ?? []).map(normalizeReferenceValue).filter(Boolean)
+    );
+
+  return {
+    external: [...new Set([...externalReferences, ...containerReferences])],
+    business: extractBusinessReferences(bookingInfo),
+    information: (bookingInfo.referenceInformation ?? [])
+      .map((item) => ({
+        name: item.name ?? null,
+        value: item.value ?? null,
+        sequence: item.seq ?? null
+      }))
+      .filter((item) => item.name && item.value)
+  };
+}
+
+export function normalizeCoscoSupplementalDetails(
+  bookingInfo,
+  containerInfo,
+  request,
+  fetchedAt
+) {
+  return {
+    fetchedAt,
+    tracking: {
+      type: request.type,
+      number: request.number
+    },
+    containers: normalizeCoscoContainerList(containerInfo),
+    references: normalizeCoscoBookingReferences(bookingInfo, containerInfo)
+  };
+}
+
 function selectRequestedContainers(containers, request) {
   const source = Array.isArray(containers) ? containers : [];
   const exact = source.filter(
@@ -728,19 +767,14 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
   const latest = summary.latestMilestone ?? null;
   const bookingInfo = extras.bookingInfo ?? {};
   const containerInfo = extras.containerInfo ?? [];
-  const externalReferences = (bookingInfo.externalReferenceNumbers ?? [])
-    .map(normalizeReferenceValue)
-    .filter(Boolean);
-  const containerReferences = containerInfo.flatMap((container) =>
-    (container.refNumbers ?? []).map(normalizeReferenceValue).filter(Boolean)
-  );
+  const normalizedReferences = normalizeCoscoBookingReferences(bookingInfo, containerInfo);
   const routingLegs = buildRoutingLegs(result);
   const actualDepartureLeg = routingLegs.find((leg) => leg.actualDeparture);
   const actualArrivalLeg = [...routingLegs].reverse().find((leg) => leg.actualArrival);
   const finalRouteNode = [...(result?.cargoTrackingFullChain ?? [])]
     .reverse()
     .find((node) => node.locationType === "FND");
-  const businessReferences = extractBusinessReferences(bookingInfo);
+  const businessReferences = normalizedReferences.business;
 
   return {
     channel: queryChannel.code,
@@ -827,13 +861,8 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
     references: {
       masterBill: summary.blNumber ?? null,
       bookingNumbers: summary.bookingNumber ?? [],
-      external: [...new Set([...externalReferences, ...containerReferences])],
-      business: businessReferences,
-      information: (bookingInfo.referenceInformation ?? []).map((item) => ({
-        name: item.name ?? null,
-        value: item.value ?? null,
-        sequence: item.seq ?? null
-      }))
+      ...normalizedReferences,
+      business: businessReferences
     }
   };
 }
@@ -1632,6 +1661,48 @@ async function handleCoscoContainerListRequest(request, response) {
   }
 }
 
+async function handleCoscoSupplementalDetailsRequest(request, response) {
+  const input = await readJsonBody(request);
+  const trackingRequest = normalizeTrackingRequest(input);
+  if (trackingRequest.type === "CONTAINER") {
+    throw new HttpError(400, "补充详情查询必须使用提单号或订舱号");
+  }
+
+  const warnings = [];
+  let bookingInfo = {};
+  let containerInfo = [];
+  try {
+    bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
+      timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
+    });
+  } catch (error) {
+    if (isCoscoProtectionError(error)) throw error;
+    warnings.push({ source: "bookingInfo", message: error?.message ?? "订舱参考信息查询失败" });
+  }
+  try {
+    containerInfo = await fetchCoscoShipmentContainers(trackingRequest);
+  } catch (error) {
+    if (isCoscoProtectionError(error)) throw error;
+    warnings.push({ source: "containerInfo", message: error?.message ?? "运输详情查询失败" });
+  }
+
+  const details = normalizeCoscoSupplementalDetails(
+    bookingInfo,
+    containerInfo,
+    trackingRequest,
+    new Date().toISOString()
+  );
+  if (details.containers.length === 0 && details.references.information.length === 0
+      && warnings.length === 2) {
+    throw new HttpError(502, "COSCO 未返回可用的补充详情", { warnings });
+  }
+  sendJson(response, 200, {
+    ...details,
+    partial: warnings.length > 0,
+    warnings
+  });
+}
+
 async function handleTrackRequest(request, response, forcedCarrier, forcedChannel) {
   const input = await readJsonBody(request);
   const forceRefresh = input.forceRefresh === true;
@@ -1860,6 +1931,11 @@ export const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/track/cosco/container-list") {
       await handleCoscoContainerListRequest(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/track/cosco/supplemental-details") {
+      await handleCoscoSupplementalDetailsRequest(request, response);
       return;
     }
 
