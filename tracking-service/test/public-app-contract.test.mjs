@@ -214,6 +214,17 @@ test("documents use one shipment-file drawer and sensitive bill metadata is alwa
   );
 });
 
+test("every result element registered by the renderer exists in the page", () => {
+  const elementMap = appSource.match(/const elements = Object\.fromEntries\(([\s\S]*?)\n\);/)?.[1];
+  assert.ok(elementMap, "result element registry is missing");
+
+  const registeredIds = [...elementMap.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  const pageIds = new Set([...indexSource.matchAll(/id="([^"]+)"/g)].map((match) => match[1]));
+  const missingIds = registeredIds.filter((id) => !pageIds.has(id));
+
+  assert.deepEqual(missingIds, [], `renderer references missing DOM ids: ${missingIds.join(", ")}`);
+});
+
 test("file preview uses a same-origin preview endpoint and safe blob rendering", () => {
   assert.match(indexSource, /id="file-preview-dialog"[\s\S]*?id="file-preview-download"/);
   assert.match(

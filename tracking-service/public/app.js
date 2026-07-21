@@ -1173,7 +1173,6 @@ const elements = Object.fromEntries(
     "routing-table-body",
     "container-count",
     "container-table-body",
-    "document-filled-count",
     "document-drawer-shipment",
     "raw-json"
   ].map((id) => [id, document.querySelector(`#${id}`)])
@@ -3229,8 +3228,6 @@ function closeDocumentDrawer() {
 function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
   if (!snapshot) return;
   const metadata = documentMetadataForSnapshot(snapshot);
-  const filledCount = DOCUMENT_TYPES.filter((definition) => documentRecord(definition.code, metadata)).length;
-  elements["document-filled-count"].textContent = `${filledCount}/${DOCUMENT_TYPES.length}`;
   elements["document-drawer-shipment"].textContent = snapshot.tracking.number;
   documentList.replaceChildren();
 
