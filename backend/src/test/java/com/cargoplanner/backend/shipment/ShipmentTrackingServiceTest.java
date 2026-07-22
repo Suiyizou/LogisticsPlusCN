@@ -110,6 +110,42 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void limitsTheProxyChannelToBusinessUsersAndAlwaysForcesALiveQuery() throws Exception {
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "PROXY", "BOOKING", "PROXY-10001"
+    );
+    when(adapterClient.track(normalized, true)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "PROXY",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "PROXY-10001"},
+            "summary": {
+              "bookingNumbers": ["PROXY-10001"],
+              "latestEvent": {"name": "Loaded on board"}
+            }
+          },
+          "strategy": {"requested": "PROXY", "used": "PROXY"}
+        }
+        """));
+
+    assertThatThrownBy(() -> service.track(
+        new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "PROXY-10001", false),
+        employee
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
+
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "PROXY-10001", false),
+        business
+    );
+
+    assertThat(response.path("snapshot").path("channel").asText()).isEqualTo("PROXY");
+    verify(adapterClient).track(normalized, true);
+  }
+
+  @Test
   void routesCmaThroughPlaywrightWithTheEncryptedServerSession() throws Exception {
     CmaSessionCredentials credentials = new CmaSessionCredentials(
         "datadome=server-secret",

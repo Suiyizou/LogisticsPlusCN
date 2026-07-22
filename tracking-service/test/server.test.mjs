@@ -226,16 +226,18 @@ test("creates a unified CMA snapshot from server-rendered container cards", () =
   assert.match(snapshot.references.information[0].value, /export-pdf/);
 });
 
-test("exposes network and Playwright query channels", () => {
+test("exposes direct, browser and proxy query channels", () => {
   assert.equal(normalizeQueryChannel().code, "NETWORK");
   assert.equal(normalizeQueryChannel("auto").code, "AUTO");
   assert.equal(normalizeQueryChannel("playwright").number, 2);
+  assert.equal(normalizeQueryChannel("proxy").number, 3);
   assert.throws(() => normalizeQueryChannel("unknown"));
   assert.deepEqual(
     listCoscoQueryChannels().map(({ code, number }) => ({ code, number })),
     [
       { code: "NETWORK", number: 1 },
-      { code: "PLAYWRIGHT", number: 2 }
+      { code: "PLAYWRIGHT", number: 2 },
+      { code: "PROXY", number: 3 }
     ]
   );
 });

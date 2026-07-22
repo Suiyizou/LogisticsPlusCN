@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { promisify } from "node:util";
@@ -20,7 +20,7 @@ import {
 import { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
 import { normalizeCmaSnapshot } from "./lib/cma-tracking.mjs";
 import {
-  createCoscoProxyDispatcher,
+  createCoscoProxyClient,
   proxyStatus,
   readCoscoProxyConfig
 } from "./lib/cosco-proxy.mjs";
@@ -106,6 +106,12 @@ const COSCO_QUERY_CHANNELS = Object.freeze({
     number: 2,
     label: "Playwright 浏览器",
     source: "COSCO_WEB_UI_PLAYWRIGHT"
+  },
+  PROXY: {
+    code: "PROXY",
+    number: 3,
+    label: "SOCKS5 proxy",
+    source: "COSCO_INTERNAL_WEB_API_PROXY"
   }
 });
 
@@ -121,7 +127,7 @@ const CARRIER_ADAPTERS = Object.freeze({
     code: "COSCO",
     name: "COSCO SHIPPING Lines",
     channel: "AUTO",
-    channels: ["NETWORK", "PLAYWRIGHT"],
+    channels: ["NETWORK", "PLAYWRIGHT", "PROXY"],
     defaultChannel: "AUTO",
     enabled: true,
     source: "COSCO_INTERNAL_WEB_API"
@@ -153,7 +159,7 @@ const compressWithGzip = promisify(gzip);
 const staticCompressionCache = new Map();
 
 const COSCO_PROXY_CONFIG = readCoscoProxyConfig();
-const coscoProxyDispatcher = createCoscoProxyDispatcher(COSCO_PROXY_CONFIG);
+const coscoProxyClient = createCoscoProxyClient(COSCO_PROXY_CONFIG);
 const coscoQueryGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_QUERY_MIN_INTERVAL_MS,
   maxIntervalMs: process.env.COSCO_QUERY_MAX_INTERVAL_MS,
@@ -166,9 +172,16 @@ const coscoUpstreamGate = createCoscoQueryGate({
   queueLimit: process.env.COSCO_UPSTREAM_QUEUE_LIMIT ?? 500,
   queueTimeoutMs: process.env.COSCO_UPSTREAM_QUEUE_TIMEOUT_MS ?? 600_000
 });
-const coscoCircuitBreaker = createCoscoCircuitBreaker({
-  cooldownMs: process.env.COSCO_BLOCK_COOLDOWN_MS,
-  failureThreshold: process.env.COSCO_CIRCUIT_FAILURE_THRESHOLD
+const coscoCircuitBreakers = Object.freeze({
+  DIRECT: createCoscoCircuitBreaker({
+    cooldownMs: process.env.COSCO_BLOCK_COOLDOWN_MS,
+    failureThreshold: process.env.COSCO_CIRCUIT_FAILURE_THRESHOLD
+  }),
+  PROXY: createCoscoCircuitBreaker({
+    cooldownMs: process.env.COSCO_PROXY_BLOCK_COOLDOWN_MS ?? process.env.COSCO_BLOCK_COOLDOWN_MS,
+    failureThreshold: process.env.COSCO_PROXY_CIRCUIT_FAILURE_THRESHOLD
+      ?? process.env.COSCO_CIRCUIT_FAILURE_THRESHOLD
+  })
 });
 const batchTaskRegistry = createBatchTaskRegistry({
   minIntervalMs: process.env.BATCH_QUERY_MIN_INTERVAL_MS,
@@ -177,8 +190,7 @@ const batchTaskRegistry = createBatchTaskRegistry({
 
 const cache = new Map();
 const inFlightTrackingRequests = new Map();
-let coscoPublicCookieCache = null;
-let coscoPublicCookiePromise = null;
+const coscoPublicCookieStates = new Map();
 const channelCHealth = {
   status: CHANNEL_C_MONITOR_ENABLED ? "unknown" : "disabled",
   available: null,
@@ -210,11 +222,21 @@ function batchCancelledHttpError() {
   });
 }
 
-function coscoBlockedHttpError() {
-  const retryAfterMs = Math.max(1_000, coscoCircuitBreaker.remainingMs());
+function coscoRouteKey(options = {}) {
+  return options.proxyMode ? "PROXY" : "DIRECT";
+}
+
+function coscoCircuitBreakerFor(options = {}) {
+  return coscoCircuitBreakers[coscoRouteKey(options)];
+}
+
+function coscoBlockedHttpError(options = {}) {
+  const breaker = coscoCircuitBreakerFor(options);
+  const retryAfterMs = Math.max(1_000, breaker.remainingMs());
   return new HttpError(503, "COSCO temporarily rejected this outbound IP", {
     code: "COSCO_UPSTREAM_BLOCKED",
     upstreamStatus: 403,
+    route: coscoRouteKey(options),
     retryAfterMs
   });
 }
@@ -230,18 +252,22 @@ export function parseRetryAfter(value, now = Date.now()) {
   return Number.isFinite(date) ? Math.max(1_000, date - now) : null;
 }
 
-function coscoRateLimitedHttpError(retryAfterMs) {
+function coscoRateLimitedHttpError(retryAfterMs, options = {}) {
+  const breaker = coscoCircuitBreakerFor(options);
   const safeRetryAfterMs = Math.max(1_000, Number(retryAfterMs) || 60_000);
-  coscoCircuitBreaker.recordFailure({ retryAfterMs: safeRetryAfterMs, immediate: true });
+  breaker.recordFailure({ retryAfterMs: safeRetryAfterMs, immediate: true });
   return new HttpError(429, "COSCO temporarily rate-limited this server", {
     code: "COSCO_UPSTREAM_RATE_LIMITED",
     upstreamStatus: 429,
-    retryAfterMs: Math.max(safeRetryAfterMs, coscoCircuitBreaker.remainingMs())
+    route: coscoRouteKey(options),
+    retryAfterMs: Math.max(safeRetryAfterMs, breaker.remainingMs())
   });
 }
 
-function ensureCoscoCircuitAvailable() {
-  if (coscoCircuitBreaker.remainingMs() > 0) throw coscoBlockedHttpError();
+function ensureCoscoCircuitAvailable(options = {}) {
+  if (coscoCircuitBreakerFor(options).remainingMs() > 0) {
+    throw coscoBlockedHttpError(options);
+  }
 }
 
 function isCoscoBlockedError(error) {
@@ -264,8 +290,55 @@ function signalForTimeout(timeoutController, externalSignal) {
     : timeoutController.signal;
 }
 
-function coscoFetchDispatcherOption() {
-  return coscoProxyDispatcher ? { dispatcher: coscoProxyDispatcher } : {};
+async function fetchCoscoUpstream(url, requestOptions = {}, routeOptions = {}) {
+  if (!routeOptions.proxyMode) return fetch(url, requestOptions);
+  if (!coscoProxyClient) {
+    throw new HttpError(503, "COSCO proxy channel is not configured", {
+      code: "COSCO_PROXY_NOT_CONFIGURED",
+      route: "PROXY"
+    });
+  }
+  try {
+    return await coscoProxyClient.fetch(url, requestOptions);
+  } catch (error) {
+    if (requestOptions.signal?.aborted || error?.name === "AbortError") throw error;
+    throw new HttpError(502, "Configured COSCO proxy is unavailable", {
+      code: "COSCO_PROXY_UNAVAILABLE",
+      route: "PROXY"
+    });
+  }
+}
+
+function coscoPublicCookieState(options = {}) {
+  const key = coscoRouteKey(options);
+  if (!coscoPublicCookieStates.has(key)) {
+    coscoPublicCookieStates.set(key, { cache: null, promise: null });
+  }
+  return coscoPublicCookieStates.get(key);
+}
+
+function secureTextEquals(left, right) {
+  const leftBuffer = Buffer.from(String(left ?? ""), "utf8");
+  const rightBuffer = Buffer.from(String(right ?? ""), "utf8");
+  return leftBuffer.length === rightBuffer.length
+    && leftBuffer.length > 0
+    && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function requireProxyAdapterAuthorization(request, queryChannel) {
+  if (queryChannel.code !== "PROXY") return;
+  const expected = String(process.env.TRACKING_ADAPTER_KEY ?? "").trim();
+  if (!expected) {
+    throw new HttpError(503, "Proxy channel internal authorization is not configured", {
+      code: "COSCO_PROXY_ACCESS_NOT_CONFIGURED"
+    });
+  }
+  const provided = String(request.headers["x-tracking-adapter-key"] ?? "").trim();
+  if (!secureTextEquals(provided, expected)) {
+    throw new HttpError(403, "Proxy tracking channel requires business authorization", {
+      code: "COSCO_PROXY_FORBIDDEN"
+    });
+  }
 }
 
 function setCommonHeaders(response) {
@@ -962,10 +1035,10 @@ export function normalizeCoscoContainerSnapshot(
 }
 
 async function fetchCoscoEndpoint(endpoint, request, options = {}) {
-  ensureCoscoCircuitAvailable();
+  ensureCoscoCircuitAvailable(options);
   return coscoUpstreamGate.run(
     () => {
-      ensureCoscoCircuitAvailable();
+      ensureCoscoCircuitAvailable(options);
       return fetchCoscoEndpointNow(endpoint, request, options);
     },
     { signal: options.signal }
@@ -982,7 +1055,7 @@ async function fetchCoscoEndpointNow(endpoint, request, options = {}) {
     `${COSCO_PAGE_URL}?trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
 
   try {
-    const upstream = await fetch(`${baseUrl}/${endpoint}`, {
+    const upstream = await fetchCoscoUpstream(`${baseUrl}/${endpoint}`, {
       method: "POST",
       headers: {
         Accept: "application/json, text/plain, */*",
@@ -998,16 +1071,15 @@ async function fetchCoscoEndpointNow(endpoint, request, options = {}) {
         businessNumberType: request.businessNumberType,
         notFilterResult: false
       }),
-      signal: signalForTimeout(controller, options.signal),
-      ...coscoFetchDispatcherOption()
-    });
+      signal: signalForTimeout(controller, options.signal)
+    }, options);
 
     const rawText = await upstream.text();
 
     if (!upstream.ok) {
       if (upstream.status === 403) {
-        coscoCircuitBreaker.trip();
-        throw coscoBlockedHttpError();
+        coscoCircuitBreakerFor(options).trip();
+        throw coscoBlockedHttpError(options);
       }
       if (upstream.status === 401) {
         throw new HttpError(502, "COSCO public session expired", {
@@ -1017,16 +1089,17 @@ async function fetchCoscoEndpointNow(endpoint, request, options = {}) {
       }
       if (upstream.status === 429) {
         throw coscoRateLimitedHttpError(
-          parseRetryAfter(upstream.headers.get("retry-after"))
+          parseRetryAfter(upstream.headers.get("retry-after")),
+          options
         );
       }
       if (upstream.status === 503) {
         const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after")) ?? 30_000;
-        coscoCircuitBreaker.recordFailure({ retryAfterMs, immediate: true });
+        coscoCircuitBreakerFor(options).recordFailure({ retryAfterMs, immediate: true });
         throw new HttpError(503, "COSCO upstream is temporarily unavailable", {
           code: "COSCO_UPSTREAM_UNAVAILABLE",
           upstreamStatus: 503,
-          retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreaker.remainingMs())
+          retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreakerFor(options).remainingMs())
         });
       }
       throw new HttpError(502, `COSCO 接口返回 HTTP ${upstream.status}`);
@@ -1041,19 +1114,19 @@ async function fetchCoscoEndpointNow(endpoint, request, options = {}) {
 
     const decodedCode = String(decoded?.code ?? "");
     if (decodedCode === "429") {
-      throw coscoRateLimitedHttpError(Number(decoded?.retryAfterMs) || 60_000);
+      throw coscoRateLimitedHttpError(Number(decoded?.retryAfterMs) || 60_000, options);
     }
     if (decodedCode === "403") {
-      coscoCircuitBreaker.trip(Number(decoded?.retryAfterMs) || undefined);
-      throw coscoBlockedHttpError();
+      coscoCircuitBreakerFor(options).trip(Number(decoded?.retryAfterMs) || undefined);
+      throw coscoBlockedHttpError(options);
     }
     if (decodedCode === "503") {
       const retryAfterMs = Math.max(1_000, Number(decoded?.retryAfterMs) || 30_000);
-      coscoCircuitBreaker.recordFailure({ retryAfterMs, immediate: true });
+      coscoCircuitBreakerFor(options).recordFailure({ retryAfterMs, immediate: true });
       throw new HttpError(503, decoded?.message || "COSCO upstream is temporarily unavailable", {
         code: "COSCO_UPSTREAM_UNAVAILABLE",
         upstreamStatus: 503,
-        retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreaker.remainingMs())
+        retryAfterMs: Math.max(retryAfterMs, coscoCircuitBreakerFor(options).remainingMs())
       });
     }
     if (decodedCode === "401") {
@@ -1099,21 +1172,23 @@ function extractCoscoPageCookies(html, headers) {
 }
 
 async function getCoscoPublicCookies(request, options = {}) {
-  if (coscoPublicCookieCache?.expiresAt > Date.now()) {
-    return coscoPublicCookieCache.value;
+  const state = coscoPublicCookieState(options);
+  if (state.cache?.expiresAt > Date.now()) {
+    return state.cache.value;
   }
-  if (!coscoPublicCookiePromise) {
-    coscoPublicCookiePromise = getCoscoPublicCookiesOnce(request, options)
+  if (!state.promise) {
+    state.promise = getCoscoPublicCookiesOnce(request, options)
       .finally(() => {
-        coscoPublicCookiePromise = null;
+        state.promise = null;
       });
   }
-  return coscoPublicCookiePromise;
+  return state.promise;
 }
 
 async function getCoscoPublicCookiesOnce(request, options = {}) {
-  if (coscoPublicCookieCache?.expiresAt > Date.now()) {
-    return coscoPublicCookieCache.value;
+  const state = coscoPublicCookieState(options);
+  if (state.cache?.expiresAt > Date.now()) {
+    return state.cache.value;
   }
 
   const controller = new AbortController();
@@ -1122,24 +1197,24 @@ async function getCoscoPublicCookiesOnce(request, options = {}) {
 
   try {
     const response = await coscoUpstreamGate.run(() => {
-      ensureCoscoCircuitAvailable();
-      return fetch(pageUrl, {
+      ensureCoscoCircuitAvailable(options);
+      return fetchCoscoUpstream(pageUrl, {
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36"
       },
-      signal: signalForTimeout(controller, options.signal),
-      ...coscoFetchDispatcherOption()
-      });
+      signal: signalForTimeout(controller, options.signal)
+      }, options);
     }, { signal: options.signal });
     if (response.status === 403) {
-      coscoCircuitBreaker.trip();
-      throw coscoBlockedHttpError();
+      coscoCircuitBreakerFor(options).trip();
+      throw coscoBlockedHttpError(options);
     }
     if (response.status === 429) {
       throw coscoRateLimitedHttpError(
-        parseRetryAfter(response.headers.get("retry-after"))
+        parseRetryAfter(response.headers.get("retry-after")),
+        options
       );
     }
     if (!response.ok) {
@@ -1147,7 +1222,7 @@ async function getCoscoPublicCookiesOnce(request, options = {}) {
     }
     const html = await response.text();
     const value = extractCoscoPageCookies(html, response.headers);
-    coscoPublicCookieCache = {
+    state.cache = {
       value,
       expiresAt: Date.now() + 5 * 60_000
     };
@@ -1175,7 +1250,8 @@ async function fetchCoscoContainers(request, options = {}) {
         referer,
         cookie,
         timeoutMs: NETWORK_CORE_TIMEOUT_MS,
-        signal: options.signal
+        signal: options.signal,
+        proxyMode: options.proxyMode
       });
     } catch (error) {
       finalError = error;
@@ -1183,7 +1259,7 @@ async function fetchCoscoContainers(request, options = {}) {
           || error?.details?.code !== "COSCO_COOKIE_EXPIRED") {
         throw error;
       }
-      coscoPublicCookieCache = null;
+      coscoPublicCookieState(options).cache = null;
     }
   }
 
@@ -1202,18 +1278,20 @@ async function optionalCoscoEndpoint(endpoint, request, fallback, options = {}) 
 async function fetchCoscoShipmentContainers(request, options = {}) {
   const result = await fetchCoscoEndpoint("containerInfo", request, {
     timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
-    signal: options.signal
+    signal: options.signal,
+    proxyMode: options.proxyMode
   });
   return Array.isArray(result) ? result : [];
 }
 
 async function fetchCoscoTrackingViaNetwork(request, options = {}) {
+  const queryChannel = options.queryChannel ?? COSCO_QUERY_CHANNELS.NETWORK;
   if (request.type === "CONTAINER") {
     const containers = await fetchCoscoContainers(request, options);
     const fetchedAt = new Date().toISOString();
     return {
       snapshot: normalizeCoscoContainerSnapshot(containers, request, fetchedAt, {
-        queryChannel: COSCO_QUERY_CHANNELS.NETWORK
+        queryChannel
       }),
       raw: { containers }
     };
@@ -1221,7 +1299,8 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
 
   const detail = await fetchCoscoEndpoint("detail", request, {
     timeoutMs: NETWORK_CORE_TIMEOUT_MS,
-    signal: options.signal
+    signal: options.signal,
+    proxyMode: options.proxyMode
   });
   let bookingInfo = {};
   let containerInfo = [];
@@ -1230,7 +1309,8 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
     try {
       bookingInfo = await optionalCoscoEndpoint("bookingInfo", request, {}, {
         timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
-        signal: options.signal
+        signal: options.signal,
+        proxyMode: options.proxyMode
       });
       containerInfo = await fetchCoscoShipmentContainers(request, options)
         .catch((error) => {
@@ -1247,7 +1327,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
   }
   const fetchedAt = new Date().toISOString();
   const snapshot = normalizeCoscoSnapshot(detail, request, fetchedAt, {
-    queryChannel: COSCO_QUERY_CHANNELS.NETWORK,
+    queryChannel,
     bookingInfo,
     containerInfo
   });
@@ -1280,12 +1360,12 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
       throw batchCancelledHttpError();
     }
     if (error?.upstreamStatus === 403) {
-      coscoCircuitBreaker.trip();
-      throw coscoBlockedHttpError();
+      coscoCircuitBreakerFor(options).trip();
+      throw coscoBlockedHttpError(options);
     }
     if (error?.upstreamStatus === 429
         || error?.code === "COSCO_UPSTREAM_RATE_LIMITED") {
-      throw coscoRateLimitedHttpError(error?.retryAfterMs);
+      throw coscoRateLimitedHttpError(error?.retryAfterMs, options);
     }
     const details = error?.code
       ? { code: error.code, retryAfterMs: error?.retryAfterMs ?? undefined }
@@ -1336,7 +1416,21 @@ async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
 }
 
 async function fetchCoscoTracking(request, queryChannel, options = {}) {
-  ensureCoscoCircuitAvailable();
+  const routeOptions = queryChannel.code === "PROXY"
+    ? { ...options, proxyMode: true, queryChannel: COSCO_QUERY_CHANNELS.PROXY }
+    : options;
+  ensureCoscoCircuitAvailable(routeOptions);
+  if (queryChannel.code === "PROXY") {
+    const result = await fetchCoscoTrackingViaNetwork(request, routeOptions);
+    return {
+      ...result,
+      strategy: {
+        requested: "PROXY",
+        used: "PROXY",
+        fallbackUsed: false
+      }
+    };
+  }
   if (queryChannel.code === "AUTO") {
     try {
       const result = await fetchCoscoTrackingViaNetwork(request, options);
@@ -1352,7 +1446,7 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
       if (isCoscoProtectionError(networkError) || options.signal?.aborted) throw networkError;
       try {
         const result = await fetchCoscoTrackingWithPlaywright(request, options);
-        coscoCircuitBreaker.recordSuccess();
+        coscoCircuitBreakerFor(options).recordSuccess();
         return {
           ...result,
           strategy: {
@@ -1367,7 +1461,7 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
         if (playwrightError instanceof HttpError && playwrightError.status === 429) {
           throw playwrightError;
         }
-        const circuit = coscoCircuitBreaker.recordFailure({ retryAfterMs: 2 * 60_000 });
+        const circuit = coscoCircuitBreakerFor(options).recordFailure({ retryAfterMs: 2 * 60_000 });
         throw new HttpError(503, "Both COSCO tracking channels are temporarily unavailable", {
           code: "COSCO_CHANNELS_UNAVAILABLE",
           retryAfterMs: circuit.retryAfterMs || 15_000,
@@ -1386,11 +1480,12 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
 }
 
 function runCoscoTrackingRequest(request, queryChannel, options = {}) {
-  ensureCoscoCircuitAvailable();
+  const routeOptions = queryChannel.code === "PROXY" ? { ...options, proxyMode: true } : options;
+  ensureCoscoCircuitAvailable(routeOptions);
   return coscoQueryGate.run(
     async () => {
       const result = await fetchCoscoTracking(request, queryChannel, options);
-      coscoCircuitBreaker.recordSuccess();
+      coscoCircuitBreakerFor(routeOptions).recordSuccess();
       return result;
     },
     { signal: options.signal }
@@ -1720,6 +1815,7 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
       ? "PLAYWRIGHT"
       : forcedChannel ?? input.channel ?? carrier.defaultChannel ?? "NETWORK"
   );
+  requireProxyAdapterAuthorization(request, queryChannel);
   const cmaCredentials = carrierCode === "CMA"
     ? {
         sessionCookie: String(request.headers["x-cma-session-cookie"] ?? "").trim(),
@@ -1859,7 +1955,10 @@ export const server = createServer(async (request, response) => {
         channel: "NETWORK",
         coscoProtection: {
           proxy: proxyStatus(COSCO_PROXY_CONFIG),
-          circuitBreaker: coscoCircuitBreaker.status(),
+          circuitBreakers: {
+            direct: coscoCircuitBreakers.DIRECT.status(),
+            proxy: coscoCircuitBreakers.PROXY.status()
+          },
           queue: coscoQueryGate.stats()
         },
         channels: {
@@ -1870,6 +1969,13 @@ export const server = createServer(async (request, response) => {
             channelLabel: "Playwright 浏览器",
             status: "configured",
             enabled: true
+          },
+          PROXY: {
+            channel: "PROXY",
+            channelNumber: 3,
+            channelLabel: "SOCKS5 proxy",
+            status: COSCO_PROXY_CONFIG ? "configured" : "missing",
+            enabled: Boolean(COSCO_PROXY_CONFIG)
           }
         },
         time: new Date().toISOString()
@@ -1994,7 +2100,7 @@ server.on("close", () => {
   stopChannelCMonitor();
   void closeCoscoPlaywrightBrowser();
   void closeCmaPlaywrightBrowser();
-  void coscoProxyDispatcher?.close();
+  void coscoProxyClient?.close();
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

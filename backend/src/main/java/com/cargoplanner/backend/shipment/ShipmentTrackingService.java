@@ -41,7 +41,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class ShipmentTrackingService {
   private static final List<String> SUPPORTED_TYPES = List.of("BILLOFLADING", "BOOKING", "CONTAINER");
-  private static final List<String> SUPPORTED_CHANNELS = List.of("AUTO", "NETWORK", "PLAYWRIGHT");
+  private static final List<String> SUPPORTED_CHANNELS = List.of(
+      "AUTO", "NETWORK", "PLAYWRIGHT", "PROXY"
+  );
 
   private final JdbcTemplate jdbcTemplate;
   private final ObjectMapper objectMapper;
@@ -567,7 +569,15 @@ public class ShipmentTrackingService {
   ) {
     NormalizedTrackRequest request = normalize(input);
     ShipmentImportDetails importedDetails = normalizeImportedDetails(input, request, user);
-    boolean forceRefresh = Boolean.TRUE.equals(input == null ? null : input.forceRefresh());
+    boolean proxyChannel = "PROXY".equals(request.channel());
+    if (proxyChannel && (user == null || !user.canManageShipmentFiles())) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Only business users or administrators may use the proxy tracking channel"
+      );
+    }
+    boolean forceRefresh = proxyChannel
+        || Boolean.TRUE.equals(input == null ? null : input.forceRefresh());
     if (forceRefresh && !trustedAutomaticRefresh
         && (user == null || !user.canManageShipmentFiles())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Only business users or administrators may force a refresh");

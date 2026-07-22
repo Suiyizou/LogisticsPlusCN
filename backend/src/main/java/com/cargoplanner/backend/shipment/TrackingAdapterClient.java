@@ -26,10 +26,14 @@ public class TrackingAdapterClient {
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(validDuration(properties.getConnectTimeout(), Duration.ofSeconds(5)));
     requestFactory.setReadTimeout(validDuration(properties.getReadTimeout(), Duration.ofSeconds(90)));
-    this.restClient = RestClient.builder()
+    RestClient.Builder builder = RestClient.builder()
         .baseUrl(trimTrailingSlash(properties.getAdapterBaseUrl()))
-        .requestFactory(requestFactory)
-        .build();
+        .requestFactory(requestFactory);
+    String adapterKey = properties.getAdapterKey();
+    if (adapterKey != null && !adapterKey.isBlank()) {
+      builder.defaultHeader("X-Tracking-Adapter-Key", adapterKey.trim());
+    }
+    this.restClient = builder.build();
   }
 
   public JsonNode track(NormalizedTrackRequest request) {

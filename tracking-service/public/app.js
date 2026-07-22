@@ -266,6 +266,11 @@ const CHANNELS = Object.freeze({
     code: "PLAYWRIGHT",
     labelKey: "channel.playwright",
     sourceKey: "source.playwright"
+  },
+  PROXY: {
+    code: "PROXY",
+    labelKey: "channel.proxy",
+    sourceKey: "source.proxy"
   }
 });
 
@@ -576,9 +581,11 @@ const MESSAGES = {
     "channel.auto": "Automatic · API first, DOM fallback",
     "channel.network": "Channel 1 · Network interface",
     "channel.playwright": "Channel 2 · Playwright browser",
+    "channel.proxy": "Proxy · Alternate outbound IP",
     "source.auto": "COSCO · API FIRST · DOM FALLBACK",
     "source.network": "COSCO · CHANNEL 1 · NETWORK",
     "source.playwright": "COSCO · CHANNEL 2 · PLAYWRIGHT",
+    "source.proxy": "COSCO · SOCKS5 PROXY",
     "type.bill": "Bill of lading",
     "type.booking": "Booking number",
     "type.container": "Container number",
@@ -1034,9 +1041,11 @@ const MESSAGES = {
     "channel.auto": "自动 · 接口优先，DOM 托底",
     "channel.network": "通道一 · 网络接口",
     "channel.playwright": "通道二 · Playwright 浏览器",
+    "channel.proxy": "代理通道 · 更换出口 IP",
     "source.auto": "COSCO · 接口优先 · DOM 托底",
     "source.network": "COSCO · 通道一 · 网络接口",
     "source.playwright": "COSCO · 通道二 · PLAYWRIGHT",
+    "source.proxy": "COSCO · SOCKS5 代理通道",
     "type.bill": "提单号",
     "type.booking": "订舱号",
     "type.container": "箱号",

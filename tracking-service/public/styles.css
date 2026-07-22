@@ -9323,12 +9323,28 @@ body.related-files-open {
 }
 
 /* Keep the visible carrier field in the final responsive cascade. */
+.internal-query-channel {
+  display: none;
+}
+
+body.is-internal-session .internal-query-channel {
+  display: flex;
+}
+
 .query-panel form {
   grid-template-columns: 190px 210px minmax(300px, 1fr) 168px;
 }
 
+body.is-internal-session .query-panel form {
+  grid-template-columns: 170px 200px 200px minmax(260px, 1fr) 168px;
+}
+
 @media (max-width: 1100px) {
   .query-panel form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.is-internal-session .query-panel form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -9339,6 +9355,10 @@ body.related-files-open {
 
 @media (max-width: 680px) {
   .query-panel form {
+    grid-template-columns: 1fr;
+  }
+
+  body.is-internal-session .query-panel form {
     grid-template-columns: 1fr;
   }
 }

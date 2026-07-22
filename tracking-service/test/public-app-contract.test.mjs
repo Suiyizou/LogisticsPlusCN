@@ -232,6 +232,16 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
+test("business users can explicitly select the alternate proxy channel", () => {
+  assert.match(
+    indexSource,
+    /class="field channel-field internal-query-channel"[\s\S]*?id="channel-select"[\s\S]*?<option value="PROXY"/
+  );
+  assert.match(appSource, /PROXY:[\s\S]*?labelKey: "channel\.proxy"/);
+  assert.match(stylesSource, /body\.is-internal-session \.internal-query-channel[\s\S]*?display: flex/);
+  assert.match(stylesSource, /\.internal-query-channel[\s\S]*?display: none/);
+});
+
 test("file preview uses a same-origin preview endpoint and safe blob rendering", () => {
   assert.match(indexSource, /id="file-preview-dialog"[\s\S]*?id="file-preview-download"/);
   assert.match(

@@ -46,6 +46,7 @@ app:
     allowed-extensions: ${APP_WORKSPACE_FILE_ALLOWED_EXTENSIONS:xlsx,xls,csv,tsv}
   shipment-tracking:
     adapter-base-url: ${APP_TRACKING_ADAPTER_BASE_URL:http://127.0.0.1:3000}
+    adapter-key: ${APP_TRACKING_ADAPTER_KEY:}
     cache-ttl: ${APP_TRACKING_CACHE_TTL:15m}
     connect-timeout: ${APP_TRACKING_CONNECT_TIMEOUT:5s}
     read-timeout: ${APP_TRACKING_READ_TIMEOUT:90s}

@@ -88,13 +88,14 @@ npm start
 
 ## COSCO 代理、限速与 403 冷却
 
-COSCO 的 `NETWORK` 与 `PLAYWRIGHT` 通道共用同一 HTTP(S) 代理配置。代理账号和密码必须使用独立变量，不要嵌入 URL，也不要提交到 Git：
+COSCO 的 `PROXY` 通道使用独立的 HTTP(S)/SOCKS5 代理出口，仅允许已登录业务员或管理员选择。`AUTO`、`NETWORK` 和 `PLAYWRIGHT` 仍使用服务器直连出口。代理账号和密码必须使用独立变量，不要嵌入 URL，也不要提交到 Git：
 
 ```powershell
 $env:COSCO_PROXY_ENABLED="true"
-$env:COSCO_PROXY_SERVER="http://proxy-host:8080"
+$env:COSCO_PROXY_SERVER="socks5://proxy-host:1080"
 $env:COSCO_PROXY_USERNAME="proxy-user"
 $env:COSCO_PROXY_PASSWORD="proxy-password"
+$env:TRACKING_ADAPTER_KEY="replace-with-a-long-random-internal-secret"
 $env:COSCO_QUERY_MIN_INTERVAL_MS="10000"
 $env:COSCO_QUERY_MAX_INTERVAL_MS="12000"
 $env:COSCO_QUERY_QUEUE_LIMIT="50"
@@ -103,7 +104,7 @@ $env:COSCO_BLOCK_COOLDOWN_MS="1800000"
 npm start
 ```
 
-COSCO 查询按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。任一通道确认上游返回 HTTP `403/429` 后会开启共享冷却，在冷却期内直接返回保护错误，不会继续用另一个通道重复冲击同一出口 IP。`GET /api/health` 只暴露脱敏后的代理状态、队列和熔断状态。
+直连与代理使用独立熔断器和 Cookie 缓存，因此直连 IP 被封时不会阻止代理通道。`TRACKING_ADAPTER_KEY` 必须在 Spring 后端和 Node 追踪服务中配置为同一个随机长字符串，防止匿名请求直接消耗代理。COSCO 查询仍按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。同一出口确认上游返回 HTTP `403/429` 后会开启该出口自己的冷却。`GET /api/health` 只暴露脱敏后的代理协议、主机、队列和熔断状态。
 
 也可以独立验证：
 
@@ -143,7 +144,7 @@ Content-Type: application/json
 }
 ```
 
-将 `channel` 改为 `PLAYWRIGHT` 即使用通道二。不传时默认使用通道一。
+将 `channel` 改为 `PLAYWRIGHT` 即使用通道二；改为 `PROXY` 即强制通过已配置的代理出口实时查询。不传时默认使用自动通道。
 
 批量查询为每次运行附带 16-80 位的 `batchTaskId`。停止任务时调用：
 

@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  createCoscoProxyClient,
   proxyStatus,
-  readCoscoProxyConfig,
-  toPlaywrightProxy
+  readCoscoProxyConfig
 } from "../lib/cosco-proxy.mjs";
 import {
   createCoscoCircuitBreaker,
@@ -12,28 +12,39 @@ import {
 } from "../lib/cosco-request-guard.mjs";
 import { createBatchTaskRegistry } from "../lib/batch-task-registry.mjs";
 
-test("shares a redacted HTTP proxy configuration across both COSCO channels", () => {
+test("loads an authenticated SOCKS5 proxy without exposing credentials", async () => {
   assert.equal(readCoscoProxyConfig({}), null);
   const config = readCoscoProxyConfig({
     COSCO_PROXY_ENABLED: "true",
-    COSCO_PROXY_SERVER: "64.32.185.129:9000",
+    COSCO_PROXY_SERVER: "socks5://proxy.example:443",
     COSCO_PROXY_USERNAME: "proxy-user",
     COSCO_PROXY_PASSWORD: "proxy-secret"
   });
-  assert.deepEqual(toPlaywrightProxy(config), {
-    server: "http://64.32.185.129:9000/",
-    username: "proxy-user",
-    password: "proxy-secret"
-  });
   assert.deepEqual(proxyStatus(config), {
     enabled: true,
-    server: "http://64.32.185.129:9000",
+    server: "socks5://proxy.example:443",
     authenticated: true
   });
+  const client = createCoscoProxyClient(config);
+  assert.equal(client.protocol, "socks5:");
+  await client.close();
   assert.throws(
-    () => readCoscoProxyConfig({ COSCO_PROXY_ENABLED: "true", COSCO_PROXY_SERVER: "socks5://127.0.0.1:1080" }),
-    /http:\/\/ or https:\/\//
+    () => readCoscoProxyConfig({
+      COSCO_PROXY_ENABLED: "true",
+      COSCO_PROXY_SERVER: "socks5://proxy-user:proxy-secret@proxy.example:443"
+    }),
+    /credentials in COSCO_PROXY_USERNAME\/PASSWORD/
   );
+});
+
+test("protects the proxy channel with a timing-safe internal adapter key", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /function requireProxyAdapterAuthorization[\s\S]*?TRACKING_ADAPTER_KEY[\s\S]*?x-tracking-adapter-key[\s\S]*?secureTextEquals/
+  );
+  assert.match(source, /timingSafeEqual\(leftBuffer, rightBuffer\)/);
+  assert.match(source, /requireProxyAdapterAuthorization\(request, queryChannel\)/);
 });
 
 test("cancels an active batch request and rejects further work for the cancelled task id", () => {

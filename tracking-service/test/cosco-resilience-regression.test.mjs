@@ -273,7 +273,7 @@ test("business-code 403 opens protection before the generic adapter failure path
 
   assert.ok(blockedBranch >= 0, "Decoded COSCO 403 must have an explicit protection branch");
   assert.ok(genericFailure > blockedBranch, "Decoded COSCO 403 must be handled before generic 502 fallback");
-  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoCircuitBreaker\.trip/);
+  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoCircuitBreakerFor\(options\)\.trip/);
   assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoBlockedHttpError/);
 });
 

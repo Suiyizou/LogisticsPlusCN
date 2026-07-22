@@ -1,6 +1,5 @@
 import { chromium } from "playwright";
 import { decodeCoscoPayload } from "../lib/cosco-payload.mjs";
-import { readCoscoProxyConfig, toPlaywrightProxy } from "../lib/cosco-proxy.mjs";
 
 const COSCO_TRACKING_PAGE =
   "https://elines.coscoshipping.com/scct/public/ct/base?lang=en";
@@ -9,7 +8,6 @@ const OPTIONAL_RESPONSE_SETTLE_MS = 1_200;
 const DEFAULT_MAX_CONCURRENCY = 2;
 const DEFAULT_QUEUE_LIMIT = 8;
 const DEFAULT_QUEUE_TIMEOUT_MS = 15_000;
-const COSCO_PLAYWRIGHT_PROXY = toPlaywrightProxy(readCoscoProxyConfig());
 
 const TRACKING_LABELS = Object.freeze({
   BILLOFLADING: "B/L No.",
@@ -136,8 +134,6 @@ async function launchSharedBrowser() {
   if (channel && channel !== "chromium") {
     launchOptions.channel = channel;
   }
-  if (COSCO_PLAYWRIGHT_PROXY) launchOptions.proxy = COSCO_PLAYWRIGHT_PROXY;
-
   const browser = await chromium.launch(launchOptions);
 
   browser.once("disconnected", () => {

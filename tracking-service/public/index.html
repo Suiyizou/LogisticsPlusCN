@@ -264,6 +264,15 @@
                     <option value="CMA">CMA CGM</option>
                   </select>
                 </div>
+                <div class="field channel-field internal-query-channel">
+                  <label for="channel-select" data-i18n="query.channel">Query channel</label>
+                  <select id="channel-select" name="channel">
+                    <option value="AUTO" data-i18n="channel.auto">Automatic · API first, DOM fallback</option>
+                    <option value="NETWORK" data-i18n="channel.network">Channel 1 · Network interface</option>
+                    <option value="PLAYWRIGHT" data-i18n="channel.playwright">Channel 2 · Playwright browser</option>
+                    <option value="PROXY" data-i18n="channel.proxy">Proxy · Alternate outbound IP</option>
+                  </select>
+                </div>
                 <div class="field type-field">
                   <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
                   <select id="tracking-type" name="type">
