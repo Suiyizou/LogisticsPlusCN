@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.common.ApiException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Clock;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpStatus;
 
 class ShipmentBatchTrackingServiceTest {
   private ExecutorService executor;
@@ -311,6 +313,56 @@ class ShipmentBatchTrackingServiceTest {
         any(), supplementalRequestCaptor.capture(), any()
     );
     assertEquals("PROXY", supplementalRequestCaptor.getValue().channel());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void retainsDetailedPartialFailureMarkerForARefreshedShipment() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    String message = "Configured COSCO proxy is unavailable；代理池已尝试 3 个出口节点";
+    when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
+        new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "COSCO_PROXY_POOL_EXHAUSTED",
+            message
+        )
+    );
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        16L, "operator-marker", "Operator Marker", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6508245590",
+            "6508245590", false, null
+        )),
+        user,
+        "PROXY"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals(1, completed.get("partial"));
+    assertEquals("PARTIAL", items.get(0).get("status"));
+    assertEquals("COSCO_PROXY_POOL_EXHAUSTED", items.get(0).get("errorCode"));
+    assertEquals(3, items.get(0).get("proxyAttempts"));
+    verify(trackingService).recordRefreshOutcome(
+        "existing-shipment",
+        "PARTIAL",
+        "COSCO_PROXY_POOL_EXHAUSTED",
+        message,
+        1,
+        3
+    );
   }
 
   @Test

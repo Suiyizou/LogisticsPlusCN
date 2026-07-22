@@ -308,6 +308,17 @@ class CustomerAccessFlowTest {
   void listsAuthorizedShipmentsAndPersistsOperatorNotes() {
     jdbcTemplate.update(
         """
+        UPDATE cp_shipments
+        SET last_refresh_result = 'PARTIAL',
+            last_refresh_error_code = 'COSCO_PROXY_POOL_EXHAUSTED',
+            last_refresh_error = 'Proxy pool exhausted after supplemental lookup',
+            last_refresh_attempts = 1, last_refresh_proxy_attempts = 3,
+            last_refresh_at = CURRENT_TIMESTAMP
+        WHERE public_id = 'participant-shipment'
+        """
+    );
+    jdbcTemplate.update(
+        """
         INSERT INTO cp_tracking_snapshots (
           shipment_id, query_reference_type, query_reference_no, queried_by, queried_by_username,
           source_channel, snapshot_json, payload_sha256, fetched_at, fresh_until, created_at
@@ -335,6 +346,11 @@ class CustomerAccessFlowTest {
         .filter(item -> "participant-shipment".equals(item.get("shipmentId")))
         .findFirst().orElseThrow();
     assertThat(participantShipment).containsEntry("dataAvailable", true);
+    assertThat(participantShipment)
+        .containsEntry("lastRefreshResult", "PARTIAL")
+        .containsEntry("lastRefreshErrorCode", "COSCO_PROXY_POOL_EXHAUSTED")
+        .containsEntry("lastRefreshAttempts", 1)
+        .containsEntry("lastRefreshProxyAttempts", 3);
     assertThat(participantShipment.get("snapshot")).isInstanceOf(com.fasterxml.jackson.databind.JsonNode.class);
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> participants =
@@ -1058,6 +1074,12 @@ class CustomerAccessFlowTest {
           client_po_number VARCHAR(160),
           client_name_code VARCHAR(160),
           original_bill_of_lading VARCHAR(64),
+          last_refresh_result VARCHAR(16),
+          last_refresh_error_code VARCHAR(120),
+          last_refresh_error VARCHAR(1000),
+          last_refresh_attempts INT NOT NULL DEFAULT 0,
+          last_refresh_proxy_attempts INT NOT NULL DEFAULT 0,
+          last_refresh_at TIMESTAMP,
           last_tracked_at TIMESTAMP,
           fresh_until TIMESTAMP,
           created_by BIGINT,

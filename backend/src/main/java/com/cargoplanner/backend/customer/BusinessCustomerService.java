@@ -742,7 +742,10 @@ public class BusinessCustomerService {
                t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
                s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
                s.business_note, s.job_number, s.client_po_number, s.client_name_code,
-               s.original_bill_of_lading, s.last_tracked_at, s.updated_at
+               s.original_bill_of_lading, s.last_refresh_result,
+               s.last_refresh_error_code, s.last_refresh_error,
+               s.last_refresh_attempts, s.last_refresh_proxy_attempts,
+               s.last_refresh_at, s.last_tracked_at, s.updated_at
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -783,6 +786,7 @@ public class BusinessCustomerService {
     value.put("clientPoNumber", rs.getString("client_po_number"));
     value.put("clientNameCode", rs.getString("client_name_code"));
     value.put("originalBillOfLading", rs.getString("original_bill_of_lading"));
+    putRefreshOutcome(value, rs);
     value.put("dataAvailable", false);
     value.put("snapshot", null);
 
@@ -1985,7 +1989,10 @@ public class BusinessCustomerService {
   private String shipmentBindingSelect() {
     return """
         SELECT s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note, s.last_tracked_at, s.fresh_until, s.updated_at,
+               s.business_note, s.last_refresh_result, s.last_refresh_error_code,
+               s.last_refresh_error, s.last_refresh_attempts,
+               s.last_refresh_proxy_attempts, s.last_refresh_at,
+               s.last_tracked_at, s.fresh_until, s.updated_at,
                a.relationship_role, a.publication_status, a.published_at, a.published_by,
                a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
                r.reference_type, r.reference_no_raw
@@ -2003,7 +2010,10 @@ public class BusinessCustomerService {
   private String availableShipmentSelect() {
     return """
         SELECT s.id, s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note, s.last_tracked_at, s.updated_at,
+               s.business_note, s.last_refresh_result, s.last_refresh_error_code,
+               s.last_refresh_error, s.last_refresh_attempts,
+               s.last_refresh_proxy_attempts, s.last_refresh_at,
+               s.last_tracked_at, s.updated_at,
                r.reference_type, r.reference_no_raw,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id) AS customer_count,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'SHIPPER') AS shipper_count,
@@ -2088,6 +2098,7 @@ public class BusinessCustomerService {
     value.put("assignedAt", instantString(rs, "assigned_at"));
     value.put("assignedBy", nullableLong(rs, "assigned_by"));
     value.put("assignedByDisplayName", rs.getString("assigned_by_display_name"));
+    putRefreshOutcome(value, rs);
     return value;
   }
   private Map<String, Object> mapAvailableShipment(ResultSet rs, int rowNumber) throws SQLException {
@@ -2100,6 +2111,7 @@ public class BusinessCustomerService {
     value.put("note", rs.getString("business_note"));
     value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
     value.put("updatedAt", instantString(rs, "updated_at"));
+    putRefreshOutcome(value, rs);
     value.put("customerCount", rs.getLong("customer_count"));
     List<String> boundRoles = new java.util.ArrayList<>();
     if (rs.getLong("shipper_count") > 0) boundRoles.add("SHIPPER");
@@ -2107,6 +2119,15 @@ public class BusinessCustomerService {
     if (rs.getLong("agent_count") > 0) boundRoles.add("AGENT");
     value.put("boundRoles", boundRoles);
     return value;
+  }
+
+  private void putRefreshOutcome(Map<String, Object> value, ResultSet rs) throws SQLException {
+    value.put("lastRefreshResult", rs.getString("last_refresh_result"));
+    value.put("lastRefreshErrorCode", rs.getString("last_refresh_error_code"));
+    value.put("lastRefreshError", rs.getString("last_refresh_error"));
+    value.put("lastRefreshAttempts", rs.getInt("last_refresh_attempts"));
+    value.put("lastRefreshProxyAttempts", rs.getInt("last_refresh_proxy_attempts"));
+    value.put("lastRefreshAt", instantString(rs, "last_refresh_at"));
   }
 
   private Map<String, Object> mapClientMatch(ResultSet rs, int rowNumber) throws SQLException {

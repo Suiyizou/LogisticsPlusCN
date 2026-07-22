@@ -209,27 +209,6 @@
                   </el-row>
                 </el-form>
 
-                <el-card class="pending-matches-card" shadow="never">
-                  <template #header>
-                    <div class="pending-matches-header">
-                      <div>
-                        <b>{{ t("customers.pendingMatches") }}</b>
-                        <small>{{ t("customers.pendingMatchesHint") }}</small>
-                      </div>
-                      <el-button text size="small" @click="loadPendingClientMatches" :disabled="loadingPendingMatches">
-                        {{ t("customers.refresh") }}
-                      </el-button>
-                    </div>
-                  </template>
-                  <div v-if="!pendingClientMatches.length" class="empty-hint-compact">{{ t("customers.noPendingMatches") }}</div>
-                  <div v-for="match in pendingClientMatches" v-else :key="match.id" class="pending-match-row">
-                    <span><b>{{ match.clientCode }}</b><small>{{ match.reason }}</small></span>
-                    <span><b>{{ match.referenceNo || match.shipmentId }}</b><small>{{ match.carrier }} · {{ referenceTypeLabel(match.referenceType) }}</small></span>
-                    <el-button type="primary" size="small" @click="resolveClientMatch(match)" :disabled="resolvingMatchId === match.id">
-                      {{ t("customers.bindToCurrentCustomer") }}
-                    </el-button>
-                  </div>
-                </el-card>
               </section>
             </el-card>
 
@@ -415,6 +394,12 @@
                         <el-option :label="t('customers.trackingChannelProxy')" value="PROXY" />
                       </el-select>
                     </label>
+                    <el-button
+                      :type="refreshIssuesOnly ? 'danger' : ''"
+                      :plain="!refreshIssuesOnly"
+                      :disabled="!refreshIssueCount"
+                      @click="refreshIssuesOnly = !refreshIssuesOnly"
+                    >{{ t("customers.refreshIssuesOnly", { count: refreshIssueCount }) }}</el-button>
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
                     <el-button
                       type="primary"
@@ -486,7 +471,18 @@
                   </el-table-column>
                   <el-table-column :label="t('customers.shipmentStatus')" width="160">
                     <template #default="{ row }">
-                      <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
+                      <div class="shipment-status-stack">
+                        <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
+                        <el-tooltip
+                          v-if="hasRefreshIssue(row)"
+                          :content="refreshOutcomeTooltip(row)"
+                          placement="top"
+                        >
+                          <el-tag size="small" type="danger" effect="plain">
+                            {{ row.lastRefreshResult === 'FAILED' ? t("customers.refreshFailedMark") : t("customers.refreshPartialMark") }}
+                          </el-tag>
+                        </el-tooltip>
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('customers.remark')" min-width="180" show-overflow-tooltip>
@@ -633,15 +629,32 @@
                       />
                       <div v-if="batchTrackResults.length" class="batch-track-result-list">
                         <div class="batch-track-result-list-head">
-                          {{ t("customers.batchTrackAllTasks", { count: batchTrackResults.length }) }}
+                          <span>{{ batchTrackProblemsOnly
+                            ? t("customers.batchTrackProblemTasks", { count: batchTrackProblemResults.length })
+                            : t("customers.batchTrackAllTasks", { count: batchTrackResults.length }) }}</span>
+                          <el-button
+                            v-if="batchTrackProblemResults.length"
+                            text
+                            size="small"
+                            type="danger"
+                            @click="batchTrackProblemsOnly = !batchTrackProblemsOnly"
+                          >{{ batchTrackProblemsOnly ? t("customers.showAllTasks") : t("customers.showProblemTasks") }}</el-button>
                         </div>
-                        <div v-for="(r, idx) in batchTrackResults" :key="`${r.number}-${idx}`" class="batch-track-result-row" :class="r.status">
+                        <div v-for="r in visibleBatchTrackResults" :key="`${r.number}-${r.index}`" class="batch-track-result-row" :class="r.status">
                           <span class="batch-track-result-meta">
-                            <span class="batch-track-result-index">{{ idx + 1 }}</span>
+                            <span class="batch-track-result-index">{{ r.index }}</span>
                             <b>{{ r.number }}</b>
                             <el-tag v-if="r.carrier" size="small" effect="plain" type="info">{{ r.carrier }}</el-tag>
+                            <el-tag v-if="r.errorCode" size="small" effect="plain" type="danger">{{ r.errorCode }}</el-tag>
+                            <el-tag v-if="r.attempts" size="small" effect="plain">{{ t("customers.mainAttempts", { count: r.attempts }) }}</el-tag>
+                            <el-tag v-if="r.proxyAttempts" size="small" effect="plain" type="warning">{{ t("customers.proxyAttempts", { count: r.proxyAttempts }) }}</el-tag>
                           </span>
                           <small>{{ r.message }}</small>
+                          <small
+                            v-for="subtask in r.failedSubtasks"
+                            :key="`${r.index}-${subtask.type}`"
+                            class="batch-track-subtask-error"
+                          ><b>{{ batchSubtaskLabel(subtask.type) }}：</b>{{ subtask.error }}</small>
                         </div>
                       </div>
                     </div>
@@ -1068,11 +1081,9 @@ import {
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
-  fetchPendingClientMatches,
   fetchShipmentBatchTask,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
-  resolvePendingClientMatch,
   setBusinessShipmentPublication,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
@@ -1113,10 +1124,8 @@ const customers = ref([]);
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
-const pendingClientMatches = ref([]);
 const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
-const loadingPendingMatches = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
 const batchImportDialogOpen = ref(false);
@@ -1149,7 +1158,7 @@ const batchTrackCarrier = ref("COSCO");
 const batchTrackType = ref("BILLOFLADING");
 const batchTrackRunning = ref(false);
 const batchTrackResults = ref([]);
-const batchTrackProgress = ref({ total: 0, done: 0, succeeded: 0, manual: 0, failed: 0, pending: 0, status: "" });
+const batchTrackProgress = ref({ total: 0, done: 0, succeeded: 0, partial: 0, manual: 0, failed: 0, pending: 0, status: "" });
 const batchTrackFileInput = ref(null);
 const batchTrackFileName = ref("");
 const batchTrackSheets = ref([]);
@@ -1158,6 +1167,7 @@ const batchTrackSelectedColumnIndex = ref(null);
 const batchTrackTaskId = ref("");
 const batchTrackMode = ref("IMPORT");
 const batchTrackCancelRequested = ref(false);
+const batchTrackProblemsOnly = ref(false);
 const batchTrackAbortController = ref(null);
 const refreshTrackingStatus = ref("");
 const refreshTrackingResponse = ref(null);
@@ -1174,11 +1184,11 @@ const batchBusinessFieldsDialogOpen = ref(false);
 const batchBusinessFieldRows = ref([]);
 const batchSavingBusinessFields = ref(false);
 const shipmentCustomerFilter = ref("");
+const refreshIssuesOnly = ref(false);
 const shipmentTrackingChannel = ref("AUTO");
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
 const publishingAllShipments = ref(false);
-const resolvingMatchId = ref(0);
 const pageMessage = ref("");
 const messageIsError = ref(false);
 const bindMode = ref("reference");
@@ -1214,6 +1224,12 @@ const batchTrackSelectedSheet = computed(() =>
 );
 const batchTrackItems = computed(() =>
   buildShipmentBatchItems(batchTrackSelectedSheet.value, batchTrackSelectedColumnIndex.value)
+);
+const batchTrackProblemResults = computed(() =>
+  batchTrackResults.value.filter((item) => ["failed", "partial"].includes(item.status))
+);
+const visibleBatchTrackResults = computed(() =>
+  batchTrackProblemsOnly.value ? batchTrackProblemResults.value : batchTrackResults.value
 );
 const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => item.displayNumber));
 const batchTrackTrackableCount = computed(() => batchTrackItems.value.filter((item) => !item.manualOnly).length);
@@ -1282,14 +1298,20 @@ const shipmentFilterCustomers = computed(() => {
   );
 });
 
+const refreshIssueCount = computed(() =>
+  availableShipments.value.filter(hasRefreshIssue).length
+);
+
 const displayedAvailableShipments = computed(() => {
-  if (!shipmentCustomerFilter.value) return availableShipments.value;
-  return availableShipments.value.filter((shipment) => {
+  let values = availableShipments.value;
+  if (shipmentCustomerFilter.value) values = values.filter((shipment) => {
     const boundCustomers = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
     return boundCustomers.some((customer) => String(
       typeof customer === "string" ? customer : customer?.id || ""
     ) === shipmentCustomerFilter.value);
   });
+  if (refreshIssuesOnly.value) values = values.filter(hasRefreshIssue);
+  return values;
 });
 
 const selectedShipment = computed(() => {
@@ -1344,6 +1366,31 @@ const shipmentDetailRows = computed(() => {
 });
 
 function valueOrDash(v) { return v || "—"; }
+
+function hasRefreshIssue(shipment) {
+  return ["FAILED", "PARTIAL"].includes(String(shipment?.lastRefreshResult || "").toUpperCase());
+}
+
+function refreshOutcomeTooltip(shipment) {
+  const parts = [
+    shipment?.lastRefreshErrorCode,
+    shipment?.lastRefreshError,
+    shipment?.lastRefreshAttempts
+      ? t("customers.mainAttempts", { count: shipment.lastRefreshAttempts })
+      : "",
+    shipment?.lastRefreshProxyAttempts
+      ? t("customers.proxyAttempts", { count: shipment.lastRefreshProxyAttempts })
+      : "",
+    shipment?.lastRefreshAt ? formatDateTime(shipment.lastRefreshAt) : ""
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function batchSubtaskLabel(type) {
+  return String(type || "").toUpperCase() === "BOOKING_REFERENCE"
+    ? t("customers.bookingReferenceStage")
+    : t("customers.transportDetailsStage");
+}
 
 const CARRIER_PREFIX_MAP = {
   COSU: "COSCO",
@@ -1560,7 +1607,6 @@ onMounted(() => {
   const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
-  void loadPendingClientMatches();
   void restoreBatchTrackTask();
 });
 onUnmounted(() => {
@@ -1742,11 +1788,14 @@ async function startBatchTrack() {
   batchTrackMode.value = "IMPORT";
   batchTrackRunning.value = true;
   batchTrackCancelRequested.value = false;
-  batchTrackResults.value = batchTrackItems.value.map((item) => ({
+  batchTrackProblemsOnly.value = false;
+  batchTrackResults.value = batchTrackItems.value.map((item, index) => ({
+    index: index + 1,
     number: item.displayNumber,
     carrier: item.carrier,
     status: "pending",
-    message: t("customers.trackPending")
+    message: t("customers.trackPending"),
+    failedSubtasks: []
   }));
   try {
     const task = await createShipmentBatchTask({
@@ -1765,7 +1814,14 @@ async function startBatchTrack() {
   } catch (error) {
     batchTrackRunning.value = false;
     batchTrackCancelRequested.value = false;
-    batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.batchTrackStartFailed") }];
+    batchTrackResults.value = [{
+      index: 1,
+      number: "-",
+      status: "failed",
+      message: error?.message || t("customers.batchTrackStartFailed"),
+      errorCode: error?.code || "",
+      failedSubtasks: []
+    }];
   }
 }
 
@@ -1775,11 +1831,13 @@ function prepareShipmentRefreshTask(mode) {
   batchTrackCancelRequested.value = false;
   batchTrackTaskId.value = "";
   batchTrackMode.value = mode;
+  batchTrackProblemsOnly.value = false;
   batchTrackResults.value = [];
   batchTrackProgress.value = {
     total: 0,
     done: 0,
     succeeded: 0,
+    partial: 0,
     manual: 0,
     failed: 0,
     pending: 0,
@@ -1818,9 +1876,12 @@ async function startShipmentRefreshTask(
   } catch (error) {
     batchTrackRunning.value = false;
     batchTrackResults.value = [{
+      index: 1,
       number: "-",
       status: "failed",
-      message: error?.message || t(failureMessageKey)
+      message: error?.message || t(failureMessageKey),
+      errorCode: error?.code || "",
+      failedSubtasks: []
     }];
     return null;
   }
@@ -1861,7 +1922,14 @@ async function cancelBatchTrack() {
     scheduleBatchTrackPoll(batchTrackTaskId.value, 500);
   } catch (error) {
     batchTrackCancelRequested.value = false;
-    batchTrackResults.value.unshift({ number: "-", status: "failed", message: error?.message || t("customers.batchTrackCancelFailed") });
+    batchTrackResults.value.unshift({
+      index: 0,
+      number: "-",
+      status: "failed",
+      message: error?.message || t("customers.batchTrackCancelFailed"),
+      errorCode: error?.code || "",
+      failedSubtasks: []
+    });
   }
 }
 
@@ -1872,6 +1940,7 @@ async function handleBatchTrackWorkbook(event) {
   batchTrackSelectedSheetName.value = "";
   batchTrackSelectedColumnIndex.value = null;
   batchTrackResults.value = [];
+  batchTrackProblemsOnly.value = false;
   if (!file) return;
   batchTrackFileParsing.value = true;
   try {
@@ -1886,7 +1955,14 @@ async function handleBatchTrackWorkbook(event) {
     batchTrackSelectedColumnIndex.value = suggestedSheet.suggestedColumnIndex;
     batchTrackFileName.value = file.name;
   } catch (error) {
-    batchTrackResults.value = [{ number: "-", status: "failed", message: error?.message || t("customers.excelReadFailed") }];
+    batchTrackResults.value = [{
+      index: 1,
+      number: "-",
+      status: "failed",
+      message: error?.message || t("customers.excelReadFailed"),
+      errorCode: error?.code || "",
+      failedSubtasks: []
+    }];
   } finally {
     batchTrackFileParsing.value = false;
     event.target.value = "";
@@ -1899,13 +1975,15 @@ function clearBatchTrackFile() {
   batchTrackSelectedSheetName.value = "";
   batchTrackSelectedColumnIndex.value = null;
   batchTrackResults.value = [];
+  batchTrackProblemsOnly.value = false;
   if (batchTrackFileInput.value) batchTrackFileInput.value.value = "";
 }
 
 function clearBatchTrack() {
   batchTrackText.value = "";
   batchTrackResults.value = [];
-  batchTrackProgress.value = { total: 0, done: 0, succeeded: 0, manual: 0, failed: 0, pending: 0, status: "" };
+  batchTrackProblemsOnly.value = false;
+  batchTrackProgress.value = { total: 0, done: 0, succeeded: 0, partial: 0, manual: 0, failed: 0, pending: 0, status: "" };
   batchTrackFileName.value = "";
   batchTrackSheets.value = [];
   batchTrackSelectedSheetName.value = "";
@@ -1929,6 +2007,7 @@ function applyBatchTrackTask(task) {
     total: Number(task.total || 0),
     done: Number(task.processed || 0),
     succeeded: Number(task.succeeded || 0),
+    partial: Number(task.partial || 0),
     manual: Number(task.manual || 0),
     failed: Number(task.failed || 0),
     pending: Number(task.pending || 0),
@@ -1938,23 +2017,38 @@ function applyBatchTrackTask(task) {
       || (task.items || []).find((item) => String(item.status || "").toUpperCase() === "RETRY_WAIT")?.nextRetryAt
       || null
   };
-  batchTrackResults.value = (task.items || []).map((item) => {
+  batchTrackResults.value = (task.items || []).map((item, index) => {
     const itemStatus = String(item.status || "PENDING").toUpperCase();
     const stopped = status === "STOPPED" && ["PENDING", "RUNNING"].includes(itemStatus);
+    const failedSubtasks = (item.subtasks || []).filter(
+      (subtask) => String(subtask.status || "").toUpperCase() === "FAILED"
+    );
+    const subtaskErrorCodes = failedSubtasks
+      .map((subtask) => subtask.errorCode)
+      .filter(Boolean);
     return {
+      index: index + 1,
+      shipmentId: item.shipmentId,
       number: item.displayNumber || item.number,
       carrier: item.carrier,
       status: stopped ? "stopped" : itemStatus.toLowerCase(),
-      message: batchTrackItemMessage(item, status)
+      message: batchTrackItemMessage(item, status),
+      errorCode: item.errorCode || [...new Set(subtaskErrorCodes)].join(", "),
+      attempts: Number(item.attempts || 0),
+      proxyAttempts: Number(item.proxyAttempts || Math.max(
+        0,
+        ...failedSubtasks.map((subtask) => Number(subtask.proxyAttempts || 0))
+      )),
+      failedSubtasks
     };
   });
   batchTrackRunning.value = !BATCH_TRACK_TERMINAL.has(status);
   if (!batchTrackRunning.value) {
+    batchTrackProblemsOnly.value = batchTrackProblemResults.value.length > 0;
     batchTrackCancelRequested.value = false;
     forgetBatchTrackTask();
     window.clearTimeout(batchTrackPollTimer);
     void loadAvailableShipments();
-    void loadPendingClientMatches();
   }
 }
 
@@ -2059,19 +2153,6 @@ function handleBatchTrackDrop(event) {
   }
   const fakeEvent = { target: { files } };
   handleBatchTrackWorkbook(fakeEvent);
-}
-
-async function loadPendingClientMatches() {
-  if (loadingPendingMatches.value) return;
-  loadingPendingMatches.value = true;
-  try {
-    const response = await fetchPendingClientMatches();
-    pendingClientMatches.value = Array.isArray(response?.items) ? response.items : [];
-  } catch (error) {
-    showError(error, "customers.loadPendingMatchesFailed");
-  } finally {
-    loadingPendingMatches.value = false;
-  }
 }
 
 async function selectCustomer(customerId) {
@@ -2422,20 +2503,6 @@ async function publishAllDraftShipments() {
     }
   } finally {
     publishingAllShipments.value = false;
-  }
-}
-
-async function resolveClientMatch(match) {
-  if (!selectedCustomer.value || !match?.id || resolvingMatchId.value) return;
-  resolvingMatchId.value = match.id;
-  try {
-    await resolvePendingClientMatch(match.id, selectedCustomer.value.id);
-    await Promise.all([selectCustomer(selectedCustomer.value.id), loadPendingClientMatches(), loadAvailableShipments()]);
-    showSuccess("customers.pendingMatchResolved");
-  } catch (error) {
-    showError(error, "customers.pendingMatchResolveFailed");
-  } finally {
-    resolvingMatchId.value = 0;
   }
 }
 
@@ -3661,6 +3728,12 @@ function showError(error, fallbackKey) {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+.shipment-status-stack {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
 .batch-track-task-dialog-body {
   width: 100%;
   max-width: none;
@@ -3757,6 +3830,12 @@ function showError(error, fallbackKey) {
 .batch-track-result-row.manual {
   border-left: 3px solid #22c55e;
   background: #f1fbf6;
+}
+
+.batch-track-result-row.partial,
+.batch-track-result-row.failed {
+  border-left: 3px solid #ef4444;
+  background: #fff3f5;
 }
 
 .batch-track-result-row.stopped {
@@ -4897,6 +4976,10 @@ button:disabled {
   background: #e8eef6;
   font-size: 12px;
   font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 .batch-track-result-row {
   display: flex;
@@ -4941,6 +5024,11 @@ button:disabled {
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+
+.batch-track-subtask-error {
+  padding-left: 32px;
+  color: #9f3340 !important;
 }
 .batch-track-result-meta {
   display: inline-flex;

@@ -844,6 +844,35 @@ public class ShipmentTrackingService {
     return response;
   }
 
+  void recordRefreshOutcome(
+      String shipmentPublicId,
+      String result,
+      String errorCode,
+      String errorMessage,
+      int attempts,
+      int proxyAttempts
+  ) {
+    if (shipmentPublicId == null || shipmentPublicId.isBlank()) return;
+    String normalizedResult = trim(result, 16);
+    boolean succeeded = "SUCCEEDED".equals(normalizedResult);
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET last_refresh_result = ?, last_refresh_error_code = ?, last_refresh_error = ?,
+            last_refresh_attempts = ?, last_refresh_proxy_attempts = ?,
+            last_refresh_at = ?, updated_at = updated_at
+        WHERE public_id = ?
+        """,
+        normalizedResult,
+        succeeded ? null : trim(errorCode, 120),
+        succeeded ? null : trim(errorMessage, 1000),
+        Math.max(0, attempts),
+        Math.max(0, proxyAttempts),
+        timestamp(clock.instant()),
+        shipmentPublicId.trim()
+    );
+  }
+
   ObjectNode discoverBatchContainers(
       String shipmentPublicId,
       String billNumber,

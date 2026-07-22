@@ -114,6 +114,36 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "ALTER TABLE cp_shipments ADD COLUMN original_bill_of_lading VARCHAR(64) NULL AFTER client_name_code"
     );
     addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_result",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_result VARCHAR(16) NULL AFTER original_bill_of_lading"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_error_code",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_error_code VARCHAR(120) NULL AFTER last_refresh_result"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_error",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_error VARCHAR(1000) NULL AFTER last_refresh_error_code"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_attempts",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_attempts INT NOT NULL DEFAULT 0 AFTER last_refresh_error"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_proxy_attempts",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_proxy_attempts INT NOT NULL DEFAULT 0 AFTER last_refresh_attempts"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "last_refresh_at",
+        "ALTER TABLE cp_shipments ADD COLUMN last_refresh_at DATETIME(6) NULL AFTER last_refresh_proxy_attempts"
+    );
+    addColumnIfMissing(
         "cp_shipment_files",
         "uploader_customer_id",
         "ALTER TABLE cp_shipment_files ADD COLUMN uploader_customer_id BIGINT NULL AFTER uploader_user_id"
@@ -414,6 +444,12 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           client_po_number VARCHAR(160) NULL,
           client_name_code VARCHAR(160) NULL,
           original_bill_of_lading VARCHAR(64) NULL,
+          last_refresh_result VARCHAR(16) NULL,
+          last_refresh_error_code VARCHAR(120) NULL,
+          last_refresh_error VARCHAR(1000) NULL,
+          last_refresh_attempts INT NOT NULL DEFAULT 0,
+          last_refresh_proxy_attempts INT NOT NULL DEFAULT 0,
+          last_refresh_at DATETIME(6) NULL,
           last_tracked_at DATETIME(6) NULL,
           fresh_until DATETIME(6) NULL,
           created_by BIGINT NULL,

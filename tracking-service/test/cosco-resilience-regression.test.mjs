@@ -10,9 +10,24 @@ import {
   normalizeCoscoSnapshot,
   normalizeTrackingRequest,
   parseRetryAfter,
+  proxyPoolExhaustedError,
   shouldFallbackCoscoAutoToProxy,
   shouldRotateCoscoProxy
 } from "../server.mjs";
+
+test("proxy exhaustion reports safe node names, attempt count, and root cause", () => {
+  const error = proxyPoolExhaustedError({
+    status: 502,
+    message: "Configured COSCO proxy is unavailable",
+    details: { code: "COSCO_PROXY_UNAVAILABLE" }
+  }, 3, ["🇭🇰 香港S01", "🇭🇰 香港S02", "🇯🇵 日本S01"]);
+
+  assert.match(error.message, /已尝试 3 个出口节点/);
+  assert.match(error.message, /香港S01.*香港S02.*日本S01/);
+  assert.match(error.message, /COSCO_PROXY_UNAVAILABLE/);
+  assert.deepEqual(error.details.triedNodes, ["🇭🇰 香港S01", "🇭🇰 香港S02", "🇯🇵 日本S01"]);
+  assert.doesNotMatch(error.message, /socks5:\/\//i);
+});
 
 class VirtualTimers {
   constructor(now = 1_000) {

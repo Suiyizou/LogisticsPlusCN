@@ -295,6 +295,13 @@ test("batch progress de-duplicates identical supplemental failure messages", () 
   );
 });
 
+test("business shipment failures remain filterable while the customer review queue stays hidden", () => {
+  assert.match(businessCustomerSource, /lastRefreshResult === 'FAILED'/);
+  assert.match(businessCustomerSource, /batchTrackProblemsOnly = ref\(false\)/);
+  assert.match(businessCustomerSource, /refreshIssuesOnly = ref\(false\)/);
+  assert.doesNotMatch(businessCustomerSource, /pendingClientMatches|loadPendingClientMatches/);
+});
+
 test("overview shows a database loading state without exposing one-click update", () => {
   assert.match(indexSource, /id="history-loading"[\s\S]*?data-i18n="history\.loadingTitle"/);
   assert.doesNotMatch(indexSource, /id="history-refresh-all"/);

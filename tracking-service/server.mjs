@@ -1532,19 +1532,22 @@ export function shouldFallbackCoscoAutoToProxy(error) {
     || /timeout|timed out|fetch failed|network|socket|econn|enet|ehost/i.test(message);
 }
 
-function proxyPoolExhaustedError(error, attempts) {
+export function proxyPoolExhaustedError(error, attempts, triedNodes = []) {
   const upstreamDetails = error?.details && typeof error.details === "object"
     ? error.details
     : {};
   const causeCode = upstreamDetails.code ?? error?.code ?? `HTTP_${error?.status ?? 503}`;
+  const nodes = [...new Set(triedNodes.map((node) => String(node ?? "").trim()).filter(Boolean))];
+  const nodeSummary = nodes.length > 0 ? `；节点：${nodes.join(" → ")}` : "";
   return new HttpError(
     Number.isInteger(error?.status) ? error.status : 503,
-    `${error?.message ?? "COSCO proxy request failed"}；代理池已尝试 ${attempts} 个出口节点`,
+    `${error?.message ?? "COSCO proxy request failed"}；代理池已尝试 ${attempts} 个出口节点${nodeSummary}；原因代码：${causeCode}`,
     {
       ...upstreamDetails,
       code: "COSCO_PROXY_POOL_EXHAUSTED",
       causeCode,
-      attempts
+      attempts,
+      triedNodes: nodes
     }
   );
 }
@@ -1564,11 +1567,17 @@ async function rotateCoscoProxy(error) {
 async function runCoscoWithProxyRotation(queryChannel, options, operation) {
   const routeOptions = queryChannel.code === "PROXY" ? { ...options, proxyMode: true } : options;
   const poolEnabled = queryChannel.code === "PROXY" && coscoProxyPool;
+  const triedNodes = [];
   return runWithProxyPoolRetries({
     maximumAttempts: poolEnabled ? coscoProxyPool.maxAttemptsPerShipment : 1,
     shouldRetry: (error) => Boolean(poolEnabled && shouldRotateCoscoProxy(error)),
-    rotate: (error) => rotateCoscoProxy(error),
-    exhaustedError: (error, attempts) => proxyPoolExhaustedError(error, attempts),
+    rotate: async (error) => {
+      const rotation = await rotateCoscoProxy(error);
+      if (rotation?.previous) triedNodes.push(rotation.previous);
+      if (rotation?.current) triedNodes.push(rotation.current);
+      return rotation;
+    },
+    exhaustedError: (error, attempts) => proxyPoolExhaustedError(error, attempts, triedNodes),
     onRotated: (rotation, attempt, maximumAttempts) => {
       console.warn(
         `COSCO proxy attempt ${attempt}/${maximumAttempts} failed; rotated ${rotation.previous ?? "unknown"} -> ${rotation.current}`
@@ -1934,13 +1943,23 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
         });
       } catch (error) {
         if (shouldRotateCoscoProxy(error)) throw error;
-        warnings.push({ source: "bookingInfo", message: error?.message ?? "订舱参考信息查询失败" });
+        warnings.push({
+          source: "bookingInfo",
+          message: error?.message ?? "订舱参考信息查询失败",
+          code: error?.details?.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
+          attempts: error?.details?.attempts ?? 0
+        });
       }
       try {
         containerInfo = await fetchCoscoShipmentContainers(trackingRequest, routeOptions);
       } catch (error) {
         if (shouldRotateCoscoProxy(error)) throw error;
-        warnings.push({ source: "containerInfo", message: error?.message ?? "运输详情查询失败" });
+        warnings.push({
+          source: "containerInfo",
+          message: error?.message ?? "运输详情查询失败",
+          code: error?.details?.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
+          attempts: error?.details?.attempts ?? 0
+        });
       }
 
       const details = normalizeCoscoSupplementalDetails(

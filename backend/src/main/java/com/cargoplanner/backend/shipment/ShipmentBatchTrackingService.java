@@ -20,6 +20,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +40,10 @@ public class ShipmentBatchTrackingService {
   static final long MAX_EXPLICIT_RETRY_AFTER_MS = 24 * 60 * 60_000L;
   private static final long TASK_RETENTION_SECONDS = 24 * 60 * 60;
   private static final List<String> SUPPORTED_CHANNELS = List.of("AUTO", "PROXY");
+  private static final Pattern PROXY_ATTEMPTS_PATTERN = Pattern.compile(
+      "(?:代理池已尝试|proxy pool (?:tried|attempted))\\s*(\\d+)",
+      Pattern.CASE_INSENSITIVE
+  );
 
   private final ShipmentTrackingService trackingService;
   private final ExecutorService executor;
@@ -315,12 +321,13 @@ public class ShipmentBatchTrackingService {
               ? "AUTO_PROXY"
               : response.path("cacheSource").asText("LIVE");
           item.error = null;
-          item.errorCode = null;
+          item.errorCode = supplementalComplete ? null : supplementalErrorCode(item);
           item.nextRetryAt = null;
           task.nextAttemptAt = null;
           item.updatedAt = clock.instant();
           task.updatedAt = item.updatedAt;
         }
+        persistRefreshOutcome(task, item);
         return;
       } catch (RuntimeException error) {
         if (task.cancelRequested.get() || isCancellation(error)) throw error;
@@ -355,7 +362,13 @@ public class ShipmentBatchTrackingService {
   private boolean refreshSupplementalDetails(BatchTask task, BatchItem item) {
     if (!task.forceRefresh || !"COSCO".equals(item.request.carrier())) return true;
     if (item.shipmentId == null || item.shipmentId.isBlank()) {
-      setFailedSupplementalSubtasks(task, item, "Main refresh did not return a shipment id");
+      setFailedSupplementalSubtasks(
+          task,
+          item,
+          "Main refresh did not return a shipment id",
+          "SHIPMENT_ID_MISSING",
+          0
+      );
       return false;
     }
     try {
@@ -372,13 +385,15 @@ public class ShipmentBatchTrackingService {
           ),
           task.owner
       );
-      Map<String, String> failures = new LinkedHashMap<>();
+      Map<String, SupplementalFailure> failures = new LinkedHashMap<>();
       JsonNode warnings = response == null ? null : response.path("warnings");
       if (warnings != null && warnings.isArray()) {
         for (JsonNode warning : warnings) {
           String source = warning.path("source").asText("");
           String message = warning.path("message").asText("Supplemental query failed");
-          failures.put(source, message);
+          String code = warning.path("code").asText("COSCO_SUPPLEMENTAL_PARTIAL");
+          int proxyAttempts = Math.max(0, warning.path("attempts").asInt(0));
+          failures.put(source, new SupplementalFailure(message, code, proxyAttempts));
         }
       }
       synchronized (task) {
@@ -393,12 +408,22 @@ public class ShipmentBatchTrackingService {
             failures.containsKey("containerInfo") ? "FAILED" : "SUCCEEDED",
             failures.get("containerInfo")
         ));
+        item.proxyAttempts = failures.values().stream()
+            .mapToInt(SupplementalFailure::proxyAttempts)
+            .max()
+            .orElse(0);
         item.updatedAt = clock.instant();
         task.updatedAt = item.updatedAt;
       }
       return failures.isEmpty();
     } catch (RuntimeException error) {
-      setFailedSupplementalSubtasks(task, item, safeMessage(error));
+      setFailedSupplementalSubtasks(
+          task,
+          item,
+          safeMessage(error),
+          errorCode(error),
+          proxyAttempts(error)
+      );
       return false;
     }
   }
@@ -406,22 +431,32 @@ public class ShipmentBatchTrackingService {
   private void setFailedSupplementalSubtasks(
       BatchTask task,
       BatchItem item,
-      String message
+      String message,
+      String errorCode,
+      int proxyAttempts
   ) {
     synchronized (task) {
       item.subtasks.clear();
-      item.subtasks.add(subtask("BOOKING_REFERENCE", "FAILED", message));
-      item.subtasks.add(subtask("TRANSPORT_DETAILS", "FAILED", message));
+      SupplementalFailure failure = new SupplementalFailure(message, errorCode, proxyAttempts);
+      item.subtasks.add(subtask("BOOKING_REFERENCE", "FAILED", failure));
+      item.subtasks.add(subtask("TRANSPORT_DETAILS", "FAILED", failure));
+      item.proxyAttempts = Math.max(0, proxyAttempts);
       item.updatedAt = clock.instant();
       task.updatedAt = item.updatedAt;
     }
   }
 
-  private Map<String, Object> subtask(String type, String status, String error) {
+  private Map<String, Object> subtask(
+      String type,
+      String status,
+      SupplementalFailure failure
+  ) {
     Map<String, Object> value = new LinkedHashMap<>();
     value.put("type", type);
     value.put("status", status);
-    value.put("error", error);
+    value.put("error", failure == null ? null : failure.message());
+    value.put("errorCode", failure == null ? null : failure.code());
+    value.put("proxyAttempts", failure == null ? 0 : failure.proxyAttempts());
     return value;
   }
 
@@ -467,10 +502,68 @@ public class ShipmentBatchTrackingService {
       item.source = null;
       item.error = safeMessage(error);
       item.errorCode = errorCode(error);
+      item.proxyAttempts = proxyAttempts(error);
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
       task.updatedAt = item.updatedAt;
+    }
+    persistRefreshOutcome(task, item);
+  }
+
+  private void persistRefreshOutcome(BatchTask task, BatchItem item) {
+    String shipmentId = item.shipmentId;
+    if ((shipmentId == null || shipmentId.isBlank()) && task.mode.startsWith("REFRESH_")) {
+      String requestId = item.request.id();
+      shipmentId = requestId != null && requestId.startsWith("refresh-")
+          ? requestId.substring("refresh-".length())
+          : null;
+    }
+    if (shipmentId == null || shipmentId.isBlank()) return;
+    String message = "PARTIAL".equals(item.status)
+        ? supplementalErrorMessage(item)
+        : item.error;
+    try {
+      trackingService.recordRefreshOutcome(
+          shipmentId,
+          item.status,
+          item.errorCode,
+          message,
+          item.attempts,
+          item.proxyAttempts
+      );
+    } catch (RuntimeException ignored) {
+      // Tracking data remains authoritative even if the diagnostic marker cannot be persisted.
+    }
+  }
+
+  private String supplementalErrorCode(BatchItem item) {
+    return item.subtasks.stream()
+        .filter(subtask -> "FAILED".equals(subtask.get("status")))
+        .map(subtask -> String.valueOf(subtask.getOrDefault("errorCode", "")))
+        .filter(code -> !code.isBlank() && !"null".equals(code))
+        .distinct()
+        .reduce((left, right) -> left + "," + right)
+        .orElse("COSCO_SUPPLEMENTAL_PARTIAL");
+  }
+
+  private String supplementalErrorMessage(BatchItem item) {
+    return item.subtasks.stream()
+        .filter(subtask -> "FAILED".equals(subtask.get("status")))
+        .map(subtask -> String.valueOf(subtask.getOrDefault("error", "")))
+        .filter(message -> !message.isBlank() && !"null".equals(message))
+        .distinct()
+        .reduce((left, right) -> left + "; " + right)
+        .orElse("Supplemental tracking details are incomplete");
+  }
+
+  private int proxyAttempts(RuntimeException error) {
+    Matcher matcher = PROXY_ATTEMPTS_PATTERN.matcher(safeMessage(error));
+    if (!matcher.find()) return 0;
+    try {
+      return Math.max(0, Integer.parseInt(matcher.group(1)));
+    } catch (NumberFormatException ignored) {
+      return 0;
     }
   }
 
@@ -812,6 +905,7 @@ public class ShipmentBatchTrackingService {
         value.put("error", item.error);
         value.put("errorCode", item.errorCode);
         value.put("attempts", item.attempts);
+        value.put("proxyAttempts", item.proxyAttempts);
         value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
         value.put("updatedAt", iso(item.updatedAt));
@@ -978,6 +1072,7 @@ public class ShipmentBatchTrackingService {
     private String error;
     private String errorCode;
     private int attempts;
+    private int proxyAttempts;
     private Instant nextRetryAt;
     private String shipmentId;
     private Instant updatedAt;
@@ -993,6 +1088,8 @@ public class ShipmentBatchTrackingService {
       this.manualOnly = manualOnly;
     }
   }
+
+  private record SupplementalFailure(String message, String code, int proxyAttempts) {}
 
   private static final class ProtectionPauseException extends RuntimeException {
     private ProtectionPauseException(RuntimeException cause) {
