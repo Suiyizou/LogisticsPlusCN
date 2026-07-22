@@ -564,6 +564,9 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
   assert.match(indexSource, /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/);
   assert.match(indexSource, /id="supplemental-details-status"/);
   assert.match(appSource, /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/);
+  assert.match(appSource, /if \(containers\.length === 0\) \{[\s\S]*?cell\.colSpan = 8;[\s\S]*?t\("containers\.empty"\)/);
+  assert.match(appSource, /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = false;[\s\S]*?renderContainers\(containers\)/);
+  assert.doesNotMatch(appSource, /elements\["container-panel"\]\.hidden = containers\.length === 0/);
   assert.match(appSource, /"references\.title": "订舱信息及参考号"/);
   assert.match(appSource, /"containers\.title": "运输详情"/);
 });

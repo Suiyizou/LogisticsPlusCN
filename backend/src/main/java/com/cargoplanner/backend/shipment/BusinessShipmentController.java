@@ -69,6 +69,22 @@ public class BusinessShipmentController {
     ));
   }
 
+  @PostMapping("/batch-refresh")
+  public ResponseEntity<Map<String, Object>> batchRefresh(
+      @RequestBody ShipmentBatchRefreshRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    List<ShipmentBatchItemRequest> items = shipmentService.listSelectedTrackingItems(
+        actor,
+        request == null ? null : request.shipmentIds()
+    );
+    return ResponseEntity.accepted().body(batchTrackingService.startRefreshSelected(
+        items,
+        actor,
+        request == null ? null : request.channel()
+    ));
+  }
+
   @PostMapping("/batch-delete")
   public Map<String, Object> batchDelete(
       @RequestBody ShipmentBatchDeleteRequest request,

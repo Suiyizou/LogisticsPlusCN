@@ -221,7 +221,7 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void bookingRefreshDoesNotInferAssociationFromANumericBillNumber() throws Exception {
+  void bookingRefreshReusesTheExistingCoscoNumericBillShipment() throws Exception {
     NormalizedTrackRequest bill = new NormalizedTrackRequest(
         "COSCO", "AUTO", "BILLOFLADING", "6507943350"
     );
@@ -271,11 +271,11 @@ class ShipmentTrackingServiceTest {
         business
     );
 
-    assertThat(refreshed.path("shipmentId").asText()).isNotEqualTo(initial.path("shipmentId").asText());
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(initial.path("shipmentId").asText());
     assertThat(refreshed.path("snapshot").path("summary").path("latestEvent").path("name").asText())
         .isEqualTo("EIR order");
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class))
-        .isEqualTo(2);
+        .isEqualTo(1);
     assertThat(jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_type = 'BOOKING'",
         Integer.class
@@ -586,6 +586,70 @@ class ShipmentTrackingServiceTest {
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class)).isZero();
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipment_references", Integer.class)).isZero();
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isZero();
+  }
+
+  @Test
+  void bookingTrackReusesExistingCoscoNumericBillShellInsteadOfCreatingDuplicate()
+      throws Exception {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipments (
+          public_id, carrier_code, tracking_status, created_by, created_at, updated_at
+        ) VALUES ('existing-bill-shell', 'COSCO', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
+    Long shipmentId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE public_id = 'existing-bill-shell'", Long.class
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_references (
+          shipment_id, carrier_code, reference_type, reference_no_raw,
+          reference_no_normalized, primary_reference
+        ) VALUES (?, 'COSCO', 'BILLOFLADING', '9508245590', '9508245590', TRUE)
+        """,
+        shipmentId
+    );
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "9508245590"
+    );
+    when(adapterClient.track(normalized)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "9508245590"},
+            "summary": {
+              "bookingNumbers": ["9508245590"],
+              "latestEvent": {"name": "EIR Printed"}
+            },
+            "containers": []
+          },
+          "cached": false
+        }
+        """));
+
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "9508245590", false),
+        employee
+    );
+
+    assertThat(response.path("shipmentId").asText()).isEqualTo("existing-bill-shell");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments", Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE shipment_id = ?", Integer.class,
+        shipmentId
+    )).isEqualTo(2);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots WHERE shipment_id = ?", Integer.class,
+        shipmentId
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = ?", Long.class, shipmentId
+    )).isNotNull();
+    verify(adapterClient).track(normalized);
   }
 
   @Test

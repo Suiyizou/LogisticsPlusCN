@@ -24,9 +24,11 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -413,6 +415,7 @@ public class BusinessCustomerService {
             actor.id()
         );
     enrichShipmentRelations(items);
+    items = deduplicateShipmentSnapshots(items);
     return Map.of("items", items, "total", items.size());
   }
 
@@ -457,9 +460,70 @@ public class BusinessCustomerService {
             this::mapRefreshableShipment,
             actor.id(), actor.id()
         );
+    return toTrackingItems(candidates);
+  }
+
+  public List<ShipmentBatchItemRequest> listSelectedTrackingItems(
+      AuthenticatedUser actor,
+      List<String> rawShipmentIds
+  ) {
+    requireManager(actor);
+    List<String> shipmentIds = normalizeShipmentIds(rawShipmentIds);
+    String placeholders = String.join(", ", shipmentIds.stream().map(id -> "?").toList());
+    String sql = """
+        SELECT s.public_id AS shipment_public_id, s.carrier_code,
+               r.reference_type,
+               r.reference_no_normalized,
+               r.reference_no_raw
+        FROM cp_shipments s
+        JOIN cp_shipment_references r ON r.id = (
+          SELECT r2.id FROM cp_shipment_references r2
+          WHERE r2.shipment_id = s.id
+            AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC
+          LIMIT 1
+        )
+        WHERE s.carrier_code IN ('COSCO', 'CMA')
+          AND s.public_id IN (%s)
+        """.formatted(placeholders);
+    List<Object> parameters = new ArrayList<>(shipmentIds);
+    if (!actor.isAdmin()) {
+      sql += " AND (s.created_by = ? OR EXISTS ("
+          + "SELECT 1 FROM cp_shipment_participants p "
+          + "WHERE p.shipment_id = s.id AND p.user_id = ?))";
+      parameters.add(actor.id());
+      parameters.add(actor.id());
+    }
+    List<RefreshableShipment> candidates = jdbcTemplate.query(
+        sql,
+        this::mapRefreshableShipment,
+        parameters.toArray()
+    );
+    Map<String, RefreshableShipment> candidatesById = new LinkedHashMap<>();
+    candidates.forEach(candidate -> candidatesById.put(candidate.shipmentPublicId(), candidate));
+    if (candidatesById.size() != shipmentIds.size()) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "One or more selected shipments are unavailable or cannot be refreshed"
+      );
+    }
+    return toTrackingItems(
+        shipmentIds.stream().map(candidatesById::get).toList()
+    );
+  }
+
+  private List<ShipmentBatchItemRequest> toTrackingItems(
+      List<RefreshableShipment> candidates
+  ) {
     List<ShipmentBatchItemRequest> items = new ArrayList<>();
+    Set<String> queuedIdentities = new LinkedHashSet<>();
     for (RefreshableShipment candidate : candidates) {
       if (candidate.referenceNo() == null || candidate.referenceNo().isBlank()) continue;
+      String identity = durableReferenceIdentity(
+          candidate.carrier(), candidate.referenceType(), candidate.referenceNo()
+      );
+      if (!queuedIdentities.add(identity)) continue;
       items.add(new ShipmentBatchItemRequest(
           "refresh-" + candidate.shipmentPublicId(),
           candidate.carrier(),
@@ -929,6 +993,7 @@ public class BusinessCustomerService {
     String carrier = normalizeCarrier(request.carrier());
     String referenceType = normalizeReferenceType(request.referenceType());
     String referenceNo = normalizeShipmentReference(carrier, referenceType, request.referenceNo());
+    assertReferenceIdentityAvailable(carrier, referenceType, referenceNo, null);
     String trackingStatus = normalizeTrackingStatus(request.trackingStatus(), null);
     String note = normalizeShipmentNote(request.note(), null);
     String publicId = UUID.randomUUID().toString();
@@ -1266,6 +1331,11 @@ public class BusinessCustomerService {
         : normalizeShipmentReference(shipment.carrier(), referenceType, request.referenceNo());
     boolean referenceChanged = !referenceType.equals(existing.referenceType())
         || !referenceNo.equals(normalizeReference(existing.referenceNo()));
+    if (referenceChanged) {
+      assertReferenceIdentityAvailable(
+          shipment.carrier(), referenceType, referenceNo, shipment.id()
+      );
+    }
     // Tracking status belongs to the manual/live snapshot workflow. The base shipment endpoint
     // deliberately ignores legacy trackingStatus input so the row and current snapshot cannot
     // diverge.
@@ -2216,6 +2286,103 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
     }
     return normalized;
+  }
+
+  private void assertReferenceIdentityAvailable(
+      String carrier,
+      String type,
+      String referenceNo,
+      Long excludedShipmentId
+  ) {
+    String normalized = normalizeReference(referenceNo);
+    boolean sharedCoscoIdentity = isSharedCoscoNumericIdentity(carrier, type, normalized);
+    String canonical = sharedCoscoIdentity && normalized.startsWith("COSU")
+        ? normalized.substring(4)
+        : normalized;
+    String sql = sharedCoscoIdentity
+        ? """
+          SELECT COUNT(*) FROM cp_shipment_references
+          WHERE carrier_code = ?
+            AND reference_type IN ('BOOKING', 'BILLOFLADING')
+            AND reference_no_normalized IN (?, ?)
+          """
+        : """
+          SELECT COUNT(*) FROM cp_shipment_references
+          WHERE carrier_code = ? AND reference_type = ? AND reference_no_normalized = ?
+          """;
+    List<Object> parameters = new ArrayList<>();
+    parameters.add(carrier);
+    if (sharedCoscoIdentity) {
+      parameters.add(canonical);
+      parameters.add("COSU" + canonical);
+    } else {
+      parameters.add(type);
+      parameters.add(normalized);
+    }
+    if (excludedShipmentId != null) {
+      sql += " AND shipment_id <> ?";
+      parameters.add(excludedShipmentId);
+    }
+    Integer count = jdbcTemplate.queryForObject(sql, Integer.class, parameters.toArray());
+    if (count != null && count > 0) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment reference already exists");
+    }
+  }
+
+  private List<Map<String, Object>> deduplicateShipmentSnapshots(
+      List<Map<String, Object>> shipments
+  ) {
+    Map<String, Map<String, Object>> unique = new LinkedHashMap<>();
+    for (Map<String, Object> shipment : shipments) {
+      String key = durableReferenceIdentity(
+          String.valueOf(shipment.getOrDefault("carrier", "")),
+          String.valueOf(shipment.getOrDefault("referenceType", "")),
+          String.valueOf(shipment.getOrDefault("referenceNo", ""))
+      );
+      Map<String, Object> current = unique.get(key);
+      if (current == null || preferShipmentSnapshot(shipment, current)) {
+        unique.put(key, shipment);
+      }
+    }
+    return new ArrayList<>(unique.values());
+  }
+
+  private boolean preferShipmentSnapshot(
+      Map<String, Object> candidate,
+      Map<String, Object> current
+  ) {
+    long candidateBindings = ((Number) candidate.getOrDefault("customerCount", 0L)).longValue();
+    long currentBindings = ((Number) current.getOrDefault("customerCount", 0L)).longValue();
+    if ((candidateBindings > 0) != (currentBindings > 0)) return candidateBindings > 0;
+    boolean candidateData = Boolean.TRUE.equals(candidate.get("dataAvailable"));
+    boolean currentData = Boolean.TRUE.equals(current.get("dataAvailable"));
+    if (candidateData != currentData) return candidateData;
+    boolean candidateBooking = "BOOKING".equals(candidate.get("referenceType"));
+    boolean currentBooking = "BOOKING".equals(current.get("referenceType"));
+    return candidateBooking && !currentBooking;
+  }
+
+  private String durableReferenceIdentity(String carrier, String type, String referenceNo) {
+    String normalizedCarrier = normalizeCode(carrier, "");
+    String normalizedType = normalizeCode(type, "");
+    String normalizedNumber = normalizeReference(referenceNo);
+    if (isSharedCoscoNumericIdentity(normalizedCarrier, normalizedType, normalizedNumber)) {
+      String canonical = normalizedNumber.startsWith("COSU")
+          ? normalizedNumber.substring(4)
+          : normalizedNumber;
+      return normalizedCarrier + "|COSCO_NUMERIC|" + canonical;
+    }
+    return normalizedCarrier + "|" + normalizedType + "|" + normalizedNumber;
+  }
+
+  private boolean isSharedCoscoNumericIdentity(
+      String carrier,
+      String type,
+      String normalizedNumber
+  ) {
+    return "COSCO".equals(carrier)
+        && REFERENCE_TYPES.contains(type)
+        && normalizeReference(normalizedNumber).matches("(?:COSU)?[0-9]{8,12}");
   }
 
   private String normalizeTrackingStatus(String value, String fallback) {

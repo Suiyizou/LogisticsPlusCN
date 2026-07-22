@@ -369,6 +369,8 @@ test("creates a stable channel-one network snapshot", () => {
           eventName: "Departed",
           actualEventDateTime: "2026-07-09T11:37:00",
           eventLocation: "Savannah",
+          stageType: "OCEAN",
+          eventStage: "EXPORT",
           transportMode: "Rail"
         }
       },
@@ -398,6 +400,8 @@ test("creates a stable channel-one network snapshot", () => {
   assert.equal(snapshot.channelNumber, 1);
   assert.equal(snapshot.provider.code, "COSCO");
   assert.equal(snapshot.summary.origin.name, "Shanghai");
+  assert.equal(snapshot.summary.latestEvent.stage, "OCEAN");
+  assert.equal(snapshot.summary.latestEvent.oceanStage, "EXPORT");
   assert.equal(snapshot.route[0].sequence, 1);
   assert.equal(snapshot.containers.length, 1);
   assert.equal(snapshot.containers[0].number, "TEMU6003424");

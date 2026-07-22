@@ -103,7 +103,7 @@ public class ShipmentBatchTrackingService {
       ShipmentBatchTaskRequest request,
       AuthenticatedUser user
   ) {
-    return startInternal(request, user, false, false);
+    return startInternal(request, user, "IMPORT", false, false);
   }
 
   public synchronized Map<String, Object> startRefreshAll(
@@ -123,6 +123,23 @@ public class ShipmentBatchTrackingService {
             "One-click active shipment refresh", channel, requestedItems
         ),
         user,
+        "REFRESH_ALL",
+        true,
+        true
+    );
+  }
+
+  public synchronized Map<String, Object> startRefreshSelected(
+      List<ShipmentBatchItemRequest> requestedItems,
+      AuthenticatedUser user,
+      String channel
+  ) {
+    return startInternal(
+        new ShipmentBatchTaskRequest(
+            "Selected shipment refresh", channel, requestedItems
+        ),
+        user,
+        "REFRESH_SELECTED",
         true,
         true
     );
@@ -131,6 +148,7 @@ public class ShipmentBatchTrackingService {
   private Map<String, Object> startInternal(
       ShipmentBatchTaskRequest request,
       AuthenticatedUser user,
+      String mode,
       boolean trustedExistingReferences,
       boolean forceRefresh
   ) {
@@ -170,6 +188,7 @@ public class ShipmentBatchTrackingService {
         clean(request == null ? null : request.sourceFileName(), 255, "Imported spreadsheet"),
         items,
         channel,
+        mode,
         forceRefresh,
         now
     );
@@ -806,7 +825,7 @@ public class ShipmentBatchTrackingService {
       value.put("taskId", task.id);
       value.put("sourceFileName", task.sourceFileName);
       value.put("channel", task.channel);
-      value.put("mode", task.forceRefresh ? "REFRESH_ALL" : "IMPORT");
+      value.put("mode", task.mode);
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
       value.put("total", task.items.size());
@@ -902,6 +921,7 @@ public class ShipmentBatchTrackingService {
     private final String sourceFileName;
     private final List<BatchItem> items;
     private final String channel;
+    private final String mode;
     private final boolean forceRefresh;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
@@ -918,6 +938,7 @@ public class ShipmentBatchTrackingService {
         String sourceFileName,
         List<BatchItem> items,
         String channel,
+        String mode,
         boolean forceRefresh,
         Instant createdAt
     ) {
@@ -926,6 +947,7 @@ public class ShipmentBatchTrackingService {
       this.sourceFileName = sourceFileName;
       this.items = items;
       this.channel = channel;
+      this.mode = mode;
       this.forceRefresh = forceRefresh;
       this.createdAt = createdAt;
       this.updatedAt = createdAt;

@@ -436,12 +436,19 @@
                       :disabled="!selectedShipmentRows.length || batchDeletingShipments"
                       @click="batchDeleteSelectedShipments"
                     >{{ t("customers.batchDeleteSelected", { count: selectedShipmentRows.length }) }}</el-button>
+                    <el-button
+                      type="warning"
+                      plain
+                      :disabled="!selectedShipmentRows.length || batchTrackRunning || refreshingShipment || batchDeletingShipments"
+                      @click="startRefreshSelectedShipments"
+                    ><el-icon><Refresh /></el-icon>{{ t("customers.batchRefreshSelected", { count: selectedShipmentRows.length }) }}</el-button>
                     <el-button type="success" plain :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}</el-button>
                     <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                   </div>
                 </div>
                 <el-table
+                  ref="shipmentTableRef"
                   :data="displayedAvailableShipments"
                   row-key="shipmentId"
                   stripe
@@ -510,7 +517,7 @@
               </div>
               <el-dialog
                 v-model="batchTrackDialogOpen"
-                :title="t('customers.batchTrack')"
+                :title="batchTrackDialogTitle"
                 width="min(920px, 94vw)"
                 append-to-body
                 :destroy-on-close="false"
@@ -1026,6 +1033,7 @@ import {
   cancelShipmentBatchTask,
   createBusinessCustomer,
   createBusinessShipment,
+  createShipmentBatchRefreshTask,
   createShipmentBatchTask,
   createShipmentRefreshAllTask,
   deleteBusinessCustomer,
@@ -1122,6 +1130,7 @@ const batchTrackSheets = ref([]);
 const batchTrackSelectedSheetName = ref("");
 const batchTrackSelectedColumnIndex = ref(null);
 const batchTrackTaskId = ref("");
+const batchTrackMode = ref("IMPORT");
 const batchTrackCancelRequested = ref(false);
 const batchTrackAbortController = ref(null);
 const refreshTrackingStatus = ref("");
@@ -1133,6 +1142,7 @@ const mutatingCustomer = ref(false);
 const bindingShipment = ref(false);
 const selectedCandidateShipmentIds = ref([]);
 const selectedShipmentRows = ref([]);
+const shipmentTableRef = ref(null);
 const batchDeletingShipments = ref(false);
 const shipmentCustomerFilter = ref("");
 const shipmentTrackingChannel = ref("AUTO");
@@ -1179,8 +1189,13 @@ const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => ite
 const batchTrackTrackableCount = computed(() => batchTrackItems.value.filter((item) => !item.manualOnly).length);
 const batchTrackManualCount = computed(() => batchTrackItems.value.filter((item) => item.manualOnly).length);
 const batchTrackPreviewRows = computed(() => batchTrackSelectedSheet.value?.rows?.slice(1, 9) || []);
+const batchTrackDialogTitle = computed(() => batchTrackMode.value.startsWith("REFRESH")
+  ? t("customers.batchRefreshTitle")
+  : t("customers.batchTrack"));
 const batchTrackToolbarLabel = computed(() => batchTrackRunning.value
-  ? t("customers.batchTrackToolbarProgress", {
+  ? t(batchTrackMode.value.startsWith("REFRESH")
+      ? "customers.batchRefreshToolbarProgress"
+      : "customers.batchTrackToolbarProgress", {
       done: batchTrackProgress.value.done,
       total: batchTrackProgress.value.total
     })
@@ -1691,6 +1706,7 @@ async function loadShipmentDetailSnapshot() {
 
 async function startBatchTrack() {
   if (!batchTrackItems.value.length || batchTrackRunning.value) return;
+  batchTrackMode.value = "IMPORT";
   batchTrackRunning.value = true;
   batchTrackCancelRequested.value = false;
   batchTrackResults.value = batchTrackItems.value.map((item) => ({
@@ -1720,11 +1736,12 @@ async function startBatchTrack() {
   }
 }
 
-async function startRefreshAllShipments() {
-  if (batchTrackRunning.value || refreshingShipment.value) return;
+function prepareShipmentRefreshTask(mode) {
   batchTrackDialogOpen.value = true;
   batchTrackRunning.value = true;
   batchTrackCancelRequested.value = false;
+  batchTrackTaskId.value = "";
+  batchTrackMode.value = mode;
   batchTrackResults.value = [];
   batchTrackProgress.value = {
     total: 0,
@@ -1735,8 +1752,18 @@ async function startRefreshAllShipments() {
     pending: 0,
     status: "QUEUED"
   };
+}
+
+async function startShipmentRefreshTask(
+  createTask,
+  failureMessageKey,
+  emptyMessageKey = "",
+  mode = "REFRESH_ALL"
+) {
+  if (batchTrackRunning.value || refreshingShipment.value) return;
+  prepareShipmentRefreshTask(mode);
   try {
-    const task = await createShipmentRefreshAllTask(shipmentTrackingChannel.value);
+    const task = await createTask();
     if (!task?.taskId) {
       batchTrackRunning.value = false;
       batchTrackProgress.value = {
@@ -1748,19 +1775,46 @@ async function startRefreshAllShipments() {
         pending: 0,
         status: "COMPLETED"
       };
-      showSuccess("customers.refreshAllEmpty");
-      return;
+      if (emptyMessageKey) showSuccess(emptyMessageKey);
+      return null;
     }
     rememberBatchTrackTask(task.taskId);
     applyBatchTrackTask(task);
     scheduleBatchTrackPoll(task.taskId, 800);
+    return task;
   } catch (error) {
     batchTrackRunning.value = false;
     batchTrackResults.value = [{
       number: "-",
       status: "failed",
-      message: error?.message || t("customers.refreshAllFailed")
+      message: error?.message || t(failureMessageKey)
     }];
+    return null;
+  }
+}
+
+async function startRefreshAllShipments() {
+  await startShipmentRefreshTask(
+    () => createShipmentRefreshAllTask(shipmentTrackingChannel.value),
+    "customers.refreshAllFailed",
+    "customers.refreshAllEmpty"
+  );
+}
+
+async function startRefreshSelectedShipments() {
+  const shipmentIds = [...new Set(
+    selectedShipmentRows.value.map((row) => row?.shipmentId).filter(Boolean)
+  )];
+  if (!shipmentIds.length) return;
+  const task = await startShipmentRefreshTask(
+    () => createShipmentBatchRefreshTask(shipmentIds, shipmentTrackingChannel.value),
+    "customers.batchRefreshFailed",
+    "",
+    "REFRESH_SELECTED"
+  );
+  if (task?.taskId) {
+    selectedShipmentRows.value = [];
+    shipmentTableRef.value?.clearSelection?.();
   }
 }
 
@@ -1833,6 +1887,7 @@ watch(batchTrackSelectedSheetName, () => {
 function applyBatchTrackTask(task) {
   if (!task?.taskId) return;
   batchTrackTaskId.value = task.taskId;
+  batchTrackMode.value = String(task.mode || "IMPORT").toUpperCase();
   if (["AUTO", "PROXY"].includes(String(task.channel || "").toUpperCase())) {
     shipmentTrackingChannel.value = String(task.channel).toUpperCase();
   }

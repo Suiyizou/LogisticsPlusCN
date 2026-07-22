@@ -51,6 +51,13 @@ export function createShipmentRefreshAllTask(channel = "AUTO") {
   });
 }
 
+export function createShipmentBatchRefreshTask(shipmentIds, channel = "AUTO") {
+  return request("/business/shipments/batch-refresh", {
+    method: "POST",
+    body: { shipmentIds, channel }
+  });
+}
+
 export function createShipmentBatchTask(payload) {
   return request("/business/shipment-batch-tasks", { method: "POST", body: payload });
 }

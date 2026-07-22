@@ -5665,10 +5665,12 @@ async function loadSupplementalDetails(payload) {
     } catch {
       if (String(currentPayload?.shipmentId ?? "") !== shipmentId) return;
       setSupplementalDetailsStatus("failed");
-      if ((currentPayload?.snapshot?.containers ?? []).length === 0) {
-        elements["container-panel"].hidden = true;
-        elements["secondary-grid"].classList.add("is-single-panel");
-      }
+      // Empty container details are still a meaningful result. Keep the
+      // transport table and its fixed columns visible when the optional child
+      // query fails so the page can render its explicit empty-state row.
+      elements["container-panel"].hidden = false;
+      elements["secondary-grid"].hidden = false;
+      elements["secondary-grid"].classList.add("is-single-panel");
     } finally {
       supplementalDetailRequests.delete(key);
     }
@@ -5813,9 +5815,9 @@ function renderResult(payload) {
   const containers = snapshot.containers ?? [];
   elements["route-panel"].hidden = route.length === 0;
   elements["routing-panel"].hidden = routingLegs.length === 0;
-  elements["container-panel"].hidden = containers.length === 0;
+  elements["container-panel"].hidden = false;
   elements["secondary-grid"].classList.toggle("is-single-panel", containers.length === 0);
-  elements["secondary-grid"].hidden = containers.length === 0 && readFileSession().kind === "CUSTOMER";
+  elements["secondary-grid"].hidden = false;
 
   renderRoute(route, snapshot);
   renderJourney(snapshot);

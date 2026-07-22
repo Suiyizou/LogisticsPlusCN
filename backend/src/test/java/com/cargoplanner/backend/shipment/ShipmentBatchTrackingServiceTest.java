@@ -314,6 +314,46 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
+  void selectedRefreshUsesItsOwnModeAndForcesLiveRefresh() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "selected-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        15L, "operator-selected", "Operator Selected", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-selected", "COSCO", "BOOKING", "6508205930",
+            "6508205930", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("REFRESH_SELECTED", completed.get("mode"));
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).track(requestCaptor.capture(), any());
+    assertEquals(Boolean.TRUE, requestCaptor.getValue().forceRefresh());
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void keepsTwentyContainerOverviewWithoutStartingIndividualQueries()
       throws Exception {

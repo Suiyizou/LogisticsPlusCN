@@ -920,8 +920,11 @@ export function normalizeCoscoSnapshot(result, request, fetchedAt, extras = {}) 
             name: latest.eventName ?? null,
             occurredAt: latest.actualEventDateTime ?? null,
             location: latest.eventLocation ?? null,
-            stage: latest.stage ?? null,
-            oceanStage: latest.oceanStage ?? null,
+            // The COSCO payload uses both pairs depending on which query path
+            // answered. Preserve the source phase (for example EXPORT) in the
+            // durable snapshot instead of keeping only the display event name.
+            stage: latest.stageType ?? latest.stage ?? null,
+            oceanStage: latest.eventStage ?? latest.oceanStage ?? null,
             transportMode: latest.transportMode ?? null
           }
         : null

@@ -448,6 +448,14 @@ class CustomerAccessFlowTest {
     assertThat(customerService.listUnfinishedTrackingItems(business))
         .extracting(ShipmentBatchItemRequest::id)
         .doesNotContain("refresh-shipment-public-id");
+
+    ShipmentBatchItemRequest selectedRefresh = customerService.listSelectedTrackingItems(
+        business,
+        List.of("shipment-public-id")
+    ).get(0);
+    assertThat(selectedRefresh.id()).isEqualTo("refresh-shipment-public-id");
+    assertThat(selectedRefresh.type()).isEqualTo("BOOKING");
+    assertThat(selectedRefresh.number()).isEqualTo("9508434560");
   }
 
   @Test
@@ -639,6 +647,61 @@ class CustomerAccessFlowTest {
         Integer.class,
         internalShipmentId
     )).isZero();
+  }
+
+  @Test
+  void rejectsAndHidesCrossTypeDuplicatesForCoscoNumericBusinessNumbers() {
+    customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BILLOFLADING", "9508245590", "Pending update", null
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThatThrownBy(() -> customerService.createShipment(
+        new CreateBusinessShipmentRequest(
+            "COSCO", "BOOKING", "9508245590", "Pending update", null
+        ),
+        business,
+        "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT)
+    );
+
+    // Simulate a pair created by an older deployment before cross-type identity
+    // protection existed. The management read model and update-all queue must
+    // still expose the business number only once, with BOOKING preferred.
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipments (
+          id, public_id, carrier_code, tracking_status, created_by, created_at, updated_at
+        ) VALUES (20, 'legacy-bill-duplicate', 'COSCO', NULL, 1,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                 (21, 'legacy-booking-duplicate', 'COSCO', NULL, 1,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_references (
+          shipment_id, carrier_code, reference_type, reference_no_raw,
+          reference_no_normalized, primary_reference
+        ) VALUES (20, 'COSCO', 'BILLOFLADING', '9508245680', '9508245680', TRUE),
+                 (21, 'COSCO', 'BOOKING', '9508245680', '9508245680', TRUE)
+        """
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> visible =
+        (List<Map<String, Object>>) customerService.listShipmentSnapshots(business).get("items");
+    assertThat(visible)
+        .filteredOn(item -> "9508245680".equals(item.get("referenceNo")))
+        .singleElement()
+        .satisfies(item -> assertThat(item).containsEntry("referenceType", "BOOKING"));
+    assertThat(customerService.listUnfinishedTrackingItems(business))
+        .filteredOn(item -> "9508245680".equals(item.number()))
+        .hasSize(1);
   }
 
   @Test

@@ -1281,14 +1281,22 @@ public class ShipmentTrackingService {
   }
 
   private CachedShipment findCached(NormalizedTrackRequest request) {
-    return findCachedByReferenceType(request, request.type());
+    for (String referenceType : compatibleReferenceTypes(
+        request.carrier(), request.type(), normalizeReference(request.number())
+    )) {
+      CachedShipment cached = findCachedByReferenceType(request, referenceType);
+      if (cached != null) return cached;
+    }
+    return null;
   }
 
   private CachedShipment findCachedByReferenceType(
       NormalizedTrackRequest request,
       String referenceType
   ) {
-    String normalizedNumber = normalizeReference(request.number());
+    String normalizedNumber = canonicalIdentityNumber(
+        request.carrier(), request.type(), normalizeReference(request.number())
+    );
     String alternateNumber = alternateCosuReference(
         request.carrier(), referenceType, normalizedNumber
     );
@@ -1328,27 +1336,34 @@ public class ShipmentTrackingService {
 
   private ShipmentIdentity findShipmentByAnyReference(List<ShipmentReference> references) {
     for (ShipmentReference reference : references) {
-      String alternateNumber = alternateCosuReference(
+      String normalizedNumber = canonicalIdentityNumber(
           reference.carrier(), reference.type(), reference.normalizedNumber()
       );
-      List<ShipmentIdentity> shipments = jdbcTemplate.query(
-          """
-          SELECT s.id, s.public_id
-          FROM cp_shipment_references r
-          JOIN cp_shipments s ON s.id = r.shipment_id
-          WHERE r.carrier_code = ? AND r.reference_type = ?
-            AND r.reference_no_normalized IN (?, ?)
-          ORDER BY CASE WHEN r.reference_no_normalized = ? THEN 0 ELSE 1 END
-          LIMIT 1
-          """,
-          (rs, rowNumber) -> new ShipmentIdentity(rs.getLong("id"), rs.getString("public_id")),
-          reference.carrier(),
-          reference.type(),
-          reference.normalizedNumber(),
-          alternateNumber,
-          reference.normalizedNumber()
-      );
-      if (!shipments.isEmpty()) return shipments.get(0);
+      for (String referenceType : compatibleReferenceTypes(
+          reference.carrier(), reference.type(), reference.normalizedNumber()
+      )) {
+        String alternateNumber = alternateCosuReference(
+            reference.carrier(), referenceType, normalizedNumber
+        );
+        List<ShipmentIdentity> shipments = jdbcTemplate.query(
+            """
+            SELECT s.id, s.public_id
+            FROM cp_shipment_references r
+            JOIN cp_shipments s ON s.id = r.shipment_id
+            WHERE r.carrier_code = ? AND r.reference_type = ?
+              AND r.reference_no_normalized IN (?, ?)
+            ORDER BY CASE WHEN r.reference_no_normalized = ? THEN 0 ELSE 1 END
+            LIMIT 1
+            """,
+            (rs, rowNumber) -> new ShipmentIdentity(rs.getLong("id"), rs.getString("public_id")),
+            reference.carrier(),
+            referenceType,
+            normalizedNumber,
+            alternateNumber,
+            normalizedNumber
+        );
+        if (!shipments.isEmpty()) return shipments.get(0);
+      }
     }
     return null;
   }
@@ -1930,6 +1945,43 @@ public class ShipmentTrackingService {
       return "COSU" + normalizedNumber;
     }
     return normalizedNumber;
+  }
+
+  /**
+   * COSCO commonly exposes the same numeric transport identity first as a booking number and
+   * later as a bill-of-lading number. Treating those two labels as unrelated creates a second
+   * shipment when the detail page tracks a previously imported shell. The alias is deliberately
+   * limited to COSCO's 8-12 digit identifiers so other carriers and textual booking references
+   * keep their strict type-specific identity.
+   */
+  private List<String> compatibleReferenceTypes(
+      String carrier,
+      String requestedType,
+      String normalizedNumber
+  ) {
+    if (!isSharedCoscoNumericIdentity(carrier, requestedType, normalizedNumber)) {
+      return List.of(requestedType);
+    }
+    return "BOOKING".equals(requestedType)
+        ? List.of("BOOKING", "BILLOFLADING")
+        : List.of("BILLOFLADING", "BOOKING");
+  }
+
+  private String canonicalIdentityNumber(String carrier, String type, String normalizedNumber) {
+    String normalized = normalizeReference(normalizedNumber);
+    if (isSharedCoscoNumericIdentity(carrier, type, normalized) && normalized.startsWith("COSU")) {
+      return normalized.substring(4);
+    }
+    return normalized;
+  }
+
+  private boolean isSharedCoscoNumericIdentity(
+      String carrier,
+      String type,
+      String normalizedNumber
+  ) {
+    if (!"COSCO".equals(carrier) || !isDurableReferenceType(type)) return false;
+    return normalizeReference(normalizedNumber).matches("(?:COSU)?[0-9]{8,12}");
   }
 
   private ObjectNode childObject(ObjectNode parent, String field) {

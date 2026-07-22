@@ -74,6 +74,7 @@ const businessCustomerApi = readFileSync(
 );
 assert.match(businessCustomerApi, /request\("\/business\/shipments"\)/);
 assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}`\)/);
+assert.match(businessCustomerApi, /request\("\/business\/shipments\/batch-refresh"/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/snapshot/);
 assert.match(
@@ -94,6 +95,11 @@ assert.match(businessCustomerPage, /status === "RETRY_WAIT"/);
 assert.match(businessCustomerPage, /v-show="!batchTrackRunning" class="batch-track-form"/);
 assert.match(businessCustomerPage, /customers\.batchTrackAllTasks/);
 assert.match(businessCustomerPage, /batch-track-result-index/);
+assert.match(businessCustomerPage, /customers\.batchRefreshSelected/);
+assert.match(
+  businessCustomerPage,
+  /selectedShipmentRows\.value\.map[\s\S]*?createShipmentBatchRefreshTask\(shipmentIds, shipmentTrackingChannel\.value\)/
+);
 assert.doesNotMatch(businessCustomerPage, /includeContainerDetails/);
 const listRefreshSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function updateShipmentTracking"),
