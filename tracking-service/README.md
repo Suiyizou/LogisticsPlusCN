@@ -109,13 +109,16 @@ npm start
 机场订阅中的 Shadowsocks/VMess 节点需要由 Mihomo 转换成内部 SOCKS5 出口。仓库提供
 `docker-compose.proxy-pool.yml` 和 `docker/proxy-pool/config.yaml`，但不会保存任何节点凭据。
 Mihomo 控制接口启用后，追踪服务会把节点按香港、台湾、日本、韩国、新加坡、美国排序；
-遇到代理传输失败或 COSCO `403/429` 时切换到下一个未冷却节点：
+遇到代理传输失败、COSCO `403/429` 或主查询超时时切换到下一个未冷却节点。每张票单的
+主查询最多尝试 3 个出口（首次请求包含在内，不是 3 次轮换后再加一次）：
 
 ```env
 COSCO_PROXY_POOL_CONTROLLER=http://proxy-pool:9090
 COSCO_PROXY_POOL_GROUP=TRACKING-POOL
-COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST=3
+COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT=3
 COSCO_PROXY_POOL_NODE_COOLDOWN_MS=1800000
+COSCO_PROXY_CORE_TIMEOUT_MS=15000
+COSCO_PROXY_ENRICHMENT_TIMEOUT_MS=8000
 ```
 
 也可以独立验证：

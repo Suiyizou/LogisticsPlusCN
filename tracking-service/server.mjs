@@ -26,7 +26,8 @@ import {
 } from "./lib/cosco-proxy.mjs";
 import {
   createCoscoProxyPool,
-  readCoscoProxyPoolConfig
+  readCoscoProxyPoolConfig,
+  runWithProxyPoolRetries
 } from "./lib/cosco-proxy-pool.mjs";
 import {
   createCoscoCircuitBreaker,
@@ -65,6 +66,18 @@ const COSCO_PAGE_URL =
 const UPSTREAM_TIMEOUT_MS = 30_000;
 const NETWORK_CORE_TIMEOUT_MS = 10_000;
 const NETWORK_ENRICHMENT_TIMEOUT_MS = 4_000;
+const PROXY_NETWORK_CORE_TIMEOUT_MS = boundedEnvironmentInteger(
+  process.env.COSCO_PROXY_CORE_TIMEOUT_MS,
+  15_000,
+  NETWORK_CORE_TIMEOUT_MS,
+  30_000
+);
+const PROXY_NETWORK_ENRICHMENT_TIMEOUT_MS = boundedEnvironmentInteger(
+  process.env.COSCO_PROXY_ENRICHMENT_TIMEOUT_MS,
+  8_000,
+  NETWORK_ENRICHMENT_TIMEOUT_MS,
+  20_000
+);
 const PLAYWRIGHT_TIMEOUT_MS = 20_000;
 const CACHE_TTL_MS = 5 * 60_000;
 const DEFAULT_CHANNEL_C_MONITOR_INTERVAL_MS = 6 * 60 * 60_000;
@@ -172,6 +185,22 @@ const coscoQueryGate = createCoscoQueryGate({
   queueLimit: process.env.COSCO_QUERY_QUEUE_LIMIT,
   queueTimeoutMs: process.env.COSCO_QUERY_QUEUE_TIMEOUT_MS
 });
+
+function boundedEnvironmentInteger(value, fallback, minimum, maximum) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, parsed));
+}
+
+function coscoCoreTimeoutMs(options = {}) {
+  return options.proxyMode ? PROXY_NETWORK_CORE_TIMEOUT_MS : NETWORK_CORE_TIMEOUT_MS;
+}
+
+function coscoEnrichmentTimeoutMs(options = {}) {
+  return options.proxyMode
+    ? PROXY_NETWORK_ENRICHMENT_TIMEOUT_MS
+    : NETWORK_ENRICHMENT_TIMEOUT_MS;
+}
 const coscoUpstreamGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_UPSTREAM_MIN_INTERVAL_MS ?? 10_000,
   maxIntervalMs: process.env.COSCO_UPSTREAM_MAX_INTERVAL_MS ?? 12_000,
@@ -1198,7 +1227,7 @@ async function getCoscoPublicCookiesOnce(request, options = {}) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), NETWORK_CORE_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), coscoCoreTimeoutMs(options));
   const pageUrl = `${COSCO_PUBLIC_TRACKING_PAGE}?lang=en&trackingType=${encodeURIComponent(request.type)}&number=${encodeURIComponent(request.number)}`;
 
   try {
@@ -1255,7 +1284,7 @@ async function fetchCoscoContainers(request, options = {}) {
         baseUrl: COSCO_TRACKING_EX_BASE,
         referer,
         cookie,
-        timeoutMs: NETWORK_CORE_TIMEOUT_MS,
+        timeoutMs: coscoCoreTimeoutMs(options),
         signal: options.signal,
         proxyMode: options.proxyMode
       });
@@ -1283,7 +1312,7 @@ async function optionalCoscoEndpoint(endpoint, request, fallback, options = {}) 
 
 async function fetchCoscoShipmentContainers(request, options = {}) {
   const result = await fetchCoscoEndpoint("containerInfo", request, {
-    timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
+    timeoutMs: coscoEnrichmentTimeoutMs(options),
     signal: options.signal,
     proxyMode: options.proxyMode
   });
@@ -1304,7 +1333,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
   }
 
   const detail = await fetchCoscoEndpoint("detail", request, {
-    timeoutMs: NETWORK_CORE_TIMEOUT_MS,
+    timeoutMs: coscoCoreTimeoutMs(options),
     signal: options.signal,
     proxyMode: options.proxyMode
   });
@@ -1314,7 +1343,7 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
   if (!options.batch) {
     try {
       bookingInfo = await optionalCoscoEndpoint("bookingInfo", request, {}, {
-        timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
+        timeoutMs: coscoEnrichmentTimeoutMs(options),
         signal: options.signal,
         proxyMode: options.proxyMode
       });
@@ -1485,10 +1514,29 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
   return fetchCoscoTrackingViaNetwork(request, options);
 }
 
-function shouldRotateCoscoProxy(error) {
+export function shouldRotateCoscoProxy(error) {
   return isCoscoProtectionError(error)
+    || error?.status === 504
     || error?.details?.code === "COSCO_PROXY_UNAVAILABLE"
-    || error?.details?.code === "COSCO_CHANNELS_UNAVAILABLE";
+    || error?.details?.code === "COSCO_CHANNELS_UNAVAILABLE"
+    || error?.details?.code === "COSCO_SUPPLEMENTAL_UNAVAILABLE";
+}
+
+function proxyPoolExhaustedError(error, attempts) {
+  const upstreamDetails = error?.details && typeof error.details === "object"
+    ? error.details
+    : {};
+  const causeCode = upstreamDetails.code ?? error?.code ?? `HTTP_${error?.status ?? 503}`;
+  return new HttpError(
+    Number.isInteger(error?.status) ? error.status : 503,
+    `${error?.message ?? "COSCO proxy request failed"}；代理池已尝试 ${attempts} 个出口节点`,
+    {
+      ...upstreamDetails,
+      code: "COSCO_PROXY_POOL_EXHAUSTED",
+      causeCode,
+      attempts
+    }
+  );
 }
 
 async function rotateCoscoProxy(error) {
@@ -1505,23 +1553,25 @@ async function rotateCoscoProxy(error) {
 
 async function runCoscoWithProxyRotation(queryChannel, options, operation) {
   const routeOptions = queryChannel.code === "PROXY" ? { ...options, proxyMode: true } : options;
-  const maximumRotations = queryChannel.code === "PROXY" && coscoProxyPool
-    ? coscoProxyPool.maxRotationsPerRequest
-    : 0;
-  for (let rotationCount = 0; ; rotationCount++) {
-    try {
-      ensureCoscoCircuitAvailable(routeOptions);
-      const result = await operation(routeOptions);
-      coscoCircuitBreakerFor(routeOptions).recordSuccess();
-      return result;
-    } catch (error) {
-      if (rotationCount >= maximumRotations) throw error;
-      const rotation = await rotateCoscoProxy(error);
-      if (!rotation?.rotated) throw error;
+  const poolEnabled = queryChannel.code === "PROXY" && coscoProxyPool;
+  return runWithProxyPoolRetries({
+    maximumAttempts: poolEnabled ? coscoProxyPool.maxAttemptsPerShipment : 1,
+    shouldRetry: (error) => Boolean(poolEnabled && shouldRotateCoscoProxy(error)),
+    rotate: (error) => rotateCoscoProxy(error),
+    exhaustedError: (error, attempts) => proxyPoolExhaustedError(error, attempts),
+    onRotated: (rotation, attempt, maximumAttempts) => {
+      console.warn(
+        `COSCO proxy attempt ${attempt}/${maximumAttempts} failed; rotated ${rotation.previous ?? "unknown"} -> ${rotation.current}`
+      );
       coscoCircuitBreakerFor(routeOptions).reset();
       coscoPublicCookieStates.delete("PROXY");
     }
-  }
+  }, async () => {
+    ensureCoscoCircuitAvailable(routeOptions);
+    const result = await operation(routeOptions);
+    coscoCircuitBreakerFor(routeOptions).recordSuccess();
+    return result;
+  });
 }
 
 function runCoscoTrackingRequest(request, queryChannel, options = {}) {
@@ -1816,7 +1866,7 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
       try {
         bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
           ...routeOptions,
-          timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
+          timeoutMs: coscoEnrichmentTimeoutMs(routeOptions)
         });
       } catch (error) {
         if (isCoscoProtectionError(error)) throw error;
@@ -1837,7 +1887,10 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
       );
       if (details.containers.length === 0 && details.references.information.length === 0
           && warnings.length === 2) {
-        throw new HttpError(502, "COSCO 未返回可用的补充详情", { warnings });
+        throw new HttpError(502, "COSCO 未返回可用的补充详情", {
+          code: "COSCO_SUPPLEMENTAL_UNAVAILABLE",
+          warnings
+        });
       }
       return {
         ...details,

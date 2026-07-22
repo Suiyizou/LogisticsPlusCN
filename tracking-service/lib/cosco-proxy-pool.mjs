@@ -1,7 +1,7 @@
 const DEFAULT_GROUP = "TRACKING-POOL";
 const DEFAULT_TIMEOUT_MS = 3_000;
 const DEFAULT_NODE_COOLDOWN_MS = 30 * 60_000;
-const DEFAULT_MAX_ROTATIONS = 3;
+const DEFAULT_MAX_ATTEMPTS = 3;
 const EXCLUDED_NODE_PATTERN = /下载专用|免费|流量|套餐|官网|到期/i;
 
 const REGION_PRIORITY = [
@@ -52,11 +52,12 @@ export function readCoscoProxyPoolConfig(environment = process.env) {
       10_000,
       24 * 60 * 60_000
     ),
-    maxRotationsPerRequest: integer(
-      environment.COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST,
-      DEFAULT_MAX_ROTATIONS,
+    maxAttemptsPerShipment: integer(
+      environment.COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT
+        ?? environment.COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST,
+      DEFAULT_MAX_ATTEMPTS,
       1,
-      12
+      6
     )
   });
 }
@@ -73,6 +74,26 @@ export function prioritizeProxyNodes(names = []) {
       const regionDifference = regionRank(left) - regionRank(right);
       return regionDifference || left.localeCompare(right, "zh-CN", { numeric: true });
     });
+}
+
+export async function runWithProxyPoolRetries(options, operation) {
+  const maximumAttempts = integer(options?.maximumAttempts, 1, 1, 6);
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    try {
+      return await operation({ attempt, maximumAttempts });
+    } catch (error) {
+      if (!options?.shouldRetry?.(error)) throw error;
+      if (attempt >= maximumAttempts) {
+        throw options?.exhaustedError?.(error, attempt) ?? error;
+      }
+      const rotation = await options.rotate(error, attempt);
+      if (!rotation?.rotated) {
+        throw options?.exhaustedError?.(error, attempt) ?? error;
+      }
+      await options?.onRotated?.(rotation, attempt, maximumAttempts);
+    }
+  }
+  throw new Error("Proxy retry loop ended unexpectedly");
 }
 
 export function createCoscoProxyPool(config, options = {}) {
@@ -139,12 +160,12 @@ export function createCoscoProxyPool(config, options = {}) {
   }
 
   return Object.freeze({
-    maxRotationsPerRequest: config.maxRotationsPerRequest,
+    maxAttemptsPerShipment: config.maxAttemptsPerShipment,
     status: () => ({
       enabled: true,
       controller: new URL(config.controller).host,
       group: config.group,
-      maxRotationsPerRequest: config.maxRotationsPerRequest
+      maxAttemptsPerShipment: config.maxAttemptsPerShipment
     }),
     async rotate(reason) {
       if (!rotationPromise) {

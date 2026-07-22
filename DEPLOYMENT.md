@@ -205,8 +205,10 @@ sudo install -m 600 /path/to/airport.yaml /opt/cargo-secrets/airport.yaml
 
 ```env
 PROXY_PROVIDER_FILE=/opt/cargo-secrets/airport.yaml
-COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST=3
+COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT=3
 COSCO_PROXY_POOL_NODE_COOLDOWN_MS=1800000
+COSCO_PROXY_CORE_TIMEOUT_MS=15000
+COSCO_PROXY_ENRICHMENT_TIMEOUT_MS=8000
 ```
 
 随后使用基础 Compose 与代理池覆盖文件一起部署：
@@ -217,7 +219,9 @@ docker compose -f docker-compose.yml -f docker-compose.proxy-pool.yml up -d --bu
 ```
 
 代理池只接收香港、台湾、日本、韩国、新加坡和美国节点，自动排除“下载专用”“免费”等节点。
-应用侧排序固定为香港优先；当前出口收到 COSCO `403/429` 或发生代理传输故障后，tracking
-服务通过 Mihomo 内部控制接口选择下一个节点，并将失败节点冷却 30 分钟。Mihomo 的 7890、
+应用侧排序固定为香港优先；当前出口收到 COSCO `403/429`、发生代理传输故障或主查询超过
+代理专用超时窗口后，tracking 服务通过 Mihomo 内部控制接口选择下一个节点，并将失败节点
+冷却 30 分钟。每张票单的主查询最多尝试 3 个出口，首次请求包含在这 3 次内；代理池耗尽后
+Spring 批量任务不会再叠加一轮重试。Mihomo 的 7890、
 9090 端口仅在 Docker `app` 网络中暴露，不映射到公网。不要把订阅地址、UUID、密码或完整
 provider 文件提交到 Git。

@@ -9,7 +9,8 @@ import {
   enrichCoscoShipmentContainers,
   normalizeCoscoSnapshot,
   normalizeTrackingRequest,
-  parseRetryAfter
+  parseRetryAfter,
+  shouldRotateCoscoProxy
 } from "../server.mjs";
 
 class VirtualTimers {
@@ -181,6 +182,11 @@ test("Retry-After parser supports seconds and HTTP dates without real waiting", 
   assert.equal(parseRetryAfter("Tue, 21 Jul 2026 00:00:00 GMT", now), 1_000);
   assert.equal(parseRetryAfter("not-a-retry-value", now), null);
   assert.equal(parseRetryAfter("", now), null);
+});
+
+test("proxy pool retries gateway timeouts but not invalid tracking input", () => {
+  assert.equal(shouldRotateCoscoProxy({ status: 504 }), true);
+  assert.equal(shouldRotateCoscoProxy({ status: 400 }), false);
 });
 
 test("optional container enrichment remains partial on an ordinary child failure", async () => {

@@ -77,6 +77,35 @@ class ShipmentBatchTrackingResilienceTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void exhaustedProxyPoolIsNotRetriedAgainByTheOuterBatchLayer() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.track(any(), any())).thenThrow(new ApiException(
+        HttpStatus.GATEWAY_TIMEOUT,
+        "COSCO_PROXY_POOL_EXHAUSTED",
+        "COSCO query timed out after trying 3 proxy exits"
+    ));
+
+    createService(trackingService, 0, 0, 5, 5);
+    AuthenticatedUser user = businessUser(76L);
+    ShipmentBatchTaskRequest request = new ShipmentBatchTaskRequest(
+        "proxy-pool.xlsx",
+        "PROXY",
+        List.of(cosuItem("row-proxy", "COSU6502406177"))
+    );
+    String taskId = taskId(service.start(request, user));
+
+    Map<String, Object> completed = awaitTerminal(taskId, user, 2_000);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals(1, completed.get("failed"));
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("COSCO_PROXY_POOL_EXHAUSTED", items.get(0).get("errorCode"));
+    assertEquals(1, items.get(0).get("attempts"));
+    verify(trackingService, times(1)).track(any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void explicitCancellationInterruptsLongRateLimitCooldownAndStopsQuickly()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);

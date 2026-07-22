@@ -301,6 +301,7 @@ public class ShipmentBatchTrackingService {
         return;
       } catch (RuntimeException error) {
         if (task.cancelRequested.get() || isCancellation(error)) throw error;
+        if ("COSCO_PROXY_POOL_EXHAUSTED".equals(errorCode(error))) throw error;
         if (!isRetryable(error)) throw error;
         boolean protectionFailure = isProtectionFailure(error);
         if (item.attempts >= MAX_TRACK_ATTEMPTS && !protectionFailure) {
