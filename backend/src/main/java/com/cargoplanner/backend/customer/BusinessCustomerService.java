@@ -545,8 +545,12 @@ public class BusinessCustomerService {
     String referenceType = rs.getString("reference_type");
     if ("COSCO".equalsIgnoreCase(carrier)
         && "BILLOFLADING".equalsIgnoreCase(referenceType)
-        && normalized != null && normalized.matches("COSU[0-9]{6,20}")) {
-      normalized = normalized.substring(4);
+        && normalized != null && normalized.matches("(?:COSU)?[0-9]{8,12}")) {
+      if (normalized.startsWith("COSU")) normalized = normalized.substring(4);
+      // COSCO issues this numeric identity as the booking reference before a
+      // bill of lading is ready. Background refreshes must therefore query it
+      // as BOOKING even when an older imported row was labelled as a bill.
+      referenceType = "BOOKING";
     }
     return new RefreshableShipment(
         rs.getString("shipment_public_id"),

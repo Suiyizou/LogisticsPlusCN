@@ -459,6 +459,33 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void refreshesLegacyNumericCoscoBillRowsAsBookingNumbers() {
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipment_references
+        SET reference_type = 'BILLOFLADING', reference_no_raw = 'COSU9508245590',
+            reference_no_normalized = 'COSU9508245590'
+        WHERE shipment_id = 10
+        """
+    );
+
+    ShipmentBatchItemRequest oneClick = customerService.listUnfinishedTrackingItems(business)
+        .stream()
+        .filter(item -> "refresh-shipment-public-id".equals(item.id()))
+        .findFirst()
+        .orElseThrow();
+    ShipmentBatchItemRequest selected = customerService.listSelectedTrackingItems(
+        business, List.of("shipment-public-id")
+    ).get(0);
+
+    assertThat(oneClick.type()).isEqualTo("BOOKING");
+    assertThat(oneClick.number()).isEqualTo("9508245590");
+    assertThat(selected.type()).isEqualTo("BOOKING");
+    assertThat(selected.number()).isEqualTo("9508245590");
+    assertThat(oneClick.displayNumber()).isEqualTo("COSU9508245590");
+  }
+
+  @Test
   void bindsShipperAndConsigneeToTheSameShipmentButRejectsDuplicatePartyRoles() {
     String shipperId = (String) customerService.create(
         new CreateCustomerRequest(
