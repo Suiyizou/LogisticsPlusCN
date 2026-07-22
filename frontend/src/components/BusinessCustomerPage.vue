@@ -288,10 +288,16 @@
                 <template #header>
                   <div class="candidate-header">
                     <div>
-                      <b>{{ t("customers.availableShipments") }}</b>
-                      <small>{{ t("customers.availableShipmentsHint") }}</small>
+                      <b>{{ t("customers.customerShipmentAccess") }}</b>
+                      <small>{{ t("customers.customerShipmentAccessHint") }}</small>
                     </div>
                     <div class="candidate-header-actions">
+                      <el-button
+                        type="success"
+                        size="small"
+                        :disabled="!draftShipments.length || publishingAllShipments || !!publishingShipmentId"
+                        @click="publishAllDraftShipments"
+                      >{{ t("customers.publishAllDrafts", { count: draftShipments.length }) }}</el-button>
                       <el-button
                         type="primary"
                         size="small"
@@ -307,9 +313,44 @@
                     </div>
                   </div>
                 </template>
-                <div v-if="loadingAvailableShipments" class="empty-hint-compact">{{ t("customers.loadingAvailableShipments") }}</div>
-                <div v-else-if="!unboundAvailableShipments.length" class="empty-hint-compact">{{ t("customers.emptyAvailableShipments") }}</div>
+                <div v-if="loadingAvailableShipments || loadingShipments" class="empty-hint-compact">{{ t("customers.loadingCustomerShipmentAccess") }}</div>
+                <div v-else-if="!shipments.length && !unboundAvailableShipments.length" class="empty-hint-compact">{{ t("customers.emptyCustomerShipmentAccess") }}</div>
                 <div v-else class="candidate-list">
+                  <div
+                    v-for="shipment in shipments"
+                    :key="`bound-${shipment.shipmentId}`"
+                    class="candidate-row candidate-row--bound"
+                  >
+                    <el-checkbox :model-value="false" disabled :aria-label="t('customers.bound')" />
+                    <span><b>{{ shipment.referenceNo || shipment.shipmentId }}</b><small>{{ shipment.carrier || '—' }} · {{ referenceTypeLabel(shipment.referenceType) }}</small></span>
+                    <span class="candidate-status-cell">
+                      <span><i class="shipment-status-dot"></i>{{ shipment.trackingStatus || t("customers.bound") }}</span>
+                      <el-tag size="small" :type="shipment.publicationStatus === 'PUBLISHED' ? 'success' : 'warning'" effect="plain">
+                        {{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
+                      </el-tag>
+                    </span>
+                    <span>{{ formatDate(shipment.assignedAt || shipment.updatedAt) }}</span>
+                    <span class="candidate-row-actions">
+                      <el-button text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.edit") }}</el-button>
+                      <el-button
+                        v-if="needsManualSupplement(shipment)"
+                        text
+                        size="small"
+                        type="warning"
+                        @click="openShipmentSupplement(shipment)"
+                      >{{ t("customers.manualSupplement") }}</el-button>
+                      <el-button
+                        :type="shipment.publicationStatus === 'PUBLISHED' ? 'warning' : 'success'"
+                        plain
+                        size="small"
+                        @click="togglePublication(shipment)"
+                        :disabled="publishingAllShipments || publishingShipmentId === shipment.shipmentId"
+                      >{{ shipment.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}</el-button>
+                      <el-button text size="small" type="danger" @click="unbindShipment(shipment)" :disabled="unbindingShipmentId === shipment.shipmentId">
+                        {{ t("customers.unbind") }}
+                      </el-button>
+                    </span>
+                  </div>
                   <div v-for="shipment in unboundAvailableShipments" :key="shipment.shipmentId" class="candidate-row">
                     <el-checkbox
                       :model-value="selectedCandidateShipmentIds.includes(shipment.shipmentId)"
@@ -328,61 +369,6 @@
                     </span>
                   </div>
                 </div>
-              </el-card>
-
-              <el-card v-if="false" class="bound-table-card" shadow="never">
-                <div v-if="loadingShipments" class="empty-hint-compact">{{ t("customers.loadingShipments") }}</div>
-                <div v-else-if="!shipments.length" class="empty-hint-compact">{{ t("customers.emptyShipments") }}</div>
-                <el-table v-else :data="shipments" class="bound-table" size="small" stripe>
-                  <el-table-column :label="t('customers.shipmentReference')" min-width="180">
-                    <template #default="{ row }">
-                      <div class="table-ref-cell">
-                        <b>{{ row.referenceNo || row.shipmentId }}</b>
-                        <small>{{ row.carrier || '—' }} · {{ referenceTypeLabel(row.referenceType) }}</small>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.shipmentStatus')" min-width="160">
-                    <template #default="{ row }">
-                      <div class="table-status-cell">
-                        <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || t("customers.bound") }}</span>
-                        <el-tag size="small" :type="row.publicationStatus === 'PUBLISHED' ? 'success' : 'warning'" effect="plain">
-                          {{ row.publicationStatus === 'PUBLISHED' ? t("customers.published") : t("customers.draft") }}
-                        </el-tag>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.assignedAt')" min-width="120">
-                    <template #default="{ row }">
-                      {{ formatDate(row.assignedAt) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.actions')" min-width="200" fixed="right">
-                    <template #default="{ row }">
-                      <div class="table-actions">
-                        <el-button text size="small" @click="openShipmentDetail(row)">{{ t("customers.edit") }}</el-button>
-                        <el-button
-                          v-if="needsManualSupplement(row)"
-                          text
-                          size="small"
-                          type="warning"
-                          @click="openShipmentSupplement(row)"
-                        >{{ t("customers.manualSupplement") }}</el-button>
-                        <el-button
-                          text
-                          size="small"
-                          @click="togglePublication(row)"
-                          :disabled="publishingShipmentId === row.shipmentId"
-                        >
-                          {{ row.publicationStatus === 'PUBLISHED' ? t("customers.withdraw") : t("customers.publish") }}
-                        </el-button>
-                        <el-button text size="small" type="danger" @click="unbindShipment(row)" :disabled="unbindingShipmentId === row.shipmentId">
-                          {{ t("customers.unbind") }}
-                        </el-button>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
               </el-card>
             </el-card>
           </template>
@@ -1148,6 +1134,7 @@ const shipmentCustomerFilter = ref("");
 const shipmentTrackingChannel = ref("AUTO");
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
+const publishingAllShipments = ref(false);
 const resolvingMatchId = ref(0);
 const pageMessage = ref("");
 const messageIsError = ref(false);
@@ -1215,6 +1202,9 @@ const unboundAvailableShipments = computed(() => {
     return !item.boundRoles?.includes(role);
   });
 });
+const draftShipments = computed(() =>
+  shipments.value.filter((item) => item.publicationStatus !== "PUBLISHED")
+);
 
 const filteredCustomers = computed(() => {
   const query = customerSearch.value.toLowerCase().trim();
@@ -2337,7 +2327,7 @@ async function unbindShipment(shipment) {
 }
 
 async function togglePublication(shipment) {
-  if (!selectedCustomer.value || !shipment?.shipmentId || publishingShipmentId.value) return;
+  if (!selectedCustomer.value || !shipment?.shipmentId || publishingShipmentId.value || publishingAllShipments.value) return;
   const published = shipment.publicationStatus !== "PUBLISHED";
   if (!window.confirm(t(published ? "customers.publishConfirm" : "customers.withdrawConfirm"))) return;
   publishingShipmentId.value = shipment.shipmentId;
@@ -2351,6 +2341,41 @@ async function togglePublication(shipment) {
     showError(error, published ? "customers.publishFailed" : "customers.withdrawFailed");
   } finally {
     publishingShipmentId.value = "";
+  }
+}
+
+async function publishAllDraftShipments() {
+  if (!selectedCustomer.value || !draftShipments.value.length || publishingAllShipments.value) return;
+  const pending = [...draftShipments.value];
+  if (!window.confirm(t("customers.publishAllDraftsConfirm", { count: pending.length }))) return;
+  publishingAllShipments.value = true;
+  clearMessage();
+  let published = 0;
+  let failed = 0;
+  try {
+    for (const shipment of pending) {
+      try {
+        const updated = await setBusinessShipmentPublication(
+          selectedCustomer.value.id, shipment.shipmentId, true
+        );
+        shipments.value = shipments.value.map((item) =>
+          item.shipmentId === shipment.shipmentId ? updated : item
+        );
+        published += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed) {
+      showError(
+        new Error(t("customers.publishAllDraftsPartial", { published, failed })),
+        "customers.publishFailed"
+      );
+    } else {
+      showSuccess("customers.publishAllDraftsSuccess", { count: published });
+    }
+  } finally {
+    publishingAllShipments.value = false;
   }
 }
 
@@ -3968,6 +3993,7 @@ function showError(error, fallbackKey) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 .candidate-header b {
   font-size: 13px;
@@ -3982,6 +4008,8 @@ function showError(error, fallbackKey) {
 .candidate-header-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .candidate-list {
   display: grid;
@@ -3998,6 +4026,15 @@ function showError(error, fallbackKey) {
   background: #fff;
   font-size: 11px;
 }
+.candidate-row--bound {
+  border-color: #d7e7fa;
+  background: #f8fbff;
+}
+.candidate-status-cell {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
 .candidate-row > span:nth-of-type(1) {
   display: grid;
   gap: 2px;
@@ -4009,6 +4046,7 @@ function showError(error, fallbackKey) {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 /* Shipment status dot */
@@ -4020,41 +4058,6 @@ function showError(error, fallbackKey) {
   border-radius: 50%;
   background: #56b88d;
   flex-shrink: 0;
-}
-
-/* Bound table */
-.bound-table-card {
-  border: 1px solid #e0e7f0;
-  border-radius: 10px;
-}
-.bound-table-card :deep(.el-card__body) {
-  padding: 0;
-}
-.bound-table {
-  width: 100%;
-}
-.table-ref-cell {
-  display: grid;
-  gap: 2px;
-}
-.table-ref-cell b {
-  font-size: 12px;
-  color: #1a2d42;
-}
-.table-ref-cell small {
-  color: #7d93ae;
-  font-size: 10px;
-}
-.table-status-cell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.table-actions {
-  display: flex;
-  gap: 2px;
-  flex-wrap: wrap;
 }
 
 /* ---- Shipment tab main area ---- */

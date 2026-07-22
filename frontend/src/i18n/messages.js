@@ -1741,6 +1741,14 @@ Object.assign(messages["en-US"].login, {
 });
 
 Object.assign(messages["zh-CN"].customers, {
+  customerShipmentAccess: "当前客户的票单绑定与发布",
+  customerShipmentAccessHint: "已绑定票单可确认发布或撤回；未绑定票单可多选后批量绑定。",
+  loadingCustomerShipmentAccess: "正在加载当前客户的票单授权...",
+  emptyCustomerShipmentAccess: "当前没有已绑定或可绑定的票单。",
+  publishAllDrafts: "确认发布待发布票单（{count}）",
+  publishAllDraftsConfirm: "确认将当前客户的 {count} 张待发布票单逐张发布？无有效运输数据的票单会保留为待发布。",
+  publishAllDraftsSuccess: "已向客户发布 {count} 张票单，刷新客户总览即可查看。",
+  publishAllDraftsPartial: "已发布 {published} 张，另有 {failed} 张因运输数据不完整而保留为待发布。",
   clientCode: "Client Code（业务匹配码）",
   clientCodePlaceholder: "例如 HAYDEN",
   pendingMatches: "Client Code 待确认队列",
@@ -1852,6 +1860,14 @@ Object.assign(messages["zh-CN"].customers, {
 });
 
 Object.assign(messages["en-US"].customers, {
+  customerShipmentAccess: "Shipment assignment and publication",
+  customerShipmentAccessHint: "Publish or withdraw assigned shipments here; unassigned shipments can be selected for batch assignment.",
+  loadingCustomerShipmentAccess: "Loading shipment access for this customer...",
+  emptyCustomerShipmentAccess: "There are no assigned or available shipments.",
+  publishAllDrafts: "Publish drafts ({count})",
+  publishAllDraftsConfirm: "Publish the {count} draft shipments to this customer one by one? Shipments without valid operational data will remain drafts.",
+  publishAllDraftsSuccess: "Published {count} shipments. Refresh the customer overview to see them.",
+  publishAllDraftsPartial: "Published {published} shipments; {failed} remain drafts because their operational data is incomplete.",
   clientCode: "Client Code (matching key)",
   clientCodePlaceholder: "For example, HAYDEN",
   pendingMatches: "Client Code review queue",
