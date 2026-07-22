@@ -44,8 +44,11 @@ export function fetchAvailableBusinessShipments() {
   return request("/business/shipments");
 }
 
-export function createShipmentRefreshAllTask() {
-  return request("/business/shipments/refresh-all", { method: "POST" });
+export function createShipmentRefreshAllTask(channel = "AUTO") {
+  return request("/business/shipments/refresh-all", {
+    method: "POST",
+    body: { channel }
+  });
 }
 
 export function createShipmentBatchTask(payload) {

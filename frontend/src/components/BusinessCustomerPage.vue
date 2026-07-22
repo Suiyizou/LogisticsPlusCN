@@ -401,20 +401,34 @@
                 <div class="list-page-header">
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
-                    <el-select
-                      v-model="shipmentCustomerFilter"
-                      class="shipment-customer-filter"
-                      :placeholder="t('customers.filterByCustomer')"
-                      clearable
-                      filterable
-                    >
-                      <el-option
-                        v-for="customer in shipmentFilterCustomers"
-                        :key="customer.id"
-                        :label="`${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`"
-                        :value="customer.id"
-                      />
-                    </el-select>
+                    <label class="shipment-toolbar-control">
+                      <span>{{ t("customers.customerFilterLabel") }}</span>
+                      <el-select
+                        v-model="shipmentCustomerFilter"
+                        class="shipment-customer-filter"
+                        :placeholder="t('customers.filterByCustomer')"
+                        clearable
+                        filterable
+                      >
+                        <el-option
+                          v-for="customer in shipmentFilterCustomers"
+                          :key="customer.id"
+                          :label="`${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`"
+                          :value="customer.id"
+                        />
+                      </el-select>
+                    </label>
+                    <label class="shipment-toolbar-control">
+                      <span>{{ t("customers.trackingChannel") }}</span>
+                      <el-select
+                        v-model="shipmentTrackingChannel"
+                        class="shipment-channel-select"
+                        :disabled="batchTrackRunning || refreshingShipment"
+                      >
+                        <el-option :label="t('customers.trackingChannelAuto')" value="AUTO" />
+                        <el-option :label="t('customers.trackingChannelProxy')" value="PROXY" />
+                      </el-select>
+                    </label>
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
                     <el-button
                       type="danger"
@@ -1121,6 +1135,7 @@ const selectedCandidateShipmentIds = ref([]);
 const selectedShipmentRows = ref([]);
 const batchDeletingShipments = ref(false);
 const shipmentCustomerFilter = ref("");
+const shipmentTrackingChannel = ref("AUTO");
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
 const resolvingMatchId = ref(0);
@@ -1687,6 +1702,7 @@ async function startBatchTrack() {
   try {
     const task = await createShipmentBatchTask({
       sourceFileName: batchTrackFileName.value,
+      channel: shipmentTrackingChannel.value,
       items: batchTrackItems.value
     });
     rememberBatchTrackTask(task.taskId);
@@ -1720,7 +1736,7 @@ async function startRefreshAllShipments() {
     status: "QUEUED"
   };
   try {
-    const task = await createShipmentRefreshAllTask();
+    const task = await createShipmentRefreshAllTask(shipmentTrackingChannel.value);
     if (!task?.taskId) {
       batchTrackRunning.value = false;
       batchTrackProgress.value = {
@@ -1817,6 +1833,9 @@ watch(batchTrackSelectedSheetName, () => {
 function applyBatchTrackTask(task) {
   if (!task?.taskId) return;
   batchTrackTaskId.value = task.taskId;
+  if (["AUTO", "PROXY"].includes(String(task.channel || "").toUpperCase())) {
+    shipmentTrackingChannel.value = String(task.channel).toUpperCase();
+  }
   const status = String(task.status || "").toUpperCase();
   batchTrackProgress.value = {
     total: Number(task.total || 0),
@@ -2482,7 +2501,7 @@ async function refreshShipmentFromCarrier() {
       },
       body: JSON.stringify({
         carrier: shipment.carrier,
-        channel: "AUTO",
+        channel: shipmentTrackingChannel.value,
         type: preferredReference.type,
         number: preferredReference.number,
         forceRefresh: true
@@ -2651,7 +2670,7 @@ async function updateShipmentTracking(row) {
       },
       body: JSON.stringify({
         carrier: row.carrier,
-        channel: "AUTO",
+        channel: shipmentTrackingChannel.value,
         type: preferredReference.type,
         number: preferredReference.number,
         forceRefresh: true
@@ -3371,6 +3390,17 @@ function showError(error, fallbackKey) {
 }
 .shipment-customer-filter {
   width: 230px;
+}
+.shipment-toolbar-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.shipment-channel-select {
+  width: 170px;
 }
 .shipment-workspace-side {
   width: 380px;
@@ -4553,6 +4583,13 @@ button:disabled {
   }
   .shipment-customer-filter {
     width: 100%;
+  }
+  .shipment-toolbar-control {
+    width: 100%;
+  }
+  .shipment-toolbar-control :deep(.el-select) {
+    flex: 1;
+    width: auto;
   }
   .sidebar-nav {
     flex-direction: row;

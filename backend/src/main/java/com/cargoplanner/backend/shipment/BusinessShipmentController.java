@@ -45,6 +45,7 @@ public class BusinessShipmentController {
 
   @PostMapping("/refresh-all")
   public ResponseEntity<Map<String, Object>> refreshAll(
+      @RequestBody(required = false) ShipmentRefreshAllRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
     List<ShipmentBatchItemRequest> items = shipmentService.listUnfinishedTrackingItems(actor);
@@ -61,7 +62,11 @@ public class BusinessShipmentController {
           "items", List.of()
       ));
     }
-    return ResponseEntity.accepted().body(batchTrackingService.startRefreshAll(items, actor));
+    return ResponseEntity.accepted().body(batchTrackingService.startRefreshAll(
+        items,
+        actor,
+        request == null ? null : request.channel()
+    ));
   }
 
   @PostMapping("/batch-delete")

@@ -37,6 +37,7 @@ public class ShipmentBatchTrackingService {
   static final long MAX_INLINE_COOLDOWN_MS = 15 * 60_000L;
   static final long MAX_EXPLICIT_RETRY_AFTER_MS = 24 * 60 * 60_000L;
   private static final long TASK_RETENTION_SECONDS = 24 * 60 * 60;
+  private static final List<String> SUPPORTED_CHANNELS = List.of("AUTO", "PROXY");
 
   private final ShipmentTrackingService trackingService;
   private final ExecutorService executor;
@@ -49,8 +50,7 @@ public class ShipmentBatchTrackingService {
   private final Map<Long, String> activeTaskByUser = new ConcurrentHashMap<>();
   private final Object throttleMonitor = new Object();
   private long lastTrackingStartedAt;
-  private volatile Instant carrierCooldownUntil;
-  private int consecutiveCarrierFailures;
+  private final Map<String, CarrierChannelState> carrierStateByChannel = new ConcurrentHashMap<>();
 
   public ShipmentBatchTrackingService(ShipmentTrackingService trackingService) {
     this(
@@ -110,8 +110,18 @@ public class ShipmentBatchTrackingService {
       List<ShipmentBatchItemRequest> requestedItems,
       AuthenticatedUser user
   ) {
+    return startRefreshAll(requestedItems, user, "AUTO");
+  }
+
+  public synchronized Map<String, Object> startRefreshAll(
+      List<ShipmentBatchItemRequest> requestedItems,
+      AuthenticatedUser user,
+      String channel
+  ) {
     return startInternal(
-        new ShipmentBatchTaskRequest("One-click active shipment refresh", requestedItems),
+        new ShipmentBatchTaskRequest(
+            "One-click active shipment refresh", channel, requestedItems
+        ),
         user,
         true,
         true
@@ -129,6 +139,7 @@ public class ShipmentBatchTrackingService {
     List<ShipmentBatchItemRequest> requestedItems = request == null || request.items() == null
         ? List.of()
         : request.items();
+    String channel = normalizeChannel(request == null ? null : request.channel());
     if (requestedItems.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "At least one shipment is required");
     }
@@ -158,6 +169,7 @@ public class ShipmentBatchTrackingService {
         user,
         clean(request == null ? null : request.sourceFileName(), 255, "Imported spreadsheet"),
         items,
+        channel,
         forceRefresh,
         now
     );
@@ -255,7 +267,7 @@ public class ShipmentBatchTrackingService {
         ObjectNode response = trackingService.track(
             new ShipmentTrackRequest(
                 item.request.carrier(),
-                "AUTO",
+                task.channel,
                 item.request.type(),
                 item.queryNumber,
                 task.forceRefresh,
@@ -265,9 +277,11 @@ public class ShipmentBatchTrackingService {
             task.owner
         );
         synchronized (throttleMonitor) {
-          consecutiveCarrierFailures = 0;
-          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(clock.instant())) {
-            carrierCooldownUntil = null;
+          CarrierChannelState channelState = carrierState(task.channel);
+          channelState.consecutiveFailures = 0;
+          if (channelState.cooldownUntil != null
+              && !channelState.cooldownUntil.isAfter(clock.instant())) {
+            channelState.cooldownUntil = null;
           }
         }
         synchronized (task) {
@@ -290,10 +304,10 @@ public class ShipmentBatchTrackingService {
         if (!isRetryable(error)) throw error;
         boolean protectionFailure = isProtectionFailure(error);
         if (item.attempts >= MAX_TRACK_ATTEMPTS && !protectionFailure) {
-          registerCarrierFailure(error, item.attempts);
+          registerCarrierFailure(task.channel, error, item.attempts);
           throw error;
         }
-        Instant retryAt = registerCarrierFailure(error, item.attempts);
+        Instant retryAt = registerCarrierFailure(task.channel, error, item.attempts);
         synchronized (task) {
           item.status = "RETRY_WAIT";
           item.source = null;
@@ -325,7 +339,7 @@ public class ShipmentBatchTrackingService {
           item.shipmentId,
           new ShipmentTrackRequest(
               item.request.carrier(),
-              "AUTO",
+              task.channel,
               item.request.type(),
               item.queryNumber,
               true,
@@ -449,12 +463,14 @@ public class ShipmentBatchTrackingService {
 
   private void waitForCarrierCooldown(BatchTask task, BatchItem item) {
     while (!task.cancelRequested.get()) {
-      Instant until = carrierCooldownUntil;
+      Instant until = carrierState(task.channel).cooldownUntil;
       Instant now = clock.instant();
       if (until == null || !until.isAfter(now)) {
         synchronized (throttleMonitor) {
-          if (carrierCooldownUntil != null && !carrierCooldownUntil.isAfter(now)) {
-            carrierCooldownUntil = null;
+          CarrierChannelState channelState = carrierState(task.channel);
+          if (channelState.cooldownUntil != null
+              && !channelState.cooldownUntil.isAfter(now)) {
+            channelState.cooldownUntil = null;
           }
         }
         synchronized (task) {
@@ -477,28 +493,37 @@ public class ShipmentBatchTrackingService {
     }
   }
 
-  private Instant registerCarrierFailure(RuntimeException error, int attempt) {
+  private Instant registerCarrierFailure(
+      String channel,
+      RuntimeException error,
+      int attempt
+  ) {
     long delayMs = retryDelayMs(error, attempt);
     synchronized (throttleMonitor) {
-      consecutiveCarrierFailures++;
+      CarrierChannelState channelState = carrierState(channel);
+      channelState.consecutiveFailures++;
       if (isImmediateProtectionFailure(error)) {
         delayMs = Math.max(
             delayMs,
             Math.min(RATE_LIMIT_COOLDOWN_MS, retryMaxMs)
         );
-      } else if (consecutiveCarrierFailures >= 2 && isChannelUnavailable(error)) {
+      } else if (channelState.consecutiveFailures >= 2 && isChannelUnavailable(error)) {
         delayMs = Math.max(
             delayMs,
             Math.min(CHANNEL_UNAVAILABLE_COOLDOWN_MS, retryMaxMs)
         );
       }
       Instant candidate = clock.instant().plusMillis(delayMs);
-      if (carrierCooldownUntil == null || candidate.isAfter(carrierCooldownUntil)) {
-        carrierCooldownUntil = candidate;
+      if (channelState.cooldownUntil == null || candidate.isAfter(channelState.cooldownUntil)) {
+        channelState.cooldownUntil = candidate;
       }
       throttleMonitor.notifyAll();
-      return carrierCooldownUntil;
+      return channelState.cooldownUntil;
     }
+  }
+
+  private CarrierChannelState carrierState(String channel) {
+    return carrierStateByChannel.computeIfAbsent(channel, ignored -> new CarrierChannelState());
   }
 
   long retryDelayMs(RuntimeException error, int attempt) {
@@ -779,6 +804,7 @@ public class ShipmentBatchTrackingService {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("taskId", task.id);
       value.put("sourceFileName", task.sourceFileName);
+      value.put("channel", task.channel);
       value.put("mode", task.forceRefresh ? "REFRESH_ALL" : "IMPORT");
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
@@ -840,6 +866,14 @@ public class ShipmentBatchTrackingService {
     return cleaned.length() <= limit ? cleaned : cleaned.substring(0, limit);
   }
 
+  private String normalizeChannel(String value) {
+    String channel = clean(value, 24, "AUTO").toUpperCase(Locale.ROOT);
+    if (!SUPPORTED_CHANNELS.contains(channel)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported tracking channel");
+    }
+    return channel;
+  }
+
   private String compact(String value) {
     if (value == null) return "";
     return Normalizer.normalize(value, Normalizer.Form.NFKC)
@@ -866,6 +900,7 @@ public class ShipmentBatchTrackingService {
     private final AuthenticatedUser owner;
     private final String sourceFileName;
     private final List<BatchItem> items;
+    private final String channel;
     private final boolean forceRefresh;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
@@ -881,6 +916,7 @@ public class ShipmentBatchTrackingService {
         AuthenticatedUser owner,
         String sourceFileName,
         List<BatchItem> items,
+        String channel,
         boolean forceRefresh,
         Instant createdAt
     ) {
@@ -888,6 +924,7 @@ public class ShipmentBatchTrackingService {
       this.owner = owner;
       this.sourceFileName = sourceFileName;
       this.items = items;
+      this.channel = channel;
       this.forceRefresh = forceRefresh;
       this.createdAt = createdAt;
       this.updatedAt = createdAt;
@@ -898,6 +935,11 @@ public class ShipmentBatchTrackingService {
           || "STOPPED".equals(status)
           || "PAUSED".equals(status);
     }
+  }
+
+  private static final class CarrierChannelState {
+    private Instant cooldownUntil;
+    private int consecutiveFailures;
   }
 
   private static final class BatchItem {

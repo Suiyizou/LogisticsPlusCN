@@ -285,12 +285,14 @@ class ShipmentBatchTrackingServiceTest {
             "refresh-existing", "COSCO", "BOOKING", "6507943350",
             "6507943350", false, null
         )),
-        user
+        user,
+        "PROXY"
     );
 
     Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
     assertEquals("COMPLETED", completed.get("status"));
     assertEquals("REFRESH_ALL", completed.get("mode"));
+    assertEquals("PROXY", completed.get("channel"));
     List<Map<String, Object>> completedItems =
         (List<Map<String, Object>>) completed.get("items");
     assertEquals(2, completedItems.get(0).get("subtaskTotal"));
@@ -301,8 +303,14 @@ class ShipmentBatchTrackingServiceTest {
     ShipmentTrackRequest request = requestCaptor.getValue();
     assertEquals("BOOKING", request.type());
     assertEquals("6507943350", request.number());
+    assertEquals("PROXY", request.channel());
     assertEquals(Boolean.TRUE, request.forceRefresh());
-    verify(trackingService).loadSupplementalDetails(any(), any(), any());
+    ArgumentCaptor<ShipmentTrackRequest> supplementalRequestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).loadSupplementalDetails(
+        any(), supplementalRequestCaptor.capture(), any()
+    );
+    assertEquals("PROXY", supplementalRequestCaptor.getValue().channel());
   }
 
   @Test
