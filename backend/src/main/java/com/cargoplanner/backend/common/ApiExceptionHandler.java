@@ -1,8 +1,12 @@
 package com.cargoplanner.backend.common;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -11,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
   @ExceptionHandler(ApiException.class)
   public ResponseEntity<Map<String, Object>> handleApiException(ApiException error) {
     Map<String, Object> body = body(error.status(), error.getMessage());
@@ -36,8 +42,21 @@ public class ApiExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<Map<String, Object>> handleUnexpected(Exception error) {
-    return ResponseEntity.internalServerError().body(body(HttpStatus.INTERNAL_SERVER_ERROR, "Server error"));
+  public ResponseEntity<Map<String, Object>> handleUnexpected(
+      Exception error,
+      HttpServletRequest request
+  ) {
+    String errorId = UUID.randomUUID().toString();
+    LOGGER.error(
+        "Unhandled request failure errorId={} method={} path={}",
+        errorId,
+        request.getMethod(),
+        request.getRequestURI(),
+        error
+    );
+    Map<String, Object> body = body(HttpStatus.INTERNAL_SERVER_ERROR, "Server error");
+    body.put("errorId", errorId);
+    return ResponseEntity.internalServerError().body(body);
   }
 
   private Map<String, Object> body(HttpStatus status, String message) {
