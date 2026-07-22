@@ -3542,9 +3542,15 @@ function businessReferencesForSnapshot(snapshot) {
   const upstream = snapshot?.references?.business ?? {};
   const stored = readSupplementaryRecord(BUSINESS_REFERENCE_PREFIX, snapshot, {});
   return {
-    clientNameCode: stored.clientNameCode ?? upstream.clientNameCode ?? "",
-    clientPoNumber: stored.clientPoNumber ?? upstream.clientPoNumber ?? "",
-    forwarderJobNumber: stored.forwarderJobNumber ?? upstream.forwarderJobNumber ?? ""
+    clientNameCode: hasText(stored.clientNameCode)
+      ? stored.clientNameCode
+      : upstream.clientNameCode ?? "",
+    clientPoNumber: hasText(stored.clientPoNumber)
+      ? stored.clientPoNumber
+      : upstream.clientPoNumber ?? "",
+    forwarderJobNumber: hasText(stored.forwarderJobNumber)
+      ? stored.forwarderJobNumber
+      : upstream.forwarderJobNumber ?? ""
   };
 }
 

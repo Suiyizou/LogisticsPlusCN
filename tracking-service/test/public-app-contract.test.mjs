@@ -593,3 +593,47 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
   assert.match(appSource, /"references\.title": "订舱信息及参考号"/);
   assert.match(appSource, /"containers\.title": "运输详情"/);
 });
+
+test("blank legacy browser business references do not hide database-backed fields", () => {
+  const start = appSource.indexOf("function businessReferencesForSnapshot(snapshot)");
+  const end = appSource.indexOf("function renderBusinessReferences(snapshot)", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const context = vm.createContext({
+    BUSINESS_REFERENCE_PREFIX: "shipment-track:business-references:",
+    readSupplementaryRecord() {
+      return {
+        clientNameCode: "",
+        clientPoNumber: "   ",
+        forwarderJobNumber: null
+      };
+    },
+    hasText(value) {
+      return value !== null && value !== undefined && String(value).trim() !== "";
+    }
+  });
+  vm.runInContext(
+    `${appSource.slice(start, end)}\n` +
+      "globalThis.businessReferencesForSnapshot = businessReferencesForSnapshot;",
+    context
+  );
+
+  const values = context.businessReferencesForSnapshot({
+    references: {
+      business: {
+        clientNameCode: "Hayden US",
+        clientPoNumber: "HW202600100",
+        forwarderJobNumber: "LJSH2607005"
+      }
+    }
+  });
+  assert.deepEqual(
+    { ...values },
+    {
+      clientNameCode: "Hayden US",
+      clientPoNumber: "HW202600100",
+      forwarderJobNumber: "LJSH2607005"
+    }
+  );
+});

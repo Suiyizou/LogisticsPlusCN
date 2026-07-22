@@ -792,14 +792,14 @@ public class BusinessCustomerService {
 
     if (snapshotJson != null && !snapshotJson.isBlank()) {
       try {
-        JsonNode snap = objectMapper.readTree(snapshotJson);
-        if (snap == null || !snap.isObject()) return value;
+        JsonNode parsedSnapshot = objectMapper.readTree(snapshotJson);
+        if (parsedSnapshot == null || !parsedSnapshot.isObject()) return value;
+        ObjectNode snap = (ObjectNode) parsedSnapshot;
         value.put("dataAvailable", true);
-        value.put("snapshot", snap);
         JsonNode summary = snap.path("summary");
         JsonNode keyTimes = snap.path("keyTimes");
-        JsonNode references = snap.path("references");
-        JsonNode businessRef = references.path("business");
+        ObjectNode references = objectField(snap, "references");
+        ObjectNode businessRef = objectField(references, "business");
         JsonNode tracking = snap.path("tracking");
 
         if (value.get("forwarderJobNumber") == null) {
@@ -811,6 +811,14 @@ public class BusinessCustomerService {
         if (value.get("clientNameCode") == null) {
           value.put("clientNameCode", textOrNull(businessRef.path("clientNameCode")));
         }
+        putManualField(
+            businessRef,
+            "forwarderJobNumber",
+            (String) value.get("forwarderJobNumber")
+        );
+        putManualField(businessRef, "clientPoNumber", (String) value.get("clientPoNumber"));
+        putManualField(businessRef, "clientNameCode", (String) value.get("clientNameCode"));
+        value.put("snapshot", snap);
 
         JsonNode origin = summary.path("origin");
         JsonNode destination = summary.path("destination");

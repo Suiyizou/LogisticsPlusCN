@@ -1034,6 +1034,25 @@ class CustomerAccessFlowTest {
         "SELECT client_name_code FROM cp_shipments WHERE public_id = 'shipment-public-id'",
         String.class
     )).isEqualTo("Hayden US");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> visibleShipments =
+        (List<Map<String, Object>>) customerService.listShipmentSnapshots(business).get("items");
+    JsonNode listSnapshot = (JsonNode) visibleShipments.stream()
+        .filter(item -> "shipment-public-id".equals(item.get("shipmentId")))
+        .findFirst()
+        .orElseThrow()
+        .get("snapshot");
+    assertThat(listSnapshot.path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("JOB-260722");
+    assertThat(listSnapshot.path("references").path("business").path("clientPoNumber").asText())
+        .isEqualTo("PO-9001");
+    assertThat(listSnapshot.path("references").path("business").path("clientNameCode").asText())
+        .isEqualTo("Hayden US");
+    JsonNode detailSnapshot = (JsonNode) customerService
+        .getShipmentSnapshot(business, "shipment-public-id")
+        .get("snapshot");
+    assertThat(detailSnapshot.path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("JOB-260722");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT snapshot_json FROM cp_tracking_snapshots WHERE shipment_id = 10",
         String.class
