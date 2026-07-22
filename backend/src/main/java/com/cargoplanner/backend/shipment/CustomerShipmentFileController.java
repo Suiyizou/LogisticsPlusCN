@@ -92,7 +92,7 @@ public class CustomerShipmentFileController {
       @RequestParam(value = "files", required = false) List<MultipartFile> files,
       @RequestParam(value = "file", required = false) MultipartFile singleFile,
       @RequestParam(value = "category", defaultValue = "RELATED") String category,
-      @RequestParam(value = "visibilityRoles", required = false) List<String> visibilityRoles,
+      @RequestParam(value = "visibilityRoles", required = false) List<String> ignoredVisibilityRoles,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer,
       HttpServletRequest request
   ) {
@@ -105,14 +105,9 @@ public class CustomerShipmentFileController {
     }
     List<Map<String, Object>> items = new ArrayList<>();
     for (MultipartFile upload : uploads) {
-      ShipmentFileService.SavedShipmentFile saved = visibilityRoles == null
-          || visibilityRoles.isEmpty()
-          ? fileService.storeCustomer(
-              upload, shipmentId, customer, category, ClientInfo.ip(request)
-          )
-          : fileService.storeCustomer(
-              upload, shipmentId, customer, category, visibilityRoles, ClientInfo.ip(request)
-          );
+      ShipmentFileService.SavedShipmentFile saved = fileService.storeCustomer(
+          upload, shipmentId, customer, category, ClientInfo.ip(request)
+      );
       items.add(fileService.metadataCustomer(saved, customer));
     }
     Map<String, Object> response = new LinkedHashMap<>();

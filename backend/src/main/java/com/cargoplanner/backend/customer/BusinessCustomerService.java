@@ -1420,6 +1420,75 @@ public class BusinessCustomerService {
     return requireAvailableShipment(shipment.publicId(), actor);
   }
 
+  /**
+   * Updates the three operator-owned card fields without touching the carrier snapshot. All
+   * targets are authorized and normalized before the first write so the batch is transactional.
+   */
+  @Transactional
+  public Map<String, Object> updateShipmentBusinessFields(
+      ShipmentBusinessFieldsBatchUpdateRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    List<ShipmentBusinessFieldsUpdateItem> requested = request == null
+        ? null
+        : request.items();
+    if (requested == null || requested.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one shipment is required");
+    }
+    if (requested.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A shipment batch cannot exceed 500 rows");
+    }
+
+    List<ShipmentBusinessFieldsTarget> targets = new ArrayList<>();
+    Set<String> shipmentIds = new LinkedHashSet<>();
+    for (ShipmentBusinessFieldsUpdateItem item : requested) {
+      String shipmentPublicId = item == null || item.shipmentId() == null
+          ? ""
+          : item.shipmentId().trim();
+      if (shipmentPublicId.isBlank() || !shipmentIds.add(shipmentPublicId)) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment ids must be present and unique");
+      }
+      ShipmentRecord shipment = requireShipment(shipmentPublicId);
+      requireShipmentAssignmentAuthority(shipment, actor);
+      targets.add(new ShipmentBusinessFieldsTarget(
+          shipment,
+          normalizeManualField(item.forwarderJobNumber(), 160),
+          normalizeManualField(item.clientPoNumber(), 160),
+          normalizeManualField(item.clientNameCode(), 160)
+      ));
+    }
+
+    Instant now = Instant.now();
+    for (ShipmentBusinessFieldsTarget target : targets) {
+      lockShipment(target.shipment().id());
+      jdbcTemplate.update(
+          """
+          UPDATE cp_shipments
+          SET job_number = ?, client_po_number = ?, client_name_code = ?, updated_at = ?
+          WHERE id = ?
+          """,
+          target.jobNumber(),
+          target.clientPoNumber(),
+          target.clientNameCode(),
+          Timestamp.from(now),
+          target.shipment().id()
+      );
+      auditShipment(
+          actor,
+          "BATCH_UPDATE_SHIPMENT_BUSINESS_FIELDS",
+          target.shipment().id(),
+          "Updated operator-owned business fields for " + target.shipment().publicId(),
+          ipAddress
+      );
+    }
+    return Map.of(
+        "updated", targets.size(),
+        "shipmentIds", List.copyOf(shipmentIds)
+    );
+  }
+
   private boolean hasManualSnapshotChanges(CreateBusinessShipmentRequest request) {
     return hasText(request.trackingStatus())
         || hasText(request.forwarderJobNumber())
@@ -2449,6 +2518,12 @@ public class BusinessCustomerService {
       String referenceType,
       String referenceNo,
       String displayReferenceNo
+  ) {}
+  private record ShipmentBusinessFieldsTarget(
+      ShipmentRecord shipment,
+      String jobNumber,
+      String clientPoNumber,
+      String clientNameCode
   ) {}
   private record PendingClientMatch(long id, long shipmentId, String shipmentPublicId) {}
   private record BusinessShipmentRecord(

@@ -503,7 +503,8 @@ public class ShipmentTrackingService {
     List<CustomerAssignedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
-               s.last_tracked_at, r.reference_type, r.reference_no_raw,
+               s.last_tracked_at, s.job_number, s.client_po_number, s.client_name_code,
+               s.original_bill_of_lading, r.reference_type, r.reference_no_raw,
                t.snapshot_json, t.strategy_json, t.fetched_at, t.fresh_until
         FROM cp_customer_shipment_access a
         JOIN cp_shipments s ON s.id = a.shipment_id
@@ -525,7 +526,13 @@ public class ShipmentTrackingService {
             ),
             rs.getString("carrier_code"), rs.getString("reference_type"),
             rs.getString("reference_no_raw"), rs.getString("tracking_status"),
-            instant(rs, "last_tracked_at")
+            instant(rs, "last_tracked_at"),
+            new ImportedBusinessFields(
+                rs.getString("job_number"),
+                rs.getString("client_po_number"),
+                rs.getString("client_name_code"),
+                rs.getString("original_bill_of_lading")
+            )
         ),
         customer.id()
     );
@@ -546,7 +553,12 @@ public class ShipmentTrackingService {
       boolean available = cached.snapshotJson() != null
           && isUsableCachedSnapshot(cached.snapshotJson());
       item.put("dataAvailable", available);
-      if (available) item.set("snapshot", readJson(cached.snapshotJson()));
+      if (available) {
+        item.set(
+            "snapshot",
+            overlayStoredBusinessFields(readJson(cached.snapshotJson()), record.businessFields())
+        );
+      }
     }
     response.put("total", records.size());
     response.put("customerReadOnly", true);
@@ -1637,6 +1649,43 @@ public class ShipmentTrackingService {
     return normalized.matches("[A-Z0-9./-]{4,128}");
   }
 
+  private ObjectNode overlayStoredBusinessFields(JsonNode source, long shipmentId) {
+    ImportedBusinessFields fields = jdbcTemplate.queryForObject(
+        """
+        SELECT job_number, client_po_number, client_name_code, original_bill_of_lading
+        FROM cp_shipments WHERE id = ?
+        """,
+        (rs, rowNumber) -> new ImportedBusinessFields(
+            rs.getString("job_number"),
+            rs.getString("client_po_number"),
+            rs.getString("client_name_code"),
+            rs.getString("original_bill_of_lading")
+        ),
+        shipmentId
+    );
+    return overlayStoredBusinessFields(source, fields);
+  }
+
+  private ObjectNode overlayStoredBusinessFields(
+      JsonNode source,
+      ImportedBusinessFields fields
+  ) {
+    ObjectNode snapshot = source != null && source.isObject()
+        ? ((ObjectNode) source).deepCopy()
+        : objectMapper.createObjectNode();
+    if (fields == null) return snapshot;
+    ObjectNode business = childObject(childObject(snapshot, "references"), "business");
+    putStoredBusinessField(business, "forwarderJobNumber", fields.jobNumber());
+    putStoredBusinessField(business, "clientPoNumber", fields.clientPoNumber());
+    putStoredBusinessField(business, "clientNameCode", fields.clientNameCode());
+    putStoredBusinessField(business, "originalBillOfLading", fields.originalBillOfLading());
+    return snapshot;
+  }
+
+  private void putStoredBusinessField(ObjectNode target, String field, String value) {
+    if (value != null && !value.isBlank()) target.put(field, value);
+  }
+
   private ObjectNode cachedResponse(CachedShipment cached, AuthenticatedUser user, boolean stale) {
     ObjectNode response = objectMapper.createObjectNode();
     response.set("snapshot", readJson(cached.snapshotJson()));
@@ -1644,6 +1693,10 @@ public class ShipmentTrackingService {
     if (routed.path("snapshot").isObject()) {
       response.set("snapshot", routed.path("snapshot").deepCopy());
     }
+    response.set(
+        "snapshot",
+        overlayStoredBusinessFields(response.path("snapshot"), cached.shipmentId())
+    );
     if (cached.strategyJson() != null && !cached.strategyJson().isBlank()) {
       response.set("strategy", readJson(cached.strategyJson()));
     }
@@ -1662,6 +1715,10 @@ public class ShipmentTrackingService {
         ? ((ObjectNode) upstream).deepCopy()
         : objectMapper.createObjectNode().set("snapshot", upstream.path("snapshot"));
     boolean adapterCached = response.path("cached").asBoolean(false);
+    response.set(
+        "snapshot",
+        overlayStoredBusinessFields(response.path("snapshot"), persisted.shipmentId())
+    );
     response.put("shipmentId", persisted.shipmentPublicId());
     response.put("cacheSource", adapterCached ? "NODE" : "LIVE");
     response.put("stale", false);
@@ -2125,7 +2182,8 @@ public class ShipmentTrackingService {
       String referenceType,
       String referenceNo,
       String trackingStatus,
-      Instant lastTrackedAt
+      Instant lastTrackedAt,
+      ImportedBusinessFields businessFields
   ) {}
 
   private record ImportedCustomerMatch(long customerId, String partyRole) {}

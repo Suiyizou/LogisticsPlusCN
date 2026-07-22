@@ -107,6 +107,17 @@ public class BusinessCustomerController {
     return service.updateManualSnapshot(shipmentId, request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PatchMapping("/shipments/batch-business-fields")
+  public Map<String, Object> updateShipmentBusinessFields(
+      @RequestBody ShipmentBusinessFieldsBatchUpdateRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateShipmentBusinessFields(
+        request, actor, ClientInfo.ip(httpRequest)
+    );
+  }
+
   @PostMapping("/shipments/{shipmentId}/invalidate-snapshot")
   public Map<String, Object> invalidateSnapshot(
       @PathVariable String shipmentId,

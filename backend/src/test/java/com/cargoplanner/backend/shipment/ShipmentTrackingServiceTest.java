@@ -336,7 +336,7 @@ class ShipmentTrackingServiceTest {
     assertThat(cached.path("shipmentId").asText()).isEqualTo(first.path("shipmentId").asText());
     assertThat(cached.path("cacheSource").asText()).isEqualTo("MYSQL");
     assertThat(cached.path("snapshot").path("references").path("business")
-        .has("forwarderJobNumber")).isFalse();
+        .path("forwarderJobNumber").asText()).isEqualTo("JOB-100");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT job_number FROM cp_shipments", String.class
     )).isEqualTo("JOB-100");
@@ -433,9 +433,11 @@ class ShipmentTrackingServiceTest {
     assertThat(snapshot.path("tracking").has("originalNumber")).isFalse();
     assertThat(snapshot.path("references").has("originalBillOfLading")).isFalse();
     assertThat(snapshot.path("references").path("business").path("clientNameCode").asText())
-        .isEqualTo("API-CODE");
-    assertThat(snapshot.path("references").path("business").has("clientPoNumber")).isFalse();
-    assertThat(snapshot.path("references").path("business").has("forwarderJobNumber")).isFalse();
+        .isEqualTo("FILE-CODE");
+    assertThat(snapshot.path("references").path("business").path("clientPoNumber").asText())
+        .isEqualTo("HW202600057-2");
+    assertThat(snapshot.path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("JSH2606003");
     assertThat(snapshot.path("extraInformation").findValuesAsText("key"))
         .doesNotContain(
             "carrierPrefix", "originalBillOfLading", "clientPoNumber", "forwarderJobNumber",
@@ -485,10 +487,18 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.update(
         "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED', published_at = CURRENT_TIMESTAMP"
     );
-    assertThat(service.listAssignedSnapshots(customer).path("total").asInt()).isEqualTo(1);
+    ObjectNode customerList = service.listAssignedSnapshots(customer);
+    assertThat(customerList.path("total").asInt()).isEqualTo(1);
+    assertThat(customerList.path("items").get(0).path("snapshot")
+        .path("references").path("business").path("forwarderJobNumber").asText())
+        .isEqualTo("JSH2606003");
     ObjectNode customerDetail = service.readAssignedSnapshotByShipmentId(shipmentId, customer);
     assertThat(customerDetail.path("customerReadOnly").asBoolean()).isTrue();
     assertThat(customerDetail.path("cacheSource").asText()).isEqualTo("MYSQL_ASSIGNED");
+    assertThat(customerDetail.path("snapshot").path("references").path("business")
+        .path("clientPoNumber").asText()).isEqualTo("HW202600057-2");
+    assertThat(customerDetail.path("snapshot").path("references").path("business")
+        .path("clientNameCode").asText()).isEqualTo("FILE-CODE");
 
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest(

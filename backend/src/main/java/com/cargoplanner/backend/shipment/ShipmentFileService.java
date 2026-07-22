@@ -398,14 +398,15 @@ public class ShipmentFileService {
     Map<Long, List<String>> rolesByFile = visibilityRolesFor(records);
     FileActor actor = FileActor.customer(customer);
     List<Map<String, Object>> items = records.stream()
-        .filter(record -> canView(access, rolesByFile.get(record.id()))
-            || isCustomerUploader(record, customer))
+        .filter(record -> canCustomerView(
+            record, access, customer, rolesByFile.get(record.id())
+        ))
         .map(record -> metadata(record, actor, "customer", rolesByFile.get(record.id())))
         .toList();
     Map<String, Object> permissions = new LinkedHashMap<>();
     permissions.put("canUpload", true);
-    permissions.put("canChangeVisibility", true);
-    permissions.put("allowedVisibilityRoles", VISIBILITY_ROLE_ORDER);
+    permissions.put("canChangeVisibility", false);
+    permissions.put("allowedVisibilityRoles", List.of());
     return Map.of("items", items, "total", items.size(), "permissions", permissions);
   }
 
@@ -591,28 +592,10 @@ public class ShipmentFileService {
       CustomerPrincipal customer,
       String ipAddress
   ) {
-    ShipmentFileRecord record = requireRecord(filePublicId, false);
-    accessService.requireCustomerAccess(record.shipmentPublicId(), customer);
-    if (!Long.valueOf(customer.id()).equals(record.uploaderCustomerId())) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "Customers may only edit their own uploads");
-    }
-    List<String> visibilityRoles = normalizeVisibilityRoles(requestedVisibilityRoles, Set.of());
-    FileActor actor = FileActor.customer(customer);
-    Map<String, Object> before = metadata(record, actor, "customer");
-    Instant now = clock.instant();
-    jdbcTemplate.update(
-        "UPDATE cp_shipment_files SET visibility = ?, target_customer_id = ?, updated_at = ? "
-            + "WHERE id = ? AND status = 'READY'",
-        legacyVisibility(visibilityRoles),
-        customer.id(),
-        timestamp(now),
-        record.id()
+    throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        "Customers cannot change shipment file visibility"
     );
-    replaceVisibilityRoles(record.id(), visibilityRoles, now);
-    ShipmentFileRecord updated = requireRecord(filePublicId, false);
-    Map<String, Object> after = metadata(updated, actor, "customer");
-    audit(updated, actor, "VISIBILITY_CHANGE", before, after, ipAddress);
-    return after;
   }
 
   public void delete(
@@ -1154,7 +1137,7 @@ public class ShipmentFileService {
     value.put("previewUrl", downloadPrefix + record.publicId() + "/preview");
     value.put("previewMode", previewMode(record.extension()));
     value.put("canDelete", canDelete);
-    value.put("canChangeVisibility", canManage || customerUploader);
+    value.put("canChangeVisibility", canManage);
     return value;
   }
 
@@ -1295,6 +1278,22 @@ public class ShipmentFileService {
     return access.fileRoles().stream().anyMatch(fileRoles::contains);
   }
 
+  private boolean canCustomerView(
+      ShipmentFileRecord record,
+      ShipmentAccess access,
+      CustomerPrincipal customer,
+      Collection<String> fileRoles
+  ) {
+    if (record == null || customer == null) return false;
+    // Customer uploads are private to the exact customer account. The OVERSEA_AGENT
+    // visibility role still lets internal business users see them, but another customer
+    // with the same SHIPPER/CONSIGNEE role must not inherit access through that role.
+    if (record.uploaderCustomerId() != null) {
+      return record.uploaderCustomerId().equals(customer.id());
+    }
+    return canView(access, fileRoles);
+  }
+
   private boolean canInternalView(
       ShipmentFileRecord record,
       ShipmentAccess access,
@@ -1325,7 +1324,9 @@ public class ShipmentFileService {
       ShipmentAccess access,
       CustomerPrincipal customer
   ) {
-    if (!isCustomerUploader(record, customer)) requireVisible(record, access);
+    if (!canCustomerView(record, access, customer, visibilityRolesFor(record))) {
+      throw new ApiException(HttpStatus.NOT_FOUND, "Shipment file not found");
+    }
   }
 
   private boolean isCustomerUploader(

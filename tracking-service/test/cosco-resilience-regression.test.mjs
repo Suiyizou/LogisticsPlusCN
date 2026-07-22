@@ -10,6 +10,7 @@ import {
   normalizeCoscoSnapshot,
   normalizeTrackingRequest,
   parseRetryAfter,
+  shouldFallbackCoscoAutoToProxy,
   shouldRotateCoscoProxy
 } from "../server.mjs";
 
@@ -266,6 +267,33 @@ test("AUTO strategy does not enter Playwright fallback for protection failures",
 
   assert.ok(protectionGuard >= 0, "AUTO must rethrow 403/429 before fallback");
   assert.ok(playwrightFallback > protectionGuard, "Playwright fallback must follow the protection guard");
+});
+
+test("AUTO falls back to the proxy pool for block, timeout, and gateway failures", () => {
+  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("blocked"), {
+    upstreamStatus: 403
+  })), true);
+  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("timed out"), {
+    status: 504
+  })), true);
+  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("bad gateway"), {
+    status: 502
+  })), true);
+  assert.equal(shouldFallbackCoscoAutoToProxy(new Error("invalid reference")), false);
+});
+
+test("supplemental proxy failures escape warning handling and enter node rotation", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const handler = source.slice(
+    source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
+    source.indexOf("async function handleTrackRequest")
+  );
+
+  assert.match(handler, /runCoscoWithAutomaticProxyFallback/);
+  assert.equal(
+    (handler.match(/if \(shouldRotateCoscoProxy\(error\)\) throw error;/g) ?? []).length,
+    2
+  );
 });
 
 test("business-code 403 opens protection before the generic adapter failure path", async () => {

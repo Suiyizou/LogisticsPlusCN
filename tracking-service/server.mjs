@@ -1519,10 +1519,17 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
 
 export function shouldRotateCoscoProxy(error) {
   return isCoscoProtectionError(error)
-    || error?.status === 504
+    || [502, 503, 504].includes(error?.status)
     || error?.details?.code === "COSCO_PROXY_UNAVAILABLE"
     || error?.details?.code === "COSCO_CHANNELS_UNAVAILABLE"
     || error?.details?.code === "COSCO_SUPPLEMENTAL_UNAVAILABLE";
+}
+
+export function shouldFallbackCoscoAutoToProxy(error) {
+  const message = String(error?.message ?? "");
+  return shouldRotateCoscoProxy(error)
+    || [502, 503, 504].includes(error?.status)
+    || /timeout|timed out|fetch failed|network|socket|econn|enet|ehost/i.test(message);
 }
 
 function proxyPoolExhaustedError(error, attempts) {
@@ -1577,12 +1584,62 @@ async function runCoscoWithProxyRotation(queryChannel, options, operation) {
   });
 }
 
-function runCoscoTrackingRequest(request, queryChannel, options = {}) {
-  return coscoQueryGate.run(
-    () => runCoscoWithProxyRotation(
+function decorateAutomaticProxyFallback(result, primaryError) {
+  if (!result || typeof result !== "object") return result;
+  const existingStrategy = result.strategy && typeof result.strategy === "object"
+    ? result.strategy
+    : {};
+  return {
+    ...result,
+    proxyFallback: true,
+    strategy: {
+      ...existingStrategy,
+      requested: "AUTO",
+      used: "PROXY",
+      fallbackUsed: true,
+      primaryError: primaryError?.message ?? "Direct COSCO channel failed"
+    }
+  };
+}
+
+async function runCoscoWithAutomaticProxyFallback(queryChannel, options, operation) {
+  try {
+    return await runCoscoWithProxyRotation(
       queryChannel,
       options,
-      (routeOptions) => fetchCoscoTracking(request, queryChannel, routeOptions)
+      (routeOptions) => operation(queryChannel, routeOptions)
+    );
+  } catch (error) {
+    if (
+      queryChannel.code !== "AUTO"
+      || !coscoProxyClient
+      || !shouldFallbackCoscoAutoToProxy(error)
+      || options.signal?.aborted
+    ) {
+      throw error;
+    }
+    try {
+      options.authorizeProxyFallback?.();
+    } catch {
+      // Public AUTO requests are not allowed to consume the private proxy pool. Keep the
+      // original upstream failure instead of exposing an authorization-specific response.
+      throw error;
+    }
+    const result = await runCoscoWithProxyRotation(
+      COSCO_QUERY_CHANNELS.PROXY,
+      options,
+      (routeOptions) => operation(COSCO_QUERY_CHANNELS.PROXY, routeOptions)
+    );
+    return decorateAutomaticProxyFallback(result, error);
+  }
+}
+
+function runCoscoTrackingRequest(request, queryChannel, options = {}) {
+  return coscoQueryGate.run(
+    () => runCoscoWithAutomaticProxyFallback(
+      queryChannel,
+      options,
+      (activeChannel, routeOptions) => fetchCoscoTracking(request, activeChannel, routeOptions)
     ),
     { signal: options.signal }
   );
@@ -1862,7 +1919,11 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
   }
 
   const result = await coscoQueryGate.run(
-    () => runCoscoWithProxyRotation(queryChannel, {}, async (routeOptions) => {
+    () => runCoscoWithAutomaticProxyFallback(queryChannel, {
+      authorizeProxyFallback: () => requireProxyAdapterAuthorization(
+        request, COSCO_QUERY_CHANNELS.PROXY
+      )
+    }, async (_activeChannel, routeOptions) => {
       const warnings = [];
       let bookingInfo = {};
       let containerInfo = [];
@@ -1872,13 +1933,13 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
           timeoutMs: coscoEnrichmentTimeoutMs(routeOptions)
         });
       } catch (error) {
-        if (isCoscoProtectionError(error)) throw error;
+        if (shouldRotateCoscoProxy(error)) throw error;
         warnings.push({ source: "bookingInfo", message: error?.message ?? "订舱参考信息查询失败" });
       }
       try {
         containerInfo = await fetchCoscoShipmentContainers(trackingRequest, routeOptions);
       } catch (error) {
-        if (isCoscoProtectionError(error)) throw error;
+        if (shouldRotateCoscoProxy(error)) throw error;
         warnings.push({ source: "containerInfo", message: error?.message ?? "运输详情查询失败" });
       }
 
@@ -1957,7 +2018,10 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
       ? fetchCmaTracking(trackingRequest, cmaCredentials, { signal: batchLease?.signal })
       : runCoscoTrackingRequest(trackingRequest, queryChannel, {
           signal: batchLease?.signal,
-          batch: Boolean(batchTaskId)
+          batch: Boolean(batchTaskId),
+          authorizeProxyFallback: () => requireProxyAdapterAuthorization(
+            request, COSCO_QUERY_CHANNELS.PROXY
+          )
         });
     if (!batchTaskId && !forceRefresh) inFlightTrackingRequests.set(cacheKey, requestPromise);
   }

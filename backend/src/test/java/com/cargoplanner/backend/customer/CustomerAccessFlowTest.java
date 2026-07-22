@@ -988,6 +988,42 @@ class CustomerAccessFlowTest {
     )).isZero();
   }
 
+  @Test
+  void batchBusinessFieldUpdateDoesNotMutateCarrierSnapshot() {
+    String before = jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE shipment_id = 10",
+        String.class
+    );
+
+    Map<String, Object> result = customerService.updateShipmentBusinessFields(
+        new ShipmentBusinessFieldsBatchUpdateRequest(List.of(
+            new ShipmentBusinessFieldsUpdateItem(
+                "shipment-public-id", "JOB-260722", "PO-9001", "Hayden US"
+            )
+        )),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(result).containsEntry("updated", 1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments WHERE public_id = 'shipment-public-id'",
+        String.class
+    )).isEqualTo("JOB-260722");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_po_number FROM cp_shipments WHERE public_id = 'shipment-public-id'",
+        String.class
+    )).isEqualTo("PO-9001");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT client_name_code FROM cp_shipments WHERE public_id = 'shipment-public-id'",
+        String.class
+    )).isEqualTo("Hayden US");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE shipment_id = 10",
+        String.class
+    )).isEqualTo(before);
+  }
+
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (

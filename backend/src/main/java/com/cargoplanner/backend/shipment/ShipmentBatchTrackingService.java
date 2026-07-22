@@ -306,10 +306,14 @@ public class ShipmentBatchTrackingService {
         synchronized (task) {
           item.shipmentId = response.path("shipmentId").asText(null);
         }
+        boolean automaticProxyFallback = "AUTO".equals(task.channel)
+            && "PROXY".equals(response.path("strategy").path("used").asText());
         boolean supplementalComplete = refreshSupplementalDetails(task, item);
         synchronized (task) {
           item.status = supplementalComplete ? "SUCCEEDED" : "PARTIAL";
-          item.source = response.path("cacheSource").asText("LIVE");
+          item.source = automaticProxyFallback
+              ? "AUTO_PROXY"
+              : response.path("cacheSource").asText("LIVE");
           item.error = null;
           item.errorCode = null;
           item.nextRetryAt = null;

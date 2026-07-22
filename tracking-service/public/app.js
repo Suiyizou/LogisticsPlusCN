@@ -2306,6 +2306,7 @@ function createRelatedFileItem(file) {
   badges.append(sharing);
 
   if (
+    session.kind === "INTERNAL" &&
     file.canChangeVisibility &&
     (canManageFileVisibility(session) || relatedFilesPermissions?.canChangeVisibility === true)
   ) {
@@ -2620,7 +2621,7 @@ function renderRelatedFilesDrawer() {
   relatedFilesUserName.textContent =
     fileSessionDisplayName(session);
   relatedFilesUploadVisibilityField.hidden =
-    !authenticated || relatedFilesPermissions?.canUpload === false;
+    !authenticated || relatedFilesPermissions?.canUpload === false || !canManageVisibility;
 
   relatedFilesLoading.hidden = !relatedFilesLoadingState;
   relatedFilesError.hidden = !relatedFilesErrorText || relatedFilesLoadingState;
@@ -2774,13 +2775,9 @@ async function uploadRelatedFiles() {
     return;
   }
 
-  const visibilityRoles = selectedRelatedFilesUploadRoles().length > 0
-    ? selectedRelatedFilesUploadRoles()
-    : normalizeFileVisibilityRoles(
-        session.principal?.partyRole ?? session.storedSession?.partyRole,
-        "SHIPPER"
-      );
-  if (visibilityRoles.length === 0) {
+  const customerUpload = session.kind === "CUSTOMER";
+  const visibilityRoles = customerUpload ? [] : selectedRelatedFilesUploadRoles();
+  if (!customerUpload && visibilityRoles.length === 0) {
     setRelatedFilesUploadMessage(t("files.visibilityRequired"), "error");
     renderRelatedFilesDrawer();
     return;
@@ -2795,7 +2792,9 @@ async function uploadRelatedFiles() {
   const formData = new FormData();
   for (const file of files) formData.append("files", file);
   formData.append("category", relatedFilesCategory.value || "EXPORT_CIV_PL");
-  for (const role of visibilityRoles) formData.append("visibilityRoles", role);
+  if (!customerUpload) {
+    for (const role of visibilityRoles) formData.append("visibilityRoles", role);
+  }
   if (session.kind === "INTERNAL") {
     formData.append("visibility", internalVisibility);
     if (targetCustomerId) formData.append("targetCustomerId", targetCustomerId);

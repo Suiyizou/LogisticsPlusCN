@@ -195,7 +195,7 @@ class ShipmentFileServiceTest {
   }
 
   @Test
-  void customerCanManageVisibilityAndDeleteOwnUpload() throws Exception {
+  void customerUploadVisibilityIsFixedAndCustomerCanDeleteOwnUpload() throws Exception {
     ShipmentFileService.SavedShipmentFile saved = service.storeCustomer(
         upload("cargo-detail.xlsx", "customer-cargo"),
         "shipment-public-id",
@@ -210,22 +210,39 @@ class ShipmentFileServiceTest {
     assertThat(saved.record().visibility()).isEqualTo("PARTIES");
     Map<String, Object> metadata = service.metadataCustomer(saved, portalCustomer);
     assertThat(metadata.get("uploaderType")).isEqualTo("CUSTOMER");
-    assertThat(metadata.get("canChangeVisibility")).isEqualTo(true);
+    assertThat(metadata.get("canChangeVisibility")).isEqualTo(false);
+    assertThat(metadata.get("visibilityRoles"))
+        .isEqualTo(List.of("OVERSEA_AGENT", "SHIPPER"));
     Map<String, Object> customerFiles = service.listCustomer(
         "shipment-public-id", portalCustomer
     );
     assertThat(((Map<?, ?>) customerFiles.get("permissions")).get("canChangeVisibility"))
-        .isEqualTo(true);
+        .isEqualTo(false);
     assertThat(((List<?>) customerFiles.get("items")))
         .hasSize(1);
-    assertThatThrownBy(() -> service.listCustomer("shipment-public-id", otherPortalCustomer))
-        .isInstanceOf(ApiException.class)
-        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
-
-    Map<String, Object> changed = service.updateVisibilityRolesCustomer(
-        saved.record().publicId(), List.of("CONSIGNEE"), portalCustomer, "127.0.0.1"
+    jdbcTemplate.update("UPDATE cp_customers SET party_role = 'SHIPPER' WHERE id = 21");
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (21, 10, 'SHIPPER', 2)"
     );
-    assertThat(changed.get("visibilityRoles")).isEqualTo(List.of("CONSIGNEE"));
+    CustomerPrincipal sameRoleCustomer = new CustomerPrincipal(
+        21, "other-customer-id", "other-customer", "Other Customer", "SHIPPER", "ACTIVE"
+    );
+    assertThat((List<?>) service.listCustomer(
+        "shipment-public-id", sameRoleCustomer
+    ).get("items")).isEmpty();
+    assertThatThrownBy(() -> service.contentCustomer(
+        saved.record().publicId(), sameRoleCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.NOT_FOUND));
+
+    assertThatThrownBy(() -> service.updateVisibilityRolesCustomer(
+        saved.record().publicId(), List.of("CONSIGNEE"), portalCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.FORBIDDEN));
     assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
         .hasSize(1);
     assertThat(service.contentCustomer(

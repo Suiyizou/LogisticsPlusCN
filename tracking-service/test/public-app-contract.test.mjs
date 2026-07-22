@@ -177,22 +177,27 @@ test("session and shipment changes discard target-customer candidates", () => {
   );
 });
 
-test("uploads and per-file edits send role arrays while retaining legacy visibility", () => {
+test("only internal uploads and per-file edits send role arrays", () => {
   const uploadStart = appSource.indexOf("async function uploadRelatedFiles()");
   const uploadEnd = appSource.indexOf("async function downloadRelatedFile", uploadStart);
   const uploadSource = appSource.slice(uploadStart, uploadEnd);
   assert.match(
     uploadSource,
-    /selectedRelatedFilesUploadRoles\(\)[\s\S]*?visibilityRoles\.length === 0[\s\S]*?return;/
+    /const customerUpload = session\.kind === "CUSTOMER";[\s\S]*?if \(!customerUpload && visibilityRoles\.length === 0\)/
   );
   assert.match(
     uploadSource,
-    /for \(const role of visibilityRoles\) formData\.append\("visibilityRoles", role\)[\s\S]*?formData\.append\("visibility", internalVisibility\)/
+    /if \(!customerUpload\) \{[\s\S]*?formData\.append\("visibilityRoles", role\)[\s\S]*?if \(session\.kind === "INTERNAL"\)[\s\S]*?formData\.append\("visibility", internalVisibility\)/
   );
   assert.match(
     appSource,
-    /method: "PATCH",[\s\S]*?visibilityRoles: nextRoles,[\s\S]*?visibility: legacyVisibilityForRoles\(nextRoles\)/
+    /session\.kind === "INTERNAL" &&[\s\S]*?method: "PATCH",[\s\S]*?visibilityRoles: nextRoles,[\s\S]*?visibility: legacyVisibilityForRoles\(nextRoles\)/
   );
+  assert.match(
+    appSource,
+    /relatedFilesUploadVisibilityField\.hidden =[\s\S]*?!canManageVisibility;/
+  );
+  assert.match(stylesSource, /\.visibility-role-menu \{[\s\S]*?bottom: calc\(100% \+ 6px\)/);
 });
 
 test("customer file cards never disclose another customer's display name", () => {

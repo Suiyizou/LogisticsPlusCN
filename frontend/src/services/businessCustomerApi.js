@@ -103,6 +103,13 @@ export function updateBusinessShipmentManualSnapshot(shipmentId, payload) {
   });
 }
 
+export function batchUpdateBusinessShipmentFields(items) {
+  return request("/business/customers/shipments/batch-business-fields", {
+    method: "PATCH",
+    body: { items }
+  });
+}
+
 export function invalidateBusinessShipmentSnapshot(shipmentId, reason) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/invalidate-snapshot`, {
     method: "POST",

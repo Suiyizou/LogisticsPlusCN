@@ -417,6 +417,12 @@
                     </label>
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
                     <el-button
+                      type="primary"
+                      plain
+                      :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
+                      @click="openBatchBusinessFieldsEditor"
+                    >{{ t("customers.batchEditBusinessFields", { count: selectedShipmentRows.length }) }}</el-button>
+                    <el-button
                       type="danger"
                       plain
                       :disabled="!selectedShipmentRows.length || batchDeletingShipments"
@@ -500,6 +506,39 @@
                     </template>
                   </el-table-column>
                 </el-table>
+                <el-dialog
+                  v-model="batchBusinessFieldsDialogOpen"
+                  :title="t('customers.batchEditBusinessFieldsTitle')"
+                  width="min(1080px, 94vw)"
+                  append-to-body
+                  class="batch-business-fields-dialog"
+                >
+                  <p class="batch-business-fields-hint">{{ t("customers.batchEditBusinessFieldsHint") }}</p>
+                  <div class="batch-business-fields-grid batch-business-fields-grid--head">
+                    <span>{{ t("customers.referenceNo") }}</span>
+                    <span>{{ t("customers.jobNumber") }}</span>
+                    <span>{{ t("customers.clientPoNumber") }}</span>
+                    <span>{{ t("customers.clientNoName") }}</span>
+                  </div>
+                  <div class="batch-business-fields-rows">
+                    <div
+                      v-for="row in batchBusinessFieldRows"
+                      :key="row.shipmentId"
+                      class="batch-business-fields-grid"
+                    >
+                      <span class="batch-business-reference"><b>{{ row.referenceNo }}</b><small>{{ row.carrier }}</small></span>
+                      <el-input v-model="row.forwarderJobNumber" clearable />
+                      <el-input v-model="row.clientPoNumber" clearable />
+                      <el-input v-model="row.clientNameCode" clearable />
+                    </div>
+                  </div>
+                  <template #footer>
+                    <el-button @click="batchBusinessFieldsDialogOpen = false" :disabled="batchSavingBusinessFields">{{ t("customers.cancel") }}</el-button>
+                    <el-button type="primary" @click="saveBatchBusinessFields" :loading="batchSavingBusinessFields">
+                      {{ t("customers.saveBatchBusinessFields") }}
+                    </el-button>
+                  </template>
+                </el-dialog>
               </div>
               <el-dialog
                 v-model="batchTrackDialogOpen"
@@ -686,14 +725,23 @@
                       </div>
                     </template>
                     <div class="customer-manual-fields shipment-detail-fields">
-                      <el-form-item :label="t('customers.shipmentStatus')">
-                        <el-input v-model.trim="detailForm.trackingStatus" />
-                      </el-form-item>
                       <el-form-item :label="t('customers.jobNumber')">
                         <el-input v-model.trim="detailForm.forwarderJobNumber" />
                       </el-form-item>
+                      <el-form-item :label="t('customers.clientPoNumber')">
+                        <el-input v-model.trim="detailForm.clientPoNumber" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.clientNoName')">
+                        <el-input v-model.trim="detailForm.clientNameCode" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.shipmentStatus')">
+                        <el-input v-model.trim="detailForm.trackingStatus" />
+                      </el-form-item>
                       <el-form-item :label="t('customers.vesselVoyage')">
                         <el-input v-model.trim="detailForm.vesselVoyage" />
+                      </el-form-item>
+                      <el-form-item :label="t('customers.volume')">
+                        <el-input v-model.trim="detailForm.volume" placeholder="5*40HC" />
                       </el-form-item>
                       <el-form-item :label="t('customers.portOfLoading')">
                         <el-input v-model.trim="detailForm.portOfLoading" />
@@ -701,11 +749,8 @@
                       <el-form-item :label="t('customers.portOfDischarge')">
                         <el-input v-model.trim="detailForm.portOfDischarge" />
                       </el-form-item>
-                      <el-form-item :label="t('customers.clientPoNumber')">
-                        <el-input v-model.trim="detailForm.clientPoNumber" />
-                      </el-form-item>
-                      <el-form-item :label="t('customers.volume')">
-                        <el-input v-model.trim="detailForm.volume" placeholder="5*40HC" />
+                      <el-form-item :label="t('customers.currentLocation')">
+                        <el-input v-model.trim="detailForm.currentLocation" />
                       </el-form-item>
                       <el-form-item :label="t('customers.estimatedDeparture')">
                         <el-input v-model.trim="detailForm.estimatedDeparture" />
@@ -722,17 +767,11 @@
                       <el-form-item :label="t('customers.actualDelivery')">
                         <el-input v-model.trim="detailForm.actualDelivery" />
                       </el-form-item>
-                      <el-form-item :label="t('customers.currentLocation')">
-                        <el-input v-model.trim="detailForm.currentLocation" />
-                      </el-form-item>
-                      <el-form-item :label="t('customers.clientNameCode')">
-                        <el-input v-model.trim="detailForm.clientNameCode" />
-                      </el-form-item>
                     </div>
                   </el-card>
 
                   <el-form-item :label="t('customers.shipmentNote')" class="shipment-note-field">
-                    <el-input v-model="detailForm.note" type="textarea" :rows="3" maxlength="2000" show-word-limit />
+                    <el-input v-model="detailForm.note" type="textarea" :rows="2" maxlength="2000" show-word-limit />
                   </el-form-item>
 
                   <div class="shipment-detail-actions">
@@ -1012,6 +1051,7 @@ import { useI18n } from "vue-i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
+  batchUpdateBusinessShipmentFields,
   batchBindBusinessCustomerShipments,
   batchDeleteBusinessShipments,
   bindBusinessCustomerShipment,
@@ -1130,6 +1170,9 @@ const selectedCandidateShipmentIds = ref([]);
 const selectedShipmentRows = ref([]);
 const shipmentTableRef = ref(null);
 const batchDeletingShipments = ref(false);
+const batchBusinessFieldsDialogOpen = ref(false);
+const batchBusinessFieldRows = ref([]);
+const batchSavingBusinessFields = ref(false);
 const shipmentCustomerFilter = ref("");
 const shipmentTrackingChannel = ref("AUTO");
 const unbindingShipmentId = ref("");
@@ -1920,6 +1963,9 @@ function batchTrackItemMessage(item, taskStatus = "") {
   if (status === "RETRY_WAIT") return t("customers.batchTrackRetryItem");
   if (item.error) return item.error;
   if (taskStatus === "STOPPED" && ["PENDING", "RUNNING"].includes(status)) return t("customers.trackStopped");
+  if (status === "SUCCEEDED" && item.source === "AUTO_PROXY") {
+    return t("customers.trackSucceededViaProxy");
+  }
   if (status === "SUCCEEDED") return t("customers.trackSucceeded");
   if (status === "PARTIAL") {
     const details = (item.subtasks || [])
@@ -2527,7 +2573,7 @@ function syncDetailFormFromShipment(shipment) {
     actualDelivery: shipment.actualDelivery || "",
     currentLocation: shipment.currentLocation || "",
     volume: shipment.volume || "",
-    clientNameCode: shipment.clientNameCode || ""
+    clientNameCode: shipment.clientNameCode || primaryBoundCustomerName(shipment)
   });
 }
 
@@ -2710,6 +2756,44 @@ async function deleteShipmentRow(row) {
 
 function handleShipmentSelectionChange(rows) {
   selectedShipmentRows.value = Array.isArray(rows) ? rows : [];
+}
+
+function openBatchBusinessFieldsEditor() {
+  if (!selectedShipmentRows.value.length || batchSavingBusinessFields.value) return;
+  batchBusinessFieldRows.value = selectedShipmentRows.value.map((row) => ({
+    shipmentId: row.shipmentId,
+    referenceNo: row.referenceNo || row.shipmentId,
+    carrier: row.carrier || t("customers.missingValue"),
+    forwarderJobNumber: row.forwarderJobNumber || "",
+    clientPoNumber: row.clientPoNumber || "",
+    clientNameCode: row.clientNameCode || primaryBoundCustomerName(row)
+  }));
+  batchBusinessFieldsDialogOpen.value = true;
+}
+
+async function saveBatchBusinessFields() {
+  if (!batchBusinessFieldRows.value.length || batchSavingBusinessFields.value) return;
+  batchSavingBusinessFields.value = true;
+  try {
+    const result = await batchUpdateBusinessShipmentFields(
+      batchBusinessFieldRows.value.map((row) => ({
+        shipmentId: row.shipmentId,
+        forwarderJobNumber: String(row.forwarderJobNumber || "").trim() || null,
+        clientPoNumber: String(row.clientPoNumber || "").trim() || null,
+        clientNameCode: String(row.clientNameCode || "").trim() || null
+      }))
+    );
+    batchBusinessFieldsDialogOpen.value = false;
+    batchBusinessFieldRows.value = [];
+    selectedShipmentRows.value = [];
+    shipmentTableRef.value?.clearSelection?.();
+    await loadAvailableShipments();
+    showSuccess("customers.batchBusinessFieldsSaved", { count: result?.updated || 0 });
+  } catch (error) {
+    showError(error, "customers.batchBusinessFieldsSaveFailed");
+  } finally {
+    batchSavingBusinessFields.value = false;
+  }
 }
 
 async function batchDeleteSelectedShipments() {
@@ -2979,6 +3063,19 @@ function shipmentClientLabel(shipment) {
       .join(" / ");
   }).filter(Boolean);
   return labels.length ? labels.join(" / ") : "—";
+}
+
+function primaryBoundCustomerName(shipment) {
+  const users = shipmentBoundUsers(shipment);
+  const preferred = users.find((user) => String(user.role || "").toUpperCase() === "SHIPPER")
+    || users.find((user) => ["SHIPPER", "CONSIGNEE"].includes(String(user.role || "").toUpperCase()))
+    || users.find((user) => String(user.role || "").toUpperCase() !== "OVERSEA_AGENT");
+  return preferred?.displayName
+    || preferred?.clientName
+    || preferred?.name
+    || preferred?.username
+    || preferred?.clientCode
+    || "";
 }
 
 function customerFilterOptionLabel(customer) {
@@ -4309,7 +4406,7 @@ function showError(error, fallbackKey) {
   gap: 12px;
 }
 .shipment-detail-card :deep(.el-card__body) {
-  padding: 24px;
+  padding: 18px;
 }
 .shipment-detail-card .main-card-subtitle {
   gap: 8px;
@@ -4327,31 +4424,81 @@ function showError(error, fallbackKey) {
 }
 .shipment-detail-single-column {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
 }
 .shipment-detail-single-column .el-form-item {
   margin-bottom: 0;
 }
 .shipment-detail-fields {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 .shipment-detail-fields .el-input {
   border-radius: 8px;
 }
 .shipment-detail-fields .el-form-item {
   margin-bottom: 0;
-  padding: 12px;
+  padding: 8px 10px;
   border: 1px solid #e1e8f0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #ffffff;
 }
-.shipment-detail-fields .el-form-item__label {
-  padding-bottom: 8px;
+.shipment-detail-fields :deep(.el-form-item__label) {
+  padding-bottom: 4px;
   color: #5a6f86;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+}
+.shipment-detail-fields :deep(.el-input__wrapper) {
+  min-height: 32px;
+}
+
+.batch-business-fields-hint {
+  margin: -4px 0 12px;
+  color: #667b91;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.batch-business-fields-rows {
+  max-height: 58vh;
+  overflow: auto;
+}
+.batch-business-fields-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, .8fr) repeat(3, minmax(180px, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 8px 6px;
+  border-bottom: 1px solid #edf1f6;
+}
+.batch-business-fields-grid--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: #526b83;
+  background: #f4f7fb;
+  border: 1px solid #dfe7f0;
+  border-radius: 8px 8px 0 0;
+  font-size: 11px;
+  font-weight: 750;
+}
+.batch-business-reference {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: #183b5a;
+}
+.batch-business-reference b,
+.batch-business-reference small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-business-reference small {
+  color: #7a8da0;
+  font-size: 10px;
 }
 .customer-manual-update {
   padding: 12px;
