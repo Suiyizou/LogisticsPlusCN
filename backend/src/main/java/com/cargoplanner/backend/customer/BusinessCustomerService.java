@@ -437,7 +437,8 @@ public class BusinessCustomerService {
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
             AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
-          ORDER BY r2.primary_reference DESC, r2.id ASC
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
@@ -668,8 +669,8 @@ public class BusinessCustomerService {
   private String snapshotShipmentSelect() {
     return """
         SELECT t.id, s.id AS shipment_id,
-               COALESCE(t.query_reference_type, r.reference_type) AS query_reference_type,
-               COALESCE(t.query_reference_no, r.reference_no_raw) AS query_reference_no,
+               COALESCE(r.reference_type, t.query_reference_type) AS query_reference_type,
+               COALESCE(r.reference_no_raw, t.query_reference_no) AS query_reference_no,
                t.source_channel, t.snapshot_json, t.fetched_at, t.fresh_until, t.created_at,
                s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
                s.business_note, s.job_number, s.client_po_number, s.client_name_code,
@@ -680,7 +681,8 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
   }
@@ -834,7 +836,8 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         WHERE q.match_status = 'PENDING'
         """;
@@ -1849,7 +1852,8 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
   }
@@ -1866,7 +1870,8 @@ public class BusinessCustomerService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
   }
@@ -2093,7 +2098,8 @@ public class BusinessCustomerService {
         JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         WHERE s.id = ?
         """,

@@ -26,6 +26,8 @@ const historyTableWrap = document.querySelector("#history-table-wrap");
 const historyTableBody = document.querySelector("#history-table-body");
 const historySearchInput = document.querySelector("#history-search-input");
 const historySearchClear = document.querySelector("#history-search-clear");
+const historyCustomerFilterWrap = document.querySelector("#history-customer-filter-wrap");
+const historyCustomerFilterSelect = document.querySelector("#history-customer-filter");
 const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
@@ -346,6 +348,9 @@ const MESSAGES = {
     "history.searchClear": "Clear shipment search",
     "history.searchEmptyTitle": "No matching shipments",
     "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
+    "history.customerFilter": "Customer",
+    "history.customerFilterLabel": "Filter shipments by customer",
+    "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
     "history.route": "Route",
@@ -801,6 +806,9 @@ const MESSAGES = {
     "history.searchClear": "清除票单搜索",
     "history.searchEmptyTitle": "没有匹配的票单",
     "history.searchEmptyDescription": "请尝试其他运输单号、Job Number、客户、港口或状态。",
+    "history.customerFilter": "客户",
+    "history.customerFilterLabel": "按客户筛选票单",
+    "history.allCustomers": "全部客户",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1304,6 +1312,7 @@ let pendingBatchFile = null;
 let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
+let historyCustomerFilter = "";
 let historyLoadingState = false;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
@@ -3954,8 +3963,8 @@ function clearLegacyBrowserSnapshots() {
 }
 
 function readHistory() {
-  if (readFileSession().kind === "CUSTOMER") return customerAssignedHistory;
-  if (readFileSession().kind === "INTERNAL") return internalTrackedHistory;
+  if (readFileSession().kind === "CUSTOMER") return uniqueHistoryEntries(customerAssignedHistory);
+  if (readFileSession().kind === "INTERNAL") return uniqueHistoryEntries(internalTrackedHistory);
   return [];
 }
 
@@ -4092,7 +4101,8 @@ async function loadInternalTrackedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           shipmentId: item.shipmentId,
-          boundShipment: true
+          boundShipment: true,
+          boundCustomers: normalizeHistoryBoundCustomers(item.boundCustomers)
         };
       });
     renderHistory();
@@ -6002,6 +6012,77 @@ function normalizeHistorySearch(value) {
     .trim();
 }
 
+function historyShipmentKey(entry) {
+  const shipmentId = String(entry?.shipmentId ?? "").trim();
+  return shipmentId ? `shipment:${shipmentId}` : `query:${trackingQueryKey(entry?.query ?? {})}`;
+}
+
+function uniqueHistoryEntries(entries) {
+  const unique = new Map();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const key = historyShipmentKey(entry);
+    if (!unique.has(key)) unique.set(key, entry);
+  }
+  return [...unique.values()];
+}
+
+function normalizeHistoryBoundCustomers(customers) {
+  const unique = new Map();
+  for (const customer of Array.isArray(customers) ? customers : []) {
+    const value = typeof customer === "string" ? { id: customer, displayName: customer } : customer ?? {};
+    const id = String(value.id ?? value.publicId ?? "").trim();
+    if (!id || unique.has(id)) continue;
+    unique.set(id, {
+      id,
+      displayName: String(value.displayName ?? value.customerName ?? "").trim(),
+      username: String(value.username ?? "").trim(),
+      clientCode: String(value.clientCode ?? value.clientNo ?? "").trim()
+    });
+  }
+  return [...unique.values()];
+}
+
+function historyCustomerLabel(customer) {
+  const name = customer.displayName || customer.username || customer.id;
+  const details = [customer.clientCode, customer.username]
+    .filter((value, index, values) => value && value !== name && values.indexOf(value) === index);
+  return details.length ? `${name} · ${details.join(" · ")}` : name;
+}
+
+function renderHistoryCustomerFilter(entries, session) {
+  if (!historyCustomerFilterWrap || !historyCustomerFilterSelect) return;
+  const customers = new Map();
+  for (const entry of entries) {
+    for (const customer of normalizeHistoryBoundCustomers(entry.boundCustomers)) {
+      const current = customers.get(customer.id) || { ...customer, shipmentCount: 0 };
+      current.shipmentCount += 1;
+      customers.set(customer.id, current);
+    }
+  }
+  const options = [...customers.values()].sort((left, right) =>
+    historyCustomerLabel(left).localeCompare(historyCustomerLabel(right), currentLanguage)
+  );
+  if (historyCustomerFilter && !customers.has(historyCustomerFilter)) historyCustomerFilter = "";
+  const allCustomers = document.createElement("option");
+  allCustomers.value = "";
+  allCustomers.textContent = t("history.allCustomers");
+  const customerOptions = options.map((customer) => {
+    const option = document.createElement("option");
+    option.value = customer.id;
+    option.textContent = `${historyCustomerLabel(customer)} (${customer.shipmentCount})`;
+    return option;
+  });
+  historyCustomerFilterSelect.replaceChildren(allCustomers, ...customerOptions);
+  historyCustomerFilterSelect.value = historyCustomerFilter;
+  historyCustomerFilterWrap.hidden = session.kind !== "INTERNAL" || options.length === 0;
+}
+
+function historyMatchesCustomer(entry, customerId) {
+  if (!customerId) return true;
+  return normalizeHistoryBoundCustomers(entry?.boundCustomers)
+    .some((customer) => customer.id === customerId);
+}
+
 function historySearchText(entry) {
   const snapshot = entry?.snapshot ?? {};
   const summary = snapshot.summary ?? {};
@@ -6025,6 +6106,11 @@ function historySearchText(entry) {
     summary.destination?.countryCode,
     summary.latestEvent?.name,
     summary.latestEvent?.location,
+    ...normalizeHistoryBoundCustomers(entry?.boundCustomers).flatMap((customer) => [
+      customer.displayName,
+      customer.username,
+      customer.clientCode
+    ]),
     ...extraInformation
   ].filter(Boolean).join(" "));
 }
@@ -6038,11 +6124,15 @@ function historyMatchesSearch(entry, searchTerm) {
 
 function renderHistory() {
   const allHistory = readHistory();
+  const session = readFileSession();
+  renderHistoryCustomerFilter(allHistory, session);
+  const customerHistory = historyCustomerFilter
+    ? allHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
+    : allHistory;
   const normalizedSearch = normalizeHistorySearch(historySearchTerm);
   const history = normalizedSearch
-    ? allHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
-    : allHistory;
-  const session = readFileSession();
+    ? customerHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
+    : customerHistory;
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
   const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
 
@@ -7294,6 +7384,11 @@ historySearchClear?.addEventListener("click", () => {
   historySearchInput.value = "";
   renderHistory();
   historySearchInput.focus();
+});
+
+historyCustomerFilterSelect?.addEventListener("change", () => {
+  historyCustomerFilter = historyCustomerFilterSelect.value;
+  renderHistory();
 });
 
 document.querySelector("#edit-business-references").addEventListener("click", () => {

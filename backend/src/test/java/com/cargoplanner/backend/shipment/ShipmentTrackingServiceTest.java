@@ -248,6 +248,38 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void rejectsCarrierStatusTextDisguisedAsABillReference() throws Exception {
+    NormalizedTrackRequest request = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BILLOFLADING", "6508063160"
+    );
+    when(adapterClient.track(request)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-07-16T10:00:00Z",
+            "tracking": {"type": "BILLOFLADING", "number": "6508063160"},
+            "summary": {
+              "billOfLading": "6508063160 B/L Not Ready",
+              "origin": {"name": "Shanghai"},
+              "destination": {"name": "Rotterdam"},
+              "latestEvent": {"name": "Booking confirmed"}
+            }
+          }
+        }
+        """));
+
+    service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "6508063160", false),
+        business
+    );
+
+    assertThat(jdbcTemplate.queryForList(
+        "SELECT reference_no_normalized FROM cp_shipment_references",
+        String.class
+    )).containsExactly("6508063160");
+  }
+
+  @Test
   void batchSpreadsheetDetailsMergeIntoMysqlWithoutAnotherCarrierRequest() {
     ObjectNode first = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),

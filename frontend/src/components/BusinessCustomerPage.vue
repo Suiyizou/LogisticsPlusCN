@@ -401,6 +401,20 @@
                 <div class="list-page-header">
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
+                    <el-select
+                      v-model="shipmentCustomerFilter"
+                      class="shipment-customer-filter"
+                      :placeholder="t('customers.filterByCustomer')"
+                      clearable
+                      filterable
+                    >
+                      <el-option
+                        v-for="customer in shipmentFilterCustomers"
+                        :key="customer.id"
+                        :label="`${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`"
+                        :value="customer.id"
+                      />
+                    </el-select>
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
                     <el-button
                       type="danger"
@@ -414,7 +428,8 @@
                   </div>
                 </div>
                 <el-table
-                  :data="availableShipments"
+                  :data="displayedAvailableShipments"
+                  row-key="shipmentId"
                   stripe
                   v-loading="loadingAvailableShipments"
                   style="width:100%"
@@ -1105,6 +1120,7 @@ const bindingShipment = ref(false);
 const selectedCandidateShipmentIds = ref([]);
 const selectedShipmentRows = ref([]);
 const batchDeletingShipments = ref(false);
+const shipmentCustomerFilter = ref("");
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
 const resolvingMatchId = ref(0);
@@ -1177,6 +1193,40 @@ const filteredCustomers = computed(() => {
     (c.username || "").toLowerCase().includes(query) ||
     (c.displayName || "").toLowerCase().includes(query)
   );
+});
+
+const shipmentFilterCustomers = computed(() => {
+  const values = new Map();
+  for (const shipment of availableShipments.value) {
+    const boundCustomers = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
+    for (const boundCustomer of boundCustomers) {
+      const customerId = String(
+        typeof boundCustomer === "string" ? boundCustomer : boundCustomer?.id || ""
+      ).trim();
+      if (!customerId) continue;
+      const knownCustomer = customers.value.find((item) => item.id === customerId);
+      const current = values.get(customerId) || {
+        ...(knownCustomer || (typeof boundCustomer === "object" ? boundCustomer : {})),
+        id: customerId,
+        shipmentCount: 0
+      };
+      current.shipmentCount += 1;
+      values.set(customerId, current);
+    }
+  }
+  return [...values.values()].sort((left, right) =>
+    customerFilterOptionLabel(left).localeCompare(customerFilterOptionLabel(right))
+  );
+});
+
+const displayedAvailableShipments = computed(() => {
+  if (!shipmentCustomerFilter.value) return availableShipments.value;
+  return availableShipments.value.filter((shipment) => {
+    const boundCustomers = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
+    return boundCustomers.some((customer) => String(
+      typeof customer === "string" ? customer : customer?.id || ""
+    ) === shipmentCustomerFilter.value);
+  });
 });
 
 const selectedShipment = computed(() => {
@@ -1419,6 +1469,19 @@ watch(availableShipments, (list) => {
   }
 });
 
+watch(shipmentFilterCustomers, (items) => {
+  if (!shipmentCustomerFilter.value) return;
+  if (!items.some((item) => item.id === shipmentCustomerFilter.value)) {
+    shipmentCustomerFilter.value = "";
+  }
+});
+
+watch(displayedAvailableShipments, (items) => {
+  const visibleIds = new Set(items.map((item) => item.shipmentId));
+  selectedShipmentRows.value = selectedShipmentRows.value
+    .filter((item) => visibleIds.has(item.shipmentId));
+});
+
 watch(selectedShipmentId, (shipmentId) => {
   detailShipmentSnapshot.value = null;
   if (shipmentId && subView.value === "detail" && menuItem.value === "shipments") {
@@ -1563,13 +1626,27 @@ function normalizeBusinessShipment(payload) {
   return normalized;
 }
 
+function deduplicateBusinessShipments(items) {
+  const unique = new Map();
+  for (const item of items) {
+    if (!item) continue;
+    const shipmentId = String(item.shipmentId || "").trim();
+    const fallbackKey = [item.carrier, item.referenceType, item.referenceNo]
+      .map((value) => String(value || "").trim().toUpperCase())
+      .join("|");
+    const key = shipmentId ? `shipment:${shipmentId}` : `reference:${fallbackKey}`;
+    if (!unique.has(key)) unique.set(key, item);
+  }
+  return [...unique.values()];
+}
+
 async function loadAvailableShipments() {
   if (loadingAvailableShipments.value) return;
   loadingAvailableShipments.value = true;
   try {
     const response = await fetchAvailableBusinessShipments();
     availableShipments.value = Array.isArray(response?.items)
-      ? response.items.map(normalizeBusinessShipment)
+      ? deduplicateBusinessShipments(response.items.map(normalizeBusinessShipment))
       : [];
     buildShipmentCustomerMap();
   } catch (error) {
@@ -2805,6 +2882,12 @@ function shipmentClientLabel(shipment) {
   return labels.length ? labels.join(" / ") : "—";
 }
 
+function customerFilterOptionLabel(customer) {
+  const name = customer?.displayName || customer?.username || customer?.id || t("customers.missingValue");
+  const code = customer?.clientCode;
+  return code && code !== name ? `${name} · ${code}` : name;
+}
+
 function shipmentBoundUsers(shipment) {
   const direct = Array.isArray(shipment?.boundUsers)
     ? shipment.boundUsers
@@ -2922,9 +3005,11 @@ function showError(error, fallbackKey) {
 
 <style scoped>
 .customer-access-page {
+  height: 100dvh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   color: #1a2d42;
   background: #f0f3f7;
 }
@@ -3172,6 +3257,7 @@ function showError(error, fallbackKey) {
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* ---- Sidebar ---- */
@@ -3182,7 +3268,7 @@ function showError(error, fallbackKey) {
   flex-direction: column;
   background: linear-gradient(180deg, #f5f7fa 0%, #eceff4 100%);
   border-right: 1px solid #dce1e8;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 12px 0;
 }
 .sidebar-nav {
@@ -3221,6 +3307,7 @@ function showError(error, fallbackKey) {
 /* ---- Main Content Area ---- */
 .workspace-main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px 24px;
   background: #f0f3f7;
@@ -3272,6 +3359,18 @@ function showError(error, fallbackKey) {
 .shipment-workspace-main {
   flex: 1;
   min-width: 0;
+}
+.shipment-workspace-main > .list-page-header {
+  position: sticky;
+  top: -20px;
+  z-index: 25;
+  margin-top: -20px;
+  padding: 20px 0 14px;
+  background: #f0f3f7;
+  box-shadow: 0 8px 14px rgba(15, 29, 46, 0.06);
+}
+.shipment-customer-filter {
+  width: 230px;
 }
 .shipment-workspace-side {
   width: 380px;
@@ -4436,13 +4535,24 @@ button:disabled {
   }
 }
 @media (max-width: 680px) {
+  .customer-access-page {
+    height: auto;
+    overflow: visible;
+  }
   .workspace-layout {
     flex-direction: column;
+    overflow: visible;
   }
   .workspace-sidebar {
     width: 100%;
     flex: 0 0 auto;
     max-height: none;
+  }
+  .shipment-workspace-main > .list-page-header {
+    top: 0;
+  }
+  .shipment-customer-filter {
+    width: 100%;
   }
   .sidebar-nav {
     flex-direction: row;

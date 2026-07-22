@@ -392,7 +392,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void preservesTheExactQueryIdentityForNumericCoscoBills() {
+  void prefersTheBookingReferenceWhenBillAndBookingAreBothAvailable() {
     jdbcTemplate.update(
         """
         UPDATE cp_shipment_references
@@ -408,13 +408,21 @@ class CustomerAccessFlowTest {
         WHERE shipment_id = 10
         """
     );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_references (
+          shipment_id, carrier_code, reference_type, reference_no_raw,
+          reference_no_normalized, primary_reference
+        ) VALUES (10, 'COSCO', 'BOOKING', '9508434560', '9508434560', FALSE)
+        """
+    );
 
     Map<String, Object> detail = customerService.getShipmentSnapshot(
         business, "shipment-public-id"
     );
     assertThat(detail)
         .containsEntry("carrier", "COSCO")
-        .containsEntry("referenceType", "BILLOFLADING")
+        .containsEntry("referenceType", "BOOKING")
         .containsEntry("referenceNo", "9508434560");
 
     ShipmentBatchItemRequest refresh = customerService.listUnfinishedTrackingItems(business)
@@ -423,7 +431,7 @@ class CustomerAccessFlowTest {
         .findFirst()
         .orElseThrow();
     assertThat(refresh.carrier()).isEqualTo("COSCO");
-    assertThat(refresh.type()).isEqualTo("BILLOFLADING");
+    assertThat(refresh.type()).isEqualTo("BOOKING");
     assertThat(refresh.number()).isEqualTo("9508434560");
 
     jdbcTemplate.update(

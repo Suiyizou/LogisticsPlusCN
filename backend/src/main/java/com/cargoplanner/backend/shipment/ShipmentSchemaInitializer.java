@@ -215,8 +215,21 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "ALTER TABLE cp_tracking_snapshots ADD COLUMN queried_by_username VARCHAR(128) NULL AFTER queried_by"
     );
     migrateLegacyShipmentBusinessFieldsForMySql();
+    removeInvalidDiscoveredShipmentReferencesForMySql();
     upgradeSnapshotUserQueryIndexForMySql();
     migrateLegacyFileVisibilityForMySql();
+  }
+
+  private void removeInvalidDiscoveredShipmentReferencesForMySql() {
+    jdbcTemplate.update(
+        """
+        DELETE FROM cp_shipment_references
+        WHERE primary_reference = 0
+          AND reference_type = 'BILLOFLADING'
+          AND UPPER(COALESCE(reference_no_normalized, reference_no_raw, ''))
+              REGEXP 'NOTREADY|NOTAVAILABLE|NORECORD|UNKNOWN|PENDING'
+        """
+    );
   }
 
   private void addColumnIfMissing(String table, String column, String ddl) {

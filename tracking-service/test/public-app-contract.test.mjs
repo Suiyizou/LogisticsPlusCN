@@ -225,6 +225,13 @@ test("every result element registered by the renderer exists in the page", () =>
   assert.deepEqual(missingIds, [], `renderer references missing DOM ids: ${missingIds.join(", ")}`);
 });
 
+test("business overview de-duplicates shipments and filters them by assigned customer", () => {
+  assert.match(indexSource, /id="history-customer-filter"/);
+  assert.match(appSource, /function uniqueHistoryEntries[\s\S]*?historyShipmentKey/);
+  assert.match(appSource, /function historyMatchesCustomer[\s\S]*?boundCustomers/);
+  assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
+});
+
 test("file preview uses a same-origin preview endpoint and safe blob rendering", () => {
   assert.match(indexSource, /id="file-preview-dialog"[\s\S]*?id="file-preview-download"/);
   assert.match(
@@ -358,7 +365,7 @@ test("customer tracking is database-backed, assigned-only, and never falls back 
   );
   assert.match(
     appSource,
-    /function readHistory\(\)[\s\S]*?readFileSession\(\)\.kind === "CUSTOMER"\) return customerAssignedHistory;/
+    /function readHistory\(\)[\s\S]*?readFileSession\(\)\.kind === "CUSTOMER"\)[\s\S]*?uniqueHistoryEntries\(customerAssignedHistory\)/
   );
 
   const requestStart = appSource.indexOf("async function requestTracking(query, options = {})");
@@ -439,7 +446,7 @@ test("signed-in overview loads account-bound snapshot objects and never offers b
   const historyStart = appSource.indexOf("function renderHistory()");
   const historyEnd = appSource.indexOf("function cmaSessionErrorMessage", historyStart);
   const historySource = appSource.slice(historyStart, historyEnd);
-  assert.match(historySource, /allHistory\.filter\(\(entry\) => historyMatchesSearch/);
+  assert.match(historySource, /customerHistory\.filter\(\(entry\) => historyMatchesSearch/);
   assert.doesNotMatch(indexSource, /id="clear-history-button"/);
   assert.match(indexSource, /id="history-search-input"[\s\S]*?id="history-search-clear"/);
   assert.match(indexSource, /id="history-title"[\s\S]*?id="history-subtitle"/);

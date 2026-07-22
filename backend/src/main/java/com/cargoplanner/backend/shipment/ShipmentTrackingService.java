@@ -508,7 +508,8 @@ public class ShipmentTrackingService {
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-          ORDER BY r2.primary_reference DESC, r2.id ASC LIMIT 1
+          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
+                   r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         WHERE a.customer_id = ? AND a.publication_status = 'PUBLISHED'
@@ -1593,11 +1594,22 @@ public class ShipmentTrackingService {
     if (number == null || number.isBlank()) return;
     String normalized = normalizeReference(number);
     if (normalized.isBlank() || normalized.length() > 128) return;
+    if (!primary && !isValidDiscoveredReference(carrier, type, normalized)) return;
     String key = carrier + "|" + type + "|" + normalized;
     ShipmentReference existing = values.get(key);
     if (existing == null || primary) {
       values.put(key, new ShipmentReference(carrier, type, number.trim(), normalized, primary));
     }
+  }
+
+  private boolean isValidDiscoveredReference(String carrier, String type, String normalized) {
+    if (normalized.matches(".*(?:NOTREADY|NOTAVAILABLE|NORECORD|UNKNOWN|PENDING).*$")) {
+      return false;
+    }
+    if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)) {
+      return normalized.matches("(?:COSU)?[0-9]{6,20}|[A-Z0-9-]{4,35}");
+    }
+    return normalized.matches("[A-Z0-9./-]{4,128}");
   }
 
   private ObjectNode cachedResponse(CachedShipment cached, AuthenticatedUser user, boolean stale) {
