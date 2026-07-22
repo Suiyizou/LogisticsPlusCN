@@ -15,6 +15,10 @@ const stylesSource = await readFile(
   new URL("../public/styles.css", import.meta.url),
   "utf8"
 );
+const businessCustomerSource = await readFile(
+  new URL("../../frontend/src/components/BusinessCustomerPage.vue", import.meta.url),
+  "utf8"
+);
 
 function loadContractHelpers() {
   const startMarker = "/* TRACKING_CONTRACT_HELPERS_START */";
@@ -281,6 +285,13 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
   assert.match(
     appSource,
     /batchResumeButton\.hidden =[\s\S]*?item\.status === "pending" \|\| \(item\.status === "manual" && !item\.submitted\)/
+  );
+});
+
+test("batch progress de-duplicates identical supplemental failure messages", () => {
+  assert.match(
+    businessCustomerSource,
+    /const details = \[\.\.\.new Set\(\(item\.subtasks \|\| \[\]\)[\s\S]*?\.filter\(Boolean\)\)\];/
   );
 });
 

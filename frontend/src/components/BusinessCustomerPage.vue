@@ -1968,10 +1968,10 @@ function batchTrackItemMessage(item, taskStatus = "") {
   }
   if (status === "SUCCEEDED") return t("customers.trackSucceeded");
   if (status === "PARTIAL") {
-    const details = (item.subtasks || [])
+    const details = [...new Set((item.subtasks || [])
       .filter((subtask) => String(subtask.status || "").toUpperCase() === "FAILED")
       .map((subtask) => subtask.error)
-      .filter(Boolean);
+      .filter(Boolean))];
     return details.join("; ") || t("customers.trackPartial");
   }
   if (status === "MANUAL") return t("customers.trackManualPlaceholder");
