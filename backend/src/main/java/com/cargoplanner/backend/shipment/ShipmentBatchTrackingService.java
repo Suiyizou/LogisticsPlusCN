@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -58,6 +59,7 @@ public class ShipmentBatchTrackingService {
   private long lastTrackingStartedAt;
   private final Map<String, CarrierChannelState> carrierStateByChannel = new ConcurrentHashMap<>();
 
+  @Autowired
   public ShipmentBatchTrackingService(ShipmentTrackingService trackingService) {
     this(
         trackingService,

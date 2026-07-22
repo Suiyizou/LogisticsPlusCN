@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.http.HttpStatus;
 
 class ShipmentBatchTrackingServiceTest {
@@ -34,6 +35,20 @@ class ShipmentBatchTrackingServiceTest {
   void tearDown() {
     if (service != null) service.shutdown();
     else if (executor != null) executor.shutdownNow();
+  }
+
+  @Test
+  void springSelectsTheProductionConstructorWhenTestConstructorsAlsoExist() {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+      context.registerBean(ShipmentTrackingService.class, () -> trackingService);
+      context.registerBean(ShipmentBatchTrackingService.class);
+      context.refresh();
+
+      service = context.getBean(ShipmentBatchTrackingService.class);
+      assertTrue(service != null);
+    }
+    service = null;
   }
 
   @Test
