@@ -106,6 +106,18 @@ npm start
 
 直连与代理使用独立熔断器和 Cookie 缓存，因此直连 IP 被封时不会阻止代理通道。`TRACKING_ADAPTER_KEY` 必须在 Spring 后端和 Node 追踪服务中配置为同一个随机长字符串，防止匿名请求直接消耗代理。COSCO 查询仍按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。同一出口确认上游返回 HTTP `403/429` 后会开启该出口自己的冷却。`GET /api/health` 只暴露脱敏后的代理协议、主机、队列和熔断状态。
 
+机场订阅中的 Shadowsocks/VMess 节点需要由 Mihomo 转换成内部 SOCKS5 出口。仓库提供
+`docker-compose.proxy-pool.yml` 和 `docker/proxy-pool/config.yaml`，但不会保存任何节点凭据。
+Mihomo 控制接口启用后，追踪服务会把节点按香港、台湾、日本、韩国、新加坡、美国排序；
+遇到代理传输失败或 COSCO `403/429` 时切换到下一个未冷却节点：
+
+```env
+COSCO_PROXY_POOL_CONTROLLER=http://proxy-pool:9090
+COSCO_PROXY_POOL_GROUP=TRACKING-POOL
+COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST=3
+COSCO_PROXY_POOL_NODE_COOLDOWN_MS=1800000
+```
+
 也可以独立验证：
 
 ```powershell

@@ -1,0 +1,34 @@
+mixed-port: 7890
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: warning
+ipv6: false
+external-controller: 0.0.0.0:9090
+
+profile:
+  store-selected: false
+  store-fake-ip: false
+
+proxy-providers:
+  airport:
+    type: file
+    path: ./providers/airport.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com
+      interval: 300
+      timeout: 5000
+      lazy: false
+      expected-status: 204
+
+proxy-groups:
+  - name: TRACKING-POOL
+    type: select
+    use:
+      - airport
+    filter: "(?i)香港|hong kong|hongkong|\\bhk\\b|台湾|taiwan|\\btw\\b|日本|japan|\\bjp\\b|韩国|korea|\\bkr\\b|新加坡|singapore|\\bsg\\b|美国|united states|\\bus\\b"
+    exclude-filter: "下载专用|免费|流量|套餐|官网|到期"
+
+rules:
+  - MATCH,TRACKING-POOL

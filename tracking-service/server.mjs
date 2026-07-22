@@ -25,6 +25,10 @@ import {
   readCoscoProxyConfig
 } from "./lib/cosco-proxy.mjs";
 import {
+  createCoscoProxyPool,
+  readCoscoProxyPoolConfig
+} from "./lib/cosco-proxy-pool.mjs";
+import {
   createCoscoCircuitBreaker,
   createCoscoQueryGate
 } from "./lib/cosco-request-guard.mjs";
@@ -160,6 +164,8 @@ const staticCompressionCache = new Map();
 
 const COSCO_PROXY_CONFIG = readCoscoProxyConfig();
 const coscoProxyClient = createCoscoProxyClient(COSCO_PROXY_CONFIG);
+const COSCO_PROXY_POOL_CONFIG = readCoscoProxyPoolConfig();
+const coscoProxyPool = createCoscoProxyPool(COSCO_PROXY_POOL_CONFIG);
 const coscoQueryGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_QUERY_MIN_INTERVAL_MS,
   maxIntervalMs: process.env.COSCO_QUERY_MAX_INTERVAL_MS,
@@ -1479,15 +1485,52 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
   return fetchCoscoTrackingViaNetwork(request, options);
 }
 
-function runCoscoTrackingRequest(request, queryChannel, options = {}) {
+function shouldRotateCoscoProxy(error) {
+  return isCoscoProtectionError(error)
+    || error?.details?.code === "COSCO_PROXY_UNAVAILABLE"
+    || error?.details?.code === "COSCO_CHANNELS_UNAVAILABLE";
+}
+
+async function rotateCoscoProxy(error) {
+  if (!coscoProxyPool || !shouldRotateCoscoProxy(error)) return null;
+  try {
+    return await coscoProxyPool.rotate(
+      error?.details?.code ?? error?.code ?? "COSCO_PROXY_FAILURE"
+    );
+  } catch (rotationError) {
+    console.warn("COSCO proxy pool rotation failed", rotationError?.message ?? rotationError);
+    return null;
+  }
+}
+
+async function runCoscoWithProxyRotation(queryChannel, options, operation) {
   const routeOptions = queryChannel.code === "PROXY" ? { ...options, proxyMode: true } : options;
-  ensureCoscoCircuitAvailable(routeOptions);
-  return coscoQueryGate.run(
-    async () => {
-      const result = await fetchCoscoTracking(request, queryChannel, options);
+  const maximumRotations = queryChannel.code === "PROXY" && coscoProxyPool
+    ? coscoProxyPool.maxRotationsPerRequest
+    : 0;
+  for (let rotationCount = 0; ; rotationCount++) {
+    try {
+      ensureCoscoCircuitAvailable(routeOptions);
+      const result = await operation(routeOptions);
       coscoCircuitBreakerFor(routeOptions).recordSuccess();
       return result;
-    },
+    } catch (error) {
+      if (rotationCount >= maximumRotations) throw error;
+      const rotation = await rotateCoscoProxy(error);
+      if (!rotation?.rotated) throw error;
+      coscoCircuitBreakerFor(routeOptions).reset();
+      coscoPublicCookieStates.delete("PROXY");
+    }
+  }
+}
+
+function runCoscoTrackingRequest(request, queryChannel, options = {}) {
+  return coscoQueryGate.run(
+    () => runCoscoWithProxyRotation(
+      queryChannel,
+      options,
+      (routeOptions) => fetchCoscoTracking(request, queryChannel, routeOptions)
+    ),
     { signal: options.signal }
   );
 }
@@ -1759,43 +1802,51 @@ async function handleCoscoContainerListRequest(request, response) {
 async function handleCoscoSupplementalDetailsRequest(request, response) {
   const input = await readJsonBody(request);
   const trackingRequest = normalizeTrackingRequest(input);
+  const queryChannel = normalizeQueryChannel(input.channel ?? "AUTO");
+  requireProxyAdapterAuthorization(request, queryChannel);
   if (trackingRequest.type === "CONTAINER") {
     throw new HttpError(400, "补充详情查询必须使用提单号或订舱号");
   }
 
-  const warnings = [];
-  let bookingInfo = {};
-  let containerInfo = [];
-  try {
-    bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
-      timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
-    });
-  } catch (error) {
-    if (isCoscoProtectionError(error)) throw error;
-    warnings.push({ source: "bookingInfo", message: error?.message ?? "订舱参考信息查询失败" });
-  }
-  try {
-    containerInfo = await fetchCoscoShipmentContainers(trackingRequest);
-  } catch (error) {
-    if (isCoscoProtectionError(error)) throw error;
-    warnings.push({ source: "containerInfo", message: error?.message ?? "运输详情查询失败" });
-  }
+  const result = await coscoQueryGate.run(
+    () => runCoscoWithProxyRotation(queryChannel, {}, async (routeOptions) => {
+      const warnings = [];
+      let bookingInfo = {};
+      let containerInfo = [];
+      try {
+        bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
+          ...routeOptions,
+          timeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS
+        });
+      } catch (error) {
+        if (isCoscoProtectionError(error)) throw error;
+        warnings.push({ source: "bookingInfo", message: error?.message ?? "订舱参考信息查询失败" });
+      }
+      try {
+        containerInfo = await fetchCoscoShipmentContainers(trackingRequest, routeOptions);
+      } catch (error) {
+        if (isCoscoProtectionError(error)) throw error;
+        warnings.push({ source: "containerInfo", message: error?.message ?? "运输详情查询失败" });
+      }
 
-  const details = normalizeCoscoSupplementalDetails(
-    bookingInfo,
-    containerInfo,
-    trackingRequest,
-    new Date().toISOString()
+      const details = normalizeCoscoSupplementalDetails(
+        bookingInfo,
+        containerInfo,
+        trackingRequest,
+        new Date().toISOString()
+      );
+      if (details.containers.length === 0 && details.references.information.length === 0
+          && warnings.length === 2) {
+        throw new HttpError(502, "COSCO 未返回可用的补充详情", { warnings });
+      }
+      return {
+        ...details,
+        partial: warnings.length > 0,
+        warnings
+      };
+    })
   );
-  if (details.containers.length === 0 && details.references.information.length === 0
-      && warnings.length === 2) {
-    throw new HttpError(502, "COSCO 未返回可用的补充详情", { warnings });
-  }
-  sendJson(response, 200, {
-    ...details,
-    partial: warnings.length > 0,
-    warnings
-  });
+  sendJson(response, 200, result);
 }
 
 async function handleTrackRequest(request, response, forcedCarrier, forcedChannel) {
@@ -1955,6 +2006,7 @@ export const server = createServer(async (request, response) => {
         channel: "NETWORK",
         coscoProtection: {
           proxy: proxyStatus(COSCO_PROXY_CONFIG),
+          proxyPool: coscoProxyPool?.status() ?? { enabled: false },
           circuitBreakers: {
             direct: coscoCircuitBreakers.DIRECT.status(),
             proxy: coscoCircuitBreakers.PROXY.status()

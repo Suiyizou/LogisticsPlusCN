@@ -11,6 +11,8 @@ data/shipment-files/
 *.log
 *.err.log
 .env
+docker/proxy-pool/airport*.yaml
+docker/proxy-pool/providers/
 *.exe
 .idea/
 .vscode/

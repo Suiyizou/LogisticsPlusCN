@@ -189,3 +189,35 @@ docker compose up -d mysql
 - 装箱计算仍在用户浏览器的 WebWorker 中完成，不消耗服务器 CPU。
 - 后端主要承载账号、登录设备限制、管理员后台和监控数据。
 - Web 端无法直接读取真实 MAC 地址；当前记录设备指纹、IP、UA，并预留 MAC 字段。
+
+## 香港优先的机场代理池
+
+机场文件中的 Shadowsocks/VMess 节点不能直接交给 Node.js 的 SOCKS5 客户端。部署时使用
+`docker-compose.proxy-pool.yml` 启动 Mihomo 侧车，由 Mihomo 读取私有的 `proxies:` 文件并向
+tracking 容器提供内部 SOCKS5 端口。机场文件必须放在仓库外并限制权限：
+
+```bash
+sudo install -d -m 700 /opt/cargo-secrets
+sudo install -m 600 /path/to/airport.yaml /opt/cargo-secrets/airport.yaml
+```
+
+服务器 `.env` 增加：
+
+```env
+PROXY_PROVIDER_FILE=/opt/cargo-secrets/airport.yaml
+COSCO_PROXY_POOL_MAX_ROTATIONS_PER_REQUEST=3
+COSCO_PROXY_POOL_NODE_COOLDOWN_MS=1800000
+```
+
+随后使用基础 Compose 与代理池覆盖文件一起部署：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy-pool.yml config
+docker compose -f docker-compose.yml -f docker-compose.proxy-pool.yml up -d --build
+```
+
+代理池只接收香港、台湾、日本、韩国、新加坡和美国节点，自动排除“下载专用”“免费”等节点。
+应用侧排序固定为香港优先；当前出口收到 COSCO `403/429` 或发生代理传输故障后，tracking
+服务通过 Mihomo 内部控制接口选择下一个节点，并将失败节点冷却 30 分钟。Mihomo 的 7890、
+9090 端口仅在 Docker `app` 网络中暴露，不映射到公网。不要把订阅地址、UUID、密码或完整
+provider 文件提交到 Git。
