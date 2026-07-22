@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class ShipmentFileCommentService {
   private final ShipmentAccessService accessService;
   private final Clock clock;
 
+  @Autowired
   public ShipmentFileCommentService(
       JdbcTemplate jdbcTemplate,
       ShipmentAccessService accessService

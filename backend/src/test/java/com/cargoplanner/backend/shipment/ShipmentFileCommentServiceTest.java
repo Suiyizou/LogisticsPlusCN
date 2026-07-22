@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -23,6 +24,25 @@ class ShipmentFileCommentServiceTest {
   private AuthenticatedUser business;
   private AuthenticatedUser outsider;
   private CustomerPrincipal customer;
+
+  @Test
+  void springSelectsProductionConstructorWhenTestConstructorAlsoExists() {
+    DriverManagerDataSource dataSource = new DriverManagerDataSource(
+        "jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "sa",
+        ""
+    );
+    JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+    ShipmentAccessService accessService = new ShipmentAccessService(jdbcTemplate);
+    try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+      context.registerBean(JdbcTemplate.class, () -> jdbcTemplate);
+      context.registerBean(ShipmentAccessService.class, () -> accessService);
+      context.registerBean(ShipmentFileCommentService.class);
+      context.refresh();
+
+      assertThat(context.getBean(ShipmentFileCommentService.class)).isNotNull();
+    }
+  }
 
   @BeforeEach
   void setUp() {
