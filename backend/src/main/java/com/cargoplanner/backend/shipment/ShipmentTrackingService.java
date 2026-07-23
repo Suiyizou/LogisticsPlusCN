@@ -728,7 +728,7 @@ public class ShipmentTrackingService {
             clientCode
         )
         : jdbcTemplate.query(
-            "SELECT id, party_role FROM cp_customers WHERE client_code = ? AND status = 'ACTIVE' AND created_by = ?",
+            "SELECT id, party_role FROM cp_customers WHERE client_code = ? AND status = 'ACTIVE' AND responsible_agent_id = ?",
             (rs, rowNumber) -> new ImportedCustomerMatch(
                 rs.getLong("id"), rs.getString("party_role")
             ),
@@ -1416,8 +1416,8 @@ public class ShipmentTrackingService {
       PreparedStatement statement = connection.prepareStatement(
           """
           INSERT INTO cp_shipments (
-            public_id, carrier_code, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?)
+            public_id, carrier_code, created_by, responsible_agent_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
           """,
           Statement.RETURN_GENERATED_KEYS
       );
@@ -1425,8 +1425,10 @@ public class ShipmentTrackingService {
       statement.setString(2, carrier);
       if (creator == null) statement.setNull(3, java.sql.Types.BIGINT);
       else statement.setLong(3, creator.id());
-      statement.setTimestamp(4, timestamp(now));
+      if (creator == null) statement.setNull(4, java.sql.Types.BIGINT);
+      else statement.setLong(4, creator.id());
       statement.setTimestamp(5, timestamp(now));
+      statement.setTimestamp(6, timestamp(now));
       return statement;
     }, keyHolder);
     Number key = keyHolder.getKey();
@@ -1583,13 +1585,13 @@ public class ShipmentTrackingService {
         SELECT
           COALESCE(
             t.queried_by,
-            s.created_by,
+            s.responsible_agent_id,
             (SELECT MIN(p.user_id) FROM cp_shipment_participants p WHERE p.shipment_id = s.id)
           ) AS owner_id,
           COALESCE(
             t.queried_by_username,
             CONCAT('user-', COALESCE(
-              s.created_by,
+              s.responsible_agent_id,
               (SELECT MIN(p.user_id) FROM cp_shipment_participants p WHERE p.shipment_id = s.id)
             ))
           ) AS owner_username
@@ -1598,7 +1600,7 @@ public class ShipmentTrackingService {
         WHERE s.id = ?
           AND COALESCE(
             t.queried_by,
-            s.created_by,
+            s.responsible_agent_id,
             (SELECT MIN(p.user_id) FROM cp_shipment_participants p WHERE p.shipment_id = s.id)
           ) IS NOT NULL
         LIMIT 1

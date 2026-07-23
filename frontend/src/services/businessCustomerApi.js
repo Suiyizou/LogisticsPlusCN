@@ -14,6 +14,14 @@ export function batchCreateBusinessCustomers(payload) {
   return request("/business/customers/batch", { method: "POST", body: payload });
 }
 
+export function fetchCustomerTransferAgents() {
+  return request("/business/customers/transfer-agents");
+}
+
+export function transferBusinessCustomers(payload) {
+  return request("/business/customers/transfer", { method: "POST", body: payload });
+}
+
 export function updateBusinessCustomer(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}`, {
     method: "PATCH",

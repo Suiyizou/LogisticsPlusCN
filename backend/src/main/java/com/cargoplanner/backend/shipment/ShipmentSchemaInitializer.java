@@ -83,10 +83,49 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "remark",
         "ALTER TABLE cp_customers ADD COLUMN remark VARCHAR(500) NULL AFTER status"
     );
+    addColumnIfMissing(
+        "cp_customers",
+        "responsible_agent_id",
+        "ALTER TABLE cp_customers ADD COLUMN responsible_agent_id BIGINT NULL AFTER created_by"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_customers SET responsible_agent_id = created_by WHERE responsible_agent_id IS NULL"
+    );
+    jdbcTemplate.execute(
+        "ALTER TABLE cp_customers MODIFY responsible_agent_id BIGINT NOT NULL"
+    );
     addIndexIfMissing(
         "cp_customers",
-        "idx_cp_customers_creator_client_code",
-        "ALTER TABLE cp_customers ADD INDEX idx_cp_customers_creator_client_code (created_by, client_code, status)"
+        "idx_cp_customers_responsible_status",
+        "ALTER TABLE cp_customers ADD INDEX idx_cp_customers_responsible_status (responsible_agent_id, status, created_at)"
+    );
+    addIndexIfMissing(
+        "cp_customers",
+        "uk_cp_customers_client_code",
+        "ALTER TABLE cp_customers ADD UNIQUE INDEX uk_cp_customers_client_code (client_code)"
+    );
+    addConstraintIfMissing(
+        "cp_customers",
+        "fk_cp_customers_responsible_agent",
+        "ALTER TABLE cp_customers ADD CONSTRAINT fk_cp_customers_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id)"
+    );
+    addColumnIfMissing(
+        "cp_shipments",
+        "responsible_agent_id",
+        "ALTER TABLE cp_shipments ADD COLUMN responsible_agent_id BIGINT NULL AFTER created_by"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET responsible_agent_id = created_by WHERE responsible_agent_id IS NULL"
+    );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_responsible_agent",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_responsible_agent (responsible_agent_id, updated_at)"
+    );
+    addConstraintIfMissing(
+        "cp_shipments",
+        "fk_cp_shipments_responsible_agent",
+        "ALTER TABLE cp_shipments ADD CONSTRAINT fk_cp_shipments_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id) ON DELETE SET NULL"
     );
     addColumnIfMissing(
         "cp_shipments",
@@ -453,11 +492,14 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           last_tracked_at DATETIME(6) NULL,
           fresh_until DATETIME(6) NULL,
           created_by BIGINT NULL,
+          responsible_agent_id BIGINT NULL,
           created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
           updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
           INDEX idx_cp_shipments_carrier_time (carrier_code, last_tracked_at),
           INDEX idx_cp_shipments_fresh_until (fresh_until),
-          CONSTRAINT fk_cp_shipments_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id) ON DELETE SET NULL
+          INDEX idx_cp_shipments_responsible_agent (responsible_agent_id, updated_at),
+          CONSTRAINT fk_cp_shipments_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id) ON DELETE SET NULL,
+          CONSTRAINT fk_cp_shipments_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
@@ -529,12 +571,15 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
           remark VARCHAR(500) NULL,
           created_by BIGINT NOT NULL,
+          responsible_agent_id BIGINT NOT NULL,
           created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
           updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
           INDEX idx_cp_customers_creator_status (created_by, status, created_at),
-          INDEX idx_cp_customers_creator_client_code (created_by, client_code, status),
+          INDEX idx_cp_customers_responsible_status (responsible_agent_id, status, created_at),
+          UNIQUE KEY uk_cp_customers_client_code (client_code),
           INDEX idx_cp_customers_code_prefix (customer_code_prefix),
-          CONSTRAINT fk_cp_customers_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id)
+          CONSTRAINT fk_cp_customers_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customers_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
@@ -568,6 +613,27 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           CONSTRAINT fk_cp_customer_shipment_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
           CONSTRAINT fk_cp_customer_shipment_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
           CONSTRAINT fk_cp_customer_shipment_assigned_by FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_customer_transfer_log (
+          id BIGINT PRIMARY KEY AUTO_INCREMENT,
+          batch_id CHAR(36) NOT NULL,
+          customer_id BIGINT NOT NULL,
+          from_agent_id BIGINT NOT NULL,
+          to_agent_id BIGINT NOT NULL,
+          initiated_by BIGINT NOT NULL,
+          retained_previous_access TINYINT(1) NOT NULL DEFAULT 0,
+          shipment_count INT NOT NULL DEFAULT 0,
+          ip_address VARCHAR(64) NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          UNIQUE KEY uk_cp_customer_transfer_batch_customer (batch_id, customer_id),
+          INDEX idx_cp_customer_transfer_customer_time (customer_id, created_at),
+          INDEX idx_cp_customer_transfer_agents_time (from_agent_id, to_agent_id, created_at),
+          CONSTRAINT fk_cp_customer_transfer_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
+          CONSTRAINT fk_cp_customer_transfer_from_agent FOREIGN KEY (from_agent_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_transfer_to_agent FOREIGN KEY (to_agent_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_transfer_initiated_by FOREIGN KEY (initiated_by) REFERENCES cp_users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """

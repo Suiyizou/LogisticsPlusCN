@@ -80,9 +80,28 @@
                   <el-input v-model="customerSearch" :placeholder="t('customers.searchCustomerPlaceholder')" prefix-icon="Search" clearable style="width:240px" />
                   <el-button type="primary" @click="createDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button>
                   <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
+                  <el-button
+                    type="warning"
+                    plain
+                    :disabled="!selectedCustomerRows.length"
+                    @click="openCustomerTransfer"
+                  >
+                    <el-icon><Operation /></el-icon>
+                    {{ t("customers.transferSelected", { count: selectedCustomerRows.length }) }}
+                  </el-button>
                 </div>
               </div>
-              <el-table :data="filteredCustomers" stripe v-loading="loadingCustomers" style="width:100%" table-layout="auto" class="customer-directory-table">
+              <el-table
+                ref="customerTableRef"
+                :data="filteredCustomers"
+                stripe
+                v-loading="loadingCustomers"
+                style="width:100%"
+                table-layout="auto"
+                class="customer-directory-table"
+                @selection-change="handleCustomerSelectionChange"
+              >
+                <el-table-column type="selection" width="48" />
                 <el-table-column type="index" :label="t('customers.index')" width="60" />
                 <el-table-column :label="t('customers.displayName')" min-width="180">
                   <template #default="{ row }">
@@ -96,6 +115,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="clientCode" :label="t('customers.userCode')" width="120" />
+                <el-table-column prop="responsibleAgentDisplayName" :label="t('customers.responsibleAgent')" min-width="140" />
                 <el-table-column :label="t('customers.partyRole')" width="120">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
                 </el-table-column>
@@ -949,6 +969,47 @@
       </section>
     </div>
 
+    <div v-if="transferDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeCustomerTransfer">
+      <section class="customer-code-dialog customer-transfer-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.transferTitle')">
+        <span class="customer-code-kicker">CUSTOMER HANDOVER</span>
+        <h2>{{ t("customers.transferTitle") }}</h2>
+        <p>{{ t("customers.transferDescription", { count: selectedCustomerRows.length }) }}</p>
+        <form class="customer-dialog-form" @submit.prevent="submitCustomerTransfer">
+          <label>
+            <span>{{ t("customers.targetAgent") }} <i class="required-star">*</i></span>
+            <el-select
+              v-model="transferForm.targetAgentId"
+              class="business-select"
+              :placeholder="t('customers.targetAgentPlaceholder')"
+              :loading="loadingTransferAgents"
+              filterable
+            >
+              <el-option
+                v-for="agent in transferAgents"
+                :key="agent.id"
+                :value="agent.id"
+                :label="`${agent.displayName} (@${agent.username})`"
+              />
+            </el-select>
+          </label>
+          <el-checkbox v-model="transferForm.retainPreviousAgentAccess">
+            {{ t("customers.retainPreviousAgentAccess") }}
+          </el-checkbox>
+          <small class="customer-transfer-hint">{{ t("customers.transferPermissionHint") }}</small>
+          <div class="customer-dialog-actions">
+            <button type="button" @click="closeCustomerTransfer">{{ t("customers.cancel") }}</button>
+            <button
+              class="customer-access-primary"
+              type="submit"
+              :disabled="transferringCustomers || !transferForm.targetAgentId"
+            >
+              {{ transferringCustomers ? t("customers.transferring") : t("customers.confirmTransfer") }}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <div v-if="batchCredentialRows.length" class="customer-code-overlay" role="presentation">
       <section class="customer-code-dialog customer-credential-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchCredentialTitle')">
         <span class="customer-code-kicker">{{ t("customers.dialogKickerCredentialExport") }}</span>
@@ -1081,10 +1142,12 @@ import {
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
+  fetchCustomerTransferAgents,
   fetchShipmentBatchTask,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
   setBusinessShipmentPublication,
+  transferBusinessCustomers,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
   updateBusinessShipment,
@@ -1121,6 +1184,8 @@ function waitForNextPaint() {
 }
 
 const customers = ref([]);
+const customerTableRef = ref(null);
+const selectedCustomerRows = ref([]);
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
@@ -1140,6 +1205,10 @@ const customerFileParsing = ref(false);
 const importingCustomers = ref(false);
 const batchCredentialRows = ref([]);
 const exportingCredentials = ref(false);
+const transferDialogOpen = ref(false);
+const transferAgents = ref([]);
+const loadingTransferAgents = ref(false);
+const transferringCustomers = ref(false);
 const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
@@ -1204,6 +1273,7 @@ const isEditMode = ref(false);
 const editingCustomerId = ref("");
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
+const transferForm = reactive({ targetAgentId: null, retainPreviousAgentAccess: false });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
 const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
@@ -1270,7 +1340,9 @@ const filteredCustomers = computed(() => {
   if (!query) return customers.value;
   return customers.value.filter((c) =>
     (c.username || "").toLowerCase().includes(query) ||
-    (c.displayName || "").toLowerCase().includes(query)
+    (c.displayName || "").toLowerCase().includes(query) ||
+    (c.clientCode || "").toLowerCase().includes(query) ||
+    (c.responsibleAgentDisplayName || "").toLowerCase().includes(query)
   );
 });
 
@@ -1671,6 +1743,61 @@ async function loadCustomers(preferredId = "") {
     showError(error, "customers.loadFailed");
   } finally {
     loadingCustomers.value = false;
+  }
+}
+
+function handleCustomerSelectionChange(rows) {
+  selectedCustomerRows.value = Array.isArray(rows) ? rows : [];
+}
+
+async function openCustomerTransfer() {
+  if (!selectedCustomerRows.value.length || loadingTransferAgents.value) return;
+  transferDialogOpen.value = true;
+  transferForm.targetAgentId = null;
+  transferForm.retainPreviousAgentAccess = false;
+  loadingTransferAgents.value = true;
+  try {
+    const response = await fetchCustomerTransferAgents();
+    transferAgents.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    transferDialogOpen.value = false;
+    showError(error, "customers.loadTransferAgentsFailed");
+  } finally {
+    loadingTransferAgents.value = false;
+  }
+}
+
+function closeCustomerTransfer() {
+  if (transferringCustomers.value) return;
+  transferDialogOpen.value = false;
+  transferForm.targetAgentId = null;
+  transferForm.retainPreviousAgentAccess = false;
+}
+
+async function submitCustomerTransfer() {
+  if (!selectedCustomerRows.value.length || !transferForm.targetAgentId || transferringCustomers.value) return;
+  transferringCustomers.value = true;
+  try {
+    const response = await transferBusinessCustomers({
+      customerIds: selectedCustomerRows.value.map((customer) => customer.id),
+      targetAgentId: transferForm.targetAgentId,
+      retainPreviousAgentAccess: transferForm.retainPreviousAgentAccess
+    });
+    transferDialogOpen.value = false;
+    transferForm.targetAgentId = null;
+    transferForm.retainPreviousAgentAccess = false;
+    selectedCustomerRows.value = [];
+    customerTableRef.value?.clearSelection?.();
+    await Promise.all([loadCustomers(), loadAvailableShipments()]);
+    showSuccess("customers.transferSuccess", {
+      count: response?.transferred || 0,
+      agent: response?.targetAgentName || "-",
+      shipments: response?.shipmentsAffected || 0
+    });
+  } catch (error) {
+    showError(error, "customers.transferFailed");
+  } finally {
+    transferringCustomers.value = false;
   }
 }
 
@@ -4426,6 +4553,13 @@ function showError(error, fallbackKey) {
   color: #183652;
   background: #fbfdff;
   font-size: 13px;
+}
+
+.customer-transfer-hint {
+  display: block;
+  color: #64748b;
+  line-height: 1.6;
+  margin-top: -4px;
 }
 .customer-dialog-form input:focus,
 .customer-dialog-form textarea:focus {

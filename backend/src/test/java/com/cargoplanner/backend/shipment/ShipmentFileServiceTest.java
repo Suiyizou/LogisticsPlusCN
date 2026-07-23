@@ -61,12 +61,12 @@ class ShipmentFileServiceTest {
         """
         INSERT INTO cp_customers (
           id, public_id, username, display_name, party_role, customer_code_hash,
-          customer_code_prefix, status, created_by
+          customer_code_prefix, status, created_by, responsible_agent_id
         ) VALUES
           (20, 'customer-public-id', 'portal-customer', 'Portal Customer', 'SHIPPER',
-           'hash-20', 'DL-PORTAL', 'ACTIVE', 2),
+           'hash-20', 'DL-PORTAL', 'ACTIVE', 2, 2),
           (21, 'other-customer-id', 'other-customer', 'Other Customer', 'CONSIGNEE',
-           'hash-21', 'DL-OTHER', 'ACTIVE', 2)
+           'hash-21', 'DL-OTHER', 'ACTIVE', 2, 2)
         """
     );
     jdbcTemplate.update(
@@ -275,10 +275,10 @@ class ShipmentFileServiceTest {
         """
         INSERT INTO cp_customers (
           id, public_id, username, display_name, party_role, customer_code_hash,
-          customer_code_prefix, status, created_by
+          customer_code_prefix, status, created_by, responsible_agent_id
         ) VALUES (
           22, 'admin-customer-id', 'admin-customer', 'Admin Customer', 'AGENT',
-          'hash-22', 'DL-ADMIN', 'ACTIVE', 4
+          'hash-22', 'DL-ADMIN', 'ACTIVE', 4, 4
         )
         """
     );
@@ -652,6 +652,7 @@ class ShipmentFileServiceTest {
           public_id CHAR(36) NOT NULL UNIQUE,
           carrier_code VARCHAR(32) NOT NULL,
           created_by BIGINT,
+          responsible_agent_id BIGINT,
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
         )
@@ -692,7 +693,8 @@ class ShipmentFileServiceTest {
           provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
           status VARCHAR(20) NOT NULL,
           remark VARCHAR(500),
-          created_by BIGINT NOT NULL
+          created_by BIGINT NOT NULL,
+          responsible_agent_id BIGINT
         )
         """);
     jdbcTemplate.execute("""

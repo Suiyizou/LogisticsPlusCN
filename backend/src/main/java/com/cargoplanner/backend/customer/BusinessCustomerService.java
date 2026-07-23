@@ -82,11 +82,32 @@ public class BusinessCustomerService {
     List<CustomerRecord> records = actor.isAdmin()
         ? jdbcTemplate.query(baseCustomerSelect() + " ORDER BY c.created_at DESC, c.id DESC", this::mapCustomer)
         : jdbcTemplate.query(
-            baseCustomerSelect() + " WHERE c.created_by = ? ORDER BY c.created_at DESC, c.id DESC",
+            baseCustomerSelect() + " WHERE c.responsible_agent_id = ? ORDER BY c.created_at DESC, c.id DESC",
             this::mapCustomer,
             actor.id()
         );
     return Map.of("items", records.stream().map(this::customerMetadata).toList(), "total", records.size());
+  }
+
+  public Map<String, Object> listTransferAgents(AuthenticatedUser actor) {
+    requireManager(actor);
+    List<Map<String, Object>> agents = jdbcTemplate.query(
+        """
+        SELECT id, username, display_name
+        FROM cp_users
+        WHERE role = 'BUSINESS' AND status = 'ACTIVE' AND id <> ?
+        ORDER BY display_name, username, id
+        """,
+        (rs, rowNumber) -> {
+          Map<String, Object> value = new LinkedHashMap<>();
+          value.put("id", rs.getLong("id"));
+          value.put("username", rs.getString("username"));
+          value.put("displayName", rs.getString("display_name"));
+          return value;
+        },
+        actor.id()
+    );
+    return Map.of("items", agents, "total", agents.size());
   }
 
   public Map<String, Object> get(String customerPublicId, AuthenticatedUser actor) {
@@ -144,8 +165,8 @@ public class BusinessCustomerService {
               public_id, username, display_name, client_code, party_role,
               password_salt, password_hash, password_iterations,
               customer_code_hash, customer_code_prefix, customer_code_mode,
-              provisioning_source, status, remark, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'ACTIVE', ?, ?)
+              provisioning_source, status, remark, created_by, responsible_agent_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'ACTIVE', ?, ?, ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -162,10 +183,11 @@ public class BusinessCustomerService {
         statement.setString(11, customerCodeMode);
         statement.setString(12, remark);
         statement.setLong(13, actor.id());
+        statement.setLong(14, actor.id());
         return statement;
       }, keyHolder);
     } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username already exists");
+      throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
     }
     CustomerRecord customer = requireManaged(publicId, actor);
     audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
@@ -310,11 +332,153 @@ public class BusinessCustomerService {
         );
       }
     } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username already exists");
+      throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
     }
     if (!"ACTIVE".equals(status)) revokeSessions(existing.id());
     audit(actor, "UPDATE_CUSTOMER", existing.id(), "Updated customer " + username, ipAddress);
     return customerMetadata(requireManaged(customerPublicId, actor));
+  }
+
+  @Transactional
+  public Map<String, Object> transferCustomers(
+      CustomerTransferRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    List<String> requestedIds = request == null || request.customerIds() == null
+        ? List.of()
+        : request.customerIds();
+    LinkedHashSet<String> customerIds = new LinkedHashSet<>();
+    for (String id : requestedIds) {
+      if (id != null && !id.isBlank()) customerIds.add(id.trim());
+    }
+    if (customerIds.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one customer is required");
+    }
+    if (customerIds.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A customer transfer cannot exceed 500 customers");
+    }
+    if (request.targetAgentId() == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business operator is required");
+    }
+    TransferAgent target = requireTransferAgent(request.targetAgentId());
+    boolean retainPreviousAccess = Boolean.TRUE.equals(request.retainPreviousAgentAccess());
+    String batchId = UUID.randomUUID().toString();
+
+    List<CustomerTransferTarget> targets = new ArrayList<>();
+    for (String customerId : customerIds.stream().sorted().toList()) {
+      lockCustomer(customerId);
+      CustomerRecord customer = requireManaged(customerId, actor);
+      if (customer.responsibleAgentId() == target.id()) {
+        throw new ApiException(
+            HttpStatus.CONFLICT,
+            "Customer " + customer.displayName() + " is already assigned to the target operator"
+        );
+      }
+      List<Long> shipmentIds = jdbcTemplate.query(
+          "SELECT shipment_id FROM cp_customer_shipment_access WHERE customer_id = ? ORDER BY shipment_id",
+          (rs, rowNumber) -> rs.getLong(1),
+          customer.id()
+      );
+      targets.add(new CustomerTransferTarget(customer, List.copyOf(shipmentIds)));
+    }
+
+    LinkedHashSet<Long> affectedShipments = new LinkedHashSet<>();
+    for (CustomerTransferTarget transfer : targets) affectedShipments.addAll(transfer.shipmentIds());
+    for (Long shipmentId : affectedShipments) lockShipment(shipmentId);
+
+    int shipmentOwnershipUpdated = 0;
+    for (CustomerTransferTarget transfer : targets) {
+      CustomerRecord customer = transfer.customer();
+      jdbcTemplate.update(
+          "UPDATE cp_customers SET responsible_agent_id = ? WHERE id = ?",
+          target.id(),
+          customer.id()
+      );
+      for (Long shipmentId : transfer.shipmentIds()) {
+        ensureTransferParticipant(shipmentId, target.id(), actor.id(), "CUSTOMER_OWNER");
+        shipmentOwnershipUpdated += jdbcTemplate.update(
+            "UPDATE cp_shipments SET responsible_agent_id = ? WHERE id = ? AND responsible_agent_id = ?",
+            target.id(),
+            shipmentId,
+            customer.responsibleAgentId()
+        );
+      }
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_transfer_log (
+            batch_id, customer_id, from_agent_id, to_agent_id, initiated_by,
+            retained_previous_access, shipment_count, ip_address
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+          batchId,
+          customer.id(),
+          customer.responsibleAgentId(),
+          target.id(),
+          actor.id(),
+          retainPreviousAccess,
+          transfer.shipmentIds().size(),
+          ClientInfo.trim(ipAddress, 64)
+      );
+      audit(
+          actor,
+          "TRANSFER_CUSTOMER",
+          customer.id(),
+          "Batch " + batchId + ": transferred " + customer.displayName()
+              + " from agent " + customer.responsibleAgentId() + " to " + target.id()
+              + "; retainedPreviousAccess=" + retainPreviousAccess,
+          ipAddress
+      );
+    }
+
+    LinkedHashSet<Long> previousAgents = new LinkedHashSet<>();
+    for (CustomerTransferTarget transfer : targets) {
+      previousAgents.add(transfer.customer().responsibleAgentId());
+    }
+    for (Long shipmentId : affectedShipments) {
+      List<Long> currentCustomerAgents = jdbcTemplate.query(
+          """
+          SELECT DISTINCT customer.responsible_agent_id
+          FROM cp_customer_shipment_access access
+          JOIN cp_customers customer ON customer.id = access.customer_id
+          WHERE access.shipment_id = ?
+          """,
+          (rs, rowNumber) -> rs.getLong(1),
+          shipmentId
+      );
+      for (Long currentAgentId : currentCustomerAgents) {
+        ensureTransferParticipant(
+            shipmentId, currentAgentId, actor.id(), "CUSTOMER_OWNER"
+        );
+      }
+      for (Long previousAgentId : previousAgents) {
+        if (shipmentStillBelongsToAgent(shipmentId, previousAgentId)) continue;
+        if (retainPreviousAccess) {
+          ensureTransferParticipant(shipmentId, previousAgentId, actor.id(), "TRANSFERRED_OWNER");
+        } else {
+          jdbcTemplate.update(
+              """
+              DELETE FROM cp_shipment_participants
+              WHERE shipment_id = ? AND user_id = ?
+                AND participant_role IN ('CUSTOMER_OWNER', 'TRANSFERRED_OWNER')
+              """,
+              shipmentId,
+              previousAgentId
+          );
+        }
+      }
+    }
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("batchId", batchId);
+    response.put("transferred", targets.size());
+    response.put("shipmentsAffected", affectedShipments.size());
+    response.put("shipmentOwnershipUpdated", shipmentOwnershipUpdated);
+    response.put("targetAgentId", target.id());
+    response.put("targetAgentName", target.displayName());
+    response.put("retainedPreviousAccess", retainPreviousAccess);
+    return response;
   }
 
   @Transactional
@@ -406,7 +570,7 @@ public class BusinessCustomerService {
             this::mapSnapshotShipment
         )
         : jdbcTemplate.query(
-            baseSql + " WHERE (s.created_by = ? OR EXISTS ("
+            baseSql + " WHERE (s.responsible_agent_id = ? OR EXISTS ("
                 + "SELECT 1 FROM cp_shipment_participants p "
                 + "WHERE p.shipment_id = s.id AND p.user_id = ?)) "
                 + "ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
@@ -453,7 +617,7 @@ public class BusinessCustomerService {
             this::mapRefreshableShipment
         )
         : jdbcTemplate.query(
-            baseSql + " AND (s.created_by = ? OR EXISTS ("
+            baseSql + " AND (s.responsible_agent_id = ? OR EXISTS ("
                 + "SELECT 1 FROM cp_shipment_participants p "
                 + "WHERE p.shipment_id = s.id AND p.user_id = ?)) "
                 + "ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
@@ -489,7 +653,7 @@ public class BusinessCustomerService {
         """.formatted(placeholders);
     List<Object> parameters = new ArrayList<>(shipmentIds);
     if (!actor.isAdmin()) {
-      sql += " AND (s.created_by = ? OR EXISTS ("
+      sql += " AND (s.responsible_agent_id = ? OR EXISTS ("
           + "SELECT 1 FROM cp_shipment_participants p "
           + "WHERE p.shipment_id = s.id AND p.user_id = ?))";
       parameters.add(actor.id());
@@ -605,17 +769,17 @@ public class BusinessCustomerService {
 
     Map<String, LinkedHashMap<String, Map<String, Object>>> internalByShipment =
         new LinkedHashMap<>();
-    String creatorSql = """
+    String responsibleAgentSql = """
         SELECT s.public_id AS shipment_public_id, u.id AS user_id, u.username,
                u.display_name, u.role AS account_role, u.party_role
         FROM cp_shipments s
-        JOIN cp_users u ON u.id = s.created_by
+        JOIN cp_users u ON u.id = s.responsible_agent_id
         WHERE s.public_id IN (
         """ + placeholders + ") ORDER BY s.id";
     jdbcTemplate.query(
-        creatorSql,
+        responsibleAgentSql,
         (rs, rowNum) -> {
-          addInternalBoundUser(internalByShipment, rs, "CREATOR");
+          addInternalBoundUser(internalByShipment, rs, "RESPONSIBLE_AGENT");
           return null;
         },
         publicIds.toArray()
@@ -721,7 +885,7 @@ public class BusinessCustomerService {
             shipmentPublicId
         )
         : jdbcTemplate.query(
-            baseSql + " WHERE s.public_id = ? AND (s.created_by = ? OR EXISTS ("
+            baseSql + " WHERE s.public_id = ? AND (s.responsible_agent_id = ? OR EXISTS ("
                 + "SELECT 1 FROM cp_shipment_participants p "
                 + "WHERE p.shipment_id = s.id AND p.user_id = ?)) LIMIT 1",
             this::mapSnapshotShipment,
@@ -924,7 +1088,7 @@ public class BusinessCustomerService {
     List<Map<String, Object>> items = actor.isAdmin()
         ? jdbcTemplate.query(base + " ORDER BY q.updated_at DESC LIMIT 200", this::mapClientMatch)
         : jdbcTemplate.query(
-            base + " AND (q.requested_by = ? OR s.created_by = ?) ORDER BY q.updated_at DESC LIMIT 200",
+            base + " AND (q.requested_by = ? OR s.responsible_agent_id = ?) ORDER BY q.updated_at DESC LIMIT 200",
             this::mapClientMatch,
             actor.id(), actor.id()
         );
@@ -962,7 +1126,7 @@ public class BusinessCustomerService {
             FROM cp_shipment_client_match_queue q
             JOIN cp_shipments s ON s.id = q.shipment_id
             WHERE q.id = ? AND q.match_status = 'PENDING'
-              AND (q.requested_by = ? OR s.created_by = ?)
+              AND (q.requested_by = ? OR s.responsible_agent_id = ?)
             """,
             (rs, rowNumber) -> new PendingClientMatch(
                 rs.getLong("id"), rs.getLong("shipment_id"), rs.getString("public_id")
@@ -1020,8 +1184,9 @@ public class BusinessCustomerService {
         PreparedStatement statement = connection.prepareStatement(
             """
             INSERT INTO cp_shipments (
-              public_id, carrier_code, tracking_status, business_note, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              public_id, carrier_code, tracking_status, business_note,
+              created_by, responsible_agent_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             Statement.RETURN_GENERATED_KEYS
         );
@@ -1030,8 +1195,9 @@ public class BusinessCustomerService {
         statement.setString(3, trackingStatus);
         statement.setString(4, note);
         statement.setLong(5, actor.id());
-        statement.setTimestamp(6, Timestamp.from(now));
+        statement.setLong(6, actor.id());
         statement.setTimestamp(7, Timestamp.from(now));
+        statement.setTimestamp(8, Timestamp.from(now));
         return statement;
       }, keyHolder);
       Number generatedId = keyHolder.getKey();
@@ -1900,7 +2066,7 @@ public class BusinessCustomerService {
     List<CustomerRecord> records = actor.isAdmin()
         ? jdbcTemplate.query(baseCustomerSelect() + " WHERE c.public_id = ?", this::mapCustomer, publicId)
         : jdbcTemplate.query(
-            baseCustomerSelect() + " WHERE c.public_id = ? AND c.created_by = ?",
+            baseCustomerSelect() + " WHERE c.public_id = ? AND c.responsible_agent_id = ?",
             this::mapCustomer,
             publicId,
             actor.id()
@@ -1925,7 +2091,7 @@ public class BusinessCustomerService {
     }
     List<ShipmentRecord> shipments = jdbcTemplate.query(
         """
-        SELECT s.id, s.public_id, s.carrier_code, s.created_by
+        SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
         FROM cp_shipment_references r
         JOIN cp_shipments s ON s.id = r.shipment_id
         WHERE r.carrier_code = ? AND r.reference_type = ? AND r.reference_no_normalized = ?
@@ -1941,7 +2107,7 @@ public class BusinessCustomerService {
 
   private ShipmentRecord requireShipment(String publicId) {
     List<ShipmentRecord> shipments = jdbcTemplate.query(
-        "SELECT id, public_id, carrier_code, created_by FROM cp_shipments WHERE public_id = ?",
+        "SELECT id, public_id, carrier_code, responsible_agent_id FROM cp_shipments WHERE public_id = ?",
         this::mapShipment,
         publicId == null ? null : publicId.trim()
     );
@@ -1966,7 +2132,7 @@ public class BusinessCustomerService {
   ) {
     String authority = actor.isAdmin()
         ? " WHERE s.public_id = ?"
-        : " WHERE s.public_id = ? AND (s.created_by = ? OR EXISTS ("
+        : " WHERE s.public_id = ? AND (s.responsible_agent_id = ? OR EXISTS ("
             + "SELECT 1 FROM cp_shipment_participants p WHERE p.shipment_id = s.id AND p.user_id = ?))";
     List<Map<String, Object>> values = actor.isAdmin()
         ? jdbcTemplate.query(availableShipmentSelect() + authority, this::mapAvailableShipment, shipmentPublicId)
@@ -1986,11 +2152,14 @@ public class BusinessCustomerService {
         SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
                c.party_role, c.customer_code_prefix, c.customer_code_mode,
                c.provisioning_source,
-               c.status, c.remark, c.created_by, c.created_at, c.updated_at,
-               u.display_name AS created_by_display_name,
+               c.status, c.remark, c.created_by, c.responsible_agent_id,
+               c.created_at, c.updated_at,
+               creator.display_name AS created_by_display_name,
+               owner.display_name AS responsible_agent_display_name,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.customer_id = c.id) AS shipment_count
         FROM cp_customers c
-        LEFT JOIN cp_users u ON u.id = c.created_by
+        LEFT JOIN cp_users creator ON creator.id = c.created_by
+        LEFT JOIN cp_users owner ON owner.id = c.responsible_agent_id
         """;
   }
 
@@ -2053,6 +2222,8 @@ public class BusinessCustomerService {
         rs.getString("remark"),
         nullableLong(rs, "created_by"),
         rs.getString("created_by_display_name"),
+        rs.getLong("responsible_agent_id"),
+        rs.getString("responsible_agent_display_name"),
         instantString(rs, "created_at"),
         instantString(rs, "updated_at"),
         rs.getLong("shipment_count")
@@ -2064,7 +2235,7 @@ public class BusinessCustomerService {
         rs.getLong("id"),
         rs.getString("public_id"),
         rs.getString("carrier_code"),
-        nullableLong(rs, "created_by")
+        nullableLong(rs, "responsible_agent_id")
     );
   }
 
@@ -2073,7 +2244,8 @@ public class BusinessCustomerService {
       AuthenticatedUser actor
   ) {
     if (actor.isAdmin()) return;
-    if (shipment.createdBy() != null && shipment.createdBy() == actor.id()) return;
+    if (shipment.responsibleAgentId() != null
+        && shipment.responsibleAgentId() == actor.id()) return;
     Integer participantCount = jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = ? AND user_id = ?",
         Integer.class,
@@ -2167,6 +2339,8 @@ public class BusinessCustomerService {
     value.put("remark", record.remark());
     value.put("createdBy", record.createdBy());
     value.put("createdByDisplayName", record.createdByDisplayName());
+    value.put("responsibleAgentId", record.responsibleAgentId());
+    value.put("responsibleAgentDisplayName", record.responsibleAgentDisplayName());
     value.put("createdAt", record.createdAt());
     value.put("updatedAt", record.updatedAt());
     value.put("shipmentCount", record.shipmentCount());
@@ -2221,6 +2395,85 @@ public class BusinessCustomerService {
         Long.class,
         shipmentId
     );
+  }
+
+  private void lockCustomer(String customerPublicId) {
+    List<Long> ids = jdbcTemplate.query(
+        "SELECT id FROM cp_customers WHERE public_id = ? FOR UPDATE",
+        (rs, rowNumber) -> rs.getLong(1),
+        customerPublicId
+    );
+    if (ids.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
+  }
+
+  private TransferAgent requireTransferAgent(long agentId) {
+    List<TransferAgent> agents = jdbcTemplate.query(
+        """
+        SELECT id, username, display_name
+        FROM cp_users
+        WHERE id = ? AND role = 'BUSINESS' AND status = 'ACTIVE'
+        FOR UPDATE
+        """,
+        (rs, rowNumber) -> new TransferAgent(
+            rs.getLong("id"), rs.getString("username"), rs.getString("display_name")
+        ),
+        agentId
+    );
+    if (agents.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business operator is not active");
+    }
+    return agents.get(0);
+  }
+
+  private void ensureTransferParticipant(
+      long shipmentId,
+      long userId,
+      long grantedBy,
+      String participantRole
+  ) {
+    Integer existing = jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = ? AND user_id = ?",
+        Integer.class,
+        shipmentId,
+        userId
+    );
+    if (existing != null && existing > 0) return;
+    try {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_shipment_participants (
+            shipment_id, user_id, participant_role, granted_by
+          ) VALUES (?, ?, ?, ?)
+          """,
+          shipmentId,
+          userId,
+          participantRole,
+          grantedBy
+      );
+    } catch (DuplicateKeyException ignored) {
+      // A concurrent grant is equivalent to the requested result.
+    }
+  }
+
+  private boolean shipmentStillBelongsToAgent(long shipmentId, long agentId) {
+    Integer count = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM cp_customer_shipment_access access
+        JOIN cp_customers customer ON customer.id = access.customer_id
+        WHERE access.shipment_id = ? AND customer.responsible_agent_id = ?
+        """,
+        Integer.class,
+        shipmentId,
+        agentId
+    );
+    Long responsibleAgentId = jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_shipments WHERE id = ?",
+        Long.class,
+        shipmentId
+    );
+    return (count != null && count > 0)
+        || (responsibleAgentId != null && responsibleAgentId == agentId);
   }
 
   private void ensureShipmentRoleAvailable(long shipmentId, long customerId, String role) {
@@ -2535,12 +2788,16 @@ public class BusinessCustomerService {
       String remark,
       Long createdBy,
       String createdByDisplayName,
+      long responsibleAgentId,
+      String responsibleAgentDisplayName,
       String createdAt,
       String updatedAt,
       long shipmentCount
   ) {}
 
-  private record ShipmentRecord(long id, String publicId, String carrier, Long createdBy) {}
+  private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
+  private record TransferAgent(long id, String username, String displayName) {}
+  private record CustomerTransferTarget(CustomerRecord customer, List<Long> shipmentIds) {}
   private record RefreshableShipment(
       String shipmentPublicId,
       String carrier,

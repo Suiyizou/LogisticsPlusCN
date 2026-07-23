@@ -1127,6 +1127,19 @@ Object.assign(messages["en-US"].portal, {
 });
 
 messages["zh-CN"].customers = {
+  transferSelected: "转交客户（{count}）",
+  responsibleAgent: "负责业务员",
+  transferTitle: "批量转交客户",
+  transferDescription: "将已选的 {count} 个客户及其关联票单权限转交给另一位业务员。",
+  targetAgent: "目标业务员",
+  targetAgentPlaceholder: "请选择接收客户的业务员",
+  retainPreviousAgentAccess: "保留原业务员的票单与文件访问权限",
+  transferPermissionHint: "不勾选时将收回由客户负责人关系产生的旧权限；其他显式参与权限不会被删除。",
+  confirmTransfer: "确认转交",
+  transferring: "正在转交...",
+  transferSuccess: "已将 {count} 个客户和 {shipments} 张关联票单转交给 {agent}。",
+  transferFailed: "客户转交失败，所有变更均已回滚。",
+  loadTransferAgentsFailed: "可接收客户的业务员列表加载失败。",
   batchBindSelected: "批量绑定已选票单（{count}）",
   selectShipment: "选择票单",
   batchBoundSuccess: "批量绑定完成：新增 {bound} 条，跳过 {skipped} 条已绑定票单。",
@@ -1380,6 +1393,19 @@ messages["zh-CN"].customers = {
 };
 
 messages["en-US"].customers = {
+  transferSelected: "Transfer customers ({count})",
+  responsibleAgent: "Responsible operator",
+  transferTitle: "Transfer customers",
+  transferDescription: "Transfer the {count} selected customers and their related shipment access to another business operator.",
+  targetAgent: "Target operator",
+  targetAgentPlaceholder: "Select the receiving operator",
+  retainPreviousAgentAccess: "Keep the previous operator's shipment and file access",
+  transferPermissionHint: "When cleared, access inherited from customer ownership is revoked; unrelated explicit participation remains intact.",
+  confirmTransfer: "Confirm transfer",
+  transferring: "Transferring...",
+  transferSuccess: "Transferred {count} customers and {shipments} related shipments to {agent}.",
+  transferFailed: "Customer transfer failed. All changes were rolled back.",
+  loadTransferAgentsFailed: "Could not load eligible receiving operators.",
   batchBindSelected: "Assign selected ({count})",
   selectShipment: "Select shipment",
   batchBoundSuccess: "Assignment complete: {bound} added and {skipped} already assigned.",

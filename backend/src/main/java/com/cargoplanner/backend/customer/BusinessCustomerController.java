@@ -38,6 +38,22 @@ public class BusinessCustomerController {
     return service.listAvailableShipments(actor);
   }
 
+  @GetMapping("/transfer-agents")
+  public Map<String, Object> transferAgents(
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listTransferAgents(actor);
+  }
+
+  @PostMapping("/transfer")
+  public Map<String, Object> transfer(
+      @RequestBody CustomerTransferRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.transferCustomers(request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @GetMapping("/shipments/{shipmentId}/snapshot")
   public Map<String, Object> shipmentSnapshot(
       @PathVariable String shipmentId,

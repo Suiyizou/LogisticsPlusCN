@@ -788,7 +788,7 @@ public class ShipmentFileService {
             FROM cp_customers c
             JOIN cp_customer_shipment_access a ON a.customer_id = c.id
             WHERE c.public_id = ? AND c.status = 'ACTIVE' AND a.shipment_id = ?
-              AND c.created_by = ?
+              AND c.responsible_agent_id = ?
             """,
             (rs, rowNumber) -> rs.getLong(1),
             customerPublicId.trim(),
@@ -805,7 +805,7 @@ public class ShipmentFileService {
       long shipmentId,
       AuthenticatedUser user
   ) {
-    String ownershipFilter = user.isAdmin() ? "" : " AND c.created_by = ?";
+    String ownershipFilter = user.isAdmin() ? "" : " AND c.responsible_agent_id = ?";
     List<Object> parameters = new ArrayList<>();
     parameters.add(shipmentId);
     if (!user.isAdmin()) parameters.add(user.id());

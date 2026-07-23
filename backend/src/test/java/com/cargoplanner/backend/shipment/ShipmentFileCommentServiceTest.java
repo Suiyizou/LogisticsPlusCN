@@ -58,7 +58,8 @@ class ShipmentFileCommentServiceTest {
             + "(2, 'Business One', 'BUSINESS'), (3, 'Outside User', 'EMPLOYEE')"
     );
     jdbcTemplate.update(
-        "INSERT INTO cp_shipments (id, public_id, created_by) VALUES (10, 'shipment-public-id', 2)"
+        "INSERT INTO cp_shipments (id, public_id, created_by, responsible_agent_id) "
+            + "VALUES (10, 'shipment-public-id', 2, 2)"
     );
     jdbcTemplate.update(
         "INSERT INTO cp_customers (id, display_name, status) VALUES (20, 'Portal Customer', 'ACTIVE')"
@@ -138,7 +139,8 @@ class ShipmentFileCommentServiceTest {
         CREATE TABLE cp_shipments (
           id BIGINT PRIMARY KEY,
           public_id CHAR(36) NOT NULL UNIQUE,
-          created_by BIGINT NULL
+          created_by BIGINT NULL,
+          responsible_agent_id BIGINT NULL
         )
         """);
     jdbcTemplate.execute("""

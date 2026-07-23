@@ -53,13 +53,14 @@ class CustomerAccessFlowTest {
     jdbcTemplate.update(
         """
         INSERT INTO cp_shipments (
-          id, public_id, carrier_code, tracking_status, created_by, created_at, updated_at
+          id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+          created_at, updated_at
         ) VALUES
-          (10, 'shipment-public-id', 'COSCO', 'In transit', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (11, 'anonymous-shipment-id', 'COSCO', 'Tracked', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (12, 'other-business-shipment', 'COSCO', 'Tracked', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (13, 'participant-shipment', 'COSCO', 'Tracked', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-          (14, 'empty-owned-shipment', 'CMA', 'Pending update', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          (10, 'shipment-public-id', 'COSCO', 'In transit', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (11, 'anonymous-shipment-id', 'COSCO', 'Tracked', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (12, 'other-business-shipment', 'COSCO', 'Tracked', 2, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (13, 'participant-shipment', 'COSCO', 'Tracked', 2, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (14, 'empty-owned-shipment', 'CMA', 'Pending update', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
     );
     jdbcTemplate.update(
@@ -245,6 +246,129 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void transfersCustomerShipmentAndFileAuthorityInOneAuditedOperation() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "hayden", "SecurePass!23", "Hayden", "SHIPPER", "HAYDEN-001"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) created.get("id");
+    customerService.bindShipment(
+        customerId,
+        new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
+        business,
+        "127.0.0.1"
+    );
+
+    Map<String, Object> result = customerService.transferCustomers(
+        new CustomerTransferRequest(List.of(customerId), otherBusiness.id(), false),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(result.get("transferred")).isEqualTo(1);
+    assertThat(result.get("shipmentsAffected")).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT created_by FROM cp_customers WHERE public_id = ?", Long.class, customerId
+    )).isEqualTo(business.id());
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    )).isEqualTo(otherBusiness.id());
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_shipments WHERE id = 10", Long.class
+    )).isEqualTo(otherBusiness.id());
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
+    assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
+    assertThatThrownBy(() -> shipmentAccessService.requireAccess("shipment-public-id", business))
+        .isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.FORBIDDEN));
+    assertThat(shipmentAccessService.requireAccess("shipment-public-id", otherBusiness).shipmentId())
+        .isEqualTo(10);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_transfer_log WHERE customer_id = ? AND from_agent_id = 1 AND to_agent_id = 2",
+        Integer.class,
+        ((Number) jdbcTemplate.queryForMap(
+            "SELECT id FROM cp_customers WHERE public_id = ?", customerId
+        ).get("ID")).longValue()
+    )).isEqualTo(1);
+  }
+
+  @Test
+  void transferCanRetainPreviousAgentAsShipmentParticipant() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest("retained", "SecurePass!23", "Retained", "CONSIGNEE"),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) created.get("id");
+    customerService.bindShipment(
+        customerId,
+        new CustomerShipmentBindingRequest("empty-owned-shipment", null, null, null),
+        business,
+        "127.0.0.1"
+    );
+
+    customerService.transferCustomers(
+        new CustomerTransferRequest(List.of(customerId), otherBusiness.id(), true),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(shipmentAccessService.requireAccess("empty-owned-shipment", business).shipmentId())
+        .isEqualTo(14);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT participant_role FROM cp_shipment_participants WHERE shipment_id = 14 AND user_id = 1",
+        String.class
+    )).isEqualTo("TRANSFERRED_OWNER");
+  }
+
+  @Test
+  void transferKeepsAccessForAnAgentWhoStillOwnsAnotherCustomerOnTheShipment() {
+    Map<String, Object> shipper = customerService.create(
+        new CreateCustomerRequest("shared-shipper", "SecurePass!23", "Shared Shipper", "SHIPPER"),
+        business,
+        "127.0.0.1"
+    );
+    Map<String, Object> consignee = customerService.create(
+        new CreateCustomerRequest(
+            "shared-consignee", "SecurePass!23", "Shared Consignee", "CONSIGNEE"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    for (Map<String, Object> customer : List.of(shipper, consignee)) {
+      customerService.bindShipment(
+          (String) customer.get("id"),
+          new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
+          business,
+          "127.0.0.1"
+      );
+    }
+
+    customerService.transferCustomers(
+        new CustomerTransferRequest(List.of((String) shipper.get("id")), otherBusiness.id(), false),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(shipmentAccessService.requireAccess("shipment-public-id", business).shipmentId())
+        .isEqualTo(10);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT participant_role FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 1",
+        String.class
+    )).isEqualTo("CUSTOMER_OWNER");
+  }
+
+  @Test
   void bindingRequiresShipmentCreatorParticipantOrAdministrator() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest("scoped-customer", "SecurePass!23", "Scoped Customer", "SHIPPER"),
@@ -358,7 +482,7 @@ class CustomerAccessFlowTest {
     assertThat(participants).extracting(item -> item.get("role"))
         .containsOnly("OVERSEA_AGENT");
     assertThat(participants).extracting(item -> item.get("bindingRole"))
-        .containsExactlyInAnyOrder("CREATOR", "OPERATOR");
+        .containsExactlyInAnyOrder("RESPONSIBLE_AGENT", "OPERATOR");
 
     Map<String, Object> emptyShipment = available.stream()
         .filter(item -> "empty-owned-shipment".equals(item.get("shipmentId")))
@@ -718,10 +842,11 @@ class CustomerAccessFlowTest {
     jdbcTemplate.update(
         """
         INSERT INTO cp_shipments (
-          id, public_id, carrier_code, tracking_status, created_by, created_at, updated_at
-        ) VALUES (20, 'legacy-bill-duplicate', 'COSCO', NULL, 1,
+          id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+          created_at, updated_at
+        ) VALUES (20, 'legacy-bill-duplicate', 'COSCO', NULL, 1, 1,
                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                 (21, 'legacy-booking-duplicate', 'COSCO', NULL, 1,
+                 (21, 'legacy-booking-duplicate', 'COSCO', NULL, 1, 1,
                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
     );
@@ -1066,7 +1191,8 @@ class CustomerAccessFlowTest {
           username VARCHAR(64) NOT NULL,
           display_name VARCHAR(80) NOT NULL,
           role VARCHAR(24) NOT NULL,
-          party_role VARCHAR(20) NOT NULL
+          party_role VARCHAR(20) NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
         )
         """);
     jdbcTemplate.execute("""
@@ -1102,6 +1228,7 @@ class CustomerAccessFlowTest {
           last_tracked_at TIMESTAMP,
           fresh_until TIMESTAMP,
           created_by BIGINT,
+          responsible_agent_id BIGINT,
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
         )
@@ -1146,6 +1273,7 @@ class CustomerAccessFlowTest {
           shipment_id BIGINT NOT NULL,
           user_id BIGINT NOT NULL,
           participant_role VARCHAR(24) NOT NULL,
+          granted_by BIGINT,
           PRIMARY KEY (shipment_id, user_id)
         )
         """);
@@ -1167,8 +1295,23 @@ class CustomerAccessFlowTest {
           status VARCHAR(20) NOT NULL,
           remark VARCHAR(500),
           created_by BIGINT NOT NULL,
+          responsible_agent_id BIGINT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_transfer_log (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          batch_id CHAR(36) NOT NULL,
+          customer_id BIGINT NOT NULL,
+          from_agent_id BIGINT NOT NULL,
+          to_agent_id BIGINT NOT NULL,
+          initiated_by BIGINT NOT NULL,
+          retained_previous_access BOOLEAN NOT NULL,
+          shipment_count INT NOT NULL,
+          ip_address VARCHAR(64),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

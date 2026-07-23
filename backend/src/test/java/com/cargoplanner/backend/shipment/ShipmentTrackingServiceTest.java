@@ -372,7 +372,8 @@ class ShipmentTrackingServiceTest {
   @Test
   void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
     jdbcTemplate.update(
-        "INSERT INTO cp_customers (created_by, status, client_code, party_role) VALUES (2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"
+        "INSERT INTO cp_customers (created_by, responsible_agent_id, status, client_code, party_role) "
+            + "VALUES (2, 2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"
     );
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO",
@@ -604,8 +605,9 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.update(
         """
         INSERT INTO cp_shipments (
-          public_id, carrier_code, tracking_status, created_by, created_at, updated_at
-        ) VALUES ('existing-bill-shell', 'COSCO', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+          created_at, updated_at
+        ) VALUES ('existing-bill-shell', 'COSCO', NULL, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
     );
     Long shipmentId = jdbcTemplate.queryForObject(
@@ -1070,8 +1072,9 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.update(
         """
         INSERT INTO cp_shipments (
-          public_id, carrier_code, tracking_status, created_by, created_at, updated_at
-        ) VALUES ('shell-shipment', 'COSCO', 'Needs review', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+          created_at, updated_at
+        ) VALUES ('shell-shipment', 'COSCO', 'Needs review', 2, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """
     );
     Long shipmentId = jdbcTemplate.queryForObject(
@@ -1170,6 +1173,7 @@ class ShipmentTrackingServiceTest {
           last_tracked_at TIMESTAMP,
           fresh_until TIMESTAMP,
           created_by BIGINT,
+          responsible_agent_id BIGINT,
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
         )
@@ -1226,6 +1230,7 @@ class ShipmentTrackingServiceTest {
           username VARCHAR(64),
           display_name VARCHAR(80),
           created_by BIGINT,
+          responsible_agent_id BIGINT,
           status VARCHAR(24) NOT NULL,
           client_code VARCHAR(64),
           party_role VARCHAR(20),

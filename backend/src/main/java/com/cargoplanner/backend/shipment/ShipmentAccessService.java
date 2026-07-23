@@ -46,10 +46,10 @@ public class ShipmentAccessService {
         shipment.id(),
         user.id()
     );
-    boolean isShipmentCreator = user.isBusiness()
-        && shipment.createdBy() != null
-        && shipment.createdBy() == user.id();
-    if (roles.isEmpty() && !isShipmentCreator) {
+    boolean isResponsibleAgent = user.isBusiness()
+        && shipment.responsibleAgentId() != null
+        && shipment.responsibleAgentId() == user.id();
+    if (roles.isEmpty() && !isResponsibleAgent) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment file access has not been granted");
     }
     Set<String> fileRoles = new LinkedHashSet<>();
@@ -129,11 +129,11 @@ public class ShipmentAccessService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment id is required");
     }
     List<ShipmentIdentity> shipments = jdbcTemplate.query(
-        "SELECT id, public_id, created_by FROM cp_shipments WHERE public_id = ?",
+        "SELECT id, public_id, responsible_agent_id FROM cp_shipments WHERE public_id = ?",
         (rs, rowNumber) -> new ShipmentIdentity(
             rs.getLong("id"),
             rs.getString("public_id"),
-            nullableLong(rs, "created_by")
+            nullableLong(rs, "responsible_agent_id")
         ),
         shipmentPublicId.trim()
     );
@@ -157,7 +157,7 @@ public class ShipmentAccessService {
     return FILE_VISIBILITY_ROLES.contains(normalized) ? normalized : null;
   }
 
-  public record ShipmentIdentity(long id, String publicId, Long createdBy) {}
+  public record ShipmentIdentity(long id, String publicId, Long responsibleAgentId) {}
 
   public record ShipmentAccess(
       long shipmentId,
