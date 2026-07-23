@@ -394,8 +394,10 @@ test("spreadsheet import previews the detected sheet and column before starting"
 test("customer tracking is database-backed, assigned-only, and never falls back to carrier lookup", () => {
   assert.match(
     appSource,
-    /async function loadCustomerAssignedHistory\(\)[\s\S]*?fetch\("\/api\/customer\/shipments"[\s\S]*?item\?\.dataAvailable && item\?\.snapshot/
+    /async function loadCustomerAssignedHistory\(\)[\s\S]*?fetch\(`\/api\/customer\/shipments\?\$\{query\}`[\s\S]*?item\?\.dataAvailable && item\?\.snapshot/
   );
+  assert.match(indexSource, /id="history-pagination"[\s\S]*?id="history-page-size"/);
+  assert.match(appSource, /page: String\(historyPage\)[\s\S]*?pageSize: String\(historyPageSize\)/);
   assert.match(
     appSource,
     /function readHistory\(\)[\s\S]*?readFileSession\(\)\.kind === "CUSTOMER"\)[\s\S]*?uniqueHistoryEntries\(customerAssignedHistory\)/
@@ -470,7 +472,7 @@ test("signed-in overview loads account-bound snapshot objects and never offers b
   const loadStart = appSource.indexOf("async function loadInternalTrackedHistory()");
   const loadEnd = appSource.indexOf("function appendCell", loadStart);
   const loadSource = appSource.slice(loadStart, loadEnd);
-  assert.match(loadSource, /fetch\("\/api\/business\/shipments"/);
+  assert.match(loadSource, /fetch\(`\/api\/business\/shipments\?\$\{query\}`/);
   assert.match(loadSource, /item\?\.snapshot && typeof item\.snapshot === "object"/);
   assert.match(loadSource, /PENDING_MANUAL/);
   assert.match(loadSource, /boundShipment: true/);

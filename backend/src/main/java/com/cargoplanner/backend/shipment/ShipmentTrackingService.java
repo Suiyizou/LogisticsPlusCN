@@ -422,7 +422,14 @@ public class ShipmentTrackingService {
         JOIN cp_shipments s ON s.id = a.shipment_id
         JOIN cp_shipment_references r ON r.shipment_id = s.id
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE a.customer_id = ?
+        WHERE (a.customer_id = ? OR EXISTS (
+          SELECT 1
+          FROM cp_oversea_agent_customers link
+          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
+          WHERE link.oversea_agent_customer_id = ?
+            AND link.customer_id = a.customer_id
+            AND linked_customer.status = 'ACTIVE'
+        ))
           AND a.publication_status = 'PUBLISHED'
           AND r.carrier_code = ?
           AND r.reference_type = ?
@@ -431,6 +438,7 @@ public class ShipmentTrackingService {
         """,
         this::mapCachedShipment,
         customer.id(),
+        linkedAgentId(customer),
         request.carrier(),
         request.type(),
         normalizeReference(request.number())
@@ -471,11 +479,20 @@ public class ShipmentTrackingService {
         JOIN cp_shipments s ON s.id = a.shipment_id
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE a.customer_id = ? AND a.publication_status = 'PUBLISHED' AND s.public_id = ?
+        WHERE (a.customer_id = ? OR EXISTS (
+          SELECT 1
+          FROM cp_oversea_agent_customers link
+          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
+          WHERE link.oversea_agent_customer_id = ?
+            AND link.customer_id = a.customer_id
+            AND linked_customer.status = 'ACTIVE'
+        ))
+          AND a.publication_status = 'PUBLISHED' AND s.public_id = ?
         LIMIT 1
         """,
         this::mapCachedShipment,
         customer.id(),
+        linkedAgentId(customer),
         shipmentPublicId == null ? "" : shipmentPublicId.trim()
     );
     if (records.isEmpty()) {
@@ -497,17 +514,64 @@ public class ShipmentTrackingService {
 
   /** Lists the database-backed shipment records explicitly assigned to a customer. */
   public ObjectNode listAssignedSnapshots(CustomerPrincipal customer) {
+    return listAssignedSnapshots(customer, 1, 20);
+  }
+
+  /** Lists one page of published shipments assigned directly or through linked customers. */
+  public ObjectNode listAssignedSnapshots(
+      CustomerPrincipal customer,
+      int requestedPage,
+      int requestedPageSize
+  ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
+    int page = Math.max(1, requestedPage);
+    int pageSize = Math.max(5, Math.min(100, requestedPageSize));
+    long linkedAgentId = linkedAgentId(customer);
+    Long totalValue = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(DISTINCT a.shipment_id)
+        FROM cp_customer_shipment_access a
+        WHERE a.publication_status = 'PUBLISHED'
+          AND (a.customer_id = ? OR EXISTS (
+            SELECT 1
+            FROM cp_oversea_agent_customers link
+            JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
+            WHERE link.oversea_agent_customer_id = ?
+              AND link.customer_id = a.customer_id
+              AND linked_customer.status = 'ACTIVE'
+          ))
+        """,
+        Long.class,
+        customer.id(), linkedAgentId
+    );
+    long total = totalValue == null ? 0 : totalValue;
+    int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
+    if (totalPages == 0) page = 1;
+    else if (page > totalPages) page = totalPages;
+    int offset = (page - 1) * pageSize;
     List<CustomerAssignedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
                s.last_tracked_at, s.job_number, s.client_po_number, s.client_name_code,
                s.original_bill_of_lading, r.reference_type, r.reference_no_raw,
                t.snapshot_json, t.strategy_json, t.fetched_at, t.fresh_until
-        FROM cp_customer_shipment_access a
-        JOIN cp_shipments s ON s.id = a.shipment_id
+        FROM cp_shipments s
+        JOIN (
+          SELECT a.shipment_id, MAX(a.assigned_at) AS assigned_at
+          FROM cp_customer_shipment_access a
+          WHERE a.publication_status = 'PUBLISHED'
+            AND (a.customer_id = ? OR EXISTS (
+              SELECT 1
+              FROM cp_oversea_agent_customers link
+              JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
+              WHERE link.oversea_agent_customer_id = ?
+                AND link.customer_id = a.customer_id
+                AND linked_customer.status = 'ACTIVE'
+            ))
+          GROUP BY a.shipment_id
+        ) assigned ON assigned.shipment_id = s.id
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
@@ -515,8 +579,8 @@ public class ShipmentTrackingService {
                    r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE a.customer_id = ? AND a.publication_status = 'PUBLISHED'
-        ORDER BY a.assigned_at DESC, s.updated_at DESC
+        ORDER BY assigned.assigned_at DESC, s.updated_at DESC
+        LIMIT ? OFFSET ?
         """,
         (rs, rowNumber) -> new CustomerAssignedShipment(
             new CachedShipment(
@@ -534,7 +598,7 @@ public class ShipmentTrackingService {
                 rs.getString("original_bill_of_lading")
             )
         ),
-        customer.id()
+        customer.id(), linkedAgentId, pageSize, offset
     );
     ObjectNode response = objectMapper.createObjectNode();
     ArrayNode items = response.putArray("items");
@@ -560,9 +624,18 @@ public class ShipmentTrackingService {
         );
       }
     }
-    response.put("total", records.size());
+    response.put("total", total);
+    response.put("page", page);
+    response.put("pageSize", pageSize);
+    response.put("totalPages", totalPages);
     response.put("customerReadOnly", true);
     return response;
+  }
+
+  private long linkedAgentId(CustomerPrincipal customer) {
+    return customer != null && "OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())
+        ? customer.id()
+        : -1L;
   }
 
   /** Runs a trusted force refresh for the background scheduler. */

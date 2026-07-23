@@ -216,6 +216,20 @@
               <div class="shipment-list-wrap" id="history-table-wrap" hidden>
                 <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
               </div>
+              <nav class="history-pagination" id="history-pagination" aria-label="Shipment pages" hidden>
+                <button id="history-page-previous" type="button" data-i18n="history.previousPage">Previous</button>
+                <span id="history-page-info"></span>
+                <button id="history-page-next" type="button" data-i18n="history.nextPage">Next</button>
+                <label>
+                  <span data-i18n="history.pageSize">Per page</span>
+                  <select id="history-page-size">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </nav>
             </section>
           </section>
 

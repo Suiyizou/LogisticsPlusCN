@@ -330,6 +330,12 @@ public class BusinessCustomerService {
             partyRole,
             existing.id()
         );
+        if (!"OVERSEA_AGENT".equals(partyRole)) {
+          jdbcTemplate.update(
+              "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
+              existing.id()
+          );
+        }
       }
     } catch (DuplicateKeyException error) {
       throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
@@ -543,6 +549,109 @@ public class BusinessCustomerService {
     return Map.of("passwordReset", true, "id", customer.publicId());
   }
 
+  public Map<String, Object> listOverseaAgentCustomers(
+      String overseaAgentPublicId,
+      AuthenticatedUser actor
+  ) {
+    CustomerRecord agent = requireManaged(overseaAgentPublicId, actor);
+    requireOverseaAgent(agent);
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        """
+        SELECT c.public_id, c.username, c.display_name, c.client_code, c.party_role,
+               c.status, link.assigned_at
+        FROM cp_oversea_agent_customers link
+        JOIN cp_customers c ON c.id = link.customer_id
+        WHERE link.oversea_agent_customer_id = ?
+        ORDER BY c.display_name, c.id
+        """,
+        (rs, rowNumber) -> {
+          Map<String, Object> item = new LinkedHashMap<>();
+          item.put("id", rs.getString("public_id"));
+          item.put("username", rs.getString("username"));
+          item.put("displayName", rs.getString("display_name"));
+          item.put("clientCode", rs.getString("client_code"));
+          item.put("partyRole", rs.getString("party_role"));
+          item.put("status", rs.getString("status"));
+          item.put("assignedAt", instantString(rs, "assigned_at"));
+          return item;
+        },
+        agent.id()
+    );
+    return Map.of("items", items, "total", items.size());
+  }
+
+  @Transactional
+  public Map<String, Object> updateOverseaAgentCustomers(
+      String overseaAgentPublicId,
+      OverseaAgentCustomerLinksRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord agent = requireManaged(overseaAgentPublicId, actor);
+    requireOverseaAgent(agent);
+    List<String> requestedIds = request == null || request.customerIds() == null
+        ? List.of()
+        : request.customerIds().stream()
+            .map(value -> value == null ? "" : value.trim())
+            .filter(value -> !value.isBlank())
+            .distinct()
+            .toList();
+    if (requestedIds.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 500 customers can be linked at once");
+    }
+
+    List<CustomerRecord> linkedCustomers = new ArrayList<>();
+    for (String customerId : requestedIds) {
+      CustomerRecord customer = requireManaged(customerId, actor);
+      if (customer.id() == agent.id()) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "An overseas agent cannot link itself");
+      }
+      if (!UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Only shipper or consignee customers can be linked to an overseas agent"
+        );
+      }
+      linkedCustomers.add(customer);
+    }
+
+    jdbcTemplate.update(
+        "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
+        agent.id()
+    );
+    for (CustomerRecord customer : linkedCustomers) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_oversea_agent_customers (
+            customer_id, oversea_agent_customer_id, assigned_by, assigned_at
+          ) VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
+          ON DUPLICATE KEY UPDATE
+            oversea_agent_customer_id = VALUES(oversea_agent_customer_id),
+            assigned_by = VALUES(assigned_by),
+            assigned_at = CURRENT_TIMESTAMP(6)
+          """,
+          customer.id(), agent.id(), actor.id()
+      );
+    }
+    audit(
+        actor,
+        "UPDATE_OVERSEA_AGENT_CUSTOMERS",
+        agent.id(),
+        "Linked " + linkedCustomers.size() + " customers",
+        ipAddress
+    );
+    return listOverseaAgentCustomers(overseaAgentPublicId, actor);
+  }
+
+  private void requireOverseaAgent(CustomerRecord customer) {
+    if (!"OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Linked customers can only be managed for an OVERSEA_AGENT customer"
+      );
+    }
+  }
+
   public Map<String, Object> listShipments(String customerPublicId, AuthenticatedUser actor) {
     CustomerRecord customer = requireManaged(customerPublicId, actor);
     List<Map<String, Object>> items = jdbcTemplate.query(
@@ -581,6 +690,78 @@ public class BusinessCustomerService {
     enrichShipmentRelations(items);
     items = deduplicateShipmentSnapshots(items);
     return Map.of("items", items, "total", items.size());
+  }
+
+  public Map<String, Object> listShipmentSnapshots(
+      AuthenticatedUser actor,
+      int requestedPage,
+      int requestedPageSize,
+      String customerPublicId,
+      boolean refreshIssuesOnly
+  ) {
+    requireManager(actor);
+    int page = Math.max(1, requestedPage);
+    int pageSize = Math.max(5, Math.min(100, requestedPageSize));
+    List<String> filters = new ArrayList<>();
+    List<Object> parameters = new ArrayList<>();
+    if (!actor.isAdmin()) {
+      filters.add("(s.responsible_agent_id = ? OR EXISTS ("
+          + "SELECT 1 FROM cp_shipment_participants p "
+          + "WHERE p.shipment_id = s.id AND p.user_id = ?))");
+      parameters.add(actor.id());
+      parameters.add(actor.id());
+    }
+    String normalizedCustomerId = customerPublicId == null ? "" : customerPublicId.trim();
+    if (!normalizedCustomerId.isBlank()) {
+      filters.add("EXISTS (SELECT 1 FROM cp_customer_shipment_access a "
+          + "JOIN cp_customers c ON c.id = a.customer_id "
+          + "WHERE a.shipment_id = s.id AND c.public_id = ?)");
+      parameters.add(normalizedCustomerId);
+    }
+    String baseWhere = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
+    long refreshIssueTotal = shipmentCount(
+        baseWhere + (baseWhere.isEmpty() ? " WHERE " : " AND ")
+            + "UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')",
+        parameters
+    );
+    if (refreshIssuesOnly) {
+      filters.add("UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')");
+    }
+    String where = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
+    long total = shipmentCount(where, parameters);
+    int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
+    if (totalPages == 0) page = 1;
+    else if (page > totalPages) page = totalPages;
+    int offset = (page - 1) * pageSize;
+
+    List<Object> queryParameters = new ArrayList<>(parameters);
+    queryParameters.add(pageSize);
+    queryParameters.add(offset);
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        snapshotShipmentSelect() + where
+            + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC LIMIT ? OFFSET ?",
+        this::mapSnapshotShipment,
+        queryParameters.toArray()
+    );
+    enrichShipmentRelations(items);
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("items", items);
+    response.put("total", total);
+    response.put("page", page);
+    response.put("pageSize", pageSize);
+    response.put("totalPages", totalPages);
+    response.put("refreshIssueTotal", refreshIssueTotal);
+    return response;
+  }
+
+  private long shipmentCount(String where, List<Object> parameters) {
+    Long count = jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments s" + where,
+        Long.class,
+        parameters.toArray()
+    );
+    return count == null ? 0 : count;
   }
 
   /**
@@ -2195,7 +2376,9 @@ public class BusinessCustomerService {
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id) AS customer_count,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'SHIPPER') AS shipper_count,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'CONSIGNEE') AS consignee_count,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'AGENT') AS agent_count
+               (SELECT COUNT(*) FROM cp_customer_shipment_access a
+                WHERE a.shipment_id = s.id
+                  AND UPPER(a.relationship_role) IN ('AGENT', 'OVERSEA_AGENT')) AS agent_count
         FROM cp_shipments s
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
@@ -2296,7 +2479,7 @@ public class BusinessCustomerService {
     List<String> boundRoles = new java.util.ArrayList<>();
     if (rs.getLong("shipper_count") > 0) boundRoles.add("SHIPPER");
     if (rs.getLong("consignee_count") > 0) boundRoles.add("CONSIGNEE");
-    if (rs.getLong("agent_count") > 0) boundRoles.add("AGENT");
+    if (rs.getLong("agent_count") > 0) boundRoles.add("OVERSEA_AGENT");
     value.put("boundRoles", boundRoles);
     return value;
   }
@@ -2603,17 +2786,17 @@ public class BusinessCustomerService {
 
   private String normalizePartyRole(String value, String fallback) {
     String normalized = normalizeCode(value, fallback);
-    // OVERSEA_AGENT is the file-visibility/UI name for the internal AGENT party.
-    // Accept it as a compatibility alias so older clients do not fail while the
-    // customer UI is narrowed to actual customer identities (shipper/consignee).
-    if ("OVERSEA_AGENT".equals(normalized)) normalized = "AGENT";
+    // AGENT remains the internal BUSINESS employee role. Customer-facing legacy
+    // clients may still submit AGENT, so canonicalize that value to the external
+    // overseas-agent customer identity.
+    if ("AGENT".equals(normalized)) normalized = "OVERSEA_AGENT";
     if (normalized == null
-        || (!"AGENT".equals(normalized)
+        || (!"OVERSEA_AGENT".equals(normalized)
         && !"SHIPPER".equals(normalized)
         && !"CONSIGNEE".equals(normalized))) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Customer party role must be AGENT/OVERSEA_AGENT, SHIPPER, or CONSIGNEE"
+          "Customer party role must be OVERSEA_AGENT, SHIPPER, or CONSIGNEE"
       );
     }
     return normalized;

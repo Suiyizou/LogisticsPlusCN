@@ -286,7 +286,19 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
     migrateLegacyShipmentBusinessFieldsForMySql();
     removeInvalidDiscoveredShipmentReferencesForMySql();
     upgradeSnapshotUserQueryIndexForMySql();
+    migrateLegacyOverseaAgentCustomersForMySql();
     migrateLegacyFileVisibilityForMySql();
+  }
+
+  private void migrateLegacyOverseaAgentCustomersForMySql() {
+    jdbcTemplate.update(
+        "UPDATE cp_customers SET party_role = 'OVERSEA_AGENT' "
+            + "WHERE UPPER(party_role) = 'AGENT'"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET relationship_role = 'OVERSEA_AGENT' "
+            + "WHERE UPPER(relationship_role) = 'AGENT'"
+    );
   }
 
   private void removeInvalidDiscoveredShipmentReferencesForMySql() {
@@ -596,6 +608,19 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           INDEX idx_cp_customer_sessions_customer (customer_id, revoked_at, expires_at),
           INDEX idx_cp_customer_sessions_expiry (expires_at, revoked_at),
           CONSTRAINT fk_cp_customer_sessions_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_oversea_agent_customers (
+          customer_id BIGINT NOT NULL,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (customer_id),
+          INDEX idx_cp_oversea_agent_customers_agent (oversea_agent_customer_id, assigned_at),
+          CONSTRAINT fk_cp_oversea_agent_customers_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_oversea_agent_customers_agent FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_oversea_agent_customers_assigned_by FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """

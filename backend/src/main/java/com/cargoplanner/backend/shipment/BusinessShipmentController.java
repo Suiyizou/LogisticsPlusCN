@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -30,9 +31,15 @@ public class BusinessShipmentController {
 
   @GetMapping
   public Map<String, Object> list(
+      @RequestParam(defaultValue = "1") int page,
+      @RequestParam(defaultValue = "20") int pageSize,
+      @RequestParam(required = false) String customerId,
+      @RequestParam(defaultValue = "false") boolean refreshIssuesOnly,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
-    return shipmentService.listShipmentSnapshots(actor);
+    return shipmentService.listShipmentSnapshots(
+        actor, page, pageSize, customerId, refreshIssuesOnly
+    );
   }
 
   @GetMapping("/{shipmentId}")

@@ -33,6 +33,11 @@ const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
 const historyEmptyDescription = document.querySelector("#history-empty-description");
 const historyLoading = document.querySelector("#history-loading");
+const historyPagination = document.querySelector("#history-pagination");
+const historyPagePrevious = document.querySelector("#history-page-previous");
+const historyPageNext = document.querySelector("#history-page-next");
+const historyPageInfo = document.querySelector("#history-page-info");
+const historyPageSizeSelect = document.querySelector("#history-page-size");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -351,6 +356,10 @@ const MESSAGES = {
     "history.searchPlaceholder": "Search shipment, job, port or status",
     "history.searchLabel": "Search shipments",
     "history.searchClear": "Clear shipment search",
+    "history.previousPage": "Previous",
+    "history.nextPage": "Next",
+    "history.pageSize": "Per page",
+    "history.pageInfo": "Page {page} of {pages} · {total} shipments",
     "history.searchEmptyTitle": "No matching shipments",
     "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
     "history.customerFilter": "Customer",
@@ -808,6 +817,10 @@ const MESSAGES = {
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.accountEmptyTitle": "当前账户还没有绑定票单",
     "history.accountEmptyDescription": "绑定到当前账户的票单会显示在这里。",
+    "history.previousPage": "上一页",
+    "history.nextPage": "下一页",
+    "history.pageSize": "每页",
+    "history.pageInfo": "第 {page} / {pages} 页 · 共 {total} 张票单",
     "history.searchPlaceholder": "搜索单号、Job、港口或状态",
     "history.searchLabel": "搜索票单",
     "history.searchClear": "清除票单搜索",
@@ -1323,6 +1336,10 @@ let lastBatchRequestAt = 0;
 let historySearchTerm = "";
 let historyCustomerFilter = "";
 let historyLoadingState = false;
+let historyPage = 1;
+let historyPageSize = 20;
+let historyTotal = 0;
+let historyTotalPages = 0;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
@@ -1355,6 +1372,12 @@ let cmaSessionStatusLoaded = false;
 let cmaSessionLoading = false;
 let relatedFilesSessionFingerprint = fileSessionFingerprint();
 const trackingPayloadSessionFingerprints = new WeakMap();
+
+function resetHistoryPagination() {
+  historyPage = 1;
+  historyTotal = 0;
+  historyTotalPages = 0;
+}
 
 function t(key, variables = {}) {
   const template = MESSAGES[currentLanguage]?.[key] ?? MESSAGES.en[key] ?? key;
@@ -3991,18 +4014,27 @@ async function loadCustomerAssignedHistory() {
   historyLoadingState = true;
   renderHistory();
   try {
-    const response = await fetch("/api/customer/shipments", {
+    const query = new URLSearchParams({
+      page: String(historyPage),
+      pageSize: String(historyPageSize)
+    });
+    const response = await fetch(`/api/customer/shipments?${query}`, {
       headers: { "X-Customer-Token": session.token }
     });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       customerAssignedHistory = [];
+      resetHistoryPagination();
       renderHistory();
       return;
     }
     if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
     const items = Array.isArray(payload?.items) ? payload.items : [];
+    historyPage = Number(payload?.page || historyPage);
+    historyPageSize = Number(payload?.pageSize || historyPageSize);
+    historyTotal = Number(payload?.total || 0);
+    historyTotalPages = Number(payload?.totalPages || 0);
     customerAssignedHistory = items
       .filter((item) => item?.dataAvailable && item?.snapshot)
       .map((item) => ({
@@ -4023,6 +4055,7 @@ async function loadCustomerAssignedHistory() {
     }
   } catch {
     customerAssignedHistory = [];
+    resetHistoryPagination();
     showError(customerFacingTrackingError(), "error");
   } finally {
     historyLoadingState = false;
@@ -4039,18 +4072,27 @@ async function loadInternalTrackedHistory() {
   historyLoadingState = true;
   renderHistory();
   try {
-    const response = await fetch("/api/business/shipments", {
+    const query = new URLSearchParams({
+      page: String(historyPage),
+      pageSize: String(historyPageSize)
+    });
+    const response = await fetch(`/api/business/shipments?${query}`, {
       headers: { "X-Auth-Token": session.token }
     });
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       internalTrackedHistory = [];
+      resetHistoryPagination();
       renderHistory();
       return;
     }
     if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
     const items = Array.isArray(payload?.items) ? payload.items : [];
+    historyPage = Number(payload?.page || historyPage);
+    historyPageSize = Number(payload?.pageSize || historyPageSize);
+    historyTotal = Number(payload?.total || 0);
+    historyTotalPages = Number(payload?.totalPages || 0);
     internalTrackedHistory = items
       .filter((item) => item?.referenceNo || item?.shipmentId)
       .map((item) => {
@@ -4122,6 +4164,7 @@ async function loadInternalTrackedHistory() {
     renderHistory();
   } catch {
     internalTrackedHistory = [];
+    resetHistoryPagination();
   } finally {
     historyLoadingState = false;
     renderHistory();
@@ -6178,6 +6221,17 @@ function renderHistory() {
     }
   }
   if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
+  if (historyPagination) {
+    historyPagination.hidden = historyLoadingState || !accountBound || historyTotalPages <= 1;
+    historyPagePrevious.disabled = historyLoadingState || historyPage <= 1;
+    historyPageNext.disabled = historyLoadingState || historyPage >= historyTotalPages;
+    historyPageInfo.textContent = t("history.pageInfo", {
+      page: historyPage,
+      pages: historyTotalPages,
+      total: historyTotal
+    });
+    historyPageSizeSelect.value = String(historyPageSize);
+  }
   historyTableBody.replaceChildren();
 
   let rowIndex = 0;
@@ -7405,6 +7459,29 @@ historySearchClear?.addEventListener("click", () => {
 historyCustomerFilterSelect?.addEventListener("change", () => {
   historyCustomerFilter = historyCustomerFilterSelect.value;
   renderHistory();
+});
+
+async function loadCurrentHistoryPage() {
+  if (readFileSession().kind === "INTERNAL") await loadInternalTrackedHistory();
+  else if (readFileSession().kind === "CUSTOMER") await loadCustomerAssignedHistory();
+}
+
+historyPagePrevious?.addEventListener("click", () => {
+  if (historyLoadingState || historyPage <= 1) return;
+  historyPage -= 1;
+  void loadCurrentHistoryPage();
+});
+
+historyPageNext?.addEventListener("click", () => {
+  if (historyLoadingState || historyPage >= historyTotalPages) return;
+  historyPage += 1;
+  void loadCurrentHistoryPage();
+});
+
+historyPageSizeSelect?.addEventListener("change", () => {
+  historyPageSize = Number(historyPageSizeSelect.value || 20);
+  historyPage = 1;
+  void loadCurrentHistoryPage();
 });
 
 document.querySelector("#edit-business-references").addEventListener("click", () => {

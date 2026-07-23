@@ -2648,6 +2648,39 @@ body {
   gap: 12px;
 }
 
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px;
+  border-top: 1px solid #d3e1f1;
+  background: #edf4fc;
+}
+
+.history-pagination button,
+.history-pagination select {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #b9cde5;
+  border-radius: 9px;
+  color: #173c68;
+  background: #fff;
+}
+
+.history-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.history-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #536b86;
+  font-size: 13px;
+}
+
 .shipment-history-item {
   position: relative;
   border: 1px solid #d3e1f1;

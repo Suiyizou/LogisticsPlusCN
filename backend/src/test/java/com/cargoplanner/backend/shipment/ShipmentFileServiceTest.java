@@ -393,6 +393,49 @@ class ShipmentFileServiceTest {
   }
 
   @Test
+  void linkedOverseasAgentListsFilesSharedWithOverseasAgents() {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, party_role, customer_code_hash,
+          customer_code_prefix, status, created_by, responsible_agent_id
+        ) VALUES (22, 'agent-customer-id', 'oversea-agent', 'Oversea Agent',
+                  'OVERSEA_AGENT', 'hash-22', 'DL-AGENT', 'ACTIVE', 2, 2)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_customers (
+          customer_id, oversea_agent_customer_id, assigned_by
+        ) VALUES (20, 22, 2)
+        """
+    );
+    CustomerPrincipal overseasAgent = new CustomerPrincipal(
+        22,
+        "agent-customer-id",
+        "oversea-agent",
+        "Oversea Agent",
+        "OVERSEA_AGENT",
+        "ACTIVE"
+    );
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("agent-shared.pdf", "agent-shared"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        List.of("OVERSEA_AGENT"),
+        "127.0.0.1"
+    );
+
+    assertThat((List<?>) service.listCustomer(
+        "shipment-public-id", overseasAgent
+    ).get("items")).hasSize(1);
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), overseasAgent, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
+  }
+
+  @Test
   void enforcesMultiRoleVisibilityFromShipmentBindings() {
     jdbcTemplate.update(
         "INSERT INTO cp_customer_shipment_access "
@@ -741,6 +784,14 @@ class ShipmentFileServiceTest {
           visibility_role VARCHAR(24) NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (shipment_file_id, visibility_role)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_customers (
+          customer_id BIGINT PRIMARY KEY,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

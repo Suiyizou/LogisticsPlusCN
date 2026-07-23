@@ -215,6 +215,7 @@
                     <el-col :span="8">
                       <el-form-item :label="t('customers.partyRole')">
                         <el-select v-model="editForm.partyRole" class="business-select" popper-class="business-select-popper">
+                          <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
                           <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                           <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
                         </el-select>
@@ -229,6 +230,38 @@
                 </el-form>
 
               </section>
+            </el-card>
+
+            <el-card v-if="selectedCustomer.partyRole === 'OVERSEA_AGENT'" class="main-card" shadow="never">
+              <template #header>
+                <div class="section-label">{{ t("customers.linkedCustomersTitle") }}</div>
+              </template>
+              <p class="section-description">{{ t("customers.linkedCustomersDescription") }}</p>
+              <el-select
+                v-model="linkedCustomerIds"
+                class="business-select"
+                popper-class="business-select-popper"
+                multiple
+                filterable
+                collapse-tags
+                :max-collapse-tags="3"
+                :loading="loadingLinkedCustomers"
+                :placeholder="t('customers.linkedCustomersPlaceholder')"
+              >
+                <el-option
+                  v-for="customer in linkableCustomers"
+                  :key="customer.id"
+                  :value="customer.id"
+                  :label="`${customer.displayName || customer.username} · ${partyRoleLabel(customer.partyRole)}`"
+                />
+              </el-select>
+              <div class="linked-customer-actions">
+                <el-button
+                  type="primary"
+                  :loading="savingLinkedCustomers"
+                  @click="saveLinkedCustomers"
+                >{{ t("customers.saveLinkedCustomers") }}</el-button>
+              </div>
             </el-card>
 
             <el-card class="main-card" shadow="never">
@@ -367,6 +400,18 @@
                     </span>
                   </div>
                 </div>
+                <el-pagination
+                  v-if="shipmentTotal > shipmentPageSize"
+                  class="shipment-pagination"
+                  background
+                  layout="prev, pager, next, sizes, total"
+                  :current-page="shipmentPage"
+                  :page-size="shipmentPageSize"
+                  :page-sizes="[10, 20, 50, 100]"
+                  :total="shipmentTotal"
+                  @current-change="changeShipmentPage"
+                  @size-change="changeShipmentPageSize"
+                />
               </el-card>
             </el-card>
           </template>
@@ -453,7 +498,7 @@
                   @selection-change="handleShipmentSelectionChange"
                 >
                   <el-table-column type="selection" width="48" />
-                  <el-table-column type="index" :label="t('customers.index')" width="60" />
+                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="60" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="200">
                     <template #default="{ row }">
                       <div>
@@ -521,6 +566,18 @@
                     </template>
                   </el-table-column>
                 </el-table>
+                <el-pagination
+                  v-if="shipmentTotal > shipmentPageSize"
+                  class="shipment-pagination"
+                  background
+                  layout="prev, pager, next, sizes, total"
+                  :current-page="shipmentPage"
+                  :page-size="shipmentPageSize"
+                  :page-sizes="[10, 20, 50, 100]"
+                  :total="shipmentTotal"
+                  @current-change="changeShipmentPage"
+                  @size-change="changeShipmentPageSize"
+                />
                 <el-dialog
                   v-model="batchBusinessFieldsDialogOpen"
                   :title="t('customers.batchEditBusinessFieldsTitle')"
@@ -907,6 +964,7 @@
           <label>
             <span>{{ t("customers.createPartyRole") }} <i class="required-star">*</i></span>
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
+              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
             </el-select>
@@ -1141,6 +1199,7 @@ import {
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
   fetchCustomerTransferAgents,
+  fetchOverseaAgentLinkedCustomers,
   fetchShipmentBatchTask,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
@@ -1148,6 +1207,7 @@ import {
   transferBusinessCustomers,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
+  updateOverseaAgentLinkedCustomers,
   updateBusinessShipment,
   updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
@@ -1240,6 +1300,9 @@ const refreshTrackingStatus = ref("");
 const refreshTrackingResponse = ref(null);
 const toastMessage = ref("");
 const loadingShipments = ref(false);
+const linkedCustomerIds = ref([]);
+const loadingLinkedCustomers = ref(false);
+const savingLinkedCustomers = ref(false);
 const creating = ref(false);
 const mutatingCustomer = ref(false);
 const bindingShipment = ref(false);
@@ -1252,6 +1315,10 @@ const batchBusinessFieldRows = ref([]);
 const batchSavingBusinessFields = ref(false);
 const shipmentCustomerFilter = ref("");
 const refreshIssuesOnly = ref(false);
+const shipmentPage = ref(1);
+const shipmentPageSize = ref(20);
+const shipmentTotal = ref(0);
+const shipmentRefreshIssueTotal = ref(0);
 const shipmentTrackingChannel = ref("AUTO");
 const unbindingShipmentId = ref("");
 const publishingShipmentId = ref("");
@@ -1276,6 +1343,7 @@ const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BO
 const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 let shipmentRequestSequence = 0;
+let shipmentListRequestSequence = 0;
 let toastTimer = 0;
 
 const menuItem = ref("customers");
@@ -1344,45 +1412,21 @@ const filteredCustomers = computed(() => {
   );
 });
 
-const shipmentFilterCustomers = computed(() => {
-  const values = new Map();
-  for (const shipment of availableShipments.value) {
-    const boundCustomers = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
-    for (const boundCustomer of boundCustomers) {
-      const customerId = String(
-        typeof boundCustomer === "string" ? boundCustomer : boundCustomer?.id || ""
-      ).trim();
-      if (!customerId) continue;
-      const knownCustomer = customers.value.find((item) => item.id === customerId);
-      const current = values.get(customerId) || {
-        ...(knownCustomer || (typeof boundCustomer === "object" ? boundCustomer : {})),
-        id: customerId,
-        shipmentCount: 0
-      };
-      current.shipmentCount += 1;
-      values.set(customerId, current);
-    }
-  }
-  return [...values.values()].sort((left, right) =>
-    customerFilterOptionLabel(left).localeCompare(customerFilterOptionLabel(right))
-  );
-});
+const linkableCustomers = computed(() => customers.value.filter((customer) =>
+  customer.id !== selectedCustomerId.value
+  && customer.status === "ACTIVE"
+  && ["SHIPPER", "CONSIGNEE"].includes(customer.partyRole)
+));
 
-const refreshIssueCount = computed(() =>
-  availableShipments.value.filter(hasRefreshIssue).length
+const shipmentFilterCustomers = computed(() =>
+  customers.value.filter((customer) => Number(customer.shipmentCount || 0) > 0).sort((left, right) =>
+    customerFilterOptionLabel(left).localeCompare(customerFilterOptionLabel(right))
+  )
 );
 
-const displayedAvailableShipments = computed(() => {
-  let values = availableShipments.value;
-  if (shipmentCustomerFilter.value) values = values.filter((shipment) => {
-    const boundCustomers = Array.isArray(shipment?.boundCustomers) ? shipment.boundCustomers : [];
-    return boundCustomers.some((customer) => String(
-      typeof customer === "string" ? customer : customer?.id || ""
-    ) === shipmentCustomerFilter.value);
-  });
-  if (refreshIssuesOnly.value) values = values.filter(hasRefreshIssue);
-  return values;
-});
+const refreshIssueCount = computed(() => shipmentRefreshIssueTotal.value);
+
+const displayedAvailableShipments = computed(() => availableShipments.value);
 
 const selectedShipment = computed(() => {
   if (detailShipmentSnapshot.value?.shipmentId === selectedShipmentId.value) {
@@ -1656,6 +1700,11 @@ watch(shipmentFilterCustomers, (items) => {
   }
 });
 
+watch([shipmentCustomerFilter, refreshIssuesOnly], () => {
+  shipmentPage.value = 1;
+  void loadAvailableShipments();
+});
+
 watch(displayedAvailableShipments, (items) => {
   const visibleIds = new Set(items.map((item) => item.shipmentId));
   selectedShipmentRows.value = selectedShipmentRows.value
@@ -1875,19 +1924,50 @@ function deduplicateBusinessShipments(items) {
 }
 
 async function loadAvailableShipments() {
-  if (loadingAvailableShipments.value) return;
+  const requestSequence = ++shipmentListRequestSequence;
   loadingAvailableShipments.value = true;
   try {
-    const response = await fetchAvailableBusinessShipments();
+    const response = await fetchAvailableBusinessShipments({
+      page: shipmentPage.value,
+      pageSize: shipmentPageSize.value,
+      customerId: shipmentCustomerFilter.value,
+      refreshIssuesOnly: refreshIssuesOnly.value
+    });
+    if (requestSequence !== shipmentListRequestSequence) return;
     availableShipments.value = Array.isArray(response?.items)
-      ? deduplicateBusinessShipments(response.items.map(normalizeBusinessShipment))
+      ? response.items.map(normalizeBusinessShipment)
       : [];
+    shipmentTotal.value = Number(response?.total || 0);
+    shipmentRefreshIssueTotal.value = Number(response?.refreshIssueTotal || 0);
+    shipmentPage.value = Number(response?.page || shipmentPage.value);
+    shipmentPageSize.value = Number(response?.pageSize || shipmentPageSize.value);
     buildShipmentCustomerMap();
   } catch (error) {
-    showError(error, "customers.loadAvailableShipmentsFailed");
+    if (requestSequence === shipmentListRequestSequence) {
+      showError(error, "customers.loadAvailableShipmentsFailed");
+    }
   } finally {
-    loadingAvailableShipments.value = false;
+    if (requestSequence === shipmentListRequestSequence) {
+      loadingAvailableShipments.value = false;
+    }
   }
+}
+
+function changeShipmentPage(page) {
+  shipmentPage.value = page;
+  selectedShipmentRows.value = [];
+  void loadAvailableShipments();
+}
+
+function changeShipmentPageSize(pageSize) {
+  shipmentPageSize.value = pageSize;
+  shipmentPage.value = 1;
+  selectedShipmentRows.value = [];
+  void loadAvailableShipments();
+}
+
+function shipmentRowIndex(index) {
+  return (shipmentPage.value - 1) * shipmentPageSize.value + index + 1;
 }
 
 async function loadShipmentDetailSnapshot() {
@@ -2295,6 +2375,49 @@ async function selectCustomer(customerId) {
   } finally {
     if (requestSequence === shipmentRequestSequence) loadingShipments.value = false;
   }
+  if (requestSequence === shipmentRequestSequence) {
+    await loadLinkedCustomers(customerId, requestSequence);
+  }
+}
+
+async function loadLinkedCustomers(customerId, requestSequence = shipmentRequestSequence) {
+  const customer = customers.value.find((item) => item.id === customerId);
+  linkedCustomerIds.value = [];
+  if (customer?.partyRole !== "OVERSEA_AGENT") return;
+  loadingLinkedCustomers.value = true;
+  try {
+    const response = await fetchOverseaAgentLinkedCustomers(customerId);
+    if (requestSequence !== shipmentRequestSequence || selectedCustomerId.value !== customerId) return;
+    linkedCustomerIds.value = Array.isArray(response?.items)
+      ? response.items.map((item) => item.id).filter(Boolean)
+      : [];
+  } catch (error) {
+    if (requestSequence === shipmentRequestSequence) {
+      showError(error, "customers.loadLinkedCustomersFailed");
+    }
+  } finally {
+    if (requestSequence === shipmentRequestSequence) loadingLinkedCustomers.value = false;
+  }
+}
+
+async function saveLinkedCustomers() {
+  if (!selectedCustomer.value || selectedCustomer.value.partyRole !== "OVERSEA_AGENT"
+      || savingLinkedCustomers.value) return;
+  savingLinkedCustomers.value = true;
+  try {
+    const response = await updateOverseaAgentLinkedCustomers(
+      selectedCustomer.value.id,
+      linkedCustomerIds.value
+    );
+    linkedCustomerIds.value = Array.isArray(response?.items)
+      ? response.items.map((item) => item.id).filter(Boolean)
+      : [];
+    showSuccess("customers.linkedCustomersSaved");
+  } catch (error) {
+    showError(error, "customers.saveLinkedCustomersFailed");
+  } finally {
+    savingLinkedCustomers.value = false;
+  }
 }
 
 async function createCustomer() {
@@ -2421,7 +2544,13 @@ async function saveCustomer() {
   clearMessage();
   try {
     const response = await updateBusinessCustomer(selectedCustomer.value.id, { ...editForm });
-    replaceCustomer(normalizeCustomer(response));
+    const updatedCustomer = normalizeCustomer(response);
+    replaceCustomer(updatedCustomer);
+    if (updatedCustomer.partyRole === "OVERSEA_AGENT") {
+      await loadLinkedCustomers(updatedCustomer.id);
+    } else {
+      linkedCustomerIds.value = [];
+    }
     showSuccess("customers.saved");
   } catch (error) {
     showError(error, "customers.saveFailed");
@@ -2643,8 +2772,9 @@ async function createShipment() {
   if (creatingShipment.value) return;
   creatingShipment.value = true;
   try {
-    const created = await createBusinessShipment({ ...shipmentCreateForm });
-    availableShipments.value.unshift(created);
+    await createBusinessShipment({ ...shipmentCreateForm });
+    shipmentPage.value = 1;
+    await loadAvailableShipments();
     shipmentCreateForm.referenceNo = "";
     shipmentCreateForm.trackingStatus = "";
     shipmentCreateForm.note = "";
@@ -2908,7 +3038,7 @@ async function removeShipment() {
   try {
     await deleteBusinessShipment(shipmentId);
     shipments.value = shipments.value.filter((item) => item.shipmentId !== shipmentId);
-    availableShipments.value = availableShipments.value.filter((item) => item.shipmentId !== shipmentId);
+    await loadAvailableShipments();
     navigateTo("shipments");
     showSuccess("customers.shipmentDeleted");
   } catch (error) {
@@ -2937,7 +3067,7 @@ async function deleteShipmentRow(row) {
   try {
     await deleteBusinessShipment(shipmentId);
     shipments.value = shipments.value.filter((item) => item.shipmentId !== shipmentId);
-    availableShipments.value = availableShipments.value.filter((item) => item.shipmentId !== shipmentId);
+    await loadAvailableShipments();
     showSuccess("customers.shipmentDeleted");
   } catch (error) {
     showError(error, "customers.shipmentDeleteFailed");
@@ -3000,7 +3130,7 @@ async function batchDeleteSelectedShipments() {
     await batchDeleteBusinessShipments(shipmentIds);
     const deleted = new Set(shipmentIds);
     shipments.value = shipments.value.filter((item) => !deleted.has(item.shipmentId));
-    availableShipments.value = availableShipments.value.filter((item) => !deleted.has(item.shipmentId));
+    await loadAvailableShipments();
     selectedShipmentRows.value = [];
     if (deleted.has(selectedShipmentId.value)) selectedShipmentId.value = "";
     showSuccess("customers.batchDeleteSuccess", { count: shipmentIds.length });
@@ -4120,6 +4250,24 @@ function showError(error, fallbackKey) {
 }
 .main-card :deep(.el-card__body) {
   padding: 20px;
+}
+
+.section-description {
+  margin: 0 0 16px;
+  color: #607086;
+  line-height: 1.65;
+}
+
+.linked-customer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.shipment-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 18px 0 4px;
 }
 
 /* Main card header */

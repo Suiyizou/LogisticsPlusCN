@@ -662,7 +662,6 @@
               <el-option value="AGENT" :label="t('customers.roleAgent')" />
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
             </el-select>
             <small v-if="employeeForm.role !== 'EMPLOYEE'">{{ t("admin.employee.agentForcedHint") }}</small>
           </label>

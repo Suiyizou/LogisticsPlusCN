@@ -48,8 +48,27 @@ export function fetchBusinessCustomerShipments(customerId) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`);
 }
 
-export function fetchAvailableBusinessShipments() {
-  return request("/business/shipments");
+export function fetchOverseaAgentLinkedCustomers(customerId) {
+  return request(`/business/customers/${encodeURIComponent(customerId)}/linked-customers`);
+}
+
+export function updateOverseaAgentLinkedCustomers(customerId, customerIds) {
+  return request(`/business/customers/${encodeURIComponent(customerId)}/linked-customers`, {
+    method: "PUT",
+    body: { customerIds }
+  });
+}
+
+export function fetchAvailableBusinessShipments({
+  page = 1,
+  pageSize = 20,
+  customerId = "",
+  refreshIssuesOnly = false
+} = {}) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (customerId) query.set("customerId", customerId);
+  if (refreshIssuesOnly) query.set("refreshIssuesOnly", "true");
+  return request(`/business/shipments?${query}`);
 }
 
 export function createShipmentRefreshAllTask(channel = "AUTO") {

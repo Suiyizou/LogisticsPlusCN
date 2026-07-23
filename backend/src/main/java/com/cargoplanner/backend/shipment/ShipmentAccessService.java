@@ -92,6 +92,24 @@ public class ShipmentAccessService {
         shipment.id(),
         customer.id()
     );
+    if (relationshipRoles.isEmpty()
+        && OVERSEA_AGENT.equalsIgnoreCase(customer.partyRole())) {
+      Integer linkedAccess = jdbcTemplate.queryForObject(
+          """
+          SELECT COUNT(*)
+          FROM cp_oversea_agent_customers link
+          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
+          JOIN cp_customer_shipment_access a ON a.customer_id = link.customer_id
+          WHERE link.oversea_agent_customer_id = ?
+            AND a.shipment_id = ?
+            AND a.publication_status = 'PUBLISHED'
+            AND linked_customer.status = 'ACTIVE'
+          """,
+          Integer.class,
+          customer.id(), shipment.id()
+      );
+      if (linkedAccess != null && linkedAccess > 0) relationshipRoles = List.of(OVERSEA_AGENT);
+    }
     if (relationshipRoles.isEmpty()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment has not been assigned to this customer");
     }

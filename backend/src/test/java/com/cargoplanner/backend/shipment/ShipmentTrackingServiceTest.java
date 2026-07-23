@@ -501,6 +501,58 @@ class ShipmentTrackingServiceTest {
     assertThat(customerDetail.path("snapshot").path("references").path("business")
         .path("clientNameCode").asText()).isEqualTo("FILE-CODE");
 
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, status, party_role,
+          customer_code_hash, customer_code_prefix, created_by, responsible_agent_id
+        ) VALUES (900, 'oversea-agent-public-id', 'oversea-agent', 'Oversea Agent',
+                  'ACTIVE', 'OVERSEA_AGENT', 'agent-hash', 'AGENT', 1, 1)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_customers (
+          customer_id, oversea_agent_customer_id, assigned_by
+        ) VALUES (?, 900, 1)
+        """,
+        matchedCustomerId
+    );
+    CustomerPrincipal overseaAgent = new CustomerPrincipal(
+        900, "oversea-agent-public-id", "oversea-agent", "Oversea Agent",
+        "OVERSEA_AGENT", "ACTIVE"
+    );
+    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5).path("total").asLong())
+        .isEqualTo(1L);
+    assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
+        .path("shipmentId").asText()).isEqualTo(shipmentId);
+
+    for (long id = 500; id < 506; id++) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_shipments (
+            id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+            created_at, updated_at
+          ) VALUES (?, ?, 'COSCO', 'Pending', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          """,
+          id, "customer-page-" + id
+      );
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_shipment_access (
+            shipment_id, customer_id, relationship_role, publication_status, assigned_by
+          ) VALUES (?, ?, 'SHIPPER', 'PUBLISHED', 1)
+          """,
+          id, matchedCustomerId
+      );
+    }
+    ObjectNode firstPage = service.listAssignedSnapshots(customer, 1, 5);
+    ObjectNode secondPage = service.listAssignedSnapshots(customer, 2, 5);
+    assertThat(firstPage.path("total").asLong()).isEqualTo(7L);
+    assertThat(firstPage.path("totalPages").asInt()).isEqualTo(2);
+    assertThat(firstPage.path("items").size()).isEqualTo(5);
+    assertThat(secondPage.path("items").size()).isEqualTo(2);
+
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest(
             "COSCO",
@@ -1252,6 +1304,14 @@ class ShipmentTrackingServiceTest {
           published_at TIMESTAMP,
           published_by BIGINT,
           PRIMARY KEY (shipment_id, customer_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_customers (
+          customer_id BIGINT PRIMARY KEY,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

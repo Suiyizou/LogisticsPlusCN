@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -215,6 +216,26 @@ public class BusinessCustomerController {
       HttpServletRequest httpRequest
   ) {
     return service.resetPassword(customerId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @GetMapping("/{customerId}/linked-customers")
+  public Map<String, Object> linkedCustomers(
+      @PathVariable String customerId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listOverseaAgentCustomers(customerId, actor);
+  }
+
+  @PutMapping("/{customerId}/linked-customers")
+  public Map<String, Object> updateLinkedCustomers(
+      @PathVariable String customerId,
+      @RequestBody OverseaAgentCustomerLinksRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateOverseaAgentCustomers(
+        customerId, request, actor, ClientInfo.ip(httpRequest)
+    );
   }
 
   @GetMapping("/{customerId}/shipments")

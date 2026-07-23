@@ -246,7 +246,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void acceptsLegacyOverseaAgentCustomerRoleAliasWithoutPersistingASecondEnumValue() {
+  void overseasAgentUsesCustomerLoginAndCanonicalFileVisibilityRole() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(
             "legacy-agent", "SecurePass!23", "Legacy External Agent", "OVERSEA_AGENT"
@@ -255,12 +255,135 @@ class CustomerAccessFlowTest {
         "127.0.0.1"
     );
 
-    assertThat(created.get("partyRole")).isEqualTo("AGENT");
+    assertThat(created.get("partyRole")).isEqualTo("OVERSEA_AGENT");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT party_role FROM cp_customers WHERE public_id = ?",
         String.class,
         created.get("id")
-    )).isEqualTo("AGENT");
+    )).isEqualTo("OVERSEA_AGENT");
+
+    assertThat(customerService.bindShipment(
+        (String) created.get("id"),
+        new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
+        business,
+        "127.0.0.1"
+    ).get("relationshipRole")).isEqualTo("OVERSEA_AGENT");
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED' "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?) "
+            + "AND shipment_id = 10",
+        created.get("id")
+    );
+
+    CustomerLoginResponse login = authService.login(
+        new CustomerLoginRequest(
+            "legacy-agent", "SecurePass!23", (String) created.get("customerCode")
+        ),
+        httpRequest
+    );
+    CustomerPrincipal principal = authService.authenticate(login.token(), httpRequest);
+    assertThat(principal.partyRole()).isEqualTo("OVERSEA_AGENT");
+    assertThat(shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", principal
+    ).fileRoles()).containsExactly("OVERSEA_AGENT");
+  }
+
+  @Test
+  void canonicalizesLegacyAgentCustomerRoleToOverseaAgent() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "legacy-agent-alias", "SecurePass!23", "Legacy Agent Alias", "AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(created.get("partyRole")).isEqualTo("OVERSEA_AGENT");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT party_role FROM cp_customers WHERE public_id = ?",
+        String.class,
+        created.get("id")
+    )).isEqualTo("OVERSEA_AGENT");
+  }
+
+  @Test
+  void businessLinksCustomersToOverseaAgentAndGrantsInheritedShipmentAccess() {
+    Map<String, Object> agent = customerService.create(
+        new CreateCustomerRequest(
+            "oversea-portal", "SecurePass!23", "Oversea Portal", "OVERSEA_AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    Map<String, Object> shipper = customerService.create(
+        new CreateCustomerRequest(
+            "linked-shipper", "SecurePass!23", "Linked Shipper", "SHIPPER"
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    Map<String, Object> links = customerService.updateOverseaAgentCustomers(
+        (String) agent.get("id"),
+        new OverseaAgentCustomerLinksRequest(List.of((String) shipper.get("id"))),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(links.get("total")).isEqualTo(1);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> linkedItems = (List<Map<String, Object>>) links.get("items");
+    assertThat(linkedItems).extracting(item -> item.get("id"))
+        .containsExactly(shipper.get("id"));
+
+    customerService.bindShipment(
+        (String) shipper.get("id"),
+        new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
+        business,
+        "127.0.0.1"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED' "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?) "
+            + "AND shipment_id = 10",
+        shipper.get("id")
+    );
+    CustomerLoginResponse login = authService.login(
+        new CustomerLoginRequest(
+            "oversea-portal", "SecurePass!23", (String) agent.get("customerCode")
+        ),
+        httpRequest
+    );
+    CustomerPrincipal principal = authService.authenticate(login.token(), httpRequest);
+
+    assertThat(shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", principal
+    ).fileRoles()).containsExactly("OVERSEA_AGENT");
+  }
+
+  @Test
+  void paginatesBusinessShipmentQueries() {
+    for (long id = 20; id <= 23; id++) {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_shipments (
+            id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+            created_at, updated_at
+          ) VALUES (?, ?, 'COSCO', 'Tracked', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          """,
+          id, "paged-shipment-" + id
+      );
+    }
+
+    Map<String, Object> firstPage = customerService.listShipmentSnapshots(
+        business, 1, 5, null, false
+    );
+    Map<String, Object> secondPage = customerService.listShipmentSnapshots(
+        business, 2, 5, null, false
+    );
+
+    assertThat(firstPage).containsEntry("total", 7L).containsEntry("totalPages", 2);
+    assertThat((List<?>) firstPage.get("items")).hasSize(5);
+    assertThat((List<?>) secondPage.get("items")).hasSize(2);
   }
 
   @Test
@@ -1330,6 +1453,14 @@ class CustomerAccessFlowTest {
           shipment_count INT NOT NULL,
           ip_address VARCHAR(64),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_customers (
+          customer_id BIGINT PRIMARY KEY,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

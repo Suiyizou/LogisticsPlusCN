@@ -45,9 +45,11 @@ public class CustomerShipmentFileController {
 
   @GetMapping("/shipments")
   public ObjectNode shipments(
+      @RequestParam(defaultValue = "1") int page,
+      @RequestParam(defaultValue = "20") int pageSize,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
-    return trackingService.listAssignedSnapshots(customer);
+    return trackingService.listAssignedSnapshots(customer, page, pageSize);
   }
 
   @GetMapping("/shipments/{shipmentId}")
