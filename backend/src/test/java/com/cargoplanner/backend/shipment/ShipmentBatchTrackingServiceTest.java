@@ -314,6 +314,14 @@ class ShipmentBatchTrackingServiceTest {
         (List<Map<String, Object>>) completed.get("items");
     assertEquals(2, completedItems.get(0).get("subtaskTotal"));
     assertEquals(2L, completedItems.get(0).get("subtaskProcessed"));
+    assertTrue(completedItems.get(0).get("startedAt") != null);
+    assertTrue(completedItems.get(0).get("finishedAt") != null);
+    assertTrue(((Number) completedItems.get(0).get("elapsedMs")).longValue() >= 0L);
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) completedItems.get(0).get("subtasks");
+    assertEquals(List.of("SUCCEEDED", "SUCCEEDED"), subtasks.stream()
+        .map(subtask -> String.valueOf(subtask.get("status")))
+        .toList());
     ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
         ArgumentCaptor.forClass(ShipmentTrackRequest.class);
     verify(trackingService).track(requestCaptor.capture(), any());

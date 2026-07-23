@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -39,8 +40,25 @@ public class ShipmentBatchTrackingService {
   static final long RATE_LIMIT_COOLDOWN_MS = 15 * 60_000L;
   static final long MAX_INLINE_COOLDOWN_MS = 15 * 60_000L;
   static final long MAX_EXPLICIT_RETRY_AFTER_MS = 24 * 60 * 60_000L;
+  static final int BATCH_CIRCUIT_FAILURE_THRESHOLD = 3;
   private static final long TASK_RETENTION_SECONDS = 24 * 60 * 60;
   private static final List<String> SUPPORTED_CHANNELS = List.of("AUTO", "PROXY");
+  private static final List<String> BATCH_CIRCUIT_ERROR_CODES = List.of(
+      "COSCO_UPSTREAM_BLOCKED",
+      "COSCO_UPSTREAM_RATE_LIMITED",
+      "COSCO_CHANNELS_UNAVAILABLE",
+      "COSCO_UPSTREAM_UNAVAILABLE",
+      "COSCO_PROXY_POOL_EXHAUSTED",
+      "COSCO_PROXY_UNAVAILABLE",
+      "COSCO_PROXY_NOT_CONFIGURED",
+      "COSCO_SUPPLEMENTAL_UNAVAILABLE",
+      "RATE_LIMITED",
+      "HTTP_429",
+      "HTTP_502",
+      "HTTP_503",
+      "HTTP_504",
+      "ADAPTER_FAILURE"
+  );
   private static final Pattern PROXY_ATTEMPTS_PATTERN = Pattern.compile(
       "(?:代理池已尝试|proxy pool (?:tried|attempted))\\s*(\\d+)",
       Pattern.CASE_INSENSITIVE
@@ -188,6 +206,9 @@ public class ShipmentBatchTrackingService {
           ? normalizeExistingReference(requestedItems.get(index), index)
           : normalizeItem(requestedItems.get(index), index));
     }
+    if (forceRefresh) {
+      items.forEach(this::initializeSupplementalSubtasks);
+    }
     String taskId = "batch_" + UUID.randomUUID().toString().replace("-", "");
     Instant now = clock.instant();
     BatchTask task = new BatchTask(
@@ -261,6 +282,7 @@ public class ShipmentBatchTrackingService {
               item.errorCode = null;
               item.nextRetryAt = null;
               item.updatedAt = clock.instant();
+              item.finishedAt = item.updatedAt;
               task.updatedAt = item.updatedAt;
             }
           } else {
@@ -275,6 +297,10 @@ public class ShipmentBatchTrackingService {
             break;
           }
           markFinalFailure(task, item, error);
+        }
+        if (recordBatchCircuitOutcome(task, item)) {
+          finalStatus = "PAUSED";
+          break;
         }
       }
     } finally {
@@ -327,6 +353,7 @@ public class ShipmentBatchTrackingService {
           item.nextRetryAt = null;
           task.nextAttemptAt = null;
           item.updatedAt = clock.instant();
+          item.finishedAt = item.updatedAt;
           task.updatedAt = item.updatedAt;
         }
         persistRefreshOutcome(task, item);
@@ -373,6 +400,7 @@ public class ShipmentBatchTrackingService {
       );
       return false;
     }
+    markSupplementalSubtasksRunning(task, item);
     try {
       ObjectNode response = trackingService.loadSupplementalDetails(
           item.shipmentId,
@@ -430,6 +458,26 @@ public class ShipmentBatchTrackingService {
     }
   }
 
+  private void initializeSupplementalSubtasks(BatchItem item) {
+    if (item.manualOnly
+        || !"COSCO".equals(item.request.carrier())
+        || "CONTAINER".equals(item.request.type())) {
+      return;
+    }
+    item.subtasks.add(subtask("BOOKING_REFERENCE", "PENDING", null));
+    item.subtasks.add(subtask("TRANSPORT_DETAILS", "PENDING", null));
+  }
+
+  private void markSupplementalSubtasksRunning(BatchTask task, BatchItem item) {
+    synchronized (task) {
+      item.subtasks.clear();
+      item.subtasks.add(subtask("BOOKING_REFERENCE", "RUNNING", null));
+      item.subtasks.add(subtask("TRANSPORT_DETAILS", "RUNNING", null));
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
   private void setFailedSupplementalSubtasks(
       BatchTask task,
       BatchItem item,
@@ -478,6 +526,7 @@ public class ShipmentBatchTrackingService {
       task.status = "RUNNING";
       item.status = "RUNNING";
       item.attempts++;
+      if (item.startedAt == null) item.startedAt = clock.instant();
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
@@ -494,6 +543,7 @@ public class ShipmentBatchTrackingService {
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
+      if (item.startedAt != null) item.finishedAt = item.updatedAt;
       task.updatedAt = item.updatedAt;
     }
   }
@@ -508,6 +558,7 @@ public class ShipmentBatchTrackingService {
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
+      item.finishedAt = item.updatedAt;
       task.updatedAt = item.updatedAt;
     }
     persistRefreshOutcome(task, item);
@@ -559,6 +610,46 @@ public class ShipmentBatchTrackingService {
         .orElse("Supplemental tracking details are incomplete");
   }
 
+  private boolean recordBatchCircuitOutcome(BatchTask task, BatchItem item) {
+    String errorCode = batchCircuitErrorCode(item);
+    synchronized (task) {
+      if (errorCode == null) {
+        task.consecutiveCircuitFailures = 0;
+        task.circuitErrorCode = null;
+        return false;
+      }
+      task.consecutiveCircuitFailures++;
+      task.circuitErrorCode = errorCode;
+      if (task.consecutiveCircuitFailures < BATCH_CIRCUIT_FAILURE_THRESHOLD) {
+        return false;
+      }
+      task.stopReason = "CIRCUIT_BREAKER";
+      task.stopMessage = "Batch stopped after "
+          + task.consecutiveCircuitFailures
+          + " consecutive upstream failures ("
+          + errorCode
+          + ")";
+      task.updatedAt = clock.instant();
+      return true;
+    }
+  }
+
+  private String batchCircuitErrorCode(BatchItem item) {
+    List<String> candidates = new ArrayList<>();
+    if (item.errorCode != null) candidates.add(item.errorCode);
+    for (Map<String, Object> subtask : item.subtasks) {
+      Object value = subtask.get("errorCode");
+      if (value != null) candidates.add(String.valueOf(value));
+    }
+    for (String candidate : candidates) {
+      for (String code : candidate.toUpperCase(Locale.ROOT).split(",")) {
+        String normalized = code.trim();
+        if (BATCH_CIRCUIT_ERROR_CODES.contains(normalized)) return normalized;
+      }
+    }
+    return null;
+  }
+
   private int proxyAttempts(RuntimeException error) {
     Matcher matcher = PROXY_ATTEMPTS_PATTERN.matcher(safeMessage(error));
     if (!matcher.find()) return 0;
@@ -576,6 +667,12 @@ public class ShipmentBatchTrackingService {
       task.cooldownUntil = null;
       task.finishedAt = clock.instant();
       task.updatedAt = task.finishedAt;
+      for (BatchItem item : task.items) {
+        if (item.startedAt != null && item.finishedAt == null) {
+          item.finishedAt = task.finishedAt;
+          item.updatedAt = task.finishedAt;
+        }
+      }
     }
     activeTaskByUser.remove(task.owner.id(), task.id);
   }
@@ -880,6 +977,7 @@ public class ShipmentBatchTrackingService {
 
   private Map<String, Object> snapshot(BatchTask task) {
     synchronized (task) {
+      Instant snapshotAt = clock.instant();
       int succeeded = 0;
       int failed = 0;
       int partial = 0;
@@ -910,13 +1008,16 @@ public class ShipmentBatchTrackingService {
         value.put("proxyAttempts", item.proxyAttempts);
         value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
+        value.put("startedAt", iso(item.startedAt));
+        value.put("finishedAt", iso(item.finishedAt));
+        value.put("elapsedMs", elapsedMs(item.startedAt, item.finishedAt, snapshotAt));
         value.put("updatedAt", iso(item.updatedAt));
         value.put("subtasks", item.subtasks.stream().map(LinkedHashMap::new).toList());
         value.put("subtaskTotal", item.subtasks.size());
         value.put(
             "subtaskProcessed",
             item.subtasks.stream()
-                .filter(subtask -> !"PENDING".equals(subtask.get("status")))
+                .filter(subtask -> List.of("SUCCEEDED", "FAILED").contains(subtask.get("status")))
                 .count()
         );
         items.add(value);
@@ -939,8 +1040,14 @@ public class ShipmentBatchTrackingService {
       value.put("startedAt", iso(task.startedAt));
       value.put("updatedAt", iso(task.updatedAt));
       value.put("finishedAt", iso(task.finishedAt));
+      value.put("elapsedMs", elapsedMs(task.startedAt, task.finishedAt, snapshotAt));
       value.put("cooldownUntil", iso(task.cooldownUntil));
       value.put("nextAttemptAt", iso(task.nextAttemptAt));
+      value.put("stopReason", task.stopReason);
+      value.put("stopMessage", task.stopMessage);
+      value.put("circuitFailureCount", task.consecutiveCircuitFailures);
+      value.put("circuitFailureThreshold", BATCH_CIRCUIT_FAILURE_THRESHOLD);
+      value.put("circuitErrorCode", task.circuitErrorCode);
       value.put("items", items);
       return value;
     }
@@ -1010,6 +1117,12 @@ public class ShipmentBatchTrackingService {
     return value == null ? null : value.toString();
   }
 
+  private long elapsedMs(Instant startedAt, Instant finishedAt, Instant snapshotAt) {
+    if (startedAt == null) return 0L;
+    Instant end = finishedAt == null ? snapshotAt : finishedAt;
+    return Math.max(0L, Duration.between(startedAt, end).toMillis());
+  }
+
   @PreDestroy
   void shutdown() {
     executor.shutdownNow();
@@ -1031,6 +1144,10 @@ public class ShipmentBatchTrackingService {
     private volatile Instant finishedAt;
     private volatile Instant cooldownUntil;
     private volatile Instant nextAttemptAt;
+    private volatile String stopReason;
+    private volatile String stopMessage;
+    private int consecutiveCircuitFailures;
+    private String circuitErrorCode;
 
     private BatchTask(
         String id,
@@ -1077,6 +1194,8 @@ public class ShipmentBatchTrackingService {
     private int proxyAttempts;
     private Instant nextRetryAt;
     private String shipmentId;
+    private Instant startedAt;
+    private Instant finishedAt;
     private Instant updatedAt;
     private final List<Map<String, Object>> subtasks = new ArrayList<>();
 

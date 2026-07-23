@@ -637,6 +637,7 @@
               v-model="employeeForm.password"
               type="password"
               :placeholder="t('admin.employee.passwordPlaceholder')"
+              @input="employeeDialogError = ''"
             />
           </label>
           <label>
@@ -676,6 +677,9 @@
               <el-option value="DISABLED" :label="statusText('DISABLED')" />
             </el-select>
           </label>
+          <p v-if="employeeDialogError" class="employee-dialog-error" role="alert">
+            {{ employeeDialogError }}
+          </p>
           <div class="modal-actions">
             <button type="button" @click="closeEmployeeDialog">取消</button>
             <button class="primary" type="submit" :disabled="loading">
@@ -800,6 +804,7 @@ import {
   updateEmployee,
   updateLlmSettings
 } from "../services/adminApi";
+import { markApiErrorHandled } from "../services/apiClient";
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
@@ -838,6 +843,7 @@ const activeAdminPage = ref("overview");
 const loginForm = reactive({ username: "admin", password: "" });
 const employeeDialogOpen = ref(false);
 const editingEmployeeId = ref("");
+const employeeDialogError = ref("");
 const employeeForm = reactive({ username: "", displayName: "", password: "", role: "EMPLOYEE", partyRole: "AGENT", status: "ACTIVE" });
 const temporaryPasswordDialog = reactive({
   open: false,
@@ -990,6 +996,7 @@ async function loadAdminFileListsWithoutLoading() {
 }
 
 function openEmployeeDialog(user = null) {
+  employeeDialogError.value = "";
   editingEmployeeId.value = user?.id || "";
   employeeForm.username = user?.username || "";
   employeeForm.displayName = user?.displayName || "";
@@ -1001,6 +1008,7 @@ function openEmployeeDialog(user = null) {
 }
 
 function closeEmployeeDialog() {
+  employeeDialogError.value = "";
   employeeDialogOpen.value = false;
   editingEmployeeId.value = "";
   employeeForm.username = "";
@@ -1012,6 +1020,11 @@ function closeEmployeeDialog() {
 }
 
 async function handleSaveEmployee() {
+  employeeDialogError.value = "";
+  if (!editingEmployeeId.value && !isStrongEmployeePassword(employeeForm.password)) {
+    employeeDialogError.value = t("admin.employee.passwordRuleError");
+    return;
+  }
   await withLoading(async () => {
     const wasEditing = Boolean(editingEmployeeId.value);
     if (wasEditing) {
@@ -1028,6 +1041,18 @@ async function handleSaveEmployee() {
     await loadDashboard(false);
     showMessage(t(wasEditing ? "admin.employee.saved" : "admin.employee.created"));
   }, { popupError: true });
+}
+
+function isStrongEmployeePassword(value) {
+  const password = String(value || "");
+  const knownLegacyPassword = password === "123456" || password === "Admin@123456";
+  return !knownLegacyPassword
+    && password.length >= 12
+    && password.length <= 128
+    && /[A-Z]/.test(password)
+    && /[a-z]/.test(password)
+    && /\d/.test(password)
+    && /[^A-Za-z0-9]/.test(password);
 }
 
 async function handleResetPassword(user) {
@@ -1296,6 +1321,7 @@ async function withLoading(action, { popupError = false } = {}) {
   try {
     await action();
   } catch (error) {
+    markApiErrorHandled(error);
     const errorText = tr(error.message || t("admin.employee.errorFallback"));
     if (popupError) {
       await showAdminErrorDialog(errorText);

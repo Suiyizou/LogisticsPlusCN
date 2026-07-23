@@ -1,11 +1,13 @@
 <template>
   <component :is="activeSurface" />
+  <GlobalApiErrorNotice />
 </template>
 
 <script setup>
 import { computed, defineAsyncComponent, h } from "vue";
 import { useRoute } from "vue-router";
 import AsyncPageError from "./components/AsyncPageError.vue";
+import GlobalApiErrorNotice from "./components/GlobalApiErrorNotice.vue";
 import SystemWaitOverlay from "./components/SystemWaitOverlay.vue";
 import { t } from "./i18n";
 

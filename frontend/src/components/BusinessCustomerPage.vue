@@ -445,6 +445,9 @@
                           :label="`${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`"
                           :value="customer.id"
                         />
+                        <template #label="{ value }">
+                          <span class="shipment-customer-filter-label">{{ shipmentCustomerSelectedLabel(value) }}</span>
+                        </template>
                       </el-select>
                     </label>
                     <label class="shipment-toolbar-control">
@@ -692,7 +695,18 @@
                         <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
                       </div>
                       <el-alert
-                        v-if="batchTrackProgress.status === 'PAUSED'"
+                        v-if="batchTrackProgress.stopReason === 'CIRCUIT_BREAKER'"
+                        type="error"
+                        show-icon
+                        :closable="false"
+                        :title="t('customers.batchTrackCircuitOpened', {
+                          count: batchTrackProgress.circuitFailureCount,
+                          code: batchTrackProgress.circuitErrorCode,
+                          remaining: batchTrackProgress.pending
+                        })"
+                      />
+                      <el-alert
+                        v-else-if="batchTrackProgress.status === 'PAUSED'"
                         type="warning"
                         :closable="false"
                         :title="t('customers.batchTrackPaused', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
@@ -722,15 +736,29 @@
                             <b>{{ r.number }}</b>
                             <el-tag v-if="r.carrier" size="small" effect="plain" type="info">{{ r.carrier }}</el-tag>
                             <el-tag v-if="r.errorCode" size="small" effect="plain" type="danger">{{ r.errorCode }}</el-tag>
+                            <el-tag v-if="!r.manualOnly" size="small" effect="light" :type="batchStageTagType(batchMainStageStatus(r))">
+                              {{ t("customers.mainQueryStage") }} · {{ batchStageStatusLabel(batchMainStageStatus(r)) }}
+                            </el-tag>
                             <el-tag v-if="r.attempts" size="small" effect="plain">{{ t("customers.mainAttempts", { count: r.attempts }) }}</el-tag>
                             <el-tag v-if="r.proxyAttempts" size="small" effect="plain" type="warning">{{ t("customers.proxyAttempts", { count: r.proxyAttempts }) }}</el-tag>
+                            <el-tag v-if="r.startedAt" size="small" effect="plain" type="info" class="batch-track-timer">
+                              {{ t("customers.itemElapsed", { time: batchTrackElapsedText(r) }) }}
+                            </el-tag>
                           </span>
                           <small>{{ r.message }}</small>
-                          <small
-                            v-for="subtask in r.failedSubtasks"
-                            :key="`${r.index}-${subtask.type}`"
-                            class="batch-track-subtask-error"
-                          ><b>{{ batchSubtaskLabel(subtask.type) }}：</b>{{ subtask.error }}</small>
+                          <div v-if="r.subtasks.length" class="batch-track-subtask-list">
+                            <span
+                              v-for="subtask in r.subtasks"
+                              :key="`${r.index}-${subtask.type}`"
+                              class="batch-track-subtask"
+                              :class="String(subtask.status || 'PENDING').toLowerCase()"
+                            >
+                              <i aria-hidden="true"></i>
+                              <b>{{ t("customers.childQueryStage") }} · {{ batchSubtaskLabel(subtask.type) }}</b>
+                              <em>{{ batchStageStatusLabel(subtask.status) }}</em>
+                              <small v-if="subtask.error">{{ subtask.error }}</small>
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1210,6 +1238,7 @@ import {
 } from "../services/businessCustomerApi";
 import { buildShipmentBatchItems, parseShipmentBatchWorkbook } from "../services/shipmentBatchImport";
 import { storedToken } from "../services/authSession";
+import { markApiErrorHandled } from "../services/apiClient";
 import {
   User,
   Document,
@@ -1292,6 +1321,7 @@ const batchTrackTaskId = ref("");
 const batchTrackMode = ref("IMPORT");
 const batchTrackCancelRequested = ref(false);
 const batchTrackProblemsOnly = ref(false);
+const batchTrackClock = ref(Date.now());
 const batchTrackAbortController = ref(null);
 const refreshTrackingStatus = ref("");
 const refreshTrackingResponse = ref(null);
@@ -1382,6 +1412,7 @@ const batchTrackToolbarLabel = computed(() => batchTrackRunning.value
 const BATCH_TRACK_TASK_KEY = "business-shipment-batch-task-id";
 const BATCH_TRACK_TERMINAL = new Set(["COMPLETED", "STOPPED", "FAILED", "PAUSED"]);
 let batchTrackPollTimer = 0;
+let batchTrackClockTimer = 0;
 
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
@@ -1501,6 +1532,59 @@ function batchSubtaskLabel(type) {
   return String(type || "").toUpperCase() === "BOOKING_REFERENCE"
     ? t("customers.bookingReferenceStage")
     : t("customers.transportDetailsStage");
+}
+
+function batchStageStatusLabel(status) {
+  const key = String(status || "PENDING").toUpperCase();
+  if (key === "RUNNING" || key === "RETRY_WAIT") return t("customers.stageRunning");
+  if (key === "SUCCEEDED") return t("customers.stageSucceeded");
+  if (key === "FAILED") return t("customers.stageFailed");
+  return t("customers.stagePending");
+}
+
+function batchStageTagType(status) {
+  const key = String(status || "PENDING").toUpperCase();
+  if (key === "SUCCEEDED") return "success";
+  if (key === "FAILED") return "danger";
+  if (key === "RUNNING" || key === "RETRY_WAIT") return "primary";
+  return "info";
+}
+
+function batchMainStageStatus(result) {
+  const status = String(result?.status || "PENDING").toUpperCase();
+  const subtaskStatuses = (result?.subtasks || []).map((subtask) =>
+    String(subtask.status || "PENDING").toUpperCase()
+  );
+  if (status === "FAILED") return "FAILED";
+  if (["SUCCEEDED", "PARTIAL"].includes(status) || subtaskStatuses.some((value) => value !== "PENDING")) {
+    return "SUCCEEDED";
+  }
+  if (Number(result?.attempts || 0) > 0 || ["RUNNING", "RETRY_WAIT"].includes(status)) {
+    return "RUNNING";
+  }
+  return "PENDING";
+}
+
+function batchTrackElapsedText(result) {
+  const startedAt = Date.parse(result?.startedAt || "");
+  const finishedAt = Date.parse(result?.finishedAt || "");
+  let elapsedMs = Number(result?.elapsedMs || 0);
+  if (!Number.isFinite(finishedAt)) {
+    const observedAt = Number(result?.elapsedObservedAt || batchTrackClock.value);
+    elapsedMs += Math.max(0, batchTrackClock.value - observedAt);
+  }
+  if (elapsedMs <= 0 && Number.isFinite(startedAt)) {
+    const end = Number.isFinite(finishedAt) ? finishedAt : batchTrackClock.value;
+    elapsedMs = Math.max(0, end - startedAt);
+  }
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const padded = (value) => String(value).padStart(2, "0");
+  return hours > 0
+    ? `${padded(hours)}:${padded(minutes)}:${padded(seconds)}`
+    : `${padded(minutes)}:${padded(seconds)}`;
 }
 
 const CARRIER_PREFIX_MAP = {
@@ -1720,6 +1804,9 @@ watch(selectedShipment, (shipment) => {
 }, { immediate: true });
 
 onMounted(() => {
+  batchTrackClockTimer = window.setInterval(() => {
+    batchTrackClock.value = Date.now();
+  }, 1000);
   const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
@@ -1728,6 +1815,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.clearTimeout(toastTimer);
   window.clearTimeout(batchTrackPollTimer);
+  window.clearInterval(batchTrackClockTimer);
 });
 
 function navigateTo(item) {
@@ -2205,6 +2293,7 @@ function applyBatchTrackTask(task) {
     shipmentTrackingChannel.value = String(task.channel).toUpperCase();
   }
   const status = String(task.status || "").toUpperCase();
+  const taskObservedAt = Date.now();
   batchTrackProgress.value = {
     total: Number(task.total || 0),
     done: Number(task.processed || 0),
@@ -2214,6 +2303,11 @@ function applyBatchTrackTask(task) {
     failed: Number(task.failed || 0),
     pending: Number(task.pending || 0),
     status,
+    stopReason: String(task.stopReason || "").toUpperCase(),
+    stopMessage: task.stopMessage || "",
+    circuitFailureCount: Number(task.circuitFailureCount || 0),
+    circuitFailureThreshold: Number(task.circuitFailureThreshold || 0),
+    circuitErrorCode: task.circuitErrorCode || "",
     nextAttemptAt: task.nextAttemptAt
       || task.cooldownUntil
       || (task.items || []).find((item) => String(item.status || "").toUpperCase() === "RETRY_WAIT")?.nextRetryAt
@@ -2221,8 +2315,15 @@ function applyBatchTrackTask(task) {
   };
   batchTrackResults.value = (task.items || []).map((item, index) => {
     const itemStatus = String(item.status || "PENDING").toUpperCase();
-    const stopped = status === "STOPPED" && ["PENDING", "RUNNING"].includes(itemStatus);
-    const failedSubtasks = (item.subtasks || []).filter(
+    const circuitStopped = String(task.stopReason || "").toUpperCase() === "CIRCUIT_BREAKER"
+      && status === "PAUSED";
+    const stopped = (status === "STOPPED" || circuitStopped)
+      && ["PENDING", "RUNNING", "RETRY_WAIT"].includes(itemStatus);
+    const subtasks = (item.subtasks || []).map((subtask) => ({
+      ...subtask,
+      status: String(subtask.status || "PENDING").toUpperCase()
+    }));
+    const failedSubtasks = subtasks.filter(
       (subtask) => String(subtask.status || "").toUpperCase() === "FAILED"
     );
     const subtaskErrorCodes = failedSubtasks
@@ -2233,14 +2334,20 @@ function applyBatchTrackTask(task) {
       shipmentId: item.shipmentId,
       number: item.displayNumber || item.number,
       carrier: item.carrier,
+      manualOnly: Boolean(item.manualOnly),
       status: stopped ? "stopped" : itemStatus.toLowerCase(),
-      message: batchTrackItemMessage(item, status),
+      message: batchTrackItemMessage(item, status, task.stopReason),
       errorCode: item.errorCode || [...new Set(subtaskErrorCodes)].join(", "),
       attempts: Number(item.attempts || 0),
       proxyAttempts: Number(item.proxyAttempts || Math.max(
         0,
         ...failedSubtasks.map((subtask) => Number(subtask.proxyAttempts || 0))
       )),
+      startedAt: item.startedAt || null,
+      finishedAt: item.finishedAt || null,
+      elapsedMs: Number(item.elapsedMs || 0),
+      elapsedObservedAt: taskObservedAt,
+      subtasks,
       failedSubtasks
     };
   });
@@ -2254,10 +2361,15 @@ function applyBatchTrackTask(task) {
   }
 }
 
-function batchTrackItemMessage(item, taskStatus = "") {
+function batchTrackItemMessage(item, taskStatus = "", stopReason = "") {
   const status = String(item.status || "PENDING").toUpperCase();
   if (status === "RETRY_WAIT") return t("customers.batchTrackRetryItem");
   if (item.error) return item.error;
+  if (String(stopReason || "").toUpperCase() === "CIRCUIT_BREAKER"
+      && taskStatus === "PAUSED"
+      && ["PENDING", "RUNNING"].includes(status)) {
+    return t("customers.batchTrackCircuitSkipped");
+  }
   if (taskStatus === "STOPPED" && ["PENDING", "RUNNING"].includes(status)) return t("customers.trackStopped");
   if (status === "SUCCEEDED" && item.source === "AUTO_PROXY") {
     return t("customers.trackSucceededViaProxy");
@@ -3403,6 +3515,12 @@ function customerFilterOptionLabel(customer) {
   return code && code !== name ? `${name} · ${code}` : name;
 }
 
+function shipmentCustomerSelectedLabel(customerId) {
+  const customer = shipmentFilterCustomers.value.find((item) => item.id === customerId);
+  if (!customer) return "";
+  return `${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`;
+}
+
 function shipmentBoundUsers(shipment) {
   const direct = Array.isArray(shipment?.boundUsers)
     ? shipment.boundUsers
@@ -3502,6 +3620,7 @@ function showSuccess(key, params) {
 }
 
 function showError(error, fallbackKey) {
+  markApiErrorHandled(error);
   const message = String(error?.message || "");
   if (/operational data|last valid snapshot was kept/i.test(message)) {
     pageMessage.value = t("customers.refreshReturnedNoData");
@@ -3886,6 +4005,15 @@ function showError(error, fallbackKey) {
 }
 .shipment-customer-filter {
   width: 230px;
+}
+.shipment-customer-filter-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #18324b;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shipment-toolbar-control {
   display: inline-flex;
@@ -5303,9 +5431,76 @@ button:disabled {
   white-space: normal;
 }
 
-.batch-track-subtask-error {
+.batch-track-subtask-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   padding-left: 32px;
+}
+.batch-track-subtask {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  color: #5f7187;
+  background: #f8fafc;
+}
+.batch-track-subtask i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+.batch-track-subtask b {
+  overflow: hidden;
+  color: #40566f;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-track-subtask em {
+  color: inherit;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+.batch-track-subtask small {
+  grid-column: 2 / -1;
   color: #9f3340 !important;
+}
+.batch-track-subtask.running {
+  border-color: #bfdbfe;
+  color: #2563eb;
+  background: #eff6ff;
+}
+.batch-track-subtask.running i {
+  background: #3b82f6;
+  animation: batch-subtask-pulse 1s ease-in-out infinite;
+}
+.batch-track-subtask.succeeded {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background: #f0fdf4;
+}
+.batch-track-subtask.succeeded i {
+  background: #22c55e;
+}
+.batch-track-subtask.failed {
+  border-color: #fecdd3;
+  color: #be123c;
+  background: #fff1f2;
+}
+.batch-track-subtask.failed i {
+  background: #ef4444;
+}
+@keyframes batch-subtask-pulse {
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+.batch-track-timer {
+  font-variant-numeric: tabular-nums;
 }
 .batch-track-result-meta {
   display: inline-flex;
@@ -5331,5 +5526,10 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .batch-track-subtask-list {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -280,6 +280,7 @@
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { loginAdmin } from "../services/adminApi";
+import { markApiErrorHandled } from "../services/apiClient";
 import { clearCustomerSession, loginCustomer } from "../services/customerSession";
 
 const emit = defineEmits(["logged-in"]);
@@ -335,6 +336,7 @@ async function submit() {
     form.password = "";
     emit("logged-in", response.user);
   } catch (error) {
+    markApiErrorHandled(error);
     message.value = loginMode.value === "customer"
       ? t("login.customerErrorFallback")
       : error.message || t("login.errorFallback");

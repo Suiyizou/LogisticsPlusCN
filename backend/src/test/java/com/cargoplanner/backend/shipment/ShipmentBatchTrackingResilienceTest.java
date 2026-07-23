@@ -185,6 +185,104 @@ class ShipmentBatchTrackingResilienceTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void threeConsecutiveSupplementalUpstreamFailuresOpenTheBatchCircuit()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    AtomicInteger shipmentSequence = new AtomicInteger();
+    when(trackingService.track(any(), any())).thenAnswer(invocation ->
+        successfulResponse("shipment-" + shipmentSequence.incrementAndGet())
+    );
+    ObjectNode blockedSupplemental = new ObjectMapper().createObjectNode();
+    blockedSupplemental.putArray("warnings")
+        .addObject()
+        .put("source", "bookingInfo")
+        .put("message", "COSCO proxy channel is not configured")
+        .put("code", "COSCO_PROXY_NOT_CONFIGURED");
+    blockedSupplemental.withArray("warnings")
+        .addObject()
+        .put("source", "containerInfo")
+        .put("message", "COSCO proxy channel is not configured")
+        .put("code", "COSCO_PROXY_NOT_CONFIGURED");
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(blockedSupplemental);
+
+    createService(trackingService, 0, 0, 5, 5);
+    AuthenticatedUser user = businessUser(77L);
+    List<ShipmentBatchItemRequest> items = List.of(
+        cosuItem("refresh-1", "COSU6502406181"),
+        cosuItem("refresh-2", "COSU6502406182"),
+        cosuItem("refresh-3", "COSU6502406183"),
+        cosuItem("refresh-4", "COSU6502406184"),
+        cosuItem("refresh-5", "COSU6502406185")
+    );
+    String taskId = taskId(service.startRefreshAll(items, user, "AUTO"));
+
+    Map<String, Object> paused = awaitTerminal(taskId, user, 2_000);
+    List<Map<String, Object>> results =
+        (List<Map<String, Object>>) paused.get("items");
+    assertEquals("PAUSED", paused.get("status"));
+    assertEquals("CIRCUIT_BREAKER", paused.get("stopReason"));
+    assertEquals("COSCO_PROXY_NOT_CONFIGURED", paused.get("circuitErrorCode"));
+    assertEquals(3, paused.get("circuitFailureCount"));
+    assertEquals(ShipmentBatchTrackingService.BATCH_CIRCUIT_FAILURE_THRESHOLD,
+        paused.get("circuitFailureThreshold"));
+    assertEquals(3, paused.get("partial"));
+    assertEquals(2, paused.get("pending"));
+    assertEquals(
+        List.of("PARTIAL", "PARTIAL", "PARTIAL", "PENDING", "PENDING"),
+        results.stream().map(result -> String.valueOf(result.get("status"))).toList()
+    );
+    verify(trackingService, times(3)).track(any(), any());
+    verify(trackingService, times(3)).loadSupplementalDetails(any(), any(), any());
+  }
+
+  @Test
+  void successfulShipmentResetsTheBatchCircuitFailureStreak() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    AtomicInteger shipmentSequence = new AtomicInteger();
+    when(trackingService.track(any(), any())).thenAnswer(invocation ->
+        successfulResponse("shipment-reset-" + shipmentSequence.incrementAndGet())
+    );
+    AtomicInteger supplementalSequence = new AtomicInteger();
+    when(trackingService.loadSupplementalDetails(any(), any(), any())).thenAnswer(invocation -> {
+      ObjectNode response = new ObjectMapper().createObjectNode();
+      int position = supplementalSequence.incrementAndGet();
+      if (position != 3 && position != 6) {
+        response.putArray("warnings")
+            .addObject()
+            .put("source", "containerInfo")
+            .put("message", "Temporary upstream block")
+            .put("code", "COSCO_UPSTREAM_BLOCKED");
+      } else {
+        response.putArray("warnings");
+      }
+      return response;
+    });
+
+    createService(trackingService, 0, 0, 5, 5);
+    AuthenticatedUser user = businessUser(78L);
+    List<ShipmentBatchItemRequest> items = List.of(
+        cosuItem("refresh-reset-1", "COSU6502406191"),
+        cosuItem("refresh-reset-2", "COSU6502406192"),
+        cosuItem("refresh-reset-3", "COSU6502406193"),
+        cosuItem("refresh-reset-4", "COSU6502406194"),
+        cosuItem("refresh-reset-5", "COSU6502406195"),
+        cosuItem("refresh-reset-6", "COSU6502406196")
+    );
+    String taskId = taskId(service.startRefreshAll(items, user, "AUTO"));
+
+    Map<String, Object> completed = awaitTerminal(taskId, user, 2_000);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals(4, completed.get("partial"));
+    assertEquals(2, completed.get("succeeded"));
+    assertEquals(0, completed.get("pending"));
+    assertEquals(0, completed.get("circuitFailureCount"));
+    verify(trackingService, times(6)).track(any(), any());
+    verify(trackingService, times(6)).loadSupplementalDetails(any(), any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void invalid400IsNotRetriedAndDoesNotDelayTheNextShipment() throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     AtomicInteger calls = new AtomicInteger();

@@ -8402,6 +8402,18 @@ select,
   padding: 18px 22px 22px;
 }
 
+.employee-dialog-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .admin-health-pill {
   padding: 6px 10px;
   border-radius: 999px;
