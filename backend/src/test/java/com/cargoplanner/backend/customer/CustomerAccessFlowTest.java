@@ -387,7 +387,21 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void transfersCustomerShipmentAndFileAuthorityInOneAuditedOperation() {
+  void transfersCustomerToOverseaAgentWithoutChangingBusinessOwnership() {
+    Map<String, Object> previousAgent = customerService.create(
+        new CreateCustomerRequest(
+            "previous-oversea", "SecurePass!23", "Previous Oversea", "OVERSEA_AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    Map<String, Object> targetAgent = customerService.create(
+        new CreateCustomerRequest(
+            "target-oversea", "SecurePass!23", "Target Oversea", "OVERSEA_AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(
             "hayden", "SecurePass!23", "Hayden", "SHIPPER", "HAYDEN-001"
@@ -396,21 +410,66 @@ class CustomerAccessFlowTest {
         "127.0.0.1"
     );
     String customerId = (String) created.get("id");
+    customerService.updateOverseaAgentCustomers(
+        (String) previousAgent.get("id"),
+        new OverseaAgentCustomerLinksRequest(List.of(customerId)),
+        business,
+        "127.0.0.1"
+    );
     customerService.bindShipment(
         customerId,
         new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
         business,
         "127.0.0.1"
     );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED' "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?) "
+            + "AND shipment_id = 10",
+        customerId
+    );
+    CustomerPrincipal previousPrincipal = authService.authenticate(
+        authService.login(
+            new CustomerLoginRequest(
+                "previous-oversea", "SecurePass!23", (String) previousAgent.get("customerCode")
+            ),
+            httpRequest
+        ).token(),
+        httpRequest
+    );
+    CustomerPrincipal targetPrincipal = authService.authenticate(
+        authService.login(
+            new CustomerLoginRequest(
+                "target-oversea", "SecurePass!23", (String) targetAgent.get("customerCode")
+            ),
+            httpRequest
+        ).token(),
+        httpRequest
+    );
+    assertThat(shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", previousPrincipal
+    ).shipmentId()).isEqualTo(10);
+    assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", targetPrincipal
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> transferAgents =
+        (List<Map<String, Object>>) customerService.listTransferAgents(business).get("items");
+    assertThat(transferAgents).extracting(item -> item.get("id"))
+        .contains(previousAgent.get("id"), targetAgent.get("id"));
 
     Map<String, Object> result = customerService.transferCustomers(
-        new CustomerTransferRequest(List.of(customerId), otherBusiness.id(), false),
+        new CustomerTransferRequest(List.of(customerId), (String) targetAgent.get("id")),
         business,
         "127.0.0.1"
     );
 
     assertThat(result.get("transferred")).isEqualTo(1);
-    assertThat(result.get("shipmentsAffected")).isEqualTo(1);
+    assertThat(result.get("relatedShipments")).isEqualTo(1);
+    assertThat(result.get("businessHistoryRetained")).isEqualTo(true);
     assertThat(jdbcTemplate.queryForObject(
         "SELECT created_by FROM cp_customers WHERE public_id = ?", Long.class, customerId
     )).isEqualTo(business.id());
@@ -418,95 +477,73 @@ class CustomerAccessFlowTest {
         "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
         Long.class,
         customerId
-    )).isEqualTo(otherBusiness.id());
+    )).isEqualTo(business.id());
     assertThat(jdbcTemplate.queryForObject(
         "SELECT responsible_agent_id FROM cp_shipments WHERE id = 10", Long.class
-    )).isEqualTo(otherBusiness.id());
+    )).isEqualTo(business.id());
     assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
-        Integer.class
-    )).isEqualTo(1);
-    assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
-    assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
-    assertThatThrownBy(() -> shipmentAccessService.requireAccess("shipment-public-id", business))
-        .isInstanceOf(ApiException.class)
-        .satisfies(error -> assertThat(((ApiException) error).status())
-            .isEqualTo(HttpStatus.FORBIDDEN));
-    assertThat(shipmentAccessService.requireAccess("shipment-public-id", otherBusiness).shipmentId())
+        "SELECT oversea_agent_customer_id FROM cp_oversea_agent_customers "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?)",
+        Long.class,
+        customerId
+    )).isEqualTo(jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_customers WHERE public_id = ?", Long.class, targetAgent.get("id")
+    ));
+    assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(3);
+    assertThat(shipmentAccessService.requireAccess("shipment-public-id", business).shipmentId())
         .isEqualTo(10);
+    assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", previousPrincipal
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
+    assertThat(shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", targetPrincipal
+    ).fileRoles()).containsExactly("OVERSEA_AGENT");
     assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_customer_transfer_log WHERE customer_id = ? AND from_agent_id = 1 AND to_agent_id = 2",
+        """
+        SELECT COUNT(*)
+        FROM cp_oversea_agent_customer_transfer_log transfer
+        JOIN cp_customers previous_agent
+          ON previous_agent.id = transfer.from_oversea_agent_customer_id
+        JOIN cp_customers target_agent
+          ON target_agent.id = transfer.to_oversea_agent_customer_id
+        WHERE transfer.customer_id = (SELECT id FROM cp_customers WHERE public_id = ?)
+          AND previous_agent.public_id = ? AND target_agent.public_id = ?
+        """,
         Integer.class,
-        ((Number) jdbcTemplate.queryForMap(
-            "SELECT id FROM cp_customers WHERE public_id = ?", customerId
-        ).get("ID")).longValue()
+        customerId,
+        previousAgent.get("id"),
+        targetAgent.get("id")
     )).isEqualTo(1);
   }
 
   @Test
-  void transferCanRetainPreviousAgentAsShipmentParticipant() {
-    Map<String, Object> created = customerService.create(
-        new CreateCustomerRequest("retained", "SecurePass!23", "Retained", "CONSIGNEE"),
-        business,
-        "127.0.0.1"
-    );
-    String customerId = (String) created.get("id");
-    customerService.bindShipment(
-        customerId,
-        new CustomerShipmentBindingRequest("empty-owned-shipment", null, null, null),
-        business,
-        "127.0.0.1"
-    );
-
-    customerService.transferCustomers(
-        new CustomerTransferRequest(List.of(customerId), otherBusiness.id(), true),
-        business,
-        "127.0.0.1"
-    );
-
-    assertThat(shipmentAccessService.requireAccess("empty-owned-shipment", business).shipmentId())
-        .isEqualTo(14);
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT participant_role FROM cp_shipment_participants WHERE shipment_id = 14 AND user_id = 1",
-        String.class
-    )).isEqualTo("TRANSFERRED_OWNER");
-  }
-
-  @Test
-  void transferKeepsAccessForAnAgentWhoStillOwnsAnotherCustomerOnTheShipment() {
-    Map<String, Object> shipper = customerService.create(
-        new CreateCustomerRequest("shared-shipper", "SecurePass!23", "Shared Shipper", "SHIPPER"),
-        business,
-        "127.0.0.1"
-    );
-    Map<String, Object> consignee = customerService.create(
+  void transferRejectsAnOverseaAgentAsTheTransferredCustomer() {
+    Map<String, Object> sourceAgent = customerService.create(
         new CreateCustomerRequest(
-            "shared-consignee", "SecurePass!23", "Shared Consignee", "CONSIGNEE"
+            "source-oversea", "SecurePass!23", "Source Oversea", "OVERSEA_AGENT"
         ),
         business,
         "127.0.0.1"
     );
-    for (Map<String, Object> customer : List.of(shipper, consignee)) {
-      customerService.bindShipment(
-          (String) customer.get("id"),
-          new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
-          business,
-          "127.0.0.1"
-      );
-    }
-
-    customerService.transferCustomers(
-        new CustomerTransferRequest(List.of((String) shipper.get("id")), otherBusiness.id(), false),
+    Map<String, Object> targetAgent = customerService.create(
+        new CreateCustomerRequest(
+            "other-oversea", "SecurePass!23", "Other Oversea", "OVERSEA_AGENT"
+        ),
         business,
         "127.0.0.1"
     );
 
-    assertThat(shipmentAccessService.requireAccess("shipment-public-id", business).shipmentId())
-        .isEqualTo(10);
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT participant_role FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 1",
-        String.class
-    )).isEqualTo("CUSTOMER_OWNER");
+    assertThatThrownBy(() -> customerService.transferCustomers(
+        new CustomerTransferRequest(
+            List.of((String) sourceAgent.get("id")), (String) targetAgent.get("id")
+        ),
+        business,
+        "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST)
+    );
   }
 
   @Test
@@ -1461,6 +1498,19 @@ class CustomerAccessFlowTest {
           oversea_agent_customer_id BIGINT NOT NULL,
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_customer_transfer_log (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          batch_id CHAR(36) NOT NULL,
+          customer_id BIGINT NOT NULL,
+          from_oversea_agent_customer_id BIGINT,
+          to_oversea_agent_customer_id BIGINT NOT NULL,
+          initiated_by BIGINT NOT NULL,
+          shipment_count INT NOT NULL,
+          ip_address VARCHAR(64),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

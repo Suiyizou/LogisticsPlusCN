@@ -4,6 +4,5 @@ import java.util.List;
 
 public record CustomerTransferRequest(
     List<String> customerIds,
-    Long targetAgentId,
-    Boolean retainPreviousAgentAccess
+    String targetAgentId
 ) {}

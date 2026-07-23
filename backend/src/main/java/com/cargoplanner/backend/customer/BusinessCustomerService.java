@@ -93,19 +93,22 @@ public class BusinessCustomerService {
     requireManager(actor);
     List<Map<String, Object>> agents = jdbcTemplate.query(
         """
-        SELECT id, username, display_name
-        FROM cp_users
-        WHERE role = 'BUSINESS' AND status = 'ACTIVE' AND id <> ?
-        ORDER BY display_name, username, id
+        SELECT c.public_id, c.username, c.display_name, c.client_code,
+               (SELECT COUNT(*) FROM cp_oversea_agent_customers link
+                WHERE link.oversea_agent_customer_id = c.id) AS linked_customer_count
+        FROM cp_customers c
+        WHERE c.party_role = 'OVERSEA_AGENT' AND c.status = 'ACTIVE'
+        ORDER BY c.display_name, c.username, c.id
         """,
         (rs, rowNumber) -> {
           Map<String, Object> value = new LinkedHashMap<>();
-          value.put("id", rs.getLong("id"));
+          value.put("id", rs.getString("public_id"));
           value.put("username", rs.getString("username"));
           value.put("displayName", rs.getString("display_name"));
+          value.put("clientCode", rs.getString("client_code"));
+          value.put("linkedCustomerCount", rs.getLong("linked_customer_count"));
           return value;
-        },
-        actor.id()
+        }
     );
     return Map.of("items", agents, "total", agents.size());
   }
@@ -365,21 +368,35 @@ public class BusinessCustomerService {
     if (customerIds.size() > 500) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "A customer transfer cannot exceed 500 customers");
     }
-    if (request.targetAgentId() == null) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business operator is required");
+    if (request == null || request.targetAgentId() == null || request.targetAgentId().isBlank()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target overseas agent is required");
     }
     TransferAgent target = requireTransferAgent(request.targetAgentId());
-    boolean retainPreviousAccess = Boolean.TRUE.equals(request.retainPreviousAgentAccess());
     String batchId = UUID.randomUUID().toString();
 
     List<CustomerTransferTarget> targets = new ArrayList<>();
     for (String customerId : customerIds.stream().sorted().toList()) {
       lockCustomer(customerId);
       CustomerRecord customer = requireManaged(customerId, actor);
-      if (customer.responsibleAgentId() == target.id()) {
+      if (!UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Only shipper or consignee customers can be transferred to an overseas agent"
+        );
+      }
+      if (!"ACTIVE".equals(customer.status())) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Only active customers can be transferred");
+      }
+      List<Long> previousAgentIds = jdbcTemplate.query(
+          "SELECT oversea_agent_customer_id FROM cp_oversea_agent_customers WHERE customer_id = ? FOR UPDATE",
+          (rs, rowNumber) -> rs.getLong(1),
+          customer.id()
+      );
+      Long previousAgentId = previousAgentIds.isEmpty() ? null : previousAgentIds.get(0);
+      if (previousAgentId != null && previousAgentId == target.id()) {
         throw new ApiException(
             HttpStatus.CONFLICT,
-            "Customer " + customer.displayName() + " is already assigned to the target operator"
+            "Customer " + customer.displayName() + " is already assigned to the target overseas agent"
         );
       }
       List<Long> shipmentIds = jdbcTemplate.query(
@@ -387,103 +404,62 @@ public class BusinessCustomerService {
           (rs, rowNumber) -> rs.getLong(1),
           customer.id()
       );
-      targets.add(new CustomerTransferTarget(customer, List.copyOf(shipmentIds)));
+      targets.add(new CustomerTransferTarget(customer, previousAgentId, List.copyOf(shipmentIds)));
     }
 
     LinkedHashSet<Long> affectedShipments = new LinkedHashSet<>();
     for (CustomerTransferTarget transfer : targets) affectedShipments.addAll(transfer.shipmentIds());
-    for (Long shipmentId : affectedShipments) lockShipment(shipmentId);
 
-    int shipmentOwnershipUpdated = 0;
     for (CustomerTransferTarget transfer : targets) {
       CustomerRecord customer = transfer.customer();
       jdbcTemplate.update(
-          "UPDATE cp_customers SET responsible_agent_id = ? WHERE id = ?",
+          """
+          INSERT INTO cp_oversea_agent_customers (
+            customer_id, oversea_agent_customer_id, assigned_by, assigned_at
+          ) VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
+          ON DUPLICATE KEY UPDATE
+            oversea_agent_customer_id = VALUES(oversea_agent_customer_id),
+            assigned_by = VALUES(assigned_by),
+            assigned_at = VALUES(assigned_at)
+          """,
+          customer.id(),
           target.id(),
-          customer.id()
+          actor.id()
       );
-      for (Long shipmentId : transfer.shipmentIds()) {
-        ensureTransferParticipant(shipmentId, target.id(), actor.id(), "CUSTOMER_OWNER");
-        shipmentOwnershipUpdated += jdbcTemplate.update(
-            "UPDATE cp_shipments SET responsible_agent_id = ? WHERE id = ? AND responsible_agent_id = ?",
-            target.id(),
-            shipmentId,
-            customer.responsibleAgentId()
-        );
-      }
       jdbcTemplate.update(
           """
-          INSERT INTO cp_customer_transfer_log (
-            batch_id, customer_id, from_agent_id, to_agent_id, initiated_by,
-            retained_previous_access, shipment_count, ip_address
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO cp_oversea_agent_customer_transfer_log (
+            batch_id, customer_id, from_oversea_agent_customer_id,
+            to_oversea_agent_customer_id, initiated_by, shipment_count, ip_address
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
           batchId,
           customer.id(),
-          customer.responsibleAgentId(),
+          transfer.previousAgentId(),
           target.id(),
           actor.id(),
-          retainPreviousAccess,
           transfer.shipmentIds().size(),
           ClientInfo.trim(ipAddress, 64)
       );
       audit(
           actor,
-          "TRANSFER_CUSTOMER",
+          "TRANSFER_CUSTOMER_TO_OVERSEA_AGENT",
           customer.id(),
           "Batch " + batchId + ": transferred " + customer.displayName()
-              + " from agent " + customer.responsibleAgentId() + " to " + target.id()
-              + "; retainedPreviousAccess=" + retainPreviousAccess,
+              + " from overseas agent " + transfer.previousAgentId()
+              + " to " + target.id() + " (" + target.displayName() + ")"
+              + "; internal business ownership retained by user " + customer.responsibleAgentId(),
           ipAddress
       );
-    }
-
-    LinkedHashSet<Long> previousAgents = new LinkedHashSet<>();
-    for (CustomerTransferTarget transfer : targets) {
-      previousAgents.add(transfer.customer().responsibleAgentId());
-    }
-    for (Long shipmentId : affectedShipments) {
-      List<Long> currentCustomerAgents = jdbcTemplate.query(
-          """
-          SELECT DISTINCT customer.responsible_agent_id
-          FROM cp_customer_shipment_access access
-          JOIN cp_customers customer ON customer.id = access.customer_id
-          WHERE access.shipment_id = ?
-          """,
-          (rs, rowNumber) -> rs.getLong(1),
-          shipmentId
-      );
-      for (Long currentAgentId : currentCustomerAgents) {
-        ensureTransferParticipant(
-            shipmentId, currentAgentId, actor.id(), "CUSTOMER_OWNER"
-        );
-      }
-      for (Long previousAgentId : previousAgents) {
-        if (shipmentStillBelongsToAgent(shipmentId, previousAgentId)) continue;
-        if (retainPreviousAccess) {
-          ensureTransferParticipant(shipmentId, previousAgentId, actor.id(), "TRANSFERRED_OWNER");
-        } else {
-          jdbcTemplate.update(
-              """
-              DELETE FROM cp_shipment_participants
-              WHERE shipment_id = ? AND user_id = ?
-                AND participant_role IN ('CUSTOMER_OWNER', 'TRANSFERRED_OWNER')
-              """,
-              shipmentId,
-              previousAgentId
-          );
-        }
-      }
     }
 
     Map<String, Object> response = new LinkedHashMap<>();
     response.put("batchId", batchId);
     response.put("transferred", targets.size());
-    response.put("shipmentsAffected", affectedShipments.size());
-    response.put("shipmentOwnershipUpdated", shipmentOwnershipUpdated);
-    response.put("targetAgentId", target.id());
+    response.put("relatedShipments", affectedShipments.size());
+    response.put("targetAgentId", target.publicId());
     response.put("targetAgentName", target.displayName());
-    response.put("retainedPreviousAccess", retainPreviousAccess);
+    response.put("businessHistoryRetained", true);
     return response;
   }
 
@@ -2589,74 +2565,24 @@ public class BusinessCustomerService {
     if (ids.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
   }
 
-  private TransferAgent requireTransferAgent(long agentId) {
+  private TransferAgent requireTransferAgent(String agentPublicId) {
     List<TransferAgent> agents = jdbcTemplate.query(
         """
-        SELECT id, username, display_name
-        FROM cp_users
-        WHERE id = ? AND role = 'BUSINESS' AND status = 'ACTIVE'
+        SELECT id, public_id, username, display_name
+        FROM cp_customers
+        WHERE public_id = ? AND party_role = 'OVERSEA_AGENT' AND status = 'ACTIVE'
         FOR UPDATE
         """,
         (rs, rowNumber) -> new TransferAgent(
-            rs.getLong("id"), rs.getString("username"), rs.getString("display_name")
+            rs.getLong("id"), rs.getString("public_id"),
+            rs.getString("username"), rs.getString("display_name")
         ),
-        agentId
+        agentPublicId.trim()
     );
     if (agents.isEmpty()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business operator is not active");
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target overseas agent is not active");
     }
     return agents.get(0);
-  }
-
-  private void ensureTransferParticipant(
-      long shipmentId,
-      long userId,
-      long grantedBy,
-      String participantRole
-  ) {
-    Integer existing = jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = ? AND user_id = ?",
-        Integer.class,
-        shipmentId,
-        userId
-    );
-    if (existing != null && existing > 0) return;
-    try {
-      jdbcTemplate.update(
-          """
-          INSERT INTO cp_shipment_participants (
-            shipment_id, user_id, participant_role, granted_by
-          ) VALUES (?, ?, ?, ?)
-          """,
-          shipmentId,
-          userId,
-          participantRole,
-          grantedBy
-      );
-    } catch (DuplicateKeyException ignored) {
-      // A concurrent grant is equivalent to the requested result.
-    }
-  }
-
-  private boolean shipmentStillBelongsToAgent(long shipmentId, long agentId) {
-    Integer count = jdbcTemplate.queryForObject(
-        """
-        SELECT COUNT(*)
-        FROM cp_customer_shipment_access access
-        JOIN cp_customers customer ON customer.id = access.customer_id
-        WHERE access.shipment_id = ? AND customer.responsible_agent_id = ?
-        """,
-        Integer.class,
-        shipmentId,
-        agentId
-    );
-    Long responsibleAgentId = jdbcTemplate.queryForObject(
-        "SELECT responsible_agent_id FROM cp_shipments WHERE id = ?",
-        Long.class,
-        shipmentId
-    );
-    return (count != null && count > 0)
-        || (responsibleAgentId != null && responsibleAgentId == agentId);
   }
 
   private void ensureShipmentRoleAvailable(long shipmentId, long customerId, String role) {
@@ -2983,8 +2909,12 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
-  private record TransferAgent(long id, String username, String displayName) {}
-  private record CustomerTransferTarget(CustomerRecord customer, List<Long> shipmentIds) {}
+  private record TransferAgent(long id, String publicId, String username, String displayName) {}
+  private record CustomerTransferTarget(
+      CustomerRecord customer,
+      Long previousAgentId,
+      List<Long> shipmentIds
+  ) {}
   private record RefreshableShipment(
       String shipmentPublicId,
       String carrier,

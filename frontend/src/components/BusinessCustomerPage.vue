@@ -101,7 +101,7 @@
                 class="customer-directory-table"
                 @selection-change="handleCustomerSelectionChange"
               >
-                <el-table-column type="selection" width="48" />
+                <el-table-column type="selection" width="48" :selectable="isTransferableCustomer" />
                 <el-table-column type="index" :label="t('customers.index')" width="60" />
                 <el-table-column :label="t('customers.displayName')" min-width="180">
                   <template #default="{ row }">
@@ -1048,9 +1048,6 @@
               />
             </el-select>
           </label>
-          <el-checkbox v-model="transferForm.retainPreviousAgentAccess">
-            {{ t("customers.retainPreviousAgentAccess") }}
-          </el-checkbox>
           <small class="customer-transfer-hint">{{ t("customers.transferPermissionHint") }}</small>
           <div class="customer-dialog-actions">
             <button type="button" @click="closeCustomerTransfer">{{ t("customers.cancel") }}</button>
@@ -1338,7 +1335,7 @@ const isEditMode = ref(false);
 const editingCustomerId = ref("");
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
-const transferForm = reactive({ targetAgentId: null, retainPreviousAgentAccess: false });
+const transferForm = reactive({ targetAgentId: null });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
 const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
@@ -1797,11 +1794,14 @@ function handleCustomerSelectionChange(rows) {
   selectedCustomerRows.value = Array.isArray(rows) ? rows : [];
 }
 
+function isTransferableCustomer(customer) {
+  return customer?.status === "ACTIVE" && ["SHIPPER", "CONSIGNEE"].includes(customer?.partyRole);
+}
+
 async function openCustomerTransfer() {
   if (!selectedCustomerRows.value.length || loadingTransferAgents.value) return;
   transferDialogOpen.value = true;
   transferForm.targetAgentId = null;
-  transferForm.retainPreviousAgentAccess = false;
   loadingTransferAgents.value = true;
   try {
     const response = await fetchCustomerTransferAgents();
@@ -1818,7 +1818,6 @@ function closeCustomerTransfer() {
   if (transferringCustomers.value) return;
   transferDialogOpen.value = false;
   transferForm.targetAgentId = null;
-  transferForm.retainPreviousAgentAccess = false;
 }
 
 async function submitCustomerTransfer() {
@@ -1827,19 +1826,17 @@ async function submitCustomerTransfer() {
   try {
     const response = await transferBusinessCustomers({
       customerIds: selectedCustomerRows.value.map((customer) => customer.id),
-      targetAgentId: transferForm.targetAgentId,
-      retainPreviousAgentAccess: transferForm.retainPreviousAgentAccess
+      targetAgentId: transferForm.targetAgentId
     });
     transferDialogOpen.value = false;
     transferForm.targetAgentId = null;
-    transferForm.retainPreviousAgentAccess = false;
     selectedCustomerRows.value = [];
     customerTableRef.value?.clearSelection?.();
     await Promise.all([loadCustomers(), loadAvailableShipments()]);
     showSuccess("customers.transferSuccess", {
       count: response?.transferred || 0,
       agent: response?.targetAgentName || "-",
-      shipments: response?.shipmentsAffected || 0
+      shipments: response?.relatedShipments || 0
     });
   } catch (error) {
     showError(error, "customers.transferFailed");
