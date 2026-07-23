@@ -646,6 +646,52 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_customer_handover_requests (
+          id BIGINT PRIMARY KEY AUTO_INCREMENT,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          from_business_user_id BIGINT NOT NULL,
+          to_business_user_id BIGINT NOT NULL,
+          requested_by BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+          reason VARCHAR(500) NOT NULL,
+          decision_note VARCHAR(500) NULL,
+          requested_ip VARCHAR(64) NULL,
+          requested_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          decided_by BIGINT NULL,
+          decided_at DATETIME(6) NULL,
+          INDEX idx_cp_customer_handover_incoming (
+            to_business_user_id, status, requested_at
+          ),
+          INDEX idx_cp_customer_handover_outgoing (
+            from_business_user_id, status, requested_at
+          ),
+          CONSTRAINT fk_cp_customer_handover_from_user
+            FOREIGN KEY (from_business_user_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_to_user
+            FOREIGN KEY (to_business_user_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_requested_by
+            FOREIGN KEY (requested_by) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_decided_by
+            FOREIGN KEY (decided_by) REFERENCES cp_users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_customer_handover_items (
+          request_id BIGINT NOT NULL,
+          customer_id BIGINT NOT NULL,
+          previous_owner_id BIGINT NOT NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (request_id, customer_id),
+          INDEX idx_cp_customer_handover_item_customer (customer_id, request_id),
+          CONSTRAINT fk_cp_customer_handover_item_request
+            FOREIGN KEY (request_id) REFERENCES cp_customer_handover_requests(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_customer_handover_item_customer
+            FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
+          CONSTRAINT fk_cp_customer_handover_item_previous_owner
+            FOREIGN KEY (previous_owner_id) REFERENCES cp_users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_customer_shipment_access (
           customer_id BIGINT NOT NULL,
           shipment_id BIGINT NOT NULL,

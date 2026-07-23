@@ -56,6 +56,9 @@
           <button :class="{ active: menuItem === 'customers' }" @click="navigateTo('customers')">
             <el-icon><User /></el-icon><span>{{ t("customers.tabCustomerManagement") }}</span>
           </button>
+          <button :class="{ active: menuItem === 'relationships' }" @click="navigateTo('relationships')">
+            <el-icon><Operation /></el-icon><span>{{ t("customers.tabCustomerRelationships") }}</span>
+          </button>
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
             <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
@@ -114,7 +117,7 @@
                     </div>
                   </template>
                 </el-table-column>
-                <el-table-column prop="clientCode" :label="t('customers.userCode')" width="120" />
+                <el-table-column prop="clientCode" :label="t('customers.clientCode')" width="150" />
                 <el-table-column prop="responsibleAgentDisplayName" :label="t('customers.responsibleAgent')" min-width="140" />
                 <el-table-column :label="t('customers.partyRole')" width="120">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
@@ -417,6 +420,11 @@
           </template>
           </div>
           </transition>
+        </div>
+
+        <!-- CUSTOMER RELATIONSHIPS -->
+        <div v-else-if="menuItem === 'relationships'" key="relationships" class="workspace-view">
+          <CustomerRelationshipPanel :current-user="props.currentUser" />
         </div>
 
         <!-- SHIPMENT MANAGEMENT -->
@@ -988,7 +996,11 @@
             <span>{{ t("customers.createPassword") }} <i class="required-star">*</i></span>
             <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
           </label>
-          <label><span>{{ t("customers.userCode") }} <i class="required-star">*</i></span><input v-model.trim="createForm.userCode" :placeholder="t('customers.userCodePlaceholder')" required /></label>
+          <label>
+            <span>{{ t("customers.clientCode") }} <i class="required-star">*</i></span>
+            <input v-model.trim="createForm.userCode" :placeholder="t('customers.clientCodePlaceholder')" required />
+            <small class="customer-code-unique-hint">{{ t("customers.customerCodeUniqueHint") }}</small>
+          </label>
           <label>
             <span>{{ t("customers.createPartyRole") }} <i class="required-star">*</i></span>
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
@@ -1203,6 +1215,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import CustomerRelationshipPanel from "./CustomerRelationshipPanel.vue";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
@@ -4831,6 +4844,11 @@ function showError(error, fallbackKey) {
   color: #64748b;
   line-height: 1.6;
   margin-top: -4px;
+}
+.customer-code-unique-hint {
+  color: #8a5b12;
+  font-size: 11px;
+  line-height: 1.5;
 }
 .customer-dialog-form input:focus,
 .customer-dialog-form textarea:focus {

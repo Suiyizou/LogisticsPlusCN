@@ -22,6 +22,28 @@ export function transferBusinessCustomers(payload) {
   return request("/business/customers/transfer", { method: "POST", body: payload });
 }
 
+export function fetchCustomerRelationships() {
+  return request("/business/customer-relationships");
+}
+
+export function fetchCustomerHandoverRequests() {
+  return request("/business/customer-relationships/handover-requests");
+}
+
+export function createCustomerHandoverRequest(payload) {
+  return request("/business/customer-relationships/handover-requests", {
+    method: "POST",
+    body: payload
+  });
+}
+
+export function decideCustomerHandoverRequest(requestId, payload) {
+  return request(
+    `/business/customer-relationships/handover-requests/${encodeURIComponent(requestId)}/decision`,
+    { method: "POST", body: payload }
+  );
+}
+
 export function updateBusinessCustomer(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}`, {
     method: "PATCH",
