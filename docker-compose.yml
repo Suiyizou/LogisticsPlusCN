@@ -139,6 +139,8 @@ services:
 
 volumes:
   mysql-data:
+    external: true
+    name: mysql-data
   workspace-files:
   backend-secrets:
 
