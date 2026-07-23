@@ -246,6 +246,24 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void acceptsLegacyOverseaAgentCustomerRoleAliasWithoutPersistingASecondEnumValue() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "legacy-agent", "SecurePass!23", "Legacy External Agent", "OVERSEA_AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(created.get("partyRole")).isEqualTo("AGENT");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT party_role FROM cp_customers WHERE public_id = ?",
+        String.class,
+        created.get("id")
+    )).isEqualTo("AGENT");
+  }
+
+  @Test
   void transfersCustomerShipmentAndFileAuthorityInOneAuditedOperation() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(

@@ -217,7 +217,6 @@
                         <el-select v-model="editForm.partyRole" class="business-select" popper-class="business-select-popper">
                           <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                           <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-                          <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
                         </el-select>
                       </el-form-item>
                     </el-col>
@@ -910,7 +909,6 @@
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
-              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
             </el-select>
           </label>
           <label>

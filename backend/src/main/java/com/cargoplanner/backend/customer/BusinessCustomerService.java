@@ -2603,13 +2603,17 @@ public class BusinessCustomerService {
 
   private String normalizePartyRole(String value, String fallback) {
     String normalized = normalizeCode(value, fallback);
+    // OVERSEA_AGENT is the file-visibility/UI name for the internal AGENT party.
+    // Accept it as a compatibility alias so older clients do not fail while the
+    // customer UI is narrowed to actual customer identities (shipper/consignee).
+    if ("OVERSEA_AGENT".equals(normalized)) normalized = "AGENT";
     if (normalized == null
         || (!"AGENT".equals(normalized)
         && !"SHIPPER".equals(normalized)
         && !"CONSIGNEE".equals(normalized))) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Customer party role must be AGENT, SHIPPER, or CONSIGNEE"
+          "Customer party role must be AGENT/OVERSEA_AGENT, SHIPPER, or CONSIGNEE"
       );
     }
     return normalized;
