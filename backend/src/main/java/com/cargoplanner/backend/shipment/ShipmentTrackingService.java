@@ -510,7 +510,7 @@ public class ShipmentTrackingService {
     );
     response.put("cacheSource", "MYSQL_ASSIGNED");
     response.put("fileAccess", true);
-    response.put("customerReadOnly", !isOverseaAgent(customer));
+    response.put("customerReadOnly", true);
     return response;
   }
 
@@ -534,9 +534,22 @@ public class ShipmentTrackingService {
       int requestedPageSize,
       boolean requestedFollowingOnly
   ) {
+    return listAssignedSnapshots(
+        customer, requestedPage, requestedPageSize, requestedFollowingOnly, null
+    );
+  }
+
+  public ObjectNode listAssignedSnapshots(
+      CustomerPrincipal customer,
+      int requestedPage,
+      int requestedPageSize,
+      boolean requestedFollowingOnly,
+      String requestedCustomerPublicId
+  ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
+    requireRequestedCustomerScope(customer, requestedCustomerPublicId);
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
     boolean overseaAgent = isOverseaAgent(customer);
@@ -678,8 +691,6 @@ public class ShipmentTrackingService {
         ObjectNode customerItem = boundCustomers.addObject();
         customerItem.put("id", assignedCustomer.publicId());
         customerItem.put("displayName", assignedCustomer.displayName());
-        customerItem.put("username", assignedCustomer.username());
-        customerItem.put("clientCode", assignedCustomer.clientCode());
         customerItem.put("partyRole", assignedCustomer.partyRole());
       }
       boolean available = cached.snapshotJson() != null
@@ -696,12 +707,19 @@ public class ShipmentTrackingService {
     response.put("page", page);
     response.put("pageSize", pageSize);
     response.put("totalPages", totalPages);
-    response.put("customerReadOnly", !overseaAgent);
+    response.put("customerReadOnly", true);
     response.put("followingOnly", followingOnly);
-    response.put(
-        "overseaAgentManagement",
-        overseaAgent
-    );
+    response.put("overseaAgentManagement", overseaAgent);
+    if (overseaAgent && customer.scopeCustomerPublicId() != null) {
+      ObjectNode scope = response.putObject("scopeCustomer");
+      scope.put("id", customer.scopeCustomerPublicId());
+      scope.put("displayName", customer.scopeCustomerDisplayName());
+      scope.put("partyRole", customer.scopeCustomerPartyRole());
+    }
+    ObjectNode capabilities = response.putObject("capabilities");
+    capabilities.put("editShipmentMasterData", false);
+    capabilities.put("refreshTracking", overseaAgent);
+    capabilities.put("manageFollowing", overseaAgent);
     return response;
   }
 
@@ -710,43 +728,13 @@ public class ShipmentTrackingService {
       CustomerShipmentUpdateRequest request,
       CustomerPrincipal customer
   ) {
-    if (request == null) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment update is required");
+    if (customer == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
-    AgentShipmentTarget shipment = requireOverseaAgentShipment(
-        shipmentPublicId, customer, false
+    throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        "Shipment master data can only be changed by the responsible business operator"
     );
-    String note = request.note() == null
-        ? shipment.note()
-        : cleanManagedText(request.note(), 2000, "Shipment note");
-    String forwarderJobNumber = request.forwarderJobNumber() == null
-        ? shipment.forwarderJobNumber()
-        : cleanManagedText(request.forwarderJobNumber(), 160, "Forwarder job number");
-    String clientPoNumber = request.clientPoNumber() == null
-        ? shipment.clientPoNumber()
-        : cleanManagedText(request.clientPoNumber(), 160, "Client PO number");
-    String clientNameCode = request.clientNameCode() == null
-        ? shipment.clientNameCode()
-        : cleanManagedText(request.clientNameCode(), 160, "Client name/code");
-    Instant now = clock.instant();
-    transactionTemplate.executeWithoutResult(status -> jdbcTemplate.update(
-        """
-        UPDATE cp_shipments
-        SET business_note = ?, job_number = ?, client_po_number = ?,
-            client_name_code = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        note, forwarderJobNumber, clientPoNumber, clientNameCode,
-        Timestamp.from(now), shipment.shipmentId()
-    ));
-    ObjectNode response = objectMapper.createObjectNode();
-    response.put("shipmentId", shipment.shipmentPublicId());
-    response.put("note", note);
-    response.put("forwarderJobNumber", forwarderJobNumber);
-    response.put("clientPoNumber", clientPoNumber);
-    response.put("clientNameCode", clientNameCode);
-    response.put("updatedAt", now.toString());
-    return response;
   }
 
   public ObjectNode setOverseaAgentShipmentFollow(
@@ -822,12 +810,14 @@ public class ShipmentTrackingService {
     );
     List<Object> parameters = new ArrayList<>();
     records.forEach(record -> parameters.add(record.cached().shipmentId()));
-    if (!overseaAgent) parameters.add(customer.id());
-    String customerFilter = overseaAgent ? "" : " AND a.customer_id = ?";
+    long visibleCustomerId = overseaAgent
+        ? (customer.scopeCustomerId() == null ? -1L : customer.scopeCustomerId())
+        : customer.id();
+    parameters.add(visibleCustomerId);
+    String customerFilter = " AND a.customer_id = ?";
     jdbcTemplate.query(
         ("""
-        SELECT DISTINCT a.shipment_id, c.public_id, c.display_name, c.username,
-               c.client_code, c.party_role
+        SELECT DISTINCT a.shipment_id, c.public_id, c.display_name, c.party_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id AND c.status = 'ACTIVE'
         WHERE a.shipment_id IN (%s)
@@ -840,8 +830,6 @@ public class ShipmentTrackingService {
               .add(new AssignedCustomer(
                   rs.getString("public_id"),
                   rs.getString("display_name"),
-                  rs.getString("username"),
-                  rs.getString("client_code"),
                   rs.getString("party_role")
               ));
         },
@@ -917,6 +905,25 @@ public class ShipmentTrackingService {
     return customer != null && customer.isOverseaAgent();
   }
 
+  private void requireRequestedCustomerScope(
+      CustomerPrincipal customer,
+      String requestedCustomerPublicId
+  ) {
+    String requested = requestedCustomerPublicId == null
+        ? ""
+        : requestedCustomerPublicId.trim();
+    if (requested.isBlank()) return;
+    String allowed = isOverseaAgent(customer)
+        ? customer.scopeCustomerPublicId()
+        : customer.publicId();
+    if (allowed == null || !allowed.equals(requested)) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "The requested customer is outside the signed-in customer scope"
+      );
+    }
+  }
+
   private CustomerAccessQuery customerAccessQuery(
       CustomerPrincipal customer,
       String accessAlias
@@ -962,17 +969,6 @@ public class ShipmentTrackingService {
         shipmentId
     );
     return values.isEmpty() ? new ImportedBusinessFields(null, null, null, null) : values.get(0);
-  }
-
-  private String cleanManagedText(String value, int limit, String label) {
-    String normalized = value == null ? null : value.trim();
-    if (normalized != null && normalized.length() > limit) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          label + " must not exceed " + limit + " characters"
-      );
-    }
-    return normalized == null || normalized.isBlank() ? null : normalized;
   }
 
   /** Runs a trusted force refresh for the background scheduler. */
@@ -2667,8 +2663,6 @@ public class ShipmentTrackingService {
   private record AssignedCustomer(
       String publicId,
       String displayName,
-      String username,
-      String clientCode,
       String partyRole
   ) {}
 

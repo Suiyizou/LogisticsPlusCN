@@ -10730,12 +10730,6 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   color: #60768c;
 }
 
-.agent-row-edit {
-  border-color: #8ebff1 !important;
-  color: #1769bb;
-  background: #f3f9ff !important;
-}
-
 .agent-row-update {
   border-color: #edc882 !important;
   color: #a66a0b;
@@ -10747,61 +10741,6 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   cursor: wait;
 }
 
-.agent-shipment-edit-dialog {
-  width: min(720px, calc(100vw - 32px));
-}
-
-.agent-shipment-edit-dialog header > div {
-  display: grid;
-  gap: 5px;
-}
-
-.agent-shipment-edit-dialog header p {
-  margin: 0;
-  color: #74899e;
-  font-size: 12px;
-}
-
-.agent-shipment-edit-grid {
-  display: grid;
-  padding: 22px 24px;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.agent-shipment-edit-grid label {
-  display: grid;
-  gap: 7px;
-  color: #496179;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.agent-shipment-edit-grid input,
-.agent-shipment-edit-grid textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cdd9e7;
-  border-radius: 6px;
-  color: #18324c;
-  background: #fff;
-  font: inherit;
-}
-
-.agent-shipment-edit-grid input {
-  min-height: 40px;
-  padding: 0 11px;
-}
-
-.agent-shipment-edit-grid textarea {
-  padding: 10px 11px;
-  resize: vertical;
-}
-
-.agent-shipment-edit-note {
-  grid-column: 1 / -1;
-}
-
 @media (max-width: 780px) {
   .agent-following-filter {
     flex: 1 1 auto;
@@ -10811,11 +10750,4 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
     justify-content: flex-start;
   }
 
-  .agent-shipment-edit-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-shipment-edit-note {
-    grid-column: auto;
-  }
 }

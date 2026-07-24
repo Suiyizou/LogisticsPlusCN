@@ -41,14 +41,6 @@ const historyPageInfo = document.querySelector("#history-page-info");
 const historyPageSizeSelect = document.querySelector("#history-page-size");
 const agentShipmentTableHead = document.querySelector("#agent-shipment-table-head");
 const trackingNavItem = document.querySelector("#tracking-nav-item");
-const agentShipmentEditDialog = document.querySelector("#agent-shipment-edit-dialog");
-const agentShipmentEditForm = document.querySelector("#agent-shipment-edit-form");
-const agentShipmentEditReference = document.querySelector("#agent-shipment-edit-reference");
-const agentEditJobNumber = document.querySelector("#agent-edit-job-number");
-const agentEditClientPo = document.querySelector("#agent-edit-client-po");
-const agentEditClientCode = document.querySelector("#agent-edit-client-code");
-const agentEditNote = document.querySelector("#agent-edit-note");
-const agentShipmentEditSubmit = document.querySelector("#agent-shipment-edit-submit");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -335,8 +327,8 @@ const MESSAGES = {
     "overview.description": "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
-    "overview.agentTitle": "Manage every shipment for your linked customers.",
-    "overview.agentDescription": "Filter by customer, choose the shipments you are following, and refresh their latest movement whenever daily work requires it.",
+    "overview.agentTitle": "Manage shipments for the current service customer.",
+    "overview.agentDescription": "Choose the shipments you are following and refresh their latest movement whenever daily work requires it.",
     "overview.agentStartTracking": "Open shipment query",
     "overview.savedSearches": "Saved searches",
     "overview.carriersUsed": "Carriers used",
@@ -363,7 +355,7 @@ const MESSAGES = {
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest shipment snapshots stored in the database",
     "history.agentTitle": "Assigned shipment management",
-    "history.agentSubtitle": "Shipments directly assigned to this overseas-agent account by a business representative",
+    "history.agentSubtitle": "Shipments authorized for this overseas agent under the current service customer",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
@@ -383,6 +375,7 @@ const MESSAGES = {
     "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
     "history.customerFilter": "Customer",
     "history.customerFilterLabel": "Filter shipments by customer",
+    "history.currentCustomer": "Current customer",
     "agent.followingOnly": "Following only",
     "agent.showAll": "Show all",
     "agent.follow": "Follow",
@@ -393,23 +386,17 @@ const MESSAGES = {
     "agent.followFailed": "Follow-up selection could not be saved: {message}",
     "agent.lastAgentUpdate": "Agent update {time}",
     "agent.emptyTitle": "No shipments have been assigned",
-    "agent.emptyDescription": "Shipments assigned by your business representative will appear here immediately.",
+    "agent.emptyDescription": "Authorized shipments for the current service customer will appear here.",
     "agent.columnIndex": "No.",
     "agent.columnReference": "Shipment No.",
     "agent.columnCarrier": "Carrier",
-    "agent.columnCustomers": "Customers",
+    "agent.columnCustomers": "Service customer",
     "agent.columnStatus": "Status",
     "agent.columnNote": "Note",
     "agent.columnUpdated": "Last updated",
     "agent.columnActions": "Actions",
     "agent.view": "View",
-    "agent.edit": "Edit",
-    "agent.editKicker": "OVERSEAS AGENT WORKSPACE",
-    "agent.editTitle": "Edit shipment information",
-    "agent.saveChanges": "Save changes",
-    "agent.saving": "Saving...",
-    "agent.editFailed": "Shipment information could not be saved: {message}",
-    "agent.noCustomer": "Customer pending assignment",
+    "agent.noCustomer": "Service customer unavailable",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
@@ -834,8 +821,8 @@ const MESSAGES = {
     "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
     "overview.agentKicker": "海外代理业务台",
-    "overview.agentTitle": "统一管理名下客户的全部票单。",
-    "overview.agentDescription": "可按客户筛选、自由选择需要跟进的票单，并根据每日业务需要主动更新最新运输进度。",
+    "overview.agentTitle": "管理当前服务客户的授权票单。",
+    "overview.agentDescription": "可选择需要跟进的票单，并根据每日业务需要主动更新最新运输进度。",
     "overview.agentStartTracking": "打开票单查询",
     "overview.savedSearches": "已保存查询",
     "overview.carriersUsed": "已使用船司",
@@ -862,7 +849,7 @@ const MESSAGES = {
     "history.title": "运输任务",
     "history.subtitle": "数据库保存的最新货运快照",
     "history.agentTitle": "已分配票单管理",
-    "history.agentSubtitle": "业务员直接分配给当前海外代理账户的票单",
+    "history.agentSubtitle": "当前服务客户下授权给该海外代理处理的票单",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
@@ -882,6 +869,7 @@ const MESSAGES = {
     "history.searchEmptyDescription": "请尝试其他运输单号、Job Number、客户、港口或状态。",
     "history.customerFilter": "客户",
     "history.customerFilterLabel": "按客户筛选票单",
+    "history.currentCustomer": "当前客户",
     "history.allCustomers": "全部客户",
     "agent.followingOnly": "只看跟进",
     "agent.showAll": "查看全部",
@@ -893,23 +881,17 @@ const MESSAGES = {
     "agent.followFailed": "无法保存跟进选择：{message}",
     "agent.lastAgentUpdate": "代理更新于 {time}",
     "agent.emptyTitle": "业务员尚未分配票单",
-    "agent.emptyDescription": "业务员分配给当前海外代理的票单会立即显示在这里，无需另外发布。",
+    "agent.emptyDescription": "当前服务客户下授权给该海外代理的票单会显示在这里。",
     "agent.columnIndex": "序号",
     "agent.columnReference": "票单号",
     "agent.columnCarrier": "船司",
-    "agent.columnCustomers": "关联客户",
+    "agent.columnCustomers": "服务客户",
     "agent.columnStatus": "追踪状态",
     "agent.columnNote": "备注",
     "agent.columnUpdated": "最近更新",
     "agent.columnActions": "操作",
     "agent.view": "查看",
-    "agent.edit": "编辑",
-    "agent.editKicker": "海外代理业务台",
-    "agent.editTitle": "编辑票单信息",
-    "agent.saveChanges": "保存修改",
-    "agent.saving": "保存中…",
-    "agent.editFailed": "票单信息保存失败：{message}",
-    "agent.noCustomer": "待业务员补充客户",
+    "agent.noCustomer": "服务客户信息不可用",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1422,8 +1404,8 @@ let historyPage = 1;
 let historyPageSize = 20;
 let historyTotal = 0;
 let historyTotalPages = 0;
+let historyScopeCustomer = null;
 let agentShipmentDetailOpen = false;
-let agentEditingShipment = null;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
@@ -1461,6 +1443,7 @@ function resetHistoryPagination() {
   historyPage = 1;
   historyTotal = 0;
   historyTotalPages = 0;
+  historyScopeCustomer = null;
 }
 
 function t(key, variables = {}) {
@@ -4148,6 +4131,7 @@ async function loadCustomerAssignedHistory() {
   const session = readFileSession();
   if (session.kind !== "CUSTOMER" || !session.token) {
     customerAssignedHistory = [];
+    historyScopeCustomer = null;
     return;
   }
   historyLoadingState = true;
@@ -4158,6 +4142,14 @@ async function loadCustomerAssignedHistory() {
       pageSize: String(historyPageSize),
       followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session))
     });
+    const scopeCustomerId = String(
+      session.principal?.scopeCustomerId
+      ?? session.storedSession?.customer?.scopeCustomerId
+      ?? ""
+    ).trim();
+    if (isOverseaAgentSession(session) && scopeCustomerId) {
+      query.set("customerId", scopeCustomerId);
+    }
     const response = await fetch(`/api/customer/shipments?${query}`, {
       headers: { "X-Customer-Token": session.token }
     });
@@ -4176,6 +4168,9 @@ async function loadCustomerAssignedHistory() {
     historyTotal = Number(payload?.total || 0);
     historyTotalPages = Number(payload?.totalPages || 0);
     const agentManagement = payload?.overseaAgentManagement === true;
+    historyScopeCustomer = agentManagement
+      ? normalizeHistoryBoundCustomers([payload?.scopeCustomer])[0] || null
+      : null;
     customerAssignedHistory = items
       .filter((item) => agentManagement
         ? Boolean(item?.referenceNo || item?.shipmentId)
@@ -4265,6 +4260,7 @@ async function loadCustomerAssignedHistory() {
 
 async function loadInternalTrackedHistory() {
   const session = readFileSession();
+  historyScopeCustomer = null;
   if (session.kind !== "INTERNAL" || !session.token) {
     internalTrackedHistory = [];
     return;
@@ -6303,8 +6299,9 @@ function normalizeHistoryBoundCustomers(customers) {
 }
 
 function historyCustomerLabel(customer) {
-  const name = customer.displayName || customer.username || customer.id;
-  const details = [customer.clientCode, customer.username]
+  const name = customer.displayName || customer.clientCode || customer.id;
+  const role = logisticsPartyRoleLabel(customer.partyRole);
+  const details = [customer.clientCode, role]
     .filter((value, index, values) => value && value !== name && values.indexOf(value) === index);
   return details.length ? `${name} · ${details.join(" · ")}` : name;
 }
@@ -6320,9 +6317,36 @@ function renderHistoryCustomerFilter(entries, session) {
       customers.set(customer.id, current);
     }
   }
+  const overseaAgent = isOverseaAgentSession(session);
+  if (overseaAgent && historyScopeCustomer?.id) {
+    customers.set(historyScopeCustomer.id, {
+      ...(customers.get(historyScopeCustomer.id) || historyScopeCustomer),
+      shipmentCount: historyTotal
+    });
+  }
   const options = [...customers.values()].sort((left, right) =>
     historyCustomerLabel(left).localeCompare(historyCustomerLabel(right), currentLanguage)
   );
+  const filterLabel = historyCustomerFilterWrap.querySelector("span");
+  if (filterLabel) {
+    const key = overseaAgent ? "history.currentCustomer" : "history.customerFilter";
+    filterLabel.dataset.i18n = key;
+    filterLabel.textContent = t(key);
+  }
+  if (overseaAgent) {
+    const currentCustomer = options[0];
+    const currentOption = document.createElement("option");
+    currentOption.value = currentCustomer?.id || "";
+    currentOption.textContent = currentCustomer
+      ? `${historyCustomerLabel(currentCustomer)} (${currentCustomer.shipmentCount})`
+      : t("agent.noCustomer");
+    historyCustomerFilterSelect.replaceChildren(currentOption);
+    historyCustomerFilterSelect.value = currentOption.value;
+    historyCustomerFilterSelect.disabled = true;
+    historyCustomerFilterWrap.hidden = options.length === 0;
+    return;
+  }
+  historyCustomerFilterSelect.disabled = false;
   if (historyCustomerFilter && !customers.has(historyCustomerFilter)) historyCustomerFilter = "";
   const allCustomers = document.createElement("option");
   allCustomers.value = "";
@@ -6335,9 +6359,7 @@ function renderHistoryCustomerFilter(entries, session) {
   });
   historyCustomerFilterSelect.replaceChildren(allCustomers, ...customerOptions);
   historyCustomerFilterSelect.value = historyCustomerFilter;
-  historyCustomerFilterWrap.hidden =
-    (session.kind !== "INTERNAL" && !isOverseaAgentSession(session))
-    || options.length === 0;
+  historyCustomerFilterWrap.hidden = session.kind !== "INTERNAL" || options.length === 0;
 }
 
 function historyMatchesCustomer(entry, customerId) {
@@ -6468,77 +6490,6 @@ function agentShipmentCustomers(entry) {
     .filter((customer) => String(customer.partyRole || "").toUpperCase() !== "OVERSEA_AGENT");
 }
 
-function openAgentShipmentEditor(entry) {
-  if (!isOverseaAgentSession() || !entry?.shipmentId || !agentShipmentEditDialog) return;
-  const business = businessReferencesForSnapshot(entry.snapshot);
-  agentEditingShipment = entry;
-  agentShipmentEditReference.textContent = [
-    entry.query?.number,
-    entry.query?.carrier
-  ].filter(Boolean).join(" · ");
-  agentEditJobNumber.value = business.forwarderJobNumber || "";
-  agentEditClientPo.value = business.clientPoNumber || "";
-  agentEditClientCode.value = business.clientNameCode || "";
-  agentEditNote.value = entry.note || "";
-  agentShipmentEditDialog.showModal();
-}
-
-function applyAgentShipmentEdit(entry, payload) {
-  if (!entry?.snapshot) return;
-  entry.snapshot.references ??= {};
-  entry.snapshot.references.business ??= {};
-  entry.snapshot.references.business.forwarderJobNumber =
-    payload?.forwarderJobNumber || "";
-  entry.snapshot.references.business.clientPoNumber = payload?.clientPoNumber || "";
-  entry.snapshot.references.business.clientNameCode = payload?.clientNameCode || "";
-  entry.note = payload?.note || "";
-  entry.updatedAt = payload?.updatedAt || new Date().toISOString();
-}
-
-async function saveAgentShipmentEdit() {
-  const session = readFileSession();
-  const entry = agentEditingShipment;
-  if (!isOverseaAgentSession(session) || !entry?.shipmentId) return;
-  clearError();
-  agentShipmentEditSubmit.disabled = true;
-  agentShipmentEditSubmit.textContent = t("agent.saving");
-  try {
-    const response = await fetch(
-      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Customer-Token": session.token
-        },
-        body: JSON.stringify({
-          note: agentEditNote.value,
-          forwarderJobNumber: agentEditJobNumber.value,
-          clientPoNumber: agentEditClientPo.value,
-          clientNameCode: agentEditClientCode.value
-        })
-      }
-    );
-    const payload = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      clearFileSession(session, { expired: true });
-      return;
-    }
-    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
-    applyAgentShipmentEdit(entry, payload);
-    agentShipmentEditDialog.close();
-    agentEditingShipment = null;
-    renderHistory();
-  } catch (error) {
-    showError(t("agent.editFailed", {
-      message: error?.message || t("error.generic")
-    }));
-  } finally {
-    agentShipmentEditSubmit.disabled = false;
-    agentShipmentEditSubmit.textContent = t("agent.saveChanges");
-  }
-}
-
 function renderAgentShipmentManagement(history) {
   history.forEach((entry, index) => {
     const row = document.createElement("article");
@@ -6610,18 +6561,13 @@ function renderAgentShipmentManagement(history) {
     view.className = "agent-row-view";
     view.textContent = t("agent.view");
     view.addEventListener("click", () => openHistoryEntry(entry));
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "agent-row-edit";
-    edit.textContent = t("agent.edit");
-    edit.addEventListener("click", () => openAgentShipmentEditor(entry));
     const update = document.createElement("button");
     update.type = "button";
     update.className = "agent-row-update";
     update.disabled = entry.refreshing === true;
     update.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
     update.addEventListener("click", () => void refreshOverseaAgentShipment(entry));
-    actions.append(view, edit, update);
+    actions.append(view, update);
 
     follow.addEventListener("click", () => {
       void setOverseaAgentShipmentFollowing(entry, !entry.followed);
@@ -7999,11 +7945,6 @@ historyFollowingFilter?.addEventListener("click", async () => {
   historyFollowingOnly = !historyFollowingOnly;
   historyPage = 1;
   await loadCustomerAssignedHistory();
-});
-
-agentShipmentEditForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  void saveAgentShipmentEdit();
 });
 
 async function loadCurrentHistoryPage() {

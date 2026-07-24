@@ -372,8 +372,10 @@ class ShipmentTrackingServiceTest {
   @Test
   void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
     jdbcTemplate.update(
-        "INSERT INTO cp_customers (created_by, responsible_agent_id, status, client_code, party_role) "
-            + "VALUES (2, 2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"
+        "INSERT INTO cp_customers (public_id, username, display_name, created_by, "
+            + "responsible_agent_id, status, client_code, party_role) "
+            + "VALUES ('customer-public-id', 'file-customer', 'File Customer', "
+            + "2, 2, 'ACTIVE', 'FILE-CODE', 'SHIPPER')"
     );
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO",
@@ -552,28 +554,41 @@ class ShipmentTrackingServiceTest {
     ObjectNode agentShipments = service.listAssignedSnapshots(overseaAgent, 1, 5);
     assertThat(agentShipments.path("total").asLong()).isEqualTo(1L);
     assertThat(agentShipments.path("overseaAgentManagement").asBoolean()).isTrue();
-    assertThat(agentShipments.path("customerReadOnly").asBoolean()).isFalse();
+    assertThat(agentShipments.path("customerReadOnly").asBoolean()).isTrue();
+    assertThat(agentShipments.path("capabilities").path("editShipmentMasterData").asBoolean())
+        .isFalse();
+    assertThat(agentShipments.path("capabilities").path("refreshTracking").asBoolean())
+        .isTrue();
+    assertThat(agentShipments.path("scopeCustomer").path("id").asText())
+        .isEqualTo("customer-public-id");
     assertThat(agentShipments.path("items").get(0).path("publicationStatus").asText())
         .isEqualTo("PUBLISHED");
     assertThat(agentShipments.path("items").get(0).path("followed").asBoolean()).isFalse();
-    assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(2);
+    JsonNode visibleCustomer = agentShipments.path("items").get(0)
+        .path("boundCustomers").get(0);
+    assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(1);
+    assertThat(visibleCustomer.path("id").asText()).isEqualTo("customer-public-id");
+    assertThat(visibleCustomer.has("username")).isFalse();
+    assertThat(visibleCustomer.has("clientCode")).isFalse();
+    assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
+        .path("customerReadOnly").asBoolean()).isTrue();
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
         .path("shipmentId").asText()).isEqualTo(shipmentId);
 
-    ObjectNode agentEdit = service.updateOverseaAgentAssignedShipment(
+    assertThatThrownBy(() -> service.updateOverseaAgentAssignedShipment(
         shipmentId,
         new CustomerShipmentUpdateRequest(
             "Oversea follow-up", "JOB-OVERSEA", "PO-OVERSEA", "CLIENT-OVERSEA"
         ),
         overseaAgent
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
-    assertThat(agentEdit.path("note").asText()).isEqualTo("Oversea follow-up");
-    assertThat(agentEdit.path("forwarderJobNumber").asText()).isEqualTo("JOB-OVERSEA");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT job_number FROM cp_shipments WHERE public_id = ?",
         String.class,
         shipmentId
-    )).isEqualTo("JOB-OVERSEA");
+    )).isEqualTo("JSH2606003");
     assertThatThrownBy(() -> service.updateOverseaAgentAssignedShipment(
         shipmentId,
         new CustomerShipmentUpdateRequest("No access", null, null, null),
@@ -744,6 +759,10 @@ class ShipmentTrackingServiceTest {
         service.listAssignedSnapshots(customer101Agent, 1, 20);
 
     assertThat(customer101Shipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(customer101Shipments.path("items").get(0).path("boundCustomers").size())
+        .isEqualTo(1);
+    assertThat(customer101Shipments.path("items").get(0).path("boundCustomers").get(0)
+        .path("id").asText()).isEqualTo("customer-101");
     assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
         .containsExactly("linked-shipment-1");
     assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
@@ -756,6 +775,14 @@ class ShipmentTrackingServiceTest {
     ObjectNode customer102Shipments =
         service.listAssignedSnapshots(customer102Agent, 1, 20);
     assertThat(customer102Shipments.path("total").asLong()).isEqualTo(2L);
+    assertThat(service.listAssignedSnapshots(
+        customer102Agent, 1, 20, false, "customer-102"
+    ).path("total").asLong()).isEqualTo(2L);
+    assertThatThrownBy(() -> service.listAssignedSnapshots(
+        customer102Agent, 1, 20, false, "customer-101"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
     assertThat(customer102Shipments.path("items").findValuesAsText("shipmentId"))
         .containsExactlyInAnyOrder("linked-shipment-1", "linked-shipment-2");
 

@@ -228,7 +228,7 @@
                   <span data-i18n="agent.columnIndex">No.</span>
                   <span data-i18n="agent.columnReference">Shipment No.</span>
                   <span data-i18n="agent.columnCarrier">Carrier</span>
-                  <span data-i18n="agent.columnCustomers">Customers</span>
+                  <span data-i18n="agent.columnCustomers">Service customer</span>
                   <span data-i18n="agent.columnStatus">Status</span>
                   <span data-i18n="agent.columnNote">Note</span>
                   <span data-i18n="agent.columnUpdated">Last updated</span>
@@ -1102,41 +1102,6 @@
         <footer>
           <button type="button" class="secondary-dialog-button" data-dialog-close="document-editor-dialog" data-i18n="common.cancel">Cancel</button>
           <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
-        </footer>
-      </form>
-    </dialog>
-
-    <dialog class="supplement-dialog agent-shipment-edit-dialog" id="agent-shipment-edit-dialog">
-      <form id="agent-shipment-edit-form">
-        <header>
-          <div>
-            <small data-i18n="agent.editKicker">OVERSEAS AGENT WORKSPACE</small>
-            <strong data-i18n="agent.editTitle">Edit shipment information</strong>
-            <p id="agent-shipment-edit-reference"></p>
-          </div>
-          <button type="button" class="dialog-close" data-dialog-close="agent-shipment-edit-dialog" aria-label="Close">×</button>
-        </header>
-        <div class="agent-shipment-edit-grid">
-          <label>
-            <span data-i18n="business.forwarderJob">Forwarder job number</span>
-            <input id="agent-edit-job-number" maxlength="160" autocomplete="off" />
-          </label>
-          <label>
-            <span data-i18n="business.clientPo">Client PO number</span>
-            <input id="agent-edit-client-po" maxlength="160" autocomplete="off" />
-          </label>
-          <label>
-            <span data-i18n="business.clientCode">Client name / code</span>
-            <input id="agent-edit-client-code" maxlength="160" autocomplete="off" />
-          </label>
-          <label class="agent-shipment-edit-note">
-            <span data-i18n="agent.columnNote">Note</span>
-            <textarea id="agent-edit-note" maxlength="2000" rows="4"></textarea>
-          </label>
-        </div>
-        <footer>
-          <button type="button" class="secondary-dialog-button" data-dialog-close="agent-shipment-edit-dialog" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" class="primary-dialog-button" id="agent-shipment-edit-submit" data-i18n="agent.saveChanges">Save changes</button>
         </footer>
       </form>
     </dialog>

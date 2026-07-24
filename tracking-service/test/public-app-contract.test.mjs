@@ -244,14 +244,12 @@ test("business overview de-duplicates shipments and filters them by assigned cus
 test("overseas-agent customers receive a direct-assignment shipment management workspace", () => {
   assert.match(indexSource, /id="history-following-filter"/);
   assert.match(indexSource, /id="agent-shipment-table-head"/);
-  assert.match(indexSource, /id="agent-shipment-edit-dialog"/);
+  assert.doesNotMatch(indexSource, /id="agent-shipment-edit-dialog"/);
   assert.match(indexSource, /id="tracking-nav-item"/);
   assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
   assert.match(appSource, /function renderAgentShipmentManagement/);
-  assert.match(
-    appSource,
-    /method: "PATCH"[\s\S]*?forwarderJobNumber:[\s\S]*?clientPoNumber:[\s\S]*?clientNameCode:/
-  );
+  assert.doesNotMatch(appSource, /function saveAgentShipmentEdit/);
+  assert.doesNotMatch(appSource, /agent-row-edit/);
   assert.match(
     appSource,
     /function setOverseaAgentShipmentFollowing[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/follow/
@@ -262,11 +260,19 @@ test("overseas-agent customers receive a direct-assignment shipment management w
   );
   assert.match(
     appSource,
-    /historyCustomerFilterWrap\.hidden =[\s\S]*?!isOverseaAgentSession\(session\)/
+    /if \(overseaAgent\) \{[\s\S]*?historyCustomerFilterSelect\.disabled = true/
   );
   assert.match(
     appSource,
     /followingOnly: String\(historyFollowingOnly && isOverseaAgentSession\(session\)\)/
+  );
+  assert.match(
+    appSource,
+    /if \(isOverseaAgentSession\(session\) && scopeCustomerId\) \{[\s\S]*?query\.set\("customerId", scopeCustomerId\)/
+  );
+  assert.match(
+    appSource,
+    /function historyCustomerLabel\(customer\) \{[\s\S]*?customer\.clientCode[\s\S]*?logisticsPartyRoleLabel\(customer\.partyRole\)/
   );
   assert.match(
     stylesSource,

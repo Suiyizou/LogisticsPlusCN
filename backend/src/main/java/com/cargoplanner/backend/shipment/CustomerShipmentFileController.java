@@ -48,9 +48,12 @@ public class CustomerShipmentFileController {
       @RequestParam(defaultValue = "1") int page,
       @RequestParam(defaultValue = "20") int pageSize,
       @RequestParam(defaultValue = "false") boolean followingOnly,
+      @RequestParam(required = false) String customerId,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
-    return trackingService.listAssignedSnapshots(customer, page, pageSize, followingOnly);
+    return trackingService.listAssignedSnapshots(
+        customer, page, pageSize, followingOnly, customerId
+    );
   }
 
   @GetMapping("/shipments/{shipmentId}")
