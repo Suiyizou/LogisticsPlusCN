@@ -624,6 +624,20 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_oversea_agent_shipment_follows (
+          oversea_agent_customer_id BIGINT NOT NULL,
+          shipment_id BIGINT NOT NULL,
+          followed_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          last_refreshed_at DATETIME(6) NULL,
+          PRIMARY KEY (oversea_agent_customer_id, shipment_id),
+          INDEX idx_cp_oversea_agent_follows_shipment (shipment_id, followed_at),
+          CONSTRAINT fk_cp_oversea_agent_follow_agent
+            FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_oversea_agent_follow_shipment
+            FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_oversea_agent_customer_transfer_log (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           batch_id CHAR(36) NOT NULL,

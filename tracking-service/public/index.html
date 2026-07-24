@@ -41,7 +41,7 @@
           </a>
           <a class="nav-item is-active" href="#overview" data-view-target="overview">
             <span class="nav-icon">◫</span>
-            <span data-i18n="nav.overview">Overview</span>
+            <span id="overview-nav-label" data-i18n="nav.overview">Overview</span>
           </a>
           <a class="nav-item" href="#tracking" data-view-target="tracking">
             <span class="nav-icon">⌁</span>
@@ -134,18 +134,18 @@
           <section class="app-view" id="overview-view" data-view="overview">
             <section class="overview-hero">
               <div class="hero-copy">
-                <p class="kicker" data-i18n="overview.kicker">SHIPMENT DASHBOARD</p>
+                <p class="kicker" id="overview-kicker" data-i18n="overview.kicker">SHIPMENT DASHBOARD</p>
                 <div class="welcome-message" id="welcome-message" hidden>
                   <span data-i18n="welcome.greeting">Welcome</span>
                   <strong id="welcome-username"></strong>
                   <span data-i18n="welcome.subtitle">, welcome to the tracking platform.</span>
                 </div>
-                <h1 data-i18n="overview.title">Your shipments, moving in plain sight.</h1>
-                <p data-i18n="overview.description">
+                <h1 id="overview-title" data-i18n="overview.title">Your shipments, moving in plain sight.</h1>
+                <p id="overview-description" data-i18n="overview.description">
                   See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.
                 </p>
                 <button class="primary-action el-button el-button--primary" type="button" id="start-tracking-button">
-                  <span data-i18n="overview.startTracking">Track a shipment</span>
+                  <span id="start-tracking-label" data-i18n="overview.startTracking">Track a shipment</span>
                   <b>↗</b>
                 </button>
               </div>
@@ -171,6 +171,16 @@
                   </span>
                 </div>
                 <div class="history-heading-actions">
+                  <button
+                    class="agent-following-filter"
+                    id="history-following-filter"
+                    type="button"
+                    aria-pressed="false"
+                    hidden
+                  >
+                    <span aria-hidden="true">★</span>
+                    <b data-i18n="agent.followingOnly">Following only</b>
+                  </button>
                   <label class="history-customer-filter" id="history-customer-filter-wrap" hidden>
                     <span data-i18n="history.customerFilter">Customer</span>
                     <select id="history-customer-filter" data-i18n-aria-label="history.customerFilterLabel" aria-label="Filter shipments by customer">

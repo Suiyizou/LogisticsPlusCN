@@ -241,6 +241,27 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
+test("overseas-agent customers can manage follow-up without opening the internal backend", () => {
+  assert.match(indexSource, /id="history-following-filter"/);
+  assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
+  assert.match(
+    appSource,
+    /function setOverseaAgentShipmentFollowing[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/follow/
+  );
+  assert.match(
+    appSource,
+    /function refreshOverseaAgentShipment[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/refresh/
+  );
+  assert.match(
+    appSource,
+    /historyCustomerFilterWrap\.hidden =[\s\S]*?!isOverseaAgentSession\(session\)/
+  );
+  assert.match(
+    appSource,
+    /followingOnly: String\(historyFollowingOnly && isOverseaAgentSession\(session\)\)/
+  );
+});
+
 test("business users can explicitly select the alternate proxy channel", () => {
   assert.match(
     indexSource,

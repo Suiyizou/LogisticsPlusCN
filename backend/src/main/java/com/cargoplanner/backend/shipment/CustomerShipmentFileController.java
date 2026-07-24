@@ -47,9 +47,10 @@ public class CustomerShipmentFileController {
   public ObjectNode shipments(
       @RequestParam(defaultValue = "1") int page,
       @RequestParam(defaultValue = "20") int pageSize,
+      @RequestParam(defaultValue = "false") boolean followingOnly,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
-    return trackingService.listAssignedSnapshots(customer, page, pageSize);
+    return trackingService.listAssignedSnapshots(customer, page, pageSize, followingOnly);
   }
 
   @GetMapping("/shipments/{shipmentId}")
@@ -58,6 +59,28 @@ public class CustomerShipmentFileController {
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
     return trackingService.readAssignedSnapshotByShipmentId(shipmentId, customer);
+  }
+
+  @PatchMapping("/shipments/{shipmentId}/follow")
+  public ObjectNode followShipment(
+      @PathVariable String shipmentId,
+      @RequestBody CustomerShipmentFollowRequest request,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    if (request == null || request.following() == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Following state is required");
+    }
+    return trackingService.setOverseaAgentShipmentFollow(
+        shipmentId, request.following(), customer
+    );
+  }
+
+  @PostMapping("/shipments/{shipmentId}/refresh")
+  public ObjectNode refreshShipment(
+      @PathVariable String shipmentId,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return trackingService.refreshOverseaAgentAssignedShipment(shipmentId, customer);
   }
 
   @GetMapping("/shipments/{shipmentId}/files")

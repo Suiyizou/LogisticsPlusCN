@@ -10450,3 +10450,101 @@ body.is-customer-session .nav-item.is-active {
     animation-duration: 1.6s;
   }
 }
+
+/* Overseas-agent shipment management reuses the customer shipment list. */
+.agent-following-filter {
+  display: inline-flex;
+  min-height: 38px;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #cbdced;
+  border-radius: 9px;
+  color: #496785;
+  background: #fff;
+  align-items: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-following-filter span {
+  color: #d39a2e;
+  font-size: 14px;
+}
+
+.agent-following-filter b {
+  font-size: 12px;
+}
+
+.agent-following-filter:hover,
+.agent-following-filter.is-active {
+  border-color: #5b91d8;
+  color: #145fc5;
+  background: #edf5ff;
+}
+
+.agent-follow-button,
+.agent-update-button {
+  display: inline-flex;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #b9cee5;
+  border-radius: 7px;
+  color: #315b82;
+  background: #fff;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-follow-button span {
+  color: #d39a2e;
+}
+
+.agent-follow-button.is-following {
+  border-color: #e4bf73;
+  color: #8a6217;
+  background: #fff9eb;
+}
+
+.agent-update-button {
+  border-color: #6aa1df;
+  color: #fff;
+  background: #256fc4;
+}
+
+.agent-update-button:hover {
+  background: #155cae;
+}
+
+.agent-follow-button:disabled,
+.agent-update-button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.agent-last-update {
+  color: #6d849a;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+body.is-oversea-agent-session .shipment-detail-actions {
+  height: auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 780px) {
+  .agent-following-filter {
+    flex: 1 1 auto;
+  }
+
+  body.is-oversea-agent-session .shipment-detail-actions {
+    justify-content: flex-start;
+  }
+}

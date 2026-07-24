@@ -522,10 +522,51 @@ class ShipmentTrackingServiceTest {
         900, "oversea-agent-public-id", "oversea-agent", "Oversea Agent",
         "OVERSEA_AGENT", "ACTIVE"
     );
-    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5).path("total").asLong())
-        .isEqualTo(1L);
+    ObjectNode agentShipments = service.listAssignedSnapshots(overseaAgent, 1, 5);
+    assertThat(agentShipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(agentShipments.path("overseaAgentManagement").asBoolean()).isTrue();
+    assertThat(agentShipments.path("items").get(0).path("followed").asBoolean()).isFalse();
+    assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(1);
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
         .path("shipmentId").asText()).isEqualTo(shipmentId);
+
+    assertThat(service.setOverseaAgentShipmentFollow(shipmentId, true, overseaAgent)
+        .path("following").asBoolean()).isTrue();
+    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5)
+        .path("items").get(0).path("followed").asBoolean()).isTrue();
+    ObjectNode followedAgentShipments =
+        service.listAssignedSnapshots(overseaAgent, 1, 5, true);
+    assertThat(followedAgentShipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(followedAgentShipments.path("followingOnly").asBoolean()).isTrue();
+    assertThatThrownBy(() ->
+        service.setOverseaAgentShipmentFollow(shipmentId, true, customer)
+    ).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
+
+    when(adapterClient.track(normalized, true)).thenReturn(adapterResponse);
+    ObjectNode agentRefresh = service.refreshOverseaAgentAssignedShipment(
+        shipmentId, overseaAgent
+    );
+    assertThat(agentRefresh.path("overseaAgentManaged").asBoolean()).isTrue();
+    assertThat(agentRefresh.path("shipmentId").asText()).isEqualTo(shipmentId);
+    assertThat(jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*) FROM cp_oversea_agent_shipment_follows
+        WHERE oversea_agent_customer_id = 900
+          AND shipment_id = (SELECT id FROM cp_shipments WHERE public_id = ?)
+          AND last_refreshed_at IS NOT NULL
+        """,
+        Integer.class,
+        shipmentId
+    )).isEqualTo(1);
+
+    assertThat(service.setOverseaAgentShipmentFollow(shipmentId, false, overseaAgent)
+        .path("following").asBoolean()).isFalse();
+    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5)
+        .path("items").get(0).path("followed").asBoolean()).isFalse();
+    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5, true)
+        .path("total").asLong()).isZero();
 
     for (long id = 500; id < 506; id++) {
       jdbcTemplate.update(
@@ -1312,6 +1353,15 @@ class ShipmentTrackingServiceTest {
           oversea_agent_customer_id BIGINT NOT NULL,
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_shipment_follows (
+          oversea_agent_customer_id BIGINT NOT NULL,
+          shipment_id BIGINT NOT NULL,
+          followed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_refreshed_at TIMESTAMP,
+          PRIMARY KEY (oversea_agent_customer_id, shipment_id)
         )
         """);
     jdbcTemplate.execute("""

@@ -28,6 +28,7 @@ const historySearchInput = document.querySelector("#history-search-input");
 const historySearchClear = document.querySelector("#history-search-clear");
 const historyCustomerFilterWrap = document.querySelector("#history-customer-filter-wrap");
 const historyCustomerFilterSelect = document.querySelector("#history-customer-filter");
+const historyFollowingFilter = document.querySelector("#history-following-filter");
 const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
 const historyEmptyTitle = document.querySelector("#history-empty-title");
@@ -297,6 +298,7 @@ const MESSAGES = {
     "nav.back": "Back",
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
+    "nav.agentShipments": "Shipment management",
     "nav.tracking": "Shipment tracking",
     "nav.profile": "Personal information",
     "profile.kicker": "CUSTOMER PROFILE",
@@ -321,6 +323,10 @@ const MESSAGES = {
     "overview.title": "Your shipments, moving in plain sight.",
     "overview.description": "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
+    "overview.agentKicker": "OVERSEAS AGENT DESK",
+    "overview.agentTitle": "Manage every shipment for your linked customers.",
+    "overview.agentDescription": "Filter by customer, choose the shipments you are following, and refresh their latest movement whenever daily work requires it.",
+    "overview.agentStartTracking": "Open shipment query",
     "overview.savedSearches": "Saved searches",
     "overview.carriersUsed": "Carriers used",
     "overview.lastUpdated": "Last updated",
@@ -345,6 +351,8 @@ const MESSAGES = {
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest shipment snapshots stored in the database",
+    "history.agentTitle": "Customer shipment management",
+    "history.agentSubtitle": "All published shipments for customers linked to this overseas-agent account",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
@@ -364,6 +372,15 @@ const MESSAGES = {
     "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
     "history.customerFilter": "Customer",
     "history.customerFilterLabel": "Filter shipments by customer",
+    "agent.followingOnly": "Following only",
+    "agent.showAll": "Show all",
+    "agent.follow": "Follow",
+    "agent.unfollow": "Following",
+    "agent.update": "Update now",
+    "agent.updating": "Updating…",
+    "agent.updateFailed": "Shipment update failed: {message}",
+    "agent.followFailed": "Follow-up selection could not be saved: {message}",
+    "agent.lastAgentUpdate": "Agent update {time}",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
@@ -761,6 +778,7 @@ const MESSAGES = {
     "nav.back": "返回上一页",
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
+    "nav.agentShipments": "票单管理",
     "nav.tracking": "货物跟踪",
     "nav.profile": "个人信息",
     "profile.kicker": "客户资料",
@@ -785,6 +803,10 @@ const MESSAGES = {
     "overview.title": "每一票货物，进度一眼可见。",
     "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
+    "overview.agentKicker": "海外代理业务台",
+    "overview.agentTitle": "统一管理名下客户的全部票单。",
+    "overview.agentDescription": "可按客户筛选、自由选择需要跟进的票单，并根据每日业务需要主动更新最新运输进度。",
+    "overview.agentStartTracking": "打开票单查询",
     "overview.savedSearches": "已保存查询",
     "overview.carriersUsed": "已使用船司",
     "overview.lastUpdated": "最近更新",
@@ -809,6 +831,8 @@ const MESSAGES = {
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
     "history.subtitle": "数据库保存的最新货运快照",
+    "history.agentTitle": "客户票单管理",
+    "history.agentSubtitle": "当前海外代理账户所关联客户的全部已发布票单",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
@@ -829,6 +853,15 @@ const MESSAGES = {
     "history.customerFilter": "客户",
     "history.customerFilterLabel": "按客户筛选票单",
     "history.allCustomers": "全部客户",
+    "agent.followingOnly": "只看跟进",
+    "agent.showAll": "查看全部",
+    "agent.follow": "加入跟进",
+    "agent.unfollow": "已跟进",
+    "agent.update": "立即更新",
+    "agent.updating": "更新中…",
+    "agent.updateFailed": "票单更新失败：{message}",
+    "agent.followFailed": "无法保存跟进选择：{message}",
+    "agent.lastAgentUpdate": "代理更新于 {time}",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1335,6 +1368,7 @@ let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
 let historyCustomerFilter = "";
+let historyFollowingOnly = false;
 let historyLoadingState = false;
 let historyPage = 1;
 let historyPageSize = 20;
@@ -1801,6 +1835,7 @@ function renderTrackingAccount(session = readFileSession()) {
   const isCustomer = session.kind === "CUSTOMER";
   document.body.classList.toggle("is-customer-session", isCustomer);
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
+  renderOverseaAgentWorkspace(session);
   trackingAccount.hidden = !authenticated;
   if (signInButton) {
     signInButton.hidden = authenticated;
@@ -1848,14 +1883,65 @@ function renderTrackingAccount(session = readFileSession()) {
 
 function customerLogisticsRoleLabel(session = readFileSession()) {
   if (session.kind !== "CUSTOMER") return "";
-  const role = String(
+  return logisticsPartyRoleLabel(customerPartyRole(session));
+}
+
+function customerPartyRole(session = readFileSession()) {
+  if (session.kind !== "CUSTOMER") return "";
+  return String(
     session.principal?.partyRole ??
     session.principal?.logisticsRole ??
+    session.storedSession?.customer?.partyRole ??
+    session.storedSession?.customer?.logisticsRole ??
     session.storedSession?.partyRole ??
     session.storedSession?.logisticsRole ??
     ""
   ).trim().toUpperCase();
-  return logisticsPartyRoleLabel(role);
+}
+
+function isOverseaAgentSession(session = readFileSession()) {
+  return session.kind === "CUSTOMER" && customerPartyRole(session) === "OVERSEA_AGENT";
+}
+
+function setLocalizedElement(id, key) {
+  const element = document.querySelector(`#${id}`);
+  if (!element) return;
+  element.dataset.i18n = key;
+  element.textContent = t(key);
+}
+
+function activeViewTranslationKey(view = activeView, session = readFileSession()) {
+  return view === "overview" && isOverseaAgentSession(session)
+    ? "nav.agentShipments"
+    : `nav.${view}`;
+}
+
+function renderOverseaAgentWorkspace(session = readFileSession()) {
+  const managed = isOverseaAgentSession(session);
+  document.body.classList.toggle("is-oversea-agent-session", managed);
+  setLocalizedElement(
+      "overview-nav-label",
+      managed ? "nav.agentShipments" : "nav.overview"
+  );
+  setLocalizedElement(
+      "overview-kicker",
+      managed ? "overview.agentKicker" : "overview.kicker"
+  );
+  setLocalizedElement(
+      "overview-title",
+      managed ? "overview.agentTitle" : "overview.title"
+  );
+  setLocalizedElement(
+      "overview-description",
+      managed ? "overview.agentDescription" : "overview.description"
+  );
+  setLocalizedElement(
+      "start-tracking-label",
+      managed ? "overview.agentStartTracking" : "overview.startTracking"
+  );
+  if (!managed) historyFollowingOnly = false;
+  if (historyFollowingFilter) historyFollowingFilter.hidden = !managed;
+  activeViewTitle.textContent = t(activeViewTranslationKey(activeView, session));
 }
 
 function logisticsPartyRoleLabel(value) {
@@ -4016,7 +4102,8 @@ async function loadCustomerAssignedHistory() {
   try {
     const query = new URLSearchParams({
       page: String(historyPage),
-      pageSize: String(historyPageSize)
+      pageSize: String(historyPageSize),
+      followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session))
     });
     const response = await fetch(`/api/customer/shipments?${query}`, {
       headers: { "X-Customer-Token": session.token }
@@ -4035,22 +4122,63 @@ async function loadCustomerAssignedHistory() {
     historyPageSize = Number(payload?.pageSize || historyPageSize);
     historyTotal = Number(payload?.total || 0);
     historyTotalPages = Number(payload?.totalPages || 0);
+    const agentManagement = payload?.overseaAgentManagement === true;
     customerAssignedHistory = items
-      .filter((item) => item?.dataAvailable && item?.snapshot)
-      .map((item) => ({
-        query: normalizeQuery({
-          carrier: item.carrier || "COSCO",
-          channel: "AUTO",
-          type: item.referenceType || "BILLOFLADING",
-          number: item.referenceNo || item.snapshot?.tracking?.number || ""
-        }),
-        snapshot: item.snapshot,
-        savedAt: item.lastTrackedAt || item.snapshot?.fetchedAt || new Date().toISOString(),
-        shipmentId: item.shipmentId,
-        customerReadOnly: true
-      }));
+      .filter((item) => agentManagement
+        ? Boolean(item?.referenceNo || item?.shipmentId)
+        : Boolean(item?.dataAvailable && item?.snapshot))
+      .map((item) => {
+        const serverSnapshot = item?.snapshot && typeof item.snapshot === "object"
+          ? item.snapshot
+          : null;
+        const carrier = String(
+          item.carrier || serverSnapshot?.tracking?.carrier || "COSCO"
+        ).toUpperCase();
+        const referenceType = String(
+          item.referenceType || serverSnapshot?.tracking?.type || "BILLOFLADING"
+        ).toUpperCase();
+        const referenceNo = String(
+          item.referenceNo || serverSnapshot?.tracking?.number || ""
+        ).trim();
+        const lastTrackedAt = item.lastTrackedAt
+          || serverSnapshot?.fetchedAt
+          || new Date().toISOString();
+        const trackingStatus = String(item.trackingStatus || "PENDING_UPDATE").trim();
+        const snapshot = serverSnapshot || {
+          tracking: {
+            number: referenceNo,
+            type: referenceType,
+            carrier,
+            status: trackingStatus
+          },
+          summary: {
+            latestEvent: { name: trackingStatus, occurredAt: lastTrackedAt, location: "" },
+            origin: {},
+            destination: {}
+          },
+          route: [],
+          keyTimes: {},
+          routingLegs: [],
+          containers: []
+        };
+        return {
+          query: normalizeQuery({
+            carrier,
+            channel: "AUTO",
+            type: referenceType,
+            number: referenceNo
+          }),
+          snapshot,
+          savedAt: lastTrackedAt,
+          shipmentId: item.shipmentId,
+          customerReadOnly: true,
+          followed: item.followed === true,
+          agentLastRefreshedAt: item.agentLastRefreshedAt || null,
+          boundCustomers: normalizeHistoryBoundCustomers(item.boundCustomers)
+        };
+      });
     renderHistory();
-    if (items.some((item) => !item?.dataAvailable)) {
+    if (!agentManagement && items.some((item) => !item?.dataAvailable)) {
       showError(customerFacingTrackingError(), "warning");
     }
   } catch {
@@ -6133,7 +6261,9 @@ function renderHistoryCustomerFilter(entries, session) {
   });
   historyCustomerFilterSelect.replaceChildren(allCustomers, ...customerOptions);
   historyCustomerFilterSelect.value = historyCustomerFilter;
-  historyCustomerFilterWrap.hidden = session.kind !== "INTERNAL" || options.length === 0;
+  historyCustomerFilterWrap.hidden =
+    (session.kind !== "INTERNAL" && !isOverseaAgentSession(session))
+    || options.length === 0;
 }
 
 function historyMatchesCustomer(entry, customerId) {
@@ -6181,13 +6311,95 @@ function historyMatchesSearch(entry, searchTerm) {
   return tokens.every((token) => searchText.includes(token));
 }
 
+async function setOverseaAgentShipmentFollowing(entry, following) {
+  const session = readFileSession();
+  if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.followBusy) return;
+  entry.followBusy = true;
+  let saved = false;
+  clearError();
+  renderHistory();
+  try {
+    const response = await fetch(
+      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/follow`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Customer-Token": session.token
+        },
+        body: JSON.stringify({ following })
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      return;
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    entry.followed = payload?.following === true;
+    saved = true;
+  } catch (error) {
+    showError(t("agent.followFailed", {
+      message: error?.message || t("error.generic")
+    }));
+  } finally {
+    entry.followBusy = false;
+    if (saved && historyFollowingOnly) {
+      await loadCustomerAssignedHistory();
+    } else {
+      renderHistory();
+    }
+  }
+}
+
+async function refreshOverseaAgentShipment(entry) {
+  const session = readFileSession();
+  if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return;
+  entry.refreshing = true;
+  clearError();
+  renderHistory();
+  try {
+    const response = await fetch(
+      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh`,
+      {
+        method: "POST",
+        headers: { "X-Customer-Token": session.token }
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      return;
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    if (payload?.snapshot && typeof payload.snapshot === "object") {
+      entry.snapshot = payload.snapshot;
+      entry.savedAt = payload.fetchedAt
+        || payload.snapshot?.fetchedAt
+        || new Date().toISOString();
+      entry.agentLastRefreshedAt = entry.savedAt;
+    }
+  } catch (error) {
+    showError(t("agent.updateFailed", {
+      message: error?.message || t("error.generic")
+    }));
+  } finally {
+    entry.refreshing = false;
+    renderHistory();
+  }
+}
+
 function renderHistory() {
   const allHistory = readHistory();
   const session = readFileSession();
+  const agentManagement = isOverseaAgentSession(session);
   renderHistoryCustomerFilter(allHistory, session);
-  const customerHistory = historyCustomerFilter
-    ? allHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
+  const followedHistory = historyFollowingOnly && agentManagement
+    ? allHistory.filter((entry) => entry.followed === true)
     : allHistory;
+  const customerHistory = historyCustomerFilter
+    ? followedHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
+    : followedHistory;
   const normalizedSearch = normalizeHistorySearch(historySearchTerm);
   const history = normalizedSearch
     ? customerHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
@@ -6195,8 +6407,31 @@ function renderHistory() {
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
   const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
 
-  historyTitle.textContent = t(accountBound ? "history.accountTitle" : "history.title");
-  historySubtitle.textContent = t(accountBound ? "history.accountSubtitle" : "history.subtitle");
+  historyTitle.textContent = t(
+    agentManagement
+      ? "history.agentTitle"
+      : accountBound
+        ? "history.accountTitle"
+        : "history.title"
+  );
+  historySubtitle.textContent = t(
+    agentManagement
+      ? "history.agentSubtitle"
+      : accountBound
+        ? "history.accountSubtitle"
+        : "history.subtitle"
+  );
+  if (historyFollowingFilter) {
+    historyFollowingFilter.hidden = !agentManagement;
+    historyFollowingFilter.classList.toggle("is-active", historyFollowingOnly);
+    historyFollowingFilter.setAttribute("aria-pressed", String(historyFollowingOnly));
+    const label = historyFollowingFilter.querySelector("b");
+    if (label) {
+      const key = historyFollowingOnly ? "agent.showAll" : "agent.followingOnly";
+      label.dataset.i18n = key;
+      label.textContent = t(key);
+    }
+  }
   historyEmptyTitle.textContent = t(
     searchHasNoResults
       ? "history.searchEmptyTitle"
@@ -6292,6 +6527,9 @@ function renderHistory() {
       businessReferences.forwarderJobNumber
         ? `${t("business.forwarderJob")} ${businessReferences.forwarderJobNumber}`
         : null,
+      normalizeHistoryBoundCustomers(entry.boundCustomers)
+        .map(historyCustomerLabel)
+        .join(" / "),
       trackingTypeLabel(entry.query.type),
       entry.query.carrier
     ]
@@ -6392,6 +6630,40 @@ function renderHistory() {
 
     const detailActions = document.createElement("div");
     detailActions.className = "shipment-detail-actions";
+    if (agentManagement) {
+      const followButton = document.createElement("button");
+      followButton.type = "button";
+      followButton.className = "agent-follow-button";
+      followButton.classList.toggle("is-following", entry.followed === true);
+      followButton.disabled = entry.followBusy === true;
+      followButton.innerHTML = `<span aria-hidden="true">★</span><b>${
+        t(entry.followed ? "agent.unfollow" : "agent.follow")
+      }</b>`;
+      followButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void setOverseaAgentShipmentFollowing(entry, !entry.followed);
+      });
+
+      const updateButton = document.createElement("button");
+      updateButton.type = "button";
+      updateButton.className = "agent-update-button";
+      updateButton.disabled = entry.refreshing === true;
+      updateButton.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+      updateButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void refreshOverseaAgentShipment(entry);
+      });
+      detailActions.append(followButton, updateButton);
+
+      if (entry.agentLastRefreshedAt) {
+        const lastAgentUpdate = document.createElement("small");
+        lastAgentUpdate.className = "agent-last-update";
+        lastAgentUpdate.textContent = t("agent.lastAgentUpdate", {
+          time: formatLocalDateTime(entry.agentLastRefreshedAt)
+        });
+        detailActions.append(lastAgentUpdate);
+      }
+    }
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "open-history-button";
@@ -6726,7 +6998,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
   document.querySelectorAll("[data-view-target]").forEach((link) => {
     link.classList.toggle("is-active", link.dataset.viewTarget === activeView);
   });
-  activeViewTitle.textContent = t(`nav.${activeView}`);
+  activeViewTitle.textContent = t(activeViewTranslationKey(activeView));
 
   if (updateLocation) {
     const url = new URL(window.location.href);
@@ -6919,7 +7191,8 @@ function applyLanguage(language, { persist = true } = {}) {
       // Language switching still works when storage is disabled.
     }
   }
-  activeViewTitle.textContent = t(`nav.${activeView}`);
+  renderOverseaAgentWorkspace();
+  activeViewTitle.textContent = t(activeViewTranslationKey(activeView));
   updateCarrierUI();
   renderChannelStatus(lastChannelStatus);
   if (lastChannelCheck) renderChannelCheck(lastChannelCheck);
@@ -7459,6 +7732,13 @@ historySearchClear?.addEventListener("click", () => {
 historyCustomerFilterSelect?.addEventListener("change", () => {
   historyCustomerFilter = historyCustomerFilterSelect.value;
   renderHistory();
+});
+
+historyFollowingFilter?.addEventListener("click", async () => {
+  if (!isOverseaAgentSession()) return;
+  historyFollowingOnly = !historyFollowingOnly;
+  historyPage = 1;
+  await loadCustomerAssignedHistory();
 });
 
 async function loadCurrentHistoryPage() {

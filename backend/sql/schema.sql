@@ -242,6 +242,59 @@ CREATE TABLE IF NOT EXISTS cp_customers (
   CONSTRAINT fk_cp_customers_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS cp_oversea_agent_customers (
+  customer_id BIGINT NOT NULL,
+  oversea_agent_customer_id BIGINT NOT NULL,
+  assigned_by BIGINT NOT NULL,
+  assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (customer_id),
+  INDEX idx_cp_oversea_agent_customers_agent (oversea_agent_customer_id, assigned_at),
+  CONSTRAINT fk_cp_oversea_agent_customers_customer
+    FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_oversea_agent_customers_agent
+    FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_oversea_agent_customers_assigned_by
+    FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_oversea_agent_shipment_follows (
+  oversea_agent_customer_id BIGINT NOT NULL,
+  shipment_id BIGINT NOT NULL,
+  followed_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  last_refreshed_at DATETIME(6) NULL,
+  PRIMARY KEY (oversea_agent_customer_id, shipment_id),
+  INDEX idx_cp_oversea_agent_follows_shipment (shipment_id, followed_at),
+  CONSTRAINT fk_cp_oversea_agent_follow_agent
+    FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_oversea_agent_follow_shipment
+    FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_oversea_agent_customer_transfer_log (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  batch_id CHAR(36) NOT NULL,
+  customer_id BIGINT NOT NULL,
+  from_oversea_agent_customer_id BIGINT NULL,
+  to_oversea_agent_customer_id BIGINT NOT NULL,
+  initiated_by BIGINT NOT NULL,
+  shipment_count INT NOT NULL DEFAULT 0,
+  ip_address VARCHAR(64) NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_cp_oversea_transfer_batch_customer (batch_id, customer_id),
+  INDEX idx_cp_oversea_transfer_customer_time (customer_id, created_at),
+  INDEX idx_cp_oversea_transfer_agents_time (
+    from_oversea_agent_customer_id, to_oversea_agent_customer_id, created_at
+  ),
+  CONSTRAINT fk_cp_oversea_transfer_customer
+    FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
+  CONSTRAINT fk_cp_oversea_transfer_from_agent
+    FOREIGN KEY (from_oversea_agent_customer_id) REFERENCES cp_customers(id),
+  CONSTRAINT fk_cp_oversea_transfer_to_agent
+    FOREIGN KEY (to_oversea_agent_customer_id) REFERENCES cp_customers(id),
+  CONSTRAINT fk_cp_oversea_transfer_initiated_by
+    FOREIGN KEY (initiated_by) REFERENCES cp_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS cp_customer_handover_requests (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   public_id CHAR(36) NOT NULL UNIQUE,
