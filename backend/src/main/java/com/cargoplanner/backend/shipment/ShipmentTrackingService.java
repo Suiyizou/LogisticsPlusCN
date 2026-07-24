@@ -422,15 +422,8 @@ public class ShipmentTrackingService {
         JOIN cp_shipments s ON s.id = a.shipment_id
         JOIN cp_shipment_references r ON r.shipment_id = s.id
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE (a.customer_id = ? OR EXISTS (
-          SELECT 1
-          FROM cp_oversea_agent_customers link
-          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
-          WHERE link.oversea_agent_customer_id = ?
-            AND link.customer_id = a.customer_id
-            AND linked_customer.status = 'ACTIVE'
-        ))
-          AND a.publication_status = 'PUBLISHED'
+        WHERE a.customer_id = ?
+          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
           AND r.carrier_code = ?
           AND r.reference_type = ?
           AND r.reference_no_normalized = ?
@@ -438,7 +431,7 @@ public class ShipmentTrackingService {
         """,
         this::mapCachedShipment,
         customer.id(),
-        linkedAgentId(customer),
+        isOverseaAgent(customer),
         request.carrier(),
         request.type(),
         normalizeReference(request.number())
@@ -463,7 +456,7 @@ public class ShipmentTrackingService {
     return response;
   }
 
-  /** Returns one explicitly published, assigned shipment by its durable public id. */
+  /** Returns one assigned shipment by its durable public id. */
   public ObjectNode readAssignedSnapshotByShipmentId(
       String shipmentPublicId,
       CustomerPrincipal customer
@@ -479,24 +472,18 @@ public class ShipmentTrackingService {
         JOIN cp_shipments s ON s.id = a.shipment_id
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE (a.customer_id = ? OR EXISTS (
-          SELECT 1
-          FROM cp_oversea_agent_customers link
-          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
-          WHERE link.oversea_agent_customer_id = ?
-            AND link.customer_id = a.customer_id
-            AND linked_customer.status = 'ACTIVE'
-        ))
-          AND a.publication_status = 'PUBLISHED' AND s.public_id = ?
+        WHERE a.customer_id = ?
+          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
+          AND s.public_id = ?
         LIMIT 1
         """,
         this::mapCachedShipment,
         customer.id(),
-        linkedAgentId(customer),
+        isOverseaAgent(customer),
         shipmentPublicId == null ? "" : shipmentPublicId.trim()
     );
     if (records.isEmpty()) {
-      throw new ApiException(HttpStatus.NOT_FOUND, "Published shipment was not found");
+      throw new ApiException(HttpStatus.NOT_FOUND, "Assigned shipment was not found");
     }
     CachedShipment cached = records.get(0);
     if (cached.snapshotJson() == null || !isUsableCachedSnapshot(cached.snapshotJson())) {
@@ -506,9 +493,16 @@ public class ShipmentTrackingService {
       );
     }
     ObjectNode response = cachedResponse(cached, null, false);
+    response.set(
+        "snapshot",
+        overlayStoredBusinessFields(
+            response.path("snapshot").deepCopy(),
+            shipmentBusinessFields(cached.shipmentId())
+        )
+    );
     response.put("cacheSource", "MYSQL_ASSIGNED");
     response.put("fileAccess", true);
-    response.put("customerReadOnly", true);
+    response.put("customerReadOnly", !isOverseaAgent(customer));
     return response;
   }
 
@@ -517,7 +511,7 @@ public class ShipmentTrackingService {
     return listAssignedSnapshots(customer, 1, 20);
   }
 
-  /** Lists one page of published shipments assigned directly or through linked customers. */
+  /** Lists one page of shipments assigned directly to the signed-in customer. */
   public ObjectNode listAssignedSnapshots(
       CustomerPrincipal customer,
       int requestedPage,
@@ -537,29 +531,26 @@ public class ShipmentTrackingService {
     }
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
-    long linkedAgentId = linkedAgentId(customer);
-    boolean followingOnly = requestedFollowingOnly && linkedAgentId > 0;
+    boolean overseaAgent = isOverseaAgent(customer);
+    long followAgentId = overseaAgent ? customer.id() : -1L;
+    boolean followingOnly = requestedFollowingOnly && overseaAgent;
+    String publicationFilter = overseaAgent
+        ? ""
+        : " AND a.publication_status = 'PUBLISHED'";
     Long totalValue = jdbcTemplate.queryForObject(
-        """
+        ("""
         SELECT COUNT(DISTINCT a.shipment_id)
         FROM cp_customer_shipment_access a
-        WHERE a.publication_status = 'PUBLISHED'
-          AND (a.customer_id = ? OR EXISTS (
-            SELECT 1
-            FROM cp_oversea_agent_customers link
-            JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
-            WHERE link.oversea_agent_customer_id = ?
-              AND link.customer_id = a.customer_id
-              AND linked_customer.status = 'ACTIVE'
-          ))
+        WHERE a.customer_id = ?
+          %s
           AND (? = FALSE OR EXISTS (
             SELECT 1 FROM cp_oversea_agent_shipment_follows follow
             WHERE follow.oversea_agent_customer_id = ?
               AND follow.shipment_id = a.shipment_id
           ))
-        """,
+        """).formatted(publicationFilter),
         Long.class,
-        customer.id(), linkedAgentId, followingOnly, linkedAgentId
+        customer.id(), followingOnly, followAgentId
     );
     long total = totalValue == null ? 0 : totalValue;
     int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
@@ -570,7 +561,9 @@ public class ShipmentTrackingService {
         """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
                s.last_tracked_at, s.job_number, s.client_po_number, s.client_name_code,
-               s.original_bill_of_lading, r.reference_type, r.reference_no_raw,
+               s.original_bill_of_lading, s.business_note,
+               assigned.assigned_at, assigned.publication_status,
+               r.reference_type, r.reference_no_raw,
                t.snapshot_json, t.strategy_json, t.fetched_at, t.fresh_until,
                EXISTS (
                  SELECT 1 FROM cp_oversea_agent_shipment_follows follow
@@ -585,23 +578,15 @@ public class ShipmentTrackingService {
                ) AS agent_last_refreshed_at
         FROM cp_shipments s
         JOIN (
-          SELECT a.shipment_id, MAX(a.assigned_at) AS assigned_at
+          SELECT a.shipment_id, a.assigned_at, a.publication_status
           FROM cp_customer_shipment_access a
-          WHERE a.publication_status = 'PUBLISHED'
-            AND (a.customer_id = ? OR EXISTS (
-              SELECT 1
-              FROM cp_oversea_agent_customers link
-              JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
-              WHERE link.oversea_agent_customer_id = ?
-                AND link.customer_id = a.customer_id
-                AND linked_customer.status = 'ACTIVE'
-            ))
+          WHERE a.customer_id = ?
+            %s
             AND (? = FALSE OR EXISTS (
               SELECT 1 FROM cp_oversea_agent_shipment_follows follow
               WHERE follow.oversea_agent_customer_id = ?
                 AND follow.shipment_id = a.shipment_id
             ))
-          GROUP BY a.shipment_id
         ) assigned ON assigned.shipment_id = s.id
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
@@ -612,7 +597,7 @@ public class ShipmentTrackingService {
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         ORDER BY assigned.assigned_at DESC, s.updated_at DESC
         LIMIT ? OFFSET ?
-        """,
+        """.formatted(publicationFilter),
         (rs, rowNumber) -> new CustomerAssignedShipment(
             new CachedShipment(
                 rs.getLong("shipment_id"), rs.getString("public_id"),
@@ -628,11 +613,14 @@ public class ShipmentTrackingService {
                 rs.getString("client_name_code"),
                 rs.getString("original_bill_of_lading")
             ),
+            rs.getString("business_note"),
+            instant(rs, "assigned_at"),
+            rs.getString("publication_status"),
             rs.getBoolean("agent_followed"),
             instant(rs, "agent_last_refreshed_at")
         ),
-        linkedAgentId, linkedAgentId, customer.id(), linkedAgentId,
-        followingOnly, linkedAgentId, pageSize, offset
+        followAgentId, followAgentId, customer.id(),
+        followingOnly, followAgentId, pageSize, offset
     );
     Map<Long, List<AssignedCustomer>> assignedCustomers =
         assignedCustomersByShipment(customer, records);
@@ -646,6 +634,12 @@ public class ShipmentTrackingService {
       item.put("referenceType", record.referenceType());
       item.put("referenceNo", record.referenceNo());
       item.put("trackingStatus", record.trackingStatus());
+      item.put("note", record.note());
+      item.put("assignedAt", record.assignedAt() == null ? null : record.assignedAt().toString());
+      item.put("publicationStatus", record.publicationStatus());
+      item.put("forwarderJobNumber", record.businessFields().jobNumber());
+      item.put("clientPoNumber", record.businessFields().clientPoNumber());
+      item.put("clientNameCode", record.businessFields().clientNameCode());
       item.put(
           "lastTrackedAt",
           record.lastTrackedAt() == null ? null : record.lastTrackedAt().toString()
@@ -681,12 +675,56 @@ public class ShipmentTrackingService {
     response.put("page", page);
     response.put("pageSize", pageSize);
     response.put("totalPages", totalPages);
-    response.put("customerReadOnly", true);
+    response.put("customerReadOnly", !overseaAgent);
     response.put("followingOnly", followingOnly);
     response.put(
         "overseaAgentManagement",
-        "OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())
+        overseaAgent
     );
+    return response;
+  }
+
+  public ObjectNode updateOverseaAgentAssignedShipment(
+      String shipmentPublicId,
+      CustomerShipmentUpdateRequest request,
+      CustomerPrincipal customer
+  ) {
+    if (request == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment update is required");
+    }
+    AgentShipmentTarget shipment = requireOverseaAgentShipment(
+        shipmentPublicId, customer, false
+    );
+    String note = request.note() == null
+        ? shipment.note()
+        : cleanManagedText(request.note(), 2000, "Shipment note");
+    String forwarderJobNumber = request.forwarderJobNumber() == null
+        ? shipment.forwarderJobNumber()
+        : cleanManagedText(request.forwarderJobNumber(), 160, "Forwarder job number");
+    String clientPoNumber = request.clientPoNumber() == null
+        ? shipment.clientPoNumber()
+        : cleanManagedText(request.clientPoNumber(), 160, "Client PO number");
+    String clientNameCode = request.clientNameCode() == null
+        ? shipment.clientNameCode()
+        : cleanManagedText(request.clientNameCode(), 160, "Client name/code");
+    Instant now = clock.instant();
+    transactionTemplate.executeWithoutResult(status -> jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET business_note = ?, job_number = ?, client_po_number = ?,
+            client_name_code = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        note, forwarderJobNumber, clientPoNumber, clientNameCode,
+        Timestamp.from(now), shipment.shipmentId()
+    ));
+    ObjectNode response = objectMapper.createObjectNode();
+    response.put("shipmentId", shipment.shipmentPublicId());
+    response.put("note", note);
+    response.put("forwarderJobNumber", forwarderJobNumber);
+    response.put("clientPoNumber", clientPoNumber);
+    response.put("clientNameCode", clientNameCode);
+    response.put("updatedAt", now.toString());
     return response;
   }
 
@@ -695,7 +733,9 @@ public class ShipmentTrackingService {
       boolean following,
       CustomerPrincipal customer
   ) {
-    AgentShipmentTarget shipment = requireOverseaAgentShipment(shipmentPublicId, customer);
+    AgentShipmentTarget shipment = requireOverseaAgentShipment(
+        shipmentPublicId, customer, false
+    );
     if (following) {
       jdbcTemplate.update(
           """
@@ -725,7 +765,9 @@ public class ShipmentTrackingService {
       String shipmentPublicId,
       CustomerPrincipal customer
   ) {
-    AgentShipmentTarget shipment = requireOverseaAgentShipment(shipmentPublicId, customer);
+    AgentShipmentTarget shipment = requireOverseaAgentShipment(
+        shipmentPublicId, customer, true
+    );
     track(
         new ShipmentTrackRequest(
             shipment.carrier(), "AUTO", shipment.referenceType(),
@@ -753,28 +795,24 @@ public class ShipmentTrackingService {
   ) {
     Map<Long, List<AssignedCustomer>> result = new LinkedHashMap<>();
     if (records.isEmpty()) return result;
-    long linkedAgentId = linkedAgentId(customer);
+    boolean overseaAgent = isOverseaAgent(customer);
     String placeholders = String.join(
         ",", records.stream().map(record -> "?").toList()
     );
     List<Object> parameters = new ArrayList<>();
-    parameters.add(linkedAgentId);
-    parameters.add(customer.id());
     records.forEach(record -> parameters.add(record.cached().shipmentId()));
+    if (!overseaAgent) parameters.add(customer.id());
+    String customerFilter = overseaAgent ? "" : " AND a.customer_id = ?";
     jdbcTemplate.query(
-        """
+        ("""
         SELECT DISTINCT a.shipment_id, c.public_id, c.display_name, c.username,
                c.client_code, c.party_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id AND c.status = 'ACTIVE'
-        LEFT JOIN cp_oversea_agent_customers link
-          ON link.customer_id = a.customer_id
-         AND link.oversea_agent_customer_id = ?
-        WHERE a.publication_status = 'PUBLISHED'
-          AND (a.customer_id = ? OR link.oversea_agent_customer_id IS NOT NULL)
-          AND a.shipment_id IN (%s)
+        WHERE a.shipment_id IN (%s)
+          %s
         ORDER BY c.display_name, c.username, c.id
-        """.formatted(placeholders),
+        """).formatted(placeholders, customerFilter),
         rs -> {
           long shipmentId = rs.getLong("shipment_id");
           result.computeIfAbsent(shipmentId, ignored -> new ArrayList<>())
@@ -793,7 +831,8 @@ public class ShipmentTrackingService {
 
   private AgentShipmentTarget requireOverseaAgentShipment(
       String shipmentPublicId,
-      CustomerPrincipal customer
+      CustomerPrincipal customer,
+      boolean requireTrackingReference
   ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
@@ -807,8 +846,11 @@ public class ShipmentTrackingService {
     String publicId = shipmentPublicId == null ? "" : shipmentPublicId.trim();
     List<AgentShipmentTarget> records = jdbcTemplate.query(
         """
-        SELECT s.id, s.public_id, r.carrier_code, r.reference_type, r.reference_no_raw
+        SELECT s.id, s.public_id, r.carrier_code, r.reference_type, r.reference_no_raw,
+               s.business_note, s.job_number, s.client_po_number, s.client_name_code
         FROM cp_shipments s
+        JOIN cp_customer_shipment_access a
+          ON a.shipment_id = s.id AND a.customer_id = ?
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id
           FROM cp_shipment_references r2
@@ -819,19 +861,6 @@ public class ShipmentTrackingService {
           LIMIT 1
         )
         WHERE s.public_id = ?
-          AND EXISTS (
-            SELECT 1
-            FROM cp_customer_shipment_access a
-            JOIN cp_customers assigned_customer
-              ON assigned_customer.id = a.customer_id
-             AND assigned_customer.status = 'ACTIVE'
-            LEFT JOIN cp_oversea_agent_customers link
-              ON link.customer_id = a.customer_id
-             AND link.oversea_agent_customer_id = ?
-            WHERE a.shipment_id = s.id
-              AND a.publication_status = 'PUBLISHED'
-              AND (a.customer_id = ? OR link.oversea_agent_customer_id IS NOT NULL)
-          )
         LIMIT 1
         """,
         (rs, rowNumber) -> new AgentShipmentTarget(
@@ -839,18 +868,23 @@ public class ShipmentTrackingService {
             rs.getString("public_id"),
             rs.getString("carrier_code"),
             rs.getString("reference_type"),
-            rs.getString("reference_no_raw")
+            rs.getString("reference_no_raw"),
+            rs.getString("business_note"),
+            rs.getString("job_number"),
+            rs.getString("client_po_number"),
+            rs.getString("client_name_code")
         ),
-        publicId, customer.id(), customer.id()
+        customer.id(), publicId
     );
     if (records.isEmpty()) {
       throw new ApiException(
           HttpStatus.NOT_FOUND,
-          "Published shipment is not available to this overseas agent"
+          "Shipment is not assigned to this overseas agent"
       );
     }
     AgentShipmentTarget shipment = records.get(0);
-    if (shipment.referenceType() == null || shipment.referenceNumber() == null) {
+    if (requireTrackingReference
+        && (shipment.referenceType() == null || shipment.referenceNumber() == null)) {
       throw new ApiException(
           HttpStatus.CONFLICT,
           "Shipment has no booking or bill-of-lading reference to refresh"
@@ -859,10 +893,36 @@ public class ShipmentTrackingService {
     return shipment;
   }
 
-  private long linkedAgentId(CustomerPrincipal customer) {
-    return customer != null && "OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())
-        ? customer.id()
-        : -1L;
+  private boolean isOverseaAgent(CustomerPrincipal customer) {
+    return customer != null && "OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole());
+  }
+
+  private ImportedBusinessFields shipmentBusinessFields(long shipmentId) {
+    List<ImportedBusinessFields> values = jdbcTemplate.query(
+        """
+        SELECT job_number, client_po_number, client_name_code, original_bill_of_lading
+        FROM cp_shipments WHERE id = ?
+        """,
+        (rs, rowNumber) -> new ImportedBusinessFields(
+            rs.getString("job_number"),
+            rs.getString("client_po_number"),
+            rs.getString("client_name_code"),
+            rs.getString("original_bill_of_lading")
+        ),
+        shipmentId
+    );
+    return values.isEmpty() ? new ImportedBusinessFields(null, null, null, null) : values.get(0);
+  }
+
+  private String cleanManagedText(String value, int limit, String label) {
+    String normalized = value == null ? null : value.trim();
+    if (normalized != null && normalized.length() > limit) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          label + " must not exceed " + limit + " characters"
+      );
+    }
+    return normalized == null || normalized.isBlank() ? null : normalized;
   }
 
   /** Runs a trusted force refresh for the background scheduler. */
@@ -2515,6 +2575,9 @@ public class ShipmentTrackingService {
       String trackingStatus,
       Instant lastTrackedAt,
       ImportedBusinessFields businessFields,
+      String note,
+      Instant assignedAt,
+      String publicationStatus,
       boolean followed,
       Instant agentLastRefreshedAt
   ) {}
@@ -2532,7 +2595,11 @@ public class ShipmentTrackingService {
       String shipmentPublicId,
       String carrier,
       String referenceType,
-      String referenceNumber
+      String referenceNumber,
+      String note,
+      String forwarderJobNumber,
+      String clientPoNumber,
+      String clientNameCode
   ) {}
 
   private record ImportedCustomerMatch(long customerId, String partyRole) {}

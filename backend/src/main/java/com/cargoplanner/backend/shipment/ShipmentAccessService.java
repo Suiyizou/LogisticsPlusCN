@@ -80,36 +80,20 @@ public class ShipmentAccessService {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
     ShipmentIdentity shipment = requireShipment(shipmentPublicId);
+    boolean overseaAgent = OVERSEA_AGENT.equalsIgnoreCase(customer.partyRole());
     List<String> relationshipRoles = jdbcTemplate.query(
         """
         SELECT a.relationship_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id
         WHERE a.shipment_id = ? AND a.customer_id = ? AND c.status = 'ACTIVE'
-          AND a.publication_status = 'PUBLISHED'
+          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
         """,
         (rs, rowNumber) -> rs.getString("relationship_role"),
         shipment.id(),
-        customer.id()
+        customer.id(),
+        overseaAgent
     );
-    if (relationshipRoles.isEmpty()
-        && OVERSEA_AGENT.equalsIgnoreCase(customer.partyRole())) {
-      Integer linkedAccess = jdbcTemplate.queryForObject(
-          """
-          SELECT COUNT(*)
-          FROM cp_oversea_agent_customers link
-          JOIN cp_customers linked_customer ON linked_customer.id = link.customer_id
-          JOIN cp_customer_shipment_access a ON a.customer_id = link.customer_id
-          WHERE link.oversea_agent_customer_id = ?
-            AND a.shipment_id = ?
-            AND a.publication_status = 'PUBLISHED'
-            AND linked_customer.status = 'ACTIVE'
-          """,
-          Integer.class,
-          customer.id(), shipment.id()
-      );
-      if (linkedAccess != null && linkedAccess > 0) relationshipRoles = List.of(OVERSEA_AGENT);
-    }
     if (relationshipRoles.isEmpty()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment has not been assigned to this customer");
     }

@@ -241,9 +241,17 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
-test("overseas-agent customers can manage follow-up without opening the internal backend", () => {
+test("overseas-agent customers receive a direct-assignment shipment management workspace", () => {
   assert.match(indexSource, /id="history-following-filter"/);
+  assert.match(indexSource, /id="agent-shipment-table-head"/);
+  assert.match(indexSource, /id="agent-shipment-edit-dialog"/);
+  assert.match(indexSource, /id="tracking-nav-item"/);
   assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
+  assert.match(appSource, /function renderAgentShipmentManagement/);
+  assert.match(
+    appSource,
+    /method: "PATCH"[\s\S]*?forwarderJobNumber:[\s\S]*?clientPoNumber:[\s\S]*?clientNameCode:/
+  );
   assert.match(
     appSource,
     /function setOverseaAgentShipmentFollowing[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/follow/
@@ -259,6 +267,14 @@ test("overseas-agent customers can manage follow-up without opening the internal
   assert.match(
     appSource,
     /followingOnly: String\(historyFollowingOnly && isOverseaAgentSession\(session\)\)/
+  );
+  assert.match(
+    stylesSource,
+    /body\.is-oversea-agent-session #tracking-nav-item[\s\S]*?display: none !important/
+  );
+  assert.match(
+    stylesSource,
+    /body\.is-oversea-agent-session #tracking-view > \.query-panel/
   );
 });
 

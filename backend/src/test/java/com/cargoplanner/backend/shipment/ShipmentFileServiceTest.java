@@ -393,7 +393,7 @@ class ShipmentFileServiceTest {
   }
 
   @Test
-  void linkedOverseasAgentListsFilesSharedWithOverseasAgents() {
+  void directlyAssignedOverseasAgentListsFilesSharedWithOverseasAgents() {
     jdbcTemplate.update(
         """
         INSERT INTO cp_customers (
@@ -418,6 +418,15 @@ class ShipmentFileServiceTest {
         "OVERSEA_AGENT",
         "ACTIVE"
     );
+    assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isFalse();
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          customer_id, shipment_id, relationship_role, publication_status, assigned_by
+        ) VALUES (22, 10, 'OVERSEA_AGENT', 'DRAFT', 2)
+        """
+    );
+    assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isTrue();
     ShipmentFileService.SavedShipmentFile saved = service.store(
         upload("agent-shared.pdf", "agent-shared"),
         "shipment-public-id",

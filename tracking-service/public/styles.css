@@ -10539,6 +10539,269 @@ body.is-oversea-agent-session .shipment-detail-actions {
   gap: 8px;
 }
 
+/* Overseas agents use a ticket-management workspace, not the free-form tracking desk. */
+body.is-oversea-agent-session #tracking-nav-item,
+body.is-oversea-agent-session .overview-hero,
+body.is-oversea-agent-session #tracking-view > .page-heading,
+body.is-oversea-agent-session #tracking-view > .query-panel {
+  display: none !important;
+}
+
+body.is-oversea-agent-session #overview-view {
+  width: 100%;
+  max-width: none;
+}
+
+body.is-oversea-agent-session .shipment-dashboard-panel {
+  margin-top: 0;
+  border-radius: 10px;
+}
+
+body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
+  min-height: 72px;
+  padding: 16px 20px;
+}
+
+.shipment-list-wrap.is-agent-management {
+  overflow-x: auto;
+  border-top: 1px solid #e2e9f2;
+}
+
+.agent-shipment-table-head,
+.agent-shipment-row {
+  display: grid;
+  min-width: 1320px;
+  grid-template-columns: 72px minmax(180px, 1.2fr) 100px minmax(180px, 1.1fr)
+    minmax(150px, 1fr) minmax(160px, 1fr) 150px 250px;
+  align-items: center;
+}
+
+.agent-shipment-table-head[hidden] {
+  display: none !important;
+}
+
+.agent-shipment-table-head {
+  min-height: 46px;
+  padding: 0 14px;
+  color: #5f7892;
+  background: #f5f8fc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-shipment-table {
+  display: block;
+  min-width: 1320px;
+}
+
+.agent-shipment-row {
+  min-height: 82px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e7edf5;
+  color: #334c65;
+  background: #fff;
+  font-size: 12px;
+}
+
+.agent-shipment-row:nth-child(even) {
+  background: #fbfcfe;
+}
+
+.agent-shipment-row:hover {
+  background: #f5f9ff;
+}
+
+.agent-shipment-row > span,
+.agent-shipment-row > time,
+.agent-shipment-table-head > span {
+  min-width: 0;
+  padding-right: 14px;
+}
+
+.agent-shipment-sequence,
+.agent-shipment-identity,
+.agent-shipment-status {
+  display: flex;
+  align-items: center;
+}
+
+.agent-shipment-sequence {
+  gap: 10px;
+}
+
+.agent-shipment-follow {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid #d7e1ed;
+  border-radius: 5px;
+  color: #9aaabd;
+  background: #fff;
+  cursor: pointer;
+}
+
+.agent-shipment-follow.is-following {
+  border-color: #e4c173;
+  color: #d29825;
+  background: #fff9e9;
+}
+
+.agent-shipment-identity {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.agent-shipment-identity b {
+  color: #18324c;
+  font-size: 13px;
+}
+
+.agent-shipment-identity small {
+  color: #7890a7;
+}
+
+.agent-shipment-carrier {
+  font-weight: 700;
+}
+
+.agent-shipment-customers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: #8193a6;
+}
+
+.agent-shipment-customers small {
+  max-width: 100%;
+  padding: 3px 6px;
+  overflow: hidden;
+  border: 1px solid #bcd8f6;
+  border-radius: 4px;
+  color: #2d70ba;
+  background: #f5faff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-shipment-status {
+  gap: 7px;
+  line-height: 1.45;
+}
+
+.agent-shipment-status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #4ebb89;
+}
+
+.agent-shipment-note {
+  overflow: hidden;
+  color: #60778e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-shipment-updated {
+  color: #647b92;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-shipment-actions {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.agent-shipment-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #cbd8e7;
+  border-radius: 5px;
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-row-view {
+  color: #60768c;
+}
+
+.agent-row-edit {
+  border-color: #8ebff1 !important;
+  color: #1769bb;
+  background: #f3f9ff !important;
+}
+
+.agent-row-update {
+  border-color: #edc882 !important;
+  color: #a66a0b;
+  background: #fff9ef !important;
+}
+
+.agent-shipment-actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.agent-shipment-edit-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.agent-shipment-edit-dialog header > div {
+  display: grid;
+  gap: 5px;
+}
+
+.agent-shipment-edit-dialog header p {
+  margin: 0;
+  color: #74899e;
+  font-size: 12px;
+}
+
+.agent-shipment-edit-grid {
+  display: grid;
+  padding: 22px 24px;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agent-shipment-edit-grid label {
+  display: grid;
+  gap: 7px;
+  color: #496179;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-shipment-edit-grid input,
+.agent-shipment-edit-grid textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cdd9e7;
+  border-radius: 6px;
+  color: #18324c;
+  background: #fff;
+  font: inherit;
+}
+
+.agent-shipment-edit-grid input {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.agent-shipment-edit-grid textarea {
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.agent-shipment-edit-note {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 780px) {
   .agent-following-filter {
     flex: 1 1 auto;
@@ -10546,5 +10809,13 @@ body.is-oversea-agent-session .shipment-detail-actions {
 
   body.is-oversea-agent-session .shipment-detail-actions {
     justify-content: flex-start;
+  }
+
+  .agent-shipment-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-shipment-edit-note {
+    grid-column: auto;
   }
 }

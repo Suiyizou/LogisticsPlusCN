@@ -61,6 +61,15 @@ public class CustomerShipmentFileController {
     return trackingService.readAssignedSnapshotByShipmentId(shipmentId, customer);
   }
 
+  @PatchMapping("/shipments/{shipmentId}")
+  public ObjectNode updateShipment(
+      @PathVariable String shipmentId,
+      @RequestBody CustomerShipmentUpdateRequest request,
+      @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
+  ) {
+    return trackingService.updateOverseaAgentAssignedShipment(shipmentId, request, customer);
+  }
+
   @PatchMapping("/shipments/{shipmentId}/follow")
   public ObjectNode followShipment(
       @PathVariable String shipmentId,

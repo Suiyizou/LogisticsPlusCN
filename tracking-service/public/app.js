@@ -39,6 +39,16 @@ const historyPagePrevious = document.querySelector("#history-page-previous");
 const historyPageNext = document.querySelector("#history-page-next");
 const historyPageInfo = document.querySelector("#history-page-info");
 const historyPageSizeSelect = document.querySelector("#history-page-size");
+const agentShipmentTableHead = document.querySelector("#agent-shipment-table-head");
+const trackingNavItem = document.querySelector("#tracking-nav-item");
+const agentShipmentEditDialog = document.querySelector("#agent-shipment-edit-dialog");
+const agentShipmentEditForm = document.querySelector("#agent-shipment-edit-form");
+const agentShipmentEditReference = document.querySelector("#agent-shipment-edit-reference");
+const agentEditJobNumber = document.querySelector("#agent-edit-job-number");
+const agentEditClientPo = document.querySelector("#agent-edit-client-po");
+const agentEditClientCode = document.querySelector("#agent-edit-client-code");
+const agentEditNote = document.querySelector("#agent-edit-note");
+const agentShipmentEditSubmit = document.querySelector("#agent-shipment-edit-submit");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
 const channelCheckSummary = document.querySelector("#channel-check-summary");
@@ -299,6 +309,7 @@ const MESSAGES = {
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
     "nav.agentShipments": "Shipment management",
+    "nav.agentShipmentDetail": "Shipment details",
     "nav.tracking": "Shipment tracking",
     "nav.profile": "Personal information",
     "profile.kicker": "CUSTOMER PROFILE",
@@ -351,8 +362,8 @@ const MESSAGES = {
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest shipment snapshots stored in the database",
-    "history.agentTitle": "Customer shipment management",
-    "history.agentSubtitle": "All published shipments for customers linked to this overseas-agent account",
+    "history.agentTitle": "Assigned shipment management",
+    "history.agentSubtitle": "Shipments directly assigned to this overseas-agent account by a business representative",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
@@ -381,6 +392,24 @@ const MESSAGES = {
     "agent.updateFailed": "Shipment update failed: {message}",
     "agent.followFailed": "Follow-up selection could not be saved: {message}",
     "agent.lastAgentUpdate": "Agent update {time}",
+    "agent.emptyTitle": "No shipments have been assigned",
+    "agent.emptyDescription": "Shipments assigned by your business representative will appear here immediately.",
+    "agent.columnIndex": "No.",
+    "agent.columnReference": "Shipment No.",
+    "agent.columnCarrier": "Carrier",
+    "agent.columnCustomers": "Customers",
+    "agent.columnStatus": "Status",
+    "agent.columnNote": "Note",
+    "agent.columnUpdated": "Last updated",
+    "agent.columnActions": "Actions",
+    "agent.view": "View",
+    "agent.edit": "Edit",
+    "agent.editKicker": "OVERSEAS AGENT WORKSPACE",
+    "agent.editTitle": "Edit shipment information",
+    "agent.saveChanges": "Save changes",
+    "agent.saving": "Saving...",
+    "agent.editFailed": "Shipment information could not be saved: {message}",
+    "agent.noCustomer": "Customer pending assignment",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
@@ -779,6 +808,7 @@ const MESSAGES = {
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
     "nav.agentShipments": "票单管理",
+    "nav.agentShipmentDetail": "票单详情",
     "nav.tracking": "货物跟踪",
     "nav.profile": "个人信息",
     "profile.kicker": "客户资料",
@@ -831,8 +861,8 @@ const MESSAGES = {
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
     "history.subtitle": "数据库保存的最新货运快照",
-    "history.agentTitle": "客户票单管理",
-    "history.agentSubtitle": "当前海外代理账户所关联客户的全部已发布票单",
+    "history.agentTitle": "已分配票单管理",
+    "history.agentSubtitle": "业务员直接分配给当前海外代理账户的票单",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
@@ -862,6 +892,24 @@ const MESSAGES = {
     "agent.updateFailed": "票单更新失败：{message}",
     "agent.followFailed": "无法保存跟进选择：{message}",
     "agent.lastAgentUpdate": "代理更新于 {time}",
+    "agent.emptyTitle": "业务员尚未分配票单",
+    "agent.emptyDescription": "业务员分配给当前海外代理的票单会立即显示在这里，无需另外发布。",
+    "agent.columnIndex": "序号",
+    "agent.columnReference": "票单号",
+    "agent.columnCarrier": "船司",
+    "agent.columnCustomers": "关联客户",
+    "agent.columnStatus": "追踪状态",
+    "agent.columnNote": "备注",
+    "agent.columnUpdated": "最近更新",
+    "agent.columnActions": "操作",
+    "agent.view": "查看",
+    "agent.edit": "编辑",
+    "agent.editKicker": "海外代理业务台",
+    "agent.editTitle": "编辑票单信息",
+    "agent.saveChanges": "保存修改",
+    "agent.saving": "保存中…",
+    "agent.editFailed": "票单信息保存失败：{message}",
+    "agent.noCustomer": "待业务员补充客户",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1374,6 +1422,8 @@ let historyPage = 1;
 let historyPageSize = 20;
 let historyTotal = 0;
 let historyTotalPages = 0;
+let agentShipmentDetailOpen = false;
+let agentEditingShipment = null;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
@@ -1911,14 +1961,17 @@ function setLocalizedElement(id, key) {
 }
 
 function activeViewTranslationKey(view = activeView, session = readFileSession()) {
-  return view === "overview" && isOverseaAgentSession(session)
-    ? "nav.agentShipments"
-    : `nav.${view}`;
+  if (isOverseaAgentSession(session)) {
+    if (view === "overview") return "nav.agentShipments";
+    if (view === "tracking") return "nav.agentShipmentDetail";
+  }
+  return `nav.${view}`;
 }
 
 function renderOverseaAgentWorkspace(session = readFileSession()) {
   const managed = isOverseaAgentSession(session);
   document.body.classList.toggle("is-oversea-agent-session", managed);
+  if (trackingNavItem) trackingNavItem.hidden = managed;
   setLocalizedElement(
       "overview-nav-label",
       managed ? "nav.agentShipments" : "nav.overview"
@@ -4159,8 +4212,23 @@ async function loadCustomerAssignedHistory() {
           route: [],
           keyTimes: {},
           routingLegs: [],
-          containers: []
+          containers: [],
+          references: {
+            business: {
+              forwarderJobNumber: item.forwarderJobNumber || "",
+              clientPoNumber: item.clientPoNumber || "",
+              clientNameCode: item.clientNameCode || ""
+            }
+          }
         };
+        snapshot.references ??= {};
+        snapshot.references.business ??= {};
+        snapshot.references.business.forwarderJobNumber =
+          item.forwarderJobNumber ?? snapshot.references.business.forwarderJobNumber ?? "";
+        snapshot.references.business.clientPoNumber =
+          item.clientPoNumber ?? snapshot.references.business.clientPoNumber ?? "";
+        snapshot.references.business.clientNameCode =
+          item.clientNameCode ?? snapshot.references.business.clientNameCode ?? "";
         return {
           query: normalizeQuery({
             carrier,
@@ -4171,7 +4239,11 @@ async function loadCustomerAssignedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           shipmentId: item.shipmentId,
-          customerReadOnly: true,
+          customerReadOnly: payload?.customerReadOnly !== false,
+          trackingStatus,
+          note: item.note || "",
+          assignedAt: item.assignedAt || null,
+          publicationStatus: item.publicationStatus || "",
           followed: item.followed === true,
           agentLastRefreshedAt: item.agentLastRefreshedAt || null,
           boundCustomers: normalizeHistoryBoundCustomers(item.boundCustomers)
@@ -6223,7 +6295,8 @@ function normalizeHistoryBoundCustomers(customers) {
       id,
       displayName: String(value.displayName ?? value.customerName ?? "").trim(),
       username: String(value.username ?? "").trim(),
-      clientCode: String(value.clientCode ?? value.clientNo ?? "").trim()
+      clientCode: String(value.clientCode ?? value.clientNo ?? "").trim(),
+      partyRole: String(value.partyRole ?? value.relationshipRole ?? "").trim().toUpperCase()
     });
   }
   return [...unique.values()];
@@ -6241,6 +6314,7 @@ function renderHistoryCustomerFilter(entries, session) {
   const customers = new Map();
   for (const entry of entries) {
     for (const customer of normalizeHistoryBoundCustomers(entry.boundCustomers)) {
+      if (isOverseaAgentSession(session) && customer.partyRole === "OVERSEA_AGENT") continue;
       const current = customers.get(customer.id) || { ...customer, shipmentCount: 0 };
       current.shipmentCount += 1;
       customers.set(customer.id, current);
@@ -6389,6 +6463,174 @@ async function refreshOverseaAgentShipment(entry) {
   }
 }
 
+function agentShipmentCustomers(entry) {
+  return normalizeHistoryBoundCustomers(entry?.boundCustomers)
+    .filter((customer) => String(customer.partyRole || "").toUpperCase() !== "OVERSEA_AGENT");
+}
+
+function openAgentShipmentEditor(entry) {
+  if (!isOverseaAgentSession() || !entry?.shipmentId || !agentShipmentEditDialog) return;
+  const business = businessReferencesForSnapshot(entry.snapshot);
+  agentEditingShipment = entry;
+  agentShipmentEditReference.textContent = [
+    entry.query?.number,
+    entry.query?.carrier
+  ].filter(Boolean).join(" · ");
+  agentEditJobNumber.value = business.forwarderJobNumber || "";
+  agentEditClientPo.value = business.clientPoNumber || "";
+  agentEditClientCode.value = business.clientNameCode || "";
+  agentEditNote.value = entry.note || "";
+  agentShipmentEditDialog.showModal();
+}
+
+function applyAgentShipmentEdit(entry, payload) {
+  if (!entry?.snapshot) return;
+  entry.snapshot.references ??= {};
+  entry.snapshot.references.business ??= {};
+  entry.snapshot.references.business.forwarderJobNumber =
+    payload?.forwarderJobNumber || "";
+  entry.snapshot.references.business.clientPoNumber = payload?.clientPoNumber || "";
+  entry.snapshot.references.business.clientNameCode = payload?.clientNameCode || "";
+  entry.note = payload?.note || "";
+  entry.updatedAt = payload?.updatedAt || new Date().toISOString();
+}
+
+async function saveAgentShipmentEdit() {
+  const session = readFileSession();
+  const entry = agentEditingShipment;
+  if (!isOverseaAgentSession(session) || !entry?.shipmentId) return;
+  clearError();
+  agentShipmentEditSubmit.disabled = true;
+  agentShipmentEditSubmit.textContent = t("agent.saving");
+  try {
+    const response = await fetch(
+      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Customer-Token": session.token
+        },
+        body: JSON.stringify({
+          note: agentEditNote.value,
+          forwarderJobNumber: agentEditJobNumber.value,
+          clientPoNumber: agentEditClientPo.value,
+          clientNameCode: agentEditClientCode.value
+        })
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      return;
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    applyAgentShipmentEdit(entry, payload);
+    agentShipmentEditDialog.close();
+    agentEditingShipment = null;
+    renderHistory();
+  } catch (error) {
+    showError(t("agent.editFailed", {
+      message: error?.message || t("error.generic")
+    }));
+  } finally {
+    agentShipmentEditSubmit.disabled = false;
+    agentShipmentEditSubmit.textContent = t("agent.saveChanges");
+  }
+}
+
+function renderAgentShipmentManagement(history) {
+  history.forEach((entry, index) => {
+    const row = document.createElement("article");
+    row.className = "agent-shipment-row";
+
+    const sequence = document.createElement("span");
+    sequence.className = "agent-shipment-sequence";
+    const follow = document.createElement("button");
+    follow.type = "button";
+    follow.className = "agent-shipment-follow";
+    follow.classList.toggle("is-following", entry.followed === true);
+    follow.disabled = entry.followBusy === true;
+    follow.title = t(entry.followed ? "agent.unfollow" : "agent.follow");
+    follow.setAttribute("aria-label", follow.title);
+    follow.textContent = entry.followed ? "★" : "☆";
+    const number = document.createElement("b");
+    number.textContent = String((historyPage - 1) * historyPageSize + index + 1);
+    sequence.append(follow, number);
+
+    const identity = document.createElement("span");
+    identity.className = "agent-shipment-identity";
+    const reference = document.createElement("b");
+    reference.textContent = entry.query?.number || "—";
+    const referenceMeta = document.createElement("small");
+    referenceMeta.textContent = trackingTypeLabel(entry.query?.type);
+    identity.append(reference, referenceMeta);
+
+    const carrier = document.createElement("span");
+    carrier.className = "agent-shipment-carrier";
+    carrier.textContent = entry.query?.carrier || "—";
+
+    const customers = document.createElement("span");
+    customers.className = "agent-shipment-customers";
+    const assignedCustomers = agentShipmentCustomers(entry);
+    if (assignedCustomers.length) {
+      assignedCustomers.slice(0, 3).forEach((customer) => {
+        const tag = document.createElement("small");
+        tag.textContent = historyCustomerLabel(customer);
+        customers.append(tag);
+      });
+    } else {
+      customers.textContent = t("agent.noCustomer");
+    }
+
+    const status = document.createElement("span");
+    status.className = "agent-shipment-status";
+    const statusDot = document.createElement("i");
+    const statusName = document.createElement("b");
+    statusName.textContent = entry.snapshot?.summary?.latestEvent?.name
+      || entry.trackingStatus
+      || "—";
+    status.append(statusDot, statusName);
+
+    const note = document.createElement("span");
+    note.className = "agent-shipment-note";
+    note.textContent = entry.note || "—";
+    note.title = entry.note || "";
+
+    const updated = document.createElement("time");
+    updated.className = "agent-shipment-updated";
+    updated.textContent = formatLocalDateTime(
+      entry.agentLastRefreshedAt || entry.updatedAt || entry.savedAt || entry.assignedAt
+    );
+
+    const actions = document.createElement("span");
+    actions.className = "agent-shipment-actions";
+    const view = document.createElement("button");
+    view.type = "button";
+    view.className = "agent-row-view";
+    view.textContent = t("agent.view");
+    view.addEventListener("click", () => openHistoryEntry(entry));
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "agent-row-edit";
+    edit.textContent = t("agent.edit");
+    edit.addEventListener("click", () => openAgentShipmentEditor(entry));
+    const update = document.createElement("button");
+    update.type = "button";
+    update.className = "agent-row-update";
+    update.disabled = entry.refreshing === true;
+    update.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+    update.addEventListener("click", () => void refreshOverseaAgentShipment(entry));
+    actions.append(view, edit, update);
+
+    follow.addEventListener("click", () => {
+      void setOverseaAgentShipmentFollowing(entry, !entry.followed);
+    });
+    row.append(sequence, identity, carrier, customers, status, note, updated, actions);
+    historyTableBody.append(row);
+  });
+}
+
 function renderHistory() {
   const allHistory = readHistory();
   const session = readFileSession();
@@ -6435,6 +6677,8 @@ function renderHistory() {
   historyEmptyTitle.textContent = t(
     searchHasNoResults
       ? "history.searchEmptyTitle"
+      : agentManagement
+        ? "agent.emptyTitle"
       : accountBound
         ? "history.accountEmptyTitle"
         : "history.emptyTitle"
@@ -6442,6 +6686,8 @@ function renderHistory() {
   historyEmptyDescription.textContent = t(
     searchHasNoResults
       ? "history.searchEmptyDescription"
+      : agentManagement
+        ? "agent.emptyDescription"
       : accountBound
         ? "history.accountEmptyDescription"
         : "history.emptyDescription"
@@ -6468,6 +6714,13 @@ function renderHistory() {
     historyPageSizeSelect.value = String(historyPageSize);
   }
   historyTableBody.replaceChildren();
+  historyTableWrap.classList.toggle("is-agent-management", agentManagement);
+  historyTableBody.classList.toggle("agent-shipment-table", agentManagement);
+  if (agentShipmentTableHead) agentShipmentTableHead.hidden = !agentManagement;
+  if (agentManagement) {
+    renderAgentShipmentManagement(history);
+    return;
+  }
 
   let rowIndex = 0;
   for (const entry of history) {
@@ -6980,7 +7233,13 @@ function updateUrl(query, { push = false } = {}) {
 }
 
 function showView(name, { updateLocation = true, pushLocation = false } = {}) {
-  const nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
+  let nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
+  if (isOverseaAgentSession() && nextView === "tracking" && !agentShipmentDetailOpen) {
+    nextView = "overview";
+  }
+  if (isOverseaAgentSession() && nextView === "overview") {
+    agentShipmentDetailOpen = false;
+  }
   if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") {
     return showView("overview", { updateLocation, pushLocation });
   }
@@ -7109,6 +7368,7 @@ function showStoredTrackingQuery(
 }
 
 function openHistoryEntry(entry) {
+  if (isOverseaAgentSession()) agentShipmentDetailOpen = true;
   showStoredTrackingQuery(entry.query, { entry });
   updateUrl(entry.query, { push: true });
   void showView("tracking", { updateLocation: false });
@@ -7739,6 +7999,11 @@ historyFollowingFilter?.addEventListener("click", async () => {
   historyFollowingOnly = !historyFollowingOnly;
   historyPage = 1;
   await loadCustomerAssignedHistory();
+});
+
+agentShipmentEditForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveAgentShipmentEdit();
 });
 
 async function loadCurrentHistoryPage() {

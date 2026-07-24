@@ -522,13 +522,51 @@ class ShipmentTrackingServiceTest {
         900, "oversea-agent-public-id", "oversea-agent", "Oversea Agent",
         "OVERSEA_AGENT", "ACTIVE"
     );
+    assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5).path("total").asLong())
+        .isZero();
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          shipment_id, customer_id, relationship_role, publication_status, assigned_by
+        ) VALUES (
+          (SELECT id FROM cp_shipments WHERE public_id = ?),
+          900, 'OVERSEA_AGENT', 'DRAFT', 1
+        )
+        """,
+        shipmentId
+    );
     ObjectNode agentShipments = service.listAssignedSnapshots(overseaAgent, 1, 5);
     assertThat(agentShipments.path("total").asLong()).isEqualTo(1L);
     assertThat(agentShipments.path("overseaAgentManagement").asBoolean()).isTrue();
+    assertThat(agentShipments.path("customerReadOnly").asBoolean()).isFalse();
+    assertThat(agentShipments.path("items").get(0).path("publicationStatus").asText())
+        .isEqualTo("DRAFT");
     assertThat(agentShipments.path("items").get(0).path("followed").asBoolean()).isFalse();
-    assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(1);
+    assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(2);
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
         .path("shipmentId").asText()).isEqualTo(shipmentId);
+
+    ObjectNode agentEdit = service.updateOverseaAgentAssignedShipment(
+        shipmentId,
+        new CustomerShipmentUpdateRequest(
+            "Oversea follow-up", "JOB-OVERSEA", "PO-OVERSEA", "CLIENT-OVERSEA"
+        ),
+        overseaAgent
+    );
+    assertThat(agentEdit.path("note").asText()).isEqualTo("Oversea follow-up");
+    assertThat(agentEdit.path("forwarderJobNumber").asText()).isEqualTo("JOB-OVERSEA");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT job_number FROM cp_shipments WHERE public_id = ?",
+        String.class,
+        shipmentId
+    )).isEqualTo("JOB-OVERSEA");
+    assertThatThrownBy(() -> service.updateOverseaAgentAssignedShipment(
+        shipmentId,
+        new CustomerShipmentUpdateRequest("No access", null, null, null),
+        customer
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
 
     assertThat(service.setOverseaAgentShipmentFollow(shipmentId, true, overseaAgent)
         .path("following").asBoolean()).isTrue();
@@ -1259,6 +1297,7 @@ class ShipmentTrackingServiceTest {
           carrier_code VARCHAR(32) NOT NULL,
           current_snapshot_id BIGINT,
           tracking_status VARCHAR(80),
+          business_note VARCHAR(2000),
           job_number VARCHAR(160),
           client_po_number VARCHAR(160),
           client_name_code VARCHAR(160),
