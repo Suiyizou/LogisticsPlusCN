@@ -393,7 +393,7 @@ class ShipmentFileServiceTest {
   }
 
   @Test
-  void directlyAssignedOverseasAgentListsFilesSharedWithOverseasAgents() {
+  void customerScopedOverseasAgentListsFilesSharedWithOverseasAgents() {
     jdbcTemplate.update(
         """
         INSERT INTO cp_customers (
@@ -416,14 +416,19 @@ class ShipmentFileServiceTest {
         "oversea-agent",
         "Oversea Agent",
         "OVERSEA_AGENT",
-        "ACTIVE"
+        "ACTIVE",
+        20L,
+        "customer-public-id",
+        "Portal Customer",
+        "SHIPPER"
     );
     assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isFalse();
     jdbcTemplate.update(
         """
-        INSERT INTO cp_customer_shipment_access (
-          customer_id, shipment_id, relationship_role, publication_status, assigned_by
-        ) VALUES (22, 10, 'OVERSEA_AGENT', 'DRAFT', 2)
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by
+        ) VALUES (10, 22, 20, 'ACTIVE', 2)
         """
     );
     assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isTrue();
@@ -801,6 +806,18 @@ class ShipmentFileServiceTest {
           oversea_agent_customer_id BIGINT NOT NULL,
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_shipment_scopes (
+          shipment_id BIGINT NOT NULL,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          represented_customer_id BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_id, oversea_agent_customer_id, represented_customer_id)
         )
         """);
     jdbcTemplate.execute("""

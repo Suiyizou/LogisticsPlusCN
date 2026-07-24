@@ -414,27 +414,31 @@ public class ShipmentTrackingService {
           "Customers can only open assigned booking or bill-of-lading records"
       );
     }
+    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
+    String publicationFilter = isOverseaAgent(customer)
+        ? ""
+        : " AND a.publication_status = 'PUBLISHED'";
+    List<Object> parameters = new ArrayList<>(accessQuery.parameters());
+    parameters.add(request.carrier());
+    parameters.add(request.type());
+    parameters.add(normalizeReference(request.number()));
     List<CachedShipment> records = jdbcTemplate.query(
-        """
+        ("""
         SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
                t.fetched_at, t.fresh_until
         FROM cp_customer_shipment_access a
         JOIN cp_shipments s ON s.id = a.shipment_id
         JOIN cp_shipment_references r ON r.shipment_id = s.id
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE a.customer_id = ?
-          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
+        WHERE %s
+          %s
           AND r.carrier_code = ?
           AND r.reference_type = ?
           AND r.reference_no_normalized = ?
         LIMIT 1
-        """,
+        """).formatted(accessQuery.predicate(), publicationFilter),
         this::mapCachedShipment,
-        customer.id(),
-        isOverseaAgent(customer),
-        request.carrier(),
-        request.type(),
-        normalizeReference(request.number())
+        parameters.toArray()
     );
     if (records.isEmpty()) {
       throw new ApiException(
@@ -464,23 +468,27 @@ public class ShipmentTrackingService {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
+    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
+    String publicationFilter = isOverseaAgent(customer)
+        ? ""
+        : " AND a.publication_status = 'PUBLISHED'";
+    List<Object> parameters = new ArrayList<>(accessQuery.parameters());
+    parameters.add(shipmentPublicId == null ? "" : shipmentPublicId.trim());
     List<CachedShipment> records = jdbcTemplate.query(
-        """
+        ("""
         SELECT s.id AS shipment_id, s.public_id, t.snapshot_json, t.strategy_json,
                t.fetched_at, t.fresh_until
         FROM cp_customer_shipment_access a
         JOIN cp_shipments s ON s.id = a.shipment_id
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        WHERE a.customer_id = ?
-          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
+        WHERE %s
+          %s
           AND s.public_id = ?
         LIMIT 1
-        """,
+        """).formatted(accessQuery.predicate(), publicationFilter),
         this::mapCachedShipment,
-        customer.id(),
-        isOverseaAgent(customer),
-        shipmentPublicId == null ? "" : shipmentPublicId.trim()
+        parameters.toArray()
     );
     if (records.isEmpty()) {
       throw new ApiException(HttpStatus.NOT_FOUND, "Assigned shipment was not found");
@@ -506,12 +514,12 @@ public class ShipmentTrackingService {
     return response;
   }
 
-  /** Lists the database-backed shipment records explicitly assigned to a customer. */
+  /** Lists the database-backed shipment records visible to a customer session. */
   public ObjectNode listAssignedSnapshots(CustomerPrincipal customer) {
     return listAssignedSnapshots(customer, 1, 20);
   }
 
-  /** Lists one page of shipments assigned directly to the signed-in customer. */
+  /** Lists one page of shipments visible to the signed-in customer. */
   public ObjectNode listAssignedSnapshots(
       CustomerPrincipal customer,
       int requestedPage,
@@ -534,29 +542,41 @@ public class ShipmentTrackingService {
     boolean overseaAgent = isOverseaAgent(customer);
     long followAgentId = overseaAgent ? customer.id() : -1L;
     boolean followingOnly = requestedFollowingOnly && overseaAgent;
+    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
     String publicationFilter = overseaAgent
         ? ""
         : " AND a.publication_status = 'PUBLISHED'";
+    List<Object> totalParameters = new ArrayList<>(accessQuery.parameters());
+    totalParameters.add(followingOnly);
+    totalParameters.add(followAgentId);
     Long totalValue = jdbcTemplate.queryForObject(
         ("""
         SELECT COUNT(DISTINCT a.shipment_id)
         FROM cp_customer_shipment_access a
-        WHERE a.customer_id = ?
+        WHERE %s
           %s
           AND (? = FALSE OR EXISTS (
             SELECT 1 FROM cp_oversea_agent_shipment_follows follow
             WHERE follow.oversea_agent_customer_id = ?
               AND follow.shipment_id = a.shipment_id
           ))
-        """).formatted(publicationFilter),
+        """).formatted(accessQuery.predicate(), publicationFilter),
         Long.class,
-        customer.id(), followingOnly, followAgentId
+        totalParameters.toArray()
     );
     long total = totalValue == null ? 0 : totalValue;
     int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
     if (totalPages == 0) page = 1;
     else if (page > totalPages) page = totalPages;
     int offset = (page - 1) * pageSize;
+    List<Object> listParameters = new ArrayList<>();
+    listParameters.add(followAgentId);
+    listParameters.add(followAgentId);
+    listParameters.addAll(accessQuery.parameters());
+    listParameters.add(followingOnly);
+    listParameters.add(followAgentId);
+    listParameters.add(pageSize);
+    listParameters.add(offset);
     List<CustomerAssignedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
@@ -578,15 +598,17 @@ public class ShipmentTrackingService {
                ) AS agent_last_refreshed_at
         FROM cp_shipments s
         JOIN (
-          SELECT a.shipment_id, a.assigned_at, a.publication_status
+          SELECT a.shipment_id, MAX(a.assigned_at) AS assigned_at,
+                 MAX(a.publication_status) AS publication_status
           FROM cp_customer_shipment_access a
-          WHERE a.customer_id = ?
+          WHERE %s
             %s
             AND (? = FALSE OR EXISTS (
               SELECT 1 FROM cp_oversea_agent_shipment_follows follow
               WHERE follow.oversea_agent_customer_id = ?
                 AND follow.shipment_id = a.shipment_id
             ))
+          GROUP BY a.shipment_id
         ) assigned ON assigned.shipment_id = s.id
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
@@ -597,7 +619,7 @@ public class ShipmentTrackingService {
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         ORDER BY assigned.assigned_at DESC, s.updated_at DESC
         LIMIT ? OFFSET ?
-        """.formatted(publicationFilter),
+        """.formatted(accessQuery.predicate(), publicationFilter),
         (rs, rowNumber) -> new CustomerAssignedShipment(
             new CachedShipment(
                 rs.getLong("shipment_id"), rs.getString("public_id"),
@@ -619,8 +641,7 @@ public class ShipmentTrackingService {
             rs.getBoolean("agent_followed"),
             instant(rs, "agent_last_refreshed_at")
         ),
-        followAgentId, followAgentId, customer.id(),
-        followingOnly, followAgentId, pageSize, offset
+        listParameters.toArray()
     );
     Map<Long, List<AssignedCustomer>> assignedCustomers =
         assignedCustomersByShipment(customer, records);
@@ -844,13 +865,12 @@ public class ShipmentTrackingService {
       );
     }
     String publicId = shipmentPublicId == null ? "" : shipmentPublicId.trim();
+    accessService.requireCustomerAccess(publicId, customer);
     List<AgentShipmentTarget> records = jdbcTemplate.query(
         """
         SELECT s.id, s.public_id, r.carrier_code, r.reference_type, r.reference_no_raw,
                s.business_note, s.job_number, s.client_po_number, s.client_name_code
         FROM cp_shipments s
-        JOIN cp_customer_shipment_access a
-          ON a.shipment_id = s.id AND a.customer_id = ?
         LEFT JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id
           FROM cp_shipment_references r2
@@ -874,7 +894,7 @@ public class ShipmentTrackingService {
             rs.getString("client_po_number"),
             rs.getString("client_name_code")
         ),
-        customer.id(), publicId
+        publicId
     );
     if (records.isEmpty()) {
       throw new ApiException(
@@ -894,7 +914,37 @@ public class ShipmentTrackingService {
   }
 
   private boolean isOverseaAgent(CustomerPrincipal customer) {
-    return customer != null && "OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole());
+    return customer != null && customer.isOverseaAgent();
+  }
+
+  private CustomerAccessQuery customerAccessQuery(
+      CustomerPrincipal customer,
+      String accessAlias
+  ) {
+    if (!isOverseaAgent(customer)) {
+      return new CustomerAccessQuery(accessAlias + ".customer_id = ?", List.of(customer.id()));
+    }
+    long scopeCustomerId = customer.scopeCustomerId() == null
+        ? -1L
+        : customer.scopeCustomerId();
+    return new CustomerAccessQuery(
+        ("""
+        %s.customer_id = ?
+        AND EXISTS (
+          SELECT 1
+          FROM cp_oversea_agent_shipment_scopes agent_scope
+          JOIN cp_oversea_agent_customers agent_customer
+            ON agent_customer.oversea_agent_customer_id =
+                 agent_scope.oversea_agent_customer_id
+           AND agent_customer.customer_id = agent_scope.represented_customer_id
+          WHERE agent_scope.shipment_id = %s.shipment_id
+            AND agent_scope.oversea_agent_customer_id = ?
+            AND agent_scope.represented_customer_id = ?
+            AND agent_scope.status = 'ACTIVE'
+        )
+        """).formatted(accessAlias, accessAlias),
+        List.of(scopeCustomerId, customer.id(), scopeCustomerId)
+    );
   }
 
   private ImportedBusinessFields shipmentBusinessFields(long shipmentId) {
@@ -1118,6 +1168,7 @@ public class ShipmentTrackingService {
           """,
           match.customerId(), shipment.shipmentId(), match.partyRole(), user.id()
       );
+      syncOverseaAgentScopeForShipment(match.customerId(), shipment.shipmentId());
       jdbcTemplate.update(
           """
           UPDATE cp_shipment_client_match_queue
@@ -1143,6 +1194,35 @@ public class ShipmentTrackingService {
         """,
         shipment.shipmentId(), clientCode, reason == null ? "NO_MATCH" : reason,
         user.id(), timestamp(now), timestamp(now)
+    );
+  }
+
+  private void syncOverseaAgentScopeForShipment(long customerId, long shipmentId) {
+    jdbcTemplate.update(
+        """
+        DELETE FROM cp_oversea_agent_shipment_scopes
+        WHERE represented_customer_id = ? AND shipment_id = ?
+        """,
+        customerId,
+        shipmentId
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by, assigned_at, updated_at
+        )
+        SELECT shipment_access.shipment_id,
+               link.oversea_agent_customer_id, link.customer_id,
+               'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+        FROM cp_oversea_agent_customers link
+        JOIN cp_customer_shipment_access shipment_access
+          ON shipment_access.customer_id = link.customer_id
+         AND shipment_access.shipment_id = ?
+        WHERE link.customer_id = ?
+        """,
+        shipmentId,
+        customerId
     );
   }
 
@@ -2549,6 +2629,8 @@ public class ShipmentTrackingService {
   }
 
   private record ShipmentIdentity(long id, String publicId) {}
+
+  private record CustomerAccessQuery(String predicate, List<Object> parameters) {}
 
   private record ShipmentReference(
       String carrier,

@@ -51,13 +51,12 @@ public class CustomerAuthService {
     List<CustomerAccount> customers = jdbcTemplate.query(
         """
         SELECT id, public_id, username, display_name, party_role, status,
-               password_salt, password_hash, password_iterations
+               password_salt, password_hash, password_iterations, customer_code_hash
         FROM cp_customers
-        WHERE username = ? AND customer_code_hash = ? AND status = 'ACTIVE'
+        WHERE username = ? AND status = 'ACTIVE'
         """,
         this::mapCustomerAccount,
-        username,
-        tokenCodec.hash(code)
+        username
     );
     if (customers.isEmpty()) throw invalidCredentials();
 
@@ -73,17 +72,20 @@ public class CustomerAuthService {
       throw invalidCredentials();
     }
 
-    CustomerPrincipal customer = account.principal();
+    String codeHash = tokenCodec.hash(code.trim());
+    CustomerScope scope = resolveScope(account, codeHash);
+    CustomerPrincipal customer = scopedPrincipal(account.principal(), scope);
     String token = tokenCodec.newSessionToken();
     Instant expiresAt = now.plus(sessionTtl);
     jdbcTemplate.update(
         """
         INSERT INTO cp_customer_sessions (
-          customer_id, session_token_hash, expires_at, last_seen_at,
+          customer_id, scope_customer_id, session_token_hash, expires_at, last_seen_at,
           ip_address, user_agent, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         customer.id(),
+        customer.scopeCustomerId(),
         tokenCodec.hash(token),
         Timestamp.from(expiresAt),
         Timestamp.from(now),
@@ -96,7 +98,10 @@ public class CustomerAuthService {
         expiresAt.toString(),
         new CustomerLoginResponse.CustomerView(
             customer.publicId(), customer.username(), customer.displayName(),
-            customer.partyRole(), customer.status()
+            customer.partyRole(), customer.status(),
+            customer.scopeCustomerPublicId(),
+            customer.scopeCustomerDisplayName(),
+            customer.scopeCustomerPartyRole()
         )
     );
   }
@@ -110,13 +115,29 @@ public class CustomerAuthService {
     String hash = tokenCodec.hash(token);
     List<CustomerPrincipal> customers = jdbcTemplate.query(
         """
-        SELECT c.id, c.public_id, c.username, c.display_name, c.party_role, c.status
+        SELECT c.id, c.public_id, c.username, c.display_name, c.party_role, c.status,
+               scoped.id AS scope_customer_id,
+               scoped.public_id AS scope_customer_public_id,
+               scoped.display_name AS scope_customer_display_name,
+               scoped.party_role AS scope_customer_party_role
         FROM cp_customer_sessions s
         JOIN cp_customers c ON c.id = s.customer_id
+        LEFT JOIN cp_customers scoped ON scoped.id = COALESCE(s.scope_customer_id, s.customer_id)
         WHERE s.session_token_hash = ?
           AND s.revoked_at IS NULL
           AND s.expires_at > ?
           AND c.status = 'ACTIVE'
+          AND scoped.status = 'ACTIVE'
+          AND (
+            (UPPER(c.party_role) <> 'OVERSEA_AGENT' AND scoped.id = c.id)
+            OR
+            (UPPER(c.party_role) = 'OVERSEA_AGENT' AND EXISTS (
+              SELECT 1
+              FROM cp_oversea_agent_customers agent_customer
+              WHERE agent_customer.oversea_agent_customer_id = c.id
+                AND agent_customer.customer_id = scoped.id
+            ))
+          )
         """,
         this::mapCustomer,
         hash,
@@ -167,7 +188,11 @@ public class CustomerAuthService {
         rs.getString("username"),
         rs.getString("display_name"),
         rs.getString("party_role"),
-        rs.getString("status")
+        rs.getString("status"),
+        nullableLong(rs, "scope_customer_id"),
+        rs.getString("scope_customer_public_id"),
+        rs.getString("scope_customer_display_name"),
+        rs.getString("scope_customer_party_role")
     );
   }
 
@@ -175,11 +200,76 @@ public class CustomerAuthService {
     int iterations = rs.getInt("password_iterations");
     Integer nullableIterations = rs.wasNull() ? null : iterations;
     return new CustomerAccount(
-        mapCustomer(rs, rowNumber),
+        new CustomerPrincipal(
+            rs.getLong("id"),
+            rs.getString("public_id"),
+            rs.getString("username"),
+            rs.getString("display_name"),
+            rs.getString("party_role"),
+            rs.getString("status")
+        ),
         rs.getString("password_salt"),
         rs.getString("password_hash"),
-        nullableIterations
+        nullableIterations,
+        rs.getString("customer_code_hash")
     );
+  }
+
+  private CustomerScope resolveScope(CustomerAccount account, String codeHash) {
+    CustomerPrincipal principal = account.principal();
+    if (!principal.isOverseaAgent()) {
+      if (!codeHash.equals(account.customerCodeHash())) throw invalidCredentials();
+      return new CustomerScope(
+          principal.id(),
+          principal.publicId(),
+          principal.displayName(),
+          principal.partyRole()
+      );
+    }
+    List<CustomerScope> scopes = jdbcTemplate.query(
+        """
+        SELECT customer.id, customer.public_id, customer.display_name, customer.party_role
+        FROM cp_oversea_agent_customers agent_customer
+        JOIN cp_customers customer ON customer.id = agent_customer.customer_id
+        WHERE agent_customer.oversea_agent_customer_id = ?
+          AND customer.customer_code_hash = ?
+          AND customer.status = 'ACTIVE'
+          AND UPPER(customer.party_role) IN ('SHIPPER', 'CONSIGNEE')
+        """,
+        (rs, rowNumber) -> new CustomerScope(
+            rs.getLong("id"),
+            rs.getString("public_id"),
+            rs.getString("display_name"),
+            rs.getString("party_role")
+        ),
+        principal.id(),
+        codeHash
+    );
+    if (scopes.isEmpty()) throw invalidCredentials();
+    return scopes.get(0);
+  }
+
+  private CustomerPrincipal scopedPrincipal(
+      CustomerPrincipal principal,
+      CustomerScope scope
+  ) {
+    return new CustomerPrincipal(
+        principal.id(),
+        principal.publicId(),
+        principal.username(),
+        principal.displayName(),
+        principal.partyRole(),
+        principal.status(),
+        scope.id(),
+        scope.publicId(),
+        scope.displayName(),
+        scope.partyRole()
+    );
+  }
+
+  private Long nullableLong(ResultSet rs, String column) throws SQLException {
+    long value = rs.getLong(column);
+    return rs.wasNull() ? null : value;
   }
 
   private ApiException invalidCredentials() {
@@ -190,6 +280,14 @@ public class CustomerAuthService {
       CustomerPrincipal principal,
       String passwordSalt,
       String passwordHash,
-      Integer passwordIterations
+      Integer passwordIterations,
+      String customerCodeHash
+  ) {}
+
+  private record CustomerScope(
+      long id,
+      String publicId,
+      String displayName,
+      String partyRole
   ) {}
 }

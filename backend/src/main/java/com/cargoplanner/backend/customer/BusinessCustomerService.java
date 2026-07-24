@@ -333,13 +333,28 @@ public class BusinessCustomerService {
             partyRole,
             existing.id()
         );
-        if (!"OVERSEA_AGENT".equals(partyRole)) {
+        jdbcTemplate.update(
+            """
+            DELETE FROM cp_oversea_agent_shipment_scopes
+            WHERE oversea_agent_customer_id = ? OR represented_customer_id = ?
+            """,
+            existing.id(),
+            existing.id()
+        );
+        if ("OVERSEA_AGENT".equals(partyRole)) {
+          jdbcTemplate.update(
+              "DELETE FROM cp_oversea_agent_customers WHERE customer_id = ?",
+              existing.id()
+          );
+        } else {
           jdbcTemplate.update(
               "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
               existing.id()
           );
         }
+        syncOverseaAgentScopesForCustomer(existing.id());
       }
+      if (codeChanged) revokeSessions(existing.id());
     } catch (DuplicateKeyException error) {
       throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
     }
@@ -451,6 +466,8 @@ public class BusinessCustomerService {
               + "; internal business ownership retained by user " + customer.responsibleAgentId(),
           ipAddress
       );
+      syncOverseaAgentScopesForCustomer(customer.id());
+      revokeSessions(customer.id());
     }
 
     Map<String, Object> response = new LinkedHashMap<>();
@@ -591,6 +608,18 @@ public class BusinessCustomerService {
       linkedCustomers.add(customer);
     }
 
+    LinkedHashSet<Long> affectedCustomerIds = new LinkedHashSet<>(
+        jdbcTemplate.query(
+            """
+            SELECT customer_id
+            FROM cp_oversea_agent_customers
+            WHERE oversea_agent_customer_id = ?
+            """,
+            (rs, rowNumber) -> rs.getLong(1),
+            agent.id()
+        )
+    );
+    linkedCustomers.forEach(customer -> affectedCustomerIds.add(customer.id()));
     jdbcTemplate.update(
         "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
         agent.id()
@@ -609,6 +638,11 @@ public class BusinessCustomerService {
           customer.id(), agent.id(), actor.id()
       );
     }
+    for (Long customerId : affectedCustomerIds) {
+      syncOverseaAgentScopesForCustomer(customerId);
+      revokeSessions(customerId);
+    }
+    revokeSessions(agent.id());
     audit(
         actor,
         "UPDATE_OVERSEA_AGENT_CUSTOMERS",
@@ -1304,6 +1338,7 @@ public class BusinessCustomerService {
         """,
         customer.id(), match.shipmentId(), customer.partyRole(), actor.id()
     );
+    syncOverseaAgentScopeForShipment(customer.id(), match.shipmentId());
     Instant now = Instant.now();
     jdbcTemplate.update(
         """
@@ -1935,6 +1970,7 @@ public class BusinessCustomerService {
         customer.partyRole(),
         actor.id()
     );
+    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
     audit(
         actor,
         "BIND_CUSTOMER_SHIPMENT",
@@ -1982,6 +2018,7 @@ public class BusinessCustomerService {
           """,
           customer.id(), shipment.id(), customer.partyRole(), actor.id()
       );
+      syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
       bound++;
       boundShipmentIds.add(shipment.publicId());
     }
@@ -2079,6 +2116,7 @@ public class BusinessCustomerService {
         shipment.id()
     );
     if (affected == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
+    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
     audit(
         actor,
         published ? "PUBLISH_CUSTOMER_SHIPMENT" : "WITHDRAW_CUSTOMER_SHIPMENT",
@@ -2208,6 +2246,7 @@ public class BusinessCustomerService {
         shipment.id()
     );
     if (affected == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
+    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
     audit(
         actor,
         "UNBIND_CUSTOMER_SHIPMENT",
@@ -2508,8 +2547,66 @@ public class BusinessCustomerService {
 
   private void revokeSessions(long customerId) {
     jdbcTemplate.update(
-        "UPDATE cp_customer_sessions SET revoked_at = ? WHERE customer_id = ? AND revoked_at IS NULL",
+        """
+        UPDATE cp_customer_sessions
+        SET revoked_at = ?
+        WHERE (customer_id = ? OR scope_customer_id = ?)
+          AND revoked_at IS NULL
+        """,
         Timestamp.from(Instant.now()),
+        customerId,
+        customerId
+    );
+  }
+
+  private void syncOverseaAgentScopesForCustomer(long customerId) {
+    jdbcTemplate.update(
+        "DELETE FROM cp_oversea_agent_shipment_scopes WHERE represented_customer_id = ?",
+        customerId
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by, assigned_at, updated_at
+        )
+        SELECT shipment_access.shipment_id,
+               link.oversea_agent_customer_id, link.customer_id,
+               'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+        FROM cp_oversea_agent_customers link
+        JOIN cp_customer_shipment_access shipment_access
+          ON shipment_access.customer_id = link.customer_id
+        WHERE link.customer_id = ?
+        """,
+        customerId
+    );
+  }
+
+  private void syncOverseaAgentScopeForShipment(long customerId, long shipmentId) {
+    jdbcTemplate.update(
+        """
+        DELETE FROM cp_oversea_agent_shipment_scopes
+        WHERE represented_customer_id = ? AND shipment_id = ?
+        """,
+        customerId,
+        shipmentId
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by, assigned_at, updated_at
+        )
+        SELECT shipment_access.shipment_id,
+               link.oversea_agent_customer_id, link.customer_id,
+               'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+        FROM cp_oversea_agent_customers link
+        JOIN cp_customer_shipment_access shipment_access
+          ON shipment_access.customer_id = link.customer_id
+         AND shipment_access.shipment_id = ?
+        WHERE link.customer_id = ?
+        """,
+        shipmentId,
         customerId
     );
   }

@@ -338,6 +338,7 @@ CREATE TABLE IF NOT EXISTS cp_customer_handover_items (
 CREATE TABLE IF NOT EXISTS cp_customer_sessions (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   customer_id BIGINT NOT NULL,
+  scope_customer_id BIGINT NOT NULL,
   session_token_hash CHAR(64) NOT NULL UNIQUE,
   expires_at DATETIME(6) NOT NULL,
   last_seen_at DATETIME(6) NOT NULL,
@@ -346,8 +347,10 @@ CREATE TABLE IF NOT EXISTS cp_customer_sessions (
   user_agent VARCHAR(512) NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   INDEX idx_cp_customer_sessions_customer (customer_id, revoked_at, expires_at),
+  INDEX idx_cp_customer_sessions_scope (scope_customer_id, revoked_at, expires_at),
   INDEX idx_cp_customer_sessions_expiry (expires_at, revoked_at),
-  CONSTRAINT fk_cp_customer_sessions_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE
+  CONSTRAINT fk_cp_customer_sessions_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_customer_sessions_scope FOREIGN KEY (scope_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_customer_shipment_access (
@@ -364,6 +367,31 @@ CREATE TABLE IF NOT EXISTS cp_customer_shipment_access (
   CONSTRAINT fk_cp_customer_shipment_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
   CONSTRAINT fk_cp_customer_shipment_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
   CONSTRAINT fk_cp_customer_shipment_assigned_by FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_oversea_agent_shipment_scopes (
+  shipment_id BIGINT NOT NULL,
+  oversea_agent_customer_id BIGINT NOT NULL,
+  represented_customer_id BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  assigned_by BIGINT NOT NULL,
+  assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (shipment_id, oversea_agent_customer_id, represented_customer_id),
+  INDEX idx_cp_agent_shipment_scopes_login (
+    oversea_agent_customer_id, represented_customer_id, status, shipment_id
+  ),
+  INDEX idx_cp_agent_shipment_scopes_customer (
+    represented_customer_id, status, shipment_id
+  ),
+  CONSTRAINT fk_cp_agent_shipment_scope_shipment
+    FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_agent_shipment_scope_agent
+    FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_agent_shipment_scope_customer
+    FOREIGN KEY (represented_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_agent_shipment_scope_assigned_by
+    FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_customer_transfer_log (

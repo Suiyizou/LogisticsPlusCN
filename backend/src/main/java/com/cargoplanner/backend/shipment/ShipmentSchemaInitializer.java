@@ -110,6 +110,31 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "ALTER TABLE cp_customers ADD CONSTRAINT fk_cp_customers_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id)"
     );
     addColumnIfMissing(
+        "cp_customer_sessions",
+        "scope_customer_id",
+        "ALTER TABLE cp_customer_sessions ADD COLUMN scope_customer_id BIGINT NULL AFTER customer_id"
+    );
+    jdbcTemplate.update(
+        """
+        UPDATE cp_customer_sessions customer_session
+        JOIN cp_customers customer_account
+          ON customer_account.id = customer_session.customer_id
+        SET customer_session.scope_customer_id = customer_session.customer_id
+        WHERE customer_session.scope_customer_id IS NULL
+          AND UPPER(customer_account.party_role) <> 'OVERSEA_AGENT'
+        """
+    );
+    addIndexIfMissing(
+        "cp_customer_sessions",
+        "idx_cp_customer_sessions_scope",
+        "ALTER TABLE cp_customer_sessions ADD INDEX idx_cp_customer_sessions_scope (scope_customer_id, revoked_at, expires_at)"
+    );
+    addConstraintIfMissing(
+        "cp_customer_sessions",
+        "fk_cp_customer_sessions_scope",
+        "ALTER TABLE cp_customer_sessions ADD CONSTRAINT fk_cp_customer_sessions_scope FOREIGN KEY (scope_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE"
+    );
+    addColumnIfMissing(
         "cp_shipments",
         "responsible_agent_id",
         "ALTER TABLE cp_shipments ADD COLUMN responsible_agent_id BIGINT NULL AFTER created_by"
@@ -287,6 +312,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
     removeInvalidDiscoveredShipmentReferencesForMySql();
     upgradeSnapshotUserQueryIndexForMySql();
     migrateLegacyOverseaAgentCustomersForMySql();
+    migrateOverseaAgentShipmentScopesForMySql();
     migrateLegacyFileVisibilityForMySql();
   }
 
@@ -298,6 +324,35 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
     jdbcTemplate.update(
         "UPDATE cp_customer_shipment_access SET relationship_role = 'OVERSEA_AGENT' "
             + "WHERE UPPER(relationship_role) = 'AGENT'"
+    );
+  }
+
+  private void migrateOverseaAgentShipmentScopesForMySql() {
+    jdbcTemplate.update(
+        """
+        INSERT IGNORE INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by, assigned_at, updated_at
+        )
+        SELECT shipment_access.shipment_id,
+               link.oversea_agent_customer_id, link.customer_id,
+               'ACTIVE', link.assigned_by,
+               GREATEST(shipment_access.assigned_at, link.assigned_at),
+               CURRENT_TIMESTAMP(6)
+        FROM cp_oversea_agent_customers link
+        JOIN cp_customer_shipment_access shipment_access
+          ON shipment_access.customer_id = link.customer_id
+        """
+    );
+    jdbcTemplate.update(
+        """
+        UPDATE cp_customer_sessions customer_session
+        JOIN cp_customers agent ON agent.id = customer_session.customer_id
+        SET customer_session.revoked_at =
+              COALESCE(customer_session.revoked_at, CURRENT_TIMESTAMP(6))
+        WHERE customer_session.scope_customer_id IS NULL
+          AND UPPER(agent.party_role) = 'OVERSEA_AGENT'
+        """
     );
   }
 
@@ -598,6 +653,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         CREATE TABLE IF NOT EXISTS cp_customer_sessions (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           customer_id BIGINT NOT NULL,
+          scope_customer_id BIGINT NOT NULL,
           session_token_hash CHAR(64) NOT NULL UNIQUE,
           expires_at DATETIME(6) NOT NULL,
           last_seen_at DATETIME(6) NOT NULL,
@@ -606,8 +662,10 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           user_agent VARCHAR(512) NULL,
           created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
           INDEX idx_cp_customer_sessions_customer (customer_id, revoked_at, expires_at),
+          INDEX idx_cp_customer_sessions_scope (scope_customer_id, revoked_at, expires_at),
           INDEX idx_cp_customer_sessions_expiry (expires_at, revoked_at),
-          CONSTRAINT fk_cp_customer_sessions_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE
+          CONSTRAINT fk_cp_customer_sessions_customer FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_customer_sessions_scope FOREIGN KEY (scope_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
@@ -635,6 +693,32 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
             FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
           CONSTRAINT fk_cp_oversea_agent_follow_shipment
             FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_oversea_agent_shipment_scopes (
+          shipment_id BIGINT NOT NULL,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          represented_customer_id BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          assigned_by BIGINT NOT NULL,
+          assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (shipment_id, oversea_agent_customer_id, represented_customer_id),
+          INDEX idx_cp_agent_shipment_scopes_login (
+            oversea_agent_customer_id, represented_customer_id, status, shipment_id
+          ),
+          INDEX idx_cp_agent_shipment_scopes_customer (
+            represented_customer_id, status, shipment_id
+          ),
+          CONSTRAINT fk_cp_agent_shipment_scope_shipment
+            FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_agent_shipment_scope_agent
+            FOREIGN KEY (oversea_agent_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_agent_shipment_scope_customer
+            FOREIGN KEY (represented_customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_agent_shipment_scope_assigned_by
+            FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """

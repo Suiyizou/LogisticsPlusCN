@@ -81,19 +81,53 @@ public class ShipmentAccessService {
     }
     ShipmentIdentity shipment = requireShipment(shipmentPublicId);
     boolean overseaAgent = OVERSEA_AGENT.equalsIgnoreCase(customer.partyRole());
-    List<String> relationshipRoles = jdbcTemplate.query(
-        """
-        SELECT a.relationship_role
-        FROM cp_customer_shipment_access a
-        JOIN cp_customers c ON c.id = a.customer_id
-        WHERE a.shipment_id = ? AND a.customer_id = ? AND c.status = 'ACTIVE'
-          AND (? = TRUE OR a.publication_status = 'PUBLISHED')
-        """,
-        (rs, rowNumber) -> rs.getString("relationship_role"),
-        shipment.id(),
-        customer.id(),
-        overseaAgent
-    );
+    List<String> relationshipRoles;
+    if (overseaAgent) {
+      if (!customer.hasCustomerScope()) {
+        throw new ApiException(
+            HttpStatus.FORBIDDEN,
+            "Overseas agent customer scope is required"
+        );
+      }
+      relationshipRoles = jdbcTemplate.query(
+          """
+          SELECT 'OVERSEA_AGENT' AS relationship_role
+          FROM cp_oversea_agent_shipment_scopes agent_scope
+          JOIN cp_oversea_agent_customers agent_customer
+            ON agent_customer.oversea_agent_customer_id =
+                 agent_scope.oversea_agent_customer_id
+           AND agent_customer.customer_id = agent_scope.represented_customer_id
+          JOIN cp_customer_shipment_access customer_access
+            ON customer_access.shipment_id = agent_scope.shipment_id
+           AND customer_access.customer_id = agent_scope.represented_customer_id
+          JOIN cp_customers represented_customer
+            ON represented_customer.id = agent_scope.represented_customer_id
+           AND represented_customer.status = 'ACTIVE'
+          WHERE agent_scope.shipment_id = ?
+            AND agent_scope.oversea_agent_customer_id = ?
+            AND agent_scope.represented_customer_id = ?
+            AND agent_scope.status = 'ACTIVE'
+          LIMIT 1
+          """,
+          (rs, rowNumber) -> rs.getString("relationship_role"),
+          shipment.id(),
+          customer.id(),
+          customer.scopeCustomerId()
+      );
+    } else {
+      relationshipRoles = jdbcTemplate.query(
+          """
+          SELECT a.relationship_role
+          FROM cp_customer_shipment_access a
+          JOIN cp_customers c ON c.id = a.customer_id
+          WHERE a.shipment_id = ? AND a.customer_id = ? AND c.status = 'ACTIVE'
+            AND a.publication_status = 'PUBLISHED'
+          """,
+          (rs, rowNumber) -> rs.getString("relationship_role"),
+          shipment.id(),
+          customer.id()
+      );
+    }
     if (relationshipRoles.isEmpty()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment has not been assigned to this customer");
     }

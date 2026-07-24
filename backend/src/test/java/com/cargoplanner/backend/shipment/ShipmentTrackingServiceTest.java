@@ -518,12 +518,26 @@ class ShipmentTrackingServiceTest {
         """,
         matchedCustomerId
     );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by
+        ) VALUES (
+          (SELECT id FROM cp_shipments WHERE public_id = ?),
+          900, ?, 'ACTIVE', 1
+        )
+        """,
+        shipmentId,
+        matchedCustomerId
+    );
     CustomerPrincipal overseaAgent = new CustomerPrincipal(
         900, "oversea-agent-public-id", "oversea-agent", "Oversea Agent",
-        "OVERSEA_AGENT", "ACTIVE"
+        "OVERSEA_AGENT", "ACTIVE",
+        matchedCustomerId, "customer-public-id", "File Customer", "SHIPPER"
     );
     assertThat(service.listAssignedSnapshots(overseaAgent, 1, 5).path("total").asLong())
-        .isZero();
+        .isEqualTo(1L);
     jdbcTemplate.update(
         """
         INSERT INTO cp_customer_shipment_access (
@@ -540,7 +554,7 @@ class ShipmentTrackingServiceTest {
     assertThat(agentShipments.path("overseaAgentManagement").asBoolean()).isTrue();
     assertThat(agentShipments.path("customerReadOnly").asBoolean()).isFalse();
     assertThat(agentShipments.path("items").get(0).path("publicationStatus").asText())
-        .isEqualTo("DRAFT");
+        .isEqualTo("PUBLISHED");
     assertThat(agentShipments.path("items").get(0).path("followed").asBoolean()).isFalse();
     assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(2);
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
@@ -645,6 +659,119 @@ class ShipmentTrackingServiceTest {
     )).isInstanceOfSatisfying(ApiException.class, error ->
         assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
+  }
+
+  @Test
+  void overseaAgentListsOnlyShipmentsForItsSelectedCustomerScope() {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, status, party_role,
+          customer_code_hash, customer_code_prefix, created_by, responsible_agent_id
+        ) VALUES
+          (100, 'agent-100', 'agent-100', 'Agent 100', 'ACTIVE', 'OVERSEA_AGENT',
+           'agent-hash', 'AGENT', 1, 1),
+          (101, 'customer-101', 'customer-101', 'Customer 101', 'ACTIVE', 'SHIPPER',
+           'customer-hash-101', 'C101', 1, 1),
+          (102, 'customer-102', 'customer-102', 'Customer 102', 'ACTIVE', 'CONSIGNEE',
+           'customer-hash-102', 'C102', 1, 1),
+          (103, 'customer-103', 'customer-103', 'Customer 103', 'ACTIVE', 'SHIPPER',
+           'customer-hash-103', 'C103', 1, 1),
+          (200, 'agent-200', 'agent-200', 'Agent 200', 'ACTIVE', 'OVERSEA_AGENT',
+           'agent-hash-200', 'AGENT200', 1, 1)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_customers (
+          customer_id, oversea_agent_customer_id, assigned_by
+        ) VALUES (101, 100, 1), (102, 100, 1)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipments (
+          id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+          created_at, updated_at
+        ) VALUES
+          (1001, 'linked-shipment-1', 'COSCO', 'Pending', 1, 1,
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (1002, 'linked-shipment-2', 'COSCO', 'Pending', 1, 1,
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (1003, 'agent-own-shipment', 'COSCO', 'Pending', 1, 1,
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+          (1004, 'unrelated-shipment', 'COSCO', 'Pending', 1, 1,
+           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          shipment_id, customer_id, relationship_role, publication_status, assigned_by
+        ) VALUES
+          (1001, 101, 'SHIPPER', 'PUBLISHED', 1),
+          (1001, 102, 'CONSIGNEE', 'DRAFT', 1),
+          (1002, 102, 'CONSIGNEE', 'DRAFT', 1),
+          (1003, 100, 'OVERSEA_AGENT', 'DRAFT', 1),
+          (1003, 200, 'OVERSEA_AGENT', 'DRAFT', 1),
+          (1004, 103, 'SHIPPER', 'PUBLISHED', 1)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_follows (
+          oversea_agent_customer_id, shipment_id
+        ) VALUES (100, 1002)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by
+        ) VALUES
+          (1001, 100, 101, 'ACTIVE', 1),
+          (1001, 100, 102, 'ACTIVE', 1),
+          (1002, 100, 102, 'ACTIVE', 1)
+        """
+    );
+
+    CustomerPrincipal customer101Agent = new CustomerPrincipal(
+        100, "agent-100", "agent-100", "Agent 100", "OVERSEA_AGENT", "ACTIVE",
+        101L, "customer-101", "Customer 101", "SHIPPER"
+    );
+    ObjectNode customer101Shipments =
+        service.listAssignedSnapshots(customer101Agent, 1, 20);
+
+    assertThat(customer101Shipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
+        .containsExactly("linked-shipment-1");
+    assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
+        .doesNotContain("agent-own-shipment", "unrelated-shipment");
+
+    CustomerPrincipal customer102Agent = new CustomerPrincipal(
+        100, "agent-100", "agent-100", "Agent 100", "OVERSEA_AGENT", "ACTIVE",
+        102L, "customer-102", "Customer 102", "CONSIGNEE"
+    );
+    ObjectNode customer102Shipments =
+        service.listAssignedSnapshots(customer102Agent, 1, 20);
+    assertThat(customer102Shipments.path("total").asLong()).isEqualTo(2L);
+    assertThat(customer102Shipments.path("items").findValuesAsText("shipmentId"))
+        .containsExactlyInAnyOrder("linked-shipment-1", "linked-shipment-2");
+
+    ObjectNode followedShipments =
+        service.listAssignedSnapshots(customer102Agent, 1, 20, true);
+    assertThat(followedShipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(followedShipments.path("items").get(0).path("shipmentId").asText())
+        .isEqualTo("linked-shipment-2");
+    assertThat(followedShipments.path("items").get(0).path("followed").asBoolean())
+        .isTrue();
+
+    CustomerPrincipal unlinkedAgent = new CustomerPrincipal(
+        200, "agent-200", "agent-200", "Agent 200", "OVERSEA_AGENT", "ACTIVE"
+    );
+    assertThat(service.listAssignedSnapshots(unlinkedAgent, 1, 20).path("total").asLong())
+        .isZero();
   }
 
   @Test
@@ -1392,6 +1519,18 @@ class ShipmentTrackingServiceTest {
           oversea_agent_customer_id BIGINT NOT NULL,
           assigned_by BIGINT NOT NULL,
           assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_shipment_scopes (
+          shipment_id BIGINT NOT NULL,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          represented_customer_id BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_id, oversea_agent_customer_id, represented_customer_id)
         )
         """);
     jdbcTemplate.execute("""

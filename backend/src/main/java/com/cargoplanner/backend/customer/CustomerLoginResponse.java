@@ -10,6 +10,9 @@ public record CustomerLoginResponse(
       String username,
       String displayName,
       String partyRole,
-      String status
+      String status,
+      String scopeCustomerId,
+      String scopeCustomerDisplayName,
+      String scopeCustomerPartyRole
   ) {}
 }
