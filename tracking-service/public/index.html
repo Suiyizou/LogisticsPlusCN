@@ -51,7 +51,7 @@
             hidden
           >
             <span class="nav-icon" aria-hidden="true">▤</span>
-            <span data-i18n="nav.agentShipments">Shipment management</span>
+            <span data-i18n="nav.agentShipments">Assigned shipments</span>
           </a>
           <a class="nav-item" id="tracking-nav-item" href="#tracking" data-view-target="tracking">
             <span class="nav-icon">⌁</span>
@@ -268,7 +268,7 @@
           >
             <section class="panel agent-management-panel">
               <div class="agent-management-toolbar">
-                <h1 data-i18n="agent.managementTitle">Confirmed tracked shipments</h1>
+                <h1 data-i18n="agent.managementTitle">Assigned tracked shipments</h1>
                 <div class="agent-management-toolbar-actions">
                   <label class="history-customer-filter" id="agent-management-customer-filter-wrap">
                     <span data-i18n="history.customerFilter">Customer filter</span>
@@ -309,15 +309,6 @@
                     >×</button>
                   </div>
                   <button
-                    class="agent-management-bulk-update"
-                    id="agent-management-bulk-update"
-                    type="button"
-                    disabled
-                  >
-                    <span aria-hidden="true">↻</span>
-                    <b id="agent-management-bulk-update-label">Update selected (0)</b>
-                  </button>
-                  <button
                     class="agent-management-refresh"
                     id="agent-management-refresh"
                     type="button"
@@ -326,21 +317,6 @@
                     <b data-i18n="agent.refreshList">Refresh</b>
                   </button>
                 </div>
-              </div>
-
-              <div class="agent-management-bulk-toolbar">
-                <span
-                  class="agent-management-selected-count"
-                  id="agent-management-selected-count"
-                  aria-live="polite"
-                >0 selected</span>
-                <span
-                  class="agent-management-bulk-status"
-                  id="agent-management-bulk-status"
-                  role="status"
-                  aria-live="polite"
-                  hidden
-                ></span>
               </div>
 
               <div class="history-loading" id="agent-management-loading" role="status" aria-live="polite" hidden>
@@ -359,14 +335,6 @@
 
               <div class="shipment-list-wrap is-agent-management" id="agent-management-table-wrap" hidden>
                 <div class="agent-shipment-table-head" id="agent-shipment-table-head">
-                  <span class="agent-shipment-select-heading">
-                    <input
-                      id="agent-management-select-all"
-                      type="checkbox"
-                      data-i18n-aria-label="agent.selectAllPage"
-                      aria-label="Select current page"
-                    />
-                  </span>
                   <span data-i18n="agent.columnIndex">No.</span>
                   <span data-i18n="agent.columnBusinessReference">Business No.</span>
                   <span data-i18n="agent.columnCarrier">Carrier</span>

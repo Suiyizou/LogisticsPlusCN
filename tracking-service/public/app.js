@@ -322,7 +322,7 @@ const MESSAGES = {
     "nav.back": "Back",
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
-    "nav.agentShipments": "Shipment management",
+    "nav.agentShipments": "Assigned shipments",
     "nav.agentShipmentDetail": "Shipment details",
     "nav.tracking": "Shipment tracking",
     "nav.profile": "Personal information",
@@ -428,8 +428,8 @@ const MESSAGES = {
     "agent.view": "View",
     "agent.noCustomer": "Service customer unavailable",
     "agent.managementKicker": "SHIPMENT MANAGEMENT",
-    "agent.managementTitle": "Confirmed tracked shipments",
-    "agent.managementDescription": "Select a customer code, review assigned shipments, and update one or many tracking records.",
+    "agent.managementTitle": "Assigned tracked shipments",
+    "agent.managementDescription": "Review the shipments assigned to linked customers. Tracking is refreshed automatically by the system.",
     "agent.managementEmptyTitle": "No assigned shipments",
     "agent.managementEmptyDescription": "Authorized customer shipments will appear here.",
     "agent.columnSelectIndex": "Select / No.",
@@ -837,7 +837,7 @@ const MESSAGES = {
     "nav.back": "返回上一页",
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
-    "nav.agentShipments": "票单管理",
+    "nav.agentShipments": "分配票单",
     "nav.agentShipmentDetail": "票单详情",
     "nav.tracking": "货物跟踪",
     "nav.profile": "个人信息",
@@ -944,8 +944,8 @@ const MESSAGES = {
     "agent.view": "查看",
     "agent.noCustomer": "服务客户信息不可用",
     "agent.managementKicker": "票单管理",
-    "agent.managementTitle": "已确认的追踪票单",
-    "agent.managementDescription": "先选择客户码，再查看、勾选并批量更新该客户名下的授权票单。",
+    "agent.managementTitle": "已分配的追踪票单",
+    "agent.managementDescription": "查看关联客户分配的票单；追踪状态由系统定时自动更新。",
     "agent.managementEmptyTitle": "暂无已分配票单",
     "agent.managementEmptyDescription": "关联客户授权给你的票单会显示在这里。",
     "agent.columnSelectIndex": "选择 / 序号",
@@ -6599,23 +6599,6 @@ function renderAgentShipmentManagement(history) {
   history.forEach((entry, index) => {
     const row = document.createElement("article");
     row.className = "agent-shipment-row";
-    const entryKey = historyShipmentKey(entry);
-
-    const selectionCell = document.createElement("span");
-    selectionCell.className = "agent-shipment-selection";
-    const selection = document.createElement("input");
-    selection.type = "checkbox";
-    selection.className = "agent-shipment-select";
-    selection.checked = agentManagementSelectedKeys.has(entryKey);
-    selection.disabled = !historyCustomerFilter || agentBulkUpdating || entry.refreshing === true;
-    selection.setAttribute("aria-label", `${t("agent.view")} ${entry.query?.number || ""}`);
-    selection.addEventListener("change", () => {
-      if (selection.checked) agentManagementSelectedKeys.add(entryKey);
-      else agentManagementSelectedKeys.delete(entryKey);
-      renderHistory();
-    });
-    selectionCell.append(selection);
-
     const sequence = document.createElement("span");
     sequence.className = "agent-shipment-sequence";
     const sequenceNumber = document.createElement("b");
@@ -6699,20 +6682,12 @@ function renderAgentShipmentManagement(history) {
     view.className = "agent-row-view";
     view.textContent = t("agent.view");
     view.addEventListener("click", () => openHistoryEntry(entry));
-    const update = document.createElement("button");
-    update.type = "button";
-    update.className = "agent-row-update";
-    update.disabled = !historyCustomerFilter || entry.refreshing === true || agentBulkUpdating;
-    update.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
-    if (!historyCustomerFilter) update.title = t("agent.selectCustomerToUpdate");
-    update.addEventListener("click", () => void refreshOverseaAgentShipment(entry));
-    actions.append(view, update, follow);
+    actions.append(view, follow);
 
     follow.addEventListener("click", () => {
       void setOverseaAgentShipmentFollowing(entry, !entry.followed);
     });
     row.append(
-      selectionCell,
       sequence,
       identity,
       carrier,
@@ -7174,19 +7149,7 @@ function renderHistory() {
         void setOverseaAgentShipmentFollowing(entry, !entry.followed);
       });
 
-      const updateButton = document.createElement("button");
-      updateButton.type = "button";
-      updateButton.className = "agent-update-button";
-      updateButton.disabled = entry.refreshing === true || !historyCustomerFilter;
-      updateButton.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
-      if (!historyCustomerFilter) {
-        updateButton.title = t("agent.selectCustomerToUpdate");
-      }
-      updateButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        void refreshOverseaAgentShipment(entry);
-      });
-      detailActions.append(followButton, updateButton);
+      detailActions.append(followButton);
 
       if (entry.agentLastRefreshedAt) {
         const lastAgentUpdate = document.createElement("small");

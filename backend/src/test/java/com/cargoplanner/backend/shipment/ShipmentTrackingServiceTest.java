@@ -558,7 +558,7 @@ class ShipmentTrackingServiceTest {
     assertThat(agentShipments.path("capabilities").path("editShipmentMasterData").asBoolean())
         .isFalse();
     assertThat(agentShipments.path("capabilities").path("refreshTracking").asBoolean())
-        .isTrue();
+        .isFalse();
     assertThat(agentShipments.path("scopeCustomer").path("id").asText())
         .isEqualTo("customer-public-id");
     assertThat(agentShipments.path("items").get(0).path("publicationStatus").asText())
@@ -611,12 +611,11 @@ class ShipmentTrackingServiceTest {
         assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
 
-    when(adapterClient.track(normalized, true)).thenReturn(adapterResponse);
-    ObjectNode agentRefresh = service.refreshOverseaAgentAssignedShipment(
-        shipmentId, overseaAgent
+    assertThatThrownBy(() ->
+        service.refreshOverseaAgentAssignedShipment(shipmentId, overseaAgent)
+    ).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
-    assertThat(agentRefresh.path("overseaAgentManaged").asBoolean()).isTrue();
-    assertThat(agentRefresh.path("shipmentId").asText()).isEqualTo(shipmentId);
     assertThat(jdbcTemplate.queryForObject(
         """
         SELECT COUNT(*) FROM cp_oversea_agent_shipment_follows
@@ -626,7 +625,7 @@ class ShipmentTrackingServiceTest {
         """,
         Integer.class,
         shipmentId
-    )).isEqualTo(1);
+    )).isZero();
 
     assertThat(service.setOverseaAgentShipmentFollow(shipmentId, false, overseaAgent)
         .path("following").asBoolean()).isFalse();
@@ -786,7 +785,7 @@ class ShipmentTrackingServiceTest {
     assertThatThrownBy(() -> service.refreshOverseaAgentAssignedShipment(
         "linked-shipment-2", null, agent
     )).isInstanceOfSatisfying(ApiException.class, error ->
-        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST)
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
     assertThatThrownBy(() -> service.refreshOverseaAgentAssignedShipment(
         "linked-shipment-2", "customer-101", agent

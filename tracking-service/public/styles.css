@@ -10706,9 +10706,8 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 .agent-shipment-table-head,
 .agent-shipment-row {
   display: grid;
-  min-width: 1580px;
+  min-width: 1480px;
   grid-template-columns:
-    48px
     60px
     minmax(190px, 1.15fr)
     110px
@@ -10736,7 +10735,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-shipment-table {
   display: block;
-  min-width: 1580px;
+  min-width: 1480px;
 }
 
 .agent-shipment-row {

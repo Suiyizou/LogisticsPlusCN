@@ -9,9 +9,14 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +37,7 @@ public class ShipmentAutoRefreshService {
   private final ShipmentTrackingService trackingService;
   private final ShipmentAutoRefreshProperties properties;
   private final Clock clock;
+  private final AtomicBoolean regularScheduleAligned = new AtomicBoolean(false);
 
   @Autowired
   public ShipmentAutoRefreshService(
@@ -64,6 +70,7 @@ public class ShipmentAutoRefreshService {
   public void scheduledRefresh() {
     if (!properties.isEnabled()) return;
     try {
+      alignRegularScheduleOnce();
       refreshDueShipments();
     } catch (RuntimeException error) {
       log.error("Shipment auto-refresh poll failed", error);
@@ -76,6 +83,34 @@ public class ShipmentAutoRefreshService {
     List<RefreshClaim> claims = claimDueJobs(now);
     for (RefreshClaim claim : claims) refreshClaim(claim);
     return claims.size();
+  }
+
+  void alignRegularScheduleOnce() {
+    if (!regularScheduleAligned.compareAndSet(false, true)) return;
+    Instant now = clock.instant();
+    Instant nextAttempt = nextRegularAttempt(now, "");
+    int aligned = jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_refresh_jobs
+        SET next_attempt_at = ?, updated_at = ?
+        WHERE auto_refresh_enabled = TRUE
+          AND terminal_status IS NULL
+          AND failure_count = 0
+          AND lease_token IS NULL
+          AND (next_attempt_at IS NULL OR next_attempt_at <> ?)
+        """,
+        timestamp(nextAttempt),
+        timestamp(now),
+        timestamp(nextAttempt)
+    );
+    if (aligned > 0) {
+      log.info(
+          "Aligned {} shipment auto-refresh jobs to the next daily run at {} ({})",
+          aligned,
+          properties.getDailyTime(),
+          properties.getTimeZone()
+      );
+    }
   }
 
   int registerMissingJobs(Instant now) {
@@ -352,13 +387,15 @@ public class ShipmentAutoRefreshService {
   }
 
   Instant nextRegularAttempt(Instant now, String stableKey) {
-    long intervalMillis = valid(properties.getRefreshInterval(), Duration.ofDays(1)).toMillis();
-    intervalMillis = Math.max(Duration.ofMinutes(1).toMillis(), intervalMillis);
-    long currentMillis = now.toEpochMilli();
-    long bucketStart = Math.floorDiv(currentMillis, intervalMillis) * intervalMillis;
-    long candidateMillis = bucketStart + Math.floorMod(stableHash(stableKey), intervalMillis);
-    if (candidateMillis <= currentMillis) candidateMillis += intervalMillis;
-    return Instant.ofEpochMilli(candidateMillis);
+    ZoneId zone = properties.getTimeZone();
+    LocalTime dailyTime = properties.getDailyTime();
+    ZonedDateTime zonedNow = now.atZone(zone);
+    LocalDate scheduledDate = zonedNow.toLocalDate();
+    ZonedDateTime candidate = scheduledDate.atTime(dailyTime).atZone(zone);
+    if (!candidate.toInstant().isAfter(now)) {
+      candidate = scheduledDate.plusDays(1).atTime(dailyTime).atZone(zone);
+    }
+    return candidate.toInstant();
   }
 
   private Instant retryAt(Instant now, String stableKey, int failureCount) {

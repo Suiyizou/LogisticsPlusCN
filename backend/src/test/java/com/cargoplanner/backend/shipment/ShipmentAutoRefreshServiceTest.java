@@ -13,6 +13,8 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ class ShipmentAutoRefreshServiceTest {
   private JdbcTemplate jdbcTemplate;
   private ObjectMapper objectMapper;
   private ShipmentTrackingService trackingService;
+  private ShipmentAutoRefreshProperties properties;
   private ShipmentAutoRefreshService service;
 
   @BeforeEach
@@ -37,8 +40,9 @@ class ShipmentAutoRefreshServiceTest {
     createSchema();
     objectMapper = new ObjectMapper();
     trackingService = mock(ShipmentTrackingService.class);
-    ShipmentAutoRefreshProperties properties = new ShipmentAutoRefreshProperties();
-    properties.setRefreshInterval(Duration.ofDays(1));
+    properties = new ShipmentAutoRefreshProperties();
+    properties.setDailyTime(LocalTime.MIDNIGHT);
+    properties.setTimeZone(ZoneId.of("Asia/Shanghai"));
     properties.setLeaseDuration(Duration.ofMinutes(5));
     properties.setRetryBaseDelay(Duration.ofMinutes(15));
     properties.setRetryMaxDelay(Duration.ofHours(6));
@@ -50,7 +54,7 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
-  void registersShipmentsIntoStableSlotsAcrossTheNextDay() {
+  void registersAllShipmentsForTheNextConfiguredDailyRun() {
     insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
     insertShipment(2, "00000000-0000-0000-0000-000000000099", "Discharged");
 
@@ -58,9 +62,28 @@ class ShipmentAutoRefreshServiceTest {
     Instant first = nextAttempt(1);
     Instant second = nextAttempt(2);
 
-    assertThat(first).isAfter(NOW).isBeforeOrEqualTo(NOW.plus(Duration.ofDays(1)));
-    assertThat(second).isAfter(NOW).isBeforeOrEqualTo(NOW.plus(Duration.ofDays(1)));
-    assertThat(first).isNotEqualTo(second);
+    assertThat(first).isEqualTo(Instant.parse("2026-07-19T16:00:00Z"));
+    assertThat(second).isEqualTo(first);
+  }
+
+  @Test
+  void supportsACustomDailyTimeAndTimeZone() {
+    properties.setDailyTime(LocalTime.of(2, 30));
+    properties.setTimeZone(ZoneId.of("Asia/Tokyo"));
+
+    assertThat(service.nextRegularAttempt(
+        Instant.parse("2026-07-19T16:00:00Z"), "shipment"
+    )).isEqualTo(Instant.parse("2026-07-19T17:30:00Z"));
+  }
+
+  @Test
+  void alignsLegacyDistributedJobsToTheNextDailyRunOnce() {
+    insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
+    insertDueJob(1, NOW.plus(Duration.ofHours(2)));
+
+    service.alignRegularScheduleOnce();
+
+    assertThat(nextAttempt(1)).isEqualTo(Instant.parse("2026-07-19T16:00:00Z"));
   }
 
   @Test

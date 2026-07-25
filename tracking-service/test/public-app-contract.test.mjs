@@ -241,7 +241,7 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
-test("overseas agents keep the overview and receive a customer-scoped bulk shipment manager", () => {
+test("overseas agents keep a customer-scoped read-only assigned shipment list", () => {
   assert.match(indexSource, /id="history-following-filter"/);
   assert.match(indexSource, /id="history-eta-sort"[\s\S]*?value="asc"[\s\S]*?value="desc"/);
   assert.match(
@@ -252,8 +252,9 @@ test("overseas agents keep the overview and receive a customer-scoped bulk shipm
     indexSource,
     /id="agent-shipments-view"[\s\S]*?data-view="shipments"[\s\S]*?id="agent-management-customer-filter"/
   );
-  assert.match(indexSource, /id="agent-management-select-all"/);
-  assert.match(indexSource, /id="agent-management-bulk-update"/);
+  assert.doesNotMatch(indexSource, /id="agent-management-select-all"/);
+  assert.doesNotMatch(indexSource, /id="agent-management-bulk-update"/);
+  assert.doesNotMatch(indexSource, /class="agent-management-bulk-toolbar"/);
   assert.match(indexSource, /id="agent-management-refresh"/);
   assert.match(
     indexSource,
@@ -270,12 +271,10 @@ test("overseas agents keep the overview and receive a customer-scoped bulk shipm
   );
   assert.match(
     appSource,
-    /function refreshOverseaAgentShipment[\s\S]*?!historyCustomerFilter[\s\S]*?\/refresh\?customerId=\$\{/
+    /function renderAgentShipmentManagement[\s\S]*?actions\.append\(view, follow\)[\s\S]*?agentManagementTableBody\.append/
   );
-  assert.match(
-    appSource,
-    /function renderAgentShipmentManagement[\s\S]*?agent-shipment-select[\s\S]*?agentManagementTableBody\.append/
-  );
+  assert.doesNotMatch(appSource, /actions\.append\(view, update/);
+  assert.doesNotMatch(appSource, /detailActions\.append\(followButton, updateButton\)/);
   assert.match(
     appSource,
     /function agentShipmentClientLabel[\s\S]*?businessReferences\.clientNameCode[\s\S]*?agentShipmentCustomers/
@@ -283,10 +282,6 @@ test("overseas agents keep the overview and receive a customer-scoped bulk shipm
   assert.match(
     appSource,
     /agentManagementRefresh\?\.addEventListener\("click"[\s\S]*?loadCustomerAssignedHistory/
-  );
-  assert.match(
-    appSource,
-    /function refreshSelectedOverseaAgentShipments[\s\S]*?selectedEntries[\s\S]*?refreshOverseaAgentShipment\(entry,[\s\S]*?loadCustomerAssignedHistory/
   );
   assert.match(
     appSource,
