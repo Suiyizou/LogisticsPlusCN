@@ -41,6 +41,26 @@ const historyPageNext = document.querySelector("#history-page-next");
 const historyPageInfo = document.querySelector("#history-page-info");
 const historyPageSizeSelect = document.querySelector("#history-page-size");
 const agentShipmentTableHead = document.querySelector("#agent-shipment-table-head");
+const agentShipmentsNavItem = document.querySelector("#agent-shipments-nav-item");
+const agentManagementFollowingFilter = document.querySelector("#agent-management-following-filter");
+const agentManagementCustomerFilterWrap = document.querySelector("#agent-management-customer-filter-wrap");
+const agentManagementCustomerFilterSelect = document.querySelector("#agent-management-customer-filter");
+const agentManagementSearchInput = document.querySelector("#agent-management-search-input");
+const agentManagementSearchClear = document.querySelector("#agent-management-search-clear");
+const agentManagementSelectAll = document.querySelector("#agent-management-select-all");
+const agentManagementSelectedCount = document.querySelector("#agent-management-selected-count");
+const agentManagementBulkUpdate = document.querySelector("#agent-management-bulk-update");
+const agentManagementBulkUpdateLabel = document.querySelector("#agent-management-bulk-update-label");
+const agentManagementBulkStatus = document.querySelector("#agent-management-bulk-status");
+const agentManagementLoading = document.querySelector("#agent-management-loading");
+const agentManagementEmpty = document.querySelector("#agent-management-empty");
+const agentManagementTableWrap = document.querySelector("#agent-management-table-wrap");
+const agentManagementTableBody = document.querySelector("#agent-management-table-body");
+const agentManagementPagination = document.querySelector("#agent-management-pagination");
+const agentManagementPagePrevious = document.querySelector("#agent-management-page-previous");
+const agentManagementPageNext = document.querySelector("#agent-management-page-next");
+const agentManagementPageInfo = document.querySelector("#agent-management-page-info");
+const agentManagementPageSizeSelect = document.querySelector("#agent-management-page-size");
 const trackingNavItem = document.querySelector("#tracking-nav-item");
 const journeyStage = document.querySelector("#journey-stage");
 const checkChannelsButton = document.querySelector("#check-channels-button");
@@ -403,6 +423,18 @@ const MESSAGES = {
     "agent.columnActions": "Actions",
     "agent.view": "View",
     "agent.noCustomer": "Service customer unavailable",
+    "agent.managementKicker": "SHIPMENT MANAGEMENT",
+    "agent.managementTitle": "Assigned shipment management",
+    "agent.managementDescription": "Select a customer code, review assigned shipments, and update one or many tracking records.",
+    "agent.managementEmptyTitle": "No assigned shipments",
+    "agent.managementEmptyDescription": "Authorized customer shipments will appear here.",
+    "agent.columnSelectIndex": "Select / No.",
+    "agent.selectAllPage": "Select current page",
+    "agent.selectedCount": "{count} selected",
+    "agent.bulkUpdate": "Update selected ({count})",
+    "agent.bulkUpdating": "Updating {current}/{total}",
+    "agent.bulkUpdateComplete": "{success} shipments updated",
+    "agent.bulkUpdatePartial": "{success} updated, {failed} failed",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
@@ -903,6 +935,18 @@ const MESSAGES = {
     "agent.columnActions": "操作",
     "agent.view": "查看",
     "agent.noCustomer": "服务客户信息不可用",
+    "agent.managementKicker": "票单管理",
+    "agent.managementTitle": "已分配票单管理",
+    "agent.managementDescription": "先选择客户码，再查看、勾选并批量更新该客户名下的授权票单。",
+    "agent.managementEmptyTitle": "暂无已分配票单",
+    "agent.managementEmptyDescription": "关联客户授权给你的票单会显示在这里。",
+    "agent.columnSelectIndex": "选择 / 序号",
+    "agent.selectAllPage": "全选当前页",
+    "agent.selectedCount": "已选择 {count} 票",
+    "agent.bulkUpdate": "批量更新（{count}）",
+    "agent.bulkUpdating": "正在更新 {current}/{total}",
+    "agent.bulkUpdateComplete": "已成功更新 {success} 票",
+    "agent.bulkUpdatePartial": "成功 {success} 票，失败 {failed} 票",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1419,6 +1463,10 @@ let historyTotalPages = 0;
 let historyScopeCustomer = null;
 let historyAvailableCustomers = [];
 let agentShipmentDetailOpen = false;
+const agentManagementSelectedKeys = new Set();
+let agentBulkUpdating = false;
+let agentBulkUpdateProgress = { current: 0, total: 0 };
+let agentBulkUpdateResult = null;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
@@ -1959,6 +2007,7 @@ function setLocalizedElement(id, key) {
 function activeViewTranslationKey(view = activeView, session = readFileSession()) {
   if (isOverseaAgentSession(session)) {
     if (view === "overview") return "nav.overview";
+    if (view === "shipments") return "nav.agentShipments";
     if (view === "tracking") return "nav.agentShipmentDetail";
   }
   return `nav.${view}`;
@@ -1968,6 +2017,7 @@ function renderOverseaAgentWorkspace(session = readFileSession()) {
   const managed = isOverseaAgentSession(session);
   document.body.classList.toggle("is-oversea-agent-session", managed);
   if (trackingNavItem) trackingNavItem.hidden = managed;
+  if (agentShipmentsNavItem) agentShipmentsNavItem.hidden = !managed;
   setLocalizedElement(
       "overview-nav-label",
       "nav.overview"
@@ -1988,7 +2038,11 @@ function renderOverseaAgentWorkspace(session = readFileSession()) {
       "start-tracking-label",
       managed ? "overview.agentStartTracking" : "overview.startTracking"
   );
-  if (!managed) historyFollowingOnly = false;
+  if (!managed) {
+    historyFollowingOnly = false;
+    agentManagementSelectedKeys.clear();
+    agentBulkUpdateResult = null;
+  }
   if (historyFollowingFilter) historyFollowingFilter.hidden = !managed;
   activeViewTitle.textContent = t(activeViewTranslationKey(activeView, session));
 }
@@ -6325,7 +6379,6 @@ function historyCustomerLabel(customer) {
 }
 
 function renderHistoryCustomerFilter(entries, session) {
-  if (!historyCustomerFilterWrap || !historyCustomerFilterSelect) return;
   const overseaAgent = isOverseaAgentSession(session);
   const customers = new Map();
   if (overseaAgent) {
@@ -6344,27 +6397,38 @@ function renderHistoryCustomerFilter(entries, session) {
   const options = [...customers.values()].sort((left, right) =>
     historyCustomerLabel(left).localeCompare(historyCustomerLabel(right), currentLanguage)
   );
-  const filterLabel = historyCustomerFilterWrap.querySelector("span");
-  if (filterLabel) {
-    const key = "history.customerFilter";
-    filterLabel.dataset.i18n = key;
-    filterLabel.textContent = t(key);
-  }
-  historyCustomerFilterSelect.disabled = false;
   if (historyCustomerFilter && !customers.has(historyCustomerFilter)) historyCustomerFilter = "";
-  const allCustomers = document.createElement("option");
-  allCustomers.value = "";
-  allCustomers.textContent = t("history.allCustomers");
-  const customerOptions = options.map((customer) => {
-    const option = document.createElement("option");
-    option.value = customer.id;
-    option.textContent = `${historyCustomerLabel(customer)} (${customer.shipmentCount})`;
-    return option;
+
+  const renderFilter = (wrap, select, { hidden, disableWhenEmpty = false }) => {
+    if (!wrap || !select) return;
+    const filterLabel = wrap.querySelector("span");
+    if (filterLabel) {
+      const key = "history.customerFilter";
+      filterLabel.dataset.i18n = key;
+      filterLabel.textContent = t(key);
+    }
+    const allCustomers = document.createElement("option");
+    allCustomers.value = "";
+    allCustomers.textContent = t("history.allCustomers");
+    const customerOptions = options.map((customer) => {
+      const option = document.createElement("option");
+      option.value = customer.id;
+      option.textContent = `${historyCustomerLabel(customer)} (${customer.shipmentCount})`;
+      return option;
+    });
+    select.replaceChildren(allCustomers, ...customerOptions);
+    select.value = historyCustomerFilter;
+    select.disabled = disableWhenEmpty && options.length === 0;
+    wrap.hidden = hidden;
+  };
+
+  renderFilter(historyCustomerFilterWrap, historyCustomerFilterSelect, {
+    hidden: !["INTERNAL", "CUSTOMER"].includes(session.kind) || options.length === 0
   });
-  historyCustomerFilterSelect.replaceChildren(allCustomers, ...customerOptions);
-  historyCustomerFilterSelect.value = historyCustomerFilter;
-  historyCustomerFilterWrap.hidden =
-    !["INTERNAL", "CUSTOMER"].includes(session.kind) || options.length === 0;
+  renderFilter(agentManagementCustomerFilterWrap, agentManagementCustomerFilterSelect, {
+    hidden: !overseaAgent,
+    disableWhenEmpty: true
+  });
 }
 
 function historyMatchesCustomer(entry, customerId) {
@@ -6453,17 +6517,23 @@ async function setOverseaAgentShipmentFollowing(entry, following) {
   }
 }
 
-async function refreshOverseaAgentShipment(entry) {
+async function refreshOverseaAgentShipment(
+  entry,
+  { render = true, reportError = true } = {}
+) {
   const session = readFileSession();
-  if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return;
+  if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return false;
   if (!historyCustomerFilter) {
-    showError(t("agent.selectCustomerToUpdate"), "warning");
-    historyCustomerFilterSelect?.focus();
-    return;
+    if (reportError) showError(t("agent.selectCustomerToUpdate"), "warning");
+    (activeView === "shipments"
+      ? agentManagementCustomerFilterSelect
+      : historyCustomerFilterSelect)?.focus();
+    return false;
   }
   entry.refreshing = true;
   clearError();
-  renderHistory();
+  if (render) renderHistory();
+  let updated = false;
   try {
     const response = await fetch(
       `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh?customerId=${
@@ -6477,7 +6547,7 @@ async function refreshOverseaAgentShipment(entry) {
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
-      return;
+      return false;
     }
     if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
     if (payload?.snapshot && typeof payload.snapshot === "object") {
@@ -6487,14 +6557,18 @@ async function refreshOverseaAgentShipment(entry) {
         || new Date().toISOString();
       entry.agentLastRefreshedAt = entry.savedAt;
     }
+    updated = true;
   } catch (error) {
-    showError(t("agent.updateFailed", {
-      message: error?.message || t("error.generic")
-    }));
+    if (reportError) {
+      showError(t("agent.updateFailed", {
+        message: error?.message || t("error.generic")
+      }));
+    }
   } finally {
     entry.refreshing = false;
-    renderHistory();
+    if (render) renderHistory();
   }
+  return updated;
 }
 
 function agentShipmentCustomers(entry) {
@@ -6503,23 +6577,36 @@ function agentShipmentCustomers(entry) {
 }
 
 function renderAgentShipmentManagement(history) {
+  if (!agentManagementTableBody) return;
   history.forEach((entry, index) => {
     const row = document.createElement("article");
     row.className = "agent-shipment-row";
+    const entryKey = historyShipmentKey(entry);
 
     const sequence = document.createElement("span");
     sequence.className = "agent-shipment-sequence";
+    const selection = document.createElement("input");
+    selection.type = "checkbox";
+    selection.className = "agent-shipment-select";
+    selection.checked = agentManagementSelectedKeys.has(entryKey);
+    selection.disabled = !historyCustomerFilter || agentBulkUpdating || entry.refreshing === true;
+    selection.setAttribute("aria-label", `${t("agent.view")} ${entry.query?.number || ""}`);
+    selection.addEventListener("change", () => {
+      if (selection.checked) agentManagementSelectedKeys.add(entryKey);
+      else agentManagementSelectedKeys.delete(entryKey);
+      renderHistory();
+    });
     const follow = document.createElement("button");
     follow.type = "button";
     follow.className = "agent-shipment-follow";
     follow.classList.toggle("is-following", entry.followed === true);
-    follow.disabled = entry.followBusy === true;
+    follow.disabled = entry.followBusy === true || agentBulkUpdating;
     follow.title = t(entry.followed ? "agent.unfollow" : "agent.follow");
     follow.setAttribute("aria-label", follow.title);
     follow.textContent = entry.followed ? "★" : "☆";
     const number = document.createElement("b");
     number.textContent = String((historyPage - 1) * historyPageSize + index + 1);
-    sequence.append(follow, number);
+    sequence.append(selection, follow, number);
 
     const identity = document.createElement("span");
     identity.className = "agent-shipment-identity";
@@ -6576,8 +6663,9 @@ function renderAgentShipmentManagement(history) {
     const update = document.createElement("button");
     update.type = "button";
     update.className = "agent-row-update";
-    update.disabled = entry.refreshing === true;
+    update.disabled = !historyCustomerFilter || entry.refreshing === true || agentBulkUpdating;
     update.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+    if (!historyCustomerFilter) update.title = t("agent.selectCustomerToUpdate");
     update.addEventListener("click", () => void refreshOverseaAgentShipment(entry));
     actions.append(view, update);
 
@@ -6585,8 +6673,159 @@ function renderAgentShipmentManagement(history) {
       void setOverseaAgentShipmentFollowing(entry, !entry.followed);
     });
     row.append(sequence, identity, carrier, customers, status, note, updated, actions);
-    historyTableBody.append(row);
+    agentManagementTableBody.append(row);
   });
+}
+
+function filteredAgentManagementHistory(entries) {
+  const followed = historyFollowingOnly
+    ? entries.filter((entry) => entry.followed === true)
+    : entries;
+  const byCustomer = historyCustomerFilter
+    ? followed.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
+    : followed;
+  const normalizedSearch = normalizeHistorySearch(historySearchTerm);
+  return normalizedSearch
+    ? byCustomer.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
+    : byCustomer;
+}
+
+function renderAgentShipmentManagementView(history, session) {
+  if (!agentManagementTableBody) return;
+  const managed = isOverseaAgentSession(session);
+  const visibleKeys = new Set(history.map((entry) => historyShipmentKey(entry)));
+  for (const selectedKey of agentManagementSelectedKeys) {
+    if (!visibleKeys.has(selectedKey)) agentManagementSelectedKeys.delete(selectedKey);
+  }
+
+  agentManagementTableBody.replaceChildren();
+  if (managed && !historyLoadingState) renderAgentShipmentManagement(history);
+
+  const hasRows = managed && history.length > 0;
+  if (agentManagementLoading) agentManagementLoading.hidden = !managed || !historyLoadingState;
+  if (agentManagementEmpty) {
+    agentManagementEmpty.hidden = !managed || historyLoadingState || hasRows;
+  }
+  if (agentManagementTableWrap) {
+    agentManagementTableWrap.hidden = !managed || historyLoadingState || !hasRows;
+  }
+  if (agentShipmentTableHead) agentShipmentTableHead.hidden = !hasRows;
+
+  const canUpdate = managed && Boolean(historyCustomerFilter) && !agentBulkUpdating;
+  const selectedCount = agentManagementSelectedKeys.size;
+  const allVisibleSelected = hasRows
+    && history.every((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
+  if (agentManagementSelectAll) {
+    agentManagementSelectAll.disabled = !canUpdate || !hasRows;
+    agentManagementSelectAll.checked = allVisibleSelected;
+    agentManagementSelectAll.indeterminate = selectedCount > 0 && !allVisibleSelected;
+  }
+  if (agentManagementSelectedCount) {
+    agentManagementSelectedCount.textContent = t("agent.selectedCount", { count: selectedCount });
+  }
+  if (agentManagementBulkUpdate) {
+    agentManagementBulkUpdate.disabled = !canUpdate || selectedCount === 0;
+    agentManagementBulkUpdate.title = historyCustomerFilter
+      ? ""
+      : t("agent.selectCustomerToUpdate");
+  }
+  if (agentManagementBulkUpdateLabel) {
+    agentManagementBulkUpdateLabel.textContent = agentBulkUpdating
+      ? t("agent.bulkUpdating", agentBulkUpdateProgress)
+      : t("agent.bulkUpdate", { count: selectedCount });
+  }
+  if (agentManagementBulkStatus) {
+    agentManagementBulkStatus.hidden = !agentBulkUpdateResult;
+    agentManagementBulkStatus.classList.toggle(
+      "is-warning",
+      Number(agentBulkUpdateResult?.failed || 0) > 0
+    );
+    if (agentBulkUpdateResult) {
+      const key = agentBulkUpdateResult.failed > 0
+        ? "agent.bulkUpdatePartial"
+        : "agent.bulkUpdateComplete";
+      agentManagementBulkStatus.textContent = t(key, agentBulkUpdateResult);
+    } else {
+      agentManagementBulkStatus.textContent = "";
+    }
+  }
+
+  if (agentManagementSearchInput) {
+    agentManagementSearchInput.disabled = historyLoadingState;
+    if (agentManagementSearchInput.value !== historySearchTerm) {
+      agentManagementSearchInput.value = historySearchTerm;
+    }
+  }
+  if (agentManagementSearchClear) {
+    agentManagementSearchClear.hidden = !normalizeHistorySearch(historySearchTerm);
+  }
+  if (agentManagementFollowingFilter) {
+    agentManagementFollowingFilter.classList.toggle("is-active", historyFollowingOnly);
+    agentManagementFollowingFilter.setAttribute("aria-pressed", String(historyFollowingOnly));
+    agentManagementFollowingFilter.disabled = agentBulkUpdating;
+    const label = agentManagementFollowingFilter.querySelector("b");
+    if (label) {
+      const key = historyFollowingOnly ? "agent.showAll" : "agent.followingOnly";
+      label.dataset.i18n = key;
+      label.textContent = t(key);
+    }
+  }
+  if (agentManagementCustomerFilterSelect) {
+    agentManagementCustomerFilterSelect.value = historyCustomerFilter;
+    agentManagementCustomerFilterSelect.disabled =
+      agentBulkUpdating || historyAvailableCustomers.length === 0;
+  }
+
+  if (agentManagementPagination) {
+    agentManagementPagination.hidden =
+      !managed || historyLoadingState || historyTotalPages <= 1;
+    agentManagementPagePrevious.disabled =
+      historyLoadingState || agentBulkUpdating || historyPage <= 1;
+    agentManagementPageNext.disabled =
+      historyLoadingState || agentBulkUpdating || historyPage >= historyTotalPages;
+    agentManagementPageInfo.textContent = t("history.pageInfo", {
+      page: historyPage,
+      pages: historyTotalPages,
+      total: historyTotal
+    });
+    agentManagementPageSizeSelect.value = String(historyPageSize);
+    agentManagementPageSizeSelect.disabled = agentBulkUpdating;
+  }
+}
+
+async function refreshSelectedOverseaAgentShipments() {
+  if (agentBulkUpdating) return;
+  if (!historyCustomerFilter) {
+    showError(t("agent.selectCustomerToUpdate"), "warning");
+    agentManagementCustomerFilterSelect?.focus();
+    return;
+  }
+  const selectedEntries = filteredAgentManagementHistory(readHistory())
+    .filter((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
+  if (selectedEntries.length === 0) return;
+
+  agentBulkUpdating = true;
+  agentBulkUpdateResult = null;
+  agentBulkUpdateProgress = { current: 0, total: selectedEntries.length };
+  clearError();
+  renderHistory();
+  let success = 0;
+  let failed = 0;
+  for (const entry of selectedEntries) {
+    if (!isOverseaAgentSession()) break;
+    agentBulkUpdateProgress.current += 1;
+    renderHistory();
+    const updated = await refreshOverseaAgentShipment(entry, {
+      render: false,
+      reportError: false
+    });
+    if (updated) success += 1;
+    else failed += 1;
+  }
+  agentBulkUpdating = false;
+  agentBulkUpdateResult = { success, failed };
+  agentManagementSelectedKeys.clear();
+  await loadCustomerAssignedHistory();
 }
 
 function historyEtaTimestamp(entry) {
@@ -6703,7 +6942,7 @@ function renderHistory() {
   historyTableBody.replaceChildren();
   historyTableWrap.classList.remove("is-agent-management");
   historyTableBody.classList.remove("agent-shipment-table");
-  if (agentShipmentTableHead) agentShipmentTableHead.hidden = true;
+  renderAgentShipmentManagementView(filteredHistory, session);
 
   let rowIndex = 0;
   for (const entry of history) {
@@ -7219,11 +7458,16 @@ function updateUrl(query, { push = false } = {}) {
 }
 
 function showView(name, { updateLocation = true, pushLocation = false } = {}) {
-  let nextView = ["overview", "tracking", "profile"].includes(name) ? name : "overview";
+  let nextView = ["overview", "shipments", "tracking", "profile"].includes(name)
+    ? name
+    : "overview";
+  if (nextView === "shipments" && !isOverseaAgentSession()) {
+    nextView = "overview";
+  }
   if (isOverseaAgentSession() && nextView === "tracking" && !agentShipmentDetailOpen) {
     nextView = "overview";
   }
-  if (isOverseaAgentSession() && nextView === "overview") {
+  if (isOverseaAgentSession() && ["overview", "shipments"].includes(nextView)) {
     agentShipmentDetailOpen = false;
   }
   if (nextView === "profile" && readFileSession().kind !== "CUSTOMER") {
@@ -7284,7 +7528,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
         { duration: 320, easing: "cubic-bezier(.2,.75,.2,1)" }
       );
     }
-    if (activeView === "overview") renderHistory();
+    if (["overview", "shipments"].includes(activeView)) renderHistory();
     renderTrackingAccount();
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
     resolveShown();
@@ -7887,6 +8131,8 @@ window.addEventListener("storage", (event) => {
       );
       historyCustomerFilter = "";
       historyAvailableCustomers = [];
+      agentManagementSelectedKeys.clear();
+      agentBulkUpdateResult = null;
       resetHistoryPagination();
       void loadCustomerAssignedHistory();
     } else if (event.key === CUSTOMER_AUTH_SESSION_KEY) {
@@ -7973,11 +8219,15 @@ document.querySelector("#start-tracking-button").addEventListener("click", () =>
 
 historySearchInput?.addEventListener("input", () => {
   historySearchTerm = historySearchInput.value;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
   renderHistory();
 });
 
 historySearchClear?.addEventListener("click", () => {
   historySearchTerm = "";
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
   historySearchInput.value = "";
   renderHistory();
   historySearchInput.focus();
@@ -7985,6 +8235,8 @@ historySearchClear?.addEventListener("click", () => {
 
 historyCustomerFilterSelect?.addEventListener("change", async () => {
   historyCustomerFilter = historyCustomerFilterSelect.value;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
   historyPage = 1;
   if (isOverseaAgentSession()) {
     await loadCustomerAssignedHistory();
@@ -8001,6 +8253,8 @@ historyEtaSortSelect?.addEventListener("change", () => {
 historyFollowingFilter?.addEventListener("click", async () => {
   if (!isOverseaAgentSession()) return;
   historyFollowingOnly = !historyFollowingOnly;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
   historyPage = 1;
   await loadCustomerAssignedHistory();
 });
@@ -8012,18 +8266,92 @@ async function loadCurrentHistoryPage() {
 
 historyPagePrevious?.addEventListener("click", () => {
   if (historyLoadingState || historyPage <= 1) return;
+  agentManagementSelectedKeys.clear();
   historyPage -= 1;
   void loadCurrentHistoryPage();
 });
 
 historyPageNext?.addEventListener("click", () => {
   if (historyLoadingState || historyPage >= historyTotalPages) return;
+  agentManagementSelectedKeys.clear();
   historyPage += 1;
   void loadCurrentHistoryPage();
 });
 
 historyPageSizeSelect?.addEventListener("change", () => {
+  agentManagementSelectedKeys.clear();
   historyPageSize = Number(historyPageSizeSelect.value || 20);
+  historyPage = 1;
+  void loadCurrentHistoryPage();
+});
+
+agentManagementSearchInput?.addEventListener("input", () => {
+  historySearchTerm = agentManagementSearchInput.value;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
+  renderHistory();
+});
+
+agentManagementSearchClear?.addEventListener("click", () => {
+  historySearchTerm = "";
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
+  agentManagementSearchInput.value = "";
+  renderHistory();
+  agentManagementSearchInput.focus();
+});
+
+agentManagementCustomerFilterSelect?.addEventListener("change", async () => {
+  historyCustomerFilter = agentManagementCustomerFilterSelect.value;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
+  historyPage = 1;
+  await loadCustomerAssignedHistory();
+});
+
+agentManagementFollowingFilter?.addEventListener("click", async () => {
+  if (!isOverseaAgentSession() || agentBulkUpdating) return;
+  historyFollowingOnly = !historyFollowingOnly;
+  agentManagementSelectedKeys.clear();
+  agentBulkUpdateResult = null;
+  historyPage = 1;
+  await loadCustomerAssignedHistory();
+});
+
+agentManagementSelectAll?.addEventListener("change", () => {
+  if (!historyCustomerFilter || agentBulkUpdating) return;
+  const visibleEntries = filteredAgentManagementHistory(readHistory());
+  for (const entry of visibleEntries) {
+    const key = historyShipmentKey(entry);
+    if (agentManagementSelectAll.checked) agentManagementSelectedKeys.add(key);
+    else agentManagementSelectedKeys.delete(key);
+  }
+  agentBulkUpdateResult = null;
+  renderHistory();
+});
+
+agentManagementBulkUpdate?.addEventListener("click", () => {
+  void refreshSelectedOverseaAgentShipments();
+});
+
+agentManagementPagePrevious?.addEventListener("click", () => {
+  if (historyLoadingState || agentBulkUpdating || historyPage <= 1) return;
+  agentManagementSelectedKeys.clear();
+  historyPage -= 1;
+  void loadCurrentHistoryPage();
+});
+
+agentManagementPageNext?.addEventListener("click", () => {
+  if (historyLoadingState || agentBulkUpdating || historyPage >= historyTotalPages) return;
+  agentManagementSelectedKeys.clear();
+  historyPage += 1;
+  void loadCurrentHistoryPage();
+});
+
+agentManagementPageSizeSelect?.addEventListener("change", () => {
+  if (agentBulkUpdating) return;
+  agentManagementSelectedKeys.clear();
+  historyPageSize = Number(agentManagementPageSizeSelect.value || 20);
   historyPage = 1;
   void loadCurrentHistoryPage();
 });
@@ -8133,7 +8461,7 @@ function trackingQueryFromLocation() {
 
 function syncViewFromLocation() {
   const requestedView = window.location.hash.replace(/^#/, "");
-  const nextView = ["overview", "tracking", "profile"].includes(requestedView)
+  const nextView = ["overview", "shipments", "tracking", "profile"].includes(requestedView)
     ? requestedView
     : "overview";
   if (nextView === "tracking") {
@@ -8195,7 +8523,7 @@ async function initializeTrackingPage() {
     }
     return;
   }
-  showView(["overview", "tracking", "profile"].includes(window.location.hash.slice(1))
+  showView(["overview", "shipments", "tracking", "profile"].includes(window.location.hash.slice(1))
     ? window.location.hash.slice(1)
     : "overview", {
     updateLocation: false

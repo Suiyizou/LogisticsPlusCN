@@ -43,6 +43,16 @@
             <span class="nav-icon">◫</span>
             <span id="overview-nav-label" data-i18n="nav.overview">Overview</span>
           </a>
+          <a
+            class="nav-item"
+            id="agent-shipments-nav-item"
+            href="#shipments"
+            data-view-target="shipments"
+            hidden
+          >
+            <span class="nav-icon" aria-hidden="true">▤</span>
+            <span data-i18n="nav.agentShipments">Shipment management</span>
+          </a>
           <a class="nav-item" id="tracking-nav-item" href="#tracking" data-view-target="tracking">
             <span class="nav-icon">⌁</span>
             <span data-i18n="nav.tracking">Shipment tracking</span>
@@ -231,16 +241,6 @@
               </div>
 
               <div class="shipment-list-wrap" id="history-table-wrap" hidden>
-                <div class="agent-shipment-table-head" id="agent-shipment-table-head" hidden aria-hidden="true">
-                  <span data-i18n="agent.columnIndex">No.</span>
-                  <span data-i18n="agent.columnReference">Shipment No.</span>
-                  <span data-i18n="agent.columnCarrier">Carrier</span>
-                  <span data-i18n="agent.columnCustomers">Service customer</span>
-                  <span data-i18n="agent.columnStatus">Status</span>
-                  <span data-i18n="agent.columnNote">Note</span>
-                  <span data-i18n="agent.columnUpdated">Last updated</span>
-                  <span data-i18n="agent.columnActions">Actions</span>
-                </div>
                 <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
               </div>
               <nav class="history-pagination" id="history-pagination" aria-label="Shipment pages" hidden>
@@ -250,6 +250,155 @@
                 <label>
                   <span data-i18n="history.pageSize">Per page</span>
                   <select id="history-page-size">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </nav>
+            </section>
+          </section>
+
+          <section
+            class="app-view agent-shipment-management-view"
+            id="agent-shipments-view"
+            data-view="shipments"
+            hidden
+          >
+            <section class="page-heading agent-management-page-heading">
+              <div>
+                <p class="kicker" data-i18n="agent.managementKicker">SHIPMENT MANAGEMENT</p>
+                <h1 data-i18n="agent.managementTitle">Assigned shipment management</h1>
+                <p data-i18n="agent.managementDescription">
+                  Select a customer code, review assigned shipments, and update one or many tracking records.
+                </p>
+              </div>
+            </section>
+
+            <section class="panel agent-management-panel">
+              <div class="panel-header history-heading agent-management-heading">
+                <div>
+                  <span class="panel-icon" aria-hidden="true">↺</span>
+                  <span>
+                    <strong data-i18n="nav.agentShipments">Shipment management</strong>
+                    <small data-i18n="history.agentSubtitle">Authorized shipments across linked customers; filter by customer code to update tracking</small>
+                  </span>
+                </div>
+                <div class="history-heading-actions">
+                  <button
+                    class="agent-following-filter"
+                    id="agent-management-following-filter"
+                    type="button"
+                    aria-pressed="false"
+                  >
+                    <span aria-hidden="true">★</span>
+                    <b data-i18n="agent.followingOnly">Following only</b>
+                  </button>
+                  <label class="history-customer-filter" id="agent-management-customer-filter-wrap">
+                    <span data-i18n="history.customerFilter">Customer</span>
+                    <select
+                      id="agent-management-customer-filter"
+                      data-i18n-aria-label="history.customerFilterLabel"
+                      aria-label="Filter shipments by customer"
+                    >
+                      <option value="" data-i18n="history.allCustomers">All customers</option>
+                    </select>
+                  </label>
+                  <div class="history-search">
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      id="agent-management-search-input"
+                      type="search"
+                      autocomplete="off"
+                      data-i18n-placeholder="history.searchPlaceholder"
+                      data-i18n-aria-label="history.searchLabel"
+                      placeholder="Search shipment, job, port or status"
+                      aria-label="Search shipments"
+                    />
+                    <button
+                      id="agent-management-search-clear"
+                      type="button"
+                      data-i18n-aria-label="history.searchClear"
+                      aria-label="Clear search"
+                      hidden
+                    >×</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="agent-management-bulk-toolbar">
+                <label class="agent-management-select-all">
+                  <input id="agent-management-select-all" type="checkbox" />
+                  <span data-i18n="agent.selectAllPage">Select current page</span>
+                </label>
+                <span
+                  class="agent-management-selected-count"
+                  id="agent-management-selected-count"
+                  aria-live="polite"
+                >0 selected</span>
+                <button
+                  class="agent-management-bulk-update"
+                  id="agent-management-bulk-update"
+                  type="button"
+                  disabled
+                >
+                  <span aria-hidden="true">↻</span>
+                  <b id="agent-management-bulk-update-label">Update selected (0)</b>
+                </button>
+                <span
+                  class="agent-management-bulk-status"
+                  id="agent-management-bulk-status"
+                  role="status"
+                  aria-live="polite"
+                  hidden
+                ></span>
+              </div>
+
+              <div class="history-loading" id="agent-management-loading" role="status" aria-live="polite" hidden>
+                <span class="history-loading-spinner" aria-hidden="true"></span>
+                <span>
+                  <strong data-i18n="history.loadingTitle">Retrieving shipment list</strong>
+                  <small data-i18n="history.loadingDescription">Loading the latest records from the database…</small>
+                </span>
+              </div>
+
+              <div class="history-empty" id="agent-management-empty">
+                <span>⌁</span>
+                <strong data-i18n="agent.managementEmptyTitle">No assigned shipments</strong>
+                <p data-i18n="agent.managementEmptyDescription">Authorized customer shipments will appear here.</p>
+              </div>
+
+              <div class="shipment-list-wrap is-agent-management" id="agent-management-table-wrap" hidden>
+                <div class="agent-shipment-table-head" id="agent-shipment-table-head">
+                  <span data-i18n="agent.columnSelectIndex">Select / No.</span>
+                  <span data-i18n="agent.columnReference">Shipment No.</span>
+                  <span data-i18n="agent.columnCarrier">Carrier</span>
+                  <span data-i18n="agent.columnCustomers">Service customer</span>
+                  <span data-i18n="agent.columnStatus">Status</span>
+                  <span data-i18n="agent.columnNote">Note</span>
+                  <span data-i18n="agent.columnUpdated">Last updated</span>
+                  <span data-i18n="agent.columnActions">Actions</span>
+                </div>
+                <div
+                  class="agent-shipment-table"
+                  id="agent-management-table-body"
+                  aria-live="polite"
+                ></div>
+              </div>
+
+              <nav
+                class="history-pagination"
+                id="agent-management-pagination"
+                aria-label="Shipment management pages"
+                hidden
+              >
+                <button id="agent-management-page-previous" type="button" data-i18n="history.previousPage">Previous</button>
+                <span id="agent-management-page-info"></span>
+                <button id="agent-management-page-next" type="button" data-i18n="history.nextPage">Next</button>
+                <label>
+                  <span data-i18n="history.pageSize">Per page</span>
+                  <select id="agent-management-page-size">
                     <option value="10">10</option>
                     <option value="20" selected>20</option>
                     <option value="50">50</option>

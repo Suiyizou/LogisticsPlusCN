@@ -241,9 +241,19 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
-test("overseas agents reuse the shipment overview and filter updates by customer code", () => {
+test("overseas agents keep the overview and receive a customer-scoped bulk shipment manager", () => {
   assert.match(indexSource, /id="history-following-filter"/);
   assert.match(indexSource, /id="history-eta-sort"[\s\S]*?value="asc"[\s\S]*?value="desc"/);
+  assert.match(
+    indexSource,
+    /id="agent-shipments-nav-item"[\s\S]*?href="#shipments"[\s\S]*?data-view-target="shipments"/
+  );
+  assert.match(
+    indexSource,
+    /id="agent-shipments-view"[\s\S]*?data-view="shipments"[\s\S]*?id="agent-management-customer-filter"/
+  );
+  assert.match(indexSource, /id="agent-management-select-all"/);
+  assert.match(indexSource, /id="agent-management-bulk-update"/);
   assert.doesNotMatch(indexSource, /id="agent-shipment-edit-dialog"/);
   assert.match(indexSource, /id="tracking-nav-item"/);
   assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
@@ -259,7 +269,15 @@ test("overseas agents reuse the shipment overview and filter updates by customer
   );
   assert.match(
     appSource,
-    /historyAvailableCustomers[\s\S]*?historyCustomerFilterSelect\.disabled = false[\s\S]*?history\.allCustomers/
+    /function renderAgentShipmentManagement[\s\S]*?agent-shipment-select[\s\S]*?agentManagementTableBody\.append/
+  );
+  assert.match(
+    appSource,
+    /function refreshSelectedOverseaAgentShipments[\s\S]*?selectedEntries[\s\S]*?refreshOverseaAgentShipment\(entry,[\s\S]*?loadCustomerAssignedHistory/
+  );
+  assert.match(
+    appSource,
+    /function renderHistoryCustomerFilter[\s\S]*?historyAvailableCustomers[\s\S]*?renderFilter\(historyCustomerFilterWrap[\s\S]*?renderFilter\(agentManagementCustomerFilterWrap/
   );
   assert.match(
     appSource,
@@ -280,6 +298,10 @@ test("overseas agents reuse the shipment overview and filter updates by customer
   assert.match(
     stylesSource,
     /body\.is-oversea-agent-session #tracking-view > \.query-panel/
+  );
+  assert.match(
+    stylesSource,
+    /\.agent-management-bulk-toolbar[\s\S]*?\.agent-management-bulk-update/
   );
   const restrictedWorkspaceRule = stylesSource.slice(
     stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"),
