@@ -83,12 +83,6 @@ public class ShipmentAccessService {
     boolean overseaAgent = OVERSEA_AGENT.equalsIgnoreCase(customer.partyRole());
     List<String> relationshipRoles;
     if (overseaAgent) {
-      if (!customer.hasCustomerScope()) {
-        throw new ApiException(
-            HttpStatus.FORBIDDEN,
-            "Overseas agent customer scope is required"
-        );
-      }
       relationshipRoles = jdbcTemplate.query(
           """
           SELECT 'OVERSEA_AGENT' AS relationship_role
@@ -105,13 +99,14 @@ public class ShipmentAccessService {
            AND represented_customer.status = 'ACTIVE'
           WHERE agent_scope.shipment_id = ?
             AND agent_scope.oversea_agent_customer_id = ?
-            AND agent_scope.represented_customer_id = ?
+            AND (? IS NULL OR agent_scope.represented_customer_id = ?)
             AND agent_scope.status = 'ACTIVE'
           LIMIT 1
           """,
           (rs, rowNumber) -> rs.getString("relationship_role"),
           shipment.id(),
           customer.id(),
+          customer.scopeCustomerId(),
           customer.scopeCustomerId()
       );
     } else {

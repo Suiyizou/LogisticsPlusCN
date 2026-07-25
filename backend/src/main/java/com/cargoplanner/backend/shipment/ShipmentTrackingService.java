@@ -414,7 +414,9 @@ public class ShipmentTrackingService {
           "Customers can only open assigned booking or bill-of-lading records"
       );
     }
-    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
+    CustomerAccessQuery accessQuery = customerAccessQuery(
+        customer, "a", customer.scopeCustomerId()
+    );
     String publicationFilter = isOverseaAgent(customer)
         ? ""
         : " AND a.publication_status = 'PUBLISHED'";
@@ -468,7 +470,9 @@ public class ShipmentTrackingService {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
-    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
+    CustomerAccessQuery accessQuery = customerAccessQuery(
+        customer, "a", customer.scopeCustomerId()
+    );
     String publicationFilter = isOverseaAgent(customer)
         ? ""
         : " AND a.publication_status = 'PUBLISHED'";
@@ -549,13 +553,17 @@ public class ShipmentTrackingService {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
-    requireRequestedCustomerScope(customer, requestedCustomerPublicId);
+    Long selectedCustomerId = resolveRequestedCustomerScope(
+        customer, requestedCustomerPublicId
+    );
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
     boolean overseaAgent = isOverseaAgent(customer);
     long followAgentId = overseaAgent ? customer.id() : -1L;
     boolean followingOnly = requestedFollowingOnly && overseaAgent;
-    CustomerAccessQuery accessQuery = customerAccessQuery(customer, "a");
+    CustomerAccessQuery accessQuery = customerAccessQuery(
+        customer, "a", selectedCustomerId
+    );
     String publicationFilter = overseaAgent
         ? ""
         : " AND a.publication_status = 'PUBLISHED'";
@@ -657,7 +665,7 @@ public class ShipmentTrackingService {
         listParameters.toArray()
     );
     Map<Long, List<AssignedCustomer>> assignedCustomers =
-        assignedCustomersByShipment(customer, records);
+        assignedCustomersByShipment(customer, records, selectedCustomerId);
     ObjectNode response = objectMapper.createObjectNode();
     ArrayNode items = response.putArray("items");
     for (CustomerAssignedShipment record : records) {
@@ -691,6 +699,7 @@ public class ShipmentTrackingService {
         ObjectNode customerItem = boundCustomers.addObject();
         customerItem.put("id", assignedCustomer.publicId());
         customerItem.put("displayName", assignedCustomer.displayName());
+        customerItem.put("clientCode", assignedCustomer.clientCode());
         customerItem.put("partyRole", assignedCustomer.partyRole());
       }
       boolean available = cached.snapshotJson() != null
@@ -710,11 +719,29 @@ public class ShipmentTrackingService {
     response.put("customerReadOnly", true);
     response.put("followingOnly", followingOnly);
     response.put("overseaAgentManagement", overseaAgent);
-    if (overseaAgent && customer.scopeCustomerPublicId() != null) {
-      ObjectNode scope = response.putObject("scopeCustomer");
-      scope.put("id", customer.scopeCustomerPublicId());
-      scope.put("displayName", customer.scopeCustomerDisplayName());
-      scope.put("partyRole", customer.scopeCustomerPartyRole());
+    if (overseaAgent) {
+      List<AssignedCustomer> agentCustomers = overseaAgentCustomers(customer);
+      ArrayNode availableCustomers = response.putArray("availableCustomers");
+      for (AssignedCustomer assignedCustomer : agentCustomers) {
+        ObjectNode customerItem = availableCustomers.addObject();
+        customerItem.put("id", assignedCustomer.publicId());
+        customerItem.put("displayName", assignedCustomer.displayName());
+        customerItem.put("clientCode", assignedCustomer.clientCode());
+        customerItem.put("partyRole", assignedCustomer.partyRole());
+        customerItem.put("shipmentCount", assignedCustomer.shipmentCount());
+      }
+      if (selectedCustomerId != null) {
+        agentCustomers.stream()
+            .filter(item -> item.customerId() == selectedCustomerId)
+            .findFirst()
+            .ifPresent(selected -> {
+              ObjectNode scope = response.putObject("scopeCustomer");
+              scope.put("id", selected.publicId());
+              scope.put("displayName", selected.displayName());
+              scope.put("clientCode", selected.clientCode());
+              scope.put("partyRole", selected.partyRole());
+            });
+      }
     }
     ObjectNode capabilities = response.putObject("capabilities");
     capabilities.put("editShipmentMasterData", false);
@@ -743,7 +770,7 @@ public class ShipmentTrackingService {
       CustomerPrincipal customer
   ) {
     AgentShipmentTarget shipment = requireOverseaAgentShipment(
-        shipmentPublicId, customer, false
+        shipmentPublicId, customer
     );
     if (following) {
       jdbcTemplate.update(
@@ -774,9 +801,39 @@ public class ShipmentTrackingService {
       String shipmentPublicId,
       CustomerPrincipal customer
   ) {
-    AgentShipmentTarget shipment = requireOverseaAgentShipment(
-        shipmentPublicId, customer, true
+    return refreshOverseaAgentAssignedShipment(
+        shipmentPublicId,
+        customer == null ? null : customer.scopeCustomerPublicId(),
+        customer
     );
+  }
+
+  public ObjectNode refreshOverseaAgentAssignedShipment(
+      String shipmentPublicId,
+      String requestedCustomerPublicId,
+      CustomerPrincipal customer
+  ) {
+    Long selectedCustomerId = resolveRequestedCustomerScope(
+        customer, requestedCustomerPublicId
+    );
+    if (selectedCustomerId == null) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Select a customer before refreshing shipment tracking"
+      );
+    }
+    AgentShipmentTarget shipment = requireOverseaAgentShipment(
+        shipmentPublicId, customer
+    );
+    requireOverseaAgentShipmentScope(
+        shipment.shipmentId(), customer.id(), selectedCustomerId
+    );
+    if (shipment.referenceType() == null || shipment.referenceNumber() == null) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Shipment has no booking or bill-of-lading reference to refresh"
+      );
+    }
     track(
         new ShipmentTrackRequest(
             shipment.carrier(), "AUTO", shipment.referenceType(),
@@ -800,7 +857,8 @@ public class ShipmentTrackingService {
 
   private Map<Long, List<AssignedCustomer>> assignedCustomersByShipment(
       CustomerPrincipal customer,
-      List<CustomerAssignedShipment> records
+      List<CustomerAssignedShipment> records,
+      Long selectedCustomerId
   ) {
     Map<Long, List<AssignedCustomer>> result = new LinkedHashMap<>();
     if (records.isEmpty()) return result;
@@ -810,14 +868,35 @@ public class ShipmentTrackingService {
     );
     List<Object> parameters = new ArrayList<>();
     records.forEach(record -> parameters.add(record.cached().shipmentId()));
-    long visibleCustomerId = overseaAgent
-        ? (customer.scopeCustomerId() == null ? -1L : customer.scopeCustomerId())
-        : customer.id();
-    parameters.add(visibleCustomerId);
-    String customerFilter = " AND a.customer_id = ?";
+    String customerFilter;
+    if (overseaAgent) {
+      customerFilter = """
+           AND EXISTS (
+             SELECT 1
+             FROM cp_oversea_agent_shipment_scopes agent_scope
+             JOIN cp_oversea_agent_customers agent_customer
+               ON agent_customer.oversea_agent_customer_id =
+                    agent_scope.oversea_agent_customer_id
+              AND agent_customer.customer_id = agent_scope.represented_customer_id
+             WHERE agent_scope.shipment_id = a.shipment_id
+               AND agent_scope.oversea_agent_customer_id = ?
+               AND agent_scope.represented_customer_id = a.customer_id
+               AND agent_scope.status = 'ACTIVE'
+           )
+          """;
+      parameters.add(customer.id());
+      if (selectedCustomerId != null) {
+        customerFilter += " AND a.customer_id = ?";
+        parameters.add(selectedCustomerId);
+      }
+    } else {
+      customerFilter = " AND a.customer_id = ?";
+      parameters.add(customer.id());
+    }
     jdbcTemplate.query(
         ("""
-        SELECT DISTINCT a.shipment_id, c.public_id, c.display_name, c.party_role
+        SELECT DISTINCT a.shipment_id, c.id AS customer_id, c.public_id,
+               c.display_name, c.client_code, c.party_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id AND c.status = 'ACTIVE'
         WHERE a.shipment_id IN (%s)
@@ -828,9 +907,12 @@ public class ShipmentTrackingService {
           long shipmentId = rs.getLong("shipment_id");
           result.computeIfAbsent(shipmentId, ignored -> new ArrayList<>())
               .add(new AssignedCustomer(
+                  rs.getLong("customer_id"),
                   rs.getString("public_id"),
                   rs.getString("display_name"),
-                  rs.getString("party_role")
+                  rs.getString("client_code"),
+                  rs.getString("party_role"),
+                  0
               ));
         },
         parameters.toArray()
@@ -840,8 +922,7 @@ public class ShipmentTrackingService {
 
   private AgentShipmentTarget requireOverseaAgentShipment(
       String shipmentPublicId,
-      CustomerPrincipal customer,
-      boolean requireTrackingReference
+      CustomerPrincipal customer
   ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
@@ -890,54 +971,75 @@ public class ShipmentTrackingService {
           "Shipment is not assigned to this overseas agent"
       );
     }
-    AgentShipmentTarget shipment = records.get(0);
-    if (requireTrackingReference
-        && (shipment.referenceType() == null || shipment.referenceNumber() == null)) {
-      throw new ApiException(
-          HttpStatus.CONFLICT,
-          "Shipment has no booking or bill-of-lading reference to refresh"
-      );
-    }
-    return shipment;
+    return records.get(0);
   }
 
   private boolean isOverseaAgent(CustomerPrincipal customer) {
     return customer != null && customer.isOverseaAgent();
   }
 
-  private void requireRequestedCustomerScope(
+  private Long resolveRequestedCustomerScope(
       CustomerPrincipal customer,
       String requestedCustomerPublicId
   ) {
     String requested = requestedCustomerPublicId == null
         ? ""
         : requestedCustomerPublicId.trim();
-    if (requested.isBlank()) return;
-    String allowed = isOverseaAgent(customer)
-        ? customer.scopeCustomerPublicId()
-        : customer.publicId();
-    if (allowed == null || !allowed.equals(requested)) {
+    if (!isOverseaAgent(customer)) {
+      if (!requested.isBlank() && !customer.publicId().equals(requested)) {
+        throw new ApiException(
+            HttpStatus.FORBIDDEN,
+            "The requested customer is outside the signed-in customer scope"
+        );
+      }
+      return customer.id();
+    }
+    if (requested.isBlank() && customer.hasCustomerScope()) {
+      return customer.scopeCustomerId();
+    }
+    if (requested.isBlank()) return null;
+    List<Long> customerIds = jdbcTemplate.query(
+        """
+        SELECT represented.id
+        FROM cp_oversea_agent_customers agent_customer
+        JOIN cp_customers represented
+          ON represented.id = agent_customer.customer_id
+         AND represented.status = 'ACTIVE'
+        WHERE agent_customer.oversea_agent_customer_id = ?
+          AND represented.public_id = ?
+          AND UPPER(represented.party_role) IN ('SHIPPER', 'CONSIGNEE')
+        """,
+        (rs, rowNumber) -> rs.getLong("id"),
+        customer.id(),
+        requested
+    );
+    if (customerIds.isEmpty()) {
       throw new ApiException(
           HttpStatus.FORBIDDEN,
           "The requested customer is outside the signed-in customer scope"
       );
     }
+    return customerIds.get(0);
   }
 
   private CustomerAccessQuery customerAccessQuery(
       CustomerPrincipal customer,
-      String accessAlias
+      String accessAlias,
+      Long selectedCustomerId
   ) {
     if (!isOverseaAgent(customer)) {
       return new CustomerAccessQuery(accessAlias + ".customer_id = ?", List.of(customer.id()));
     }
-    long scopeCustomerId = customer.scopeCustomerId() == null
-        ? -1L
-        : customer.scopeCustomerId();
+    List<Object> parameters = new ArrayList<>();
+    parameters.add(customer.id());
+    String selectedCustomerFilter = "";
+    if (selectedCustomerId != null) {
+      selectedCustomerFilter = " AND " + accessAlias + ".customer_id = ?";
+      parameters.add(selectedCustomerId);
+    }
     return new CustomerAccessQuery(
         ("""
-        %s.customer_id = ?
-        AND EXISTS (
+        EXISTS (
           SELECT 1
           FROM cp_oversea_agent_shipment_scopes agent_scope
           JOIN cp_oversea_agent_customers agent_customer
@@ -946,12 +1048,85 @@ public class ShipmentTrackingService {
            AND agent_customer.customer_id = agent_scope.represented_customer_id
           WHERE agent_scope.shipment_id = %s.shipment_id
             AND agent_scope.oversea_agent_customer_id = ?
-            AND agent_scope.represented_customer_id = ?
+            AND agent_scope.represented_customer_id = %s.customer_id
             AND agent_scope.status = 'ACTIVE'
         )
-        """).formatted(accessAlias, accessAlias),
-        List.of(scopeCustomerId, customer.id(), scopeCustomerId)
+        %s
+        """).formatted(accessAlias, accessAlias, selectedCustomerFilter),
+        parameters
     );
+  }
+
+  private List<AssignedCustomer> overseaAgentCustomers(CustomerPrincipal customer) {
+    if (!isOverseaAgent(customer)) return List.of();
+    return jdbcTemplate.query(
+        """
+        SELECT represented.id AS customer_id, represented.public_id,
+               represented.display_name, represented.client_code,
+               represented.party_role,
+               (
+                 SELECT COUNT(DISTINCT agent_scope.shipment_id)
+                 FROM cp_oversea_agent_shipment_scopes agent_scope
+                 JOIN cp_customer_shipment_access customer_access
+                   ON customer_access.shipment_id = agent_scope.shipment_id
+                  AND customer_access.customer_id = agent_scope.represented_customer_id
+                 WHERE agent_scope.oversea_agent_customer_id =
+                       agent_customer.oversea_agent_customer_id
+                   AND agent_scope.represented_customer_id = represented.id
+                   AND agent_scope.status = 'ACTIVE'
+               ) AS shipment_count
+        FROM cp_oversea_agent_customers agent_customer
+        JOIN cp_customers represented
+          ON represented.id = agent_customer.customer_id
+         AND represented.status = 'ACTIVE'
+        WHERE agent_customer.oversea_agent_customer_id = ?
+          AND UPPER(represented.party_role) IN ('SHIPPER', 'CONSIGNEE')
+        ORDER BY represented.display_name, represented.client_code, represented.id
+        """,
+        (rs, rowNumber) -> new AssignedCustomer(
+            rs.getLong("customer_id"),
+            rs.getString("public_id"),
+            rs.getString("display_name"),
+            rs.getString("client_code"),
+            rs.getString("party_role"),
+            rs.getLong("shipment_count")
+        ),
+        customer.id()
+    );
+  }
+
+  private void requireOverseaAgentShipmentScope(
+      long shipmentId,
+      long overseaAgentCustomerId,
+      long representedCustomerId
+  ) {
+    Integer count = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM cp_oversea_agent_shipment_scopes agent_scope
+        JOIN cp_oversea_agent_customers agent_customer
+          ON agent_customer.oversea_agent_customer_id =
+               agent_scope.oversea_agent_customer_id
+         AND agent_customer.customer_id = agent_scope.represented_customer_id
+        JOIN cp_customer_shipment_access customer_access
+          ON customer_access.shipment_id = agent_scope.shipment_id
+         AND customer_access.customer_id = agent_scope.represented_customer_id
+        WHERE agent_scope.shipment_id = ?
+          AND agent_scope.oversea_agent_customer_id = ?
+          AND agent_scope.represented_customer_id = ?
+          AND agent_scope.status = 'ACTIVE'
+        """,
+        Integer.class,
+        shipmentId,
+        overseaAgentCustomerId,
+        representedCustomerId
+    );
+    if (count == null || count == 0) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Shipment is outside the selected customer scope"
+      );
+    }
   }
 
   private ImportedBusinessFields shipmentBusinessFields(long shipmentId) {
@@ -2661,9 +2836,12 @@ public class ShipmentTrackingService {
   ) {}
 
   private record AssignedCustomer(
+      long customerId,
       String publicId,
       String displayName,
-      String partyRole
+      String clientCode,
+      String partyRole,
+      long shipmentCount
   ) {}
 
   private record AgentShipmentTarget(

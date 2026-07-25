@@ -122,21 +122,17 @@ public class CustomerAuthService {
                scoped.party_role AS scope_customer_party_role
         FROM cp_customer_sessions s
         JOIN cp_customers c ON c.id = s.customer_id
-        LEFT JOIN cp_customers scoped ON scoped.id = COALESCE(s.scope_customer_id, s.customer_id)
+        LEFT JOIN cp_customers scoped ON scoped.id = s.scope_customer_id
         WHERE s.session_token_hash = ?
           AND s.revoked_at IS NULL
           AND s.expires_at > ?
           AND c.status = 'ACTIVE'
-          AND scoped.status = 'ACTIVE'
           AND (
-            (UPPER(c.party_role) <> 'OVERSEA_AGENT' AND scoped.id = c.id)
+            (UPPER(c.party_role) <> 'OVERSEA_AGENT'
+              AND scoped.id = c.id
+              AND scoped.status = 'ACTIVE')
             OR
-            (UPPER(c.party_role) = 'OVERSEA_AGENT' AND EXISTS (
-              SELECT 1
-              FROM cp_oversea_agent_customers agent_customer
-              WHERE agent_customer.oversea_agent_customer_id = c.id
-                AND agent_customer.customer_id = scoped.id
-            ))
+            (UPPER(c.party_role) = 'OVERSEA_AGENT' AND s.scope_customer_id IS NULL)
           )
         """,
         this::mapCustomer,
@@ -217,42 +213,21 @@ public class CustomerAuthService {
 
   private CustomerScope resolveScope(CustomerAccount account, String codeHash) {
     CustomerPrincipal principal = account.principal();
-    if (!principal.isOverseaAgent()) {
-      if (!codeHash.equals(account.customerCodeHash())) throw invalidCredentials();
-      return new CustomerScope(
-          principal.id(),
-          principal.publicId(),
-          principal.displayName(),
-          principal.partyRole()
-      );
-    }
-    List<CustomerScope> scopes = jdbcTemplate.query(
-        """
-        SELECT customer.id, customer.public_id, customer.display_name, customer.party_role
-        FROM cp_oversea_agent_customers agent_customer
-        JOIN cp_customers customer ON customer.id = agent_customer.customer_id
-        WHERE agent_customer.oversea_agent_customer_id = ?
-          AND customer.customer_code_hash = ?
-          AND customer.status = 'ACTIVE'
-          AND UPPER(customer.party_role) IN ('SHIPPER', 'CONSIGNEE')
-        """,
-        (rs, rowNumber) -> new CustomerScope(
-            rs.getLong("id"),
-            rs.getString("public_id"),
-            rs.getString("display_name"),
-            rs.getString("party_role")
-        ),
+    if (!codeHash.equals(account.customerCodeHash())) throw invalidCredentials();
+    if (principal.isOverseaAgent()) return null;
+    return new CustomerScope(
         principal.id(),
-        codeHash
+        principal.publicId(),
+        principal.displayName(),
+        principal.partyRole()
     );
-    if (scopes.isEmpty()) throw invalidCredentials();
-    return scopes.get(0);
   }
 
   private CustomerPrincipal scopedPrincipal(
       CustomerPrincipal principal,
       CustomerScope scope
   ) {
+    if (scope == null) return principal;
     return new CustomerPrincipal(
         principal.id(),
         principal.publicId(),

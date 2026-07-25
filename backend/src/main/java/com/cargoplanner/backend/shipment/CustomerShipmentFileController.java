@@ -90,9 +90,12 @@ public class CustomerShipmentFileController {
   @PostMapping("/shipments/{shipmentId}/refresh")
   public ObjectNode refreshShipment(
       @PathVariable String shipmentId,
+      @RequestParam String customerId,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
-    return trackingService.refreshOverseaAgentAssignedShipment(shipmentId, customer);
+    return trackingService.refreshOverseaAgentAssignedShipment(
+        shipmentId, customerId, customer
+    );
   }
 
   @GetMapping("/shipments/{shipmentId}/files")

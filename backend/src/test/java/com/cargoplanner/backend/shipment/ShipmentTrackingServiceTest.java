@@ -569,7 +569,7 @@ class ShipmentTrackingServiceTest {
     assertThat(agentShipments.path("items").get(0).path("boundCustomers").size()).isEqualTo(1);
     assertThat(visibleCustomer.path("id").asText()).isEqualTo("customer-public-id");
     assertThat(visibleCustomer.has("username")).isFalse();
-    assertThat(visibleCustomer.has("clientCode")).isFalse();
+    assertThat(visibleCustomer.path("clientCode").asText()).isEqualTo("FILE-CODE");
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
         .path("customerReadOnly").asBoolean()).isTrue();
     assertThat(service.readAssignedSnapshotByShipmentId(shipmentId, overseaAgent)
@@ -677,23 +677,24 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void overseaAgentListsOnlyShipmentsForItsSelectedCustomerScope() {
+  void overseaAgentListsLinkedCustomerShipmentsAndFiltersBySelectedCustomer() {
     jdbcTemplate.update(
         """
         INSERT INTO cp_customers (
           id, public_id, username, display_name, status, party_role,
-          customer_code_hash, customer_code_prefix, created_by, responsible_agent_id
+          client_code, customer_code_hash, customer_code_prefix,
+          created_by, responsible_agent_id
         ) VALUES
           (100, 'agent-100', 'agent-100', 'Agent 100', 'ACTIVE', 'OVERSEA_AGENT',
-           'agent-hash', 'AGENT', 1, 1),
+           'AGENT-100', 'agent-hash', 'AGENT', 1, 1),
           (101, 'customer-101', 'customer-101', 'Customer 101', 'ACTIVE', 'SHIPPER',
-           'customer-hash-101', 'C101', 1, 1),
+           'CLIENT-101', 'customer-hash-101', 'C101', 1, 1),
           (102, 'customer-102', 'customer-102', 'Customer 102', 'ACTIVE', 'CONSIGNEE',
-           'customer-hash-102', 'C102', 1, 1),
+           'CLIENT-102', 'customer-hash-102', 'C102', 1, 1),
           (103, 'customer-103', 'customer-103', 'Customer 103', 'ACTIVE', 'SHIPPER',
-           'customer-hash-103', 'C103', 1, 1),
+           'CLIENT-103', 'customer-hash-103', 'C103', 1, 1),
           (200, 'agent-200', 'agent-200', 'Agent 200', 'ACTIVE', 'OVERSEA_AGENT',
-           'agent-hash-200', 'AGENT200', 1, 1)
+           'AGENT-200', 'agent-hash-200', 'AGENT200', 1, 1)
         """
     );
     jdbcTemplate.update(
@@ -751,43 +752,50 @@ class ShipmentTrackingServiceTest {
         """
     );
 
-    CustomerPrincipal customer101Agent = new CustomerPrincipal(
-        100, "agent-100", "agent-100", "Agent 100", "OVERSEA_AGENT", "ACTIVE",
-        101L, "customer-101", "Customer 101", "SHIPPER"
+    CustomerPrincipal agent = new CustomerPrincipal(
+        100, "agent-100", "agent-100", "Agent 100", "OVERSEA_AGENT", "ACTIVE"
     );
-    ObjectNode customer101Shipments =
-        service.listAssignedSnapshots(customer101Agent, 1, 20);
+    ObjectNode allShipments = service.listAssignedSnapshots(agent, 1, 20);
 
-    assertThat(customer101Shipments.path("total").asLong()).isEqualTo(1L);
-    assertThat(customer101Shipments.path("items").get(0).path("boundCustomers").size())
-        .isEqualTo(1);
-    assertThat(customer101Shipments.path("items").get(0).path("boundCustomers").get(0)
-        .path("id").asText()).isEqualTo("customer-101");
-    assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
-        .containsExactly("linked-shipment-1");
-    assertThat(customer101Shipments.path("items").findValuesAsText("shipmentId"))
+    assertThat(allShipments.path("total").asLong()).isEqualTo(2L);
+    assertThat(allShipments.path("availableCustomers").findValuesAsText("clientCode"))
+        .containsExactly("CLIENT-101", "CLIENT-102");
+    assertThat(allShipments.path("items").findValuesAsText("shipmentId"))
+        .containsExactlyInAnyOrder("linked-shipment-1", "linked-shipment-2");
+    assertThat(allShipments.path("items").findValuesAsText("shipmentId"))
         .doesNotContain("agent-own-shipment", "unrelated-shipment");
 
-    CustomerPrincipal customer102Agent = new CustomerPrincipal(
-        100, "agent-100", "agent-100", "Agent 100", "OVERSEA_AGENT", "ACTIVE",
-        102L, "customer-102", "Customer 102", "CONSIGNEE"
+    ObjectNode customer101Shipments = service.listAssignedSnapshots(
+        agent, 1, 20, false, "customer-101"
     );
-    ObjectNode customer102Shipments =
-        service.listAssignedSnapshots(customer102Agent, 1, 20);
+    assertThat(customer101Shipments.path("total").asLong()).isEqualTo(1L);
+    assertThat(customer101Shipments.path("items").get(0).path("boundCustomers").get(0)
+        .path("clientCode").asText()).isEqualTo("CLIENT-101");
+
+    ObjectNode customer102Shipments = service.listAssignedSnapshots(
+        agent, 1, 20, false, "customer-102"
+    );
     assertThat(customer102Shipments.path("total").asLong()).isEqualTo(2L);
-    assertThat(service.listAssignedSnapshots(
-        customer102Agent, 1, 20, false, "customer-102"
-    ).path("total").asLong()).isEqualTo(2L);
     assertThatThrownBy(() -> service.listAssignedSnapshots(
-        customer102Agent, 1, 20, false, "customer-101"
+        agent, 1, 20, false, "customer-103"
     )).isInstanceOfSatisfying(ApiException.class, error ->
         assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
     assertThat(customer102Shipments.path("items").findValuesAsText("shipmentId"))
         .containsExactlyInAnyOrder("linked-shipment-1", "linked-shipment-2");
+    assertThatThrownBy(() -> service.refreshOverseaAgentAssignedShipment(
+        "linked-shipment-2", null, agent
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST)
+    );
+    assertThatThrownBy(() -> service.refreshOverseaAgentAssignedShipment(
+        "linked-shipment-2", "customer-101", agent
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
+    );
 
     ObjectNode followedShipments =
-        service.listAssignedSnapshots(customer102Agent, 1, 20, true);
+        service.listAssignedSnapshots(agent, 1, 20, true);
     assertThat(followedShipments.path("total").asLong()).isEqualTo(1L);
     assertThat(followedShipments.path("items").get(0).path("shipmentId").asText())
         .isEqualTo("linked-shipment-2");

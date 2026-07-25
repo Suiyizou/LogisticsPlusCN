@@ -241,13 +241,12 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
-test("overseas-agent customers receive a direct-assignment shipment management workspace", () => {
+test("overseas agents reuse the shipment overview and filter updates by customer code", () => {
   assert.match(indexSource, /id="history-following-filter"/);
-  assert.match(indexSource, /id="agent-shipment-table-head"/);
+  assert.match(indexSource, /id="history-eta-sort"[\s\S]*?value="asc"[\s\S]*?value="desc"/);
   assert.doesNotMatch(indexSource, /id="agent-shipment-edit-dialog"/);
   assert.match(indexSource, /id="tracking-nav-item"/);
   assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
-  assert.match(appSource, /function renderAgentShipmentManagement/);
   assert.doesNotMatch(appSource, /function saveAgentShipmentEdit/);
   assert.doesNotMatch(appSource, /agent-row-edit/);
   assert.match(
@@ -256,11 +255,11 @@ test("overseas-agent customers receive a direct-assignment shipment management w
   );
   assert.match(
     appSource,
-    /function refreshOverseaAgentShipment[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/refresh/
+    /function refreshOverseaAgentShipment[\s\S]*?!historyCustomerFilter[\s\S]*?\/refresh\?customerId=\$\{/
   );
   assert.match(
     appSource,
-    /if \(overseaAgent\) \{[\s\S]*?historyCustomerFilterSelect\.disabled = true/
+    /historyAvailableCustomers[\s\S]*?historyCustomerFilterSelect\.disabled = false[\s\S]*?history\.allCustomers/
   );
   assert.match(
     appSource,
@@ -268,7 +267,7 @@ test("overseas-agent customers receive a direct-assignment shipment management w
   );
   assert.match(
     appSource,
-    /if \(isOverseaAgentSession\(session\) && scopeCustomerId\) \{[\s\S]*?query\.set\("customerId", scopeCustomerId\)/
+    /if \(isOverseaAgentSession\(session\) && historyCustomerFilter\) \{[\s\S]*?query\.set\("customerId", historyCustomerFilter\)/
   );
   assert.match(
     appSource,
@@ -281,6 +280,15 @@ test("overseas-agent customers receive a direct-assignment shipment management w
   assert.match(
     stylesSource,
     /body\.is-oversea-agent-session #tracking-view > \.query-panel/
+  );
+  const restrictedWorkspaceRule = stylesSource.slice(
+    stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"),
+    stylesSource.indexOf("display: none !important", stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"))
+  );
+  assert.doesNotMatch(restrictedWorkspaceRule, /\.overview-hero/);
+  assert.match(
+    appSource,
+    /function sortHistoryByEta[\s\S]*?historyEtaSort === "desc"[\s\S]*?historyEtaTimestamp/
   );
 });
 

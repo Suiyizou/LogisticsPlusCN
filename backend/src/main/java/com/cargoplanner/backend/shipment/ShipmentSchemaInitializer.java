@@ -350,7 +350,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         JOIN cp_customers agent ON agent.id = customer_session.customer_id
         SET customer_session.revoked_at =
               COALESCE(customer_session.revoked_at, CURRENT_TIMESTAMP(6))
-        WHERE customer_session.scope_customer_id IS NULL
+        WHERE customer_session.scope_customer_id IS NOT NULL
           AND UPPER(agent.party_role) = 'OVERSEA_AGENT'
         """
     );
@@ -653,7 +653,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         CREATE TABLE IF NOT EXISTS cp_customer_sessions (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           customer_id BIGINT NOT NULL,
-          scope_customer_id BIGINT NOT NULL,
+          scope_customer_id BIGINT NULL,
           session_token_hash CHAR(64) NOT NULL UNIQUE,
           expires_at DATETIME(6) NOT NULL,
           last_seen_at DATETIME(6) NOT NULL,

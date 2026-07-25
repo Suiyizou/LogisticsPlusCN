@@ -28,6 +28,7 @@ const historySearchInput = document.querySelector("#history-search-input");
 const historySearchClear = document.querySelector("#history-search-clear");
 const historyCustomerFilterWrap = document.querySelector("#history-customer-filter-wrap");
 const historyCustomerFilterSelect = document.querySelector("#history-customer-filter");
+const historyEtaSortSelect = document.querySelector("#history-eta-sort");
 const historyFollowingFilter = document.querySelector("#history-following-filter");
 const historyTitle = document.querySelector("#history-title");
 const historySubtitle = document.querySelector("#history-subtitle");
@@ -327,9 +328,9 @@ const MESSAGES = {
     "overview.description": "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
-    "overview.agentTitle": "Manage shipments for the current service customer.",
-    "overview.agentDescription": "Choose the shipments you are following and refresh their latest movement whenever daily work requires it.",
-    "overview.agentStartTracking": "Open shipment query",
+    "overview.agentTitle": "Your customer shipments, moving in plain sight.",
+    "overview.agentDescription": "Review every authorized shipment in one overview, then filter by customer code before updating that customer's tracking.",
+    "overview.agentStartTracking": "Choose a customer code",
     "overview.savedSearches": "Saved searches",
     "overview.carriersUsed": "Carriers used",
     "overview.lastUpdated": "Last updated",
@@ -354,8 +355,8 @@ const MESSAGES = {
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest shipment snapshots stored in the database",
-    "history.agentTitle": "Assigned shipment management",
-    "history.agentSubtitle": "Shipments authorized for this overseas agent under the current service customer",
+    "history.agentTitle": "My shipments",
+    "history.agentSubtitle": "Authorized shipments across linked customers; filter by customer code to update tracking",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
@@ -376,6 +377,10 @@ const MESSAGES = {
     "history.customerFilter": "Customer",
     "history.customerFilterLabel": "Filter shipments by customer",
     "history.currentCustomer": "Current customer",
+    "history.etaSort": "ETA order",
+    "history.etaSortLabel": "Sort shipments by ETA",
+    "history.etaAscending": "ETA ascending",
+    "history.etaDescending": "ETA descending",
     "agent.followingOnly": "Following only",
     "agent.showAll": "Show all",
     "agent.follow": "Follow",
@@ -383,6 +388,7 @@ const MESSAGES = {
     "agent.update": "Update now",
     "agent.updating": "Updating…",
     "agent.updateFailed": "Shipment update failed: {message}",
+    "agent.selectCustomerToUpdate": "Select a customer code before updating this shipment.",
     "agent.followFailed": "Follow-up selection could not be saved: {message}",
     "agent.lastAgentUpdate": "Agent update {time}",
     "agent.emptyTitle": "No shipments have been assigned",
@@ -821,9 +827,9 @@ const MESSAGES = {
     "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
     "overview.agentKicker": "海外代理业务台",
-    "overview.agentTitle": "管理当前服务客户的授权票单。",
-    "overview.agentDescription": "可选择需要跟进的票单，并根据每日业务需要主动更新最新运输进度。",
-    "overview.agentStartTracking": "打开票单查询",
+    "overview.agentTitle": "客户票单动态，一页尽览。",
+    "overview.agentDescription": "统一查看名下全部授权票单；需要更新时，先按客户码筛选，再更新该客户的运输进度。",
+    "overview.agentStartTracking": "选择客户码",
     "overview.savedSearches": "已保存查询",
     "overview.carriersUsed": "已使用船司",
     "overview.lastUpdated": "最近更新",
@@ -848,8 +854,8 @@ const MESSAGES = {
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
     "history.subtitle": "数据库保存的最新货运快照",
-    "history.agentTitle": "已分配票单管理",
-    "history.agentSubtitle": "当前服务客户下授权给该海外代理处理的票单",
+    "history.agentTitle": "我的票单",
+    "history.agentSubtitle": "汇总关联客户的授权票单；按客户码筛选后可更新对应客户业务",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
@@ -870,6 +876,10 @@ const MESSAGES = {
     "history.customerFilter": "客户",
     "history.customerFilterLabel": "按客户筛选票单",
     "history.currentCustomer": "当前客户",
+    "history.etaSort": "ETA 排序",
+    "history.etaSortLabel": "按预计到达时间排序票单",
+    "history.etaAscending": "ETA 正序",
+    "history.etaDescending": "ETA 倒序",
     "history.allCustomers": "全部客户",
     "agent.followingOnly": "只看跟进",
     "agent.showAll": "查看全部",
@@ -878,6 +888,7 @@ const MESSAGES = {
     "agent.update": "立即更新",
     "agent.updating": "更新中…",
     "agent.updateFailed": "票单更新失败：{message}",
+    "agent.selectCustomerToUpdate": "请先选择客户码，再更新该客户名下的票单。",
     "agent.followFailed": "无法保存跟进选择：{message}",
     "agent.lastAgentUpdate": "代理更新于 {time}",
     "agent.emptyTitle": "业务员尚未分配票单",
@@ -1398,6 +1409,7 @@ let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
 let historyCustomerFilter = "";
+let historyEtaSort = "asc";
 let historyFollowingOnly = false;
 let historyLoadingState = false;
 let historyPage = 1;
@@ -1405,6 +1417,7 @@ let historyPageSize = 20;
 let historyTotal = 0;
 let historyTotalPages = 0;
 let historyScopeCustomer = null;
+let historyAvailableCustomers = [];
 let agentShipmentDetailOpen = false;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
@@ -1945,7 +1958,7 @@ function setLocalizedElement(id, key) {
 
 function activeViewTranslationKey(view = activeView, session = readFileSession()) {
   if (isOverseaAgentSession(session)) {
-    if (view === "overview") return "nav.agentShipments";
+    if (view === "overview") return "nav.overview";
     if (view === "tracking") return "nav.agentShipmentDetail";
   }
   return `nav.${view}`;
@@ -1957,7 +1970,7 @@ function renderOverseaAgentWorkspace(session = readFileSession()) {
   if (trackingNavItem) trackingNavItem.hidden = managed;
   setLocalizedElement(
       "overview-nav-label",
-      managed ? "nav.agentShipments" : "nav.overview"
+      "nav.overview"
   );
   setLocalizedElement(
       "overview-kicker",
@@ -4132,6 +4145,7 @@ async function loadCustomerAssignedHistory() {
   if (session.kind !== "CUSTOMER" || !session.token) {
     customerAssignedHistory = [];
     historyScopeCustomer = null;
+    historyAvailableCustomers = [];
     return;
   }
   historyLoadingState = true;
@@ -4142,13 +4156,8 @@ async function loadCustomerAssignedHistory() {
       pageSize: String(historyPageSize),
       followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session))
     });
-    const scopeCustomerId = String(
-      session.principal?.scopeCustomerId
-      ?? session.storedSession?.customer?.scopeCustomerId
-      ?? ""
-    ).trim();
-    if (isOverseaAgentSession(session) && scopeCustomerId) {
-      query.set("customerId", scopeCustomerId);
+    if (isOverseaAgentSession(session) && historyCustomerFilter) {
+      query.set("customerId", historyCustomerFilter);
     }
     const response = await fetch(`/api/customer/shipments?${query}`, {
       headers: { "X-Customer-Token": session.token }
@@ -4171,6 +4180,9 @@ async function loadCustomerAssignedHistory() {
     historyScopeCustomer = agentManagement
       ? normalizeHistoryBoundCustomers([payload?.scopeCustomer])[0] || null
       : null;
+    historyAvailableCustomers = agentManagement
+      ? normalizeHistoryBoundCustomers(payload?.availableCustomers)
+      : [];
     customerAssignedHistory = items
       .filter((item) => agentManagement
         ? Boolean(item?.referenceNo || item?.shipmentId)
@@ -4250,6 +4262,7 @@ async function loadCustomerAssignedHistory() {
     }
   } catch {
     customerAssignedHistory = [];
+    historyAvailableCustomers = [];
     resetHistoryPagination();
     showError(customerFacingTrackingError(), "error");
   } finally {
@@ -6133,7 +6146,11 @@ function historyTiming(snapshot) {
     keyTimes.estimatedDelivery?.actualTime ??
     null;
   const estimatedArrival =
-    lastOceanLeg.estimatedArrival ?? keyTimes.estimatedDelivery?.time ?? null;
+    lastOceanLeg.estimatedArrival ??
+    keyTimes.estimatedFinalArrival?.time ??
+    keyTimes.estimatedArrival?.time ??
+    keyTimes.estimatedDelivery?.time ??
+    null;
 
   return {
     departureTime: actualDeparture ?? estimatedDeparture,
@@ -6292,7 +6309,8 @@ function normalizeHistoryBoundCustomers(customers) {
       displayName: String(value.displayName ?? value.customerName ?? "").trim(),
       username: String(value.username ?? "").trim(),
       clientCode: String(value.clientCode ?? value.clientNo ?? "").trim(),
-      partyRole: String(value.partyRole ?? value.relationshipRole ?? "").trim().toUpperCase()
+      partyRole: String(value.partyRole ?? value.relationshipRole ?? "").trim().toUpperCase(),
+      shipmentCount: Number(value.shipmentCount ?? 0)
     });
   }
   return [...unique.values()];
@@ -6308,43 +6326,29 @@ function historyCustomerLabel(customer) {
 
 function renderHistoryCustomerFilter(entries, session) {
   if (!historyCustomerFilterWrap || !historyCustomerFilterSelect) return;
+  const overseaAgent = isOverseaAgentSession(session);
   const customers = new Map();
-  for (const entry of entries) {
-    for (const customer of normalizeHistoryBoundCustomers(entry.boundCustomers)) {
-      if (isOverseaAgentSession(session) && customer.partyRole === "OVERSEA_AGENT") continue;
-      const current = customers.get(customer.id) || { ...customer, shipmentCount: 0 };
-      current.shipmentCount += 1;
-      customers.set(customer.id, current);
+  if (overseaAgent) {
+    for (const customer of historyAvailableCustomers) {
+      customers.set(customer.id, { ...customer });
     }
   }
-  const overseaAgent = isOverseaAgentSession(session);
-  if (overseaAgent && historyScopeCustomer?.id) {
-    customers.set(historyScopeCustomer.id, {
-      ...(customers.get(historyScopeCustomer.id) || historyScopeCustomer),
-      shipmentCount: historyTotal
-    });
+  for (const entry of entries) {
+    for (const customer of normalizeHistoryBoundCustomers(entry.boundCustomers)) {
+      if (overseaAgent && customer.partyRole === "OVERSEA_AGENT") continue;
+      const current = customers.get(customer.id) || { ...customer, shipmentCount: 0 };
+      if (!overseaAgent || !customers.has(customer.id)) current.shipmentCount += 1;
+      customers.set(customer.id, current);
+    }
   }
   const options = [...customers.values()].sort((left, right) =>
     historyCustomerLabel(left).localeCompare(historyCustomerLabel(right), currentLanguage)
   );
   const filterLabel = historyCustomerFilterWrap.querySelector("span");
   if (filterLabel) {
-    const key = overseaAgent ? "history.currentCustomer" : "history.customerFilter";
+    const key = "history.customerFilter";
     filterLabel.dataset.i18n = key;
     filterLabel.textContent = t(key);
-  }
-  if (overseaAgent) {
-    const currentCustomer = options[0];
-    const currentOption = document.createElement("option");
-    currentOption.value = currentCustomer?.id || "";
-    currentOption.textContent = currentCustomer
-      ? `${historyCustomerLabel(currentCustomer)} (${currentCustomer.shipmentCount})`
-      : t("agent.noCustomer");
-    historyCustomerFilterSelect.replaceChildren(currentOption);
-    historyCustomerFilterSelect.value = currentOption.value;
-    historyCustomerFilterSelect.disabled = true;
-    historyCustomerFilterWrap.hidden = options.length === 0;
-    return;
   }
   historyCustomerFilterSelect.disabled = false;
   if (historyCustomerFilter && !customers.has(historyCustomerFilter)) historyCustomerFilter = "";
@@ -6359,7 +6363,8 @@ function renderHistoryCustomerFilter(entries, session) {
   });
   historyCustomerFilterSelect.replaceChildren(allCustomers, ...customerOptions);
   historyCustomerFilterSelect.value = historyCustomerFilter;
-  historyCustomerFilterWrap.hidden = session.kind !== "INTERNAL" || options.length === 0;
+  historyCustomerFilterWrap.hidden =
+    !["INTERNAL", "CUSTOMER"].includes(session.kind) || options.length === 0;
 }
 
 function historyMatchesCustomer(entry, customerId) {
@@ -6451,12 +6456,19 @@ async function setOverseaAgentShipmentFollowing(entry, following) {
 async function refreshOverseaAgentShipment(entry) {
   const session = readFileSession();
   if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return;
+  if (!historyCustomerFilter) {
+    showError(t("agent.selectCustomerToUpdate"), "warning");
+    historyCustomerFilterSelect?.focus();
+    return;
+  }
   entry.refreshing = true;
   clearError();
   renderHistory();
   try {
     const response = await fetch(
-      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh`,
+      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh?customerId=${
+        encodeURIComponent(historyCustomerFilter)
+      }`,
       {
         method: "POST",
         headers: { "X-Customer-Token": session.token }
@@ -6577,6 +6589,33 @@ function renderAgentShipmentManagement(history) {
   });
 }
 
+function historyEtaTimestamp(entry) {
+  const timing = historyTiming(entry?.snapshot ?? {});
+  const parsed = Date.parse(timing.estimatedArrival ?? timing.arrivalTime ?? "");
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sortHistoryByEta(entries) {
+  const direction = historyEtaSort === "desc" ? -1 : 1;
+  return [...entries].sort((left, right) => {
+    const leftEta = historyEtaTimestamp(left);
+    const rightEta = historyEtaTimestamp(right);
+    if (leftEta == null && rightEta == null) {
+      return String(left?.query?.number || "").localeCompare(
+        String(right?.query?.number || ""),
+        currentLanguage
+      );
+    }
+    if (leftEta == null) return 1;
+    if (rightEta == null) return -1;
+    if (leftEta !== rightEta) return (leftEta - rightEta) * direction;
+    return String(left?.query?.number || "").localeCompare(
+      String(right?.query?.number || ""),
+      currentLanguage
+    );
+  });
+}
+
 function renderHistory() {
   const allHistory = readHistory();
   const session = readFileSession();
@@ -6589,9 +6628,10 @@ function renderHistory() {
     ? followedHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
     : followedHistory;
   const normalizedSearch = normalizeHistorySearch(historySearchTerm);
-  const history = normalizedSearch
+  const filteredHistory = normalizedSearch
     ? customerHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
     : customerHistory;
+  const history = sortHistoryByEta(filteredHistory);
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
   const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
 
@@ -6648,6 +6688,7 @@ function renderHistory() {
     }
   }
   if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
+  if (historyEtaSortSelect) historyEtaSortSelect.value = historyEtaSort;
   if (historyPagination) {
     historyPagination.hidden = historyLoadingState || !accountBound || historyTotalPages <= 1;
     historyPagePrevious.disabled = historyLoadingState || historyPage <= 1;
@@ -6660,13 +6701,9 @@ function renderHistory() {
     historyPageSizeSelect.value = String(historyPageSize);
   }
   historyTableBody.replaceChildren();
-  historyTableWrap.classList.toggle("is-agent-management", agentManagement);
-  historyTableBody.classList.toggle("agent-shipment-table", agentManagement);
-  if (agentShipmentTableHead) agentShipmentTableHead.hidden = !agentManagement;
-  if (agentManagement) {
-    renderAgentShipmentManagement(history);
-    return;
-  }
+  historyTableWrap.classList.remove("is-agent-management");
+  historyTableBody.classList.remove("agent-shipment-table");
+  if (agentShipmentTableHead) agentShipmentTableHead.hidden = true;
 
   let rowIndex = 0;
   for (const entry of history) {
@@ -6846,8 +6883,11 @@ function renderHistory() {
       const updateButton = document.createElement("button");
       updateButton.type = "button";
       updateButton.className = "agent-update-button";
-      updateButton.disabled = entry.refreshing === true;
+      updateButton.disabled = entry.refreshing === true || !historyCustomerFilter;
       updateButton.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+      if (!historyCustomerFilter) {
+        updateButton.title = t("agent.selectCustomerToUpdate");
+      }
       updateButton.addEventListener("click", (event) => {
         event.stopPropagation();
         void refreshOverseaAgentShipment(entry);
@@ -7845,6 +7885,9 @@ window.addEventListener("storage", (event) => {
       customerPrincipalAwaitingRefresh = Boolean(
         event.newValue && event.newValue !== event.oldValue
       );
+      historyCustomerFilter = "";
+      historyAvailableCustomers = [];
+      resetHistoryPagination();
       void loadCustomerAssignedHistory();
     } else if (event.key === CUSTOMER_AUTH_SESSION_KEY) {
       customerPrincipalAwaitingRefresh = false;
@@ -7915,6 +7958,11 @@ document.querySelector("#portal-return-link")?.addEventListener("click", (event)
 });
 
 document.querySelector("#start-tracking-button").addEventListener("click", () => {
+  if (isOverseaAgentSession()) {
+    historyCustomerFilterSelect?.focus();
+    historyCustomerFilterWrap?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   showView("tracking", { pushLocation: activeView !== "tracking" }).then(() => {
     if (trackingNumber && !trackingNumber.hidden) {
       trackingNumber.focus();
@@ -7935,8 +7983,18 @@ historySearchClear?.addEventListener("click", () => {
   historySearchInput.focus();
 });
 
-historyCustomerFilterSelect?.addEventListener("change", () => {
+historyCustomerFilterSelect?.addEventListener("change", async () => {
   historyCustomerFilter = historyCustomerFilterSelect.value;
+  historyPage = 1;
+  if (isOverseaAgentSession()) {
+    await loadCustomerAssignedHistory();
+  } else {
+    renderHistory();
+  }
+});
+
+historyEtaSortSelect?.addEventListener("change", () => {
+  historyEtaSort = historyEtaSortSelect.value === "desc" ? "desc" : "asc";
   renderHistory();
 });
 

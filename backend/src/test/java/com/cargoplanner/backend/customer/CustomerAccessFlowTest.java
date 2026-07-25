@@ -290,7 +290,7 @@ class CustomerAccessFlowTest {
 
     assertThatThrownBy(() -> authService.login(
         new CustomerLoginRequest(
-            "legacy-agent", "SecurePass!23", (String) agent.get("customerCode")
+            "legacy-agent", "SecurePass!23", (String) customer.get("customerCode")
         ),
         httpRequest
     )).isInstanceOfSatisfying(ApiException.class, error ->
@@ -298,23 +298,23 @@ class CustomerAccessFlowTest {
     );
     CustomerLoginResponse login = authService.login(
         new CustomerLoginRequest(
-            "legacy-agent", "SecurePass!23", (String) customer.get("customerCode")
+            "legacy-agent", "SecurePass!23", (String) agent.get("customerCode")
         ),
         httpRequest
     );
     CustomerPrincipal principal = authService.authenticate(login.token(), httpRequest);
     assertThat(principal.partyRole()).isEqualTo("OVERSEA_AGENT");
-    assertThat(principal.scopeCustomerPublicId()).isEqualTo(customer.get("id"));
-    assertThat(login.customer().scopeCustomerId()).isEqualTo(customer.get("id"));
+    assertThat(principal.scopeCustomerPublicId()).isNull();
+    assertThat(login.customer().scopeCustomerId()).isNull();
     assertThat(jdbcTemplate.queryForObject(
         """
-        SELECT scoped.public_id
+        SELECT COUNT(*)
         FROM cp_customer_sessions session
-        JOIN cp_customers scoped ON scoped.id = session.scope_customer_id
         WHERE session.session_token_hash IS NOT NULL
+          AND session.scope_customer_id IS NULL
         """,
-        String.class
-    )).isEqualTo(customer.get("id"));
+        Integer.class
+    )).isEqualTo(1);
     assertThat(shipmentAccessService.requireCustomerAccess(
         "shipment-public-id", principal
     ).fileRoles()).containsExactly("OVERSEA_AGENT");
@@ -381,13 +381,13 @@ class CustomerAccessFlowTest {
     );
     CustomerLoginResponse login = authService.login(
         new CustomerLoginRequest(
-            "oversea-portal", "SecurePass!23", (String) shipper.get("customerCode")
+            "oversea-portal", "SecurePass!23", (String) agent.get("customerCode")
         ),
         httpRequest
     );
     CustomerPrincipal principal = authService.authenticate(login.token(), httpRequest);
 
-    assertThat(principal.scopeCustomerPublicId()).isEqualTo(shipper.get("id"));
+    assertThat(principal.scopeCustomerPublicId()).isNull();
     assertThat(shipmentAccessService.requireCustomerAccess(
         "shipment-public-id", principal
     ).fileRoles()).containsExactly("OVERSEA_AGENT");
@@ -464,7 +464,7 @@ class CustomerAccessFlowTest {
     CustomerPrincipal previousPrincipal = authService.authenticate(
         authService.login(
             new CustomerLoginRequest(
-                "previous-oversea", "SecurePass!23", (String) created.get("customerCode")
+                "previous-oversea", "SecurePass!23", (String) previousAgent.get("customerCode")
             ),
             httpRequest
         ).token(),
@@ -473,13 +473,19 @@ class CustomerAccessFlowTest {
     assertThat(shipmentAccessService.requireCustomerAccess(
         "shipment-public-id", previousPrincipal
     ).shipmentId()).isEqualTo(10);
-    assertThatThrownBy(() -> authService.login(
-        new CustomerLoginRequest(
-            "target-oversea", "SecurePass!23", (String) created.get("customerCode")
-        ),
+    CustomerPrincipal targetPrincipalBeforeTransfer = authService.authenticate(
+        authService.login(
+            new CustomerLoginRequest(
+                "target-oversea", "SecurePass!23", (String) targetAgent.get("customerCode")
+            ),
+            httpRequest
+        ).token(),
         httpRequest
+    );
+    assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(
+        "shipment-public-id", targetPrincipalBeforeTransfer
     )).isInstanceOfSatisfying(ApiException.class, error ->
-        assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
+        assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
 
     @SuppressWarnings("unchecked")
@@ -527,7 +533,7 @@ class CustomerAccessFlowTest {
     CustomerPrincipal targetPrincipal = authService.authenticate(
         authService.login(
             new CustomerLoginRequest(
-                "target-oversea", "SecurePass!23", (String) created.get("customerCode")
+                "target-oversea", "SecurePass!23", (String) targetAgent.get("customerCode")
             ),
             httpRequest
         ).token(),
@@ -1565,7 +1571,7 @@ class CustomerAccessFlowTest {
         CREATE TABLE cp_customer_sessions (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
           customer_id BIGINT NOT NULL,
-          scope_customer_id BIGINT NOT NULL,
+          scope_customer_id BIGINT,
           session_token_hash CHAR(64) NOT NULL UNIQUE,
           expires_at TIMESTAMP NOT NULL,
           last_seen_at TIMESTAMP NOT NULL,

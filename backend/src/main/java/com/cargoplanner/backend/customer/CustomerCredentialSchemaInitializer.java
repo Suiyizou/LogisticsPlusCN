@@ -9,7 +9,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Adds password credentials to customer tables created by earlier releases. */
+/** Keeps customer authentication tables compatible with the current sign-in model. */
 @Component
 @Order(1)
 public class CustomerCredentialSchemaInitializer implements ApplicationRunner {
@@ -42,6 +42,7 @@ public class CustomerCredentialSchemaInitializer implements ApplicationRunner {
         "provisioning_source",
         "ALTER TABLE cp_customers ADD COLUMN provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL' AFTER customer_code_mode"
     );
+    makeCustomerSessionScopeNullable();
   }
 
   private boolean isMySql() {
@@ -65,5 +66,22 @@ public class CustomerCredentialSchemaInitializer implements ApplicationRunner {
         column
     );
     if (count == null || count == 0) jdbcTemplate.execute(ddl);
+  }
+
+  private void makeCustomerSessionScopeNullable() {
+    String nullable = jdbcTemplate.queryForObject(
+        """
+        SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'cp_customer_sessions'
+          AND COLUMN_NAME = 'scope_customer_id'
+        """,
+        String.class
+    );
+    if ("NO".equalsIgnoreCase(nullable)) {
+      jdbcTemplate.execute(
+          "ALTER TABLE cp_customer_sessions MODIFY COLUMN scope_customer_id BIGINT NULL"
+      );
+    }
   }
 }
