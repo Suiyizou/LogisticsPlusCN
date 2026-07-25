@@ -266,26 +266,20 @@
             data-view="shipments"
             hidden
           >
-            <section class="page-heading agent-management-page-heading">
-              <div>
-                <p class="kicker" data-i18n="agent.managementKicker">SHIPMENT MANAGEMENT</p>
-                <h1 data-i18n="agent.managementTitle">Assigned shipment management</h1>
-                <p data-i18n="agent.managementDescription">
-                  Select a customer code, review assigned shipments, and update one or many tracking records.
-                </p>
-              </div>
-            </section>
-
             <section class="panel agent-management-panel">
-              <div class="panel-header history-heading agent-management-heading">
-                <div>
-                  <span class="panel-icon" aria-hidden="true">↺</span>
-                  <span>
-                    <strong data-i18n="nav.agentShipments">Shipment management</strong>
-                    <small data-i18n="history.agentSubtitle">Authorized shipments across linked customers; filter by customer code to update tracking</small>
-                  </span>
-                </div>
-                <div class="history-heading-actions">
+              <div class="agent-management-toolbar">
+                <h1 data-i18n="agent.managementTitle">Confirmed tracked shipments</h1>
+                <div class="agent-management-toolbar-actions">
+                  <label class="history-customer-filter" id="agent-management-customer-filter-wrap">
+                    <span data-i18n="history.customerFilter">Customer filter</span>
+                    <select
+                      id="agent-management-customer-filter"
+                      data-i18n-aria-label="history.customerFilterLabel"
+                      aria-label="Filter shipments by customer"
+                    >
+                      <option value="" data-i18n="history.allCustomers">All customers</option>
+                    </select>
+                  </label>
                   <button
                     class="agent-following-filter"
                     id="agent-management-following-filter"
@@ -295,16 +289,6 @@
                     <span aria-hidden="true">★</span>
                     <b data-i18n="agent.followingOnly">Following only</b>
                   </button>
-                  <label class="history-customer-filter" id="agent-management-customer-filter-wrap">
-                    <span data-i18n="history.customerFilter">Customer</span>
-                    <select
-                      id="agent-management-customer-filter"
-                      data-i18n-aria-label="history.customerFilterLabel"
-                      aria-label="Filter shipments by customer"
-                    >
-                      <option value="" data-i18n="history.allCustomers">All customers</option>
-                    </select>
-                  </label>
                   <div class="history-search">
                     <span aria-hidden="true">⌕</span>
                     <input
@@ -324,28 +308,32 @@
                       hidden
                     >×</button>
                   </div>
+                  <button
+                    class="agent-management-bulk-update"
+                    id="agent-management-bulk-update"
+                    type="button"
+                    disabled
+                  >
+                    <span aria-hidden="true">↻</span>
+                    <b id="agent-management-bulk-update-label">Update selected (0)</b>
+                  </button>
+                  <button
+                    class="agent-management-refresh"
+                    id="agent-management-refresh"
+                    type="button"
+                  >
+                    <span aria-hidden="true">↻</span>
+                    <b data-i18n="agent.refreshList">Refresh</b>
+                  </button>
                 </div>
               </div>
 
               <div class="agent-management-bulk-toolbar">
-                <label class="agent-management-select-all">
-                  <input id="agent-management-select-all" type="checkbox" />
-                  <span data-i18n="agent.selectAllPage">Select current page</span>
-                </label>
                 <span
                   class="agent-management-selected-count"
                   id="agent-management-selected-count"
                   aria-live="polite"
                 >0 selected</span>
-                <button
-                  class="agent-management-bulk-update"
-                  id="agent-management-bulk-update"
-                  type="button"
-                  disabled
-                >
-                  <span aria-hidden="true">↻</span>
-                  <b id="agent-management-bulk-update-label">Update selected (0)</b>
-                </button>
                 <span
                   class="agent-management-bulk-status"
                   id="agent-management-bulk-status"
@@ -371,10 +359,19 @@
 
               <div class="shipment-list-wrap is-agent-management" id="agent-management-table-wrap" hidden>
                 <div class="agent-shipment-table-head" id="agent-shipment-table-head">
-                  <span data-i18n="agent.columnSelectIndex">Select / No.</span>
-                  <span data-i18n="agent.columnReference">Shipment No.</span>
+                  <span class="agent-shipment-select-heading">
+                    <input
+                      id="agent-management-select-all"
+                      type="checkbox"
+                      data-i18n-aria-label="agent.selectAllPage"
+                      aria-label="Select current page"
+                    />
+                  </span>
+                  <span data-i18n="agent.columnIndex">No.</span>
+                  <span data-i18n="agent.columnBusinessReference">Business No.</span>
                   <span data-i18n="agent.columnCarrier">Carrier</span>
-                  <span data-i18n="agent.columnCustomers">Service customer</span>
+                  <span data-i18n="agent.columnClient">Client No./Name</span>
+                  <span data-i18n="agent.columnBoundUsers">Bound users</span>
                   <span data-i18n="agent.columnStatus">Status</span>
                   <span data-i18n="agent.columnNote">Note</span>
                   <span data-i18n="agent.columnUpdated">Last updated</span>

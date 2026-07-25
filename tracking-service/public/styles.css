@@ -10560,48 +10560,75 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   margin: 0 auto;
 }
 
-.agent-management-page-heading {
-  padding-bottom: 20px;
-}
-
-.agent-management-page-heading h1 {
-  margin-bottom: 8px;
-}
-
-.agent-management-page-heading p:last-child {
-  max-width: 760px;
-}
-
 .agent-management-panel {
   overflow: hidden;
+  border-color: #dfe6ef;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(31, 48, 74, 0.045);
 }
 
-.agent-management-heading {
-  min-height: 88px;
-  padding: 16px 20px;
+.agent-management-toolbar {
+  display: flex;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5ebf2;
+  background: #f8fafc;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-management-toolbar h1 {
+  flex: 0 0 auto;
+  margin: 0;
+  color: #17233d;
+  font-size: 20px;
+  font-weight: 760;
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+
+.agent-management-toolbar-actions {
+  display: flex;
+  min-width: 0;
+  margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.agent-management-toolbar .history-customer-filter {
+  display: flex;
+  min-width: 285px;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.agent-management-toolbar .history-customer-filter > span {
+  font-size: 11px;
+}
+
+.agent-management-toolbar .history-customer-filter select {
+  min-width: 205px;
+}
+
+.agent-management-toolbar .history-search {
+  width: min(290px, 24vw);
 }
 
 .agent-management-bulk-toolbar {
   display: flex;
-  min-height: 58px;
-  padding: 10px 18px;
-  border-top: 1px solid #e2e9f2;
+  min-height: 38px;
+  padding: 7px 16px;
+  border-bottom: 1px solid #e5ebf2;
   background: #f8fbff;
   align-items: center;
   gap: 12px;
 }
 
-.agent-management-select-all {
-  display: inline-flex;
-  color: #405f7d;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.agent-management-select-all input,
+.agent-shipment-select-heading input,
 .agent-shipment-select {
   width: 16px;
   height: 16px;
@@ -10609,40 +10636,53 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   cursor: pointer;
 }
 
-.agent-management-select-all input:disabled,
+.agent-shipment-select-heading input:disabled,
 .agent-shipment-select:disabled {
   cursor: not-allowed;
 }
 
 .agent-management-selected-count {
-  min-width: 92px;
   color: #688199;
   font-size: 12px;
 }
 
-.agent-management-bulk-update {
+.agent-management-bulk-update,
+.agent-management-refresh {
   display: inline-flex;
-  min-height: 36px;
+  min-height: 38px;
   padding: 0 14px;
-  border: 1px solid #edc779;
-  border-radius: 7px;
-  color: #9b650f;
-  background: #fff9ec;
+  border: 1px solid #cbd8e7;
+  border-radius: 6px;
+  color: #52657b;
+  background: #fff;
   align-items: center;
   gap: 7px;
   font: inherit;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .agent-management-bulk-update:hover:not(:disabled) {
   border-color: #d9a63f;
+  color: #9b650f;
   background: #fff3d7;
 }
 
 .agent-management-bulk-update:disabled {
   opacity: .55;
   cursor: not-allowed;
+}
+
+.agent-management-refresh:hover:not(:disabled) {
+  border-color: #83a8d2;
+  color: #1767c8;
+  background: #f3f8ff;
+}
+
+.agent-management-refresh:disabled {
+  opacity: .55;
+  cursor: wait;
 }
 
 .agent-management-bulk-status {
@@ -10658,15 +10698,26 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .shipment-list-wrap.is-agent-management {
   overflow-x: auto;
-  border-top: 1px solid #e2e9f2;
+  padding: 0;
+  border-top: 0;
+  background: #fff;
 }
 
 .agent-shipment-table-head,
 .agent-shipment-row {
   display: grid;
-  min-width: 1360px;
-  grid-template-columns: 112px minmax(180px, 1.2fr) 100px minmax(180px, 1.1fr)
-    minmax(150px, 1fr) minmax(160px, 1fr) 150px 250px;
+  min-width: 1580px;
+  grid-template-columns:
+    48px
+    60px
+    minmax(190px, 1.15fr)
+    110px
+    minmax(170px, .95fr)
+    minmax(220px, 1.25fr)
+    minmax(175px, 1fr)
+    minmax(160px, .9fr)
+    160px
+    210px;
   align-items: center;
 }
 
@@ -10675,22 +10726,22 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 }
 
 .agent-shipment-table-head {
-  min-height: 46px;
-  padding: 0 14px;
-  color: #5f7892;
-  background: #f5f8fc;
+  min-height: 44px;
+  padding: 0 10px;
+  color: #1f3856;
+  background: #fff;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 760;
 }
 
 .agent-shipment-table {
   display: block;
-  min-width: 1320px;
+  min-width: 1580px;
 }
 
 .agent-shipment-row {
   min-height: 82px;
-  padding: 12px 14px;
+  padding: 11px 10px;
   border-bottom: 1px solid #e7edf5;
   color: #334c65;
   background: #fff;
@@ -10709,9 +10760,10 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 .agent-shipment-row > time,
 .agent-shipment-table-head > span {
   min-width: 0;
-  padding-right: 14px;
+  padding-right: 12px;
 }
 
+.agent-shipment-selection,
 .agent-shipment-sequence,
 .agent-shipment-identity,
 .agent-shipment-status {
@@ -10719,13 +10771,14 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   align-items: center;
 }
 
+.agent-shipment-selection,
 .agent-shipment-sequence {
-  gap: 9px;
+  justify-content: center;
 }
 
 .agent-shipment-follow {
-  width: 27px;
-  height: 27px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 1px solid #d7e1ed;
   border-radius: 5px;
@@ -10759,6 +10812,13 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   font-weight: 700;
 }
 
+.agent-shipment-client {
+  overflow: hidden;
+  color: #52677e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-shipment-customers {
   display: flex;
   flex-wrap: wrap;
@@ -10776,6 +10836,12 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   background: #f5faff;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-shipment-customers small.is-overflow {
+  border-color: #d5dde7;
+  color: #64768a;
+  background: #f7f9fc;
 }
 
 .agent-shipment-status {
@@ -10806,7 +10872,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 .agent-shipment-actions {
   display: flex;
   gap: 7px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .agent-shipment-actions button {
@@ -10830,27 +10896,54 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   background: #fff9ef !important;
 }
 
+.agent-row-follow {
+  flex: 0 0 32px;
+}
+
 .agent-shipment-actions button:disabled {
   opacity: .55;
   cursor: wait;
 }
 
-@media (max-width: 780px) {
-  .agent-following-filter {
-    flex: 1 1 auto;
-  }
-
-  .agent-management-page-heading {
-    padding-bottom: 14px;
-  }
-
-  .agent-management-heading {
-    align-items: stretch;
-  }
-
-  .agent-management-bulk-toolbar {
+@media (max-width: 1380px) {
+  .agent-management-toolbar {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-management-toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .agent-management-toolbar .history-search {
+    width: min(320px, 100%);
+  }
+}
+
+@media (max-width: 780px) {
+  .agent-management-toolbar-actions,
+  .agent-management-toolbar .history-customer-filter {
+    width: 100%;
+  }
+
+  .agent-management-toolbar .history-customer-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-management-toolbar .history-customer-filter select,
+  .agent-management-toolbar .history-search {
+    width: 100%;
+  }
+
+  .agent-following-filter,
+  .agent-management-bulk-update,
+  .agent-management-refresh {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .agent-management-bulk-status {

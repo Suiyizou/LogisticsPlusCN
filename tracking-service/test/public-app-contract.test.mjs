@@ -254,6 +254,11 @@ test("overseas agents keep the overview and receive a customer-scoped bulk shipm
   );
   assert.match(indexSource, /id="agent-management-select-all"/);
   assert.match(indexSource, /id="agent-management-bulk-update"/);
+  assert.match(indexSource, /id="agent-management-refresh"/);
+  assert.match(
+    indexSource,
+    /agent\.managementTitle[\s\S]*?agent\.columnBusinessReference[\s\S]*?agent\.columnClient[\s\S]*?agent\.columnBoundUsers/
+  );
   assert.doesNotMatch(indexSource, /id="agent-shipment-edit-dialog"/);
   assert.match(indexSource, /id="tracking-nav-item"/);
   assert.match(appSource, /function isOverseaAgentSession[\s\S]*?OVERSEA_AGENT/);
@@ -270,6 +275,14 @@ test("overseas agents keep the overview and receive a customer-scoped bulk shipm
   assert.match(
     appSource,
     /function renderAgentShipmentManagement[\s\S]*?agent-shipment-select[\s\S]*?agentManagementTableBody\.append/
+  );
+  assert.match(
+    appSource,
+    /function agentShipmentClientLabel[\s\S]*?businessReferences\.clientNameCode[\s\S]*?agentShipmentCustomers/
+  );
+  assert.match(
+    appSource,
+    /agentManagementRefresh\?\.addEventListener\("click"[\s\S]*?loadCustomerAssignedHistory/
   );
   assert.match(
     appSource,
