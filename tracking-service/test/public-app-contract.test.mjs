@@ -257,6 +257,9 @@ test("overseas agents manually update only their assigned shipment list", () => 
   assert.match(indexSource, /id="agent-management-refresh-all"/);
   assert.match(indexSource, /class="agent-management-bulk-toolbar"/);
   assert.match(indexSource, /id="agent-management-refresh"/);
+  assert.match(indexSource, /id="agent-update-task-dialog"/);
+  assert.match(indexSource, /id="agent-update-task-progress-bar"/);
+  assert.match(indexSource, /id="agent-update-task-results"/);
   assert.match(
     indexSource,
     /agent\.managementTitle[\s\S]*?agent\.columnBusinessReference[\s\S]*?agent\.columnClient[\s\S]*?agent\.columnBoundUsers/
@@ -286,6 +289,18 @@ test("overseas agents manually update only their assigned shipment list", () => 
   assert.match(
     appSource,
     /function refreshAllOverseaAgentShipments[\s\S]*?loadAllRefreshableOverseaAgentShipments[\s\S]*?agent\.refreshAllConfirm/
+  );
+  assert.match(
+    appSource,
+    /function createAgentUpdateTask[\s\S]*?agentUpdateTaskDialog\.showModal\(\)/
+  );
+  assert.match(
+    appSource,
+    /function renderAgentUpdateTaskDialog[\s\S]*?agentUpdateTaskProgressBar\.style\.width[\s\S]*?agentUpdateTaskResults\.replaceChildren/
+  );
+  assert.match(
+    appSource,
+    /function performOverseaAgentShipmentRefresh[\s\S]*?createAgentUpdateTask\(entries, mode\)[\s\S]*?taskItem\.status = "SUCCEEDED"[\s\S]*?taskItem\.status = "FAILED"/
   );
   assert.match(
     appSource,
@@ -322,6 +337,10 @@ test("overseas agents manually update only their assigned shipment list", () => 
   assert.match(
     stylesSource,
     /\.agent-management-bulk-toolbar[\s\S]*?\.agent-management-bulk-update/
+  );
+  assert.match(
+    stylesSource,
+    /\.agent-update-task-dialog::backdrop[\s\S]*?\.agent-update-task-progress[\s\S]*?\.agent-update-task-result\.is-running/
   );
   assert.match(
     indexSource,

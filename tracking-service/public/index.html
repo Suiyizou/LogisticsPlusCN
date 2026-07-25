@@ -1186,6 +1186,81 @@
         <b aria-hidden="true"></b>
       </div>
     </div>
+
+    <dialog
+      class="agent-update-task-dialog"
+      id="agent-update-task-dialog"
+      aria-labelledby="agent-update-task-title"
+    >
+      <section class="agent-update-task-panel">
+        <header>
+          <span>
+            <small id="agent-update-task-kicker">UPDATE TASK</small>
+            <strong id="agent-update-task-title">Batch shipment update</strong>
+          </span>
+          <button
+            type="button"
+            class="agent-update-task-close"
+            id="agent-update-task-close"
+            aria-label="Close"
+            disabled
+          >×</button>
+        </header>
+        <div class="agent-update-task-body">
+          <section class="agent-update-task-summary">
+            <div class="agent-update-task-headline">
+              <span class="agent-update-task-spinner" id="agent-update-task-spinner" aria-hidden="true"></span>
+              <span>
+                <strong id="agent-update-task-state">Updating shipments…</strong>
+                <small id="agent-update-task-progress-label">0 of 0 processed</small>
+              </span>
+            </div>
+            <div
+              class="agent-update-task-progress"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <i id="agent-update-task-progress-bar"></i>
+            </div>
+            <div class="agent-update-task-counters">
+              <span class="is-success">
+                <small data-i18n="agent.taskSucceeded">Succeeded</small>
+                <strong id="agent-update-task-success">0</strong>
+              </span>
+              <span class="is-failed">
+                <small data-i18n="agent.taskFailed">Failed</small>
+                <strong id="agent-update-task-failed">0</strong>
+              </span>
+              <span class="is-pending">
+                <small data-i18n="agent.taskPending">Pending</small>
+                <strong id="agent-update-task-pending">0</strong>
+              </span>
+            </div>
+            <p class="agent-update-task-current">
+              <span data-i18n="agent.taskCurrent">Current shipment</span>
+              <strong id="agent-update-task-current">—</strong>
+            </p>
+            <p class="agent-update-task-hint" id="agent-update-task-hint">
+              Keep this page open until all updates finish.
+            </p>
+          </section>
+          <section class="agent-update-task-results" aria-live="polite">
+            <div id="agent-update-task-results"></div>
+          </section>
+        </div>
+        <footer>
+          <button
+            type="button"
+            class="agent-update-task-close-action"
+            id="agent-update-task-close-action"
+            disabled
+          >Close</button>
+        </footer>
+      </section>
+    </dialog>
+
     <div class="document-drawer-layer" id="document-drawer-layer" hidden>
       <button class="document-drawer-backdrop" id="document-drawer-backdrop" type="button" aria-label="Close document drawer"></button>
       <aside class="document-drawer" id="document-drawer" aria-hidden="true" aria-labelledby="document-drawer-title">

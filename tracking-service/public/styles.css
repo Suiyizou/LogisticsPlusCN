@@ -10919,6 +10919,323 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
   cursor: wait;
 }
 
+.agent-update-task-dialog {
+  width: min(820px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: #203852;
+  background: transparent;
+  box-shadow: 0 28px 80px rgba(16, 42, 68, .28);
+  overflow: hidden;
+}
+
+.agent-update-task-dialog::backdrop {
+  background: rgba(15, 35, 54, .48);
+  backdrop-filter: blur(3px);
+}
+
+.agent-update-task-panel {
+  display: grid;
+  max-height: calc(100dvh - 32px);
+  background: #fff;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.agent-update-task-panel > header {
+  display: flex;
+  min-height: 76px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4ebf3;
+  background: #fbfdff;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-update-task-panel > header > span {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-update-task-panel > header small {
+  color: #2a77ce;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.agent-update-task-panel > header strong {
+  color: #172b45;
+  font-size: 19px;
+}
+
+.agent-update-task-close {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  color: #60768c;
+  background: #fff;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.agent-update-task-close:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.agent-update-task-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(260px, .85fr) minmax(340px, 1.15fr);
+}
+
+.agent-update-task-summary {
+  padding: 22px;
+  border-right: 1px solid #e5ecf4;
+  background: #f8fbff;
+}
+
+.agent-update-task-headline {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.agent-update-task-headline > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-update-task-headline strong {
+  color: #1c3957;
+  font-size: 15px;
+}
+
+.agent-update-task-headline small {
+  color: #70859a;
+  font-size: 11px;
+}
+
+.agent-update-task-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #d5e6f8;
+  border-top-color: #2f7dd1;
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+
+.agent-update-task-spinner[hidden] {
+  display: none;
+}
+
+.agent-update-task-progress {
+  height: 8px;
+  margin-top: 18px;
+  border-radius: 999px;
+  background: #dfe9f4;
+  overflow: hidden;
+}
+
+.agent-update-task-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2879d1, #55a9e8);
+  transition: width .22s ease;
+}
+
+.agent-update-task-dialog.is-complete .agent-update-task-progress i {
+  background: linear-gradient(90deg, #1f9b68, #52c690);
+}
+
+.agent-update-task-dialog.is-interrupted .agent-update-task-progress i {
+  background: linear-gradient(90deg, #d48a24, #efb45d);
+}
+
+.agent-update-task-counters {
+  display: grid;
+  margin-top: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.agent-update-task-counters > span {
+  display: grid;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dde7f1;
+  border-radius: 8px;
+  background: #fff;
+  gap: 4px;
+}
+
+.agent-update-task-counters small {
+  color: #7a8da0;
+  font-size: 10px;
+}
+
+.agent-update-task-counters strong {
+  color: #3b5873;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-update-task-counters .is-success strong {
+  color: #16855b;
+}
+
+.agent-update-task-counters .is-failed strong {
+  color: #d45e59;
+}
+
+.agent-update-task-current {
+  display: grid;
+  margin: 18px 0 0;
+  padding: 12px;
+  border: 1px solid #dce7f2;
+  border-radius: 8px;
+  background: #fff;
+  gap: 4px;
+}
+
+.agent-update-task-current span {
+  color: #778b9e;
+  font-size: 10px;
+}
+
+.agent-update-task-current strong {
+  color: #244d75;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.agent-update-task-hint {
+  margin: 12px 0 0;
+  color: #7b8fa2;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.agent-update-task-results {
+  min-height: 0;
+  max-height: min(560px, calc(100dvh - 180px));
+  padding: 18px;
+  background: #fff;
+  overflow: auto;
+}
+
+.agent-update-task-results > div {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-update-task-result {
+  display: flex;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  background: #fbfcfe;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.agent-update-task-result > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.agent-update-task-result small {
+  color: #91a1b0;
+  font-size: 9px;
+}
+
+.agent-update-task-result strong {
+  color: #2d4e6c;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.agent-update-task-result em {
+  color: #b0524c;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.agent-update-task-result > b {
+  flex: 0 0 auto;
+  color: #8090a0;
+  font-size: 10px;
+}
+
+.agent-update-task-result.is-running {
+  border-color: #9dc5ee;
+  background: #f1f7ff;
+  box-shadow: 0 0 0 2px rgba(44, 126, 211, .08);
+}
+
+.agent-update-task-result.is-running > b {
+  color: #2775c7;
+}
+
+.agent-update-task-result.is-succeeded > b {
+  color: #17865c;
+}
+
+.agent-update-task-result.is-failed {
+  border-color: #f0c8c5;
+  background: #fff8f7;
+}
+
+.agent-update-task-result.is-failed > b {
+  color: #d05c56;
+}
+
+.agent-update-task-panel > footer {
+  display: flex;
+  min-height: 64px;
+  padding: 12px 20px;
+  border-top: 1px solid #e4ebf3;
+  background: #fbfdff;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.agent-update-task-close-action {
+  min-width: 88px;
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid #2b78ca;
+  border-radius: 7px;
+  color: #fff;
+  background: #2b78ca;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-update-task-close-action:disabled {
+  border-color: #cdd9e5;
+  color: #8b9bab;
+  background: #edf2f7;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1380px) {
   .agent-management-toolbar {
     align-items: flex-start;
@@ -10938,6 +11255,30 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 }
 
 @media (max-width: 780px) {
+  .agent-update-task-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 11px;
+  }
+
+  .agent-update-task-panel {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .agent-update-task-body {
+    overflow: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-update-task-summary {
+    border-right: 0;
+    border-bottom: 1px solid #e5ecf4;
+  }
+
+  .agent-update-task-results {
+    max-height: 42dvh;
+  }
+
   .agent-management-toolbar-actions,
   .agent-management-toolbar .history-customer-filter {
     width: 100%;

@@ -55,6 +55,21 @@ const agentManagementRefreshAll = document.querySelector("#agent-management-refr
 const agentManagementRefreshAllLabel = agentManagementRefreshAll?.querySelector("b");
 const agentManagementRefresh = document.querySelector("#agent-management-refresh");
 const agentManagementBulkStatus = document.querySelector("#agent-management-bulk-status");
+const agentUpdateTaskDialog = document.querySelector("#agent-update-task-dialog");
+const agentUpdateTaskClose = document.querySelector("#agent-update-task-close");
+const agentUpdateTaskCloseAction = document.querySelector("#agent-update-task-close-action");
+const agentUpdateTaskKicker = document.querySelector("#agent-update-task-kicker");
+const agentUpdateTaskTitle = document.querySelector("#agent-update-task-title");
+const agentUpdateTaskState = document.querySelector("#agent-update-task-state");
+const agentUpdateTaskSpinner = document.querySelector("#agent-update-task-spinner");
+const agentUpdateTaskProgressLabel = document.querySelector("#agent-update-task-progress-label");
+const agentUpdateTaskProgressBar = document.querySelector("#agent-update-task-progress-bar");
+const agentUpdateTaskSuccess = document.querySelector("#agent-update-task-success");
+const agentUpdateTaskFailed = document.querySelector("#agent-update-task-failed");
+const agentUpdateTaskPending = document.querySelector("#agent-update-task-pending");
+const agentUpdateTaskCurrent = document.querySelector("#agent-update-task-current");
+const agentUpdateTaskHint = document.querySelector("#agent-update-task-hint");
+const agentUpdateTaskResults = document.querySelector("#agent-update-task-results");
 const agentManagementLoading = document.querySelector("#agent-management-loading");
 const agentManagementEmpty = document.querySelector("#agent-management-empty");
 const agentManagementTableWrap = document.querySelector("#agent-management-table-wrap");
@@ -444,6 +459,25 @@ const MESSAGES = {
     "agent.refreshAllConfirm": "Update all {count} active shipments in the current customer scope?",
     "agent.noRefreshableShipments": "There are no active assigned shipments to update.",
     "agent.refreshList": "Refresh",
+    "agent.taskKicker": "UPDATE TASK",
+    "agent.taskTitleSelected": "Batch shipment update",
+    "agent.taskTitleAll": "One-click shipment update",
+    "agent.taskRunning": "Updating shipments…",
+    "agent.taskCompleted": "Update task completed",
+    "agent.taskInterrupted": "Update task interrupted",
+    "agent.taskProgress": "{current} of {total} processed",
+    "agent.taskSucceeded": "Succeeded",
+    "agent.taskFailed": "Failed",
+    "agent.taskPending": "Pending",
+    "agent.taskCurrent": "Current shipment",
+    "agent.taskWaiting": "Waiting",
+    "agent.taskUpdating": "Updating",
+    "agent.taskResultSuccess": "Updated",
+    "agent.taskResultFailed": "Failed",
+    "agent.taskInterruptedItem": "Not updated because the session ended.",
+    "agent.taskRunningHint": "Keep this page open until all updates finish.",
+    "agent.taskCompletedHint": "The update results are shown below.",
+    "agent.taskClose": "Close",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
     "history.reference": "Shipment No.",
@@ -962,6 +996,25 @@ const MESSAGES = {
     "agent.refreshAllConfirm": "确认更新当前客户范围内的全部 {count} 票未结束票单吗？",
     "agent.noRefreshableShipments": "当前没有需要更新的已分配票单。",
     "agent.refreshList": "刷新",
+    "agent.taskKicker": "更新任务",
+    "agent.taskTitleSelected": "批量更新票单",
+    "agent.taskTitleAll": "一键更新票单",
+    "agent.taskRunning": "正在更新票单…",
+    "agent.taskCompleted": "更新任务已完成",
+    "agent.taskInterrupted": "更新任务已中断",
+    "agent.taskProgress": "已处理 {current}/{total}",
+    "agent.taskSucceeded": "成功",
+    "agent.taskFailed": "失败",
+    "agent.taskPending": "待更新",
+    "agent.taskCurrent": "当前票单",
+    "agent.taskWaiting": "等待更新",
+    "agent.taskUpdating": "正在更新",
+    "agent.taskResultSuccess": "更新成功",
+    "agent.taskResultFailed": "更新失败",
+    "agent.taskInterruptedItem": "登录状态已失效，票单未更新。",
+    "agent.taskRunningHint": "请保持页面打开，直到全部票单更新完成。",
+    "agent.taskCompletedHint": "本次更新结果如下。",
+    "agent.taskClose": "关闭",
     "history.carrier": "船司",
     "history.reference": "运输单号",
     "history.route": "路线",
@@ -1483,6 +1536,7 @@ let agentBulkUpdating = false;
 let agentBulkUpdateMode = "";
 let agentBulkUpdateProgress = { current: 0, total: 0 };
 let agentBulkUpdateResult = null;
+let agentUpdateTask = null;
 const supplementalDetailRequests = new Map();
 let supplementalStatusTimer = null;
 const expandedHistoryKeys = new Set();
@@ -6541,6 +6595,7 @@ async function refreshOverseaAgentShipment(
   const session = readFileSession();
   if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return false;
   entry.refreshing = true;
+  entry.refreshError = "";
   clearError();
   if (render) renderHistory();
   let updated = false;
@@ -6557,6 +6612,7 @@ async function refreshOverseaAgentShipment(
     );
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401) {
+      entry.refreshError = trackingResponseMessage(payload, response);
       clearFileSession(session, { expired: true });
       return false;
     }
@@ -6570,9 +6626,10 @@ async function refreshOverseaAgentShipment(
     }
     updated = true;
   } catch (error) {
+    entry.refreshError = error?.message || t("error.generic");
     if (reportError) {
       showError(t("agent.updateFailed", {
-        message: error?.message || t("error.generic")
+        message: entry.refreshError
       }));
     }
   } finally {
@@ -6911,6 +6968,140 @@ async function loadAllRefreshableOverseaAgentShipments() {
   return entries;
 }
 
+function agentUpdateTaskShipmentNumber(entry, index) {
+  return String(
+    entry?.query?.number
+    || entry?.snapshot?.tracking?.number
+    || entry?.referenceNo
+    || entry?.shipmentId
+    || index + 1
+  );
+}
+
+function createAgentUpdateTask(entries, mode) {
+  agentUpdateTask = {
+    mode,
+    status: "RUNNING",
+    total: entries.length,
+    success: 0,
+    failed: 0,
+    currentNumber: "",
+    items: entries.map((entry, index) => ({
+      number: agentUpdateTaskShipmentNumber(entry, index),
+      status: "PENDING",
+      message: ""
+    }))
+  };
+  renderAgentUpdateTaskDialog();
+  if (agentUpdateTaskDialog && !agentUpdateTaskDialog.open) {
+    agentUpdateTaskDialog.showModal();
+  }
+}
+
+function agentUpdateTaskStatusLabel(item) {
+  if (item.status === "RUNNING") return t("agent.taskUpdating");
+  if (item.status === "SUCCEEDED") return t("agent.taskResultSuccess");
+  if (item.status === "FAILED") return t("agent.taskResultFailed");
+  return t("agent.taskWaiting");
+}
+
+function renderAgentUpdateTaskDialog() {
+  if (!agentUpdateTask) return;
+  const task = agentUpdateTask;
+  const running = task.status === "RUNNING";
+  const processed = task.success + task.failed;
+  const pending = Math.max(0, task.total - processed);
+  const progress = task.total > 0
+    ? Math.min(100, Math.round((processed / task.total) * 100))
+    : 0;
+
+  if (agentUpdateTaskDialog) {
+    agentUpdateTaskDialog.classList.toggle("is-complete", task.status === "COMPLETED");
+    agentUpdateTaskDialog.classList.toggle("is-interrupted", task.status === "INTERRUPTED");
+  }
+  if (agentUpdateTaskKicker) agentUpdateTaskKicker.textContent = t("agent.taskKicker");
+  if (agentUpdateTaskTitle) {
+    agentUpdateTaskTitle.textContent = t(
+      task.mode === "all" ? "agent.taskTitleAll" : "agent.taskTitleSelected"
+    );
+  }
+  if (agentUpdateTaskState) {
+    agentUpdateTaskState.textContent = t(
+      running
+        ? "agent.taskRunning"
+        : task.status === "INTERRUPTED"
+          ? "agent.taskInterrupted"
+          : "agent.taskCompleted"
+    );
+  }
+  if (agentUpdateTaskSpinner) agentUpdateTaskSpinner.hidden = !running;
+  if (agentUpdateTaskProgressLabel) {
+    agentUpdateTaskProgressLabel.textContent = t("agent.taskProgress", {
+      current: processed,
+      total: task.total
+    });
+  }
+  if (agentUpdateTaskProgressBar) {
+    agentUpdateTaskProgressBar.style.width = `${progress}%`;
+    const track = agentUpdateTaskProgressBar.parentElement;
+    track?.setAttribute("aria-valuenow", String(progress));
+  }
+  if (agentUpdateTaskSuccess) agentUpdateTaskSuccess.textContent = String(task.success);
+  if (agentUpdateTaskFailed) agentUpdateTaskFailed.textContent = String(task.failed);
+  if (agentUpdateTaskPending) agentUpdateTaskPending.textContent = String(pending);
+  if (agentUpdateTaskCurrent) {
+    agentUpdateTaskCurrent.textContent = running && task.currentNumber
+      ? task.currentNumber
+      : "—";
+  }
+  if (agentUpdateTaskHint) {
+    agentUpdateTaskHint.textContent = t(
+      running ? "agent.taskRunningHint" : "agent.taskCompletedHint"
+    );
+  }
+  if (agentUpdateTaskClose) {
+    agentUpdateTaskClose.disabled = running;
+    agentUpdateTaskClose.setAttribute("aria-label", t("agent.taskClose"));
+  }
+  if (agentUpdateTaskCloseAction) {
+    agentUpdateTaskCloseAction.disabled = running;
+    agentUpdateTaskCloseAction.textContent = t("agent.taskClose");
+  }
+  if (!agentUpdateTaskResults) return;
+
+  const fragment = document.createDocumentFragment();
+  task.items.forEach((item, index) => {
+    const row = document.createElement("article");
+    row.className = `agent-update-task-result is-${item.status.toLowerCase()}`;
+
+    const details = document.createElement("span");
+    const sequence = document.createElement("small");
+    sequence.textContent = `#${index + 1}`;
+    const number = document.createElement("strong");
+    number.textContent = item.number;
+    details.append(sequence, number);
+    if (item.message) {
+      const message = document.createElement("em");
+      message.textContent = item.message;
+      details.append(message);
+    }
+
+    const status = document.createElement("b");
+    status.textContent = agentUpdateTaskStatusLabel(item);
+    row.append(details, status);
+    fragment.append(row);
+  });
+  agentUpdateTaskResults.replaceChildren(fragment);
+  agentUpdateTaskResults.querySelector(".is-running")?.scrollIntoView({
+    block: "nearest"
+  });
+}
+
+function closeAgentUpdateTaskDialog() {
+  if (agentUpdateTask?.status === "RUNNING") return;
+  agentUpdateTaskDialog?.close();
+}
+
 async function performOverseaAgentShipmentRefresh(
   entries,
   { alreadyBusy = false, mode = "selected" } = {}
@@ -6921,23 +7112,60 @@ async function performOverseaAgentShipmentRefresh(
   agentBulkUpdateResult = null;
   agentBulkUpdateProgress = { current: 0, total: entries.length };
   clearError();
+  createAgentUpdateTask(entries, mode);
   renderHistory();
   let success = 0;
   let failed = 0;
-  for (const entry of entries) {
-    if (!isOverseaAgentSession()) break;
+  let interrupted = false;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!isOverseaAgentSession()) {
+      interrupted = true;
+      for (let remaining = index; remaining < entries.length; remaining += 1) {
+        const taskItem = agentUpdateTask?.items[remaining];
+        if (!taskItem || taskItem.status !== "PENDING") continue;
+        taskItem.status = "FAILED";
+        taskItem.message = t("agent.taskInterruptedItem");
+        failed += 1;
+      }
+      break;
+    }
     agentBulkUpdateProgress.current += 1;
+    const taskItem = agentUpdateTask?.items[index];
+    if (taskItem) taskItem.status = "RUNNING";
+    if (agentUpdateTask) agentUpdateTask.currentNumber = taskItem?.number || "";
+    renderAgentUpdateTaskDialog();
     renderHistory();
     const updated = await refreshOverseaAgentShipment(entry, {
       render: false,
       reportError: false
     });
-    if (updated) success += 1;
-    else failed += 1;
+    if (updated) {
+      success += 1;
+      if (taskItem) taskItem.status = "SUCCEEDED";
+    } else {
+      failed += 1;
+      if (taskItem) {
+        taskItem.status = "FAILED";
+        taskItem.message = entry.refreshError || t("error.generic");
+      }
+    }
+    if (agentUpdateTask) {
+      agentUpdateTask.success = success;
+      agentUpdateTask.failed = failed;
+    }
+    renderAgentUpdateTaskDialog();
   }
   agentBulkUpdating = false;
   agentBulkUpdateMode = "";
   agentBulkUpdateResult = { success, failed };
+  if (agentUpdateTask) {
+    agentUpdateTask.status = interrupted ? "INTERRUPTED" : "COMPLETED";
+    agentUpdateTask.success = success;
+    agentUpdateTask.failed = failed;
+    agentUpdateTask.currentNumber = "";
+  }
+  renderAgentUpdateTaskDialog();
   agentManagementSelectedKeys.clear();
   await loadCustomerAssignedHistory();
 }
@@ -7842,6 +8070,7 @@ function applyLanguage(language, { persist = true } = {}) {
   renderChannelStatus(lastChannelStatus);
   if (lastChannelCheck) renderChannelCheck(lastChannelCheck);
   renderHistory();
+  renderAgentUpdateTaskDialog();
   renderBatchState();
   if (currentPayload) renderResult(currentPayload);
   renderRelatedFilesDrawer();
@@ -8491,6 +8720,14 @@ agentManagementBulkUpdate?.addEventListener("click", () => {
 
 agentManagementRefreshAll?.addEventListener("click", () => {
   void refreshAllOverseaAgentShipments();
+});
+
+agentUpdateTaskClose?.addEventListener("click", closeAgentUpdateTaskDialog);
+agentUpdateTaskCloseAction?.addEventListener("click", closeAgentUpdateTaskDialog);
+agentUpdateTaskDialog?.addEventListener("cancel", (event) => {
+  if (agentUpdateTask?.status === "RUNNING") {
+    event.preventDefault();
+  }
 });
 
 agentManagementRefresh?.addEventListener("click", () => {
