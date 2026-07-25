@@ -60,18 +60,20 @@ APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 
 批量查询使用可取消的任务 ID。浏览器停止按钮先中止本地请求，再经 Spring `POST /api/public/shipments/batch-tasks/{taskId}/cancel` 转发给 Node；正在运行的请求会退出，未完成条目保留为待处理。Node 重启会清空内存中的任务状态，但不影响浏览器保存的待处理队列。
 
-### 每日票单自动更新
+### 票单手动更新
 
-海外代理页面只提供分配票单的查看和跟进标记，票单追踪统一由后端定时任务更新。默认配置为上海时区每天零点：
+海外代理保留与客户主页一致的“总览”看板，更新操作集中在“分配票单”页面。代理只能更新业务员已授权给自己的票单，可使用单票更新、勾选批量更新和一键更新；业务员仍可在原工作台手动更新。
+
+系统定时自动更新默认关闭：
 
 ```env
-APP_TRACKING_AUTO_REFRESH_ENABLED=true
+APP_TRACKING_AUTO_REFRESH_ENABLED=false
 APP_TRACKING_AUTO_REFRESH_DAILY_TIME=00:00
 APP_TRACKING_AUTO_REFRESH_TIME_ZONE=Asia/Shanghai
 APP_TRACKING_AUTO_REFRESH_CLAIM_BATCH_SIZE=10
 ```
 
-`APP_TRACKING_AUTO_REFRESH_DAILY_TIME` 必须使用 `HH:mm`，时区必须是有效 IANA 名称。修改后需重建或重启后端容器。任务会跳过手工导入快照和已空箱归还的终止票单，并按小批次依次提交查询；失败票单由数据库任务表记录并按指数退避重试。
+部署环境应保持 `APP_TRACKING_AUTO_REFRESH_ENABLED=false`。一键更新会跳过已空箱归还的终止票单，批量更新仅处理代理勾选的授权票单；所有接口都会重新校验海外代理与票单的有效授权关系。
 
 Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。这样公开的 Node/Playwright 追踪服务无法直接连接数据库。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
 

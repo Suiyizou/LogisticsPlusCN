@@ -49,7 +49,7 @@ COSCO 两个查询通道可通过 `COSCO_PROXY_*` 环境变量共用 HTTP(S) 代
 
 客户绑定按关系角色维护。同一票单可以同时绑定一个 `SHIPPER` 和一个 `CONSIGNEE`；同一角色重复绑定给不同客户会返回 `409`。原有绑定与解绑接口保持为 `POST /api/business/customers/{customerId}/shipments` 和 `DELETE /api/business/customers/{customerId}/shipments/{shipmentId}`。
 
-海外代理只读查看其关联客户分配的票单，不在代理端手动更新追踪。后端默认在 `Asia/Shanghai` 每天 `00:00` 将全部未结束的 COSCO/CMA 票单加入自动刷新队列；空箱已还等终止票单会跳过，失败任务仍按退避策略重试。可通过 `APP_TRACKING_AUTO_REFRESH_DAILY_TIME=HH:mm` 和 `APP_TRACKING_AUTO_REFRESH_TIME_ZONE=IANA时区` 自定义执行时间。
+海外代理保留与客户主页一致的“总览”看板；票单操作集中在“分配票单”页面。代理可对授权范围内的票单执行单票更新、勾选批量更新或一键更新全部未结束票单；业务员原有手动更新能力保持不变。系统定时自动更新默认关闭（`APP_TRACKING_AUTO_REFRESH_ENABLED=false`），票单追踪由代理员工或业务员按需触发。
 
 建表脚本：
 

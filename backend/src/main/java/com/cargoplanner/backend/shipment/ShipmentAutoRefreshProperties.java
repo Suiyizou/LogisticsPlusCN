@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.shipment-tracking.auto-refresh")
 public class ShipmentAutoRefreshProperties {
-  private boolean enabled = true;
+  private boolean enabled = false;
   private LocalTime dailyTime = LocalTime.MIDNIGHT;
   private ZoneId timeZone = ZoneId.of("Asia/Shanghai");
   private Duration leaseDuration = Duration.ofMinutes(5);

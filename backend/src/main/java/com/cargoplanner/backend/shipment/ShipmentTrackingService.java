@@ -745,7 +745,7 @@ public class ShipmentTrackingService {
     }
     ObjectNode capabilities = response.putObject("capabilities");
     capabilities.put("editShipmentMasterData", false);
-    capabilities.put("refreshTracking", false);
+    capabilities.put("refreshTracking", overseaAgent);
     capabilities.put("manageFollowing", overseaAgent);
     return response;
   }
@@ -809,16 +809,50 @@ public class ShipmentTrackingService {
       String requestedCustomerPublicId,
       CustomerPrincipal customer
   ) {
-    if (customer == null) {
-      throw new ApiException(
-          HttpStatus.UNAUTHORIZED,
-          "Customer sign in is required"
+    AgentShipmentTarget shipment = requireOverseaAgentShipment(
+        shipmentPublicId, customer
+    );
+    if (requestedCustomerPublicId != null
+        && !requestedCustomerPublicId.isBlank()) {
+      Long selectedCustomerId = resolveRequestedCustomerScope(
+          customer, requestedCustomerPublicId
+      );
+      requireOverseaAgentShipmentScope(
+          shipment.shipmentId(), customer.id(), selectedCustomerId
       );
     }
-    throw new ApiException(
-        HttpStatus.FORBIDDEN,
-        "Shipment tracking is refreshed automatically by the scheduled system task"
+    if (shipment.referenceType() == null || shipment.referenceNumber() == null) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Shipment has no booking or bill-of-lading reference to refresh"
+      );
+    }
+    if (!List.of("COSCO", "CMA").contains(
+        String.valueOf(shipment.carrier()).toUpperCase(Locale.ROOT)
+    )) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Shipment carrier does not support live tracking refresh"
+      );
+    }
+    refreshAutomatically(
+        shipment.carrier(),
+        shipment.referenceType(),
+        shipment.referenceNumber()
     );
+    jdbcTemplate.update(
+        """
+        UPDATE cp_oversea_agent_shipment_follows
+        SET last_refreshed_at = CURRENT_TIMESTAMP
+        WHERE oversea_agent_customer_id = ? AND shipment_id = ?
+        """,
+        customer.id(), shipment.shipmentId()
+    );
+    ObjectNode response = readAssignedSnapshotByShipmentId(
+        shipment.shipmentPublicId(), customer
+    );
+    response.put("overseaAgentManaged", true);
+    return response;
   }
 
   private Map<Long, List<AssignedCustomer>> assignedCustomersByShipment(

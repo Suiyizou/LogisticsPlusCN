@@ -54,6 +54,11 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
+  void keepsScheduledRefreshDisabledByDefault() {
+    assertThat(new ShipmentAutoRefreshProperties().isEnabled()).isFalse();
+  }
+
+  @Test
   void registersAllShipmentsForTheNextConfiguredDailyRun() {
     insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
     insertShipment(2, "00000000-0000-0000-0000-000000000099", "Discharged");

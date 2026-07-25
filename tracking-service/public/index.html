@@ -309,6 +309,23 @@
                     >×</button>
                   </div>
                   <button
+                    class="agent-management-refresh-all"
+                    id="agent-management-refresh-all"
+                    type="button"
+                  >
+                    <span aria-hidden="true">↻</span>
+                    <b data-i18n="agent.refreshAll">One-click update</b>
+                  </button>
+                  <button
+                    class="agent-management-bulk-update"
+                    id="agent-management-bulk-update"
+                    type="button"
+                    disabled
+                  >
+                    <span aria-hidden="true">↻</span>
+                    <b id="agent-management-bulk-update-label">Update selected (0)</b>
+                  </button>
+                  <button
                     class="agent-management-refresh"
                     id="agent-management-refresh"
                     type="button"
@@ -317,6 +334,21 @@
                     <b data-i18n="agent.refreshList">Refresh</b>
                   </button>
                 </div>
+              </div>
+
+              <div class="agent-management-bulk-toolbar">
+                <span
+                  class="agent-management-selected-count"
+                  id="agent-management-selected-count"
+                  aria-live="polite"
+                >0 selected</span>
+                <span
+                  class="agent-management-bulk-status"
+                  id="agent-management-bulk-status"
+                  role="status"
+                  aria-live="polite"
+                  hidden
+                ></span>
               </div>
 
               <div class="history-loading" id="agent-management-loading" role="status" aria-live="polite" hidden>
@@ -335,6 +367,14 @@
 
               <div class="shipment-list-wrap is-agent-management" id="agent-management-table-wrap" hidden>
                 <div class="agent-shipment-table-head" id="agent-shipment-table-head">
+                  <span class="agent-shipment-select-heading">
+                    <input
+                      id="agent-management-select-all"
+                      type="checkbox"
+                      data-i18n-aria-label="agent.selectAllPage"
+                      aria-label="Select current page"
+                    />
+                  </span>
                   <span data-i18n="agent.columnIndex">No.</span>
                   <span data-i18n="agent.columnBusinessReference">Business No.</span>
                   <span data-i18n="agent.columnCarrier">Carrier</span>

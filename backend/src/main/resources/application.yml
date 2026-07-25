@@ -51,7 +51,7 @@ app:
     connect-timeout: ${APP_TRACKING_CONNECT_TIMEOUT:5s}
     read-timeout: ${APP_TRACKING_READ_TIMEOUT:90s}
     auto-refresh:
-      enabled: ${APP_TRACKING_AUTO_REFRESH_ENABLED:true}
+      enabled: ${APP_TRACKING_AUTO_REFRESH_ENABLED:false}
       daily-time: ${APP_TRACKING_AUTO_REFRESH_DAILY_TIME:00:00}
       time-zone: ${APP_TRACKING_AUTO_REFRESH_TIME_ZONE:Asia/Shanghai}
       initial-delay-ms: ${APP_TRACKING_AUTO_REFRESH_INITIAL_DELAY_MS:60000}

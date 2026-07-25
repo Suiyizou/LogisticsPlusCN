@@ -241,7 +241,7 @@ test("business overview de-duplicates shipments and filters them by assigned cus
   assert.match(appSource, /boundCustomers: normalizeHistoryBoundCustomers\(item\.boundCustomers\)/);
 });
 
-test("overseas agents keep a customer-scoped read-only assigned shipment list", () => {
+test("overseas agents manually update only their assigned shipment list", () => {
   assert.match(indexSource, /id="history-following-filter"/);
   assert.match(indexSource, /id="history-eta-sort"[\s\S]*?value="asc"[\s\S]*?value="desc"/);
   assert.match(
@@ -252,9 +252,10 @@ test("overseas agents keep a customer-scoped read-only assigned shipment list", 
     indexSource,
     /id="agent-shipments-view"[\s\S]*?data-view="shipments"[\s\S]*?id="agent-management-customer-filter"/
   );
-  assert.doesNotMatch(indexSource, /id="agent-management-select-all"/);
-  assert.doesNotMatch(indexSource, /id="agent-management-bulk-update"/);
-  assert.doesNotMatch(indexSource, /class="agent-management-bulk-toolbar"/);
+  assert.match(indexSource, /id="agent-management-select-all"/);
+  assert.match(indexSource, /id="agent-management-bulk-update"/);
+  assert.match(indexSource, /id="agent-management-refresh-all"/);
+  assert.match(indexSource, /class="agent-management-bulk-toolbar"/);
   assert.match(indexSource, /id="agent-management-refresh"/);
   assert.match(
     indexSource,
@@ -271,10 +272,21 @@ test("overseas agents keep a customer-scoped read-only assigned shipment list", 
   );
   assert.match(
     appSource,
-    /function renderAgentShipmentManagement[\s\S]*?actions\.append\(view, follow\)[\s\S]*?agentManagementTableBody\.append/
+    /function renderAgentShipmentManagement[\s\S]*?agent-shipment-select[\s\S]*?actions\.append\(view, update, follow\)[\s\S]*?agentManagementTableBody\.append/
   );
-  assert.doesNotMatch(appSource, /actions\.append\(view, update/);
-  assert.doesNotMatch(appSource, /detailActions\.append\(followButton, updateButton\)/);
+  assert.match(appSource, /detailActions\.append\(followButton, updateButton\)/);
+  assert.match(
+    appSource,
+    /function refreshOverseaAgentShipment[\s\S]*?\/api\/customer\/shipments\/\$\{encodeURIComponent\(entry\.shipmentId\)\}\/refresh\$\{scopeQuery\}/
+  );
+  assert.match(
+    appSource,
+    /function refreshSelectedOverseaAgentShipments[\s\S]*?performOverseaAgentShipmentRefresh/
+  );
+  assert.match(
+    appSource,
+    /function refreshAllOverseaAgentShipments[\s\S]*?loadAllRefreshableOverseaAgentShipments[\s\S]*?agent\.refreshAllConfirm/
+  );
   assert.match(
     appSource,
     /function agentShipmentClientLabel[\s\S]*?businessReferences\.clientNameCode[\s\S]*?agentShipmentCustomers/
@@ -311,6 +323,11 @@ test("overseas agents keep a customer-scoped read-only assigned shipment list", 
     stylesSource,
     /\.agent-management-bulk-toolbar[\s\S]*?\.agent-management-bulk-update/
   );
+  assert.match(
+    indexSource,
+    /href="#overview"[\s\S]*?data-view-target="overview"[\s\S]*?id="overview-view"/
+  );
+  assert.doesNotMatch(appSource, /overviewNavItem\.hidden = managed/);
   const restrictedWorkspaceRule = stylesSource.slice(
     stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"),
     stylesSource.indexOf("display: none !important", stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"))

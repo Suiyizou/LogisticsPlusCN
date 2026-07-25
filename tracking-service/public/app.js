@@ -51,6 +51,8 @@ const agentManagementSelectAll = document.querySelector("#agent-management-selec
 const agentManagementSelectedCount = document.querySelector("#agent-management-selected-count");
 const agentManagementBulkUpdate = document.querySelector("#agent-management-bulk-update");
 const agentManagementBulkUpdateLabel = document.querySelector("#agent-management-bulk-update-label");
+const agentManagementRefreshAll = document.querySelector("#agent-management-refresh-all");
+const agentManagementRefreshAllLabel = agentManagementRefreshAll?.querySelector("b");
 const agentManagementRefresh = document.querySelector("#agent-management-refresh");
 const agentManagementBulkStatus = document.querySelector("#agent-management-bulk-status");
 const agentManagementLoading = document.querySelector("#agent-management-loading");
@@ -409,7 +411,6 @@ const MESSAGES = {
     "agent.update": "Update now",
     "agent.updating": "Updating…",
     "agent.updateFailed": "Shipment update failed: {message}",
-    "agent.selectCustomerToUpdate": "Select a customer code before updating this shipment.",
     "agent.followFailed": "Follow-up selection could not be saved: {message}",
     "agent.lastAgentUpdate": "Agent update {time}",
     "agent.emptyTitle": "No shipments have been assigned",
@@ -429,7 +430,7 @@ const MESSAGES = {
     "agent.noCustomer": "Service customer unavailable",
     "agent.managementKicker": "SHIPMENT MANAGEMENT",
     "agent.managementTitle": "Assigned tracked shipments",
-    "agent.managementDescription": "Review the shipments assigned to linked customers. Tracking is refreshed automatically by the system.",
+    "agent.managementDescription": "Review and manually refresh the shipments assigned to linked customers.",
     "agent.managementEmptyTitle": "No assigned shipments",
     "agent.managementEmptyDescription": "Authorized customer shipments will appear here.",
     "agent.columnSelectIndex": "Select / No.",
@@ -439,6 +440,9 @@ const MESSAGES = {
     "agent.bulkUpdating": "Updating {current}/{total}",
     "agent.bulkUpdateComplete": "{success} shipments updated",
     "agent.bulkUpdatePartial": "{success} updated, {failed} failed",
+    "agent.refreshAll": "One-click update",
+    "agent.refreshAllConfirm": "Update all {count} active shipments in the current customer scope?",
+    "agent.noRefreshableShipments": "There are no active assigned shipments to update.",
     "agent.refreshList": "Refresh",
     "history.allCustomers": "All customers",
     "history.carrier": "Carrier",
@@ -925,7 +929,6 @@ const MESSAGES = {
     "agent.update": "立即更新",
     "agent.updating": "更新中…",
     "agent.updateFailed": "票单更新失败：{message}",
-    "agent.selectCustomerToUpdate": "请先选择客户码，再更新该客户名下的票单。",
     "agent.followFailed": "无法保存跟进选择：{message}",
     "agent.lastAgentUpdate": "代理更新于 {time}",
     "agent.emptyTitle": "业务员尚未分配票单",
@@ -945,7 +948,7 @@ const MESSAGES = {
     "agent.noCustomer": "服务客户信息不可用",
     "agent.managementKicker": "票单管理",
     "agent.managementTitle": "已分配的追踪票单",
-    "agent.managementDescription": "查看关联客户分配的票单；追踪状态由系统定时自动更新。",
+    "agent.managementDescription": "查看关联客户分配的票单，并由代理员工手动更新追踪状态。",
     "agent.managementEmptyTitle": "暂无已分配票单",
     "agent.managementEmptyDescription": "关联客户授权给你的票单会显示在这里。",
     "agent.columnSelectIndex": "选择 / 序号",
@@ -955,6 +958,9 @@ const MESSAGES = {
     "agent.bulkUpdating": "正在更新 {current}/{total}",
     "agent.bulkUpdateComplete": "已成功更新 {success} 票",
     "agent.bulkUpdatePartial": "成功 {success} 票，失败 {failed} 票",
+    "agent.refreshAll": "一键更新",
+    "agent.refreshAllConfirm": "确认更新当前客户范围内的全部 {count} 票未结束票单吗？",
+    "agent.noRefreshableShipments": "当前没有需要更新的已分配票单。",
     "agent.refreshList": "刷新",
     "history.carrier": "船司",
     "history.reference": "运输单号",
@@ -1474,6 +1480,7 @@ let historyAvailableCustomers = [];
 let agentShipmentDetailOpen = false;
 const agentManagementSelectedKeys = new Set();
 let agentBulkUpdating = false;
+let agentBulkUpdateMode = "";
 let agentBulkUpdateProgress = { current: 0, total: 0 };
 let agentBulkUpdateResult = null;
 const supplementalDetailRequests = new Map();
@@ -2050,6 +2057,7 @@ function renderOverseaAgentWorkspace(session = readFileSession()) {
   if (!managed) {
     historyFollowingOnly = false;
     agentManagementSelectedKeys.clear();
+    agentBulkUpdateMode = "";
     agentBulkUpdateResult = null;
   }
   if (historyFollowingFilter) historyFollowingFilter.hidden = !managed;
@@ -6532,22 +6540,16 @@ async function refreshOverseaAgentShipment(
 ) {
   const session = readFileSession();
   if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return false;
-  if (!historyCustomerFilter) {
-    if (reportError) showError(t("agent.selectCustomerToUpdate"), "warning");
-    (activeView === "shipments"
-      ? agentManagementCustomerFilterSelect
-      : historyCustomerFilterSelect)?.focus();
-    return false;
-  }
   entry.refreshing = true;
   clearError();
   if (render) renderHistory();
   let updated = false;
   try {
+    const scopeQuery = historyCustomerFilter
+      ? `?customerId=${encodeURIComponent(historyCustomerFilter)}`
+      : "";
     const response = await fetch(
-      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh?customerId=${
-        encodeURIComponent(historyCustomerFilter)
-      }`,
+      `/api/customer/shipments/${encodeURIComponent(entry.shipmentId)}/refresh${scopeQuery}`,
       {
         method: "POST",
         headers: { "X-Customer-Token": session.token }
@@ -6599,6 +6601,23 @@ function renderAgentShipmentManagement(history) {
   history.forEach((entry, index) => {
     const row = document.createElement("article");
     row.className = "agent-shipment-row";
+    const entryKey = historyShipmentKey(entry);
+
+    const selectionCell = document.createElement("span");
+    selectionCell.className = "agent-shipment-selection";
+    const selection = document.createElement("input");
+    selection.type = "checkbox";
+    selection.className = "agent-shipment-select";
+    selection.checked = agentManagementSelectedKeys.has(entryKey);
+    selection.disabled = agentBulkUpdating || entry.refreshing === true;
+    selection.setAttribute("aria-label", `${t("agent.view")} ${entry.query?.number || ""}`);
+    selection.addEventListener("change", () => {
+      if (selection.checked) agentManagementSelectedKeys.add(entryKey);
+      else agentManagementSelectedKeys.delete(entryKey);
+      renderHistory();
+    });
+    selectionCell.append(selection);
+
     const sequence = document.createElement("span");
     sequence.className = "agent-shipment-sequence";
     const sequenceNumber = document.createElement("b");
@@ -6682,12 +6701,19 @@ function renderAgentShipmentManagement(history) {
     view.className = "agent-row-view";
     view.textContent = t("agent.view");
     view.addEventListener("click", () => openHistoryEntry(entry));
-    actions.append(view, follow);
+    const update = document.createElement("button");
+    update.type = "button";
+    update.className = "agent-row-update";
+    update.disabled = entry.refreshing === true || agentBulkUpdating;
+    update.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+    update.addEventListener("click", () => void refreshOverseaAgentShipment(entry));
+    actions.append(view, update, follow);
 
     follow.addEventListener("click", () => {
       void setOverseaAgentShipmentFollowing(entry, !entry.followed);
     });
     row.append(
+      selectionCell,
       sequence,
       identity,
       carrier,
@@ -6736,7 +6762,7 @@ function renderAgentShipmentManagementView(history, session) {
   }
   if (agentShipmentTableHead) agentShipmentTableHead.hidden = !hasRows;
 
-  const canUpdate = managed && Boolean(historyCustomerFilter) && !agentBulkUpdating;
+  const canUpdate = managed && !agentBulkUpdating;
   const selectedCount = agentManagementSelectedKeys.size;
   const allVisibleSelected = hasRows
     && history.every((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
@@ -6748,16 +6774,15 @@ function renderAgentShipmentManagementView(history, session) {
   if (agentManagementSelectedCount) {
     agentManagementSelectedCount.textContent = t("agent.selectedCount", { count: selectedCount });
     agentManagementSelectedCount.parentElement.hidden =
-      selectedCount === 0 && !agentBulkUpdateResult;
+      selectedCount === 0 && !agentBulkUpdateResult && !agentBulkUpdating;
   }
   if (agentManagementBulkUpdate) {
     agentManagementBulkUpdate.disabled = !canUpdate || selectedCount === 0;
-    agentManagementBulkUpdate.title = historyCustomerFilter
-      ? ""
-      : t("agent.selectCustomerToUpdate");
+    agentManagementBulkUpdate.title = "";
   }
   if (agentManagementBulkUpdateLabel) {
-    agentManagementBulkUpdateLabel.textContent = agentBulkUpdating
+    agentManagementBulkUpdateLabel.textContent =
+      agentBulkUpdating && agentBulkUpdateMode === "selected"
       ? t("agent.bulkUpdating", agentBulkUpdateProgress)
       : t("agent.bulkUpdate", { count: selectedCount });
   }
@@ -6805,6 +6830,16 @@ function renderAgentShipmentManagementView(history, session) {
   if (agentManagementRefresh) {
     agentManagementRefresh.disabled = historyLoadingState || agentBulkUpdating;
   }
+  if (agentManagementRefreshAll) {
+    agentManagementRefreshAll.disabled =
+      historyLoadingState || agentBulkUpdating || historyTotal === 0;
+  }
+  if (agentManagementRefreshAllLabel) {
+    agentManagementRefreshAllLabel.textContent =
+      agentBulkUpdating && agentBulkUpdateMode === "all"
+        ? t("agent.bulkUpdating", agentBulkUpdateProgress)
+        : t("agent.refreshAll");
+  }
 
   if (agentManagementPagination) {
     agentManagementPagination.hidden =
@@ -6823,25 +6858,73 @@ function renderAgentShipmentManagementView(history, session) {
   }
 }
 
-async function refreshSelectedOverseaAgentShipments() {
-  if (agentBulkUpdating) return;
-  if (!historyCustomerFilter) {
-    showError(t("agent.selectCustomerToUpdate"), "warning");
-    agentManagementCustomerFilterSelect?.focus();
-    return;
-  }
-  const selectedEntries = filteredAgentManagementHistory(readHistory())
-    .filter((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
-  if (selectedEntries.length === 0) return;
+function isRefreshableOverseaAgentShipment(item) {
+  if (!item?.shipmentId || !item?.referenceNo) return false;
+  const carrier = String(item.carrier || "").toUpperCase();
+  const referenceType = String(item.referenceType || "").toUpperCase();
+  if (!["COSCO", "CMA"].includes(carrier)) return false;
+  if (!["BOOKING", "BILLOFLADING"].includes(referenceType)) return false;
+  const status = [
+    item.trackingStatus,
+    item.snapshot?.tracking?.status,
+    item.snapshot?.summary?.latestEvent?.name
+  ].filter(Boolean).join(" ").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return !status.includes("EMPTY_RETURNED");
+}
 
+async function loadAllRefreshableOverseaAgentShipments() {
+  const session = readFileSession();
+  if (!isOverseaAgentSession(session) || !session.token) return [];
+  const entries = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: "100",
+      followingOnly: "false"
+    });
+    if (historyCustomerFilter) query.set("customerId", historyCustomerFilter);
+    const response = await fetch(`/api/customer/shipments?${query}`, {
+      headers: { "X-Customer-Token": session.token }
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearFileSession(session, { expired: true });
+      return [];
+    }
+    if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
+    for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+      if (!isRefreshableOverseaAgentShipment(item)) continue;
+      entries.push({
+        shipmentId: item.shipmentId,
+        query: {
+          number: item.referenceNo,
+          carrier: item.carrier,
+          type: item.referenceType
+        }
+      });
+    }
+    totalPages = Math.max(1, Number(payload?.totalPages || 1));
+    page += 1;
+  } while (page <= totalPages);
+  return entries;
+}
+
+async function performOverseaAgentShipmentRefresh(
+  entries,
+  { alreadyBusy = false, mode = "selected" } = {}
+) {
+  if ((agentBulkUpdating && !alreadyBusy) || entries.length === 0) return;
   agentBulkUpdating = true;
+  agentBulkUpdateMode = mode;
   agentBulkUpdateResult = null;
-  agentBulkUpdateProgress = { current: 0, total: selectedEntries.length };
+  agentBulkUpdateProgress = { current: 0, total: entries.length };
   clearError();
   renderHistory();
   let success = 0;
   let failed = 0;
-  for (const entry of selectedEntries) {
+  for (const entry of entries) {
     if (!isOverseaAgentSession()) break;
     agentBulkUpdateProgress.current += 1;
     renderHistory();
@@ -6853,9 +6936,54 @@ async function refreshSelectedOverseaAgentShipments() {
     else failed += 1;
   }
   agentBulkUpdating = false;
+  agentBulkUpdateMode = "";
   agentBulkUpdateResult = { success, failed };
   agentManagementSelectedKeys.clear();
   await loadCustomerAssignedHistory();
+}
+
+async function refreshSelectedOverseaAgentShipments() {
+  if (agentBulkUpdating) return;
+  const selectedEntries = filteredAgentManagementHistory(readHistory())
+    .filter((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
+  await performOverseaAgentShipmentRefresh(selectedEntries, { mode: "selected" });
+}
+
+async function refreshAllOverseaAgentShipments() {
+  if (agentBulkUpdating) return;
+  agentBulkUpdating = true;
+  agentBulkUpdateMode = "all";
+  agentBulkUpdateResult = null;
+  agentBulkUpdateProgress = { current: 0, total: 0 };
+  clearError();
+  renderHistory();
+  try {
+    const entries = await loadAllRefreshableOverseaAgentShipments();
+    if (entries.length === 0) {
+      showError(t("agent.noRefreshableShipments"), "warning");
+      agentBulkUpdating = false;
+      agentBulkUpdateMode = "";
+      renderHistory();
+      return;
+    }
+    if (!window.confirm(t("agent.refreshAllConfirm", { count: entries.length }))) {
+      agentBulkUpdating = false;
+      agentBulkUpdateMode = "";
+      renderHistory();
+      return;
+    }
+    await performOverseaAgentShipmentRefresh(entries, {
+      alreadyBusy: true,
+      mode: "all"
+    });
+  } catch (error) {
+    agentBulkUpdating = false;
+    agentBulkUpdateMode = "";
+    showError(t("agent.updateFailed", {
+      message: error?.message || t("error.generic")
+    }));
+    renderHistory();
+  }
 }
 
 function historyEtaTimestamp(entry) {
@@ -7149,7 +7277,16 @@ function renderHistory() {
         void setOverseaAgentShipmentFollowing(entry, !entry.followed);
       });
 
-      detailActions.append(followButton);
+      const updateButton = document.createElement("button");
+      updateButton.type = "button";
+      updateButton.className = "agent-update-button";
+      updateButton.disabled = entry.refreshing === true || agentBulkUpdating;
+      updateButton.textContent = t(entry.refreshing ? "agent.updating" : "agent.update");
+      updateButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void refreshOverseaAgentShipment(entry);
+      });
+      detailActions.append(followButton, updateButton);
 
       if (entry.agentLastRefreshedAt) {
         const lastAgentUpdate = document.createElement("small");
@@ -8337,7 +8474,7 @@ agentManagementFollowingFilter?.addEventListener("click", async () => {
 });
 
 agentManagementSelectAll?.addEventListener("change", () => {
-  if (!historyCustomerFilter || agentBulkUpdating) return;
+  if (agentBulkUpdating) return;
   const visibleEntries = filteredAgentManagementHistory(readHistory());
   for (const entry of visibleEntries) {
     const key = historyShipmentKey(entry);
@@ -8350,6 +8487,10 @@ agentManagementSelectAll?.addEventListener("change", () => {
 
 agentManagementBulkUpdate?.addEventListener("click", () => {
   void refreshSelectedOverseaAgentShipments();
+});
+
+agentManagementRefreshAll?.addEventListener("click", () => {
+  void refreshAllOverseaAgentShipments();
 });
 
 agentManagementRefresh?.addEventListener("click", () => {
