@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as XLSX from "xlsx";
 import { buildShipmentBatchItems, prepareSheet } from "../src/services/shipmentBatchImport.js";
+import {
+  buildManualShipmentImportResultWorkbook,
+  buildManualShipmentImportTemplate,
+  parseManualShipmentImportWorkbook
+} from "../src/services/manualShipmentExcelImport.js";
 
 const headers = ["JOB NUMBER", "VESSEL /VOY", "MB/L NO.", "POL", "POD", "PO NO.", "ETD", "ETA", "", "Client Code"];
 const cosuNumbers = Array.from({ length: 30 }, (_, index) => `COSU${String(6502406170 + index)}`);
@@ -54,6 +60,47 @@ assert.deepEqual(items.filter((item) => item.manualOnly).map((item) => item.numb
   "784-84594366",
   "CPJQTA45TACHOU09"
 ]);
+
+const completeTemplate = buildManualShipmentImportTemplate(XLSX);
+assert.deepEqual(completeTemplate.SheetNames, [
+  "填写说明",
+  "票单主表",
+  "中转港",
+  "分段运输",
+  "箱型数量",
+  "箱级详情"
+]);
+const completeImport = parseManualShipmentImportWorkbook(completeTemplate, XLSX);
+assert.equal(completeImport.total, 1);
+assert.equal(completeImport.valid, 1);
+assert.equal(completeImport.invalid, 0);
+assert.equal(completeImport.items[0].payload.routeNodes.length, 5);
+assert.equal(completeImport.items[0].payload.routeNodes[2].locationType, "TSP");
+assert.equal(completeImport.items[0].payload.routingLegs[0].mode, "SEA");
+assert.deepEqual(completeImport.items[0].payload.containerTypes, [{ type: "40HQ", quantity: 2 }]);
+assert.equal(completeImport.items[0].payload.containers[0].number, "TEMU6003424");
+assert.deepEqual(completeImport.items[0].payload.serviceScopes, ["OCEAN", "INLAND"]);
+
+const invalidTemplate = buildManualShipmentImportTemplate(XLSX);
+invalidTemplate.Sheets["箱型数量"] = XLSX.utils.aoa_to_sheet([
+  ["导入编号*", "箱型*", "数量*"]
+]);
+const invalidImport = parseManualShipmentImportWorkbook(invalidTemplate, XLSX);
+assert.equal(invalidImport.valid, 0);
+assert.equal(invalidImport.invalid, 1);
+assert.match(invalidImport.rows[0].errors.join(" "), /至少需要一种箱型和数量/);
+
+const resultWorkbook = buildManualShipmentImportResultWorkbook([
+  {
+    importKey: "SHIP-001",
+    carrier: "COSCO",
+    referenceType: "BOOKING",
+    referenceNo: "6508205930",
+    status: "CREATED",
+    message: "Created"
+  }
+], XLSX);
+assert.deepEqual(resultWorkbook.SheetNames, ["导入结果"]);
 
 const punctuationSheet = prepareSheet("Manual", [
   ["MB/L NO."],
@@ -147,6 +194,12 @@ assert.match(manualCreateSource, /routingLegs,/);
 assert.match(manualCreateSource, /containerTypes,/);
 assert.match(manualCreateSource, /containers/);
 assert.match(manualCreateSource, /createBusinessShipment\(buildManualShipmentPayload\(shipmentCreateForm\)\)/);
+assert.match(businessCustomerPage, /@click="openShipmentExcelImport"/);
+assert.match(businessCustomerPage, /v-if="shipmentExcelImportDialogOpen"/);
+assert.match(businessCustomerPage, /downloadShipmentExcelTemplate/);
+assert.match(businessCustomerPage, /parseManualShipmentImportWorkbook/);
+assert.match(businessCustomerPage, /await createBusinessShipment\(item\.payload\)/);
+assert.match(businessCustomerPage, /shipmentExcelImportResults/);
 
 const shipmentSaveSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function saveShipmentDetail"),

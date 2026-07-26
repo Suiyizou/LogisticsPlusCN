@@ -476,6 +476,9 @@
                       @click="refreshIssuesOnly = !refreshIssuesOnly"
                     >{{ t("customers.refreshIssuesOnly", { count: refreshIssueCount }) }}</el-button>
                     <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                    <el-button type="primary" plain @click="openShipmentExcelImport">
+                      <el-icon><Upload /></el-icon>{{ t("customers.shipmentExcelImport") }}
+                    </el-button>
                     <el-button
                       type="primary"
                       plain
@@ -1432,6 +1435,159 @@
       </section>
     </div>
 
+    <div
+      v-if="shipmentExcelImportDialogOpen"
+      class="customer-code-overlay"
+      role="presentation"
+      @keydown.esc.stop.prevent
+    >
+      <section
+        class="customer-code-dialog shipment-excel-import-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('customers.shipmentExcelImport')"
+      >
+        <div class="shipment-excel-import-heading">
+          <div>
+            <span class="customer-code-kicker">{{ t("customers.dialogKickerShipmentExcelImport") }}</span>
+            <h2>{{ t("customers.shipmentExcelImport") }}</h2>
+            <p>{{ t("customers.shipmentExcelImportDescription") }}</p>
+          </div>
+          <button type="button" class="manual-add-button" @click="downloadShipmentExcelTemplate">
+            {{ t("customers.downloadShipmentExcelTemplate") }}
+          </button>
+        </div>
+
+        <div class="shipment-excel-import-body">
+          <div
+            v-loading="shipmentExcelImportParsing"
+            :element-loading-text="t('app.loadingPage')"
+            class="customer-excel-dropzone shipment-excel-import-dropzone"
+            :class="{
+              'has-file': shipmentExcelImportFileName,
+              'is-dragover': shipmentExcelImportDropzoneActive
+            }"
+            @dragover.prevent="shipmentExcelImportDropzoneActive = true"
+            @dragleave.prevent="shipmentExcelImportDropzoneActive = false"
+            @drop.prevent="handleShipmentExcelImportDrop"
+            @click="shipmentExcelImportFileInput?.click()"
+          >
+            <input
+              ref="shipmentExcelImportFileInput"
+              type="file"
+              accept=".xlsx,.xls"
+              style="display:none"
+              @change="handleShipmentExcelImportWorkbook"
+            />
+            <b>{{ shipmentExcelImportFileName || t("customers.chooseShipmentExcel") }}</b>
+            <small>{{ shipmentExcelImportFileName
+              ? t("customers.shipmentExcelRowsReady", { count: shipmentExcelImportPreview.total })
+              : t("customers.shipmentExcelSheetsHint") }}</small>
+            <button type="button" @click.stop="shipmentExcelImportFileInput?.click()">
+              {{ shipmentExcelImportFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}
+            </button>
+          </div>
+
+          <div v-if="shipmentExcelImportFileName" class="shipment-excel-import-summary">
+            <span><b>{{ shipmentExcelImportPreview.total }}</b><small>{{ t("customers.shipmentExcelTotal") }}</small></span>
+            <span class="is-valid"><b>{{ shipmentExcelImportPreview.valid }}</b><small>{{ t("customers.shipmentExcelValid") }}</small></span>
+            <span :class="{ 'is-invalid': shipmentExcelImportPreview.invalid }"><b>{{ shipmentExcelImportPreview.invalid }}</b><small>{{ t("customers.shipmentExcelInvalid") }}</small></span>
+            <span :class="{ 'has-warning': shipmentExcelImportPreview.warningCount }"><b>{{ shipmentExcelImportPreview.warningCount }}</b><small>{{ t("customers.shipmentExcelWarnings") }}</small></span>
+          </div>
+
+          <div v-if="shipmentExcelImportPreview.globalErrors.length" class="shipment-excel-import-errors">
+            <b>{{ t("customers.shipmentExcelWorkbookErrors") }}</b>
+            <ul>
+              <li v-for="error in shipmentExcelImportPreview.globalErrors" :key="error">{{ error }}</li>
+            </ul>
+          </div>
+
+          <div v-if="shipmentExcelImportPreview.rows.length" class="shipment-excel-import-table-wrap">
+            <table class="shipment-excel-import-table">
+              <thead>
+                <tr>
+                  <th>{{ t("customers.excelRow") }}</th>
+                  <th>{{ t("customers.importKey") }}</th>
+                  <th>{{ t("customers.carrier") }}</th>
+                  <th>{{ t("customers.referenceType") }}</th>
+                  <th>{{ t("customers.referenceNo") }}</th>
+                  <th>{{ t("customers.importStatus") }}</th>
+                  <th>{{ t("customers.validationMessage") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in shipmentExcelImportPreview.rows"
+                  :key="`${row.rowNumber}-${row.importKey}`"
+                  :class="{ 'is-invalid': row.errors.length, 'has-warning': row.warnings.length }"
+                >
+                  <td>{{ row.rowNumber }}</td>
+                  <td><b>{{ row.importKey || "—" }}</b></td>
+                  <td>{{ row.carrier || "—" }}</td>
+                  <td>{{ row.referenceType || "—" }}</td>
+                  <td>{{ row.referenceNo || "—" }}</td>
+                  <td>
+                    <span :class="row.errors.length ? 'import-state-error' : 'import-state-ready'">
+                      {{ row.errors.length ? t("customers.importNeedsFix") : t("customers.importReady") }}
+                    </span>
+                  </td>
+                  <td>
+                    <span v-if="row.errors.length">{{ row.errors.join("；") }}</span>
+                    <span v-else-if="row.warnings.length">{{ row.warnings.join("；") }}</span>
+                    <span v-else>—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <section v-if="shipmentExcelImporting || shipmentExcelImportResults.length" class="shipment-excel-import-progress">
+            <div>
+              <b>{{ t("customers.shipmentExcelImportProgress", shipmentExcelImportProgress) }}</b>
+              <el-progress
+                :percentage="shipmentExcelImportProgress.total
+                  ? Math.round(shipmentExcelImportProgress.done / shipmentExcelImportProgress.total * 100)
+                  : 0"
+                :stroke-width="7"
+              />
+            </div>
+            <div v-if="shipmentExcelImportResults.length" class="shipment-excel-import-result-list">
+              <span
+                v-for="result in shipmentExcelImportResults"
+                :key="result.importKey"
+                :class="result.status === 'CREATED' ? 'is-created' : result.status === 'FAILED' ? 'is-failed' : 'is-pending'"
+              >
+                <b>{{ result.referenceNo || result.importKey }}</b>
+                <small>{{ result.message }}</small>
+              </span>
+            </div>
+          </section>
+        </div>
+
+        <div class="customer-dialog-actions shipment-excel-import-actions">
+          <button
+            v-if="shipmentExcelImportResults.length"
+            type="button"
+            :disabled="shipmentExcelImporting"
+            @click="downloadShipmentExcelImportResults"
+          >{{ t("customers.downloadImportResults") }}</button>
+          <button type="button" :disabled="shipmentExcelImporting" @click="closeShipmentExcelImport">
+            {{ t("customers.cancel") }}
+          </button>
+          <button
+            class="customer-access-primary"
+            type="button"
+            :disabled="!canStartShipmentExcelImport"
+            @click="startShipmentExcelImport"
+          >
+            {{ shipmentExcelImporting
+              ? t("customers.importing")
+              : t("customers.importValidShipments", { count: shipmentExcelImportPreview.valid }) }}
+          </button>
+        </div>
+      </section>
+    </div>
+
     <div v-if="toastMessage" class="customer-toast" role="status">{{ toastMessage }}</div>
   </main>
 </template>
@@ -1474,6 +1630,11 @@ import {
   updateBusinessShipmentManualSnapshot
 } from "../services/businessCustomerApi";
 import { buildShipmentBatchItems, parseShipmentBatchWorkbook } from "../services/shipmentBatchImport";
+import {
+  buildManualShipmentImportResultWorkbook,
+  buildManualShipmentImportTemplate,
+  parseManualShipmentImportWorkbook
+} from "../services/manualShipmentExcelImport";
 import { storedToken } from "../services/authSession";
 import { markApiErrorHandled } from "../services/apiClient";
 import {
@@ -1534,6 +1695,15 @@ const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
 const shipmentCreateDialogOpen = ref(false);
+const shipmentExcelImportDialogOpen = ref(false);
+const shipmentExcelImportFileInput = ref(null);
+const shipmentExcelImportFileName = ref("");
+const shipmentExcelImportDropzoneActive = ref(false);
+const shipmentExcelImportParsing = ref(false);
+const shipmentExcelImporting = ref(false);
+const shipmentExcelImportPreview = ref(emptyShipmentExcelImportPreview());
+const shipmentExcelImportResults = ref([]);
+const shipmentExcelImportProgress = ref({ total: 0, done: 0, succeeded: 0, failed: 0 });
 const detailShipmentSnapshot = ref(null);
 const loadingShipmentDetail = ref(false);
 const savingShipment = ref(false);
@@ -1707,6 +1877,13 @@ const shipmentFilterCustomers = computed(() =>
 const refreshIssueCount = computed(() => shipmentRefreshIssueTotal.value);
 
 const displayedAvailableShipments = computed(() => availableShipments.value);
+const canStartShipmentExcelImport = computed(() =>
+  !shipmentExcelImporting.value
+  && shipmentExcelImportResults.value.length === 0
+  && shipmentExcelImportPreview.value.valid > 0
+  && shipmentExcelImportPreview.value.invalid === 0
+  && shipmentExcelImportPreview.value.globalErrors.length === 0
+);
 
 const selectedShipment = computed(() => {
   if (detailShipmentSnapshot.value?.shipmentId === selectedShipmentId.value) {
@@ -3127,6 +3304,171 @@ function isShipmentBound(shipment) {
 
 function openShipmentDetail(shipment) {
   navigateToShipmentDetail(shipment);
+}
+
+function emptyShipmentExcelImportPreview(globalErrors = []) {
+  return {
+    rows: [],
+    items: [],
+    globalErrors,
+    total: 0,
+    valid: 0,
+    invalid: 0,
+    warningCount: 0
+  };
+}
+
+function openShipmentExcelImport() {
+  shipmentExcelImportDialogOpen.value = true;
+}
+
+function closeShipmentExcelImport() {
+  if (shipmentExcelImporting.value) return;
+  shipmentExcelImportDialogOpen.value = false;
+  shipmentExcelImportFileName.value = "";
+  shipmentExcelImportDropzoneActive.value = false;
+  shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview();
+  shipmentExcelImportResults.value = [];
+  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0 };
+  if (shipmentExcelImportFileInput.value) shipmentExcelImportFileInput.value.value = "";
+}
+
+async function downloadShipmentExcelTemplate() {
+  try {
+    const XLSX = await loadXlsxModule();
+    const workbook = buildManualShipmentImportTemplate(XLSX);
+    XLSX.writeFile(
+      workbook,
+      `shipment-import-template-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  } catch (error) {
+    showError(error, "customers.shipmentExcelTemplateFailed");
+  }
+}
+
+async function handleShipmentExcelImportWorkbook(event) {
+  const file = event.target.files?.[0];
+  if (event.target) event.target.value = "";
+  await parseShipmentExcelImportFile(file);
+}
+
+async function handleShipmentExcelImportDrop(event) {
+  shipmentExcelImportDropzoneActive.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  await parseShipmentExcelImportFile(file);
+}
+
+async function parseShipmentExcelImportFile(file) {
+  shipmentExcelImportFileName.value = "";
+  shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview();
+  shipmentExcelImportResults.value = [];
+  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0 };
+  if (!file) return;
+  if (!/\.(xlsx|xls)$/i.test(file.name || "")) {
+    shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview([
+      t("customers.shipmentExcelUnsupportedFile")
+    ]);
+    return;
+  }
+  if (Number(file.size || 0) > 10 * 1024 * 1024) {
+    shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview([
+      t("customers.shipmentExcelFileTooLarge")
+    ]);
+    return;
+  }
+  shipmentExcelImportParsing.value = true;
+  shipmentExcelImportFileName.value = file.name;
+  try {
+    await waitForNextPaint();
+    const XLSX = await loadXlsxModule();
+    const workbook = XLSX.read(await file.arrayBuffer(), {
+      type: "array",
+      cellDates: true
+    });
+    shipmentExcelImportPreview.value = parseManualShipmentImportWorkbook(workbook, XLSX);
+  } catch (error) {
+    shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview([
+      error?.message || t("customers.excelReadFailed")
+    ]);
+  } finally {
+    shipmentExcelImportParsing.value = false;
+  }
+}
+
+async function startShipmentExcelImport() {
+  if (!canStartShipmentExcelImport.value) return;
+  const items = shipmentExcelImportPreview.value.items;
+  shipmentExcelImporting.value = true;
+  shipmentExcelImportProgress.value = {
+    total: items.length,
+    done: 0,
+    succeeded: 0,
+    failed: 0
+  };
+  shipmentExcelImportResults.value = items.map((item) => ({
+    importKey: item.importKey,
+    carrier: item.carrier,
+    referenceType: item.referenceType,
+    referenceNo: item.referenceNo,
+    status: "PENDING",
+    message: t("customers.importPending")
+  }));
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      const item = items[index];
+      try {
+        await createBusinessShipment(item.payload);
+        shipmentExcelImportResults.value[index] = {
+          ...shipmentExcelImportResults.value[index],
+          status: "CREATED",
+          message: t("customers.importCreated")
+        };
+        shipmentExcelImportProgress.value.succeeded += 1;
+      } catch (error) {
+        markApiErrorHandled(error);
+        shipmentExcelImportResults.value[index] = {
+          ...shipmentExcelImportResults.value[index],
+          status: "FAILED",
+          message: error?.message || t("customers.shipmentExcelImportItemFailed")
+        };
+        shipmentExcelImportProgress.value.failed += 1;
+      } finally {
+        shipmentExcelImportProgress.value.done += 1;
+      }
+    }
+  };
+  try {
+    const concurrency = Math.min(4, items.length);
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    shipmentPage.value = 1;
+    await loadAvailableShipments();
+    showSuccess("customers.shipmentExcelImportFinished", {
+      succeeded: shipmentExcelImportProgress.value.succeeded,
+      failed: shipmentExcelImportProgress.value.failed
+    });
+  } finally {
+    shipmentExcelImporting.value = false;
+  }
+}
+
+async function downloadShipmentExcelImportResults() {
+  if (!shipmentExcelImportResults.value.length) return;
+  try {
+    const XLSX = await loadXlsxModule();
+    const workbook = buildManualShipmentImportResultWorkbook(
+      shipmentExcelImportResults.value,
+      XLSX
+    );
+    XLSX.writeFile(
+      workbook,
+      `shipment-import-results-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  } catch (error) {
+    showError(error, "customers.shipmentExcelResultsFailed");
+  }
 }
 
 function nextManualEntryKey(prefix) {
@@ -5607,6 +5949,247 @@ function showError(error, fallbackKey) {
   min-width: 124px;
 }
 
+.shipment-excel-import-dialog {
+  width: min(1180px, calc(100vw - 48px));
+  max-height: min(92vh, 980px);
+  padding: 26px 28px 0;
+  overflow: hidden;
+}
+
+.shipment-excel-import-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.shipment-excel-import-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.shipment-excel-import-heading p {
+  max-width: 820px;
+}
+
+.shipment-excel-import-heading > .manual-add-button {
+  flex: 0 0 auto;
+  min-width: 176px;
+  white-space: nowrap;
+}
+
+.customer-code-dialog > .shipment-excel-import-body {
+  display: grid;
+  min-height: 0;
+  max-height: calc(min(92vh, 980px) - 196px);
+  margin-top: 0;
+  padding-right: 7px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 14px;
+}
+
+.shipment-excel-import-dropzone {
+  min-height: 132px;
+}
+
+.shipment-excel-import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shipment-excel-import-summary > span {
+  display: grid;
+  min-height: 70px;
+  padding: 12px 14px;
+  border: 1px solid #dce6ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  align-content: center;
+  gap: 3px;
+}
+
+.shipment-excel-import-summary b {
+  color: #24445f;
+  font-size: 22px;
+}
+
+.shipment-excel-import-summary small {
+  color: #7b90a5;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.shipment-excel-import-summary .is-valid {
+  border-color: #bfe5d4;
+  background: #f2fbf7;
+}
+
+.shipment-excel-import-summary .is-valid b {
+  color: #238560;
+}
+
+.shipment-excel-import-summary .is-invalid {
+  border-color: #f0c9cd;
+  background: #fff7f7;
+}
+
+.shipment-excel-import-summary .is-invalid b {
+  color: #be4f5b;
+}
+
+.shipment-excel-import-summary .has-warning {
+  border-color: #ead9b4;
+  background: #fffbf1;
+}
+
+.shipment-excel-import-summary .has-warning b {
+  color: #a46a17;
+}
+
+.shipment-excel-import-errors {
+  padding: 12px 14px;
+  border: 1px solid #f0c9cd;
+  border-radius: 10px;
+  color: #9c3f49;
+  background: #fff7f7;
+  font-size: 11px;
+}
+
+.shipment-excel-import-errors ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.shipment-excel-import-table-wrap {
+  max-height: 330px;
+  border: 1px solid #dce5ee;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.shipment-excel-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 11px;
+}
+
+.shipment-excel-import-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px;
+  color: #4d657b;
+  background: #f2f6fa;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.shipment-excel-import-table td {
+  max-width: 330px;
+  padding: 10px 12px;
+  border-top: 1px solid #edf1f5;
+  color: #526a80;
+  vertical-align: top;
+}
+
+.shipment-excel-import-table tr.is-invalid td {
+  background: #fff8f8;
+}
+
+.shipment-excel-import-table tr.has-warning:not(.is-invalid) td {
+  background: #fffdf7;
+}
+
+.import-state-error,
+.import-state-ready {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.import-state-error {
+  color: #b84955;
+  background: #fdecef;
+}
+
+.import-state-ready {
+  color: #237b59;
+  background: #e8f7f0;
+}
+
+.shipment-excel-import-progress {
+  display: grid;
+  padding: 14px;
+  border: 1px solid #d9e5f0;
+  border-radius: 11px;
+  background: #f8fbfe;
+  gap: 13px;
+}
+
+.shipment-excel-import-progress > div:first-child {
+  display: grid;
+  gap: 9px;
+}
+
+.shipment-excel-import-result-list {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.shipment-excel-import-result-list > span {
+  display: grid;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid #dce5ee;
+  border-radius: 8px;
+  background: #fff;
+  gap: 2px;
+}
+
+.shipment-excel-import-result-list .is-created {
+  border-color: #bfe5d4;
+}
+
+.shipment-excel-import-result-list .is-failed {
+  border-color: #f0c9cd;
+  background: #fff8f8;
+}
+
+.shipment-excel-import-result-list b,
+.shipment-excel-import-result-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-excel-import-result-list small {
+  color: #7b90a5;
+  font-size: 9px;
+}
+
+.shipment-excel-import-actions {
+  margin: 0 -28px;
+  padding: 14px 28px 18px;
+  border-top: 1px solid #dce6ef;
+  background: #fff;
+}
+
+.shipment-excel-import-actions button {
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
 .shipment-detail-card :deep(.el-card__body) {
   padding: 18px;
 }
@@ -6047,6 +6630,32 @@ button:disabled {
     justify-self: start;
   }
   .manual-shipment-form > .customer-dialog-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .shipment-excel-import-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 18px 16px 0;
+  }
+  .shipment-excel-import-heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .shipment-excel-import-body {
+    max-height: calc(100vh - 220px);
+  }
+  .shipment-excel-import-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shipment-excel-import-result-list {
+    grid-template-columns: 1fr;
+  }
+  .shipment-excel-import-actions {
+    margin: 0 -16px;
+    padding: 12px 16px 16px;
+  }
+  .shipment-excel-import-actions button {
     flex: 1 1 0;
     min-width: 0;
   }
