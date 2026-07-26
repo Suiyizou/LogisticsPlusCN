@@ -1162,46 +1162,270 @@
       </section>
     </div>
 
-    <div v-if="shipmentCreateDialogOpen" class="customer-code-overlay" role="presentation" @click.self="shipmentCreateDialogOpen = false">
-      <section class="customer-code-dialog customer-create-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createShipment')">
+    <div
+      v-if="shipmentCreateDialogOpen"
+      class="customer-code-overlay"
+      role="presentation"
+      @keydown.esc.stop.prevent
+    >
+      <section class="customer-code-dialog customer-create-dialog manual-shipment-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.createShipment')">
         <span class="customer-code-kicker">{{ t("customers.dialogKickerNewShipment") }}</span>
         <h2>{{ t("customers.createShipment") }}</h2>
         <p>{{ t("customers.createShipmentDescription") }}</p>
-        <form class="customer-dialog-form" @submit.prevent="createShipment">
-          <label>
-            <span>{{ t("customers.carrier") }}</span>
-            <el-select v-model="shipmentCreateForm.carrier" class="business-select" popper-class="business-select-popper">
-              <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-              <el-option value="CMA" :label="t('customers.carrierCMA')" />
-            </el-select>
-          </label>
-          <label>
-            <span>{{ t("customers.referenceType") }}</span>
-            <el-select v-model="shipmentCreateForm.referenceType" class="business-select" popper-class="business-select-popper">
-              <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-              <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
-            </el-select>
-          </label>
-          <label><span>{{ t("customers.referenceNo") }}</span><input v-model.trim="shipmentCreateForm.referenceNo" required /></label>
-          <label><span>{{ t("customers.shipmentStatus") }}</span><input v-model.trim="shipmentCreateForm.trackingStatus" /></label>
-          <div class="customer-manual-fields">
-            <label><span>{{ t("customers.jobNumber") }}</span><input v-model.trim="shipmentCreateForm.forwarderJobNumber" /></label>
-            <label><span>{{ t("customers.vesselVoyage") }}</span><input v-model.trim="shipmentCreateForm.vesselVoyage" /></label>
-            <label><span>{{ t("customers.portOfLoading") }}</span><input v-model.trim="shipmentCreateForm.portOfLoading" /></label>
-            <label><span>{{ t("customers.portOfDischarge") }}</span><input v-model.trim="shipmentCreateForm.portOfDischarge" /></label>
-            <label><span>{{ t("customers.clientPoNumber") }}</span><input v-model.trim="shipmentCreateForm.clientPoNumber" /></label>
-            <label><span>{{ t("customers.volume") }}</span><input v-model.trim="shipmentCreateForm.volume" placeholder="5*40HC" /></label>
-            <label><span>{{ t("customers.estimatedDeparture") }}</span><input v-model.trim="shipmentCreateForm.estimatedDeparture" /></label>
-            <label><span>{{ t("customers.estimatedArrival") }}</span><input v-model.trim="shipmentCreateForm.estimatedArrival" /></label>
-            <label><span>{{ t("customers.actualDeparture") }}</span><input v-model.trim="shipmentCreateForm.actualDeparture" /></label>
-            <label><span>{{ t("customers.actualArrival") }}</span><input v-model.trim="shipmentCreateForm.actualArrival" /></label>
-            <label><span>{{ t("customers.actualDelivery") }}</span><input v-model.trim="shipmentCreateForm.actualDelivery" /></label>
-            <label><span>{{ t("customers.currentLocation") }}</span><input v-model.trim="shipmentCreateForm.currentLocation" /></label>
-            <label><span>{{ t("customers.clientNameCode") }}</span><input v-model.trim="shipmentCreateForm.clientNameCode" /></label>
-          </div>
-          <label><span>{{ t("customers.shipmentNote") }}</span><textarea v-model="shipmentCreateForm.note" maxlength="2000"></textarea></label>
+        <form class="customer-dialog-form manual-shipment-form" @submit.prevent="createShipment">
+          <p class="manual-required-hint">{{ t("customers.manualRequiredHint") }}</p>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>01</b><strong>{{ t("customers.manualSectionBasic") }}</strong></span>
+              <small>{{ t("customers.manualRequiredSection") }}</small>
+            </header>
+            <div class="manual-entry-grid">
+              <label>
+                <span>{{ t("customers.carrier") }} <i class="required-star">*</i></span>
+                <el-select v-model="shipmentCreateForm.carrier" class="business-select" popper-class="business-select-popper">
+                  <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+                  <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                </el-select>
+              </label>
+              <label>
+                <span>{{ t("customers.referenceType") }} <i class="required-star">*</i></span>
+                <el-select v-model="shipmentCreateForm.referenceType" class="business-select" popper-class="business-select-popper">
+                  <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                  <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                </el-select>
+              </label>
+              <label>
+                <span>{{ t("customers.referenceNo") }} <i class="required-star">*</i></span>
+                <input v-model.trim="shipmentCreateForm.referenceNo" maxlength="160" required />
+              </label>
+              <label>
+                <span>{{ t("customers.latestEventName") }} <i class="required-star">*</i></span>
+                <input v-model.trim="shipmentCreateForm.latestEventName" maxlength="160" required />
+              </label>
+              <label>
+                <span>{{ t("customers.latestEventLocation") }}</span>
+                <input v-model.trim="shipmentCreateForm.latestEventLocation" maxlength="160" />
+              </label>
+              <label>
+                <span>{{ t("customers.latestEventTime") }}</span>
+                <input v-model="shipmentCreateForm.latestEventTime" type="datetime-local" />
+              </label>
+              <label>
+                <span>{{ t("customers.estimatedDeparture") }} <i class="required-star">*</i></span>
+                <input v-model="shipmentCreateForm.estimatedDeparture" type="datetime-local" required />
+              </label>
+              <label>
+                <span>{{ t("customers.estimatedArrival") }} <i class="required-star">*</i></span>
+                <input v-model="shipmentCreateForm.estimatedArrival" type="datetime-local" required />
+              </label>
+              <label>
+                <span>{{ t("customers.estimatedDelivery") }}</span>
+                <input v-model="shipmentCreateForm.estimatedDelivery" type="datetime-local" />
+              </label>
+              <label>
+                <span>{{ t("customers.actualDeparture") }}</span>
+                <input v-model="shipmentCreateForm.actualDeparture" type="datetime-local" />
+              </label>
+              <label>
+                <span>{{ t("customers.actualArrival") }}</span>
+                <input v-model="shipmentCreateForm.actualArrival" type="datetime-local" />
+              </label>
+              <label>
+                <span>{{ t("customers.actualDelivery") }}</span>
+                <input v-model="shipmentCreateForm.actualDelivery" type="datetime-local" />
+              </label>
+            </div>
+          </section>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>02</b><strong>{{ t("customers.manualSectionRoute") }}</strong></span>
+              <small>{{ t("customers.manualRouteHint") }}</small>
+            </header>
+            <div class="manual-route-list">
+              <article
+                v-for="(node, index) in shipmentCreateForm.routeNodes"
+                :key="node.key"
+                class="manual-repeat-card manual-route-card"
+              >
+                <header>
+                  <span>
+                    <b>{{ manualRouteNodeLabel(node.locationType) }}</b>
+                    <small>{{ node.locationType }}</small>
+                  </span>
+                  <button
+                    v-if="node.optional"
+                    type="button"
+                    class="manual-remove-button"
+                    @click="removeManualRouteNode(index)"
+                  >{{ t("customers.removeItem") }}</button>
+                </header>
+                <div class="manual-entry-grid is-route">
+                  <label>
+                    <span>{{ t("customers.routeLocation") }} <i v-if="node.required" class="required-star">*</i></span>
+                    <input v-model.trim="node.city" maxlength="160" :required="node.required" />
+                  </label>
+                  <label>
+                    <span>{{ t("customers.countryCode") }}</span>
+                    <input v-model.trim="node.countryCode" maxlength="2" placeholder="CN / US" />
+                  </label>
+                  <label>
+                    <span>{{ t("customers.facilityTerminal") }}</span>
+                    <input v-model.trim="node.facilityCode" maxlength="160" />
+                  </label>
+                  <label>
+                    <span>{{ t("customers.routeEvent") }}</span>
+                    <input v-model.trim="node.event" maxlength="160" />
+                  </label>
+                  <label>
+                    <span>{{ t("customers.routeEstimatedTime") }}</span>
+                    <input v-model="node.estimatedTime" type="datetime-local" />
+                  </label>
+                  <label>
+                    <span>{{ t("customers.routeActualTime") }}</span>
+                    <input v-model="node.actualTime" type="datetime-local" />
+                  </label>
+                </div>
+              </article>
+            </div>
+            <button type="button" class="manual-add-button" @click="addManualTransshipment">
+              + {{ t("customers.addTransshipment") }}
+            </button>
+          </section>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>03</b><strong>{{ t("customers.manualSectionBooking") }}</strong></span>
+              <small>{{ t("customers.manualOptionalSection") }}</small>
+            </header>
+            <div class="manual-entry-grid">
+              <label><span>{{ t("customers.jobNumber") }}</span><input v-model.trim="shipmentCreateForm.forwarderJobNumber" maxlength="160" /></label>
+              <label><span>{{ t("customers.clientNameCode") }}</span><input v-model.trim="shipmentCreateForm.clientNameCode" maxlength="160" /></label>
+              <label><span>{{ t("customers.clientPoNumber") }}</span><input v-model.trim="shipmentCreateForm.clientPoNumber" maxlength="160" /></label>
+              <label><span>{{ t("customers.bookingNumber") }}</span><input v-model.trim="shipmentCreateForm.bookingNumber" maxlength="160" /></label>
+              <label><span>{{ t("customers.billOfLading") }}</span><input v-model.trim="shipmentCreateForm.billOfLading" maxlength="160" /></label>
+              <label><span>{{ t("customers.vesselVoyage") }}</span><input v-model.trim="shipmentCreateForm.vesselVoyage" maxlength="240" /></label>
+              <label><span>{{ t("customers.trafficTerm") }}</span><input v-model.trim="shipmentCreateForm.trafficTerm" maxlength="80" placeholder="CY | CY" /></label>
+            </div>
+            <div class="manual-service-field">
+              <span>{{ t("customers.selectedServices") }}</span>
+              <div>
+                <label v-for="service in manualServiceOptions" :key="service.value" class="manual-service-choice">
+                  <input v-model="shipmentCreateForm.serviceScopes" type="checkbox" :value="service.value" />
+                  <span>{{ t(service.labelKey) }}</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>04</b><strong>{{ t("customers.manualSectionContainerTypes") }}</strong></span>
+              <small>{{ t("customers.manualContainerTypeHint") }}</small>
+            </header>
+            <div class="manual-compact-list">
+              <article
+                v-for="(item, index) in shipmentCreateForm.containerTypes"
+                :key="item.key"
+                class="manual-compact-row"
+              >
+                <label>
+                  <span>{{ t("customers.containerType") }} <i v-if="index === 0" class="required-star">*</i></span>
+                  <input v-model.trim="item.type" list="manual-container-type-options" maxlength="40" :required="index === 0" placeholder="40HQ" />
+                </label>
+                <label>
+                  <span>{{ t("customers.containerQuantity") }} <i v-if="index === 0" class="required-star">*</i></span>
+                  <input v-model.number="item.quantity" type="number" min="1" max="999" :required="index === 0" />
+                </label>
+                <button v-if="shipmentCreateForm.containerTypes.length > 1" type="button" class="manual-remove-button" @click="removeManualListItem('containerTypes', index)">
+                  {{ t("customers.removeItem") }}
+                </button>
+              </article>
+            </div>
+            <datalist id="manual-container-type-options">
+              <option value="20GP"></option>
+              <option value="40GP"></option>
+              <option value="40HQ"></option>
+              <option value="45HQ"></option>
+              <option value="20RF"></option>
+              <option value="40RF"></option>
+            </datalist>
+            <button type="button" class="manual-add-button" @click="addManualContainerType">
+              + {{ t("customers.addContainerType") }}
+            </button>
+          </section>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>05</b><strong>{{ t("customers.manualSectionRouting") }}</strong></span>
+              <small>{{ t("customers.manualRoutingHint") }}</small>
+            </header>
+            <div v-if="shipmentCreateForm.routingLegs.length" class="manual-repeat-list">
+              <article v-for="(leg, index) in shipmentCreateForm.routingLegs" :key="leg.key" class="manual-repeat-card">
+                <header>
+                  <span><b>{{ t("customers.routingLegNumber", { number: index + 1 }) }}</b></span>
+                  <button type="button" class="manual-remove-button" @click="removeManualListItem('routingLegs', index)">{{ t("customers.removeItem") }}</button>
+                </header>
+                <div class="manual-entry-grid">
+                  <label>
+                    <span>{{ t("customers.transportMode") }}</span>
+                    <select v-model="leg.mode">
+                      <option value="SEA">{{ t("customers.transportModeSea") }}</option>
+                      <option value="TRUCK">{{ t("customers.transportModeTruck") }}</option>
+                      <option value="RAIL">{{ t("customers.transportModeRail") }}</option>
+                      <option value="BARGE">{{ t("customers.transportModeBarge") }}</option>
+                    </select>
+                  </label>
+                  <label><span>{{ t("customers.vesselName") }}</span><input v-model.trim="leg.vesselName" maxlength="160" /></label>
+                  <label><span>{{ t("customers.voyage") }}</span><input v-model.trim="leg.voyage" maxlength="120" /></label>
+                  <label><span>{{ t("customers.serviceRoute") }}</span><input v-model.trim="leg.service" maxlength="120" /></label>
+                  <label><span>{{ t("customers.routingLoadPort") }}</span><input v-model.trim="leg.loadPort" maxlength="160" /></label>
+                  <label><span>{{ t("customers.routingDischargePort") }}</span><input v-model.trim="leg.dischargePort" maxlength="160" /></label>
+                  <label><span>{{ t("customers.estimatedDeparture") }}</span><input v-model="leg.estimatedDeparture" type="datetime-local" /></label>
+                  <label><span>{{ t("customers.actualDeparture") }}</span><input v-model="leg.actualDeparture" type="datetime-local" /></label>
+                  <label><span>{{ t("customers.estimatedArrival") }}</span><input v-model="leg.estimatedArrival" type="datetime-local" /></label>
+                  <label><span>{{ t("customers.actualArrival") }}</span><input v-model="leg.actualArrival" type="datetime-local" /></label>
+                </div>
+              </article>
+            </div>
+            <p v-else class="manual-empty-copy">{{ t("customers.manualRoutingEmpty") }}</p>
+            <button type="button" class="manual-add-button" @click="addManualRoutingLeg">
+              + {{ t("customers.addRoutingLeg") }}
+            </button>
+          </section>
+
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>06</b><strong>{{ t("customers.manualSectionContainers") }}</strong></span>
+              <small>{{ t("customers.manualContainerHint") }}</small>
+            </header>
+            <div v-if="shipmentCreateForm.containers.length" class="manual-repeat-list">
+              <article v-for="(container, index) in shipmentCreateForm.containers" :key="container.key" class="manual-repeat-card">
+                <header>
+                  <span><b>{{ t("customers.containerNumberIndex", { number: index + 1 }) }}</b></span>
+                  <button type="button" class="manual-remove-button" @click="removeManualListItem('containers', index)">{{ t("customers.removeItem") }}</button>
+                </header>
+                <div class="manual-entry-grid">
+                  <label><span>{{ t("customers.containerNumber") }}</span><input v-model.trim="container.number" maxlength="40" /></label>
+                  <label><span>{{ t("customers.containerType") }}</span><input v-model.trim="container.type" list="manual-container-type-options" maxlength="40" /></label>
+                  <label><span>{{ t("customers.transportMode") }}</span><input v-model.trim="container.transportMode" maxlength="40" /></label>
+                  <label><span>{{ t("customers.trafficTerm") }}</span><input v-model.trim="container.trafficTerm" maxlength="80" /></label>
+                  <label><span>{{ t("customers.currentLocation") }}</span><input v-model.trim="container.currentLocation" maxlength="160" /></label>
+                  <label><span>{{ t("customers.latestEventName") }}</span><input v-model.trim="container.latestEvent" maxlength="160" /></label>
+                  <label><span>{{ t("customers.latestEventTime") }}</span><input v-model="container.latestEventTime" type="datetime-local" /></label>
+                </div>
+              </article>
+            </div>
+            <p v-else class="manual-empty-copy">{{ t("customers.manualContainerEmpty") }}</p>
+            <button type="button" class="manual-add-button" @click="addManualContainer">
+              + {{ t("customers.addContainer") }}
+            </button>
+          </section>
+
+          <label class="manual-shipment-note"><span>{{ t("customers.shipmentNote") }}</span><textarea v-model="shipmentCreateForm.note" maxlength="2000"></textarea></label>
           <div class="customer-dialog-actions">
-            <button type="button" @click="shipmentCreateDialogOpen = false">{{ t("customers.cancel") }}</button>
+            <button type="button" @click="closeShipmentCreateDialog">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="creatingShipment">{{ creatingShipment ? t("customers.savingShipment") : t("customers.createShipment") }}</button>
           </div>
         </form>
@@ -1380,7 +1604,22 @@ const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const transferForm = reactive({ targetAgentId: null });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
-const shipmentCreateForm = reactive({ carrier: "COSCO", referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
+let manualEntryKeySeed = 0;
+const manualServiceOptions = [
+  { value: "OCEAN", labelKey: "customers.serviceOcean" },
+  { value: "INLAND", labelKey: "customers.serviceInland" },
+  { value: "CUSTOMS", labelKey: "customers.serviceCustoms" },
+  { value: "WAREHOUSE", labelKey: "customers.serviceWarehouse" }
+];
+const shipmentCreateForm = reactive({
+  carrier: "COSCO",
+  referenceType: "BOOKING",
+  referenceNo: "",
+  trackingStatus: "",
+  note: "",
+  ...emptyManualShipmentFields(),
+  ...emptyDetailedManualShipmentFields()
+});
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 let shipmentRequestSequence = 0;
 let shipmentListRequestSequence = 0;
@@ -2890,17 +3129,229 @@ function openShipmentDetail(shipment) {
   navigateToShipmentDetail(shipment);
 }
 
+function nextManualEntryKey(prefix) {
+  manualEntryKeySeed += 1;
+  return `${prefix}-${manualEntryKeySeed}`;
+}
+
+function createManualRouteNode(locationType, options = {}) {
+  return {
+    key: nextManualEntryKey("route"),
+    locationType,
+    city: "",
+    countryCode: "",
+    facilityCode: "",
+    event: "",
+    estimatedTime: "",
+    actualTime: "",
+    timezone: "",
+    required: options.required === true,
+    optional: options.optional === true
+  };
+}
+
+function createManualContainerType() {
+  return {
+    key: nextManualEntryKey("container-type"),
+    type: "",
+    quantity: 1
+  };
+}
+
+function createManualRoutingLeg() {
+  const loadingPort = shipmentCreateForm.routeNodes
+    .find((node) => ["FPOL", "POL"].includes(node.locationType))?.city || "";
+  const dischargePort = shipmentCreateForm.routeNodes
+    .find((node) => ["LPOD", "POD"].includes(node.locationType))?.city || "";
+  return {
+    key: nextManualEntryKey("routing-leg"),
+    mode: "SEA",
+    vesselName: "",
+    service: "",
+    voyage: "",
+    loadPort: loadingPort,
+    loadCountryCode: "",
+    dischargePort,
+    dischargeCountryCode: "",
+    estimatedDeparture: "",
+    actualDeparture: "",
+    estimatedArrival: "",
+    actualArrival: "",
+    masterBill: ""
+  };
+}
+
+function createManualContainer() {
+  return {
+    key: nextManualEntryKey("container"),
+    number: "",
+    type: shipmentCreateForm.containerTypes[0]?.type || "",
+    transportMode: "",
+    trafficTerm: shipmentCreateForm.trafficTerm || "",
+    currentLocation: "",
+    latestEvent: "",
+    latestEventTime: ""
+  };
+}
+
+function emptyDetailedManualShipmentFields() {
+  return {
+    bookingNumber: "",
+    billOfLading: "",
+    trafficTerm: "",
+    serviceScopes: ["OCEAN"],
+    estimatedDelivery: "",
+    latestEventName: "",
+    latestEventTime: "",
+    latestEventLocation: "",
+    routeNodes: [
+      createManualRouteNode("POR", { required: true }),
+      createManualRouteNode("FPOL", { required: true }),
+      createManualRouteNode("LPOD", { required: true }),
+      createManualRouteNode("FND", { required: true })
+    ],
+    routingLegs: [],
+    containerTypes: [createManualContainerType()],
+    containers: []
+  };
+}
+
+function manualRouteNodeLabel(locationType) {
+  const keys = {
+    POR: "customers.routePlaceOfReceipt",
+    FPOL: "customers.routeFirstLoadingPort",
+    LPOD: "customers.routeLastDischargePort",
+    FND: "customers.routeFinalDestination",
+    TSP: "customers.routeTransshipment"
+  };
+  return t(keys[locationType] || "customers.routeTransshipment");
+}
+
+function addManualTransshipment() {
+  const node = createManualRouteNode("TSP", { optional: true });
+  const finalDischargeIndex = shipmentCreateForm.routeNodes
+    .findIndex((item) => ["LPOD", "POD"].includes(item.locationType));
+  const insertAt = finalDischargeIndex < 0
+    ? Math.max(0, shipmentCreateForm.routeNodes.length - 1)
+    : finalDischargeIndex;
+  shipmentCreateForm.routeNodes.splice(insertAt, 0, node);
+}
+
+function removeManualRouteNode(index) {
+  const node = shipmentCreateForm.routeNodes[index];
+  if (!node?.optional) return;
+  shipmentCreateForm.routeNodes.splice(index, 1);
+}
+
+function addManualContainerType() {
+  shipmentCreateForm.containerTypes.push(createManualContainerType());
+}
+
+function addManualRoutingLeg() {
+  shipmentCreateForm.routingLegs.push(createManualRoutingLeg());
+}
+
+function addManualContainer() {
+  shipmentCreateForm.containers.push(createManualContainer());
+}
+
+function removeManualListItem(field, index) {
+  if (!["containerTypes", "routingLegs", "containers"].includes(field)) return;
+  shipmentCreateForm[field].splice(index, 1);
+}
+
+function manualRowHasValue(item, ignored = ["key"]) {
+  return Object.entries(item || {}).some(([key, value]) => (
+    !ignored.includes(key)
+    && value !== null
+    && value !== undefined
+    && String(value).trim() !== ""
+  ));
+}
+
+function stripManualRowState(item) {
+  return Object.fromEntries(
+    Object.entries(item || {}).filter(([key]) =>
+      !["key", "required", "optional"].includes(key)
+    )
+  );
+}
+
+function buildManualShipmentPayload(form) {
+  const routeNodes = form.routeNodes.map((item) => {
+    const node = stripManualRowState(item);
+    return {
+      ...node,
+      countryCode: String(node.countryCode || "").trim().toUpperCase()
+    };
+  });
+  const firstLoadingPort = routeNodes.find((node) =>
+    ["FPOL", "POL"].includes(node.locationType)
+  );
+  const lastDischargePort = routeNodes.find((node) =>
+    ["LPOD", "POD"].includes(node.locationType)
+  );
+  const containerTypes = form.containerTypes
+    .map((item) => ({
+      type: String(item.type || "").trim().toUpperCase(),
+      quantity: Number(item.quantity || 0)
+    }))
+    .filter((item) => item.type && item.quantity > 0);
+  const volume = containerTypes
+    .map((item) => `${item.type} × ${item.quantity}`)
+    .join(" · ");
+  const routingLegs = form.routingLegs
+    .filter((item) => manualRowHasValue(item, ["key", "mode"]))
+    .map(stripManualRowState);
+  const containers = form.containers
+    .filter((item) => manualRowHasValue(item))
+    .map(stripManualRowState);
+
+  return {
+    ...form,
+    trackingStatus: form.latestEventName,
+    currentLocation: form.latestEventLocation,
+    portOfLoading: firstLoadingPort?.city || "",
+    portOfDischarge: lastDischargePort?.city || "",
+    volume,
+    bookingNumber: form.bookingNumber
+      || (form.referenceType === "BOOKING" ? form.referenceNo : ""),
+    billOfLading: form.billOfLading
+      || (form.referenceType === "BILLOFLADING" ? form.referenceNo : ""),
+    serviceScopes: [...form.serviceScopes],
+    routeNodes,
+    routingLegs,
+    containerTypes,
+    containers
+  };
+}
+
+function resetShipmentCreateForm() {
+  Object.assign(shipmentCreateForm, {
+    carrier: "COSCO",
+    referenceType: "BOOKING",
+    referenceNo: "",
+    trackingStatus: "",
+    note: "",
+    ...emptyManualShipmentFields(),
+    ...emptyDetailedManualShipmentFields()
+  });
+}
+
+function closeShipmentCreateDialog() {
+  if (creatingShipment.value) return;
+  shipmentCreateDialogOpen.value = false;
+  resetShipmentCreateForm();
+}
+
 async function createShipment() {
   if (creatingShipment.value) return;
   creatingShipment.value = true;
   try {
-    await createBusinessShipment({ ...shipmentCreateForm });
+    await createBusinessShipment(buildManualShipmentPayload(shipmentCreateForm));
     shipmentPage.value = 1;
     await loadAvailableShipments();
-    shipmentCreateForm.referenceNo = "";
-    shipmentCreateForm.trackingStatus = "";
-    shipmentCreateForm.note = "";
-    Object.assign(shipmentCreateForm, emptyManualShipmentFields());
+    resetShipmentCreateForm();
     shipmentCreateDialogOpen.value = false;
     showSuccess("customers.shipmentCreated");
   } catch (error) {
@@ -4828,6 +5279,7 @@ function showError(error, fallbackKey) {
   font-weight: 800;
 }
 .customer-dialog-form input,
+.customer-dialog-form select,
 .customer-dialog-form textarea,
 .customer-note-editor textarea {
   width: 100%;
@@ -4851,6 +5303,7 @@ function showError(error, fallbackKey) {
   line-height: 1.5;
 }
 .customer-dialog-form input:focus,
+.customer-dialog-form select:focus,
 .customer-dialog-form textarea:focus {
   border-color: #4086d2;
   outline: 0;
@@ -4907,6 +5360,253 @@ function showError(error, fallbackKey) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+
+.manual-shipment-dialog {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: min(92vh, 980px);
+  padding: 24px 26px 0;
+  overflow: hidden;
+}
+
+.manual-shipment-dialog > p {
+  max-width: 900px;
+}
+
+.manual-shipment-form {
+  min-height: 0;
+  max-height: calc(min(92vh, 980px) - 132px);
+  padding: 2px 8px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.manual-required-hint {
+  padding: 10px 12px;
+  border: 1px solid #f1d59b;
+  border-radius: 9px;
+  color: #895b14 !important;
+  background: #fff9eb;
+  font-size: 11px;
+}
+
+.manual-entry-section {
+  display: grid;
+  padding: 16px;
+  border: 1px solid #dbe6f0;
+  border-radius: 12px;
+  background: #f9fbfd;
+  gap: 14px;
+}
+
+.manual-entry-section-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.manual-entry-section-head > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.manual-entry-section-head > span > b {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #2474c8;
+  background: #eaf4ff;
+  place-items: center;
+  font-size: 10px;
+}
+
+.manual-entry-section-head strong {
+  color: #1d3852;
+  font-size: 14px;
+}
+
+.manual-entry-section-head > small {
+  color: #7a8ea2;
+  font-size: 10px;
+  text-align: right;
+}
+
+.manual-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-entry-grid.is-route {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.manual-route-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-repeat-list {
+  display: grid;
+  gap: 12px;
+}
+
+.manual-repeat-card {
+  display: grid;
+  padding: 13px;
+  border: 1px solid #d9e5f0;
+  border-radius: 10px;
+  background: #fff;
+  gap: 12px;
+}
+
+.manual-repeat-card > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manual-repeat-card > header > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.manual-repeat-card > header b {
+  color: #234867;
+  font-size: 12px;
+}
+
+.manual-repeat-card > header small {
+  color: #3f83c5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.manual-add-button,
+.manual-remove-button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid #bfd4e8;
+  border-radius: 7px;
+  color: #276da8;
+  background: #f4f9ff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manual-add-button {
+  justify-self: start;
+}
+
+.manual-remove-button {
+  flex: 0 0 auto;
+  border-color: #ead0d2;
+  color: #a94c56;
+  background: #fff8f8;
+}
+
+.manual-service-field {
+  display: grid;
+  gap: 8px;
+}
+
+.manual-service-field > span {
+  color: #435d76;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.manual-service-field > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manual-service-choice {
+  display: inline-flex !important;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d2dfeb;
+  border-radius: 8px;
+  background: #fff;
+  align-items: center;
+  gap: 7px !important;
+  cursor: pointer;
+}
+
+.manual-service-choice input {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  accent-color: #2877c8;
+}
+
+.manual-service-choice > span {
+  color: #3a5873 !important;
+  font-size: 11px !important;
+}
+
+.manual-compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.manual-compact-row {
+  display: grid;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f0;
+  border-radius: 9px;
+  background: #fff;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, .35fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.manual-empty-copy {
+  padding: 14px;
+  border: 1px dashed #cad9e8;
+  border-radius: 9px;
+  color: #8193a6 !important;
+  background: #fff;
+  text-align: center;
+  font-size: 11px;
+}
+
+.manual-shipment-note {
+  padding: 14px;
+  border: 1px solid #dbe6f0;
+  border-radius: 10px;
+  background: #f9fbfd;
+}
+
+.manual-shipment-form > .customer-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin: 0 -8px 0 0;
+  padding: 13px 0 16px;
+  border-top: 1px solid #dce6ef;
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(8px);
+}
+
+.manual-shipment-form > .customer-dialog-actions button {
+  flex: 0 0 auto;
+  min-width: 124px;
+}
+
 .shipment-detail-card :deep(.el-card__body) {
   padding: 18px;
 }
@@ -5317,6 +6017,38 @@ button:disabled {
   }
   .customer-manual-fields {
     grid-template-columns: 1fr;
+  }
+  .manual-shipment-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 18px 16px 0;
+  }
+  .manual-shipment-form {
+    max-height: calc(100vh - 132px);
+  }
+  .manual-entry-grid,
+  .manual-entry-grid.is-route,
+  .manual-route-list {
+    grid-template-columns: 1fr;
+  }
+  .manual-entry-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .manual-entry-section-head > small {
+    text-align: left;
+  }
+  .manual-compact-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .manual-compact-row .manual-remove-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .manual-shipment-form > .customer-dialog-actions button {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 

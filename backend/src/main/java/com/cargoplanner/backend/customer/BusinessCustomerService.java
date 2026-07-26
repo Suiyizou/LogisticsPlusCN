@@ -1444,6 +1444,38 @@ public class BusinessCustomerService {
     String currentLocation = normalizeManualField(request.currentLocation(), 160);
     String volume = normalizeManualField(request.volume(), 80);
     String clientCode = normalizeManualField(request.clientNameCode(), 160);
+    String bookingNumber = normalizeManualField(request.bookingNumber(), 160);
+    String billOfLading = normalizeManualField(request.billOfLading(), 160);
+    String trafficTerm = normalizeManualField(request.trafficTerm(), 80);
+    String estimatedDelivery = normalizeManualField(request.estimatedDelivery(), 80);
+    String latestEventName = normalizeManualField(request.latestEventName(), 160);
+    String latestEventTime = normalizeManualField(request.latestEventTime(), 80);
+    String latestEventLocation = normalizeManualField(request.latestEventLocation(), 160);
+    List<String> serviceScopes = normalizeManualServiceScopes(request.serviceScopes());
+    List<ManualRouteNodeRequest> routeNodes = normalizeManualRouteNodes(request.routeNodes());
+    List<ManualRoutingLegRequest> requestedRoutingLegs =
+        normalizeManualRoutingLegs(request.routingLegs());
+    List<ManualContainerSummaryRequest> containerTypes =
+        normalizeManualContainerTypes(request.containerTypes());
+    List<ManualContainerRequest> requestedContainers =
+        normalizeManualContainers(request.containers());
+    validateDetailedManualSnapshot(request, routeNodes, containerTypes);
+
+    ManualRouteNodeRequest placeOfReceipt = manualRouteNode(routeNodes, "POR");
+    ManualRouteNodeRequest firstLoadingPort = manualRouteNode(routeNodes, "FPOL", "POL");
+    ManualRouteNodeRequest lastDischargePort = manualRouteNode(routeNodes, "LPOD", "POD");
+    ManualRouteNodeRequest finalDestination = manualRouteNode(routeNodes, "FND");
+    if (firstLoadingPort != null) loadingPort = firstLoadingPort.city();
+    if (lastDischargePort != null) dischargePort = lastDischargePort.city();
+    if (bookingNumber == null && "BOOKING".equals(referenceType)) bookingNumber = referenceNo;
+    if (billOfLading == null && "BILLOFLADING".equals(referenceType)) billOfLading = referenceNo;
+    if (latestEventName == null) latestEventName = status;
+    if (latestEventLocation == null) latestEventLocation = currentLocation;
+    if (latestEventTime == null) {
+      latestEventTime = actualDelivery != null
+          ? actualDelivery
+          : actualArrival != null ? actualArrival : actualDeparture;
+    }
 
     jdbcTemplate.update(
         """
@@ -1470,29 +1502,90 @@ public class BusinessCustomerService {
     tracking.put("number", referenceNo);
     tracking.put("status", status);
     ObjectNode summary = objectField(snapshot, "summary");
-    if ("BOOKING".equals(referenceType)) {
-      ArrayNode bookingNumbers = arrayField(summary, "bookingNumbers");
-      boolean alreadyPresent = false;
-      for (JsonNode bookingNumber : bookingNumbers) {
-        if (referenceNo.equals(bookingNumber.asText())) {
-          alreadyPresent = true;
-          break;
-        }
-      }
-      if (!alreadyPresent) bookingNumbers.add(referenceNo);
-    }
-    else summary.put("billOfLading", referenceNo);
+    if (bookingNumber != null) addUniqueManualText(arrayField(summary, "bookingNumbers"), bookingNumber);
+    if (billOfLading != null) summary.put("billOfLading", billOfLading);
     ObjectNode latestEvent = objectField(summary, "latestEvent");
-    latestEvent.put("name", status);
-    putManualField(latestEvent, "location", currentLocation);
-    putManualField(latestEvent, "occurredAt", actualDelivery != null
-        ? actualDelivery : actualArrival != null ? actualArrival : actualDeparture);
-    if (loadingPort != null) objectField(summary, "origin").put("name", loadingPort);
-    if (dischargePort != null) objectField(summary, "destination").put("name", dischargePort);
+    latestEvent.put("name", latestEventName);
+    putManualField(latestEvent, "location", latestEventLocation);
+    putManualField(latestEvent, "occurredAt", latestEventTime);
+    String originName = placeOfReceipt != null ? placeOfReceipt.city() : loadingPort;
+    String destinationName = finalDestination != null ? finalDestination.city() : dischargePort;
+    if (originName != null) objectField(summary, "origin").put("name", originName);
+    if (destinationName != null) objectField(summary, "destination").put("name", destinationName);
+    if (placeOfReceipt != null && placeOfReceipt.countryCode() != null) {
+      objectField(summary, "origin").put("countryCode", placeOfReceipt.countryCode());
+    }
+    if (finalDestination != null && finalDestination.countryCode() != null) {
+      objectField(summary, "destination").put("countryCode", finalDestination.countryCode());
+    }
     putManualField(summary, "vesselVoyage", vesselVoyage);
     putManualField(summary, "volume", volume);
+    putManualField(summary, "trafficTerm", trafficTerm);
+    if (serviceScopes != null) {
+      ArrayNode scopes = summary.putArray("serviceScopes");
+      serviceScopes.forEach(scopes::add);
+    }
+    if (containerTypes != null) {
+      ArrayNode containerSummary = summary.putArray("containers");
+      for (ManualContainerSummaryRequest item : containerTypes) {
+        ObjectNode value = containerSummary.addObject();
+        value.put("containerType", item.type());
+        value.put("quantity", item.quantity());
+      }
+    }
 
-    if (vesselVoyage != null || loadingPort != null || dischargePort != null
+    ObjectNode references = objectField(snapshot, "references");
+    if (bookingNumber != null) {
+      addUniqueManualText(arrayField(references, "bookingNumbers"), bookingNumber);
+    }
+    if (billOfLading != null) references.put("masterBill", billOfLading);
+
+    if (routeNodes != null && !routeNodes.isEmpty()) {
+      ArrayNode route = snapshot.putArray("route");
+      for (int index = 0; index < routeNodes.size(); index += 1) {
+        ManualRouteNodeRequest item = routeNodes.get(index);
+        ObjectNode node = route.addObject();
+        node.put("sequence", index + 1);
+        node.put("locationType", item.locationType());
+        node.put("city", item.city());
+        putManualField(node, "countryCode", item.countryCode());
+        putManualField(node, "facilityCode", item.facilityCode());
+        putManualField(node, "event", manualRouteEvent(item));
+        putManualField(node, "estimatedTime", manualRouteEstimatedTime(
+            item, etd, eta, estimatedDelivery
+        ));
+        putManualField(node, "actualTime", manualRouteActualTime(
+            item, actualDeparture, actualArrival, actualDelivery
+        ));
+        putManualField(node, "timezone", item.timezone());
+        if (latestEventLocation != null
+            && latestEventLocation.equalsIgnoreCase(item.city())) {
+          node.put("active", true);
+        }
+      }
+    }
+
+    if (requestedRoutingLegs != null && !requestedRoutingLegs.isEmpty()) {
+      ArrayNode routingLegs = snapshot.putArray("routingLegs");
+      for (int index = 0; index < requestedRoutingLegs.size(); index += 1) {
+        ManualRoutingLegRequest item = requestedRoutingLegs.get(index);
+        ObjectNode leg = routingLegs.addObject();
+        leg.put("sequence", index + 1);
+        putManualField(leg, "mode", item.mode());
+        putManualField(leg, "vesselName", item.vesselName());
+        putManualField(leg, "service", item.service());
+        putManualField(leg, "voyage", item.voyage());
+        putManualField(leg, "loadPort", item.loadPort());
+        putManualField(leg, "loadCountryCode", item.loadCountryCode());
+        putManualField(leg, "dischargePort", item.dischargePort());
+        putManualField(leg, "dischargeCountryCode", item.dischargeCountryCode());
+        putManualField(leg, "estimatedDeparture", item.estimatedDeparture());
+        putManualField(leg, "actualDeparture", item.actualDeparture());
+        putManualField(leg, "estimatedArrival", item.estimatedArrival());
+        putManualField(leg, "actualArrival", item.actualArrival());
+        putManualField(leg, "masterBill", item.masterBill());
+      }
+    } else if (vesselVoyage != null || loadingPort != null || dischargePort != null
         || etd != null || eta != null || actualDeparture != null || actualArrival != null) {
       ArrayNode routingLegs = arrayField(snapshot, "routingLegs");
       ObjectNode leg = routingLegs.size() > 0 && routingLegs.get(0).isObject()
@@ -1505,15 +1598,45 @@ public class BusinessCustomerService {
       putManualField(leg, "actualArrival", actualArrival);
       putManualField(leg, "portOfLoading", loadingPort);
       putManualField(leg, "portOfDischarge", dischargePort);
+      putManualField(leg, "loadPort", loadingPort);
+      putManualField(leg, "dischargePort", dischargePort);
+    }
+    if (requestedContainers != null) {
+      ArrayNode containers = snapshot.putArray("containers");
+      for (ManualContainerRequest item : requestedContainers) {
+        ObjectNode container = containers.addObject();
+        putManualField(container, "number", item.number());
+        putManualField(container, "type", item.type());
+        putManualField(container, "transportMode", item.transportMode());
+        putManualField(container, "trafficTerm", item.trafficTerm());
+        putManualField(container, "currentLocation", item.currentLocation());
+        putManualField(container, "latestEvent", item.latestEvent());
+        putManualField(container, "latestEventTime", item.latestEventTime());
+        container.putArray("milestones");
+        container.put("detailSource", "BUSINESS_MANUAL");
+      }
     }
     if (etd != null || eta != null || actualDeparture != null
-        || actualArrival != null || actualDelivery != null) {
+        || actualArrival != null || actualDelivery != null || estimatedDelivery != null) {
       ObjectNode keyTimes = objectField(snapshot, "keyTimes");
-      if (etd != null) objectField(keyTimes, "estimatedDeparture").put("time", etd);
-      if (eta != null) objectField(keyTimes, "estimatedFinalArrival").put("time", eta);
+      if (etd != null) {
+        ObjectNode departure = objectField(keyTimes, "estimatedDeparture");
+        departure.put("time", etd);
+        if (loadingPort != null) departure.put("location", loadingPort);
+      }
+      if (eta != null) {
+        ObjectNode arrival = objectField(keyTimes, "estimatedFinalArrival");
+        arrival.put("time", eta);
+        if (dischargePort != null) arrival.put("location", dischargePort);
+      }
       if (actualDeparture != null) objectField(keyTimes, "actualDeparture").put("time", actualDeparture);
       if (actualArrival != null) objectField(keyTimes, "actualArrival").put("time", actualArrival);
       if (actualDelivery != null) objectField(keyTimes, "actualDelivery").put("time", actualDelivery);
+      if (estimatedDelivery != null) {
+        ObjectNode delivery = objectField(keyTimes, "estimatedDelivery");
+        delivery.put("time", estimatedDelivery);
+        if (destinationName != null) delivery.put("location", destinationName);
+      }
     }
     ArrayNode extra = arrayField(snapshot, "extraInformation");
     addManualExtra(extra, "vesselVoyage", vesselVoyage);
@@ -1526,6 +1649,8 @@ public class BusinessCustomerService {
     addManualExtra(extra, "actualDelivery", actualDelivery);
     addManualExtra(extra, "currentLocation", currentLocation);
     addManualExtra(extra, "volume", volume);
+    addManualExtra(extra, "trafficTerm", trafficTerm);
+    addManualExtra(extra, "estimatedDelivery", estimatedDelivery);
 
     String snapshotJson;
     try {
@@ -1603,6 +1728,242 @@ public class BusinessCustomerService {
         "UPDATE cp_customer_shipment_access SET publication_status = 'DRAFT', published_at = NULL, published_by = NULL WHERE shipment_id = ?",
         shipmentId
     );
+  }
+
+  private List<String> normalizeManualServiceScopes(List<String> requested) {
+    if (requested == null) return null;
+    if (requested.size() > 12) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Too many shipment service types");
+    }
+    LinkedHashSet<String> values = new LinkedHashSet<>();
+    for (String requestedValue : requested) {
+      String value = normalizeManualField(requestedValue, 40);
+      if (value != null) values.add(value.toUpperCase(Locale.ROOT));
+    }
+    return List.copyOf(values);
+  }
+
+  private void validateDetailedManualSnapshot(
+      CreateBusinessShipmentRequest request,
+      List<ManualRouteNodeRequest> routeNodes,
+      List<ManualContainerSummaryRequest> containerTypes
+  ) {
+    if (request.routeNodes() != null) {
+      Set<String> types = routeNodes == null
+          ? Set.of()
+          : routeNodes.stream()
+              .map(ManualRouteNodeRequest::locationType)
+              .collect(java.util.stream.Collectors.toSet());
+      if (!types.containsAll(List.of("POR", "FPOL", "LPOD", "FND"))) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Manual route must include POR, FPOL, LPOD, and FND"
+        );
+      }
+    }
+    if (request.containerTypes() != null
+        && (containerTypes == null || containerTypes.isEmpty())) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "At least one container type and quantity is required"
+      );
+    }
+  }
+
+  private List<ManualRouteNodeRequest> normalizeManualRouteNodes(
+      List<ManualRouteNodeRequest> requested
+  ) {
+    if (requested == null) return null;
+    if (requested.size() > 20) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A manual route cannot exceed 20 nodes");
+    }
+    List<ManualRouteNodeRequest> values = new ArrayList<>();
+    for (ManualRouteNodeRequest item : requested) {
+      if (item == null) continue;
+      String city = normalizeManualField(item.city(), 160);
+      if (city == null) continue;
+      String locationType = normalizeManualField(item.locationType(), 32);
+      values.add(new ManualRouteNodeRequest(
+          locationType == null ? "WAYPOINT" : locationType.toUpperCase(Locale.ROOT),
+          city,
+          normalizeCountryCode(item.countryCode()),
+          normalizeManualField(item.facilityCode(), 160),
+          normalizeManualField(item.event(), 160),
+          normalizeManualField(item.estimatedTime(), 80),
+          normalizeManualField(item.actualTime(), 80),
+          normalizeManualField(item.timezone(), 40)
+      ));
+    }
+    return List.copyOf(values);
+  }
+
+  private List<ManualRoutingLegRequest> normalizeManualRoutingLegs(
+      List<ManualRoutingLegRequest> requested
+  ) {
+    if (requested == null) return null;
+    if (requested.size() > 50) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A manual shipment cannot exceed 50 routing legs");
+    }
+    List<ManualRoutingLegRequest> values = new ArrayList<>();
+    for (ManualRoutingLegRequest item : requested) {
+      if (item == null) continue;
+      String mode = normalizeManualField(item.mode(), 40);
+      String vesselName = normalizeManualField(item.vesselName(), 160);
+      String service = normalizeManualField(item.service(), 120);
+      String voyage = normalizeManualField(item.voyage(), 120);
+      String loadPort = normalizeManualField(item.loadPort(), 160);
+      String dischargePort = normalizeManualField(item.dischargePort(), 160);
+      String etd = normalizeManualField(item.estimatedDeparture(), 80);
+      String atd = normalizeManualField(item.actualDeparture(), 80);
+      String eta = normalizeManualField(item.estimatedArrival(), 80);
+      String ata = normalizeManualField(item.actualArrival(), 80);
+      String masterBill = normalizeManualField(item.masterBill(), 160);
+      if (mode == null && vesselName == null && service == null && voyage == null
+          && loadPort == null && dischargePort == null && etd == null && atd == null
+          && eta == null && ata == null && masterBill == null) {
+        continue;
+      }
+      values.add(new ManualRoutingLegRequest(
+          mode == null ? null : mode.toUpperCase(Locale.ROOT),
+          vesselName,
+          service,
+          voyage,
+          loadPort,
+          normalizeCountryCode(item.loadCountryCode()),
+          dischargePort,
+          normalizeCountryCode(item.dischargeCountryCode()),
+          etd,
+          atd,
+          eta,
+          ata,
+          masterBill
+      ));
+    }
+    return List.copyOf(values);
+  }
+
+  private List<ManualContainerSummaryRequest> normalizeManualContainerTypes(
+      List<ManualContainerSummaryRequest> requested
+  ) {
+    if (requested == null) return null;
+    if (requested.size() > 20) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A manual shipment cannot exceed 20 container types");
+    }
+    List<ManualContainerSummaryRequest> values = new ArrayList<>();
+    for (ManualContainerSummaryRequest item : requested) {
+      if (item == null) continue;
+      String type = normalizeManualField(item.type(), 40);
+      if (type == null) continue;
+      int quantity = item.quantity() == null ? 1 : item.quantity();
+      if (quantity < 1 || quantity > 999) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Container quantity must be between 1 and 999");
+      }
+      values.add(new ManualContainerSummaryRequest(
+          type.toUpperCase(Locale.ROOT),
+          quantity
+      ));
+    }
+    return List.copyOf(values);
+  }
+
+  private List<ManualContainerRequest> normalizeManualContainers(
+      List<ManualContainerRequest> requested
+  ) {
+    if (requested == null) return null;
+    if (requested.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A manual shipment cannot exceed 500 containers");
+    }
+    List<ManualContainerRequest> values = new ArrayList<>();
+    for (ManualContainerRequest item : requested) {
+      if (item == null) continue;
+      String number = normalizeManualField(item.number(), 40);
+      String type = normalizeManualField(item.type(), 40);
+      String mode = normalizeManualField(item.transportMode(), 40);
+      String terms = normalizeManualField(item.trafficTerm(), 80);
+      String location = normalizeManualField(item.currentLocation(), 160);
+      String latestEvent = normalizeManualField(item.latestEvent(), 160);
+      String latestEventTime = normalizeManualField(item.latestEventTime(), 80);
+      if (number == null && type == null && mode == null && terms == null
+          && location == null && latestEvent == null && latestEventTime == null) {
+        continue;
+      }
+      values.add(new ManualContainerRequest(
+          number == null ? null : number.toUpperCase(Locale.ROOT),
+          type == null ? null : type.toUpperCase(Locale.ROOT),
+          mode == null ? null : mode.toUpperCase(Locale.ROOT),
+          terms,
+          location,
+          latestEvent,
+          latestEventTime
+      ));
+    }
+    return List.copyOf(values);
+  }
+
+  private String normalizeCountryCode(String value) {
+    String normalized = normalizeManualField(value, 2);
+    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+  }
+
+  private ManualRouteNodeRequest manualRouteNode(
+      List<ManualRouteNodeRequest> nodes,
+      String... locationTypes
+  ) {
+    if (nodes == null || nodes.isEmpty()) return null;
+    Set<String> expected = Set.of(locationTypes);
+    return nodes.stream()
+        .filter(node -> expected.contains(node.locationType()))
+        .findFirst()
+        .orElse(null);
+  }
+
+  private String manualRouteEvent(ManualRouteNodeRequest node) {
+    if (node.event() != null) return node.event();
+    return switch (node.locationType()) {
+      case "POR" -> "Place of Receipt";
+      case "FPOL", "POL" -> "Estimated Time of Departure";
+      case "LPOD", "POD" -> "Estimated Time of Arrival";
+      case "FND" -> "Cargo Pickup Estimated Time";
+      default -> "Transshipment";
+    };
+  }
+
+  private String manualRouteEstimatedTime(
+      ManualRouteNodeRequest node,
+      String estimatedDeparture,
+      String estimatedArrival,
+      String estimatedDelivery
+  ) {
+    if (node.estimatedTime() != null) return node.estimatedTime();
+    return switch (node.locationType()) {
+      case "FPOL", "POL" -> estimatedDeparture;
+      case "LPOD", "POD" -> estimatedArrival;
+      case "FND" -> estimatedDelivery;
+      default -> null;
+    };
+  }
+
+  private String manualRouteActualTime(
+      ManualRouteNodeRequest node,
+      String actualDeparture,
+      String actualArrival,
+      String actualDelivery
+  ) {
+    if (node.actualTime() != null) return node.actualTime();
+    return switch (node.locationType()) {
+      case "FPOL", "POL" -> actualDeparture;
+      case "LPOD", "POD" -> actualArrival;
+      case "FND" -> actualDelivery;
+      default -> null;
+    };
+  }
+
+  private void addUniqueManualText(ArrayNode values, String value) {
+    if (value == null) return;
+    for (JsonNode existing : values) {
+      if (value.equalsIgnoreCase(existing.asText())) return;
+    }
+    values.add(value);
   }
 
   private String normalizeManualField(String value, int maxLength) {
@@ -1873,7 +2234,19 @@ public class BusinessCustomerService {
         || hasText(request.actualDelivery())
         || hasText(request.currentLocation())
         || hasText(request.volume())
-        || hasText(request.clientNameCode());
+        || hasText(request.clientNameCode())
+        || hasText(request.bookingNumber())
+        || hasText(request.billOfLading())
+        || hasText(request.trafficTerm())
+        || hasText(request.estimatedDelivery())
+        || hasText(request.latestEventName())
+        || hasText(request.latestEventTime())
+        || hasText(request.latestEventLocation())
+        || (request.serviceScopes() != null && !request.serviceScopes().isEmpty())
+        || (request.routeNodes() != null && !request.routeNodes().isEmpty())
+        || (request.routingLegs() != null && !request.routingLegs().isEmpty())
+        || (request.containerTypes() != null && !request.containerTypes().isEmpty())
+        || (request.containers() != null && !request.containers().isEmpty());
   }
 
   private boolean hasText(String value) {

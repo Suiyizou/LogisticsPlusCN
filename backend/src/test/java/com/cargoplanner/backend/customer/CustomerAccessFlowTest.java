@@ -921,14 +921,50 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void createsUpdatesAndDeletesManagedShipmentRecords() {
+  void createsUpdatesAndDeletesManagedShipmentRecords() throws Exception {
     Map<String, Object> created = customerService.createShipment(
         new CreateBusinessShipmentRequest(
             "COSCO", "BOOKING", "NEW-BOOKING-100", "Booking confirmed", "Created manually",
             "LJSH26050019", "OOCL POLAND 059E-35", "Shanghai", "Long Beach",
             "HW202600057-1", "2026-06-07", "2026-06-22",
             "2026-06-07 14:13:59", "2026-06-22 05:33:58", "2026-06-29 18:32:00",
-            "Pacific Container Terminal", "5*40HC", "HAYDEN"
+            "Pacific Container Terminal", "5*40HC", "HAYDEN",
+            "NEW-BOOKING-100", "COSU6508205930", "CY | CY",
+            List.of("OCEAN", "INLAND"), "2026-06-30 08:00:00",
+            "Container discharged", "2026-06-22 05:33:58", "Long Beach",
+            List.of(
+                new ManualRouteNodeRequest(
+                    "POR", "Suzhou", "CN", "Suzhou Depot", null,
+                    null, null, null
+                ),
+                new ManualRouteNodeRequest(
+                    "FPOL", "Shanghai", "CN", "Yangshan Terminal", null,
+                    null, null, null
+                ),
+                new ManualRouteNodeRequest(
+                    "TSP", "Busan", "KR", "Busan New Port", "Transshipment",
+                    "2026-06-14 09:00:00", null, null
+                ),
+                new ManualRouteNodeRequest(
+                    "LPOD", "Long Beach", "US", "Pacific Container Terminal", null,
+                    null, null, null
+                ),
+                new ManualRouteNodeRequest(
+                    "FND", "Los Angeles", "US", "Los Angeles Depot", null,
+                    null, null, null
+                )
+            ),
+            List.of(new ManualRoutingLegRequest(
+                "SEA", "OOCL POLAND", "TP1", "059E-35",
+                "Shanghai", "CN", "Long Beach", "US",
+                "2026-06-07", "2026-06-07 14:13:59",
+                "2026-06-22", "2026-06-22 05:33:58", "COSU6508205930"
+            )),
+            List.of(new ManualContainerSummaryRequest("40HQ", 5)),
+            List.of(new ManualContainerRequest(
+                "TEMU6003424", "40HQ", "TRUCK", "CY | CY",
+                "Long Beach", "Container discharged", "2026-06-22 05:33:58"
+            ))
         ),
         business,
         "127.0.0.1"
@@ -953,6 +989,23 @@ class CustomerAccessFlowTest {
         .contains("2026-06-29 18:32:00")
         .contains("5*40HC")
         .doesNotContain("LJSH26050019", "HW202600057-1", "HAYDEN");
+    JsonNode detailedManualSnapshot = new ObjectMapper().readTree(manualSnapshot);
+    assertThat(detailedManualSnapshot.path("route").size()).isEqualTo(5);
+    assertThat(detailedManualSnapshot.path("route").get(0).path("locationType").asText())
+        .isEqualTo("POR");
+    assertThat(detailedManualSnapshot.path("route").get(2).path("city").asText())
+        .isEqualTo("Busan");
+    assertThat(detailedManualSnapshot.path("summary").path("trafficTerm").asText())
+        .isEqualTo("CY | CY");
+    assertThat(detailedManualSnapshot.path("summary").path("serviceScopes").size()).isEqualTo(2);
+    assertThat(detailedManualSnapshot.path("summary").path("containers").get(0)
+        .path("quantity").asInt()).isEqualTo(5);
+    assertThat(detailedManualSnapshot.path("routingLegs").get(0).path("mode").asText())
+        .isEqualTo("SEA");
+    assertThat(detailedManualSnapshot.path("containers").get(0).path("number").asText())
+        .isEqualTo("TEMU6003424");
+    assertThat(detailedManualSnapshot.path("keyTimes").path("estimatedDelivery")
+        .path("time").asText()).isEqualTo("2026-06-30 08:00:00");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT job_number FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
     )).isEqualTo("LJSH26050019");

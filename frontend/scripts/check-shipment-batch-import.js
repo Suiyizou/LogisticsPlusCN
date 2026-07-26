@@ -72,8 +72,9 @@ const businessCustomerApi = readFileSync(
   new URL("../src/services/businessCustomerApi.js", import.meta.url),
   "utf8"
 );
-assert.match(businessCustomerApi, /request\("\/business\/shipments"\)/);
+assert.match(businessCustomerApi, /request\(`\/business\/shipments\?\$\{query\}`\)/);
 assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}`\)/);
+assert.match(businessCustomerApi, /request\("\/business\/customers\/shipments", \{ method: "POST", body: payload \}\)/);
 assert.match(businessCustomerApi, /request\("\/business\/shipments\/batch-refresh"/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/snapshot/);
@@ -120,6 +121,32 @@ assert.match(manualRequestSource, /trackingStatus: detailForm\.trackingStatus/);
 assert.doesNotMatch(manualRequestSource, /note: detailForm\.note/);
 assert.doesNotMatch(manualRequestSource, /referenceNo: detailForm\.referenceNo/);
 assert.match(manualSaveSource, /Object\.assign\(detailForm, unsavedTicketFields\)/);
+
+const manualCreateDialogSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf('v-if="shipmentCreateDialogOpen"'),
+  businessCustomerPage.indexOf('<div v-if="toastMessage"')
+);
+assert.doesNotMatch(
+  manualCreateDialogSource,
+  /@click\.self="shipmentCreateDialogOpen = false"/
+);
+assert.match(manualCreateDialogSource, /@keydown\.esc\.stop\.prevent/);
+assert.match(manualCreateDialogSource, /v-for="\(node, index\) in shipmentCreateForm\.routeNodes"/);
+assert.match(manualCreateDialogSource, /:required="node\.required"/);
+assert.match(manualCreateDialogSource, /shipmentCreateForm\.containerTypes/);
+assert.match(manualCreateDialogSource, /shipmentCreateForm\.routingLegs/);
+assert.match(manualCreateDialogSource, /shipmentCreateForm\.containers/);
+
+const manualCreateSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf("function buildManualShipmentPayload"),
+  businessCustomerPage.indexOf("async function saveManualSnapshot")
+);
+assert.match(manualCreateSource, /trackingStatus: form\.latestEventName/);
+assert.match(manualCreateSource, /routeNodes,/);
+assert.match(manualCreateSource, /routingLegs,/);
+assert.match(manualCreateSource, /containerTypes,/);
+assert.match(manualCreateSource, /containers/);
+assert.match(manualCreateSource, /createBusinessShipment\(buildManualShipmentPayload\(shipmentCreateForm\)\)/);
 
 const shipmentSaveSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function saveShipmentDetail"),
