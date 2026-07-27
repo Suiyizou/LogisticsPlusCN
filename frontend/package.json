@@ -17,6 +17,7 @@
     "test:packing-single-layer-row-fill": "node scripts/check-packing-single-layer-row-fill.js",
     "test:packing-pallet-gap": "node scripts/check-packing-pallet-gap.js",
     "test:container-reference-data": "node scripts/check-container-reference-data.js",
+    "test:customer-batch-import": "node scripts/check-customer-batch-import.js",
     "test:shipment-batch-import": "node scripts/check-shipment-batch-import.js",
     "desktop:preview": "npm run build && electron .",
     "desktop:build": "npm run build && electron-builder --win nsis --x64"

@@ -123,6 +123,56 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void batchCustomerImportPreservesCompleteFieldsAndEnforcesPasswordRules() {
+    Map<String, Object> response = customerService.batchCreate(
+        new CustomerBatchImportRequest(
+            "customer-import.xlsx",
+            List.of(
+                new CustomerBatchImportItem(
+                    2,
+                    "batch-shipper",
+                    "StrongPass9",
+                    "Batch Shipper",
+                    "BATCH-001",
+                    "SHIPPER",
+                    "Imported from the standard template"
+                ),
+                new CustomerBatchImportItem(
+                    3,
+                    "weak-password",
+                    "lowercase",
+                    "Weak Password",
+                    "BATCH-002",
+                    "CONSIGNEE",
+                    null
+                )
+            )
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(response.get("created")).isEqualTo(1);
+    assertThat(response.get("failed")).isEqualTo(1);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
+    assertThat(items.get(0))
+        .containsEntry("status", "CREATED")
+        .containsEntry("displayName", "Batch Shipper")
+        .containsEntry("clientCode", "BATCH-001")
+        .containsEntry("partyRole", "SHIPPER");
+    assertThat(items.get(1).get("message").toString())
+        .contains("uppercase and lowercase");
+    assertThat(jdbcTemplate.queryForMap(
+        "SELECT display_name, client_code, party_role, remark FROM cp_customers WHERE username = ?",
+        "batch-shipper"
+    )).containsEntry("DISPLAY_NAME", "Batch Shipper")
+        .containsEntry("CLIENT_CODE", "BATCH-001")
+        .containsEntry("PARTY_ROLE", "SHIPPER")
+        .containsEntry("REMARK", "Imported from the standard template");
+  }
+
+  @Test
   void customerCodeLoginAndExplicitShipmentBindingEnforceOwnership() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest("acme-shipper", "SecurePass!23", "ACME Shipper", "SHIPPER"),

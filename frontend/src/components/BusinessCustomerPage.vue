@@ -994,15 +994,20 @@
         <p>{{ isEditMode ? t("customers.editDescription") : t("customers.createDescription") }}</p>
         <form class="customer-dialog-form" @submit.prevent="submitCustomerForm">
           <label><span>{{ t("customers.createDisplayName") }} <i class="required-star">*</i></span><input v-model.trim="createForm.displayName" :placeholder="t('customers.createDisplayNamePlaceholder')" required /></label>
-          <label><span>{{ t("customers.createAccount") }} <i class="required-star">*</i></span><input v-model.trim="createForm.username" :placeholder="t('customers.createAccountPlaceholder')" required /></label>
+          <label>
+            <span>{{ t("customers.createAccount") }} <i class="required-star">*</i></span>
+            <input v-model.trim="createForm.username" minlength="2" maxlength="64" :placeholder="t('customers.createAccountPlaceholder')" required />
+            <small class="customer-field-rule">{{ t("customers.usernameRule") }}</small>
+          </label>
           <label v-if="!isEditMode">
             <span>{{ t("customers.createPassword") }} <i class="required-star">*</i></span>
-            <input v-model="createForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+            <input v-model="createForm.password" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+            <small class="customer-field-rule">{{ t("customers.passwordRule") }}</small>
           </label>
           <label>
             <span>{{ t("customers.clientCode") }} <i class="required-star">*</i></span>
             <input v-model.trim="createForm.userCode" :placeholder="t('customers.clientCodePlaceholder')" required />
-            <small class="customer-code-unique-hint">{{ t("customers.customerCodeUniqueHint") }}</small>
+            <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
           </label>
           <label>
             <span>{{ t("customers.createPartyRole") }} <i class="required-star">*</i></span>
@@ -1028,43 +1033,160 @@
     </div>
 
     <div v-if="batchImportDialogOpen" class="customer-code-overlay" role="presentation">
-      <section class="customer-code-dialog customer-batch-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchImport')">
-        <span class="customer-code-kicker">{{ t("customers.dialogKickerProvisioning") }}</span>
-        <h2>{{ t("customers.batchImport") }}</h2>
-        <p>{{ t("customers.batchImportDescription") }}</p>
-        <div class="customer-batch-tabs">
-          <button type="button" :class="{ 'is-active': batchImportMode === 'quick' }" @click="batchImportMode = 'quick'">{{ t("customers.quickImport") }}</button>
-          <button type="button" :class="{ 'is-active': batchImportMode === 'excel' }" @click="batchImportMode = 'excel'">{{ t("customers.excelImport") }}</button>
+      <section
+        class="customer-code-dialog customer-batch-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('customers.batchImport')"
+        @keydown.esc.stop.prevent
+      >
+        <header class="customer-batch-heading">
+          <div>
+            <span class="customer-code-kicker">{{ t("customers.dialogKickerProvisioning") }}</span>
+            <h2>{{ t("customers.batchImport") }}</h2>
+            <p>{{ t("customers.batchImportDescription") }}</p>
+          </div>
+          <button class="customer-template-button" type="button" @click="downloadCustomerImportTemplate">
+            {{ t("customers.downloadCustomerTemplate") }}
+          </button>
+        </header>
+
+        <div class="customer-batch-body">
+          <section class="customer-import-rules" :aria-label="t('customers.importRulesTitle')">
+            <header>
+              <b>{{ t("customers.importRulesTitle") }}</b>
+              <small>{{ t("customers.importRulesHint") }}</small>
+            </header>
+            <div>
+              <article><strong>01</strong><span><b>{{ t("customers.usernameRuleTitle") }}</b><small>{{ t("customers.usernameRule") }}</small></span></article>
+              <article><strong>02</strong><span><b>{{ t("customers.passwordRuleTitle") }}</b><small>{{ t("customers.passwordRule") }}</small></span></article>
+              <article><strong>03</strong><span><b>{{ t("customers.clientCodeRuleTitle") }}</b><small>{{ t("customers.clientCodeRule") }}</small></span></article>
+              <article><strong>04</strong><span><b>{{ t("customers.displayNameRuleTitle") }}</b><small>{{ t("customers.displayNameRule") }}</small></span></article>
+              <article><strong>05</strong><span><b>{{ t("customers.roleRuleTitle") }}</b><small>{{ t("customers.roleRule") }}</small></span></article>
+            </div>
+          </section>
+
+          <div class="customer-batch-tabs">
+            <button type="button" :class="{ 'is-active': batchImportMode === 'quick' }" @click="selectCustomerBatchMode('quick')">{{ t("customers.quickImport") }}</button>
+            <button type="button" :class="{ 'is-active': batchImportMode === 'excel' }" @click="selectCustomerBatchMode('excel')">{{ t("customers.excelImport") }}</button>
+          </div>
+
+          <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
+            <span>{{ t("customers.quickImportNames") }}</span>
+            <textarea v-model="quickImportText" :placeholder="t('customers.quickImportPlaceholder')"></textarea>
+            <small>{{ t("customers.quickImportHint") }}</small>
+          </label>
+          <div
+            v-else
+            v-loading="customerFileParsing"
+            :element-loading-text="t('app.loadingPage')"
+            class="customer-excel-dropzone customer-import-dropzone"
+            :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
+            @dragover.prevent="batchDropzoneActive = true"
+            @dragleave.prevent="batchDropzoneActive = false"
+            @drop.prevent="handleBatchDrop"
+            @click="batchFileInput?.click()"
+          >
+            <input ref="batchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleCustomerWorkbook" style="display:none" />
+            <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
+            <small>{{ batchFileName ? t("customers.rowsReady", { count: activeCustomerBatchPreview.total }) : t("customers.excelColumnsHint") }}</small>
+            <button type="button" @click.stop="batchFileInput?.click()">{{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}</button>
+          </div>
+
+          <div v-if="batchPreviewError" class="customer-import-file-error" role="alert">
+            <b>{{ t("customers.fileLevelError") }}</b>
+            <span>{{ batchPreviewError }}</span>
+          </div>
+          <div
+            v-for="problem in activeCustomerBatchPreview.globalErrors"
+            :key="`${problem.code}-${problem.value || ''}`"
+            class="customer-import-file-error"
+            role="alert"
+          >
+            <b>{{ t("customers.fileLevelError") }}</b>
+            <span>{{ customerImportIssueText(problem) }}</span>
+          </div>
+
+          <template v-if="activeCustomerBatchPreview.total">
+            <div class="customer-import-summary">
+              <span><b>{{ activeCustomerBatchPreview.total }}</b><small>{{ t("customers.importTotalRows") }}</small></span>
+              <span class="is-valid"><b>{{ activeCustomerBatchPreview.valid }}</b><small>{{ t("customers.importValidRows") }}</small></span>
+              <span class="is-invalid"><b>{{ activeCustomerBatchPreview.invalid }}</b><small>{{ t("customers.importInvalidRows") }}</small></span>
+              <span class="is-warning"><b>{{ activeCustomerBatchPreview.warningCount }}</b><small>{{ t("customers.importWarningRows") }}</small></span>
+            </div>
+
+            <div class="customer-import-preview">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ t("customers.excelRow") }}</th>
+                    <th>{{ t("customers.createAccount") }}</th>
+                    <th>{{ t("customers.createDisplayName") }}</th>
+                    <th>{{ t("customers.initialPassword") }}</th>
+                    <th>{{ t("customers.clientCode") }}</th>
+                    <th>{{ t("customers.createPartyRole") }}</th>
+                    <th>{{ t("customers.validationMessage") }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template
+                    v-for="row in activeCustomerBatchPreview.rows"
+                    :key="`${row.rowNumber}-${row.username}`"
+                  >
+                    <tr :class="{ 'is-invalid': row.errors.length }">
+                      <td><b>#{{ row.rowNumber }}</b></td>
+                      <td><b>{{ row.username || '—' }}</b></td>
+                      <td>{{ row.displayName || '—' }}</td>
+                      <td>
+                        <span class="customer-import-value-pill" :class="{ 'is-generated': !row.passwordProvided }">
+                          {{ row.passwordProvided ? t("customers.passwordProvided", { count: row.password.length }) : t("customers.systemGenerated") }}
+                        </span>
+                      </td>
+                      <td>{{ row.clientCode || t("customers.systemGenerated") }}</td>
+                      <td>{{ customerPartyRoleLabel(row.partyRole) }}</td>
+                      <td>
+                        <span v-if="row.errors.length" class="customer-import-validation-pill is-error">
+                          {{ t("customers.validationErrorCount", { count: row.errors.length }) }}
+                        </span>
+                        <span v-else-if="row.warnings.length" class="customer-import-validation-pill is-warning">
+                          {{ t("customers.validationWarningCount", { count: row.warnings.length }) }}
+                        </span>
+                        <span v-else class="customer-import-ready">{{ t("customers.importReady") }}</span>
+                      </td>
+                    </tr>
+                    <tr v-if="row.errors.length || row.warnings.length" class="customer-import-issue-row">
+                      <td colspan="7">
+                        <div class="customer-import-issues">
+                          <span v-for="problem in row.errors" :key="`error-${problem.field}-${problem.code}`" class="is-error">
+                            <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
+                          </span>
+                          <span v-for="problem in row.warnings" :key="`warning-${problem.field}-${problem.code}`" class="is-warning">
+                            <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
         </div>
 
-        <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
-          <span>{{ t("customers.quickImportNames") }}</span>
-          <textarea v-model="quickImportText" :placeholder="t('customers.quickImportPlaceholder')"></textarea>
-          <small>{{ t("customers.quickImportHint") }}</small>
-        </label>
-        <div
-          v-else
-          v-loading="customerFileParsing"
-          :element-loading-text="t('app.loadingPage')"
-          class="customer-excel-dropzone"
-          :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
-          @dragover.prevent="batchDropzoneActive = true"
-          @dragleave.prevent="batchDropzoneActive = false"
-          @drop.prevent="handleBatchDrop"
-          @click="batchFileInput?.click()"
-        >
-          <input ref="batchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleCustomerWorkbook" style="display:none" />
-          <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
-          <small>{{ batchFileName ? t("customers.rowsReady", { count: batchRows.length }) : t("customers.excelColumnsHint") }}</small>
-          <button type="button" @click.stop="batchFileInput?.click()">{{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}</button>
-        </div>
-        <p v-if="batchPreviewError" class="customer-batch-error">{{ batchPreviewError }}</p>
-        <div class="customer-dialog-actions">
+        <footer class="customer-dialog-actions customer-batch-actions">
+          <small v-if="activeCustomerBatchPreview.invalid">{{ t("customers.fixInvalidRowsBeforeImport") }}</small>
           <button type="button" @click="closeBatchImport">{{ t("customers.cancel") }}</button>
-          <button class="customer-access-primary" type="button" :disabled="importingCustomers" @click="submitBatchImport">
-            {{ importingCustomers ? t("customers.importing") : t("customers.confirmImport") }}
+          <button
+            class="customer-access-primary"
+            type="button"
+            :disabled="!canSubmitCustomerBatchImport"
+            @click="submitBatchImport"
+          >
+            {{ importingCustomers
+              ? t("customers.importing")
+              : t("customers.confirmImportCount", { count: activeCustomerBatchPreview.valid }) }}
           </button>
-        </div>
+        </footer>
       </section>
     </div>
 
@@ -1107,24 +1229,68 @@
     </div>
 
     <div v-if="batchCredentialRows.length" class="customer-code-overlay" role="presentation">
-      <section class="customer-code-dialog customer-credential-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.batchCredentialTitle')">
-        <span class="customer-code-kicker">{{ t("customers.dialogKickerCredentialExport") }}</span>
-        <h2>{{ t("customers.batchCredentialTitle") }}</h2>
-        <p>{{ t("customers.batchCredentialDescription") }}</p>
-        <div class="customer-credential-table">
-          <div class="customer-credential-table-head"><span>{{ t("customers.customerName") }}</span><span>{{ t("customers.initialPassword") }}</span><span>{{ t("customers.importStatus") }}</span></div>
-          <div v-for="row in batchCredentialRows" :key="`${row.rowNumber}-${row.username}`" class="customer-credential-row" :class="{ 'is-failed': row.status !== 'CREATED' }">
-            <span><b>{{ row.username }}</b><small>#{{ row.rowNumber }}</small></span>
-            <span>{{ row.password || '—' }}</span>
-            <span>{{ row.status === 'CREATED' ? t("customers.importCreated") : row.message }}</span>
+      <section
+        class="customer-code-dialog customer-credential-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('customers.batchCredentialTitle')"
+        @keydown.esc.stop.prevent
+      >
+        <header class="customer-batch-heading">
+          <div>
+            <span class="customer-code-kicker">{{ t("customers.dialogKickerCredentialExport") }}</span>
+            <h2>{{ t("customers.batchCredentialTitle") }}</h2>
+            <p>{{ t("customers.batchCredentialDescription") }}</p>
           </div>
-        </div>
-        <div class="customer-dialog-actions">
-          <button type="button" :disabled="exportingCredentials" @click="downloadCredentialWorkbook">
+          <button type="button" :disabled="exportingCredentials" class="customer-template-button" @click="downloadCredentialWorkbook">
             {{ exportingCredentials ? t("customers.preparingExport") : t("customers.exportCredentials") }}
           </button>
-          <button class="customer-access-primary" type="button" @click="closeBatchCredentials">{{ t("customers.confirmStored") }}</button>
+        </header>
+
+        <div class="customer-credential-body">
+          <div class="customer-import-summary">
+            <span><b>{{ batchCredentialSummary.total }}</b><small>{{ t("customers.importTotalRows") }}</small></span>
+            <span class="is-valid"><b>{{ batchCredentialSummary.created }}</b><small>{{ t("customers.importCreatedCount") }}</small></span>
+            <span class="is-invalid"><b>{{ batchCredentialSummary.failed }}</b><small>{{ t("customers.importFailedCount") }}</small></span>
+          </div>
+          <div v-if="batchCredentialSummary.failed" class="customer-import-file-error">
+            <b>{{ t("customers.importFailureExplanation") }}</b>
+            <span>{{ t("customers.importFailureHint") }}</span>
+          </div>
+          <div class="customer-credential-table">
+            <div class="customer-credential-table-head">
+              <span>{{ t("customers.excelRow") }}</span>
+              <span>{{ t("customers.createAccount") }}</span>
+              <span>{{ t("customers.createDisplayName") }}</span>
+              <span>{{ t("customers.clientCode") }}</span>
+              <span>{{ t("customers.initialPassword") }}</span>
+              <span>{{ t("customers.importStatus") }}</span>
+            </div>
+            <div
+              v-for="row in batchCredentialRows"
+              :key="`${row.rowNumber}-${row.username}`"
+              class="customer-credential-entry"
+              :class="{ 'is-failed': row.status !== 'CREATED' }"
+            >
+              <div class="customer-credential-row">
+                <span><b>#{{ row.rowNumber }}</b></span>
+                <span><b>{{ row.username || '—' }}</b></span>
+                <span>{{ row.displayName || row.username || '—' }}</span>
+                <span>{{ row.customerCode || row.clientCode || '—' }}</span>
+                <span class="customer-credential-password">{{ row.password || '—' }}</span>
+                <span><i :class="row.status === 'CREATED' ? 'is-created' : 'is-failed'">{{ row.status === 'CREATED' ? t("customers.importCreated") : t("customers.importFailedStatus") }}</i></span>
+              </div>
+              <div v-if="row.status !== 'CREATED'" class="customer-credential-message">
+                <b>{{ t("customers.failureReason") }}</b>
+                <span>{{ localizeCustomerImportResult(row.message) }}</span>
+              </div>
+            </div>
+          </div>
         </div>
+        <footer class="customer-dialog-actions customer-batch-actions">
+          <small>{{ t("customers.credentialsSaveReminder") }}</small>
+          <button class="customer-access-primary" type="button" @click="closeBatchCredentials">{{ t("customers.confirmStored") }}</button>
+        </footer>
       </section>
     </div>
 
@@ -1134,7 +1300,11 @@
         <h2>{{ t("customers.supplementClientCode") }}</h2>
         <p>{{ t("customers.supplementClientCodeHint") }}</p>
         <form class="customer-dialog-form" @submit.prevent="saveClientCodeSupplement">
-          <label><span>{{ t("customers.clientCode") }}</span><input v-model.trim="clientCodeSupplement" maxlength="64" :placeholder="t('customers.clientCodePlaceholder')" required /></label>
+          <label>
+            <span>{{ t("customers.clientCode") }}</span>
+            <input v-model.trim="clientCodeSupplement" maxlength="64" :placeholder="t('customers.clientCodePlaceholder')" required />
+            <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
+          </label>
           <div class="customer-dialog-actions">
             <button type="button" @click="clientCodeDialogOpen = false">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">{{ t("customers.saveSupplement") }}</button>
@@ -1151,11 +1321,12 @@
         <form class="customer-dialog-form" @submit.prevent="resetPassword">
           <label>
             <span>{{ t("customers.newPassword") }}</span>
-            <input v-model="passwordResetForm.password" type="password" minlength="8" maxlength="128" autocomplete="new-password" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+            <input v-model="passwordResetForm.password" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+            <small class="customer-field-rule">{{ t("customers.passwordRule") }}</small>
           </label>
           <label>
             <span>{{ t("customers.confirmPassword") }}</span>
-            <input v-model="passwordResetForm.confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+            <input v-model="passwordResetForm.confirmPassword" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" required />
           </label>
           <div class="customer-dialog-actions">
             <button type="button" @click="closeResetPasswordDialog">{{ t("customers.cancel") }}</button>
@@ -1635,6 +1806,11 @@ import {
   buildManualShipmentImportTemplate,
   parseManualShipmentImportWorkbook
 } from "../services/manualShipmentExcelImport";
+import {
+  buildCustomerImportTemplate,
+  parseCustomerImportWorkbook,
+  validateCustomerImportRows
+} from "../services/customerExcelImport";
 import { storedToken } from "../services/authSession";
 import { markApiErrorHandled } from "../services/apiClient";
 import {
@@ -1679,7 +1855,7 @@ const batchImportDialogOpen = ref(false);
 const batchImportMode = ref("quick");
 const quickImportText = ref("");
 const batchFileName = ref("");
-const batchRows = ref([]);
+const customerBatchPreview = ref(emptyCustomerBatchPreview());
 const batchPreviewError = ref("");
 const batchFileInput = ref(null);
 const batchDropzoneActive = ref(false);
@@ -1709,6 +1885,30 @@ const loadingShipmentDetail = ref(false);
 const savingShipment = ref(false);
 const creatingShipment = ref(false);
 const deletingShipment = ref(false);
+
+const quickCustomerBatchPreview = computed(() =>
+  validateCustomerImportRows(quickImportSourceRows())
+);
+const activeCustomerBatchPreview = computed(() =>
+  batchImportMode.value === "quick"
+    ? quickCustomerBatchPreview.value
+    : customerBatchPreview.value
+);
+const canSubmitCustomerBatchImport = computed(() => {
+  const preview = activeCustomerBatchPreview.value;
+  return !importingCustomers.value
+    && preview.valid > 0
+    && preview.invalid === 0
+    && preview.globalErrors.length === 0;
+});
+const batchCredentialSummary = computed(() => {
+  const rows = batchCredentialRows.value;
+  return {
+    total: rows.length,
+    created: rows.filter((row) => row.status === "CREATED").length,
+    failed: rows.filter((row) => row.status !== "CREATED").length
+  };
+});
 const refreshingShipment = ref(false);
 const batchTrackDialogOpen = ref(false);
 const batchTrackDropzoneActive = ref(false);
@@ -4169,13 +4369,41 @@ function closeBatchImport() {
   if (importingCustomers.value) return;
   batchImportDialogOpen.value = false;
   batchPreviewError.value = "";
+  batchDropzoneActive.value = false;
 }
 
-function quickImportRows() {
+function emptyCustomerBatchPreview() {
+  return {
+    rows: [],
+    items: [],
+    globalErrors: [],
+    total: 0,
+    valid: 0,
+    invalid: 0,
+    warningCount: 0
+  };
+}
+
+function selectCustomerBatchMode(mode) {
+  batchImportMode.value = mode;
+  batchPreviewError.value = "";
+}
+
+function quickImportSourceRows() {
   return quickImportText.value.split(/\r?\n/).map((line, index) => {
-    const [username = "", customerCode = ""] = line.split(/[,，\t]/, 2).map((value) => value.trim());
-    return { rowNumber: index + 1, username, customerCode };
+    const [username = "", clientCode = ""] = line.split(/[,，\t]/, 2).map((value) => value.trim());
+    return { rowNumber: index + 1, username, clientCode };
   }).filter((row) => row.username);
+}
+
+async function downloadCustomerImportTemplate() {
+  try {
+    const XLSX = await loadXlsxModule();
+    const workbook = buildCustomerImportTemplate(XLSX);
+    XLSX.writeFile(workbook, `customer-import-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  } catch (error) {
+    batchPreviewError.value = error?.message || t("customers.customerTemplateFailed");
+  }
 }
 
 function handleBatchDrop(event) {
@@ -4195,7 +4423,7 @@ function handleBatchDrop(event) {
 
 async function handleCustomerWorkbook(event) {
   const file = event.target.files?.[0];
-  batchRows.value = [];
+  customerBatchPreview.value = emptyCustomerBatchPreview();
   batchFileName.value = "";
   batchPreviewError.value = "";
   if (!file) return;
@@ -4204,22 +4432,10 @@ async function handleCustomerWorkbook(event) {
     await waitForNextPaint();
     const XLSX = await loadXlsxModule();
     const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
-    const headers = (rows[0] || []).map((value) => String(value).trim().toLowerCase());
-    const findColumn = (aliases) => headers.findIndex((header) => aliases.includes(header));
-    const usernameIndex = findColumn(["客户名", "用户名", "登录名", "customer name", "username", "login name"]);
-    const passwordIndex = findColumn(["密码", "登录密码", "password"]);
-    const startIndex = usernameIndex >= 0 ? 1 : 0;
-    const nameColumn = usernameIndex >= 0 ? usernameIndex : 0;
-    batchRows.value = rows.slice(startIndex).map((row, index) => ({
-      rowNumber: index + startIndex + 1,
-      username: String(row[nameColumn] || "").trim(),
-      password: passwordIndex >= 0 ? String(row[passwordIndex] || "") : ""
-    })).filter((row) => row.username);
-    if (!batchRows.value.length) throw new Error(t("customers.noImportRows"));
+    customerBatchPreview.value = parseCustomerImportWorkbook(workbook, XLSX);
     batchFileName.value = file.name;
   } catch (error) {
+    customerBatchPreview.value = emptyCustomerBatchPreview();
     batchPreviewError.value = error?.message || t("customers.excelReadFailed");
   } finally {
     customerFileParsing.value = false;
@@ -4229,9 +4445,13 @@ async function handleCustomerWorkbook(event) {
 
 async function submitBatchImport() {
   if (importingCustomers.value) return;
-  const rows = batchImportMode.value === "quick" ? quickImportRows() : batchRows.value;
-  if (!rows.length) {
+  const preview = activeCustomerBatchPreview.value;
+  if (!preview.items.length) {
     batchPreviewError.value = t("customers.noImportRows");
+    return;
+  }
+  if (preview.invalid || preview.globalErrors.length) {
+    batchPreviewError.value = t("customers.fixInvalidRowsBeforeImport");
     return;
   }
   importingCustomers.value = true;
@@ -4239,12 +4459,12 @@ async function submitBatchImport() {
   try {
     const response = await batchCreateBusinessCustomers({
       sourceFileName: batchImportMode.value === "excel" ? batchFileName.value : "quick-entry",
-      items: rows
+      items: preview.items
     });
     batchCredentialRows.value = Array.isArray(response?.items) ? response.items : [];
     batchImportDialogOpen.value = false;
     quickImportText.value = "";
-    batchRows.value = [];
+    customerBatchPreview.value = emptyCustomerBatchPreview();
     batchFileName.value = "";
     await loadCustomers();
   } catch (error) {
@@ -4261,12 +4481,30 @@ async function downloadCredentialWorkbook() {
     await waitForNextPaint();
     const XLSX = await loadXlsxModule();
     const rows = batchCredentialRows.value.map((row) => ({
-      [t("customers.customerName")]: row.username,
+      [t("customers.excelRow")]: row.rowNumber,
+      [t("customers.createAccount")]: row.username,
+      [t("customers.createDisplayName")]: row.displayName || row.username,
+      [t("customers.clientCode")]: row.customerCode || row.clientCode || "",
       [t("customers.initialPassword")]: row.password || "",
-      [t("customers.importStatus")]: row.status === "CREATED" ? t("customers.importCreated") : row.message
+      [t("customers.importStatus")]: row.status === "CREATED"
+        ? t("customers.importCreated")
+        : t("customers.importFailedStatus"),
+      [t("customers.failureReason")]: row.status === "CREATED"
+        ? ""
+        : localizeCustomerImportResult(row.message)
     }));
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), "Customer credentials");
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet["!cols"] = [
+      { wch: 10 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 22 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 58 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Customer credentials");
     XLSX.writeFile(workbook, `customer-credentials-${new Date().toISOString().slice(0, 10)}.xlsx`);
   } finally {
     exportingCredentials.value = false;
@@ -4275,6 +4513,77 @@ async function downloadCredentialWorkbook() {
 
 function closeBatchCredentials() {
   batchCredentialRows.value = [];
+}
+
+function customerImportIssueText(problem) {
+  const keys = {
+    EMPTY_WORKBOOK: "customers.customerImportEmptyWorkbook",
+    WRONG_TEMPLATE: "customers.customerImportWrongTemplate",
+    MISSING_CUSTOMER_SHEET: "customers.customerImportMissingSheet",
+    MISSING_USERNAME_COLUMN: "customers.customerImportMissingUsernameColumn",
+    NO_ROWS: "customers.noImportRows",
+    TOO_MANY_ROWS: "customers.customerImportTooManyRows",
+    USERNAME_REQUIRED: "customers.customerImportUsernameRequired",
+    USERNAME_FORMAT: "customers.usernameRule",
+    PASSWORD_LENGTH: "customers.customerImportPasswordLength",
+    PASSWORD_COMPLEXITY: "customers.customerImportPasswordComplexity",
+    DISPLAY_NAME_LENGTH: "customers.displayNameRule",
+    CLIENT_CODE_FORMAT: "customers.customerImportClientCodeFormat",
+    PARTY_ROLE_FORMAT: "customers.roleRule",
+    REMARK_LENGTH: "customers.customerImportRemarkLength",
+    DUPLICATE_USERNAME: "customers.customerImportDuplicateUsername",
+    DUPLICATE_CLIENT_CODE: "customers.customerImportDuplicateClientCode",
+    PASSWORD_WILL_GENERATE: "customers.customerImportPasswordGenerated",
+    CLIENT_CODE_WILL_GENERATE: "customers.customerImportClientCodeGenerated"
+  };
+  return t(keys[problem?.code] || "customers.importFailed", problem || {});
+}
+
+function customerImportFieldLabel(field) {
+  const keys = {
+    username: "customers.createAccount",
+    password: "customers.initialPassword",
+    displayName: "customers.createDisplayName",
+    clientCode: "customers.clientCode",
+    partyRole: "customers.createPartyRole",
+    remark: "customers.remark"
+  };
+  return field && keys[field] ? `${t(keys[field])}：` : "";
+}
+
+function customerPartyRoleLabel(role) {
+  const keys = {
+    SHIPPER: "customers.roleShipper",
+    CONSIGNEE: "customers.roleConsignee",
+    OVERSEA_AGENT: "customers.roleOverseaAgent"
+  };
+  return keys[role] ? t(keys[role]) : role || "—";
+}
+
+function localizeCustomerImportResult(message) {
+  const value = String(message || "");
+  if (/username or client code already exists/i.test(value)) {
+    return t("customers.customerImportDuplicateServer");
+  }
+  if (/password must contain uppercase/i.test(value)) {
+    return t("customers.customerImportPasswordComplexity");
+  }
+  if (/password must contain 8-128/i.test(value)) {
+    return t("customers.customerImportPasswordLength");
+  }
+  if (/customer name must contain/i.test(value)) {
+    return t("customers.usernameRule");
+  }
+  if (/display name must contain/i.test(value)) {
+    return t("customers.displayNameRule");
+  }
+  if (/client code must contain/i.test(value)) {
+    return t("customers.customerImportClientCodeFormat");
+  }
+  if (/party role/i.test(value)) {
+    return t("customers.roleRule");
+  }
+  return value || t("customers.importFailed");
 }
 
 function replaceShipmentInLocalCollections(shipment) {
@@ -6331,8 +6640,120 @@ function showError(error, fallbackKey) {
 }
 
 /* Batch import dialog */
+.customer-batch-dialog,
+.customer-credential-dialog {
+  width: min(1180px, calc(100vw - 48px));
+  max-height: min(92vh, 980px);
+  padding: 26px 28px 0;
+  overflow: hidden;
+}
+.customer-batch-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.customer-batch-heading > div {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  gap: 8px;
+}
+.customer-batch-heading p {
+  max-width: 820px;
+}
+.customer-template-button {
+  flex: 0 0 auto !important;
+  min-width: 178px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #b9d1e8;
+  border-radius: 8px;
+  color: #2369a7;
+  background: #f4f9ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.customer-code-dialog > .customer-batch-body,
+.customer-code-dialog > .customer-credential-body {
+  display: grid;
+  min-height: 0;
+  max-height: calc(min(92vh, 980px) - 188px);
+  margin: 0;
+  padding: 2px 7px 2px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 14px;
+}
+.customer-import-rules {
+  display: grid;
+  padding: 14px;
+  border: 1px solid #dbe6f0;
+  border-radius: 12px;
+  background: #f8fbfe;
+  gap: 12px;
+}
+.customer-import-rules > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.customer-import-rules > header b {
+  color: #1c3d5a;
+  font-size: 13px;
+}
+.customer-import-rules > header small {
+  color: #73899e;
+  font-size: 10px;
+}
+.customer-import-rules > div {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.customer-import-rules article {
+  display: flex;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e2eaf2;
+  border-radius: 9px;
+  background: #fff;
+  gap: 9px;
+}
+.customer-import-rules article > strong {
+  display: inline-grid;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: #3479ba;
+  background: #eaf4ff;
+  place-items: center;
+  font-size: 9px;
+}
+.customer-import-rules article > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.customer-import-rules article b {
+  color: #294b68;
+  font-size: 10px;
+}
+.customer-import-rules article small {
+  color: #72879b;
+  font-size: 9px;
+  line-height: 1.55;
+}
 .customer-batch-tabs {
   display: flex;
+  margin: 0 !important;
   gap: 4px;
 }
 .customer-batch-tabs button {
@@ -6379,6 +6800,10 @@ function showError(error, fallbackKey) {
 .customer-batch-textarea small {
   color: #889aaf;
   font-size: 10px;
+}
+.customer-import-dropzone {
+  min-height: 116px;
+  padding: 20px 16px;
 }
 .customer-excel-dropzone {
   display: grid;
@@ -6432,40 +6857,277 @@ function showError(error, fallbackKey) {
   color: #ac3d4d;
   font-size: 12px;
 }
+.customer-import-file-error {
+  display: grid !important;
+  margin: 0 !important;
+  padding: 11px 13px;
+  border: 1px solid #f0c6cc;
+  border-radius: 9px;
+  color: #983746;
+  background: #fff7f8;
+  gap: 4px !important;
+}
+.customer-import-file-error b {
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+.customer-import-file-error span {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.customer-import-summary {
+  display: grid !important;
+  margin: 0 !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px !important;
+}
+.customer-import-summary > span {
+  display: grid;
+  min-height: 62px;
+  padding: 10px 13px;
+  border: 1px solid #dce6ef;
+  border-radius: 9px;
+  background: #f8fafc;
+  align-content: center;
+  gap: 2px;
+}
+.customer-import-summary > span b {
+  color: #24445f;
+  font-size: 20px;
+}
+.customer-import-summary > span small {
+  color: #7b90a5;
+  font-size: 9px;
+  font-weight: 750;
+}
+.customer-import-summary > .is-valid {
+  border-color: #bfe5d4;
+  background: #f2fbf7;
+}
+.customer-import-summary > .is-valid b {
+  color: #1d805d;
+}
+.customer-import-summary > .is-invalid {
+  border-color: #f0c8ce;
+  background: #fff7f8;
+}
+.customer-import-summary > .is-invalid b {
+  color: #b13f50;
+}
+.customer-import-summary > .is-warning {
+  border-color: #ecd9ad;
+  background: #fffbf2;
+}
+.customer-import-summary > .is-warning b {
+  color: #93691c;
+}
+.customer-import-preview {
+  max-height: 340px;
+  margin: 0 !important;
+  border: 1px solid #dce6ef;
+  border-radius: 10px;
+  overflow: auto;
+}
+.customer-import-preview table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.customer-import-preview th,
+.customer-import-preview td {
+  padding: 10px 11px;
+  border-bottom: 1px solid #e8eef4;
+  color: #405c74;
+  font-size: 10px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.customer-import-preview th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: #49647c;
+  background: #f4f7fa;
+  font-size: 9px;
+  letter-spacing: .04em;
+}
+.customer-import-preview th:nth-child(1) { width: 70px; }
+.customer-import-preview th:nth-child(2) { width: 145px; }
+.customer-import-preview th:nth-child(3) { width: 150px; }
+.customer-import-preview th:nth-child(4) { width: 132px; }
+.customer-import-preview th:nth-child(5) { width: 145px; }
+.customer-import-preview th:nth-child(6) { width: 135px; }
+.customer-import-preview th:nth-child(7) { width: 108px; }
+.customer-import-preview tr.is-invalid td {
+  background: #fff9fa;
+}
+.customer-import-value-pill,
+.customer-import-ready {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #237356;
+  background: #eaf8f2;
+  font-size: 9px;
+  font-weight: 750;
+}
+.customer-import-value-pill.is-generated {
+  color: #7f5d18;
+  background: #fff7df;
+}
+.customer-import-validation-pill {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.customer-import-validation-pill.is-error {
+  color: #a73d4c;
+  background: #fff0f2;
+}
+.customer-import-validation-pill.is-warning {
+  color: #84611a;
+  background: #fff8e8;
+}
+.customer-import-issue-row td {
+  padding: 0 11px 10px;
+  background: #fff !important;
+}
+.customer-import-issues {
+  display: flex !important;
+  flex-wrap: wrap;
+  margin: 0 !important;
+  gap: 5px !important;
+}
+.customer-import-issues > span {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.customer-import-issues > .is-error {
+  color: #a73d4c;
+  background: #fff0f2;
+}
+.customer-import-issues > .is-warning {
+  color: #84611a;
+  background: #fff8e8;
+}
+.customer-import-issues b {
+  margin-right: 3px;
+}
+.customer-batch-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex !important;
+  min-height: 64px;
+  margin: 0 -28px !important;
+  padding: 12px 28px 14px;
+  border-top: 1px solid #dce6ef;
+  background: rgba(255, 255, 255, .97);
+  align-items: center;
+  justify-content: flex-end;
+  backdrop-filter: blur(8px);
+}
+.customer-batch-actions > small {
+  margin-right: auto;
+  color: #a23e4d;
+  font-size: 10px;
+}
+.customer-batch-actions button {
+  flex: 0 0 auto !important;
+  min-width: 160px;
+}
+.customer-field-rule {
+  color: #71879b;
+  font-size: 10px;
+  line-height: 1.5;
+}
 
 /* Credential table */
+.customer-credential-dialog .customer-credential-body {
+  max-height: calc(min(92vh, 980px) - 174px);
+}
+.customer-credential-dialog .customer-import-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .customer-credential-table {
   border: 1px solid #e0e7f0;
   border-radius: 10px;
-  overflow: hidden;
-  max-height: 340px;
-  overflow-y: auto;
+  max-height: 460px;
+  overflow: auto;
 }
 .customer-credential-table-head,
 .customer-credential-row {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 0.8fr;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 11px;
+  min-width: 820px;
+  grid-template-columns: 58px 130px 145px 130px minmax(150px, 1fr) 90px;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 10px;
 }
 .customer-credential-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #f4f7fb;
   color: #5e7794;
   font-weight: 800;
   font-size: 10px;
   letter-spacing: 0.04em;
 }
-.customer-credential-row {
+.customer-credential-entry {
+  min-width: 820px;
   border-bottom: 1px solid #eef2f7;
 }
-.customer-credential-row.is-failed {
+.customer-credential-entry.is-failed {
   background: #fff8f8;
-  color: #ac3d4d;
 }
-.customer-credential-row:last-child {
+.customer-credential-entry:last-child {
   border-bottom: 0;
+}
+.customer-credential-password {
+  color: #204d70;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.customer-credential-row i {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+}
+.customer-credential-row i.is-created {
+  color: #197454;
+  background: #e9f8f1;
+}
+.customer-credential-row i.is-failed {
+  color: #a93e4e;
+  background: #ffeaed;
+}
+.customer-credential-message {
+  display: flex;
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: #7b5360;
+  background: #fff0f2;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  gap: 8px;
+}
+.customer-credential-message b {
+  flex: 0 0 auto;
+  color: #a93e4e;
 }
 
 /* Shipment detail grid */
@@ -6889,6 +7551,36 @@ button:disabled {
 @media (max-width: 760px) {
   .batch-track-subtask-list {
     grid-template-columns: 1fr;
+  }
+  .customer-batch-dialog,
+  .customer-credential-dialog {
+    width: calc(100vw - 24px);
+    max-height: 94vh;
+    padding: 20px 18px 0;
+  }
+  .customer-batch-heading {
+    display: grid;
+  }
+  .customer-template-button {
+    width: 100%;
+  }
+  .customer-import-rules > div {
+    grid-template-columns: 1fr;
+  }
+  .customer-import-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .customer-batch-actions {
+    margin: 0 -18px !important;
+    padding-inline: 18px;
+    flex-wrap: wrap;
+  }
+  .customer-batch-actions > small {
+    width: 100%;
+  }
+  .customer-batch-actions button {
+    flex: 1 1 140px !important;
+    min-width: 0;
   }
 }
 </style>

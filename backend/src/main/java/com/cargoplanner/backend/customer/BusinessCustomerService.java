@@ -226,18 +226,29 @@ public class BusinessCustomerService {
           ? generatePassword()
           : suppliedPassword;
       String username = item == null ? null : item.username();
+      String displayName = item == null || item.displayName() == null || item.displayName().isBlank()
+          ? username
+          : item.displayName();
+      String clientCode = item == null ? null : item.clientCode();
+      String partyRole = item == null || item.partyRole() == null || item.partyRole().isBlank()
+          ? "CONSIGNEE"
+          : item.partyRole();
+      String remark = item == null ? null : item.remark();
       Map<String, Object> row = new LinkedHashMap<>();
       row.put("rowNumber", rowNumber);
       row.put("username", username == null ? "" : username.trim());
+      row.put("displayName", displayName == null ? "" : displayName.trim());
+      row.put("clientCode", clientCode == null ? "" : clientCode.trim().toUpperCase(Locale.ROOT));
+      row.put("partyRole", partyRole);
       try {
         Map<String, Object> created = create(
             new CreateCustomerRequest(
                 username,
                 password,
-                username,
-                "CONSIGNEE",
-                null,
-                null
+                displayName,
+                partyRole,
+                clientCode,
+                remark
             ),
             actor,
             ipAddress
@@ -3133,6 +3144,14 @@ public class BusinessCustomerService {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Customer password must contain 8-128 characters"
+      );
+    }
+    if (!value.matches(".*[A-Z].*")
+        || !value.matches(".*[a-z].*")
+        || !value.matches(".*\\d.*")) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Customer password must contain uppercase and lowercase letters and at least one number"
       );
     }
     return value;
