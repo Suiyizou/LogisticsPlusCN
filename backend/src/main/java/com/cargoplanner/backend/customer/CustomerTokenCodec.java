@@ -11,11 +11,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomerTokenCodec {
   private static final SecureRandom RANDOM = new SecureRandom();
+  private static final String CUSTOMER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
   public GeneratedCustomerCode newCustomerCode() {
-    String secret = randomToken();
-    String code = "DL-" + secret;
-    return new GeneratedCustomerCode(code, "DL-" + secret.substring(0, 8), sha256(code));
+    StringBuilder code = new StringBuilder("DL-");
+    while (code.length() < 10) {
+      code.append(CUSTOMER_CODE_ALPHABET.charAt(RANDOM.nextInt(CUSTOMER_CODE_ALPHABET.length())));
+    }
+    String plainText = code.toString();
+    return new GeneratedCustomerCode(plainText, plainText.substring(0, 4), sha256(plainText));
   }
 
   public String newSessionToken() {

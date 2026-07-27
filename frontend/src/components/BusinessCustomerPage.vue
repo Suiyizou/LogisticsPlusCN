@@ -1006,7 +1006,15 @@
           </label>
           <label>
             <span>{{ t("customers.clientCode") }} <i class="required-star">*</i></span>
-            <input v-model.trim="createForm.userCode" :placeholder="t('customers.clientCodePlaceholder')" required />
+            <input
+              v-model.trim="createForm.userCode"
+              minlength="6"
+              :maxlength="isEditMode ? 64 : 10"
+              :pattern="isEditMode ? undefined : '[A-Za-z0-9._-]{6,10}'"
+              :title="t('customers.clientCodeRule')"
+              :placeholder="t('customers.clientCodePlaceholder')"
+              required
+            />
             <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
           </label>
           <label>
@@ -1302,7 +1310,15 @@
         <form class="customer-dialog-form" @submit.prevent="saveClientCodeSupplement">
           <label>
             <span>{{ t("customers.clientCode") }}</span>
-            <input v-model.trim="clientCodeSupplement" maxlength="64" :placeholder="t('customers.clientCodePlaceholder')" required />
+            <input
+              v-model.trim="clientCodeSupplement"
+              minlength="6"
+              maxlength="10"
+              pattern="[A-Za-z0-9._-]{6,10}"
+              :title="t('customers.clientCodeRule')"
+              :placeholder="t('customers.clientCodePlaceholder')"
+              required
+            />
             <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
           </label>
           <div class="customer-dialog-actions">

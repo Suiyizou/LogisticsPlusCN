@@ -182,7 +182,7 @@ class CustomerAccessFlowTest {
     String customerId = (String) created.get("id");
     String code = (String) created.get("customerCode");
 
-    assertThat(code).startsWith("DL-").hasSizeGreaterThan(40);
+    assertThat(code).startsWith("DL-").hasSize(10);
     assertThat(created.get("partyRole")).isEqualTo("SHIPPER");
     assertThat(jdbcTemplate.queryForObject(
         "SELECT customer_code_hash FROM cp_customers WHERE public_id = ?",
@@ -191,6 +191,22 @@ class CustomerAccessFlowTest {
     )).doesNotContain(code);
     assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(1);
     assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).isEmpty();
+    assertThatThrownBy(() -> customerService.create(
+        new CreateCustomerRequest(
+            "short-code", "SecurePass!23", "Short Code", "SHIPPER", "ABCDE"
+        ),
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.BAD_REQUEST));
+    assertThatThrownBy(() -> customerService.create(
+        new CreateCustomerRequest(
+            "long-code", "SecurePass!23", "Long Code", "SHIPPER", "ABCDEFGHIJK"
+        ),
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.BAD_REQUEST));
     assertThatThrownBy(() -> customerService.create(
         new CreateCustomerRequest("forbidden", "SecurePass!23", "Forbidden Customer", "SHIPPER"),
         employee,
@@ -260,7 +276,7 @@ class CustomerAccessFlowTest {
 
     Map<String, Object> reset = customerService.resetCode(customerId, business, "127.0.0.1");
     String newCode = (String) reset.get("customerCode");
-    assertThat(newCode).isNotEqualTo(code);
+    assertThat(newCode).isNotEqualTo(code).startsWith("DL-").hasSize(10);
     assertThatThrownBy(() -> authService.authenticate(login.token(), httpRequest))
         .isInstanceOf(ApiException.class)
         .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.UNAUTHORIZED));
@@ -1363,7 +1379,7 @@ class CustomerAccessFlowTest {
   void refusesToPublishPlaceholderOnlyShipmentData() {
     String customerId = (String) customerService.create(
         new CreateCustomerRequest(
-            "placeholder-customer", "SecurePass!23", "Placeholder Customer", "SHIPPER", "PLACEHOLDER"
+            "placeholder-customer", "SecurePass!23", "Placeholder Customer", "SHIPPER", "PLACEHOLD"
         ),
         business,
         "127.0.0.1"

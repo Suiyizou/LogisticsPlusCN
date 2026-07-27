@@ -289,9 +289,12 @@ public class BusinessCustomerService {
     String displayName = request == null || request.displayName() == null || request.displayName().isBlank()
         ? existing.displayName()
         : normalizeDisplayName(request.displayName());
-    String clientCode = request == null || request.clientCode() == null
+    String requestedClientCode = request == null ? null : request.clientCode();
+    String clientCode = requestedClientCode == null
         ? existing.clientCode()
-        : normalizeOptionalClientCode(request.clientCode());
+        : requestedClientCode.trim().equalsIgnoreCase(existing.clientCode())
+            ? existing.clientCode()
+            : normalizeOptionalClientCode(requestedClientCode);
     String partyRole = normalizePartyRole(
         request == null ? null : request.partyRole(), existing.partyRole()
     );
@@ -3168,10 +3171,10 @@ public class BusinessCustomerService {
   private String normalizeOptionalClientCode(String value) {
     if (value == null || value.isBlank()) return null;
     String normalized = value.trim().toUpperCase(Locale.ROOT);
-    if (!normalized.matches("[A-Z0-9._-]{1,64}")) {
+    if (!normalized.matches("[A-Z0-9._-]{6,10}")) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Client Code must contain 1-64 letters, numbers, dots, underscores, or hyphens"
+          "Client Code must contain 6-10 letters, numbers, dots, underscores, or hyphens"
       );
     }
     return normalized;

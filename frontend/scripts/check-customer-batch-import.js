@@ -36,14 +36,26 @@ const invalid = validateCustomerImportRows([
     rowNumber: 4,
     username: "duplicate",
     clientCode: "CLIENT-001"
+  },
+  {
+    rowNumber: 5,
+    username: "short-code",
+    clientCode: "ABCDE"
+  },
+  {
+    rowNumber: 6,
+    username: "long-code",
+    clientCode: "ABCDEFGHIJK"
   }
 ]);
 assert.equal(invalid.valid, 1);
-assert.equal(invalid.invalid, 2);
+assert.equal(invalid.invalid, 4);
 assert(invalid.rows[0].errors.some((item) => item.code === "USERNAME_FORMAT"));
 assert(invalid.rows[0].errors.some((item) => item.code === "PASSWORD_COMPLEXITY"));
 assert(invalid.rows[2].errors.some((item) => item.code === "DUPLICATE_USERNAME"));
 assert(invalid.rows[2].errors.some((item) => item.code === "DUPLICATE_CLIENT_CODE"));
+assert(invalid.rows[3].errors.some((item) => item.code === "CLIENT_CODE_FORMAT"));
+assert(invalid.rows[4].errors.some((item) => item.code === "CLIENT_CODE_FORMAT"));
 
 const shipmentWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(
