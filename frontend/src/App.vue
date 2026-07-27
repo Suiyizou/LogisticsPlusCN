@@ -24,6 +24,7 @@
     key="workbenches"
     :current-user="currentUser"
     @logout="handleLogout"
+    @user-updated="handleUserUpdated"
   />
   <BusinessCustomerPage
     v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
@@ -998,7 +999,7 @@ const profileInitial = computed(() => userDisplayName.value.slice(0, 1).toUpperC
 const profileRoleText = computed(() => ui({
   ADMIN: "profile.role.admin",
   BUSINESS: "profile.role.business",
-  EMPLOYEE: "profile.role.employee"
+  OVERSEA_AGENT: "profile.role.overseaAgent"
 }[currentUser.value?.role] || "profile.role.employee"));
 const profilePartyRoleText = computed(() => t({
   AGENT: "customers.roleAgent",

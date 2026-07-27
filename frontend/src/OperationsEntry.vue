@@ -14,7 +14,7 @@
       @user-updated="handleUserUpdated"
     />
     <BusinessCustomerPage
-      v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
+      v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
       :current-user="currentUser"
       @logout="handleLogout"
     />
@@ -22,6 +22,7 @@
       v-else
       :current-user="currentUser"
       @logout="handleLogout"
+      @user-updated="handleUserUpdated"
     />
     <SystemWaitOverlay
       :visible="loginRedirecting"
@@ -87,7 +88,7 @@ watch([activePage, currentUser, authChecked], () => {
   if (!authChecked.value || !currentUser.value) return;
   if (activePage.value === "admin" && currentUser.value.role !== "ADMIN") {
     void router.replace("/workbenches");
-  } else if (activePage.value === "customers" && !["BUSINESS", "ADMIN"].includes(currentUser.value.role)) {
+  } else if (activePage.value === "customers" && !["BUSINESS", "ADMIN", "OVERSEA_AGENT"].includes(currentUser.value.role)) {
     void router.replace("/workbenches");
   }
 });

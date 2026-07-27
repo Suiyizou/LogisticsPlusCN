@@ -27,7 +27,7 @@
           {{ t("portal.adminConsole") }}
         </RouterLink>
         <RouterLink
-          v-if="['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
+          v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
           class="portal-admin-link portal-customer-link"
           to="/customers"
         >
@@ -40,6 +40,12 @@
             <small>{{ roleLabel }}</small>
           </span>
         </div>
+        <button class="portal-password" type="button" @click="openProfileDialog">
+          {{ t("portal.personalInfo") }}
+        </button>
+        <button class="portal-password" type="button" @click="openPasswordDialog">
+          {{ t("portal.changePassword") }}
+        </button>
         <button class="portal-logout" type="button" @click="emit('logout')">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M8 3H4.8A1.8 1.8 0 0 0 3 4.8v10.4A1.8 1.8 0 0 0 4.8 17H8M12.5 6.5 16 10l-3.5 3.5M16 10H7" />
@@ -132,7 +138,7 @@
           <p>{{ t("portal.sectionDescription") }}</p>
         </header>
 
-        <div class="portal-card-grid" :class="{ 'has-customer-card': ['BUSINESS', 'ADMIN'].includes(currentUser?.role) }">
+        <div class="portal-card-grid" :class="{ 'has-customer-card': ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role) }">
           <RouterLink
             class="portal-workbench-card portal-workbench-card--planner"
             to="/planner/config"
@@ -168,7 +174,7 @@
           </RouterLink>
 
           <a
-            v-if="!['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
+            v-if="!['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
             class="portal-workbench-card portal-workbench-card--tracking"
             :href="trackingWorkbenchUrl"
             target="_blank"
@@ -204,7 +210,7 @@
           </a>
 
           <RouterLink
-            v-if="['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
+            v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
             class="portal-workbench-card portal-workbench-card--customers"
             to="/customers"
           >
@@ -244,20 +250,98 @@
         <span>{{ t("portal.footerHint") }}</span>
       </footer>
     </section>
+
+    <el-dialog
+      v-model="profileDialogOpen"
+      class="portal-password-dialog"
+      :title="t('portal.personalInfoTitle')"
+      width="560px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+    >
+      <el-form class="portal-password-form" label-position="top" @submit.prevent="submitProfile">
+        <el-form-item :label="t('portal.accountUsername')">
+          <el-input :model-value="currentUser?.username" disabled />
+        </el-form-item>
+        <el-form-item :label="t('portal.accountRole')">
+          <el-input :model-value="roleLabel" disabled />
+        </el-form-item>
+        <el-form-item :label="t('portal.displayName')">
+          <el-input v-model.trim="profileForm.displayName" maxlength="80" show-word-limit />
+        </el-form-item>
+        <el-alert v-if="profileError" :title="profileError" type="error" :closable="false" show-icon />
+      </el-form>
+      <template #footer>
+        <el-button :disabled="profileSaving" @click="profileDialogOpen = false">{{ t("portal.cancel") }}</el-button>
+        <el-button type="primary" :loading="profileSaving" @click="submitProfile">{{ t("portal.saveProfile") }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="passwordDialogOpen"
+      class="portal-password-dialog"
+      :title="t('portal.changePasswordTitle')"
+      width="520px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      destroy-on-close
+    >
+      <el-alert
+        :title="t('portal.passwordRule')"
+        type="info"
+        :closable="false"
+        show-icon
+      />
+      <el-form class="portal-password-form" label-position="top" @submit.prevent="submitPasswordChange">
+        <el-form-item :label="t('portal.currentPassword')">
+          <el-input v-model="passwordForm.currentPassword" type="password" show-password autocomplete="current-password" />
+        </el-form-item>
+        <el-form-item :label="t('portal.newPassword')">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password autocomplete="new-password" />
+        </el-form-item>
+        <el-form-item :label="t('portal.confirmPassword')">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password autocomplete="new-password" />
+        </el-form-item>
+        <el-alert v-if="passwordError" :title="passwordError" type="error" :closable="false" show-icon />
+      </el-form>
+      <template #footer>
+        <el-button :disabled="passwordSaving" @click="passwordDialogOpen = false">
+          {{ t("portal.cancel") }}
+        </el-button>
+        <el-button type="primary" :loading="passwordSaving" @click="submitPasswordChange">
+          {{ t("portal.savePassword") }}
+        </el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
+import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
+import { changeOwnPassword, updateOwnProfile } from "../services/adminApi";
+import { saveStoredUser } from "../services/authSession";
 
 const props = defineProps({
   currentUser: { type: Object, default: null }
 });
-const emit = defineEmits(["logout"]);
+const emit = defineEmits(["logout", "user-updated"]);
 const { t } = useI18n();
+const passwordDialogOpen = ref(false);
+const profileDialogOpen = ref(false);
+const profileSaving = ref(false);
+const profileError = ref("");
+const passwordSaving = ref(false);
+const passwordError = ref("");
+const passwordForm = reactive({
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: ""
+});
+const profileForm = reactive({ displayName: "" });
 
 const trackingWorkbenchUrl = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("portal.operator"));
@@ -265,7 +349,7 @@ const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase());
 const roleLabel = computed(() => t({
   ADMIN: "portal.roleAdmin",
   BUSINESS: "portal.roleBusiness",
-  EMPLOYEE: "portal.roleEmployee"
+  OVERSEA_AGENT: "portal.roleOverseaAgent"
 }[props.currentUser?.role] || "portal.roleEmployee"));
 const currentYear = new Date().getFullYear();
 const todayText = computed(() => new Intl.DateTimeFormat(currentLocale.value === "en-US" ? "en-US" : "zh-CN", {
@@ -273,6 +357,77 @@ const todayText = computed(() => new Intl.DateTimeFormat(currentLocale.value ===
   day: "2-digit",
   weekday: "short"
 }).format(new Date()));
+
+function openPasswordDialog() {
+  passwordForm.currentPassword = "";
+  passwordForm.newPassword = "";
+  passwordForm.confirmPassword = "";
+  passwordError.value = "";
+  passwordDialogOpen.value = true;
+}
+
+function openProfileDialog() {
+  profileForm.displayName = props.currentUser?.displayName || "";
+  profileError.value = "";
+  profileDialogOpen.value = true;
+}
+
+onMounted(() => {
+  if (new URLSearchParams(window.location.search).get("profile") === "1") {
+    openProfileDialog();
+  }
+});
+
+async function submitProfile() {
+  profileError.value = "";
+  if (profileForm.displayName.trim().length < 2) {
+    profileError.value = t("portal.displayNameRule");
+    return;
+  }
+  profileSaving.value = true;
+  try {
+    const user = await updateOwnProfile(profileForm.displayName.trim());
+    saveStoredUser(user);
+    emit("user-updated", user);
+    profileDialogOpen.value = false;
+    ElMessage.success(t("portal.profileSaved"));
+  } catch (error) {
+    profileError.value = error?.message || t("portal.profileSaveFailed");
+  } finally {
+    profileSaving.value = false;
+  }
+}
+
+async function submitPasswordChange() {
+  passwordError.value = "";
+  if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+    passwordError.value = t("portal.passwordRequired");
+    return;
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    passwordError.value = t("portal.passwordMismatch");
+    return;
+  }
+  const strong = passwordForm.newPassword.length >= 12
+    && /[A-Z]/.test(passwordForm.newPassword)
+    && /[a-z]/.test(passwordForm.newPassword)
+    && /\d/.test(passwordForm.newPassword)
+    && /[^A-Za-z0-9]/.test(passwordForm.newPassword);
+  if (!strong) {
+    passwordError.value = t("portal.passwordRule");
+    return;
+  }
+  passwordSaving.value = true;
+  try {
+    await changeOwnPassword(passwordForm.currentPassword, passwordForm.newPassword);
+    passwordDialogOpen.value = false;
+    ElMessage.success(t("portal.passwordChanged"));
+  } catch (error) {
+    passwordError.value = error?.message || t("portal.passwordChangeFailed");
+  } finally {
+    passwordSaving.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -287,6 +442,21 @@ const todayText = computed(() => new Intl.DateTimeFormat(currentLocale.value ===
   background:
     radial-gradient(circle at 72% 8%, rgba(32, 116, 181, 0.2), transparent 28%),
     linear-gradient(145deg, #07131f 0%, #0a1b2b 52%, #07121e 100%);
+}
+
+:global(.portal-password-dialog) {
+  border-radius: 0;
+}
+
+:global(.portal-password-dialog .el-dialog__header),
+:global(.portal-password-dialog .el-dialog__body),
+:global(.portal-password-dialog .el-dialog__footer) {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.portal-password-form {
+  margin-top: 18px;
 }
 
 .portal-atmosphere,

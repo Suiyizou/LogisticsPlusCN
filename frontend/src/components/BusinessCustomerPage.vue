@@ -13,7 +13,7 @@
         <span class="customer-access-party-pill">{{ t("customers.internalPartyAgent") }}</span>
         <div class="customer-account" :class="{ 'is-open': accountMenuOpen }">
           <button type="button" class="customer-account-trigger" @click="accountMenuOpen = !accountMenuOpen">
-            <span><b>{{ displayName }}</b><small>{{ t("customers.businessOperator") }}</small></span>
+            <span><b>{{ displayName }}</b><small>{{ isManager ? t("customers.businessOperator") : t("customers.overseaAgentEmployee") }}</small></span>
             <i aria-hidden="true">&#x2304;</i>
           </button>
           <div v-if="accountMenuOpen" class="customer-account-menu">
@@ -53,17 +53,23 @@
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
         <nav class="sidebar-nav">
+          <button :class="{ active: menuItem === 'overview' }" @click="navigateTo('overview')">
+            <el-icon><DataBoard /></el-icon><span>{{ t("customers.overview") }}</span>
+          </button>
           <button :class="{ active: menuItem === 'customers' }" @click="navigateTo('customers')">
             <el-icon><User /></el-icon><span>{{ t("customers.tabCustomerManagement") }}</span>
-          </button>
-          <button :class="{ active: menuItem === 'relationships' }" @click="navigateTo('relationships')">
-            <el-icon><Operation /></el-icon><span>{{ t("customers.tabCustomerRelationships") }}</span>
           </button>
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
             <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
-          <button @click="navigateTo('tracking')">
-            <el-icon><Ship /></el-icon><span>{{ t("customers.trackingWorkspace") }}</span>
+          <button v-if="isManager" @click="navigateTo('batch-tracking')">
+            <el-icon><Operation /></el-icon><span>{{ t("customers.batchTrack") }}</span>
+          </button>
+          <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
+            <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
+          </button>
+          <button @click="$router.push({ path: '/workbenches', query: { profile: '1' } })">
+            <el-icon><User /></el-icon><span>{{ t("customers.personalInfo") }}</span>
           </button>
         </nav>
       </aside>
@@ -71,7 +77,19 @@
       <div class="workspace-main">
         <transition name="fade" mode="out-in" appear>
         <!-- CUSTOMER MANAGEMENT -->
-        <div v-if="menuItem === 'customers'" key="customers" class="workspace-view">
+        <div v-if="menuItem === 'overview'" key="overview" class="workspace-view">
+          <div class="list-page list-page-full">
+            <div class="list-page-header">
+              <div><h2>{{ t("customers.overview") }}</h2><p>{{ t("customers.overviewHint") }}</p></div>
+            </div>
+            <div class="customer-import-summary">
+              <span><b>{{ customers.length }}</b><small>{{ t("customers.directoryTitle") }}</small></span>
+              <span class="is-valid"><b>{{ availableShipments.length }}</b><small>{{ t("customers.tabShipmentManagement") }}</small></span>
+              <span><b>{{ transferAgents.filter((agent) => agent.status === 'ACTIVE').length }}</b><small>{{ t("customers.overseaAgentManagement") }}</small></span>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="menuItem === 'customers'" key="customers" class="workspace-view">
           <transition name="fade-slide" mode="out-in">
           <div :key="subView" class="subview-wrap">
           <!-- List view -->
@@ -79,19 +97,11 @@
             <div class="list-page list-page-full">
               <div class="list-page-header">
                 <h2>{{ t("customers.directoryTitle") }}</h2>
-                <div class="list-page-actions">
+                <div v-if="isManager" class="list-page-actions">
                   <el-input v-model="customerSearch" :placeholder="t('customers.searchCustomerPlaceholder')" prefix-icon="Search" clearable style="width:240px" />
                   <el-button type="primary" @click="createDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button>
+                  <el-button type="primary" plain @click="openAgentCreateDialog"><el-icon><UserFilled /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
                   <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
-                  <el-button
-                    type="warning"
-                    plain
-                    :disabled="!selectedCustomerRows.length"
-                    @click="openCustomerTransfer"
-                  >
-                    <el-icon><Operation /></el-icon>
-                    {{ t("customers.transferSelected", { count: selectedCustomerRows.length }) }}
-                  </el-button>
                 </div>
               </div>
               <el-table
@@ -102,9 +112,7 @@
                 style="width:100%"
                 table-layout="auto"
                 class="customer-directory-table"
-                @selection-change="handleCustomerSelectionChange"
               >
-                <el-table-column type="selection" width="48" :selectable="isTransferableCustomer" />
                 <el-table-column type="index" :label="t('customers.index')" width="60" />
                 <el-table-column :label="t('customers.displayName')" min-width="180">
                   <template #default="{ row }">
@@ -118,7 +126,9 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="clientCode" :label="t('customers.clientCode')" width="150" />
-                <el-table-column prop="responsibleAgentDisplayName" :label="t('customers.responsibleAgent')" min-width="140" />
+                <el-table-column prop="overseaAgentDisplayName" :label="t('customers.targetAgent')" min-width="150">
+                  <template #default="{ row }">{{ row.overseaAgentDisplayName || t("customers.unassigned") }}</template>
+                </el-table-column>
                 <el-table-column :label="t('customers.partyRole')" width="120">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
                 </el-table-column>
@@ -136,14 +146,21 @@
                 <el-table-column :label="t('customers.createdAt')" width="170">
                   <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.actions')" width="460" fixed="right">
+                <el-table-column :label="t('customers.actions')" :width="isManager ? 560 : 120" fixed="right">
                   <template #default="{ row }">
                     <div class="table-action-buttons table-action-buttons--spacious">
                       <el-button type="primary" plain @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
-                      <el-button type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
-                      <el-button type="warning" plain @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                      <el-button v-if="row.status==='ACTIVE'" type="danger" plain @click.stop="toggleCustomerStatus(row)">{{ t("customers.disable") }}</el-button>
-                      <el-button v-else type="success" plain @click.stop="toggleCustomerStatus(row)">{{ t("customers.enable") }}</el-button>
+                      <template v-if="isManager">
+                        <el-button type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
+                        <el-button
+                          type="success"
+                          plain
+                          :disabled="!isTransferableCustomer(row)"
+                          @click.stop="openCustomerTransfer(row)"
+                        >{{ row.overseaAgentUserId ? t("customers.changeAgent") : t("customers.assignAgent") }}</el-button>
+                        <el-button type="warning" plain @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                        <el-button type="danger" plain @click.stop="deleteCustomerRow(row)">{{ t("customers.deleteCustomer") }}</el-button>
+                      </template>
                     </div>
                   </template>
                 </el-table-column>
@@ -167,7 +184,7 @@
                       {{ statusLabel(selectedCustomer.status) }}
                     </p>
                   </div>
-                  <div class="main-card-header-actions">
+                  <div v-if="isManager" class="main-card-header-actions">
                     <el-button text @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
                       {{ t("customers.resetPassword") }}
                     </el-button>
@@ -189,7 +206,7 @@
 
               <section class="profile-section">
                 <div class="section-label">{{ t("customers.profileTitle") }}</div>
-                <el-form class="profile-form" @submit.prevent="saveCustomer" label-position="top">
+                <el-form class="profile-form" :disabled="!isManager" @submit.prevent="saveCustomer" label-position="top">
                   <el-row :gutter="16">
                     <el-col :span="8">
                       <el-form-item :label="t('customers.username')">
@@ -218,13 +235,12 @@
                     <el-col :span="8">
                       <el-form-item :label="t('customers.partyRole')">
                         <el-select v-model="editForm.partyRole" class="business-select" popper-class="business-select-popper">
-                          <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
                           <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                           <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
                         </el-select>
                       </el-form-item>
                     </el-col>
-                    <el-col :span="4" :offset="12" style="display:flex;align-items:flex-end;padding-bottom:18px;">
+                    <el-col v-if="isManager" :span="4" :offset="12" style="display:flex;align-items:flex-end;padding-bottom:18px;">
                       <el-button type="primary" native-type="submit" :disabled="mutatingCustomer">
                         {{ t("customers.saveProfile") }}
                       </el-button>
@@ -235,7 +251,7 @@
               </section>
             </el-card>
 
-            <el-card v-if="selectedCustomer.partyRole === 'OVERSEA_AGENT'" class="main-card" shadow="never">
+            <el-card v-if="isManager && selectedCustomer.partyRole === 'OVERSEA_AGENT'" class="main-card" shadow="never">
               <template #header>
                 <div class="section-label">{{ t("customers.linkedCustomersTitle") }}</div>
               </template>
@@ -272,7 +288,7 @@
                 <div class="section-label">{{ t("customers.shipmentsTitle") }}</div>
               </template>
 
-              <el-card class="bind-form-card" shadow="never">
+              <el-card v-if="isManager" class="bind-form-card" shadow="never">
                 <div class="bind-mode-switch">
                   <el-radio-group v-model="bindMode" size="small">
                     <el-radio-button value="reference">{{ t("customers.bindByReference") }}</el-radio-button>
@@ -398,8 +414,8 @@
                     </span>
                     <span>{{ formatDate(shipment.lastTrackedAt || shipment.updatedAt) }}</span>
                     <span class="candidate-row-actions">
-                      <el-button text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.edit") }}</el-button>
-                      <el-button type="primary" size="small" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</el-button>
+                      <el-button v-if="isManager" text size="small" @click="openShipmentDetail(shipment)">{{ t("customers.edit") }}</el-button>
+                      <el-button v-if="isManager" type="primary" size="small" @click="quickBindShipment(shipment)" :disabled="bindingShipment">{{ t("customers.quickBind") }}</el-button>
                     </span>
                   </div>
                 </div>
@@ -422,9 +438,36 @@
           </transition>
         </div>
 
-        <!-- CUSTOMER RELATIONSHIPS -->
-        <div v-else-if="menuItem === 'relationships'" key="relationships" class="workspace-view">
-          <CustomerRelationshipPanel :current-user="props.currentUser" />
+        <div v-else-if="menuItem === 'agents'" key="agents" class="workspace-view">
+          <div class="list-page list-page-full">
+            <div class="list-page-header">
+              <div><h2>{{ t("customers.overseaAgentManagement") }}</h2><p>{{ t("customers.overseaAgentManagementHint") }}</p></div>
+              <div class="list-page-actions">
+                <el-button @click="loadTransferAgents"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
+                <el-button type="primary" @click="openAgentCreateDialog"><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
+              </div>
+            </div>
+            <el-table :data="transferAgents" border stripe v-loading="loadingTransferAgents" class="standard-information-table">
+              <el-table-column type="index" :label="t('customers.index')" width="70" />
+              <el-table-column prop="username" :label="t('customers.username')" min-width="160" />
+              <el-table-column prop="displayName" :label="t('customers.displayName')" min-width="180" />
+              <el-table-column prop="linkedCustomerCount" :label="t('customers.shipmentCount')" width="130" align="center" />
+              <el-table-column :label="t('customers.status')" width="120">
+                <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'">{{ statusLabel(row.status) }}</el-tag></template>
+              </el-table-column>
+              <el-table-column :label="t('customers.actions')" width="360" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
+                  <el-button type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                  <el-button
+                    :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
+                    plain
+                    @click="toggleAgentStatus(row)"
+                  >{{ row.status === 'ACTIVE' ? t("customers.disable") : t("customers.enable") }}</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </div>
 
         <!-- SHIPMENT MANAGEMENT -->
@@ -438,7 +481,7 @@
                 <div class="list-page-header">
                   <h2>{{ t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
-                    <label class="shipment-toolbar-control">
+                    <label v-if="isManager" class="shipment-toolbar-control">
                       <span>{{ t("customers.customerFilterLabel") }}</span>
                       <el-select
                         v-model="shipmentCustomerFilter"
@@ -475,30 +518,33 @@
                       :disabled="!refreshIssueCount"
                       @click="refreshIssuesOnly = !refreshIssuesOnly"
                     >{{ t("customers.refreshIssuesOnly", { count: refreshIssueCount }) }}</el-button>
-                    <el-button type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
-                    <el-button type="primary" plain @click="openShipmentExcelImport">
+                    <el-button v-if="isManager" type="primary" @click="shipmentCreateDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}</el-button>
+                    <el-button v-if="isManager" type="primary" plain @click="openShipmentExcelImport">
                       <el-icon><Upload /></el-icon>{{ t("customers.shipmentExcelImport") }}
                     </el-button>
                     <el-button
+                      v-if="isManager"
                       type="primary"
                       plain
                       :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
                       @click="openBatchBusinessFieldsEditor"
                     >{{ t("customers.batchEditBusinessFields", { count: selectedShipmentRows.length }) }}</el-button>
                     <el-button
+                      v-if="isManager"
                       type="danger"
                       plain
                       :disabled="!selectedShipmentRows.length || batchDeletingShipments"
                       @click="batchDeleteSelectedShipments"
                     >{{ t("customers.batchDeleteSelected", { count: selectedShipmentRows.length }) }}</el-button>
                     <el-button
+                      v-if="isManager"
                       type="warning"
                       plain
                       :disabled="!selectedShipmentRows.length || batchTrackRunning || refreshingShipment || batchDeletingShipments"
                       @click="startRefreshSelectedShipments"
                     ><el-icon><Refresh /></el-icon>{{ t("customers.batchRefreshSelected", { count: selectedShipmentRows.length }) }}</el-button>
-                    <el-button type="success" plain :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}</el-button>
-                    <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
+                    <el-button v-if="isManager" type="success" plain :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}</el-button>
+                    <el-button v-if="isManager" @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''"><el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
                   </div>
                 </div>
@@ -511,7 +557,7 @@
                   style="width:100%"
                   @selection-change="handleShipmentSelectionChange"
                 >
-                  <el-table-column type="selection" width="48" />
+                  <el-table-column v-if="isManager" type="selection" width="48" />
                   <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="60" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="200">
                     <template #default="{ row }">
@@ -569,13 +615,15 @@
                   <el-table-column :label="t('customers.lastTrackedAt')" width="160">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" width="380" fixed="right">
+                  <el-table-column :label="t('customers.actions')" :width="isManager ? 380 : 110" fixed="right">
                     <template #default="{ row }">
                       <div class="table-action-buttons table-action-buttons--spacious">
                         <el-button size="small" type="info" plain @click.stop="trackShipmentInWorkspace(row)">{{ t("customers.view") }}</el-button>
-                        <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
-                        <el-button size="small" type="warning" plain :disabled="refreshingShipment" @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
-                        <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
+                        <template v-if="isManager">
+                          <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
+                          <el-button size="small" type="warning" plain :disabled="refreshingShipment" @click.stop="updateShipmentTracking(row)">{{ t("customers.update") }}</el-button>
+                          <el-button size="small" type="danger" plain @click.stop="deleteShipmentRow(row)">{{ t("customers.delete") }}</el-button>
+                        </template>
                       </div>
                     </template>
                   </el-table-column>
@@ -637,6 +685,20 @@
                 <div class="shipment-workspace-side batch-track-task-dialog-body">
                   <div class="batch-track-panel">
                     <div v-show="!batchTrackRunning" class="batch-track-form">
+                      <div class="assignment-customer-row">
+                        <label>
+                          <span>{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span>
+                          <el-select v-model="batchTrackCustomerId" filterable class="business-select">
+                            <el-option
+                              v-for="customer in assignableCustomers"
+                              :key="customer.id"
+                              :value="customer.id"
+                              :label="customerFilterOptionLabel(customer)"
+                            />
+                          </el-select>
+                        </label>
+                        <el-checkbox v-model="batchTrackPublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
+                      </div>
                       <div
                         v-loading="batchTrackFileParsing"
                         :element-loading-text="t('app.loadingPage')"
@@ -680,22 +742,24 @@
                           {{ t("customers.trackColumnDecision", { trackable: batchTrackTrackableCount, manual: batchTrackManualCount }) }}
                         </p>
                         <div class="batch-track-preview-table-wrap">
-                          <table class="batch-track-preview-table">
-                            <thead>
-                              <tr>
-                                <th v-for="column in batchTrackSelectedSheet.columns" :key="column.index" :class="{ selected: column.index === batchTrackSelectedColumnIndex }">
-                                  {{ column.label }}
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr v-for="(row, rowIndex) in batchTrackPreviewRows" :key="rowIndex">
-                                <td v-for="column in batchTrackSelectedSheet.columns" :key="column.index" :class="{ selected: column.index === batchTrackSelectedColumnIndex }">
-                                  {{ row[column.index] || "—" }}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                          <el-table
+                            :data="batchTrackPreviewRows"
+                            border
+                            size="small"
+                            max-height="260"
+                            class="standard-information-table batch-track-preview-table"
+                          >
+                            <el-table-column
+                              v-for="column in batchTrackSelectedSheet.columns"
+                              :key="column.index"
+                              min-width="150"
+                              :label="column.label"
+                              :class-name="column.index === batchTrackSelectedColumnIndex ? 'selected' : ''"
+                              :label-class-name="column.index === batchTrackSelectedColumnIndex ? 'selected' : ''"
+                            >
+                              <template #default="{ row }">{{ row[column.index] || "—" }}</template>
+                            </el-table-column>
+                          </el-table>
                         </div>
                       </section>
                     </div>
@@ -779,7 +843,7 @@
                       <button
                         class="customer-access-primary"
                         type="button"
-                        :disabled="batchTrackRunning || !batchTrackSelectedSheet || !batchTrackNumbers.length"
+                        :disabled="batchTrackRunning || !batchTrackCustomerId || !batchTrackSelectedSheet || !batchTrackNumbers.length"
                         @click="startBatchTrack"
                       >
                         {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
@@ -1020,7 +1084,6 @@
           <label>
             <span>{{ t("customers.createPartyRole") }} <i class="required-star">*</i></span>
             <el-select v-model="createForm.partyRole" class="business-select" popper-class="business-select-popper">
-              <el-option value="OVERSEA_AGENT" :label="t('customers.roleOverseaAgent')" />
               <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
               <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
             </el-select>
@@ -1124,59 +1187,52 @@
             </div>
 
             <div class="customer-import-preview">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{{ t("customers.excelRow") }}</th>
-                    <th>{{ t("customers.createAccount") }}</th>
-                    <th>{{ t("customers.createDisplayName") }}</th>
-                    <th>{{ t("customers.initialPassword") }}</th>
-                    <th>{{ t("customers.clientCode") }}</th>
-                    <th>{{ t("customers.createPartyRole") }}</th>
-                    <th>{{ t("customers.validationMessage") }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template
-                    v-for="row in activeCustomerBatchPreview.rows"
-                    :key="`${row.rowNumber}-${row.username}`"
-                  >
-                    <tr :class="{ 'is-invalid': row.errors.length }">
-                      <td><b>#{{ row.rowNumber }}</b></td>
-                      <td><b>{{ row.username || '—' }}</b></td>
-                      <td>{{ row.displayName || '—' }}</td>
-                      <td>
-                        <span class="customer-import-value-pill" :class="{ 'is-generated': !row.passwordProvided }">
-                          {{ row.passwordProvided ? t("customers.passwordProvided", { count: row.password.length }) : t("customers.systemGenerated") }}
-                        </span>
-                      </td>
-                      <td>{{ row.clientCode || t("customers.systemGenerated") }}</td>
-                      <td>{{ customerPartyRoleLabel(row.partyRole) }}</td>
-                      <td>
-                        <span v-if="row.errors.length" class="customer-import-validation-pill is-error">
-                          {{ t("customers.validationErrorCount", { count: row.errors.length }) }}
-                        </span>
-                        <span v-else-if="row.warnings.length" class="customer-import-validation-pill is-warning">
-                          {{ t("customers.validationWarningCount", { count: row.warnings.length }) }}
-                        </span>
-                        <span v-else class="customer-import-ready">{{ t("customers.importReady") }}</span>
-                      </td>
-                    </tr>
-                    <tr v-if="row.errors.length || row.warnings.length" class="customer-import-issue-row">
-                      <td colspan="7">
-                        <div class="customer-import-issues">
-                          <span v-for="problem in row.errors" :key="`error-${problem.field}-${problem.code}`" class="is-error">
-                            <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
-                          </span>
-                          <span v-for="problem in row.warnings" :key="`warning-${problem.field}-${problem.code}`" class="is-warning">
-                            <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
+              <el-table
+                :data="activeCustomerBatchPreview.rows"
+                border
+                max-height="440"
+                class="standard-information-table customer-import-preview-table"
+              >
+                <el-table-column :label="t('customers.excelRow')" width="82">
+                  <template #default="{ row }"><b>#{{ row.rowNumber }}</b></template>
+                </el-table-column>
+                <el-table-column :label="t('customers.createAccount')" min-width="145">
+                  <template #default="{ row }"><b>{{ row.username || "—" }}</b></template>
+                </el-table-column>
+                <el-table-column prop="displayName" :label="t('customers.createDisplayName')" min-width="150" />
+                <el-table-column :label="t('customers.initialPassword')" min-width="160">
+                  <template #default="{ row }">
+                    <span class="customer-import-value-pill" :class="{ 'is-generated': !row.passwordProvided }">
+                      {{ row.passwordProvided ? t("customers.passwordProvided", { count: row.password.length }) : t("customers.systemGenerated") }}
+                    </span>
                   </template>
-                </tbody>
-              </table>
+                </el-table-column>
+                <el-table-column :label="t('customers.clientCode')" min-width="135">
+                  <template #default="{ row }">{{ row.clientCode || t("customers.systemGenerated") }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.createPartyRole')" min-width="140">
+                  <template #default="{ row }">{{ customerPartyRoleLabel(row.partyRole) }}</template>
+                </el-table-column>
+                <el-table-column :label="t('customers.validationMessage')" min-width="300">
+                  <template #default="{ row }">
+                    <span v-if="row.errors.length" class="customer-import-validation-pill is-error">
+                      {{ t("customers.validationErrorCount", { count: row.errors.length }) }}
+                    </span>
+                    <span v-else-if="row.warnings.length" class="customer-import-validation-pill is-warning">
+                      {{ t("customers.validationWarningCount", { count: row.warnings.length }) }}
+                    </span>
+                    <span v-else class="customer-import-ready">{{ t("customers.importReady") }}</span>
+                    <div v-if="row.errors.length || row.warnings.length" class="customer-import-issues">
+                      <span v-for="problem in row.errors" :key="`error-${problem.field}-${problem.code}`" class="is-error">
+                        <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
+                      </span>
+                      <span v-for="problem in row.warnings" :key="`warning-${problem.field}-${problem.code}`" class="is-warning">
+                        <b>{{ customerImportFieldLabel(problem.field) }}</b>{{ customerImportIssueText(problem) }}
+                      </span>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
             </div>
           </template>
         </div>
@@ -1364,6 +1420,26 @@
         <p>{{ t("customers.createShipmentDescription") }}</p>
         <form class="customer-dialog-form manual-shipment-form" @submit.prevent="createShipment">
           <p class="manual-required-hint">{{ t("customers.manualRequiredHint") }}</p>
+          <section class="manual-entry-section">
+            <header class="manual-entry-section-head">
+              <span><b>00</b><strong>{{ t("customers.selectCustomerFirst") }}</strong></span>
+              <small>{{ t("customers.manualRequiredSection") }}</small>
+            </header>
+            <div class="assignment-customer-row">
+              <label>
+                <span>{{ t("customers.customer") }} <i class="required-star">*</i></span>
+                <el-select v-model="shipmentCreateCustomerId" filterable class="business-select">
+                  <el-option
+                    v-for="customer in assignableCustomers"
+                    :key="customer.id"
+                    :value="customer.id"
+                    :label="customerFilterOptionLabel(customer)"
+                  />
+                </el-select>
+              </label>
+              <el-checkbox v-model="shipmentCreatePublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
+            </div>
+          </section>
 
           <section class="manual-entry-section">
             <header class="manual-entry-section-head">
@@ -1646,6 +1722,20 @@
         </div>
 
         <div class="shipment-excel-import-body">
+          <div class="assignment-customer-row">
+            <label>
+              <span>{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span>
+              <el-select v-model="shipmentExcelCustomerId" filterable class="business-select">
+                <el-option
+                  v-for="customer in assignableCustomers"
+                  :key="customer.id"
+                  :value="customer.id"
+                  :label="customerFilterOptionLabel(customer)"
+                />
+              </el-select>
+            </label>
+            <el-checkbox v-model="shipmentExcelPublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
+          </div>
           <div
             v-loading="shipmentExcelImportParsing"
             :element-loading-text="t('app.loadingPage')"
@@ -1690,42 +1780,34 @@
           </div>
 
           <div v-if="shipmentExcelImportPreview.rows.length" class="shipment-excel-import-table-wrap">
-            <table class="shipment-excel-import-table">
-              <thead>
-                <tr>
-                  <th>{{ t("customers.excelRow") }}</th>
-                  <th>{{ t("customers.importKey") }}</th>
-                  <th>{{ t("customers.carrier") }}</th>
-                  <th>{{ t("customers.referenceType") }}</th>
-                  <th>{{ t("customers.referenceNo") }}</th>
-                  <th>{{ t("customers.importStatus") }}</th>
-                  <th>{{ t("customers.validationMessage") }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="row in shipmentExcelImportPreview.rows"
-                  :key="`${row.rowNumber}-${row.importKey}`"
-                  :class="{ 'is-invalid': row.errors.length, 'has-warning': row.warnings.length }"
-                >
-                  <td>{{ row.rowNumber }}</td>
-                  <td><b>{{ row.importKey || "—" }}</b></td>
-                  <td>{{ row.carrier || "—" }}</td>
-                  <td>{{ row.referenceType || "—" }}</td>
-                  <td>{{ row.referenceNo || "—" }}</td>
-                  <td>
-                    <span :class="row.errors.length ? 'import-state-error' : 'import-state-ready'">
-                      {{ row.errors.length ? t("customers.importNeedsFix") : t("customers.importReady") }}
-                    </span>
-                  </td>
-                  <td>
-                    <span v-if="row.errors.length">{{ row.errors.join("；") }}</span>
-                    <span v-else-if="row.warnings.length">{{ row.warnings.join("；") }}</span>
-                    <span v-else>—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <el-table
+              :data="shipmentExcelImportPreview.rows"
+              border
+              max-height="440"
+              class="standard-information-table shipment-excel-import-table"
+            >
+              <el-table-column prop="rowNumber" :label="t('customers.excelRow')" width="82" />
+              <el-table-column :label="t('customers.importKey')" min-width="150">
+                <template #default="{ row }"><b>{{ row.importKey || "—" }}</b></template>
+              </el-table-column>
+              <el-table-column prop="carrier" :label="t('customers.carrier')" width="110" />
+              <el-table-column prop="referenceType" :label="t('customers.referenceType')" min-width="135" />
+              <el-table-column prop="referenceNo" :label="t('customers.referenceNo')" min-width="155" />
+              <el-table-column :label="t('customers.importStatus')" width="120">
+                <template #default="{ row }">
+                  <span :class="row.errors.length ? 'import-state-error' : 'import-state-ready'">
+                    {{ row.errors.length ? t("customers.importNeedsFix") : t("customers.importReady") }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('customers.validationMessage')" min-width="300">
+                <template #default="{ row }">
+                  <span v-if="row.errors.length">{{ row.errors.join("；") }}</span>
+                  <span v-else-if="row.warnings.length">{{ row.warnings.join("；") }}</span>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
 
           <section v-if="shipmentExcelImporting || shipmentExcelImportResults.length" class="shipment-excel-import-progress">
@@ -1775,6 +1857,33 @@
       </section>
     </div>
 
+    <el-dialog
+      v-model="agentCreateDialogOpen"
+      :title="t('customers.createOverseaAgentTitle')"
+      width="560px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      class="square-dialog"
+    >
+      <el-alert :title="t('customers.createOverseaAgentHint')" type="info" :closable="false" show-icon />
+      <el-form class="agent-create-form" label-position="top" @submit.prevent="submitAgentCreate">
+        <el-form-item :label="t('customers.username')">
+          <el-input v-model.trim="agentCreateForm.username" autocomplete="off" />
+        </el-form-item>
+        <el-form-item :label="t('customers.displayName')">
+          <el-input v-model.trim="agentCreateForm.displayName" />
+        </el-form-item>
+        <el-form-item :label="t('customers.initialPassword')">
+          <el-input v-model="agentCreateForm.password" type="password" show-password autocomplete="new-password" />
+        </el-form-item>
+        <el-alert v-if="agentCreateError" :title="agentCreateError" type="error" :closable="false" show-icon />
+      </el-form>
+      <template #footer>
+        <el-button :disabled="creatingAgent" @click="agentCreateDialogOpen = false">{{ t("customers.cancel") }}</el-button>
+        <el-button type="primary" :loading="creatingAgent" @click="submitAgentCreate">{{ t("customers.createOverseaAgent") }}</el-button>
+      </template>
+    </el-dialog>
+
     <div v-if="toastMessage" class="customer-toast" role="status">{{ toastMessage }}</div>
   </main>
 </template>
@@ -1782,7 +1891,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import CustomerRelationshipPanel from "./CustomerRelationshipPanel.vue";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
@@ -1793,11 +1901,13 @@ import {
   batchCreateBusinessCustomers,
   cancelShipmentBatchTask,
   createBusinessCustomer,
+  createOverseaAgentEmployee,
   createBusinessShipment,
   createShipmentBatchRefreshTask,
   createShipmentBatchTask,
   createShipmentRefreshAllTask,
   deleteBusinessCustomer,
+  deleteOverseaAgent,
   deleteBusinessShipment,
   fetchAvailableBusinessShipments,
   fetchBusinessCustomers,
@@ -1812,6 +1922,7 @@ import {
   transferBusinessCustomers,
   unbindBusinessCustomerShipment,
   updateBusinessCustomer,
+  updateOverseaAgent,
   updateOverseaAgentLinkedCustomers,
   updateBusinessShipment,
   updateBusinessShipmentManualSnapshot
@@ -1838,7 +1949,8 @@ import {
   Ship,
   Refresh,
   Search,
-  Operation
+  Operation,
+  DataBoard
 } from "@element-plus/icons-vue";
 
 const props = defineProps({
@@ -1846,6 +1958,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["logout"]);
 const { t } = useI18n();
+const isManager = computed(() => ["BUSINESS", "ADMIN"].includes(props.currentUser?.role));
 let xlsxModulePromise;
 
 function loadXlsxModule() {
@@ -1867,6 +1980,9 @@ const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
 const accountMenuOpen = ref(false);
 const createDialogOpen = ref(false);
+const agentCreateDialogOpen = ref(false);
+const creatingAgent = ref(false);
+const agentCreateError = ref("");
 const batchImportDialogOpen = ref(false);
 const batchImportMode = ref("quick");
 const quickImportText = ref("");
@@ -1943,6 +2059,8 @@ const batchTrackSelectedColumnIndex = ref(null);
 const batchTrackTaskId = ref("");
 const batchTrackMode = ref("IMPORT");
 const batchTrackCancelRequested = ref(false);
+const batchTrackCustomerId = ref("");
+const batchTrackPublishToCustomer = ref(true);
 const batchTrackProblemsOnly = ref(false);
 const batchTrackClock = ref(Date.now());
 const batchTrackAbortController = ref(null);
@@ -1984,6 +2102,7 @@ const createForm = reactive({
   partyRole: "SHIPPER",
   remark: ""
 });
+const agentCreateForm = reactive({ username: "", displayName: "", password: "" });
 const isEditMode = ref(false);
 const editingCustomerId = ref("");
 const passwordResetForm = reactive({ password: "", confirmPassword: "" });
@@ -2006,12 +2125,16 @@ const shipmentCreateForm = reactive({
   ...emptyManualShipmentFields(),
   ...emptyDetailedManualShipmentFields()
 });
+const shipmentCreateCustomerId = ref("");
+const shipmentCreatePublishToCustomer = ref(true);
+const shipmentExcelCustomerId = ref("");
+const shipmentExcelPublishToCustomer = ref(true);
 const detailForm = reactive({ referenceType: "BOOKING", referenceNo: "", trackingStatus: "", note: "", ...emptyManualShipmentFields() });
 let shipmentRequestSequence = 0;
 let shipmentListRequestSequence = 0;
 let toastTimer = 0;
 
-const menuItem = ref("customers");
+const menuItem = ref(isManager.value ? "customers" : "shipments");
 const subView = ref("list");
 const customerSearch = ref("");
 const selectedShipmentId = ref("");
@@ -2089,6 +2212,11 @@ const shipmentFilterCustomers = computed(() =>
     customerFilterOptionLabel(left).localeCompare(customerFilterOptionLabel(right))
   )
 );
+const assignableCustomers = computed(() =>
+  customers.value.filter((customer) =>
+    customer.status === "ACTIVE" && ["SHIPPER", "CONSIGNEE"].includes(customer.partyRole)
+  )
+);
 
 const refreshIssueCount = computed(() => shipmentRefreshIssueTotal.value);
 
@@ -2099,6 +2227,7 @@ const canStartShipmentExcelImport = computed(() =>
   && shipmentExcelImportPreview.value.valid > 0
   && shipmentExcelImportPreview.value.invalid === 0
   && shipmentExcelImportPreview.value.globalErrors.length === 0
+  && !!shipmentExcelCustomerId.value
 );
 
 const selectedShipment = computed(() => {
@@ -2404,6 +2533,24 @@ watch(selectedCustomer, (customer) => {
   editForm.partyRole = customer?.partyRole || "SHIPPER";
 }, { immediate: true });
 
+watch(shipmentCreateDialogOpen, (open) => {
+  if (open && !shipmentCreateCustomerId.value) {
+    shipmentCreateCustomerId.value = selectedCustomerId.value || assignableCustomers.value[0]?.id || "";
+  }
+});
+
+watch(shipmentExcelImportDialogOpen, (open) => {
+  if (open && !shipmentExcelCustomerId.value) {
+    shipmentExcelCustomerId.value = selectedCustomerId.value || assignableCustomers.value[0]?.id || "";
+  }
+});
+
+watch(batchTrackDialogOpen, (open) => {
+  if (open && batchTrackMode.value === "IMPORT" && !batchTrackCustomerId.value) {
+    batchTrackCustomerId.value = selectedCustomerId.value || assignableCustomers.value[0]?.id || "";
+  }
+});
+
 watch(unboundAvailableShipments, (items) => {
   const availableIds = new Set(items.map((item) => item.shipmentId));
   selectedCandidateShipmentIds.value = selectedCandidateShipmentIds.value
@@ -2464,12 +2611,15 @@ onUnmounted(() => {
 });
 
 function navigateTo(item) {
-  if (item === "tracking") {
-    openTrackingWorkspace();
+  if (item === "batch-tracking") {
+    menuItem.value = "shipments";
+    subView.value = "list";
+    toggleBatchTrackPanel();
     return;
   }
   menuItem.value = item;
   subView.value = "list";
+  if (item === "agents") void loadTransferAgents();
 }
 
 function selectCustomerFromList(row) {
@@ -2531,14 +2681,63 @@ function isTransferableCustomer(customer) {
   return customer?.status === "ACTIVE" && ["SHIPPER", "CONSIGNEE"].includes(customer?.partyRole);
 }
 
-async function openCustomerTransfer() {
-  if (!selectedCustomerRows.value.length || loadingTransferAgents.value) return;
-  transferDialogOpen.value = true;
-  transferForm.targetAgentId = null;
+function openAgentCreateDialog() {
+  agentCreateForm.username = "";
+  agentCreateForm.displayName = "";
+  agentCreateForm.password = "";
+  agentCreateError.value = "";
+  agentCreateDialogOpen.value = true;
+}
+
+async function submitAgentCreate() {
+  agentCreateError.value = "";
+  const strong = agentCreateForm.password.length >= 12
+    && /[A-Z]/.test(agentCreateForm.password)
+    && /[a-z]/.test(agentCreateForm.password)
+    && /\d/.test(agentCreateForm.password)
+    && /[^A-Za-z0-9]/.test(agentCreateForm.password);
+  if (!agentCreateForm.username || !agentCreateForm.displayName || !strong) {
+    agentCreateError.value = t("customers.createOverseaAgentValidation");
+    return;
+  }
+  creatingAgent.value = true;
+  try {
+    await createOverseaAgentEmployee({
+      username: agentCreateForm.username,
+      displayName: agentCreateForm.displayName,
+      password: agentCreateForm.password
+    });
+    agentCreateDialogOpen.value = false;
+    showSuccess("customers.createOverseaAgentSuccess");
+  } catch (error) {
+    agentCreateError.value = error?.message || t("customers.createOverseaAgentFailed");
+  } finally {
+    creatingAgent.value = false;
+  }
+}
+
+async function loadTransferAgents() {
   loadingTransferAgents.value = true;
   try {
     const response = await fetchCustomerTransferAgents();
     transferAgents.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    showError(error, "customers.loadTransferAgentsFailed");
+  } finally {
+    loadingTransferAgents.value = false;
+  }
+}
+
+async function openCustomerTransfer(customer) {
+  if (!customer || loadingTransferAgents.value) return;
+  selectedCustomerRows.value = [customer];
+  transferDialogOpen.value = true;
+  transferForm.targetAgentId = customer.overseaAgentUserId || null;
+  loadingTransferAgents.value = true;
+  try {
+    const response = await fetchCustomerTransferAgents();
+    transferAgents.value = (Array.isArray(response?.items) ? response.items : [])
+      .filter((agent) => agent.status === "ACTIVE");
   } catch (error) {
     transferDialogOpen.value = false;
     showError(error, "customers.loadTransferAgentsFailed");
@@ -2564,7 +2763,6 @@ async function submitCustomerTransfer() {
     transferDialogOpen.value = false;
     transferForm.targetAgentId = null;
     selectedCustomerRows.value = [];
-    customerTableRef.value?.clearSelection?.();
     await Promise.all([loadCustomers(), loadAvailableShipments()]);
     showSuccess("customers.transferSuccess", {
       count: response?.transferred || 0,
@@ -2575,6 +2773,42 @@ async function submitCustomerTransfer() {
     showError(error, "customers.transferFailed");
   } finally {
     transferringCustomers.value = false;
+  }
+}
+
+async function editAgentDisplayName(agent) {
+  const displayName = window.prompt(t("customers.displayName"), agent.displayName || "");
+  if (displayName == null || !displayName.trim()) return;
+  try {
+    await updateOverseaAgent(agent.id, { displayName: displayName.trim() });
+    await loadTransferAgents();
+    showSuccess("customers.saved");
+  } catch (error) {
+    showError(error, "customers.saveFailed");
+  }
+}
+
+async function resetAgentPassword(agent) {
+  const password = window.prompt(t("customers.newPassword"));
+  if (password == null) return;
+  try {
+    await updateOverseaAgent(agent.id, { password });
+    showSuccess("customers.passwordReset");
+  } catch (error) {
+    showError(error, "customers.resetPasswordFailed");
+  }
+}
+
+async function toggleAgentStatus(agent) {
+  const status = agent.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+  if (!window.confirm(t("customers.confirmAgentStatusChange", { name: agent.displayName || agent.username }))) return;
+  try {
+    if (status === "DISABLED") await deleteOverseaAgent(agent.id);
+    else await updateOverseaAgent(agent.id, { status });
+    await loadTransferAgents();
+    showSuccess("customers.saved");
+  } catch (error) {
+    showError(error, "customers.saveFailed");
   }
 }
 
@@ -2719,7 +2953,7 @@ async function loadShipmentDetailSnapshot() {
 }
 
 async function startBatchTrack() {
-  if (!batchTrackItems.value.length || batchTrackRunning.value) return;
+  if (!batchTrackCustomerId.value || !batchTrackItems.value.length || batchTrackRunning.value) return;
   batchTrackMode.value = "IMPORT";
   batchTrackRunning.value = true;
   batchTrackCancelRequested.value = false;
@@ -2736,7 +2970,9 @@ async function startBatchTrack() {
     const task = await createShipmentBatchTask({
       sourceFileName: batchTrackFileName.value,
       channel: shipmentTrackingChannel.value,
-      items: batchTrackItems.value
+      items: batchTrackItems.value,
+      customerId: batchTrackCustomerId.value,
+      publishToCustomer: batchTrackPublishToCustomer.value
     });
     rememberBatchTrackTask(task.taskId);
     applyBatchTrackTask(task);
@@ -3280,6 +3516,23 @@ async function toggleCustomerStatus(row) {
   }
 }
 
+async function deleteCustomerRow(row) {
+  if (mutatingCustomer.value) return;
+  if (!window.confirm(t("customers.confirmDeleteCustomer", {
+    name: row.displayName || row.username
+  }))) return;
+  mutatingCustomer.value = true;
+  try {
+    await deleteBusinessCustomer(row.id);
+    await Promise.all([loadCustomers(), loadAvailableShipments()]);
+    showSuccess("customers.customerArchived");
+  } catch (error) {
+    showError(error, "customers.deleteCustomerFailed");
+  } finally {
+    mutatingCustomer.value = false;
+  }
+}
+
 function formatDateTime(value) {
   if (!value) return "—";
   try {
@@ -3636,7 +3889,11 @@ async function startShipmentExcelImport() {
       cursor += 1;
       const item = items[index];
       try {
-        await createBusinessShipment(item.payload);
+        await createBusinessShipment(
+          item.payload,
+          shipmentExcelCustomerId.value,
+          shipmentExcelPublishToCustomer.value
+        );
         shipmentExcelImportResults.value[index] = {
           ...shipmentExcelImportResults.value[index],
           status: "CREATED",
@@ -3903,10 +4160,14 @@ function closeShipmentCreateDialog() {
 }
 
 async function createShipment() {
-  if (creatingShipment.value) return;
+  if (creatingShipment.value || !shipmentCreateCustomerId.value) return;
   creatingShipment.value = true;
   try {
-    await createBusinessShipment(buildManualShipmentPayload(shipmentCreateForm));
+    await createBusinessShipment(
+      buildManualShipmentPayload(shipmentCreateForm),
+      shipmentCreateCustomerId.value,
+      shipmentCreatePublishToCustomer.value
+    );
     shipmentPage.value = 1;
     await loadAvailableShipments();
     resetShipmentCreateForm();
@@ -5301,7 +5562,7 @@ function showError(error, fallbackKey) {
   max-height: 260px;
   overflow: auto;
   border: 1px solid #dce6f1;
-  border-radius: 9px;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -5403,6 +5664,24 @@ function showError(error, fallbackKey) {
 .subview-wrap {
   width: 100%;
   min-width: 0;
+}
+.assignment-customer-row {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid #d9e2ef;
+  border-radius: 0;
+  background: #f8fafc;
+}
+.assignment-customer-row > label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.assignment-customer-row .business-select {
+  width: 100%;
 }
 .list-page-header {
   display: flex;
@@ -6392,7 +6671,7 @@ function showError(error, fallbackKey) {
 .shipment-excel-import-table-wrap {
   max-height: 330px;
   border: 1px solid #dce5ee;
-  border-radius: 10px;
+  border-radius: 0;
   overflow: auto;
 }
 
@@ -6941,7 +7220,7 @@ function showError(error, fallbackKey) {
   max-height: 340px;
   margin: 0 !important;
   border: 1px solid #dce6ef;
-  border-radius: 10px;
+  border-radius: 0;
   overflow: auto;
 }
 .customer-import-preview table {

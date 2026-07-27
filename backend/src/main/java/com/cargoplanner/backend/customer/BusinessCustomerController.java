@@ -4,6 +4,7 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ClientInfo;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +45,34 @@ public class BusinessCustomerController {
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
     return service.listTransferAgents(actor);
+  }
+
+  @PostMapping("/oversea-agents")
+  public Map<String, Object> createOverseaAgent(
+      @Valid @RequestBody CreateOverseaAgentEmployeeRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.createOverseaAgentEmployee(request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @PatchMapping("/oversea-agents/{userId}")
+  public Map<String, Object> updateOverseaAgent(
+      @PathVariable long userId,
+      @RequestBody UpdateOverseaAgentRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.updateOverseaAgent(userId, request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @DeleteMapping("/oversea-agents/{userId}")
+  public Map<String, Object> deleteOverseaAgent(
+      @PathVariable long userId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.disableOverseaAgent(userId, actor, ClientInfo.ip(httpRequest));
   }
 
   @PostMapping("/transfer")
@@ -97,11 +126,11 @@ public class BusinessCustomerController {
 
   @PostMapping("/shipments")
   public Map<String, Object> createShipment(
-      @RequestBody CreateBusinessShipmentRequest request,
+      @RequestBody AssignedBusinessShipmentRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
       HttpServletRequest httpRequest
   ) {
-    return service.createShipment(request, actor, ClientInfo.ip(httpRequest));
+    return service.createAssignedShipment(request, actor, ClientInfo.ip(httpRequest));
   }
 
   @PatchMapping("/shipments/{shipmentId}")

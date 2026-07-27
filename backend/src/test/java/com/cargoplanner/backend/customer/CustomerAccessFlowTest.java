@@ -46,7 +46,7 @@ class CustomerAccessFlowTest {
         INSERT INTO cp_users (id, username, display_name, role, party_role) VALUES
           (1, 'sales-1', 'Business One', 'BUSINESS', 'OVERSEA_AGENT'),
           (2, 'sales-2', 'Business Two', 'BUSINESS', 'OVERSEA_AGENT'),
-          (3, 'employee', 'Employee', 'EMPLOYEE', 'SHIPPER'),
+          (3, 'employee', 'Employee', 'OVERSEA_AGENT', 'AGENT'),
           (4, 'admin', 'Administrator', 'ADMIN', 'OVERSEA_AGENT')
         """
     );
@@ -116,7 +116,7 @@ class CustomerAccessFlowTest {
     otherBusiness = new AuthenticatedUser(
         2, "sales-2", "Business Two", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
     );
-    employee = new AuthenticatedUser(3, "employee", "Employee", "EMPLOYEE", "ACTIVE", "SHIPPER");
+    employee = new AuthenticatedUser(3, "employee", "Employee", "OVERSEA_AGENT", "ACTIVE", "AGENT");
     httpRequest = new MockHttpServletRequest();
     httpRequest.setRemoteAddr("127.0.0.1");
     httpRequest.addHeader("User-Agent", "Customer portal test");
@@ -486,7 +486,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void transfersCustomerToOverseaAgentWithoutChangingBusinessOwnership() {
+  void legacyCustomerAgentTransferRemainsCompatibleButIsHiddenFromEmployeeAssignments() {
     Map<String, Object> previousAgent = customerService.create(
         new CreateCustomerRequest(
             "previous-oversea", "SecurePass!23", "Previous Oversea", "OVERSEA_AGENT"
@@ -558,7 +558,7 @@ class CustomerAccessFlowTest {
     List<Map<String, Object>> transferAgents =
         (List<Map<String, Object>>) customerService.listTransferAgents(business).get("items");
     assertThat(transferAgents).extracting(item -> item.get("id"))
-        .contains(previousAgent.get("id"), targetAgent.get("id"));
+        .doesNotContain(previousAgent.get("id"), targetAgent.get("id"));
 
     Map<String, Object> result = customerService.transferCustomers(
         new CustomerTransferRequest(List.of(customerId), (String) targetAgent.get("id")),
@@ -624,6 +624,67 @@ class CustomerAccessFlowTest {
         previousAgent.get("id"),
         targetAgent.get("id")
     )).isEqualTo(1);
+  }
+
+  @Test
+  void assignsCustomerAndPublishedShipmentsToInternalOverseaAgentEmployee() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "assigned-customer", "SecurePass!23", "Assigned Customer", "SHIPPER", "ASSIGN-01"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) created.get("id");
+    customerService.bindShipment(
+        customerId,
+        new CustomerShipmentBindingRequest("shipment-public-id", null, null, null),
+        business,
+        "127.0.0.1"
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_customer_shipment_access SET publication_status = 'PUBLISHED' "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?) "
+            + "AND shipment_id = 10",
+        customerId
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> employees =
+        (List<Map<String, Object>>) customerService.listTransferAgents(business).get("items");
+    assertThat(employees).extracting(item -> item.get("id")).contains("3");
+
+    Map<String, Object> result = customerService.transferCustomers(
+        new CustomerTransferRequest(List.of(customerId), "3"),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(result)
+        .containsEntry("transferred", 1)
+        .containsEntry("relatedShipments", 1)
+        .containsEntry("businessHistoryRetained", true)
+        .containsEntry("assignmentMode", "OVERSEA_AGENT");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT employee_user_id FROM cp_customer_employee_assignments "
+            + "WHERE customer_id = (SELECT id FROM cp_customers WHERE public_id = ?)",
+        Long.class,
+        customerId
+    )).isEqualTo(employee.id());
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_participants "
+            + "WHERE shipment_id = 10 AND user_id = 3 AND participant_role = 'OVERSEA_AGENT'",
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_shipments WHERE id = 10",
+        Long.class
+    )).isEqualTo(business.id());
+    assertThat(((List<?>) customerService.list(employee).get("items"))).hasSize(1);
+    assertThat(customerService.getShipmentSnapshot(employee, "shipment-public-id"))
+        .containsEntry("shipmentId", "shipment-public-id");
+    assertThat(shipmentAccessService.requireAccess("shipment-public-id", employee).shipmentId())
+        .isEqualTo(10);
   }
 
   @Test
@@ -1613,6 +1674,7 @@ class CustomerAccessFlowTest {
           user_id BIGINT NOT NULL,
           participant_role VARCHAR(24) NOT NULL,
           granted_by BIGINT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (shipment_id, user_id)
         )
         """);
@@ -1651,6 +1713,15 @@ class CustomerAccessFlowTest {
           shipment_count INT NOT NULL,
           ip_address VARCHAR(64),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_employee_assignments (
+          customer_id BIGINT PRIMARY KEY,
+          employee_user_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

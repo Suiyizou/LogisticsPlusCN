@@ -35,6 +35,36 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         """
     );
     if (mySql) upgradeCustomerFileSchemaForMySql();
+    if (mySql) upgradeAdminAuditSchemaForMySql();
+  }
+
+  private void upgradeAdminAuditSchemaForMySql() {
+    Integer tableCount = jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cp_admin_audit_log'
+        """,
+        Integer.class
+    );
+    if (tableCount == null || tableCount == 0) return;
+    addColumnIfMissing("cp_admin_audit_log", "username_snapshot",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN username_snapshot VARCHAR(100) NULL AFTER ip_address");
+    addColumnIfMissing("cp_admin_audit_log", "role_snapshot",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN role_snapshot VARCHAR(32) NULL AFTER username_snapshot");
+    addColumnIfMissing("cp_admin_audit_log", "http_method",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN http_method VARCHAR(12) NULL AFTER role_snapshot");
+    addColumnIfMissing("cp_admin_audit_log", "request_path",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN request_path VARCHAR(255) NULL AFTER http_method");
+    addColumnIfMissing("cp_admin_audit_log", "http_status",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN http_status INT NULL AFTER request_path");
+    addColumnIfMissing("cp_admin_audit_log", "success",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN success TINYINT(1) NULL AFTER http_status");
+    addColumnIfMissing("cp_admin_audit_log", "duration_ms",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN duration_ms BIGINT NULL AFTER success");
+    addColumnIfMissing("cp_admin_audit_log", "request_id",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN request_id VARCHAR(64) NULL AFTER duration_ms");
+    addColumnIfMissing("cp_admin_audit_log", "user_agent",
+        "ALTER TABLE cp_admin_audit_log ADD COLUMN user_agent VARCHAR(255) NULL AFTER request_id");
   }
 
   private boolean isMySql() {
@@ -57,9 +87,16 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         """,
         (rs, rowNumber) -> rs.getString("COLUMN_TYPE")
     );
-    if (!columnTypes.isEmpty() && !columnTypes.get(0).contains("'BUSINESS'")) {
+    if (!columnTypes.isEmpty()) {
+      String currentType = columnTypes.get(0);
+      if (currentType.contains("'EMPLOYEE'")) {
+        jdbcTemplate.execute(
+            "ALTER TABLE cp_users MODIFY role ENUM('ADMIN','EMPLOYEE','BUSINESS','OVERSEA_AGENT') NOT NULL DEFAULT 'OVERSEA_AGENT'"
+        );
+        jdbcTemplate.update("UPDATE cp_users SET role = 'OVERSEA_AGENT' WHERE role = 'EMPLOYEE'");
+      }
       jdbcTemplate.execute(
-          "ALTER TABLE cp_users MODIFY role ENUM('ADMIN','EMPLOYEE','BUSINESS') NOT NULL DEFAULT 'EMPLOYEE'"
+          "ALTER TABLE cp_users MODIFY role ENUM('ADMIN','BUSINESS','OVERSEA_AGENT') NOT NULL DEFAULT 'OVERSEA_AGENT'"
       );
     }
     addColumnIfMissing(
@@ -70,6 +107,28 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
     jdbcTemplate.update(
         "UPDATE cp_users SET party_role = 'AGENT' WHERE role IN ('ADMIN', 'BUSINESS') OR party_role IS NULL"
     );
+    List<String> loginEventTypes = jdbcTemplate.query(
+        """
+        SELECT COLUMN_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'cp_login_events'
+          AND COLUMN_NAME = 'event_type'
+        """,
+        (rs, rowNumber) -> rs.getString("COLUMN_TYPE")
+    );
+    if (!loginEventTypes.isEmpty()
+        && (!loginEventTypes.get(0).contains("'PASSWORD_CHANGED'")
+            || !loginEventTypes.get(0).contains("'PASSWORD_CHANGE_FAIL'"))) {
+      jdbcTemplate.execute(
+          """
+          ALTER TABLE cp_login_events MODIFY event_type ENUM(
+            'LOGIN_SUCCESS','LOGIN_FAIL','LOGOUT','KICK','DEVICE_LIMIT',
+            'PASSWORD_CHANGED','PASSWORD_CHANGE_FAIL'
+          ) NOT NULL
+          """
+      );
+    }
   }
 
   private void upgradeCustomerFileSchemaForMySql() {
@@ -650,6 +709,23 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_customer_employee_assignments (
+          customer_id BIGINT NOT NULL,
+          employee_user_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          PRIMARY KEY (customer_id),
+          INDEX idx_cp_customer_employee_agent (employee_user_id, assigned_at),
+          CONSTRAINT fk_cp_customer_employee_assignment_customer
+            FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_customer_employee_assignment_employee
+            FOREIGN KEY (employee_user_id) REFERENCES cp_users(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_customer_employee_assignment_actor
+            FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_customer_sessions (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           customer_id BIGINT NOT NULL,
@@ -741,52 +817,6 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           CONSTRAINT fk_cp_oversea_transfer_from_agent FOREIGN KEY (from_oversea_agent_customer_id) REFERENCES cp_customers(id),
           CONSTRAINT fk_cp_oversea_transfer_to_agent FOREIGN KEY (to_oversea_agent_customer_id) REFERENCES cp_customers(id),
           CONSTRAINT fk_cp_oversea_transfer_initiated_by FOREIGN KEY (initiated_by) REFERENCES cp_users(id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS cp_customer_handover_requests (
-          id BIGINT PRIMARY KEY AUTO_INCREMENT,
-          public_id CHAR(36) NOT NULL UNIQUE,
-          from_business_user_id BIGINT NOT NULL,
-          to_business_user_id BIGINT NOT NULL,
-          requested_by BIGINT NOT NULL,
-          status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-          reason VARCHAR(500) NOT NULL,
-          decision_note VARCHAR(500) NULL,
-          requested_ip VARCHAR(64) NULL,
-          requested_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-          decided_by BIGINT NULL,
-          decided_at DATETIME(6) NULL,
-          INDEX idx_cp_customer_handover_incoming (
-            to_business_user_id, status, requested_at
-          ),
-          INDEX idx_cp_customer_handover_outgoing (
-            from_business_user_id, status, requested_at
-          ),
-          CONSTRAINT fk_cp_customer_handover_from_user
-            FOREIGN KEY (from_business_user_id) REFERENCES cp_users(id),
-          CONSTRAINT fk_cp_customer_handover_to_user
-            FOREIGN KEY (to_business_user_id) REFERENCES cp_users(id),
-          CONSTRAINT fk_cp_customer_handover_requested_by
-            FOREIGN KEY (requested_by) REFERENCES cp_users(id),
-          CONSTRAINT fk_cp_customer_handover_decided_by
-            FOREIGN KEY (decided_by) REFERENCES cp_users(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS cp_customer_handover_items (
-          request_id BIGINT NOT NULL,
-          customer_id BIGINT NOT NULL,
-          previous_owner_id BIGINT NOT NULL,
-          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-          PRIMARY KEY (request_id, customer_id),
-          INDEX idx_cp_customer_handover_item_customer (customer_id, request_id),
-          CONSTRAINT fk_cp_customer_handover_item_request
-            FOREIGN KEY (request_id) REFERENCES cp_customer_handover_requests(id) ON DELETE CASCADE,
-          CONSTRAINT fk_cp_customer_handover_item_customer
-            FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
-          CONSTRAINT fk_cp_customer_handover_item_previous_owner
-            FOREIGN KEY (previous_owner_id) REFERENCES cp_users(id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """

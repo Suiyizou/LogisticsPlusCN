@@ -98,6 +98,11 @@ public class AdminController {
     return adminService.monitoring();
   }
 
+  @GetMapping("/platform-info")
+  public Map<String, Object> platformInfo() {
+    return adminService.platformInfo();
+  }
+
   @GetMapping("/settings/llm")
   public Map<String, Object> llmSettings() {
     return llmSettingsService.publicSettings();

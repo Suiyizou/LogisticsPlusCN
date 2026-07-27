@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -64,7 +65,8 @@ public class AdminService {
   public Map<String, Object> createEmployee(CreateEmployeeRequest request, AuthenticatedUser admin, String ip) {
     validateStrongPassword(request.password());
     PasswordHasher.PasswordHash passwordHash = passwordHasher.hash(request.password());
-    String role = normalizeRole(request.role(), "EMPLOYEE");
+    String role = normalizeRole(request.role(), "OVERSEA_AGENT");
+    ensureSingleBusinessAccount(role, null);
     String partyRole = normalizePartyRole(request.partyRole(), role, "AGENT");
     try {
       jdbcTemplate.update(
@@ -97,6 +99,7 @@ public class AdminService {
     Map<String, Object> existing = findUser(userId);
     String displayName = valueOrExisting(request.displayName(), (String) existing.get("displayName"));
     String role = normalizeRole(request.role(), (String) existing.get("role"));
+    ensureSingleBusinessAccount(role, userId);
     String partyRole = normalizePartyRole(
         request.partyRole(),
         role,
@@ -329,7 +332,95 @@ public class AdminService {
     result.put("tokenTtlHours", authService.tokenTtlHours());
     result.put("runtime", requestStats.snapshot());
     result.put("recentEvents", recentEvents());
+    result.put("recentApiAudit", recentApiAudit());
     return result;
+  }
+
+  public Map<String, Object> platformInfo() {
+    List<Map<String, Object>> customers = jdbcTemplate.query(
+        """
+        SELECT c.public_id, c.username, c.display_name, c.client_code, c.party_role, c.status,
+               business_user.id AS business_user_id,
+               business_user.username AS business_username,
+               business_user.display_name AS business_display_name,
+               agent_user.id AS agent_user_id,
+               agent_user.username AS agent_username,
+               agent_user.display_name AS agent_display_name,
+               agent_user.status AS agent_status,
+               COUNT(DISTINCT access.shipment_id) AS shipment_count
+        FROM cp_customers c
+        LEFT JOIN cp_users business_user ON business_user.id = c.responsible_agent_id
+        LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
+        LEFT JOIN cp_users agent_user ON agent_user.id = assignment.employee_user_id
+        LEFT JOIN cp_customer_shipment_access access ON access.customer_id = c.id
+        GROUP BY c.id, c.public_id, c.username, c.display_name, c.client_code,
+                 c.party_role, c.status, business_user.id, business_user.username,
+                 business_user.display_name, agent_user.id, agent_user.username,
+                 agent_user.display_name, agent_user.status
+        ORDER BY c.created_at DESC, c.id DESC
+        """,
+        (rs, rowNum) -> {
+          Map<String, Object> row = new LinkedHashMap<>();
+          row.put("customerId", rs.getString("public_id"));
+          row.put("customerUsername", rs.getString("username"));
+          row.put("customerDisplayName", rs.getString("display_name"));
+          row.put("clientCode", rs.getString("client_code"));
+          row.put("partyRole", rs.getString("party_role"));
+          row.put("customerStatus", rs.getString("status"));
+          row.put("businessUserId", nullableLong(rs, "business_user_id"));
+          row.put("businessUsername", rs.getString("business_username"));
+          row.put("businessDisplayName", rs.getString("business_display_name"));
+          row.put("agentUserId", nullableLong(rs, "agent_user_id"));
+          row.put("agentUsername", rs.getString("agent_username"));
+          row.put("agentDisplayName", rs.getString("agent_display_name"));
+          row.put("agentStatus", rs.getString("agent_status"));
+          row.put("shipmentCount", rs.getLong("shipment_count"));
+          return row;
+        }
+    );
+    long assigned = customers.stream().filter(row -> row.get("agentUserId") != null).count();
+    return Map.of(
+        "platform", "Shipment Track",
+        "items", customers,
+        "customerCount", customers.size(),
+        "assignedCustomerCount", assigned,
+        "unassignedCustomerCount", customers.size() - assigned
+    );
+  }
+
+  private List<Map<String, Object>> recentApiAudit() {
+    try {
+      return jdbcTemplate.query(
+          """
+          SELECT id, admin_user_id, username_snapshot, role_snapshot,
+                 http_method, request_path, http_status, success, duration_ms,
+                 request_id, ip_address, user_agent, created_at
+          FROM cp_admin_audit_log
+          WHERE action = 'API_REQUEST'
+          ORDER BY created_at DESC, id DESC
+          LIMIT 100
+          """,
+          (rs, rowNum) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getLong("id"));
+            row.put("userId", nullableLong(rs, "admin_user_id"));
+            row.put("username", rs.getString("username_snapshot"));
+            row.put("role", rs.getString("role_snapshot"));
+            row.put("method", rs.getString("http_method"));
+            row.put("path", rs.getString("request_path"));
+            row.put("status", rs.getObject("http_status"));
+            row.put("success", rs.getObject("success"));
+            row.put("durationMs", rs.getObject("duration_ms"));
+            row.put("requestId", rs.getString("request_id"));
+            row.put("ipAddress", rs.getString("ip_address"));
+            row.put("userAgent", rs.getString("user_agent"));
+            row.put("createdAt", stringTimestamp(rs, "created_at"));
+            return row;
+          }
+      );
+    } catch (DataAccessException ignored) {
+      return List.of();
+    }
   }
 
   private Map<String, Object> findUser(Long userId) {
@@ -411,10 +502,30 @@ public class AdminService {
 
   private String normalizeRole(String role, String fallback) {
     String value = role == null || role.isBlank() ? fallback : role.trim().toUpperCase();
-    if (!"ADMIN".equals(value) && !"EMPLOYEE".equals(value) && !"BUSINESS".equals(value)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Role must be ADMIN, EMPLOYEE, or BUSINESS");
+    if (!"ADMIN".equals(value) && !"OVERSEA_AGENT".equals(value) && !"BUSINESS".equals(value)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Role must be ADMIN, BUSINESS, or OVERSEA_AGENT");
     }
     return value;
+  }
+
+  private void ensureSingleBusinessAccount(String role, Long excludedUserId) {
+    if (!"BUSINESS".equals(role)) return;
+    Long count = excludedUserId == null
+        ? jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS'",
+            Long.class
+        )
+        : jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS' AND id <> ?",
+            Long.class,
+            excludedUserId
+        );
+    if (count != null && count > 0) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Only one business operator account is allowed"
+      );
+    }
   }
 
   private String normalizeStatus(String status, String fallback) {
@@ -426,14 +537,7 @@ public class AdminService {
   }
 
   private String normalizePartyRole(String partyRole, String systemRole, String fallback) {
-    if ("ADMIN".equals(systemRole) || "BUSINESS".equals(systemRole)) return "AGENT";
-    String value = partyRole == null || partyRole.isBlank()
-        ? (fallback == null || fallback.isBlank() ? "AGENT" : fallback.trim().toUpperCase())
-        : partyRole.trim().toUpperCase();
-    if (!"AGENT".equals(value) && !"SHIPPER".equals(value) && !"CONSIGNEE".equals(value)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Party role must be AGENT, SHIPPER, or CONSIGNEE");
-    }
-    return value;
+    return "AGENT";
   }
 
   private String valueOrExisting(String value, String fallback) {

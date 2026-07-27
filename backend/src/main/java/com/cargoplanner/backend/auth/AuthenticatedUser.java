@@ -26,8 +26,8 @@ public record AuthenticatedUser(
     return "BUSINESS".equals(role);
   }
 
-  public boolean isEmployee() {
-    return "EMPLOYEE".equals(role);
+  public boolean isOverseaAgent() {
+    return "OVERSEA_AGENT".equals(role);
   }
 
   public boolean canManageShipmentFiles() {

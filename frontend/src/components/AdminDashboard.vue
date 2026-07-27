@@ -164,31 +164,27 @@
             </div>
           </div>
           <div class="admin-table-wrap">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>账号</th>
-                  <th>姓名</th>
-                  <th>角色</th>
-                  <th>{{ t("admin.employee.partyRole") }}</th>
-                  <th>状态</th>
-                  <th>最近登录</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="user in normalizedEmployees" :key="user.id">
-                  <td>{{ user.username }}</td>
-                  <td>{{ user.displayName }}</td>
-                  <td>{{ roleText(user.role) }}</td>
-                  <td>{{ partyRoleText(user.partyRole, user.role) }}</td>
-                  <td>
+            <el-table :data="normalizedEmployees" row-key="id" stripe class="standard-information-table">
+              <el-table-column prop="username" :label="t('admin.list.username')" min-width="140" />
+              <el-table-column prop="displayName" :label="t('admin.list.displayName')" min-width="150" />
+              <el-table-column :label="t('admin.list.systemRole')" width="150">
+                <template #default="{ row: user }">{{ roleText(user.role) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.employee.partyRole')" width="150">
+                <template #default="{ row: user }">{{ partyRoleText(user.partyRole, user.role) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.status')" width="100">
+                <template #default="{ row: user }">
                     <span class="admin-status" :class="{ off: user.status !== 'ACTIVE' }">
                       {{ statusText(user.status) }}
                     </span>
-                  </td>
-                  <td>{{ formatDate(user.lastLoginAt) }}</td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.lastLogin')" min-width="170">
+                <template #default="{ row: user }">{{ formatDate(user.lastLoginAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.actions')" width="320" fixed="right">
+                <template #default="{ row: user }">
                     <div class="table-actions">
                       <button type="button" @click="openEmployeeDialog(user)">{{ t("admin.employee.edit") }}</button>
                       <button
@@ -202,13 +198,53 @@
                       </button>
                       <button class="danger ghost" type="button" :disabled="user.id === currentUser?.id" @click="handleDeleteEmployee(user)">删除</button>
                     </div>
-                  </td>
-                </tr>
-                <tr v-if="!employees.length">
-                  <td colspan="7">{{ t("admin.employee.empty") }}</td>
-                </tr>
-              </tbody>
-            </table>
+                </template>
+              </el-table-column>
+              <template #empty>{{ t("admin.employee.empty") }}</template>
+            </el-table>
+          </div>
+        </article>
+      </section>
+
+      <section v-else-if="activeAdminPage === 'platform'" class="admin-page-pane">
+        <article class="admin-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>Shipment Track</p>
+              <h2>{{ ui('admin.platform.title') }}</h2>
+            </div>
+            <div class="admin-inline-actions">
+              <span>{{ ui('admin.platform.summary', {
+                customers: platformInfo?.customerCount || 0,
+                assigned: platformInfo?.assignedCustomerCount || 0
+              }) }}</span>
+              <button type="button" @click="loadDashboard">{{ ui('admin.files.refresh') }}</button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table :data="platformCustomers" row-key="customerId" border stripe class="standard-information-table">
+              <el-table-column :label="ui('admin.platform.business')" min-width="170">
+                <template #default="{ row }"><b>{{ row.businessDisplayName || '-' }}</b><small>@{{ row.businessUsername || '-' }}</small></template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.platform.agent')" min-width="180">
+                <template #default="{ row }">
+                  <b>{{ row.agentDisplayName || ui('admin.platform.unassigned') }}</b>
+                  <small>{{ row.agentUsername ? `@${row.agentUsername}` : '-' }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.platform.customer')" min-width="180">
+                <template #default="{ row }"><b>{{ row.customerDisplayName || row.customerUsername }}</b><small>@{{ row.customerUsername }}</small></template>
+              </el-table-column>
+              <el-table-column prop="clientCode" :label="ui('admin.platform.clientCode')" min-width="140" />
+              <el-table-column :label="ui('admin.platform.partyRole')" width="130">
+                <template #default="{ row }">{{ partyRoleText(row.partyRole) }}</template>
+              </el-table-column>
+              <el-table-column prop="shipmentCount" :label="ui('admin.platform.shipments')" width="120" align="center" />
+              <el-table-column :label="ui('admin.list.status')" width="110">
+                <template #default="{ row }"><span class="admin-status" :class="{ off: row.customerStatus !== 'ACTIVE' }">{{ statusText(row.customerStatus) }}</span></template>
+              </el-table-column>
+              <template #empty>{{ ui('admin.platform.empty') }}</template>
+            </el-table>
           </div>
         </article>
       </section>
@@ -240,53 +276,51 @@
             </div>
           </div>
           <div class="admin-table-wrap">
-            <table class="admin-table devices">
-              <thead>
-                <tr>
-                  <th>用户</th>
-                  <th>设备</th>
-                  <th>IP</th>
-                  <th>MAC</th>
-                  <th>登录时间</th>
-                  <th>最近活跃</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="device in normalizedDevices" :key="device.id">
-                  <td>{{ device.displayName }} / {{ device.username }}</td>
-                  <td>
+            <el-table :data="normalizedDevices" row-key="id" stripe class="standard-information-table devices">
+              <el-table-column :label="t('admin.list.user')" min-width="170">
+                <template #default="{ row: device }">{{ device.displayName }} / {{ device.username }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.device')" min-width="200">
+                <template #default="{ row: device }">
                     <b>{{ device.deviceName || "Web 设备" }}</b>
                     <small>{{ device.deviceId }}</small>
-                  </td>
-                  <td>{{ device.ipAddress || "-" }}</td>
-                  <td>{{ device.macAddress || "Web 端不可读取" }}</td>
-                  <td>{{ formatDate(device.loggedInAt) }}</td>
-                  <td>{{ formatDate(device.lastSeenAt) }}</td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column prop="ipAddress" label="IP" min-width="130">
+                <template #default="{ row: device }">{{ device.ipAddress || "-" }}</template>
+              </el-table-column>
+              <el-table-column label="MAC" min-width="150">
+                <template #default="{ row: device }">{{ device.macAddress || t("admin.list.webMacUnavailable") }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.loginAt')" min-width="170">
+                <template #default="{ row: device }">{{ formatDate(device.loggedInAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.lastSeen')" min-width="170">
+                <template #default="{ row: device }">{{ formatDate(device.lastSeenAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.status')" width="90">
+                <template #default="{ row: device }">
                     <span class="admin-status" :class="{ off: !device.online }">
                       {{ device.online ? "在线" : "离线" }}
                     </span>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.actions')" width="190" fixed="right">
+                <template #default="{ row: device }">
                     <div class="table-actions">
                       <button type="button" :disabled="!device.online" @click="handleKickDevice(device)">踢下线</button>
                       <button class="danger ghost" type="button" @click="handleDeleteDevice(device)">删除设备</button>
                     </div>
-                  </td>
-                </tr>
-                <tr v-if="!devices.length">
-                  <td colspan="8">暂无登录设备</td>
-                </tr>
-              </tbody>
-            </table>
+                </template>
+              </el-table-column>
+              <template #empty>{{ t("admin.list.noDevices") }}</template>
+            </el-table>
           </div>
         </article>
       </section>
 
       <section v-else-if="activeAdminPage === 'files'" class="admin-page-pane">
-        <div class="admin-file-scope-tabs" role="tablist" :aria-label="ui('admin.files.scopeAria')">
+        <div v-if="false" class="admin-file-scope-tabs" role="tablist" :aria-label="ui('admin.files.scopeAria')">
           <button
             type="button"
             role="tab"
@@ -311,7 +345,7 @@
           </button>
         </div>
 
-        <article v-if="activeAdminFileSection === 'workspace'" class="admin-panel">
+        <article v-if="false" class="admin-panel">
           <div class="admin-panel-head">
             <div>
               <p>Temporary Workspace Files</p>
@@ -327,47 +361,44 @@
             </div>
           </div>
           <div class="admin-table-wrap">
-            <table class="admin-table admin-files-table">
-              <thead>
-                <tr>
-                  <th>{{ ui('admin.files.user') }}</th>
-                  <th>{{ ui('admin.files.fileName') }}</th>
-                  <th>{{ ui('admin.files.size') }}</th>
-                  <th>{{ ui('admin.files.uploadedAt') }}</th>
-                  <th>{{ ui('admin.files.expiresAt') }}</th>
-                  <th>{{ ui('admin.files.status') }}</th>
-                  <th>{{ ui('admin.files.action') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="file in adminWorkspaceFiles" :key="file.id">
-                  <td>
+            <el-table :data="adminWorkspaceFiles" row-key="id" stripe class="standard-information-table admin-files-table">
+              <el-table-column :label="ui('admin.files.user')" min-width="160">
+                <template #default="{ row: file }">
                     <b>{{ file.ownerDisplayName || '-' }}</b>
                     <small>ID {{ file.userId || '-' }}</small>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.fileName')" min-width="220">
+                <template #default="{ row: file }">
                     <b>{{ file.originalFileName }}</b>
                     <small>{{ file.source || '-' }}</small>
-                  </td>
-                  <td>{{ formatFileSize(file.sizeBytes) }}</td>
-                  <td>{{ formatDate(file.uploadedAt) }}</td>
-                  <td>{{ formatDate(file.expiresAt) }}</td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.size')" width="110">
+                <template #default="{ row: file }">{{ formatFileSize(file.sizeBytes) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.uploadedAt')" min-width="165">
+                <template #default="{ row: file }">{{ formatDate(file.uploadedAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.expiresAt')" min-width="165">
+                <template #default="{ row: file }">{{ formatDate(file.expiresAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.status')" width="100">
+                <template #default="{ row: file }">
                     <span class="admin-status" :class="{ off: file.expired }">
                       {{ ui(file.expired ? 'admin.files.expired' : 'admin.files.active') }}
                     </span>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.action')" width="110" fixed="right">
+                <template #default="{ row: file }">
                     <div class="table-actions">
                       <button type="button" :disabled="file.expired" @click="handleDownloadWorkspaceFile(file)">{{ ui('admin.files.download') }}</button>
                     </div>
-                  </td>
-                </tr>
-                <tr v-if="!adminWorkspaceFiles.length">
-                  <td colspan="7">{{ ui('admin.files.workspaceEmpty') }}</td>
-                </tr>
-              </tbody>
-            </table>
+                </template>
+              </el-table-column>
+              <template #empty>{{ ui('admin.files.workspaceEmpty') }}</template>
+            </el-table>
           </div>
         </article>
 
@@ -383,41 +414,40 @@
             </div>
           </div>
           <div class="admin-table-wrap">
-            <table class="admin-table admin-files-table shipment-files">
-              <thead>
-                <tr>
-                  <th>{{ ui('admin.files.shipmentReference') }}</th>
-                  <th>{{ ui('admin.files.uploader') }}</th>
-                  <th>{{ ui('admin.files.fileName') }}</th>
-                  <th>{{ ui('admin.files.visibility') }}</th>
-                  <th>{{ ui('admin.files.size') }}</th>
-                  <th>{{ ui('admin.files.uploadedAt') }}</th>
-                  <th>{{ ui('admin.files.status') }}</th>
-                  <th>{{ ui('admin.files.action') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="file in adminShipmentFiles" :key="shipmentFileKey(file)">
-                  <td>
+            <el-table :data="adminShipmentFiles" :row-key="shipmentFileKey" stripe class="standard-information-table admin-files-table shipment-files">
+              <el-table-column :label="ui('admin.files.shipmentReference')" min-width="180">
+                <template #default="{ row: file }">
                     <b>{{ shipmentFileReference(file) }}</b>
                     <small>{{ ui('admin.files.publicId') }} {{ shipmentPublicId(file) }}</small>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.uploader')" min-width="170">
+                <template #default="{ row: file }">
                     <b>{{ shipmentFileUploader(file) }}</b>
                     <small>{{ shipmentFileUploaderDetail(file) }}</small>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.fileName')" min-width="220">
+                <template #default="{ row: file }">
                     <b>{{ file.originalFileName || file.fileName || '-' }}</b>
                     <small>{{ file.documentCategory || file.category || file.contentType || '-' }}</small>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.visibility')" width="130">
+                <template #default="{ row: file }">
                     <span class="admin-visibility-pill" :class="shipmentFileVisibilityClass(file.visibility)">
                       {{ shipmentFileVisibilityText(file.visibility) }}
                     </span>
-                  </td>
-                  <td>{{ formatFileSize(file.sizeBytes) }}</td>
-                  <td>{{ formatDate(file.uploadedAt || file.createdAt) }}</td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.size')" width="100">
+                <template #default="{ row: file }">{{ formatFileSize(file.sizeBytes) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.uploadedAt')" min-width="165">
+                <template #default="{ row: file }">{{ formatDate(file.uploadedAt || file.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.status')" width="100">
+                <template #default="{ row: file }">
                     <span
                       class="admin-status"
                       :class="{
@@ -427,8 +457,10 @@
                     >
                       {{ shipmentFileStatusText(file.status) }}
                     </span>
-                  </td>
-                  <td>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.files.action')" width="250" fixed="right">
+                <template #default="{ row: file }">
                     <div class="table-actions">
                       <button
                         type="button"
@@ -453,13 +485,10 @@
                         {{ ui('admin.files.delete') }}
                       </button>
                     </div>
-                  </td>
-                </tr>
-                <tr v-if="!adminShipmentFiles.length">
-                  <td colspan="8">{{ ui('admin.files.shipmentEmpty') }}</td>
-                </tr>
-              </tbody>
-            </table>
+                </template>
+              </el-table-column>
+              <template #empty>{{ ui('admin.files.shipmentEmpty') }}</template>
+            </el-table>
           </div>
         </article>
       </section>
@@ -558,6 +587,37 @@
       </section>
 
       <section v-else class="admin-page-pane">
+        <article class="admin-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>API Audit Trail</p>
+              <h2>{{ ui('admin.audit.apiTitle') }}</h2>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table :data="recentApiAudit" row-key="id" border stripe class="standard-information-table">
+              <el-table-column :label="ui('admin.audit.time')" width="170">
+                <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.userRole')" min-width="170">
+                <template #default="{ row }"><b>{{ row.username || '-' }}</b><small>{{ row.role || '-' }} · ID {{ row.userId || '-' }}</small></template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.endpoint')" min-width="300">
+                <template #default="{ row }"><b>{{ row.method }} {{ row.path }}</b><small>{{ row.requestId || '-' }}</small></template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.result')" width="110">
+                <template #default="{ row }"><el-tag :type="Number(row.status) < 400 ? 'success' : 'danger'">{{ row.status || '-' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.duration')" width="100">
+                <template #default="{ row }">{{ row.durationMs ?? 0 }} ms</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.ipDevice')" min-width="220">
+                <template #default="{ row }"><b>{{ row.ipAddress || '-' }}</b><small>{{ row.userAgent || '-' }}</small></template>
+              </el-table-column>
+              <template #empty>{{ ui('admin.audit.empty') }}</template>
+            </el-table>
+          </div>
+        </article>
         <div class="admin-dashboard-grid">
           <article class="admin-panel">
             <div class="admin-panel-head">
@@ -586,23 +646,11 @@
               </div>
             </div>
             <div class="admin-table-wrap">
-              <table class="admin-table endpoints">
-                <thead>
-                  <tr>
-                    <th>接口</th>
-                    <th>请求数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="endpoint in topEndpoints" :key="endpoint.endpoint">
-                    <td>{{ endpoint.endpoint }}</td>
-                    <td>{{ endpoint.hits }}</td>
-                  </tr>
-                  <tr v-if="!topEndpoints.length">
-                    <td colspan="2">暂无接口统计</td>
-                  </tr>
-                </tbody>
-              </table>
+              <el-table :data="topEndpoints" row-key="endpoint" stripe class="standard-information-table endpoints">
+                <el-table-column prop="endpoint" :label="t('admin.list.endpoint')" min-width="280" />
+                <el-table-column prop="hits" :label="t('admin.list.requests')" width="120" />
+                <template #empty>{{ t("admin.list.noEndpoints") }}</template>
+              </el-table>
             </div>
           </article>
         </div>
@@ -613,7 +661,7 @@
       <div class="modal employee-modal">
         <header>
           <div>
-            <p>Employee Account</p>
+            <p>Internal Account</p>
             <h2>{{ t(editingEmployeeId ? "admin.employee.editTitle" : "admin.employee.createTitle") }}</h2>
           </div>
           <button type="button" @click="closeEmployeeDialog">×</button>
@@ -647,7 +695,7 @@
               class="business-select"
               popper-class="business-select-popper"
             >
-              <el-option value="EMPLOYEE" :label="ui('profile.role.employee')" />
+              <el-option value="OVERSEA_AGENT" :label="ui('profile.role.overseaAgent')" />
               <el-option value="BUSINESS" :label="ui('profile.role.business')" />
               <el-option value="ADMIN" :label="ui('profile.role.admin')" />
             </el-select>
@@ -658,13 +706,11 @@
               v-model="employeeForm.partyRole"
               class="business-select"
               popper-class="business-select-popper"
-              :disabled="employeeForm.role !== 'EMPLOYEE'"
+              :disabled="employeeForm.role !== 'OVERSEA_AGENT'"
             >
               <el-option value="AGENT" :label="t('customers.roleAgent')" />
-              <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
-              <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
             </el-select>
-            <small v-if="employeeForm.role !== 'EMPLOYEE'">{{ t("admin.employee.agentForcedHint") }}</small>
+            <small>{{ t(employeeForm.role === 'OVERSEA_AGENT' ? "admin.employee.overseaAgentHint" : "admin.employee.agentForcedHint") }}</small>
           </label>
           <label>
             <span>状态</span>
@@ -790,17 +836,16 @@ import {
   fetchAdminMe,
   fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
-  fetchAdminWorkspaceFiles,
   fetchDevices,
   fetchEmployees,
   fetchLlmSettings,
   fetchMonitoring,
+  fetchPlatformInfo,
   kickDevice,
   loginAdmin,
   resetEmployeePassword,
   storedAdminToken,
   downloadAdminShipmentFile,
-  downloadAdminWorkspaceFile,
   updateEmployee,
   updateLlmSettings
 } from "../services/adminApi";
@@ -816,11 +861,12 @@ const emit = defineEmits(["logout", "user-updated"]);
 
 const rawAdminPages = [
   { key: "overview", no: "01", label: "后台概览", description: "指标与运行监控", eyebrow: "Admin Console", title: "后台总览", subtitle: "查看账号、设备、接口运行的关键状态。" },
-  { key: "employees", no: "02", label: "员工管理", description: "账号与角色", eyebrow: "Employee Management", title: "员工管理", subtitle: "创建员工账号，调整角色与启用状态。" },
-  { key: "devices", no: "03", label: "设备登录", description: "IP 与在线设备", eyebrow: "Device Sessions", title: "设备与登录", subtitle: "查看当前登录设备、IP、会话状态并执行下线。" },
-  { key: "files", no: "04", labelKey: "admin.files.navLabel", descriptionKey: "admin.files.navDescription", eyebrow: "Workspace Files", titleKey: "admin.files.title", subtitleKey: "admin.files.subtitle" },
-  { key: "system", no: "05", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" },
-  { key: "audit", no: "06", label: "审计日志", description: "登录与接口记录", eyebrow: "Audit Log", title: "审计日志", subtitle: "追踪登录事件和接口访问热度。" }
+  { key: "employees", no: "02", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
+  { key: "platform", no: "03", label: "\u5e73\u53f0\u4fe1\u606f", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Platform Information", title: "\u8d27\u8e2a\u5e73\u53f0\u4fe1\u606f", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
+  { key: "devices", no: "04", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
+  { key: "files", no: "05", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
+  { key: "system", no: "06", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" },
+  { key: "audit", no: "07", label: "\u5ba1\u8ba1\u65e5\u5fd7", description: "\u767b\u5f55\u4e0e\u63a5\u53e3\u8bb0\u5f55", eyebrow: "Audit Log", title: "\u5ba1\u8ba1\u65e5\u5fd7", subtitle: "\u8ffd\u8e2a\u767b\u5f55\u4e8b\u4ef6\u548c\u63a5\u53e3\u8bbf\u95ee\u70ed\u5ea6\u3002" }
 ];
 
 const loading = ref(false);
@@ -829,6 +875,7 @@ const message = ref("");
 const hasError = ref(false);
 const currentUser = ref(props.currentUser);
 const employees = ref([]);
+const platformInfo = ref(null);
 const devices = ref([]);
 const adminWorkspaceFiles = ref([]);
 const adminWorkspaceFileTotal = ref(0);
@@ -836,7 +883,7 @@ const adminShipmentFiles = ref([]);
 const adminShipmentFileTotal = ref(0);
 const adminFilesLoaded = ref(false);
 const includeExpiredFiles = ref(false);
-const activeAdminFileSection = ref("workspace");
+const activeAdminFileSection = ref("shipment");
 const monitoring = ref(null);
 const llmSettings = ref(null);
 const activeAdminPage = ref("overview");
@@ -844,7 +891,7 @@ const loginForm = reactive({ username: "admin", password: "" });
 const employeeDialogOpen = ref(false);
 const editingEmployeeId = ref("");
 const employeeDialogError = ref("");
-const employeeForm = reactive({ username: "", displayName: "", password: "", role: "EMPLOYEE", partyRole: "AGENT", status: "ACTIVE" });
+const employeeForm = reactive({ username: "", displayName: "", password: "", role: "OVERSEA_AGENT", partyRole: "AGENT", status: "ACTIVE" });
 const temporaryPasswordDialog = reactive({
   open: false,
   username: "",
@@ -884,6 +931,8 @@ const normalizedEmployees = computed(() => employees.value.map(normalizeDisplayN
 const normalizedDevices = computed(() => devices.value.map(normalizeDisplayName));
 const onlineDevices = computed(() => normalizedDevices.value.filter((device) => device.online));
 const recentEvents = computed(() => monitoring.value?.recentEvents || []);
+const platformCustomers = computed(() => platformInfo.value?.items || []);
+const recentApiAudit = computed(() => monitoring.value?.recentApiAudit || []);
 const topEndpoints = computed(() => monitoring.value?.runtime?.topEndpoints || []);
 const runtimeFailedRequestCount = computed(() => Number(monitoring.value?.runtime?.failedRequests || 0));
 const runtimeHasFailedRequests = computed(() => runtimeFailedRequestCount.value > 0);
@@ -920,7 +969,7 @@ watch(() => props.currentUser, (user) => {
 }, { immediate: true });
 
 watch(() => employeeForm.role, (role) => {
-  if (role === "BUSINESS" || role === "ADMIN") employeeForm.partyRole = "AGENT";
+  employeeForm.partyRole = "AGENT";
 });
 
 async function handleLogin() {
@@ -951,16 +1000,19 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
       employeeRows,
       deviceRows,
       monitoringData,
+      platformData,
       llmData
     ] = await Promise.all([
       fetchEmployees(),
       fetchDevices(),
       fetchMonitoring(),
+      fetchPlatformInfo(),
       fetchLlmSettings()
     ]);
     employees.value = employeeRows;
     devices.value = deviceRows;
     monitoring.value = monitoringData;
+    platformInfo.value = platformData;
     llmSettings.value = llmData;
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     syncLlmForm(llmData);
@@ -976,22 +1028,16 @@ function selectAdminPage(page) {
 }
 
 async function loadAdminFileListsWithoutLoading() {
-  const [workspaceResult, shipmentResult] = await Promise.allSettled([
-    fetchAdminWorkspaceFiles({ page: 0, size: 200, includeExpired: includeExpiredFiles.value }),
+  const [shipmentResult] = await Promise.allSettled([
     fetchAdminShipmentFiles({ page: 0, size: 200, includeDeleted: true })
   ]);
-  if (workspaceResult.status === "fulfilled") {
-    const data = workspaceResult.value;
-    adminWorkspaceFiles.value = Array.isArray(data?.items) ? data.items : [];
-    adminWorkspaceFileTotal.value = Number(data?.total ?? adminWorkspaceFiles.value.length);
-  }
   if (shipmentResult.status === "fulfilled") {
     const data = shipmentResult.value;
     adminShipmentFiles.value = Array.isArray(data?.items) ? data.items : [];
     adminShipmentFileTotal.value = Number(data?.total ?? adminShipmentFiles.value.length);
   }
-  adminFilesLoaded.value = workspaceResult.status === "fulfilled" && shipmentResult.status === "fulfilled";
-  const failed = [workspaceResult, shipmentResult].find((result) => result.status === "rejected");
+  adminFilesLoaded.value = shipmentResult.status === "fulfilled";
+  const failed = [shipmentResult].find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
 }
 
@@ -1001,7 +1047,7 @@ function openEmployeeDialog(user = null) {
   employeeForm.username = user?.username || "";
   employeeForm.displayName = user?.displayName || "";
   employeeForm.password = "";
-  employeeForm.role = user?.role || "EMPLOYEE";
+  employeeForm.role = user?.role || "OVERSEA_AGENT";
   employeeForm.partyRole = user?.partyRole || "AGENT";
   employeeForm.status = user?.status || "ACTIVE";
   employeeDialogOpen.value = true;
@@ -1014,7 +1060,7 @@ function closeEmployeeDialog() {
   employeeForm.username = "";
   employeeForm.displayName = "";
   employeeForm.password = "";
-  employeeForm.role = "EMPLOYEE";
+  employeeForm.role = "OVERSEA_AGENT";
   employeeForm.partyRole = "AGENT";
   employeeForm.status = "ACTIVE";
 }
@@ -1124,24 +1170,6 @@ async function handleDeleteDevice(device) {
     await deleteDevice(device.id);
     await loadDashboard(false);
     showMessage("设备记录已删除");
-  });
-}
-
-async function loadAdminWorkspaceFiles() {
-  await withLoading(async () => {
-    const response = await fetchAdminWorkspaceFiles({
-      page: 0,
-      size: 200,
-      includeExpired: includeExpiredFiles.value
-    });
-    adminWorkspaceFiles.value = Array.isArray(response?.items) ? response.items : [];
-    adminWorkspaceFileTotal.value = Number(response?.total ?? adminWorkspaceFiles.value.length);
-  });
-}
-
-async function handleDownloadWorkspaceFile(file) {
-  await withLoading(async () => {
-    await downloadAdminWorkspaceFile(file.id, file.originalFileName || `workspace-${file.id}.xlsx`);
   });
 }
 
@@ -1385,7 +1413,7 @@ function roleText(role) {
     ADMIN: "profile.role.admin",
     BUSINESS: "profile.role.business",
     OPERATOR: "profile.role.business",
-    EMPLOYEE: "profile.role.employee"
+    OVERSEA_AGENT: "profile.role.overseaAgent"
   }[role] || "profile.role.employee";
   return ui(key);
 }

@@ -2,7 +2,9 @@ package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.UserAuthInterceptor;
+import com.cargoplanner.backend.common.ApiException;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +28,9 @@ public class ShipmentBatchTrackingController {
       @RequestBody ShipmentBatchTaskRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user
   ) {
+    if (request == null || request.customerId() == null || request.customerId().isBlank()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Select a customer before batch tracking");
+    }
     return ResponseEntity.accepted().body(batchTrackingService.start(request, user));
   }
 

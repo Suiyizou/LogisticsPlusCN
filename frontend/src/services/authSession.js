@@ -37,6 +37,10 @@ export function saveSession(response) {
   if (response.expiresAt) localStorage.setItem(EXPIRES_KEY, response.expiresAt);
 }
 
+export function saveStoredUser(user) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+}
+
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);

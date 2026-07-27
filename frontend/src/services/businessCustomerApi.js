@@ -18,30 +18,25 @@ export function fetchCustomerTransferAgents() {
   return request("/business/customers/transfer-agents");
 }
 
-export function transferBusinessCustomers(payload) {
-  return request("/business/customers/transfer", { method: "POST", body: payload });
+export function createOverseaAgentEmployee(payload) {
+  return request("/business/customers/oversea-agents", { method: "POST", body: payload });
 }
 
-export function fetchCustomerRelationships() {
-  return request("/business/customer-relationships");
-}
-
-export function fetchCustomerHandoverRequests() {
-  return request("/business/customer-relationships/handover-requests");
-}
-
-export function createCustomerHandoverRequest(payload) {
-  return request("/business/customer-relationships/handover-requests", {
-    method: "POST",
+export function updateOverseaAgent(userId, payload) {
+  return request(`/business/customers/oversea-agents/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
     body: payload
   });
 }
 
-export function decideCustomerHandoverRequest(requestId, payload) {
-  return request(
-    `/business/customer-relationships/handover-requests/${encodeURIComponent(requestId)}/decision`,
-    { method: "POST", body: payload }
-  );
+export function deleteOverseaAgent(userId) {
+  return request(`/business/customers/oversea-agents/${encodeURIComponent(userId)}`, {
+    method: "DELETE"
+  });
+}
+
+export function transferBusinessCustomers(payload) {
+  return request("/business/customers/transfer", { method: "POST", body: payload });
 }
 
 export function updateBusinessCustomer(customerId, payload) {
@@ -134,8 +129,11 @@ export function resolvePendingClientMatch(matchId, customerId) {
   });
 }
 
-export function createBusinessShipment(payload) {
-  return request("/business/customers/shipments", { method: "POST", body: payload });
+export function createBusinessShipment(payload, customerId, publishToCustomer = true) {
+  return request("/business/customers/shipments", {
+    method: "POST",
+    body: { customerId, publishToCustomer, shipment: payload }
+  });
 }
 
 export function updateBusinessShipment(shipmentId, payload) {

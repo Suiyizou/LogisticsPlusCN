@@ -2,6 +2,9 @@ package com.cargoplanner.backend.shipment;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.customer.BusinessCustomerService;
+import com.cargoplanner.backend.customer.CustomerShipmentBindingRequest;
+import com.cargoplanner.backend.customer.ShipmentPublicationRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
@@ -24,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -65,6 +69,7 @@ public class ShipmentBatchTrackingService {
   );
 
   private final ShipmentTrackingService trackingService;
+  private final BusinessCustomerService customerService;
   private final ExecutorService executor;
   private final long minIntervalMs;
   private final long maxIntervalMs;
@@ -78,9 +83,13 @@ public class ShipmentBatchTrackingService {
   private final Map<String, CarrierChannelState> carrierStateByChannel = new ConcurrentHashMap<>();
 
   @Autowired
-  public ShipmentBatchTrackingService(ShipmentTrackingService trackingService) {
+  public ShipmentBatchTrackingService(
+      ShipmentTrackingService trackingService,
+      ObjectProvider<BusinessCustomerService> customerServiceProvider
+  ) {
     this(
         trackingService,
+        customerServiceProvider.getIfAvailable(),
         Executors.newSingleThreadExecutor(runnable -> {
           Thread thread = new Thread(runnable, "shipment-batch-tracking");
           thread.setDaemon(true);
@@ -102,7 +111,7 @@ public class ShipmentBatchTrackingService {
       Clock clock
   ) {
     this(
-        trackingService, executor, minIntervalMs, maxIntervalMs,
+        trackingService, null, executor, minIntervalMs, maxIntervalMs,
         DEFAULT_RETRY_BASE_MS, DEFAULT_RETRY_MAX_MS, clock
     );
   }
@@ -116,7 +125,24 @@ public class ShipmentBatchTrackingService {
       long retryMaxMs,
       Clock clock
   ) {
+    this(
+        trackingService, null, executor, minIntervalMs, maxIntervalMs,
+        retryBaseMs, retryMaxMs, clock
+    );
+  }
+
+  ShipmentBatchTrackingService(
+      ShipmentTrackingService trackingService,
+      BusinessCustomerService customerService,
+      ExecutorService executor,
+      long minIntervalMs,
+      long maxIntervalMs,
+      long retryBaseMs,
+      long retryMaxMs,
+      Clock clock
+  ) {
     this.trackingService = trackingService;
+    this.customerService = customerService;
     this.executor = executor;
     this.minIntervalMs = Math.max(0, minIntervalMs);
     this.maxIntervalMs = Math.max(this.minIntervalMs, maxIntervalMs);
@@ -219,6 +245,8 @@ public class ShipmentBatchTrackingService {
         channel,
         mode,
         forceRefresh,
+        "IMPORT".equals(mode) && request != null ? request.customerId() : null,
+        "IMPORT".equals(mode) && request != null && !Boolean.FALSE.equals(request.publishToCustomer()),
         now
     );
     tasks.put(taskId, task);
@@ -288,6 +316,7 @@ public class ShipmentBatchTrackingService {
           } else {
             trackWithRetry(task, item);
           }
+          assignImportedShipment(task, item);
         } catch (ProtectionPauseException paused) {
           finalStatus = "PAUSED";
           break;
@@ -305,6 +334,31 @@ public class ShipmentBatchTrackingService {
       }
     } finally {
       finish(task, task.cancelRequested.get() ? "STOPPED" : finalStatus);
+    }
+  }
+
+  private void assignImportedShipment(BatchTask task, BatchItem item) {
+    if (!"IMPORT".equals(task.mode) || customerService == null) return;
+    if (task.customerId == null || task.customerId.isBlank()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Select a customer before batch tracking");
+    }
+    if (item.shipmentId == null || item.shipmentId.isBlank()) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking result did not return a shipment id");
+    }
+    customerService.bindShipment(
+        task.customerId,
+        new CustomerShipmentBindingRequest(item.shipmentId, null, null, null),
+        task.owner,
+        "batch:" + task.id
+    );
+    if (task.publishToCustomer) {
+      customerService.setShipmentPublication(
+          task.customerId,
+          item.shipmentId,
+          new ShipmentPublicationRequest(true),
+          task.owner,
+          "batch:" + task.id
+      );
     }
   }
 
@@ -1027,6 +1081,8 @@ public class ShipmentBatchTrackingService {
       value.put("sourceFileName", task.sourceFileName);
       value.put("channel", task.channel);
       value.put("mode", task.mode);
+      value.put("customerId", task.customerId);
+      value.put("publishToCustomer", task.publishToCustomer);
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
       value.put("total", task.items.size());
@@ -1136,6 +1192,8 @@ public class ShipmentBatchTrackingService {
     private final String channel;
     private final String mode;
     private final boolean forceRefresh;
+    private final String customerId;
+    private final boolean publishToCustomer;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
     private volatile String status = "QUEUED";
@@ -1157,6 +1215,8 @@ public class ShipmentBatchTrackingService {
         String channel,
         String mode,
         boolean forceRefresh,
+        String customerId,
+        boolean publishToCustomer,
         Instant createdAt
     ) {
       this.id = id;
@@ -1166,6 +1226,8 @@ public class ShipmentBatchTrackingService {
       this.channel = channel;
       this.mode = mode;
       this.forceRefresh = forceRefresh;
+      this.customerId = customerId;
+      this.publishToCustomer = publishToCustomer;
       this.createdAt = createdAt;
       this.updatedAt = createdAt;
     }

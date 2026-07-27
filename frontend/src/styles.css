@@ -8052,8 +8052,9 @@ select,
   align-content: start;
   gap: 16px;
   padding: 18px;
-  background: #142235;
-  color: #eaf2fb;
+  border-right: 1px solid #d8e2ee;
+  background: #fff;
+  color: #17253a;
   overflow: auto;
 }
 
@@ -8062,7 +8063,7 @@ select,
   gap: 12px;
   align-items: center;
   min-height: 54px;
-  color: #fff;
+  color: #17253a;
   text-decoration: none;
 }
 
@@ -8078,7 +8079,7 @@ select,
 }
 
 .admin-console-brand strong {
-  color: #fff;
+  color: #17253a;
   font-size: 18px;
 }
 
@@ -8086,18 +8087,18 @@ select,
   display: grid;
   gap: 4px;
   padding: 14px;
-  border: 1px solid rgba(199, 215, 235, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #d8e2ee;
+  border-radius: 0;
+  background: #f7f9fc;
 }
 
 .admin-profile-card strong {
-  color: #fff;
+  color: #17253a;
   font-size: 18px;
 }
 
 .admin-profile-card small {
-  color: #b8c7d9;
+  color: #60738a;
 }
 
 .admin-console-nav {
@@ -8113,9 +8114,9 @@ select,
   min-height: 66px;
   padding: 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
-  color: #dce9f8;
+  color: #25364d;
   text-align: left;
   box-shadow: none;
   transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
@@ -8123,14 +8124,15 @@ select,
 
 .admin-console-nav button:hover,
 .admin-console-nav button.active {
-  border-color: rgba(111, 176, 235, 0.4);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: #9cc4f4;
+  background: #eef6ff;
   transform: translateX(2px);
 }
 
 .admin-console-nav button.active {
-  background: #2f80d1;
-  color: #fff;
+  background: #e8f2ff;
+  border-left: 3px solid #2f80d1;
+  color: #1767b3;
 }
 
 .admin-console-nav span {
@@ -8139,8 +8141,8 @@ select,
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
+  border-radius: 0;
+  background: #edf2f8;
   font-size: 12px;
   font-weight: 800;
 }
@@ -8151,7 +8153,7 @@ select,
 
 .admin-console-nav small {
   grid-column: 2;
-  color: rgba(220, 233, 248, 0.66);
+  color: #73859b;
   text-transform: none;
 }
 
@@ -8400,6 +8402,62 @@ select,
 
 .employee-dialog-form {
   padding: 18px 22px 22px;
+}
+
+/* Shared operations-list standard: dense, square, and consistent across internal pages. */
+.customer-access-page .el-table,
+.admin-console-shell .el-table,
+.standard-information-table,
+.admin-table-wrap,
+.admin-table {
+  border-radius: 0 !important;
+}
+
+.customer-access-page .el-table,
+.admin-console-shell .el-table,
+.standard-information-table {
+  --el-table-border-color: #dbe4ee;
+  --el-table-header-bg-color: #f4f7fb;
+  --el-table-row-hover-bg-color: #f5f9ff;
+  font-size: 13px;
+}
+
+.customer-access-page .el-table__inner-wrapper,
+.customer-access-page .el-table__header-wrapper,
+.customer-access-page .el-table__body-wrapper,
+.admin-console-shell .el-table__inner-wrapper,
+.admin-console-shell .el-table__header-wrapper,
+.admin-console-shell .el-table__body-wrapper,
+.standard-information-table .el-table__inner-wrapper {
+  border-radius: 0 !important;
+}
+
+.customer-access-page .el-table th.el-table__cell,
+.admin-console-shell .el-table th.el-table__cell,
+.standard-information-table th.el-table__cell,
+.admin-table th {
+  height: 44px;
+  padding: 8px 10px;
+  background: #f4f7fb;
+  color: #31455d;
+  font-weight: 700;
+}
+
+.customer-access-page .el-table td.el-table__cell,
+.admin-console-shell .el-table td.el-table__cell,
+.standard-information-table td.el-table__cell,
+.admin-table td {
+  min-height: 48px;
+  padding: 9px 10px;
+  vertical-align: middle;
+}
+
+.customer-access-page .el-card,
+.customer-access-page .el-dialog,
+.admin-console-shell .el-card,
+.admin-console-shell .el-dialog,
+.square-dialog {
+  border-radius: 0 !important;
 }
 
 .employee-dialog-error {

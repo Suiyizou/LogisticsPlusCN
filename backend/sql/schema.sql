@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS cp_users (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   username VARCHAR(64) NOT NULL UNIQUE,
   display_name VARCHAR(80) NOT NULL,
-  role ENUM('ADMIN', 'EMPLOYEE', 'BUSINESS') NOT NULL DEFAULT 'EMPLOYEE',
+  role ENUM('ADMIN', 'BUSINESS', 'OVERSEA_AGENT') NOT NULL DEFAULT 'OVERSEA_AGENT',
   party_role VARCHAR(20) NOT NULL DEFAULT 'AGENT',
   status ENUM('ACTIVE', 'DISABLED') NOT NULL DEFAULT 'ACTIVE',
   password_salt VARCHAR(128) NOT NULL,
@@ -52,7 +52,10 @@ CREATE TABLE IF NOT EXISTS cp_login_events (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NULL,
   username VARCHAR(64) NULL,
-  event_type ENUM('LOGIN_SUCCESS', 'LOGIN_FAIL', 'LOGOUT', 'KICK', 'DEVICE_LIMIT') NOT NULL,
+  event_type ENUM(
+    'LOGIN_SUCCESS', 'LOGIN_FAIL', 'LOGOUT', 'KICK', 'DEVICE_LIMIT',
+    'PASSWORD_CHANGED', 'PASSWORD_CHANGE_FAIL'
+  ) NOT NULL,
   device_id VARCHAR(128) NULL,
   ip_address VARCHAR(64) NULL,
   user_agent VARCHAR(512) NULL,
@@ -82,8 +85,18 @@ CREATE TABLE IF NOT EXISTS cp_admin_audit_log (
   target_id BIGINT NULL,
   detail VARCHAR(512) NULL,
   ip_address VARCHAR(64) NULL,
+  username_snapshot VARCHAR(100) NULL,
+  role_snapshot VARCHAR(32) NULL,
+  http_method VARCHAR(12) NULL,
+  request_path VARCHAR(255) NULL,
+  http_status INT NULL,
+  success TINYINT(1) NULL,
+  duration_ms BIGINT NULL,
+  request_id VARCHAR(64) NULL,
+  user_agent VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_cp_admin_audit_admin_time (admin_user_id, created_at),
+  INDEX idx_cp_admin_audit_request_time (request_id, created_at),
   CONSTRAINT fk_cp_admin_audit_user FOREIGN KEY (admin_user_id) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -242,6 +255,22 @@ CREATE TABLE IF NOT EXISTS cp_customers (
   CONSTRAINT fk_cp_customers_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS cp_customer_employee_assignments (
+  customer_id BIGINT NOT NULL,
+  employee_user_id BIGINT NOT NULL,
+  assigned_by BIGINT NOT NULL,
+  assigned_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (customer_id),
+  INDEX idx_cp_customer_employee_agent (employee_user_id, assigned_at),
+  CONSTRAINT fk_cp_customer_employee_customer
+    FOREIGN KEY (customer_id) REFERENCES cp_customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_customer_employee_user
+    FOREIGN KEY (employee_user_id) REFERENCES cp_users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_customer_employee_assigned_by
+    FOREIGN KEY (assigned_by) REFERENCES cp_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS cp_oversea_agent_customers (
   customer_id BIGINT NOT NULL,
   oversea_agent_customer_id BIGINT NOT NULL,
@@ -293,46 +322,6 @@ CREATE TABLE IF NOT EXISTS cp_oversea_agent_customer_transfer_log (
     FOREIGN KEY (to_oversea_agent_customer_id) REFERENCES cp_customers(id),
   CONSTRAINT fk_cp_oversea_transfer_initiated_by
     FOREIGN KEY (initiated_by) REFERENCES cp_users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE IF NOT EXISTS cp_customer_handover_requests (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  public_id CHAR(36) NOT NULL UNIQUE,
-  from_business_user_id BIGINT NOT NULL,
-  to_business_user_id BIGINT NOT NULL,
-  requested_by BIGINT NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-  reason VARCHAR(500) NOT NULL,
-  decision_note VARCHAR(500) NULL,
-  requested_ip VARCHAR(64) NULL,
-  requested_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  decided_by BIGINT NULL,
-  decided_at DATETIME(6) NULL,
-  INDEX idx_cp_customer_handover_incoming (to_business_user_id, status, requested_at),
-  INDEX idx_cp_customer_handover_outgoing (from_business_user_id, status, requested_at),
-  CONSTRAINT fk_cp_customer_handover_from_user
-    FOREIGN KEY (from_business_user_id) REFERENCES cp_users(id),
-  CONSTRAINT fk_cp_customer_handover_to_user
-    FOREIGN KEY (to_business_user_id) REFERENCES cp_users(id),
-  CONSTRAINT fk_cp_customer_handover_requested_by
-    FOREIGN KEY (requested_by) REFERENCES cp_users(id),
-  CONSTRAINT fk_cp_customer_handover_decided_by
-    FOREIGN KEY (decided_by) REFERENCES cp_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE IF NOT EXISTS cp_customer_handover_items (
-  request_id BIGINT NOT NULL,
-  customer_id BIGINT NOT NULL,
-  previous_owner_id BIGINT NOT NULL,
-  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  PRIMARY KEY (request_id, customer_id),
-  INDEX idx_cp_customer_handover_item_customer (customer_id, request_id),
-  CONSTRAINT fk_cp_customer_handover_item_request
-    FOREIGN KEY (request_id) REFERENCES cp_customer_handover_requests(id) ON DELETE CASCADE,
-  CONSTRAINT fk_cp_customer_handover_item_customer
-    FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
-  CONSTRAINT fk_cp_customer_handover_item_previous_owner
-    FOREIGN KEY (previous_owner_id) REFERENCES cp_users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_customer_sessions (

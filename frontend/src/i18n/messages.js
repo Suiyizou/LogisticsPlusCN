@@ -1064,7 +1064,7 @@ export const messages = {
 
 Object.assign(messages["zh-CN"].login, {
   routeLabel: "选择登录方式",
-  employeeRoute: "企业内部员工",
+  employeeRoute: "内部账号",
   employeeRouteHint: "工号 + 密码",
   customerRoute: "客户码登录",
   customerRouteHint: "直达货物追踪",
@@ -1087,7 +1087,7 @@ Object.assign(messages["zh-CN"].login, {
 
 Object.assign(messages["en-US"].login, {
   routeLabel: "Choose a sign-in route",
-  employeeRoute: "Internal employee",
+  employeeRoute: "Internal account",
   employeeRouteHint: "Employee No. + password",
   customerRoute: "Customer code",
   customerRouteHint: "Go straight to tracking",
@@ -1109,6 +1109,18 @@ Object.assign(messages["en-US"].login, {
 });
 
 Object.assign(messages["zh-CN"].portal, {
+  changePassword: "修改密码",
+  changePasswordTitle: "修改登录密码",
+  currentPassword: "当前密码",
+  newPassword: "新密码",
+  confirmPassword: "确认新密码",
+  passwordRule: "密码须为 12–128 位，并同时包含大写字母、小写字母、数字和符号，且不能包含登录账号。",
+  passwordRequired: "请完整填写当前密码和新密码。",
+  passwordMismatch: "两次输入的新密码不一致。",
+  passwordChanged: "密码修改成功，其他设备已退出登录。",
+  passwordChangeFailed: "密码修改失败，请检查当前密码后重试。",
+  savePassword: "保存新密码",
+  cancel: "取消",
   customerWorkspace: "客户与票单",
   controlled: "显式授权",
   customers: {
@@ -1122,6 +1134,18 @@ Object.assign(messages["zh-CN"].portal, {
 });
 
 Object.assign(messages["en-US"].portal, {
+  changePassword: "Change password",
+  changePasswordTitle: "Change sign-in password",
+  currentPassword: "Current password",
+  newPassword: "New password",
+  confirmPassword: "Confirm new password",
+  passwordRule: "Use 12–128 characters with uppercase, lowercase, a number, and a symbol. Do not include the username.",
+  passwordRequired: "Enter the current password and the new password.",
+  passwordMismatch: "The new passwords do not match.",
+  passwordChanged: "Password changed. Other devices were signed out.",
+  passwordChangeFailed: "Could not change the password. Check the current password and retry.",
+  savePassword: "Save new password",
+  cancel: "Cancel",
   customerWorkspace: "Customers & shipments",
   controlled: "Explicit access",
   customers: {
@@ -1686,7 +1710,7 @@ messages["zh-CN"].admin = {
     createTitle: "新增内部账号",
     agentForcedHint: "BUSINESS 与 ADMIN 属于内部代理角色，货运身份固定为 AGENT。",
     save: "保存账号",
-    create: "创建员工",
+    create: "创建账号",
     saved: "内部账号已更新。",
     created: "内部账号已创建。",
     empty: "暂无内部账号。",
@@ -1700,7 +1724,7 @@ messages["zh-CN"].admin = {
     resetPasswordSuccess: "账号 {username} 的密码已安全重置。",
     temporaryPasswordTitle: "立即保存重置密码",
     temporaryPasswordDescription: "这是账号 {username} 的新重置密码；出于安全考虑，关闭后系统不会再次显示。",
-    temporaryPasswordWarning: "请通过可信渠道交给员工。该密码会持续有效，直到管理员再次修改或重置。",
+    temporaryPasswordWarning: "请通过可信渠道交给账号使用者。该密码会持续有效，直到管理员再次修改或重置。",
     copyTemporaryPassword: "复制临时密码",
     temporaryPasswordCopied: "已复制",
     temporaryPasswordStored: "我已安全保存",
@@ -1720,7 +1744,7 @@ messages["en-US"].admin = {
     createTitle: "Create internal account",
     agentForcedHint: "BUSINESS and ADMIN are internal operator roles, so their freight identity is fixed to AGENT.",
     save: "Save account",
-    create: "Create employee",
+    create: "Create account",
     saved: "Internal account updated.",
     created: "Internal account created.",
     empty: "No internal accounts yet.",
@@ -1919,55 +1943,8 @@ Object.assign(messages["zh-CN"].customers, {
   trackingWorkspace: "货物追踪",
   backToList: "返回列表",
   tabCustomerManagement: "客户管理",
-  tabCustomerRelationships: "客户关系",
   tabShipmentManagement: "票单管理",
-  customerCodeUniqueHint: "客户名称可以重复；客户码是全局唯一识别码，创建后会用于客户关系和票单匹配，请勿随意修改。",
-  relationshipEyebrow: "CUSTOMER RESPONSIBILITY",
-  relationshipTitle: "客户关系",
-  relationshipDescription: "查看全局客户负责人、海外代理关联及交接状态。业务员交接需要目标负责人确认后才会生效。",
-  relationshipRefresh: "刷新关系",
-  relationshipCustomerTotal: "全局客户",
-  relationshipIncomingPending: "待我确认",
-  relationshipOutgoingPending: "我发起的待确认",
-  relationshipDirectoryTab: "客户负责人",
-  relationshipRequestsTab: "交接申请",
-  relationshipSearchPlaceholder: "搜索客户名、客户码、负责人或海外代理",
-  relationshipOwnerFilter: "按负责人筛选",
-  relationshipStartHandover: "发起交接（{count}）",
-  relationshipSameOwnerRequired: "同一批交接只能选择当前负责人相同的客户。",
-  relationshipCustomer: "客户",
-  relationshipCurrentOwner: "当前业务负责人",
-  relationshipOverseaAgent: "关联海外代理",
-  relationshipHandoverStatus: "交接状态",
-  relationshipPendingTo: "待 {name} 确认",
-  relationshipNoPending: "无待处理交接",
-  relationshipRequestCustomers: "交接客户",
-  relationshipFromOwner: "原负责人",
-  relationshipToOwner: "目标负责人",
-  relationshipReason: "交接原因",
-  relationshipRequestStatus: "状态",
-  relationshipRequestedAt: "发起时间",
-  relationshipAccept: "接受",
-  relationshipReject: "拒绝",
-  relationshipHandoverDialogTitle: "发起客户交接",
-  relationshipHandoverDialogDescription: "所选 {count} 个客户会在目标业务员接受后变更负责人；票单创建人与历史负责人不会被改写。",
-  relationshipTargetOwner: "目标业务员",
-  relationshipTargetOwnerPlaceholder: "选择接手业务员",
-  relationshipReasonPlaceholder: "填写交接背景、当前进度和需要关注的事项",
-  relationshipSubmitRequest: "提交交接申请",
-  relationshipLoadFailed: "客户关系加载失败。",
-  relationshipRequestCreated: "交接申请已发出，等待目标业务员确认。",
-  relationshipRequestFailed: "交接申请提交失败。",
-  relationshipAcceptConfirm: "确认接收这批 {count} 个客户吗？接受后你将成为当前负责人。",
-  relationshipRejectPrompt: "请填写拒绝原因，原负责人会在交接记录中看到。",
-  relationshipRejectReasonPlaceholder: "例如：当前工作量已满，需要重新安排",
-  relationshipRejectReasonRequired: "请填写拒绝原因",
-  relationshipAccepted: "已接受交接，客户负责人和相关票单权限已更新。",
-  relationshipRejected: "已拒绝交接，客户负责人保持不变。",
-  relationshipDecisionFailed: "交接处理失败，请刷新后重试。",
-  relationshipStatusPending: "待确认",
-  relationshipStatusAccepted: "已接受",
-  relationshipStatusRejected: "已拒绝",
+  customerCodeUniqueHint: "客户名称可以重复；客户码是全局唯一识别码，创建后会用于票单匹配，请勿随意修改。",
   customerFilterLabel: "客户筛选",
   filterByCustomer: "按客户筛选票单",
   trackingChannel: "追踪通道",
@@ -2171,55 +2148,8 @@ Object.assign(messages["en-US"].customers, {
   trackingWorkspace: "Tracking Workspace",
   backToList: "Back to list",
   tabCustomerManagement: "Customer Management",
-  tabCustomerRelationships: "Customer Relationships",
   tabShipmentManagement: "Shipment Management",
-  customerCodeUniqueHint: "Customer names may repeat. The customer code is the globally unique identifier used for relationships and shipment matching, so do not change it casually after creation.",
-  relationshipEyebrow: "CUSTOMER RESPONSIBILITY",
-  relationshipTitle: "Customer Relationships",
-  relationshipDescription: "Review customer ownership, overseas-agent links, and handover status across the company. A handover takes effect only after the target operator accepts it.",
-  relationshipRefresh: "Refresh",
-  relationshipCustomerTotal: "All customers",
-  relationshipIncomingPending: "Awaiting my decision",
-  relationshipOutgoingPending: "My pending requests",
-  relationshipDirectoryTab: "Customer owners",
-  relationshipRequestsTab: "Handover requests",
-  relationshipSearchPlaceholder: "Search customer, code, owner, or overseas agent",
-  relationshipOwnerFilter: "Filter by owner",
-  relationshipStartHandover: "Start handover ({count})",
-  relationshipSameOwnerRequired: "Customers in one handover must have the same current owner.",
-  relationshipCustomer: "Customer",
-  relationshipCurrentOwner: "Current business owner",
-  relationshipOverseaAgent: "Linked overseas agent",
-  relationshipHandoverStatus: "Handover status",
-  relationshipPendingTo: "Awaiting {name}",
-  relationshipNoPending: "No pending handover",
-  relationshipRequestCustomers: "Customers",
-  relationshipFromOwner: "Current owner",
-  relationshipToOwner: "Target owner",
-  relationshipReason: "Reason",
-  relationshipRequestStatus: "Status",
-  relationshipRequestedAt: "Requested",
-  relationshipAccept: "Accept",
-  relationshipReject: "Reject",
-  relationshipHandoverDialogTitle: "Start customer handover",
-  relationshipHandoverDialogDescription: "The selected {count} customers will change owner only after the target operator accepts. Shipment creators and historical ownership are retained.",
-  relationshipTargetOwner: "Target business operator",
-  relationshipTargetOwnerPlaceholder: "Select the receiving operator",
-  relationshipReasonPlaceholder: "Describe the context, current progress, and follow-up items",
-  relationshipSubmitRequest: "Submit request",
-  relationshipLoadFailed: "Could not load customer relationships.",
-  relationshipRequestCreated: "Handover request sent. It is waiting for the target operator.",
-  relationshipRequestFailed: "Could not submit the handover request.",
-  relationshipAcceptConfirm: "Accept these {count} customers? You will become their current owner.",
-  relationshipRejectPrompt: "Provide a rejection reason for the current owner.",
-  relationshipRejectReasonPlaceholder: "For example: current capacity is full; reassignment is needed",
-  relationshipRejectReasonRequired: "Enter a rejection reason",
-  relationshipAccepted: "Handover accepted. Customer ownership and related shipment access were updated.",
-  relationshipRejected: "Handover rejected. Customer ownership was unchanged.",
-  relationshipDecisionFailed: "Could not process the handover. Refresh and try again.",
-  relationshipStatusPending: "Pending",
-  relationshipStatusAccepted: "Accepted",
-  relationshipStatusRejected: "Rejected",
+  customerCodeUniqueHint: "Customer names may repeat. The customer code is the globally unique identifier used for shipment matching, so do not change it casually after creation.",
   customerFilterLabel: "Customer",
   filterByCustomer: "Filter shipments by customer",
   trackingChannel: "Tracking channel",
@@ -2460,4 +2390,177 @@ Object.assign(messages["en-US"].customers, {
   customerImportPasswordGenerated: "Blank; a strong password will be generated after successful import.",
   customerImportClientCodeGenerated: "Blank; a globally unique customer code will be generated after successful import.",
   customerImportDuplicateServer: "The username or customer code already exists. Both must be globally unique."
+});
+
+Object.assign(messages["zh-CN"].customers, {
+  transferSelected: "分配海外代理（{count}）",
+  transferTitle: "分配内部海外代理",
+  transferDescription: "将选中的 {count} 个客户分配给内部海外代理员工。该员工可跟进相关票单、文件和留言。",
+  targetAgent: "海外代理员工",
+  targetAgentPlaceholder: "选择内部海外代理员工",
+  transferPermissionHint: "业务员始终保留客户、票单和全局更新权限；海外代理仅获得被分配业务的跟进权限。",
+  confirmTransfer: "确认分配",
+  transferring: "正在分配…",
+  transferSuccess: "已把 {count} 个客户分配给 {agent}，同步授权 {shipments} 张关联票单。",
+  transferFailed: "海外代理分配失败，未完成的变更已回滚。",
+  loadTransferAgentsFailed: "无法加载可用的内部海外代理员工。",
+  unassigned: "未分配",
+  overseaAgentEmployee: "海外代理员工",
+  roleRule: "仅支持 SHIPPER 或 CONSIGNEE；海外代理使用内部员工账号。",
+  createDescription: "创建发货人或收货人客户账号；海外代理创建为内部员工。",
+  createOverseaAgent: "新增海外代理",
+  createOverseaAgentTitle: "创建内部海外代理员工",
+  createOverseaAgentHint: "海外代理通过员工通道登录，只能查看和跟进业务员分配的客户、票单、文件与留言，不能执行全局更新。",
+  createOverseaAgentValidation: "请填写 2–64 位账号、2–80 位姓名，并使用至少 12 位且包含大小写字母、数字和符号的密码。",
+  createOverseaAgentSuccess: "海外代理员工账号创建成功。",
+  createOverseaAgentFailed: "海外代理员工账号创建失败。"
+});
+
+Object.assign(messages["en-US"].customers, {
+  transferSelected: "Assign agent ({count})",
+  transferTitle: "Assign internal overseas agent",
+  transferDescription: "Assign the {count} selected customers to an internal overseas-agent employee for shipment, file, and message follow-up.",
+  targetAgent: "Overseas-agent employee",
+  targetAgentPlaceholder: "Select an internal overseas-agent employee",
+  transferPermissionHint: "The business operator retains customer, shipment, and global refresh authority. The agent receives follow-up access only.",
+  confirmTransfer: "Confirm assignment",
+  transferring: "Assigning…",
+  transferSuccess: "Assigned {count} customers to {agent} with access to {shipments} related shipments.",
+  transferFailed: "Agent assignment failed. Incomplete changes were rolled back.",
+  loadTransferAgentsFailed: "Could not load internal overseas-agent employees.",
+  unassigned: "Unassigned",
+  overseaAgentEmployee: "Overseas-agent employee",
+  roleRule: "SHIPPER or CONSIGNEE only. Overseas agents use internal employee accounts.",
+  createDescription: "Create shipper or consignee customer accounts. Overseas agents are internal employees.",
+  createOverseaAgent: "New overseas agent",
+  createOverseaAgentTitle: "Create internal overseas-agent employee",
+  createOverseaAgentHint: "The agent signs in through the employee route and may only follow assigned customers, shipments, files, and messages. Global refresh is not permitted.",
+  createOverseaAgentValidation: "Enter a 2–64 character username, 2–80 character name, and a 12+ character password with upper, lower, digit, and symbol.",
+  createOverseaAgentSuccess: "Overseas-agent employee created.",
+  createOverseaAgentFailed: "Could not create the overseas-agent employee."
+});
+
+Object.assign(messages["zh-CN"].admin.employee, {
+  overseaAgentHint: "员工账号固定为内部海外代理，通过员工通道登录并仅跟进已分配业务。"
+});
+
+Object.assign(messages["en-US"].admin.employee, {
+  overseaAgentHint: "Employee accounts are internal overseas agents who sign in through the employee route and only follow assigned work."
+});
+
+messages["zh-CN"].admin.list = {
+  username: "账号",
+  displayName: "姓名",
+  systemRole: "系统角色",
+  status: "状态",
+  lastLogin: "最近登录",
+  actions: "操作",
+  user: "用户",
+  device: "设备",
+  webMacUnavailable: "Web 端不可读取",
+  loginAt: "登录时间",
+  lastSeen: "最近活跃",
+  noDevices: "暂无登录设备",
+  endpoint: "接口",
+  requests: "请求数",
+  noEndpoints: "暂无接口统计"
+};
+
+messages["en-US"].admin.list = {
+  username: "Account",
+  displayName: "Name",
+  systemRole: "System role",
+  status: "Status",
+  lastLogin: "Last sign-in",
+  actions: "Actions",
+  user: "User",
+  device: "Device",
+  webMacUnavailable: "Unavailable in web browsers",
+  loginAt: "Signed in",
+  lastSeen: "Last active",
+  noDevices: "No sign-in devices",
+  endpoint: "Endpoint",
+  requests: "Requests",
+  noEndpoints: "No endpoint statistics"
+};
+
+Object.assign(messages["zh-CN"].customers, {
+  overview: "总览",
+  overviewHint: "汇总客户、票单与海外代理，并从左侧进入具体业务。",
+  personalInfo: "个人信息",
+  overseaAgentManagement: "海外代理",
+  overseaAgentManagementHint: "由唯一业务员统一创建、维护和停用海外代理账号。",
+  selectCustomerFirst: "先选择客户",
+  customer: "客户",
+  publishAfterCreate: "创建后立即发布给客户",
+  assignAgent: "为该客户分配代理",
+  changeAgent: "为客户更换代理",
+  deleteCustomer: "删除客户",
+  confirmDeleteCustomer: "确认删除客户“{name}”吗？有关联票单时将安全归档并撤销登录权限，历史记录会保留。",
+  customerArchived: "客户已删除或安全归档。",
+  deleteCustomerFailed: "客户删除失败。",
+  confirmAgentStatusChange: "确认更改海外代理“{name}”的状态吗？",
+  refresh: "刷新"
+  ,transferDescription: "为当前客户选择一个海外代理；保存后，该代理可跟进相关票单、文件和留言。"
+  ,targetAgent: "海外代理"
+  ,targetAgentPlaceholder: "选择可用海外代理"
+  ,loadTransferAgentsFailed: "无法加载可用海外代理。"
+  ,overseaAgentEmployee: "海外代理"
+  ,createOverseaAgentTitle: "创建海外代理"
+  ,createOverseaAgentSuccess: "海外代理账号创建成功。"
+  ,createOverseaAgentFailed: "海外代理账号创建失败。"
+});
+
+Object.assign(messages["en-US"].customers, {
+  overview: "Overview",
+  overviewHint: "Review customers, shipments, and overseas agents, then enter a workflow from the sidebar.",
+  personalInfo: "Personal information",
+  overseaAgentManagement: "Overseas agents",
+  overseaAgentManagementHint: "The single business operator creates, maintains, and disables overseas-agent accounts.",
+  selectCustomerFirst: "Select customer first",
+  customer: "Customer",
+  publishAfterCreate: "Publish to the customer after creation",
+  assignAgent: "Assign agent",
+  changeAgent: "Change agent",
+  deleteCustomer: "Delete customer",
+  confirmDeleteCustomer: "Delete “{name}”? Customers with shipment history are safely archived and their access is revoked.",
+  customerArchived: "Customer deleted or safely archived.",
+  deleteCustomerFailed: "Could not delete the customer.",
+  confirmAgentStatusChange: "Change the status of overseas agent “{name}”?",
+  refresh: "Refresh"
+  ,transferDescription: "Select one overseas agent for this customer. The agent can then follow related shipments, files, and comments."
+  ,targetAgent: "Overseas agent"
+  ,targetAgentPlaceholder: "Select an available overseas agent"
+  ,loadTransferAgentsFailed: "Could not load available overseas agents."
+  ,overseaAgentEmployee: "Overseas agent"
+  ,createOverseaAgentTitle: "Create overseas agent"
+  ,createOverseaAgentSuccess: "Overseas-agent account created."
+  ,createOverseaAgentFailed: "Could not create the overseas-agent account."
+});
+
+messages["zh-CN"].portal.roleOverseaAgent = "海外代理";
+messages["en-US"].portal.roleOverseaAgent = "Overseas agent";
+
+Object.assign(messages["zh-CN"].portal, {
+  personalInfo: "个人信息",
+  personalInfoTitle: "修改个人信息",
+  accountUsername: "登录用户名",
+  accountRole: "系统角色",
+  displayName: "显示名称",
+  displayNameRule: "显示名称需要 2–80 个字符。",
+  saveProfile: "保存个人信息",
+  profileSaved: "个人信息已更新。",
+  profileSaveFailed: "个人信息保存失败。"
+});
+
+Object.assign(messages["en-US"].portal, {
+  personalInfo: "Personal information",
+  personalInfoTitle: "Edit personal information",
+  accountUsername: "Username",
+  accountRole: "System role",
+  displayName: "Display name",
+  displayNameRule: "Display name must contain 2–80 characters.",
+  saveProfile: "Save profile",
+  profileSaved: "Personal information updated.",
+  profileSaveFailed: "Could not save personal information."
 });

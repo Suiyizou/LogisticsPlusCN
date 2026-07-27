@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -146,6 +147,124 @@ public class AuthService {
     }
   }
 
+  @Transactional
+  public AuthenticatedUser updateOwnProfile(
+      AuthenticatedUser actor,
+      UpdateOwnProfileRequest request,
+      HttpServletRequest httpRequest
+  ) {
+    if (actor == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required");
+    String displayName = request == null || request.displayName() == null
+        ? ""
+        : request.displayName().trim();
+    if (displayName.length() < 2 || displayName.length() > 80) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Display name must contain 2-80 characters");
+    }
+    jdbcTemplate.update(
+        "UPDATE cp_users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        displayName,
+        actor.id()
+    );
+    try {
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_admin_audit_log (
+            admin_user_id, action, target_type, target_id, detail, ip_address,
+            username_snapshot, role_snapshot
+          ) VALUES (?, 'UPDATE_OWN_PROFILE', 'USER', ?, ?, ?, ?, ?)
+          """,
+          actor.id(),
+          actor.id(),
+          ClientInfo.trim("Updated own display name", 512),
+          ClientInfo.trim(ClientInfo.ip(httpRequest), 64),
+          ClientInfo.trim(actor.username(), 100),
+          ClientInfo.trim(actor.role(), 32)
+      );
+    } catch (RuntimeException ignored) {
+      // Profile updates stay available while an older audit schema is being upgraded.
+    }
+    return new AuthenticatedUser(
+        actor.id(),
+        actor.username(),
+        displayName,
+        actor.role(),
+        actor.status(),
+        actor.partyRole()
+    );
+  }
+
+  @Transactional
+  public void changeOwnPassword(
+      AuthenticatedUser actor,
+      ChangeOwnPasswordRequest request,
+      String currentToken,
+      HttpServletRequest httpRequest
+  ) {
+    if (actor == null) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Sign in is required");
+    }
+    UserAccount account = findAccountById(actor.id());
+    if (account == null || !"ACTIVE".equals(account.status())) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, "Account is unavailable");
+    }
+    if (!passwordHasher.verify(
+        request.currentPassword(),
+        account.passwordSalt(),
+        account.passwordHash(),
+        account.passwordIterations()
+    )) {
+      recordEvent(
+          actor.id(),
+          actor.username(),
+          "PASSWORD_CHANGE_FAIL",
+          null,
+          ClientInfo.ip(httpRequest),
+          ClientInfo.userAgent(httpRequest),
+          "Current password was incorrect"
+      );
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+    }
+    validateStrongPassword(request.newPassword(), actor.username());
+    if (request.currentPassword().equals(request.newPassword())) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "New password must be different");
+    }
+    PasswordHasher.PasswordHash passwordHash = passwordHasher.hash(request.newPassword());
+    jdbcTemplate.update(
+        """
+        UPDATE cp_users
+        SET password_salt = ?, password_hash = ?, password_iterations = ?
+        WHERE id = ?
+        """,
+        passwordHash.salt(),
+        passwordHash.hash(),
+        passwordHash.iterations(),
+        actor.id()
+    );
+    String currentTokenHash = currentToken == null || currentToken.isBlank()
+        ? null
+        : sha256Hex(currentToken.trim());
+    jdbcTemplate.update(
+        """
+        UPDATE cp_login_devices
+        SET online = 0, session_token_hash = NULL, revoked_at = ?
+        WHERE user_id = ? AND (? IS NULL OR session_token_hash <> ?)
+        """,
+        Timestamp.from(Instant.now()),
+        actor.id(),
+        currentTokenHash,
+        currentTokenHash
+    );
+    recordEvent(
+        actor.id(),
+        actor.username(),
+        "PASSWORD_CHANGED",
+        null,
+        ClientInfo.ip(httpRequest),
+        ClientInfo.userAgent(httpRequest),
+        "Password changed by account owner"
+    );
+  }
+
   public int deviceLimit() {
     return deviceLimit;
   }
@@ -190,6 +309,40 @@ public class AuthService {
         username
     );
     return users.isEmpty() ? null : users.get(0);
+  }
+
+  private UserAccount findAccountById(long userId) {
+    List<UserAccount> users = jdbcTemplate.query(
+        """
+        SELECT id, username, display_name, role, status, party_role,
+               password_salt, password_hash, password_iterations
+        FROM cp_users
+        WHERE id = ?
+        FOR UPDATE
+        """,
+        this::mapUserAccount,
+        userId
+    );
+    return users.isEmpty() ? null : users.get(0);
+  }
+
+  private void validateStrongPassword(String password, String username) {
+    String value = password == null ? "" : password;
+    boolean valid = value.length() >= 12
+        && value.length() <= 128
+        && value.chars().anyMatch(Character::isUpperCase)
+        && value.chars().anyMatch(Character::isLowerCase)
+        && value.chars().anyMatch(Character::isDigit)
+        && value.chars().anyMatch(character -> !Character.isLetterOrDigit(character));
+    boolean containsUsername = username != null
+        && !username.isBlank()
+        && value.toLowerCase(Locale.ROOT).contains(username.toLowerCase(Locale.ROOT));
+    if (!valid || containsUsername || "123456".equals(value) || "Admin@123456".equals(value)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Password must be 12-128 characters, include upper, lower, digit, and symbol, and not contain the username"
+      );
+    }
   }
 
   private DeviceSession findDeviceSession(String tokenHash) {

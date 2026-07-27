@@ -44,6 +44,20 @@ export async function fetchAdminMe() {
   return request("/auth/me");
 }
 
+export async function changeOwnPassword(currentPassword, newPassword) {
+  return request("/auth/change-password", {
+    method: "POST",
+    body: { currentPassword, newPassword }
+  });
+}
+
+export async function updateOwnProfile(displayName) {
+  return request("/auth/profile", {
+    method: "PATCH",
+    body: { displayName }
+  });
+}
+
 export async function fetchEmployees() {
   return request("/admin/employees");
 }
@@ -78,6 +92,10 @@ export async function deleteDevice(id) {
 
 export async function fetchMonitoring() {
   return request("/admin/monitoring");
+}
+
+export async function fetchPlatformInfo() {
+  return request("/admin/platform-info");
 }
 
 export async function fetchLlmSettings() {
