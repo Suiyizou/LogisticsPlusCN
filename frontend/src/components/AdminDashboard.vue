@@ -76,6 +76,10 @@
           <span>{{ activePageMeta.subtitle }}</span>
         </div>
         <div class="admin-top-actions">
+          <button class="admin-system-message-button" type="button" @click="emit('open-announcements')">
+            {{ announcementCopy.systemMessages }}
+            <em v-if="props.announcementCount > 0">{{ props.announcementCount > 99 ? '99+' : props.announcementCount }}</em>
+          </button>
           <button type="button" :disabled="loading" @click="loadDashboard">
             {{ loading ? "刷新中..." : "刷新数据" }}
           </button>
@@ -310,6 +314,13 @@
           </div>
           <div class="admin-table-wrap">
             <el-table :data="pagedPlatformCustomers" :row-key="platformRowKey" stripe class="standard-information-table">
+              <el-table-column :label="ui('admin.platform.customer')" min-width="158" show-overflow-tooltip>
+                <template #default="{ row }"><b>{{ row.customerDisplayName || row.customerUsername }}</b><small>@{{ row.customerUsername }}</small></template>
+              </el-table-column>
+              <el-table-column prop="clientCode" :label="ui('admin.platform.clientCode')" width="128" show-overflow-tooltip />
+              <el-table-column :label="ui('admin.platform.partyRole')" width="130">
+                <template #default="{ row }">{{ partyRoleText(row.partyRole) }}</template>
+              </el-table-column>
               <el-table-column :label="ui('admin.platform.business')" min-width="148" show-overflow-tooltip>
                 <template #default="{ row }"><b>{{ row.businessDisplayName || '-' }}</b><small>@{{ row.businessUsername || '-' }}</small></template>
               </el-table-column>
@@ -318,13 +329,6 @@
                   <b>{{ row.agentDisplayName || ui('admin.platform.unassigned') }}</b>
                   <small>{{ row.agentUsername ? `@${row.agentUsername}` : '-' }}</small>
                 </template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.platform.customer')" min-width="158" show-overflow-tooltip>
-                <template #default="{ row }"><b>{{ row.customerDisplayName || row.customerUsername }}</b><small>@{{ row.customerUsername }}</small></template>
-              </el-table-column>
-              <el-table-column prop="clientCode" :label="ui('admin.platform.clientCode')" width="128" show-overflow-tooltip />
-              <el-table-column :label="ui('admin.platform.partyRole')" width="130">
-                <template #default="{ row }">{{ partyRoleText(row.partyRole) }}</template>
               </el-table-column>
               <el-table-column prop="shipmentCount" :label="ui('admin.platform.shipments')" width="120" align="center" />
               <el-table-column :label="t('admin.list.status')" width="110">
@@ -354,6 +358,101 @@
             :total="platformTotal"
             @current-change="changePlatformPage"
             @size-change="changePlatformPageSize"
+          />
+        </article>
+      </section>
+
+      <section v-else-if="activeAdminPage === 'announcements'" class="admin-page-pane">
+        <article class="admin-panel admin-announcement-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>Announcement Center</p>
+              <h2>{{ announcementCopy.listTitle }}</h2>
+            </div>
+            <div class="admin-inline-actions">
+              <span>{{ announcementCopy.total.replace('{count}', String(announcementTotal)) }}</span>
+              <button class="primary" type="button" @click="openAnnouncementEditor()">
+                {{ announcementCopy.create }}
+              </button>
+              <button type="button" :disabled="loading" @click="loadAnnouncementPage">
+                {{ announcementCopy.refresh }}
+              </button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table
+              :data="announcements"
+              row-key="id"
+              stripe
+              class="standard-information-table admin-announcement-table"
+            >
+              <el-table-column :label="announcementCopy.title" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="announcement-title-cell">
+                    <span v-if="announcementImageUrl(row)" class="announcement-image-indicator" aria-hidden="true"></span>
+                    <div>
+                      <b>{{ row.title || '-' }}</b>
+                      <small>{{ announcementExcerpt(row.contentMarkdown) }}</small>
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="announcementCopy.visibility" width="122">
+                <template #default="{ row }">
+                  <span class="announcement-visibility" :class="announcementAudience(row).toLowerCase()">
+                    {{ announcementVisibilityLabel(announcementAudience(row)) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="announcementCopy.displayDate" width="126">
+                <template #default="{ row }">{{ row.displayDate || '-' }}</template>
+              </el-table-column>
+              <el-table-column :label="announcementCopy.status" width="108">
+                <template #default="{ row }">
+                  <span class="admin-status" :class="{ off: row.status !== 'PUBLISHED' }">
+                    {{ announcementStatusLabel(row.status) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="announcementCopy.updatedAt" width="148">
+                <template #default="{ row }">{{ formatDate(row.updatedAt || row.publishedAt || row.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="announcementCopy.actions" width="250" fixed="right">
+                <template #default="{ row }">
+                  <div class="table-actions announcement-row-actions">
+                    <button type="button" @click="openAnnouncementPreview(row)">{{ announcementCopy.preview }}</button>
+                    <button type="button" @click="openAnnouncementEditor(row)">{{ announcementCopy.edit }}</button>
+                    <button
+                      v-if="row.status !== 'PUBLISHED'"
+                      class="primary"
+                      type="button"
+                      @click="handlePublishAnnouncement(row)"
+                    >{{ announcementCopy.publish }}</button>
+                    <button
+                      v-else
+                      type="button"
+                      @click="handleDeactivateAnnouncement(row)"
+                    >{{ announcementCopy.deactivate }}</button>
+                    <button class="danger ghost" type="button" @click="handleDeleteAnnouncement(row)">
+                      {{ announcementCopy.delete }}
+                    </button>
+                  </div>
+                </template>
+              </el-table-column>
+              <template #empty>{{ announcementCopy.empty }}</template>
+            </el-table>
+          </div>
+          <el-pagination
+            v-if="announcementTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="announcementPage"
+            :page-size="announcementPageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="announcementTotal"
+            @current-change="changeAnnouncementPage"
+            @size-change="changeAnnouncementPageSize"
           />
         </article>
       </section>
@@ -441,7 +540,7 @@
       </section>
 
       <section v-else-if="activeAdminPage === 'files'" class="admin-page-pane">
-        <div v-if="false" class="admin-file-scope-tabs" role="tablist" :aria-label="ui('admin.files.scopeAria')">
+        <div class="admin-file-scope-tabs" role="tablist" :aria-label="ui('admin.files.scopeAria')">
           <button
             type="button"
             role="tab"
@@ -466,7 +565,7 @@
           </button>
         </div>
 
-        <article v-if="false" class="admin-panel">
+        <article v-if="activeAdminFileSection === 'workspace'" class="admin-panel">
           <div class="admin-panel-head">
             <div>
               <p>Temporary Workspace Files</p>
@@ -474,7 +573,7 @@
             </div>
             <div class="admin-inline-actions">
               <label class="admin-files-expired-filter">
-                <input v-model="includeExpiredFiles" type="checkbox" @change="loadAdminWorkspaceFiles" />
+                <input v-model="includeExpiredFiles" type="checkbox" @change="handleWorkspaceExpiredToggle" />
                 <span>{{ ui('admin.files.includeExpired') }}</span>
               </label>
               <span>{{ ui('admin.files.total', { count: adminWorkspaceFileTotal }) }}</span>
@@ -521,6 +620,18 @@
               <template #empty>{{ ui('admin.files.workspaceEmpty') }}</template>
             </el-table>
           </div>
+          <el-pagination
+            v-if="adminWorkspaceFileTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="adminWorkspaceFilePage"
+            :page-size="adminWorkspaceFilePageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="adminWorkspaceFileTotal"
+            @current-change="changeAdminWorkspaceFilePage"
+            @size-change="changeAdminWorkspaceFilePageSize"
+          />
         </article>
 
         <article v-else class="admin-panel">
@@ -721,6 +832,122 @@
 
     </main>
 
+    <div v-if="announcementDialogOpen" class="modal-backdrop">
+      <div class="modal announcement-editor-modal" role="dialog" aria-modal="true">
+        <header>
+          <div>
+            <p>Announcement Editor</p>
+            <h2>{{ editingAnnouncementId ? announcementCopy.editTitle : announcementCopy.createTitle }}</h2>
+          </div>
+          <button type="button" :aria-label="announcementCopy.close" @click="closeAnnouncementEditor">×</button>
+        </header>
+        <form class="announcement-editor-form" @submit.prevent="handleSaveAnnouncement">
+          <div class="announcement-editor-grid">
+            <div class="announcement-fields">
+              <label>
+                <span>{{ announcementCopy.title }}</span>
+                <input v-model.trim="announcementForm.title" maxlength="160" :placeholder="announcementCopy.titlePlaceholder" />
+              </label>
+              <div class="announcement-field-row">
+                <label>
+                  <span>{{ announcementCopy.displayDate }}</span>
+                  <input v-model="announcementForm.displayDate" type="date" />
+                </label>
+                <label>
+                  <span>{{ announcementCopy.visibility }}</span>
+                  <el-select v-model="announcementForm.audience" class="business-select">
+                    <el-option value="CUSTOMER" :label="announcementVisibilityLabel('CUSTOMER')" />
+                    <el-option value="EMPLOYEE" :label="announcementVisibilityLabel('EMPLOYEE')" />
+                    <el-option value="ALL" :label="announcementVisibilityLabel('ALL')" />
+                  </el-select>
+                </label>
+              </div>
+              <label>
+                <span>{{ announcementCopy.imageUrl }}</span>
+                <input v-model.trim="announcementForm.imageUrl" type="url" placeholder="https://example.com/image.jpg" />
+              </label>
+              <label>
+                <span>{{ announcementCopy.illustrationRef }}</span>
+                <input v-model.trim="announcementForm.illustrationRef" :placeholder="announcementCopy.illustrationPlaceholder" />
+              </label>
+              <label class="announcement-markdown-field">
+                <span>
+                  {{ announcementCopy.markdown }}
+                  <button class="announcement-insert-image" type="button" @click="insertAnnouncementImageMarkdown">
+                    {{ announcementCopy.insertImage }}
+                  </button>
+                </span>
+                <textarea
+                  v-model="announcementForm.contentMarkdown"
+                  rows="15"
+                  :placeholder="announcementCopy.markdownPlaceholder"
+                ></textarea>
+              </label>
+              <p v-if="announcementDialogError" class="announcement-dialog-error" role="alert">
+                {{ announcementDialogError }}
+              </p>
+            </div>
+            <aside class="announcement-live-preview">
+              <div class="announcement-preview-heading">
+                <span>{{ announcementCopy.livePreview }}</span>
+                <small>{{ announcementForm.displayDate || todayDateString() }}</small>
+              </div>
+              <article class="announcement-preview-card">
+                <img
+                  v-if="announcementImageUrl(announcementForm)"
+                  :src="announcementImageUrl(announcementForm)"
+                  :alt="announcementForm.title || announcementCopy.preview"
+                />
+                <span class="announcement-preview-visibility">
+                  {{ announcementVisibilityLabel(announcementForm.audience) }}
+                </span>
+                <h3>{{ announcementForm.title || announcementCopy.untitled }}</h3>
+                <div class="announcement-markdown-preview" v-html="announcementEditorPreviewHtml"></div>
+              </article>
+            </aside>
+          </div>
+          <div class="modal-actions announcement-editor-actions">
+            <button type="button" @click="closeAnnouncementEditor">{{ announcementCopy.cancel }}</button>
+            <button class="primary" type="submit" :disabled="loading">{{ announcementCopy.saveDraft }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="announcementPreviewRecord" class="modal-backdrop">
+      <div class="modal announcement-preview-modal" role="dialog" aria-modal="true">
+        <header>
+          <div>
+            <p>Announcement Preview</p>
+            <h2>{{ announcementPreviewRecord.title || announcementCopy.untitled }}</h2>
+          </div>
+          <button type="button" :aria-label="announcementCopy.close" @click="closeAnnouncementPreview">×</button>
+        </header>
+        <div class="announcement-preview-dialog-body">
+          <article class="announcement-preview-card is-dialog">
+            <img
+              v-if="announcementImageUrl(announcementPreviewRecord)"
+              :src="announcementImageUrl(announcementPreviewRecord)"
+              :alt="announcementPreviewRecord.title || announcementCopy.preview"
+            />
+            <div class="announcement-preview-meta">
+              <span>{{ announcementVisibilityLabel(announcementAudience(announcementPreviewRecord)) }}</span>
+              <span>{{ announcementPreviewRecord.displayDate || '-' }}</span>
+              <span>{{ announcementStatusLabel(announcementPreviewRecord.status) }}</span>
+            </div>
+            <h3>{{ announcementPreviewRecord.title || announcementCopy.untitled }}</h3>
+            <div
+              class="announcement-markdown-preview"
+              v-html="renderAnnouncementMarkdown(announcementPreviewRecord.contentMarkdown)"
+            ></div>
+          </article>
+        </div>
+        <div class="modal-actions">
+          <button class="primary" type="button" @click="closeAnnouncementPreview">{{ announcementCopy.close }}</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="employeeDialogOpen" class="modal-backdrop">
       <div class="modal employee-modal">
         <header>
@@ -893,11 +1120,18 @@ import { ElMessageBox } from "element-plus";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
   clearAdminToken,
+  createAdminAnnouncement,
   createEmployee,
+  deleteAdminAnnouncement,
   deleteAdminShipmentFile,
   deleteDevice,
   deleteEmployee,
+  disableAdminAnnouncement,
+  downloadAdminWorkspaceFile,
+  downloadAdminShipmentFile,
+  fetchAdminAnnouncements,
   fetchAdminMe,
+  fetchAdminWorkspaceFiles,
   fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
   fetchAuditLog,
@@ -908,9 +1142,10 @@ import {
   fetchPlatformInfo,
   kickDevice,
   loginAdmin,
+  publishAdminAnnouncement,
   resetEmployeePassword,
   storedAdminToken,
-  downloadAdminShipmentFile,
+  updateAdminAnnouncement,
   updateEmployee,
   updateLlmSettings
 } from "../services/adminApi";
@@ -920,17 +1155,19 @@ import { translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
 
 const props = defineProps({
-  currentUser: { type: Object, default: null }
+  currentUser: { type: Object, default: null },
+  announcementCount: { type: Number, default: 0 }
 });
-const emit = defineEmits(["logout", "user-updated"]);
+const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 
 const rawAdminPages = [
   { key: "overview", no: "01", group: "monitor", groupLabel: "\u8fd0\u884c\u76d1\u63a7", label: "\u540e\u53f0\u6982\u89c8", description: "\u6307\u6807\u3001\u5ba1\u8ba1\u4e0e\u8fd0\u884c\u76d1\u63a7", eyebrow: "Admin Console", title: "\u540e\u53f0\u6982\u89c8\u4e0e\u5ba1\u8ba1", subtitle: "\u96c6\u4e2d\u67e5\u770b\u8d26\u53f7\u3001\u8bbe\u5907\u3001\u767b\u5f55\u4e8b\u4ef6\u4e0e\u63a5\u53e3\u8bbf\u95ee\u5ba1\u8ba1\u3002" },
   { key: "employees", no: "02", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
   { key: "platform", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
-  { key: "devices", no: "04", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
-  { key: "files", no: "05", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
-  { key: "system", no: "06", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
+  { key: "announcements", no: "04", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u7f16\u8f91 Markdown \u516c\u544a\u3001\u914d\u7f6e\u53ef\u89c1\u8303\u56f4\u4e0e\u5f53\u65e5\u5c55\u793a\u65e5\u671f\u3002" },
+  { key: "devices", no: "05", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
+  { key: "files", no: "06", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
+  { key: "system", no: "07", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
 ];
 
 const loading = ref(false);
@@ -946,6 +1183,23 @@ const platformInfo = ref(null);
 const platformTotal = ref(0);
 const platformPage = ref(1);
 const platformPageSize = ref(20);
+const announcements = ref([]);
+const announcementTotal = ref(0);
+const announcementPage = ref(1);
+const announcementPageSize = ref(20);
+const announcementsLoaded = ref(false);
+const announcementDialogOpen = ref(false);
+const editingAnnouncementId = ref("");
+const announcementDialogError = ref("");
+const announcementPreviewRecord = ref(null);
+const announcementForm = reactive({
+  title: "",
+  contentMarkdown: "",
+  imageUrl: "",
+  illustrationRef: "",
+  audience: "ALL",
+  displayDate: ""
+});
 const devices = ref([]);
 const deviceTotal = ref(0);
 const devicePage = ref(1);
@@ -957,6 +1211,8 @@ const apiAuditPageSize = ref(20);
 const auditSectionRef = ref(null);
 const adminWorkspaceFiles = ref([]);
 const adminWorkspaceFileTotal = ref(0);
+const adminWorkspaceFilePage = ref(1);
+const adminWorkspaceFilePageSize = ref(20);
 const adminShipmentFiles = ref([]);
 const adminShipmentFileTotal = ref(0);
 const adminShipmentFilePage = ref(1);
@@ -996,6 +1252,108 @@ const llmForm = reactive({
   clearApiKey: false
 });
 
+const ANNOUNCEMENT_COPY = {
+  "zh-CN": {
+    systemMessages: "\u7cfb\u7edf\u6d88\u606f",
+    listTitle: "\u901a\u77e5\u516c\u544a\u7ba1\u7406",
+    total: "\u5171 {count} \u6761\u516c\u544a",
+    create: "\u65b0\u589e\u516c\u544a",
+    refresh: "\u5237\u65b0",
+    title: "\u516c\u544a\u6807\u9898",
+    visibility: "\u53ef\u89c1\u8303\u56f4",
+    displayDate: "\u5c55\u793a\u65e5\u671f",
+    status: "\u72b6\u6001",
+    updatedAt: "\u66f4\u65b0\u65f6\u95f4",
+    actions: "\u64cd\u4f5c",
+    preview: "\u9884\u89c8",
+    edit: "\u7f16\u8f91",
+    publish: "\u53d1\u5e03",
+    deactivate: "\u505c\u7528",
+    delete: "\u5220\u9664",
+    empty: "\u6682\u65e0\u901a\u77e5\u516c\u544a",
+    createTitle: "\u65b0\u589e\u901a\u77e5\u516c\u544a",
+    editTitle: "\u7f16\u8f91\u901a\u77e5\u516c\u544a",
+    close: "\u5173\u95ed",
+    cancel: "\u53d6\u6d88",
+    saveDraft: "\u4fdd\u5b58",
+    titlePlaceholder: "\u4f8b\u5982\uff1a\u4eca\u65e5\u8d27\u8e2a\u5e73\u53f0\u5347\u7ea7\u901a\u77e5",
+    imageUrl: "\u5934\u56fe URL\uff08\u53ef\u9009\uff09",
+    illustrationRef: "\u63d2\u56fe\u5f15\u7528/\u8bf4\u660e\uff08\u53ef\u9009\uff09",
+    illustrationPlaceholder: "\u56fe\u7247\u6765\u6e90\u3001\u7248\u6743\u6216\u5185\u90e8\u7d20\u6750\u7f16\u53f7",
+    markdown: "Markdown \u6b63\u6587",
+    insertImage: "\u63d2\u5165\u56fe\u7247 Markdown",
+    markdownPlaceholder: "# \u516c\u544a\u8981\u70b9\n\n\u8bf7\u8f93\u5165\u6b63\u6587\uff0c\u652f\u6301 **\u52a0\u7c97**\u3001\u5217\u8868\u3001\u94fe\u63a5\u4e0e ![alt](https://...)\u3002",
+    livePreview: "\u5b9e\u65f6\u9884\u89c8",
+    untitled: "\u672a\u547d\u540d\u516c\u544a",
+    customer: "\u5ba2\u6237\u53ef\u89c1",
+    employee: "\u5458\u5de5\u53ef\u89c1",
+    all: "\u5168\u90e8\u53ef\u89c1",
+    draft: "\u8349\u7a3f",
+    published: "\u5df2\u53d1\u5e03",
+    disabled: "\u5df2\u505c\u7528",
+    required: "\u8bf7\u5b8c\u6574\u586b\u5199\u6807\u9898\u3001\u5c55\u793a\u65e5\u671f\u548c Markdown \u6b63\u6587\u3002",
+    invalidImage: "\u5934\u56fe\u5730\u5740\u5fc5\u987b\u4e3a http/https URL\u3002",
+    created: "\u516c\u544a\u5df2\u521b\u5efa",
+    updated: "\u516c\u544a\u5df2\u66f4\u65b0",
+    publishedSuccess: "\u516c\u544a\u5df2\u53d1\u5e03",
+    disabledSuccess: "\u516c\u544a\u5df2\u505c\u7528",
+    deletedSuccess: "\u516c\u544a\u5df2\u5220\u9664",
+    deleteConfirm: "\u786e\u8ba4\u5220\u9664\u516c\u544a\u300c{title}\u300d\u5417\uff1f",
+    imageUrlNeeded: "\u8bf7\u5148\u586b\u5199\u5934\u56fe URL\uff0c\u518d\u63d2\u5165 Markdown \u56fe\u7247\u3002"
+  },
+  "en-US": {
+    systemMessages: "System messages",
+    listTitle: "Notification announcements",
+    total: "{count} announcements",
+    create: "New announcement",
+    refresh: "Refresh",
+    title: "Title",
+    visibility: "Audience",
+    displayDate: "Display date",
+    status: "Status",
+    updatedAt: "Updated",
+    actions: "Actions",
+    preview: "Preview",
+    edit: "Edit",
+    publish: "Publish",
+    deactivate: "Disable",
+    delete: "Delete",
+    empty: "No announcements",
+    createTitle: "Create announcement",
+    editTitle: "Edit announcement",
+    close: "Close",
+    cancel: "Cancel",
+    saveDraft: "Save",
+    titlePlaceholder: "For example: Shipment tracking platform update",
+    imageUrl: "Cover image URL (optional)",
+    illustrationRef: "Illustration reference (optional)",
+    illustrationPlaceholder: "Source, copyright note, or internal asset reference",
+    markdown: "Markdown content",
+    insertImage: "Insert Markdown image",
+    markdownPlaceholder: "# Highlights\n\nSupports **bold**, lists, links, and ![alt](https://...).",
+    livePreview: "Live preview",
+    untitled: "Untitled announcement",
+    customer: "Customers",
+    employee: "Employees",
+    all: "Everyone",
+    draft: "Draft",
+    published: "Published",
+    disabled: "Disabled",
+    required: "Title, display date, and Markdown content are required.",
+    invalidImage: "The cover image must use an http/https URL.",
+    created: "Announcement created",
+    updated: "Announcement updated",
+    publishedSuccess: "Announcement published",
+    disabledSuccess: "Announcement disabled",
+    deletedSuccess: "Announcement deleted",
+    deleteConfirm: "Delete announcement “{title}”?",
+    imageUrlNeeded: "Enter a cover image URL before inserting Markdown."
+  }
+};
+const announcementCopy = computed(() =>
+  ANNOUNCEMENT_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
+);
+
 const adminPages = computed(() => rawAdminPages.map((item) => ({
   ...item,
   label: item.labelKey ? ui(item.labelKey) : tr(item.label),
@@ -1015,6 +1373,9 @@ const onlineDevices = computed(() => normalizedDevices.value.filter((device) => 
 const recentEvents = computed(() => monitoring.value?.recentEvents || []);
 const platformCustomers = computed(() => platformInfo.value?.items || []);
 const pagedPlatformCustomers = computed(() => platformCustomers.value);
+const announcementEditorPreviewHtml = computed(() =>
+  renderAnnouncementMarkdown(announcementForm.contentMarkdown)
+);
 const topEndpoints = computed(() => monitoring.value?.runtime?.topEndpoints || []);
 const runtimeFailedRequestCount = computed(() => Number(monitoring.value?.runtime?.failedRequests || 0));
 const runtimeHasFailedRequests = computed(() => runtimeFailedRequestCount.value > 0);
@@ -1104,6 +1465,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
     apiAuditTotal.value = Number(auditData?.total || 0);
     llmSettings.value = llmData;
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
+    if (activeAdminPage.value === "announcements") await loadAnnouncementPageWithoutLoading();
     syncLlmForm(llmData);
     if (showSuccess) showMessage("后台数据已刷新");
   });
@@ -1113,6 +1475,9 @@ function selectAdminPage(page) {
   activeAdminPage.value = page;
   if (page === "files" && !adminFilesLoaded.value) {
     void withLoading(loadAdminFileListsWithoutLoading);
+  }
+  if (page === "announcements" && !announcementsLoaded.value) {
+    void withLoading(loadAnnouncementPageWithoutLoading);
   }
 }
 
@@ -1141,6 +1506,20 @@ async function loadPlatformPage() {
   });
   platformInfo.value = data;
   platformTotal.value = Number(data?.total || 0);
+}
+
+async function loadAnnouncementPageWithoutLoading() {
+  const data = await fetchAdminAnnouncements({
+    page: announcementPage.value - 1,
+    size: announcementPageSize.value
+  });
+  announcements.value = Array.isArray(data?.items) ? data.items : [];
+  announcementTotal.value = Number(data?.total ?? announcements.value.length);
+  announcementsLoaded.value = true;
+}
+
+async function loadAnnouncementPage() {
+  await withLoading(loadAnnouncementPageWithoutLoading);
 }
 
 async function loadApiAuditPage() {
@@ -1185,6 +1564,17 @@ async function changePlatformPageSize(size) {
   await withLoading(loadPlatformPage);
 }
 
+async function changeAnnouncementPage(page) {
+  announcementPage.value = page;
+  await withLoading(loadAnnouncementPageWithoutLoading);
+}
+
+async function changeAnnouncementPageSize(size) {
+  announcementPageSize.value = size;
+  announcementPage.value = 1;
+  await withLoading(loadAnnouncementPageWithoutLoading);
+}
+
 async function changeApiAuditPage(page) {
   apiAuditPage.value = page;
   await withLoading(loadApiAuditPage);
@@ -1202,21 +1592,308 @@ async function scrollToAudit() {
   auditSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function todayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function announcementAudience(record) {
+  return String(record?.audience || record?.visibility || "ALL").toUpperCase();
+}
+
+function announcementVisibilityLabel(audience) {
+  return {
+    CUSTOMER: announcementCopy.value.customer,
+    EMPLOYEE: announcementCopy.value.employee,
+    ALL: announcementCopy.value.all
+  }[String(audience || "ALL").toUpperCase()] || announcementCopy.value.all;
+}
+
+function announcementStatusLabel(status) {
+  return {
+    DRAFT: announcementCopy.value.draft,
+    PUBLISHED: announcementCopy.value.published,
+    DISABLED: announcementCopy.value.disabled
+  }[String(status || "DRAFT").toUpperCase()] || announcementCopy.value.draft;
+}
+
+function resetAnnouncementForm() {
+  announcementForm.title = "";
+  announcementForm.contentMarkdown = "";
+  announcementForm.imageUrl = "";
+  announcementForm.illustrationRef = "";
+  announcementForm.audience = "ALL";
+  announcementForm.displayDate = todayDateString();
+}
+
+function openAnnouncementEditor(record = null) {
+  announcementDialogError.value = "";
+  editingAnnouncementId.value = record?.id || "";
+  announcementForm.title = record?.title || "";
+  announcementForm.contentMarkdown = record?.contentMarkdown || "";
+  announcementForm.imageUrl = record?.imageUrl || "";
+  announcementForm.illustrationRef = record?.illustrationRef || "";
+  announcementForm.audience = announcementAudience(record);
+  announcementForm.displayDate = record?.displayDate || todayDateString();
+  announcementDialogOpen.value = true;
+}
+
+function closeAnnouncementEditor() {
+  announcementDialogOpen.value = false;
+  editingAnnouncementId.value = "";
+  announcementDialogError.value = "";
+  resetAnnouncementForm();
+}
+
+function openAnnouncementPreview(record) {
+  announcementPreviewRecord.value = { ...record };
+}
+
+function closeAnnouncementPreview() {
+  announcementPreviewRecord.value = null;
+}
+
+function announcementPayload() {
+  return {
+    title: announcementForm.title.trim(),
+    contentMarkdown: announcementForm.contentMarkdown.trim(),
+    imageUrl: announcementForm.imageUrl.trim() || null,
+    illustrationRef: announcementForm.illustrationRef.trim() || null,
+    audience: announcementForm.audience,
+    displayDate: announcementForm.displayDate
+  };
+}
+
+function validateAnnouncementForm() {
+  announcementDialogError.value = "";
+  if (!announcementForm.title.trim() || !announcementForm.contentMarkdown.trim() || !announcementForm.displayDate) {
+    announcementDialogError.value = announcementCopy.value.required;
+    return false;
+  }
+  if (announcementForm.imageUrl.trim() && !safeAnnouncementUrl(announcementForm.imageUrl)) {
+    announcementDialogError.value = announcementCopy.value.invalidImage;
+    return false;
+  }
+  return true;
+}
+
+async function handleSaveAnnouncement() {
+  if (!validateAnnouncementForm()) return;
+  await withLoading(async () => {
+    const wasEditing = Boolean(editingAnnouncementId.value);
+    if (wasEditing) {
+      await updateAdminAnnouncement(editingAnnouncementId.value, announcementPayload());
+    } else {
+      await createAdminAnnouncement(announcementPayload());
+    }
+    closeAnnouncementEditor();
+    await loadAnnouncementPageWithoutLoading();
+    showMessage(wasEditing ? announcementCopy.value.updated : announcementCopy.value.created);
+  }, { popupError: true });
+}
+
+async function handlePublishAnnouncement(record) {
+  await withLoading(async () => {
+    await publishAdminAnnouncement(record.id);
+    await loadAnnouncementPageWithoutLoading();
+    showMessage(announcementCopy.value.publishedSuccess);
+  }, { popupError: true });
+}
+
+async function handleDeactivateAnnouncement(record) {
+  await withLoading(async () => {
+    await disableAdminAnnouncement(record.id);
+    await loadAnnouncementPageWithoutLoading();
+    showMessage(announcementCopy.value.disabledSuccess);
+  }, { popupError: true });
+}
+
+async function handleDeleteAnnouncement(record) {
+  const title = record?.title || announcementCopy.value.untitled;
+  const prompt = announcementCopy.value.deleteConfirm.replace("{title}", title);
+  try {
+    await ElMessageBox.confirm(prompt, announcementCopy.value.delete, {
+      type: "warning",
+      confirmButtonText: announcementCopy.value.delete,
+      cancelButtonText: announcementCopy.value.cancel,
+      customClass: "admin-error-message-box"
+    });
+  } catch {
+    return;
+  }
+  await withLoading(async () => {
+    await deleteAdminAnnouncement(record.id);
+    if (announcements.value.length === 1 && announcementPage.value > 1) {
+      announcementPage.value -= 1;
+    }
+    await loadAnnouncementPageWithoutLoading();
+    showMessage(announcementCopy.value.deletedSuccess);
+  }, { popupError: true });
+}
+
+function insertAnnouncementImageMarkdown() {
+  const url = safeAnnouncementUrl(announcementForm.imageUrl);
+  if (!url) {
+    announcementDialogError.value = announcementCopy.value.imageUrlNeeded;
+    return;
+  }
+  announcementDialogError.value = "";
+  const alt = announcementForm.illustrationRef.trim() || announcementForm.title.trim() || "illustration";
+  const markdown = `![${alt.replace(/[\[\]]/g, "")}](${url})`;
+  announcementForm.contentMarkdown = `${announcementForm.contentMarkdown.trimEnd()}${announcementForm.contentMarkdown.trim() ? "\n\n" : ""}${markdown}`;
+}
+
+function safeAnnouncementUrl(value) {
+  const source = String(value || "").trim().replace(/&amp;/g, "&");
+  if (!source) return "";
+  try {
+    const url = new URL(source, window.location.origin);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+function announcementImageUrl(record) {
+  const explicit = safeAnnouncementUrl(record?.imageUrl);
+  if (explicit) return explicit;
+  const match = String(record?.contentMarkdown || "").match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/i);
+  return safeAnnouncementUrl(match?.[1]);
+}
+
+function announcementExcerpt(value) {
+  const text = String(value || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[#>*_`~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 72 ? `${text.slice(0, 72)}…` : (text || "-");
+}
+
+function escapeAnnouncementHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderAnnouncementInline(value) {
+  const tokens = [];
+  const stash = (html) => {
+    const index = tokens.push(html) - 1;
+    return `\u0000${index}\u0000`;
+  };
+  let output = escapeAnnouncementHtml(value);
+  output = output.replace(/`([^`]+)`/g, (_, code) => stash(`<code>${code}</code>`));
+  output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (match, alt, source) => {
+    const url = safeAnnouncementUrl(source);
+    if (!url) return match;
+    return stash(`<img src="${escapeAnnouncementHtml(url)}" alt="${escapeAnnouncementHtml(alt)}" loading="lazy">`);
+  });
+  output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, source) => {
+    const url = safeAnnouncementUrl(source);
+    if (!url) return match;
+    return stash(`<a href="${escapeAnnouncementHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+  });
+  output = output
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return output.replace(/\u0000(\d+)\u0000/g, (_, index) => tokens[Number(index)] || "");
+}
+
+function renderAnnouncementMarkdown(value) {
+  const lines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+  const html = [];
+  let listType = "";
+  let codeLines = null;
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = "";
+  };
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      if (codeLines) {
+        html.push(`<pre><code>${escapeAnnouncementHtml(codeLines.join("\n"))}</code></pre>`);
+        codeLines = null;
+      } else {
+        closeList();
+        codeLines = [];
+      }
+      continue;
+    }
+    if (codeLines) {
+      codeLines.push(line);
+      continue;
+    }
+    if (!line.trim()) {
+      closeList();
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length + 1;
+      html.push(`<h${level}>${renderAnnouncementInline(heading[2])}</h${level}>`);
+      continue;
+    }
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const nextType = unordered ? "ul" : "ol";
+      if (listType !== nextType) {
+        closeList();
+        listType = nextType;
+        html.push(`<${nextType}>`);
+      }
+      html.push(`<li>${renderAnnouncementInline((unordered || ordered)[1])}</li>`);
+      continue;
+    }
+    closeList();
+    const quote = line.match(/^\s*>\s?(.+)$/);
+    html.push(quote
+      ? `<blockquote>${renderAnnouncementInline(quote[1])}</blockquote>`
+      : `<p>${renderAnnouncementInline(line)}</p>`);
+  }
+  if (codeLines) html.push(`<pre><code>${escapeAnnouncementHtml(codeLines.join("\n"))}</code></pre>`);
+  closeList();
+  return html.join("");
+}
+
 async function loadAdminFileListsWithoutLoading() {
-  const [shipmentResult] = await Promise.allSettled([
+  const [workspaceResult, shipmentResult] = await Promise.allSettled([
+    fetchAdminWorkspaceFiles({
+      page: adminWorkspaceFilePage.value - 1,
+      size: adminWorkspaceFilePageSize.value,
+      includeExpired: includeExpiredFiles.value
+    }),
     fetchAdminShipmentFiles({
       page: adminShipmentFilePage.value - 1,
       size: adminShipmentFilePageSize.value,
       includeDeleted: true
     })
   ]);
+  if (workspaceResult.status === "fulfilled") {
+    const data = workspaceResult.value;
+    adminWorkspaceFiles.value = Array.isArray(data?.items) ? data.items : [];
+    adminWorkspaceFileTotal.value = Number(data?.total ?? adminWorkspaceFiles.value.length);
+  }
   if (shipmentResult.status === "fulfilled") {
     const data = shipmentResult.value;
     adminShipmentFiles.value = Array.isArray(data?.items) ? data.items : [];
     adminShipmentFileTotal.value = Number(data?.total ?? adminShipmentFiles.value.length);
   }
-  adminFilesLoaded.value = shipmentResult.status === "fulfilled";
-  const failed = [shipmentResult].find((result) => result.status === "rejected");
+  adminFilesLoaded.value = workspaceResult.status === "fulfilled" && shipmentResult.status === "fulfilled";
+  const failed = [workspaceResult, shipmentResult].find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
 }
 
@@ -1349,6 +2026,43 @@ async function handleDeleteDevice(device) {
     await deleteDevice(device.id);
     await loadDashboard(false);
     showMessage("设备记录已删除");
+  });
+}
+
+async function loadAdminWorkspaceFiles() {
+  await withLoading(async () => {
+    const response = await fetchAdminWorkspaceFiles({
+      page: adminWorkspaceFilePage.value - 1,
+      size: adminWorkspaceFilePageSize.value,
+      includeExpired: includeExpiredFiles.value
+    });
+    adminWorkspaceFiles.value = Array.isArray(response?.items) ? response.items : [];
+    adminWorkspaceFileTotal.value = Number(response?.total ?? adminWorkspaceFiles.value.length);
+  });
+}
+
+async function changeAdminWorkspaceFilePage(page) {
+  adminWorkspaceFilePage.value = page;
+  await loadAdminWorkspaceFiles();
+}
+
+async function changeAdminWorkspaceFilePageSize(size) {
+  adminWorkspaceFilePageSize.value = size;
+  adminWorkspaceFilePage.value = 1;
+  await loadAdminWorkspaceFiles();
+}
+
+async function handleWorkspaceExpiredToggle() {
+  adminWorkspaceFilePage.value = 1;
+  await loadAdminWorkspaceFiles();
+}
+
+async function handleDownloadWorkspaceFile(file) {
+  await withLoading(async () => {
+    await downloadAdminWorkspaceFile(
+      file.id,
+      file.originalFileName || `workspace-file-${file.id}`
+    );
   });
 }
 
@@ -1828,8 +2542,431 @@ const CP1252_BYTES = {
 
 .admin-pagination {
   display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 0;
   justify-content: flex-end;
+  overflow: visible;
   padding: 16px 2px 2px;
+}
+
+.admin-pagination :deep(.el-pagination__sizes) {
+  flex: 0 0 auto;
+  margin-inline: 8px;
+}
+
+.admin-pagination :deep(.el-pagination__sizes .el-select) {
+  width: 112px !important;
+  min-width: 112px;
+}
+
+.admin-pagination :deep(.el-pagination__total) {
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+
+.admin-page-pane .admin-panel {
+  border-color: #d7e3ef;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(251 253 255 / 98%));
+}
+
+.admin-page-pane .admin-panel-head {
+  min-height: 48px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5edf5;
+}
+
+.admin-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid #dce6f0;
+  background: #fff;
+}
+
+.admin-table-wrap :deep(.el-table) {
+  min-width: 760px;
+}
+
+.admin-table-wrap :deep(.el-table__header th) {
+  color: #344e68;
+  background: #f3f7fb !important;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.admin-table-wrap :deep(.el-table__body tr) {
+  transition: background-color 0.18s ease;
+}
+
+.admin-inline-actions > button,
+.admin-top-actions > button,
+.table-actions > button {
+  border-radius: 8px;
+  font-weight: 700;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.admin-inline-actions > button:hover:not(:disabled),
+.admin-top-actions > button:hover:not(:disabled),
+.table-actions > button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 16px rgb(47 128 209 / 12%);
+}
+
+.admin-system-message-button {
+  position: relative;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.admin-system-message-button em {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: #e6535f;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.announcement-title-cell {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: center;
+}
+
+.announcement-title-cell > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.announcement-title-cell b,
+.announcement-title-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-title-cell small {
+  color: #7b8da1;
+}
+
+.announcement-image-indicator {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #b9daf4;
+  border-radius: 9px;
+  background:
+    linear-gradient(145deg, rgb(55 155 213 / 18%), rgb(96 125 218 / 8%)),
+    linear-gradient(135deg, transparent 48%, #55a9da 49% 53%, transparent 54%);
+}
+
+.announcement-visibility,
+.announcement-preview-visibility {
+  display: inline-flex;
+  min-height: 26px;
+  padding: 0 9px;
+  align-items: center;
+  border: 1px solid #bfcee0;
+  border-radius: 999px;
+  color: #4d6782;
+  background: #f5f8fc;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.announcement-visibility.customer {
+  border-color: #abdccf;
+  color: #17866c;
+  background: #effaf6;
+}
+
+.announcement-visibility.employee {
+  border-color: #b8cdf2;
+  color: #346eb6;
+  background: #f0f6ff;
+}
+
+.announcement-row-actions {
+  gap: 5px;
+}
+
+.announcement-row-actions button {
+  padding: 6px 8px;
+}
+
+.announcement-editor-modal {
+  width: min(1160px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 16px;
+  background: #f7faff;
+}
+
+.announcement-editor-form {
+  padding: 18px 22px 20px;
+}
+
+.announcement-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.announcement-fields {
+  display: grid;
+  gap: 13px;
+}
+
+.announcement-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #3d536a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.announcement-fields input,
+.announcement-fields textarea {
+  width: 100%;
+  border: 1px solid #bed0e2;
+  border-radius: 9px;
+  outline: none;
+  color: #18324c;
+  background: #fff;
+  font: inherit;
+  font-weight: 500;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.announcement-fields input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.announcement-fields textarea {
+  min-height: 300px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.announcement-fields input:focus,
+.announcement-fields textarea:focus {
+  border-color: #4c9bde;
+  box-shadow: 0 0 0 3px rgb(47 128 209 / 11%);
+}
+
+.announcement-fields :deep(.el-select__wrapper) {
+  min-height: 42px;
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px #bed0e2 inset;
+}
+
+.announcement-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.announcement-markdown-field > span {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.announcement-insert-image {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #b8cee4;
+  border-radius: 7px;
+  color: #276da8;
+  background: #f4f9ff;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.announcement-dialog-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f0bcc1;
+  border-radius: 8px;
+  color: #b43d48;
+  background: #fff4f5;
+  font-size: 12px;
+}
+
+.announcement-live-preview {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #d9e6f2;
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 90% 0, rgb(94 176 229 / 13%), transparent 34%),
+    #eef4fa;
+}
+
+.announcement-preview-heading,
+.announcement-preview-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.announcement-preview-heading {
+  margin-bottom: 10px;
+  color: #49647e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.announcement-preview-heading small {
+  color: #8395a8;
+}
+
+.announcement-preview-card {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  padding: 22px;
+  border: 1px solid #d4e0ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgb(35 77 116 / 9%);
+}
+
+.announcement-preview-card > img {
+  display: block;
+  width: calc(100% + 44px);
+  max-height: 220px;
+  margin: -22px -22px 20px;
+  object-fit: cover;
+}
+
+.announcement-preview-card h3 {
+  margin: 14px 0 16px;
+  color: #173652;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.announcement-preview-card.is-dialog {
+  min-height: 0;
+}
+
+.announcement-preview-meta {
+  justify-content: flex-start;
+  color: #6b8198;
+  font-size: 12px;
+}
+
+.announcement-preview-meta span + span::before {
+  margin-right: 10px;
+  color: #b0becb;
+  content: "·";
+}
+
+.announcement-markdown-preview {
+  color: #3e556b;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.announcement-markdown-preview :deep(h2),
+.announcement-markdown-preview :deep(h3),
+.announcement-markdown-preview :deep(h4),
+.announcement-markdown-preview :deep(h5) {
+  margin: 18px 0 8px;
+  color: #173652;
+  line-height: 1.35;
+}
+
+.announcement-markdown-preview :deep(p) {
+  margin: 8px 0;
+}
+
+.announcement-markdown-preview :deep(ul),
+.announcement-markdown-preview :deep(ol) {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.announcement-markdown-preview :deep(a) {
+  color: #1979be;
+}
+
+.announcement-markdown-preview :deep(img) {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: 14px auto;
+  border-radius: 9px;
+  object-fit: contain;
+}
+
+.announcement-markdown-preview :deep(blockquote) {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid #51a5d8;
+  color: #5c7187;
+  background: #f1f7fb;
+}
+
+.announcement-markdown-preview :deep(pre) {
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  color: #e9f4ff;
+  background: #13283b;
+}
+
+.announcement-markdown-preview :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #eef3f8;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.announcement-markdown-preview :deep(pre code) {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.announcement-editor-actions {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #dce6ef;
+}
+
+.announcement-preview-modal {
+  width: min(780px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 16px;
+}
+
+.announcement-preview-dialog-body {
+  padding: 20px 22px 10px;
 }
 
 .admin-inline-link,
@@ -1874,6 +3011,47 @@ const CP1252_BYTES = {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 980px) {
+  .announcement-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .announcement-live-preview {
+    position: relative;
+  }
+}
+
+@media (max-width: 680px) {
+  .admin-panel-head,
+  .admin-inline-actions,
+  .admin-top-actions {
+    align-items: stretch;
+  }
+
+  .admin-inline-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .announcement-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .announcement-editor-modal,
+  .announcement-preview-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .announcement-editor-form {
+    padding: 14px;
+  }
+
+  .admin-pagination {
+    justify-content: flex-start;
   }
 }
 

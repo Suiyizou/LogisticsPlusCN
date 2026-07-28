@@ -102,6 +102,33 @@ export async function fetchPlatformInfo(options = {}) {
   return request(`/admin/platform-info?${pageParams(options)}`);
 }
 
+export async function fetchAdminAnnouncements(options = {}) {
+  return request(`/admin/announcements?${pageParams(options)}`);
+}
+
+export async function createAdminAnnouncement(payload) {
+  return request("/admin/announcements", { method: "POST", body: payload });
+}
+
+export async function updateAdminAnnouncement(id, payload) {
+  return request(`/admin/announcements/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: payload
+  });
+}
+
+export async function deleteAdminAnnouncement(id) {
+  return request(`/admin/announcements/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function publishAdminAnnouncement(id) {
+  return request(`/admin/announcements/${encodeURIComponent(id)}/publish`, { method: "POST" });
+}
+
+export async function disableAdminAnnouncement(id) {
+  return request(`/admin/announcements/${encodeURIComponent(id)}/disable`, { method: "POST" });
+}
+
 function pageParams(options = {}) {
   const params = new URLSearchParams();
   params.set("page", String(Math.max(0, Number(options.page || 0))));

@@ -121,7 +121,10 @@ const businessCustomerApi = readFileSync(
 );
 assert.match(businessCustomerApi, /request\(`\/business\/shipments\?\$\{query\}`\)/);
 assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}`\)/);
-assert.match(businessCustomerApi, /request\("\/business\/customers\/shipments", \{ method: "POST", body: payload \}\)/);
+assert.match(
+  businessCustomerApi,
+  /request\("\/business\/customers\/shipments", \{\s*method: "POST",\s*body: \{ customerId, publishToCustomer, shipment: payload \}\s*\}\)/
+);
 assert.match(businessCustomerApi, /request\("\/business\/shipments\/batch-refresh"/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/snapshot/);
@@ -193,12 +196,18 @@ assert.match(manualCreateSource, /routeNodes,/);
 assert.match(manualCreateSource, /routingLegs,/);
 assert.match(manualCreateSource, /containerTypes,/);
 assert.match(manualCreateSource, /containers/);
-assert.match(manualCreateSource, /createBusinessShipment\(buildManualShipmentPayload\(shipmentCreateForm\)\)/);
+assert.match(
+  manualCreateSource,
+  /createBusinessShipment\(\s*buildManualShipmentPayload\(shipmentCreateForm\),\s*shipmentCreateCustomerId\.value,\s*shipmentCreatePublishToCustomer\.value\s*\)/
+);
 assert.match(businessCustomerPage, /@click="openShipmentExcelImport"/);
 assert.match(businessCustomerPage, /v-if="shipmentExcelImportDialogOpen"/);
 assert.match(businessCustomerPage, /downloadShipmentExcelTemplate/);
 assert.match(businessCustomerPage, /parseManualShipmentImportWorkbook/);
-assert.match(businessCustomerPage, /await createBusinessShipment\(item\.payload\)/);
+assert.match(
+  businessCustomerPage,
+  /await createBusinessShipment\(\s*item\.payload,\s*shipmentExcelCustomerId\.value,\s*shipmentExcelPublishToCustomer\.value\s*\)/
+);
 assert.match(businessCustomerPage, /shipmentExcelImportResults/);
 
 const shipmentSaveSource = businessCustomerPage.slice(

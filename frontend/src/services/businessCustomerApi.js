@@ -22,6 +22,17 @@ export function createOverseaAgentEmployee(payload) {
   return request("/business/customers/oversea-agents", { method: "POST", body: payload });
 }
 
+export function batchCreateOverseaAgentEmployees(items) {
+  return request("/business/customers/oversea-agents/batch", {
+    method: "POST",
+    body: { items }
+  });
+}
+
+export function fetchBusinessDashboardTodayStats() {
+  return request("/business/dashboard/today-stats");
+}
+
 export function updateOverseaAgent(userId, payload) {
   return request(`/business/customers/oversea-agents/${encodeURIComponent(userId)}`, {
     method: "PATCH",

@@ -11,6 +11,11 @@
       <div class="customer-access-header-actions">
         <LanguageSwitcher class="customer-access-language" />
         <span class="customer-access-party-pill">{{ t("customers.internalPartyAgent") }}</span>
+        <button type="button" class="system-message-button" @click="emit('open-announcements')">
+          <el-icon><Bell /></el-icon>
+          <span>{{ t("customers.systemMessages") }}</span>
+          <i v-if="announcementCount > 0">{{ announcementCount > 99 ? "99+" : announcementCount }}</i>
+        </button>
         <div class="customer-account" :class="{ 'is-open': accountMenuOpen }">
           <button type="button" class="customer-account-trigger" @click="accountMenuOpen = !accountMenuOpen">
             <span><b>{{ displayName }}</b><small>{{ isManager ? t("customers.businessOperator") : t("customers.overseaAgentEmployee") }}</small></span>
@@ -62,31 +67,135 @@
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
             <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
-          <button v-if="isManager" @click="navigateTo('batch-tracking')">
-            <el-icon><Operation /></el-icon><span>{{ t("customers.batchTrack") }}</span>
-          </button>
           <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
             <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
           </button>
-          <button @click="openPersonalProfile">
-            <el-icon><User /></el-icon><span>{{ t("customers.personalInfo") }}</span>
-          </button>
         </nav>
+        <button type="button" class="sidebar-profile-card" @click="openPersonalProfile">
+          <span class="sidebar-profile-avatar">{{ displayName.slice(0, 1).toUpperCase() }}</span>
+          <span class="sidebar-profile-copy">
+            <b>{{ displayName }}</b>
+            <small>{{ personalRoleLabel }}</small>
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
       </aside>
 
       <div class="workspace-main">
         <transition name="fade" mode="out-in" appear>
         <!-- CUSTOMER MANAGEMENT -->
         <div v-if="menuItem === 'overview'" key="overview" class="workspace-view">
-          <div class="list-page list-page-full">
-            <div class="list-page-header">
-              <div><h2>{{ t("customers.overview") }}</h2><p>{{ t("customers.overviewHint") }}</p></div>
+          <div class="list-page list-page-full business-overview" v-loading="loadingOverviewMetrics">
+            <div class="list-page-header business-overview-header">
+              <div>
+                <span class="business-overview-kicker">{{ t("customers.overviewKicker") }}</span>
+                <h2>{{ t("customers.overview") }}</h2>
+                <p>{{ t("customers.overviewHint") }}</p>
+              </div>
+              <el-button :loading="loadingOverviewMetrics" @click="loadOverviewMetrics">
+                <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
+              </el-button>
             </div>
-            <div class="customer-import-summary">
-              <span><b>{{ customers.length }}</b><small>{{ t("customers.directoryTitle") }}</small></span>
-              <span class="is-valid"><b>{{ availableShipments.length }}</b><small>{{ t("customers.tabShipmentManagement") }}</small></span>
-              <span><b>{{ transferAgents.filter((agent) => agent.status === 'ACTIVE').length }}</b><small>{{ t("customers.overseaAgentManagement") }}</small></span>
+            <div class="business-kpi-grid">
+              <article
+                v-for="metric in overviewKpis"
+                :key="metric.key"
+                class="business-kpi-card"
+                :class="`is-${metric.tone}`"
+              >
+                <div class="business-kpi-card__top">
+                  <span class="business-kpi-card__icon" aria-hidden="true">
+                    <el-icon><component :is="metric.icon" /></el-icon>
+                  </span>
+                  <span>{{ metric.label }}</span>
+                </div>
+                <div class="business-kpi-card__value">
+                  <b>{{ metric.value }}</b>
+                  <small>{{ metric.hint }}</small>
+                </div>
+              </article>
             </div>
+            <div class="business-chart-grid">
+              <section class="business-chart-card business-chart-card--trend">
+                <header>
+                  <div>
+                    <b>{{ t("customers.overviewSevenDayTrend") }}</b>
+                    <small>{{ t("customers.overviewTrendHint") }}</small>
+                  </div>
+                </header>
+                <div class="business-chart-body" v-loading="loadingOverviewMetrics">
+                  <div
+                    ref="overviewTrendChartRef"
+                    class="business-echart"
+                    role="img"
+                    :aria-label="t('customers.overviewSevenDayTrend')"
+                  ></div>
+                  <div v-if="!loadingOverviewMetrics && !overviewTrendHasData" class="business-chart-empty">
+                    <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
+                  </div>
+                </div>
+              </section>
+              <section class="business-chart-card">
+                <header>
+                  <div>
+                    <b>{{ t("customers.overviewTodayCompositionTitle") }}</b>
+                    <small>{{ t("customers.overviewTodayCompositionHint") }}</small>
+                  </div>
+                </header>
+                <div class="business-chart-body" v-loading="loadingOverviewMetrics">
+                  <div
+                    ref="overviewTodayChartRef"
+                    class="business-echart"
+                    role="img"
+                    :aria-label="t('customers.overviewTodayCompositionTitle')"
+                  ></div>
+                  <div v-if="!loadingOverviewMetrics && !overviewTodayHasData" class="business-chart-empty">
+                    <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
+                  </div>
+                </div>
+              </section>
+              <section class="business-chart-card business-chart-card--resources">
+                <header>
+                  <div>
+                    <b>{{ t("customers.overviewResourceTitle") }}</b>
+                    <small>{{ t("customers.overviewDataSource") }}</small>
+                  </div>
+                </header>
+                <div class="business-chart-body" v-loading="loadingOverviewMetrics">
+                  <div
+                    ref="overviewResourcesChartRef"
+                    class="business-echart"
+                    role="img"
+                    :aria-label="t('customers.overviewResourceTitle')"
+                  ></div>
+                  <div v-if="!loadingOverviewMetrics && !overviewResourcesHaveData" class="business-chart-empty">
+                    <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
+                  </div>
+                </div>
+              </section>
+              <section class="business-chart-card">
+                <header>
+                  <div>
+                    <b>{{ t("customers.overviewShipmentStatusTitle") }}</b>
+                    <small>{{ t("customers.overviewShipmentStatusHint") }}</small>
+                  </div>
+                </header>
+                <div class="business-chart-body" v-loading="loadingOverviewMetrics">
+                  <div
+                    ref="overviewStatusChartRef"
+                    class="business-echart"
+                    role="img"
+                    :aria-label="t('customers.overviewShipmentStatusTitle')"
+                  ></div>
+                  <div v-if="!loadingOverviewMetrics && !overviewStatusHasData" class="business-chart-empty">
+                    <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
+                  </div>
+                </div>
+              </section>
+            </div>
+            <p v-if="overviewMetricsError" class="business-overview-warning" role="status">
+              {{ overviewMetricsError }}
+            </p>
           </div>
         </div>
         <div v-else-if="menuItem === 'customers'" key="customers" class="workspace-view">
@@ -161,7 +270,7 @@
                 <el-table-column :label="t('customers.actions')" :width="isManager ? 318 : 110" fixed="right">
                   <template #default="{ row }">
                     <div class="table-action-buttons table-action-buttons--single-line">
-                      <el-button size="small" type="primary" plain @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
+                      <el-button size="small" type="primary" plain @click.stop="selectCustomerFromList(row)">{{ t("customers.detail") }}</el-button>
                       <template v-if="isManager">
                         <el-button size="small" type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
                         <el-button
@@ -468,6 +577,7 @@
               <div><h2>{{ t("customers.overseaAgentManagement") }}</h2><p>{{ t("customers.overseaAgentManagementHint") }}</p></div>
               <div class="list-page-actions">
                 <el-button @click="loadTransferAgents"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
+                <el-button type="primary" plain @click="openAgentBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchCreateAgents") }}</el-button>
                 <el-button type="primary" @click="openAgentCreateDialog"><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
               </div>
             </div>
@@ -594,11 +704,12 @@
                   stripe
                   v-loading="loadingAvailableShipments"
                   style="width:100%"
+                  class="shipment-list-table"
                   @selection-change="handleShipmentSelectionChange"
                 >
-                  <el-table-column v-if="isManager" type="selection" width="48" />
-                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="60" />
-                  <el-table-column :label="t('customers.referenceNo')" min-width="200">
+                  <el-table-column v-if="isManager" type="selection" width="42" />
+                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="48" />
+                  <el-table-column :label="t('customers.referenceNo')" min-width="165">
                     <template #default="{ row }">
                       <div>
                         <b>{{ row.referenceNo || row.shipmentId }}</b>
@@ -606,13 +717,13 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.carrier')" width="120">
+                  <el-table-column :label="t('customers.carrier')" width="86">
                     <template #default="{ row }">{{ row.carrier || '—' }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.clientNoName')" min-width="170" show-overflow-tooltip>
+                  <el-table-column :label="t('customers.clientNoName')" min-width="135" show-overflow-tooltip>
                     <template #default="{ row }">{{ shipmentClientLabel(row) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.boundUsers')" min-width="210">
+                  <el-table-column :label="t('customers.boundUsers')" min-width="160">
                     <template #default="{ row }">
                       <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
                         <el-tag
@@ -632,7 +743,7 @@
                       <span v-else>—</span>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.shipmentStatus')" width="160">
+                  <el-table-column :label="t('customers.shipmentStatus')" width="132">
                     <template #default="{ row }">
                       <div class="shipment-status-stack">
                         <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
@@ -648,13 +759,25 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.remark')" min-width="180" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.note || row.remark || '—' }}</template>
+                  <el-table-column :label="t('customers.remark')" min-width="190" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <div class="shipment-remark-cell">
+                        <span>{{ row.note || row.remark || '—' }}</span>
+                        <div v-if="isCreatedToday(row) || isUpdatedToday(row)" class="shipment-today-tags">
+                          <el-tag v-if="isCreatedToday(row)" size="small" type="success" effect="light">
+                            {{ t("customers.todayNewBusiness") }}
+                          </el-tag>
+                          <el-tag v-if="isUpdatedToday(row)" size="small" type="warning" effect="light">
+                            {{ t("customers.todayUpdatedBusiness") }}
+                          </el-tag>
+                        </div>
+                      </div>
+                    </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.lastTrackedAt')" width="160">
+                  <el-table-column :label="t('customers.lastTrackedAt')" width="132">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" :width="isManager ? 282 : 110" fixed="right">
+                  <el-table-column :label="t('customers.actions')" :width="isManager ? 234 : 94" fixed="right">
                     <template #default="{ row }">
                       <div class="table-action-buttons table-action-buttons--single-line">
                         <el-button size="small" type="info" plain @click.stop="trackShipmentInWorkspace(row)">{{ t("customers.view") }}</el-button>
@@ -1911,27 +2034,147 @@
     <el-dialog
       v-model="agentCreateDialogOpen"
       :title="t('customers.createOverseaAgentTitle')"
-      width="560px"
+      width="640px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
-      class="square-dialog"
+      class="square-dialog agent-create-dialog"
     >
-      <el-alert :title="t('customers.createOverseaAgentHint')" type="info" :closable="false" show-icon />
+      <div class="agent-create-intro">
+        <span><el-icon><UserFilled /></el-icon></span>
+        <div>
+          <b>{{ t("customers.createOverseaAgentTitle") }}</b>
+          <small>{{ t("customers.createOverseaAgentHint") }}</small>
+        </div>
+      </div>
       <el-form class="agent-create-form" label-position="top" @submit.prevent="submitAgentCreate">
-        <el-form-item :label="t('customers.username')">
-          <el-input v-model.trim="agentCreateForm.username" autocomplete="off" />
+        <el-form-item :label="t('customers.username')" required>
+          <el-input
+            v-model.trim="agentCreateForm.username"
+            autocomplete="off"
+            maxlength="64"
+            show-word-limit
+            :placeholder="t('customers.agentUsernamePlaceholder')"
+          />
+          <small class="agent-field-hint">{{ t("customers.agentUsernameRule") }}</small>
         </el-form-item>
-        <el-form-item :label="t('customers.displayName')">
-          <el-input v-model.trim="agentCreateForm.displayName" />
+        <el-form-item :label="t('customers.displayName')" required>
+          <el-input
+            v-model.trim="agentCreateForm.displayName"
+            maxlength="80"
+            show-word-limit
+            :placeholder="t('customers.agentDisplayNamePlaceholder')"
+          />
+          <small class="agent-field-hint">{{ t("customers.agentDisplayNameRule") }}</small>
         </el-form-item>
-        <el-form-item :label="t('customers.initialPassword')">
-          <el-input v-model="agentCreateForm.password" type="password" show-password autocomplete="new-password" />
+        <el-form-item :label="t('customers.initialPassword')" required class="agent-password-field">
+          <el-input
+            v-model="agentCreateForm.password"
+            type="password"
+            show-password
+            maxlength="128"
+            autocomplete="new-password"
+            :placeholder="t('customers.agentPasswordPlaceholder')"
+          />
+          <div class="agent-password-rules">
+            <span v-for="rule in agentPasswordChecks" :key="rule.key" :class="{ 'is-valid': rule.valid }">
+              <i>{{ rule.valid ? "✓" : "•" }}</i>{{ rule.label }}
+            </span>
+          </div>
         </el-form-item>
         <el-alert v-if="agentCreateError" :title="agentCreateError" type="error" :closable="false" show-icon />
       </el-form>
       <template #footer>
         <el-button :disabled="creatingAgent" @click="agentCreateDialogOpen = false">{{ t("customers.cancel") }}</el-button>
-        <el-button type="primary" :loading="creatingAgent" @click="submitAgentCreate">{{ t("customers.createOverseaAgent") }}</el-button>
+        <el-button type="primary" :loading="creatingAgent" :disabled="!canCreateAgent" @click="submitAgentCreate">
+          {{ t("customers.createOverseaAgent") }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="agentBatchDialogOpen"
+      :title="t('customers.batchCreateAgents')"
+      width="min(940px, 94vw)"
+      :close-on-click-modal="false"
+      :close-on-press-escape="!importingAgents"
+      class="square-dialog agent-batch-dialog"
+    >
+      <div class="agent-batch-intro">
+        <div>
+          <span class="customer-code-kicker">{{ t("customers.agentBatchKicker") }}</span>
+          <h3>{{ t("customers.agentBatchTitle") }}</h3>
+          <p>{{ t("customers.agentBatchHint") }}</p>
+        </div>
+        <el-button type="primary" plain @click="downloadAgentImportTemplate">
+          <el-icon><Document /></el-icon>{{ t("customers.downloadAgentTemplate") }}
+        </el-button>
+      </div>
+      <div
+        v-loading="parsingAgentFile"
+        class="agent-import-dropzone"
+        :class="{ 'has-file': agentBatchFileName, 'is-dragover': agentBatchDropzoneActive }"
+        @dragover.prevent="agentBatchDropzoneActive = true"
+        @dragleave.prevent="agentBatchDropzoneActive = false"
+        @drop.prevent="handleAgentBatchDrop"
+        @click="agentBatchFileInput?.click()"
+      >
+        <input ref="agentBatchFileInput" type="file" accept=".xlsx,.xls,.csv" @change="handleAgentWorkbook" />
+        <span><el-icon><Upload /></el-icon></span>
+        <b>{{ agentBatchFileName || t("customers.chooseAgentExcel") }}</b>
+        <small>{{ t("customers.agentExcelColumns") }}</small>
+        <el-button size="small" @click.stop="agentBatchFileInput?.click()">
+          {{ agentBatchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}
+        </el-button>
+      </div>
+      <div v-if="agentBatchRows.length" class="agent-batch-summary">
+        <span><b>{{ agentBatchRows.length }}</b><small>{{ t("customers.importTotalRows") }}</small></span>
+        <span class="is-valid"><b>{{ agentBatchReadyCount }}</b><small>{{ t("customers.importValidRows") }}</small></span>
+        <span class="is-invalid"><b>{{ agentBatchInvalidCount }}</b><small>{{ t("customers.importInvalidRows") }}</small></span>
+        <span class="is-created"><b>{{ agentBatchCreatedCount }}</b><small>{{ t("customers.importCreatedCount") }}</small></span>
+      </div>
+      <el-table
+        v-if="agentBatchRows.length"
+        :data="agentBatchRows"
+        max-height="360"
+        stripe
+        border
+        class="standard-information-table agent-batch-preview"
+        :row-class-name="agentBatchRowClass"
+      >
+        <el-table-column prop="rowNumber" :label="t('customers.excelRow')" width="78" />
+        <el-table-column prop="username" :label="t('customers.username')" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="displayName" :label="t('customers.displayName')" min-width="160" show-overflow-tooltip />
+        <el-table-column :label="t('customers.initialPassword')" min-width="155">
+          <template #default="{ row }"><span class="agent-password-mask">{{ "•".repeat(Math.min(row.password.length, 12)) }}</span></template>
+        </el-table-column>
+        <el-table-column :label="t('customers.validationMessage')" min-width="280">
+          <template #default="{ row }">
+            <el-tag v-if="row.status === 'CREATED'" size="small" type="success">{{ t("customers.importCreatedCount") }}</el-tag>
+            <el-tag v-else-if="row.status === 'FAILED'" size="small" type="danger">{{ row.resultMessage }}</el-tag>
+            <div v-else-if="row.errors.length" class="agent-row-errors">
+              <span v-for="error in row.errors" :key="error">{{ error }}</span>
+            </div>
+            <el-tag v-else size="small" type="success" effect="plain">{{ t("customers.importReady") }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-alert
+        v-if="agentBatchError"
+        :title="agentBatchError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
+      <template #footer>
+        <el-button :disabled="importingAgents" @click="closeAgentBatchImport">{{ t("customers.cancel") }}</el-button>
+        <el-button
+          type="primary"
+          :loading="importingAgents"
+          :disabled="!agentBatchReadyCount || agentBatchInvalidCount > 0"
+          @click="submitAgentBatchImport"
+        >
+          {{ importingAgents ? t("customers.importing") : t("customers.importAgentsCount", { count: agentBatchReadyCount }) }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -1939,31 +2182,67 @@
       v-model="personalProfileOpen"
       class="operations-profile-dialog"
       :title="t('portal.personalInfoTitle')"
-      width="560px"
+      width="min(860px, 94vw)"
       :close-on-click-modal="false"
     >
       <div class="operations-profile-hero">
-        <span>{{ displayName.slice(0, 1).toUpperCase() }}</span>
+        <span class="operations-profile-avatar">{{ displayName.slice(0, 1).toUpperCase() }}</span>
         <div>
           <b>{{ displayName }}</b>
-          <small>@{{ currentUser?.username }}</small>
+          <small>@{{ currentUser?.username }} · {{ personalRoleLabel }}</small>
         </div>
+        <el-tag type="success" effect="light">{{ t("portal.accountActive") }}</el-tag>
       </div>
-      <el-form class="operations-profile-form" label-position="top" @submit.prevent="savePersonalProfile">
-        <el-form-item :label="t('portal.accountUsername')">
-          <el-input :model-value="currentUser?.username" disabled />
-        </el-form-item>
-        <el-form-item :label="t('portal.accountRole')">
-          <el-input :model-value="personalRoleLabel" disabled />
-        </el-form-item>
-        <el-form-item :label="t('portal.displayName')">
-          <el-input v-model.trim="personalProfileForm.displayName" maxlength="80" show-word-limit />
-        </el-form-item>
-        <el-alert v-if="personalProfileError" :title="personalProfileError" type="error" :closable="false" show-icon />
-      </el-form>
+      <div class="operations-profile-layout">
+        <section class="operations-profile-section">
+          <header>
+            <b>{{ t("portal.basicProfile") }}</b>
+            <small>{{ t("portal.basicProfileHint") }}</small>
+          </header>
+          <el-form class="operations-profile-form" label-position="top" @submit.prevent="savePersonalProfile">
+            <el-form-item :label="t('portal.accountUsername')">
+              <el-input :model-value="currentUser?.username" disabled />
+            </el-form-item>
+            <el-form-item :label="t('portal.accountRole')">
+              <el-input :model-value="personalRoleLabel" disabled />
+            </el-form-item>
+            <el-form-item :label="t('portal.displayName')" required>
+              <el-input v-model.trim="personalProfileForm.displayName" maxlength="80" show-word-limit />
+            </el-form-item>
+            <el-alert v-if="personalProfileError" :title="personalProfileError" type="error" :closable="false" show-icon />
+            <el-button type="primary" :loading="personalProfileSaving" @click="savePersonalProfile">
+              {{ t("portal.saveProfile") }}
+            </el-button>
+          </el-form>
+        </section>
+        <section class="operations-profile-section is-security">
+          <header>
+            <b>{{ t("portal.accountSecurity") }}</b>
+            <small>{{ t("portal.accountSecurityHint") }}</small>
+          </header>
+          <el-form class="operations-password-form" label-position="top" @submit.prevent="savePersonalPassword">
+            <el-form-item :label="t('portal.currentPassword')" required>
+              <el-input v-model="personalPasswordForm.currentPassword" type="password" show-password autocomplete="current-password" />
+            </el-form-item>
+            <el-form-item :label="t('portal.newPassword')" required>
+              <el-input v-model="personalPasswordForm.newPassword" type="password" show-password autocomplete="new-password" />
+            </el-form-item>
+            <el-form-item :label="t('portal.confirmNewPassword')" required>
+              <el-input v-model="personalPasswordForm.confirmPassword" type="password" show-password autocomplete="new-password" />
+            </el-form-item>
+            <small class="operations-password-rule">{{ t("portal.passwordRule") }}</small>
+            <el-alert v-if="personalPasswordError" :title="personalPasswordError" type="error" :closable="false" show-icon />
+            <el-alert v-if="personalPasswordSuccess" :title="personalPasswordSuccess" type="success" :closable="false" show-icon />
+            <el-button type="primary" plain :loading="personalPasswordSaving" @click="savePersonalPassword">
+              {{ t("portal.changePassword") }}
+            </el-button>
+          </el-form>
+        </section>
+      </div>
       <template #footer>
-        <el-button :disabled="personalProfileSaving" @click="personalProfileOpen = false">{{ t("customers.cancel") }}</el-button>
-        <el-button type="primary" :loading="personalProfileSaving" @click="savePersonalProfile">{{ t("portal.saveProfile") }}</el-button>
+        <el-button :disabled="personalProfileSaving || personalPasswordSaving" @click="personalProfileOpen = false">
+          {{ t("customers.close") }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -1974,11 +2253,16 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { init as initEChart, use as useECharts } from "echarts/core";
+import { BarChart, LineChart, PieChart } from "echarts/charts";
+import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { currentLocale } from "../i18n";
 import {
   batchUpdateBusinessShipmentFields,
   batchBindBusinessCustomerShipments,
+  batchCreateOverseaAgentEmployees,
   batchDeleteBusinessShipments,
   bindBusinessCustomerShipment,
   batchCreateBusinessCustomers,
@@ -1993,6 +2277,7 @@ import {
   deleteOverseaAgent,
   deleteBusinessShipment,
   fetchAvailableBusinessShipments,
+  fetchBusinessDashboardTodayStats,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
@@ -2021,7 +2306,7 @@ import {
   parseCustomerImportWorkbook,
   validateCustomerImportRows
 } from "../services/customerExcelImport";
-import { updateOwnProfile } from "../services/adminApi";
+import { changeOwnPassword, updateOwnProfile } from "../services/adminApi";
 import { saveStoredUser, storedToken } from "../services/authSession";
 import { markApiErrorHandled } from "../services/apiClient";
 import {
@@ -2034,13 +2319,31 @@ import {
   Refresh,
   Search,
   Operation,
-  DataBoard
+  DataBoard,
+  ArrowRight,
+  Bell,
+  ChatDotRound,
+  CirclePlusFilled,
+  FolderOpened,
+  RefreshRight
 } from "@element-plus/icons-vue";
 
+useECharts([
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  LegendComponent,
+  TitleComponent,
+  TooltipComponent,
+  CanvasRenderer
+]);
+
 const props = defineProps({
-  currentUser: { type: Object, default: null }
+  currentUser: { type: Object, default: null },
+  announcementCount: { type: Number, default: 0 }
 });
-const emit = defineEmits(["logout", "user-updated"]);
+const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 const { t } = useI18n();
 const isManager = computed(() => ["BUSINESS", "ADMIN"].includes(props.currentUser?.role));
 let xlsxModulePromise;
@@ -2071,10 +2374,41 @@ const personalProfileOpen = ref(false);
 const personalProfileSaving = ref(false);
 const personalProfileError = ref("");
 const personalProfileForm = reactive({ displayName: "" });
+const personalPasswordSaving = ref(false);
+const personalPasswordError = ref("");
+const personalPasswordSuccess = ref("");
+const personalPasswordForm = reactive({ currentPassword: "", newPassword: "", confirmPassword: "" });
 const createDialogOpen = ref(false);
 const agentCreateDialogOpen = ref(false);
 const creatingAgent = ref(false);
 const agentCreateError = ref("");
+const agentBatchDialogOpen = ref(false);
+const agentBatchFileInput = ref(null);
+const agentBatchFileName = ref("");
+const agentBatchDropzoneActive = ref(false);
+const parsingAgentFile = ref(false);
+const importingAgents = ref(false);
+const agentBatchRows = ref([]);
+const agentBatchError = ref("");
+const overviewShipments = ref([]);
+const overviewShipmentTotal = ref(0);
+const overviewTodayStats = ref(null);
+const loadingOverviewMetrics = ref(false);
+const overviewMetricsError = ref("");
+const overviewTrendChartRef = ref(null);
+const overviewTodayChartRef = ref(null);
+const overviewResourcesChartRef = ref(null);
+const overviewStatusChartRef = ref(null);
+const prefersReducedMotion = ref(false);
+const overviewChartInstances = {
+  trend: null,
+  today: null,
+  resources: null,
+  status: null
+};
+let overviewChartResizeObserver = null;
+let overviewMotionQuery = null;
+let overviewMotionPreferenceHandler = null;
 const batchImportDialogOpen = ref(false);
 const batchImportMode = ref("quick");
 const quickImportText = ref("");
@@ -2273,6 +2607,148 @@ const personalRoleLabel = computed(() => t({
   BUSINESS: "portal.roleBusiness",
   OVERSEA_AGENT: "portal.roleOverseaAgent"
 }[props.currentUser?.role] || "portal.roleEmployee"));
+const agentPasswordChecks = computed(() => {
+  const password = agentCreateForm.password;
+  return [
+    { key: "length", valid: password.length >= 12, label: t("customers.agentPasswordLength") },
+    { key: "case", valid: /[A-Z]/.test(password) && /[a-z]/.test(password), label: t("customers.agentPasswordCase") },
+    { key: "number", valid: /\d/.test(password), label: t("customers.agentPasswordNumber") },
+    { key: "symbol", valid: /[^A-Za-z0-9]/.test(password), label: t("customers.agentPasswordSymbol") },
+    {
+      key: "username",
+      valid: Boolean(agentCreateForm.username)
+        && !password.toLowerCase().includes(agentCreateForm.username.toLowerCase()),
+      label: t("customers.agentPasswordUsername")
+    }
+  ];
+});
+const canCreateAgent = computed(() =>
+  isValidAgentUsername(agentCreateForm.username)
+  && isValidAgentDisplayName(agentCreateForm.displayName)
+  && isStrongAgentPassword(agentCreateForm.password, agentCreateForm.username)
+);
+const agentBatchReadyCount = computed(() =>
+  agentBatchRows.value.filter((row) => row.status === "READY" && row.errors.length === 0).length
+);
+const agentBatchInvalidCount = computed(() =>
+  agentBatchRows.value.filter((row) => row.errors.length > 0).length
+);
+const agentBatchCreatedCount = computed(() =>
+  agentBatchRows.value.filter((row) => row.status === "CREATED").length
+);
+const activeAgentCount = computed(() =>
+  transferAgents.value.filter((agent) => agent.status === "ACTIVE").length
+);
+const activeCustomerCount = computed(() =>
+  customers.value.filter((customer) => customer.status === "ACTIVE").length
+);
+const overviewKpis = computed(() => {
+  const items = overviewShipments.value;
+  const stats = overviewTodayStats.value;
+  const stat = (key, fallback) => {
+    const value = Number(stats?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  return [
+    {
+      key: "created",
+      tone: "blue",
+      icon: CirclePlusFilled,
+      label: t("customers.todayNewBusiness"),
+      value: stat("newShipments", items.filter(isCreatedToday).length),
+      hint: t("customers.todayNewBusinessHint")
+    },
+    {
+      key: "updated",
+      tone: "amber",
+      icon: RefreshRight,
+      label: t("customers.todayUpdatedBusiness"),
+      value: stat("updatedShipments", items.filter(isUpdatedToday).length),
+      hint: t("customers.todayUpdatedBusinessHint")
+    },
+    {
+      key: "files",
+      tone: "green",
+      icon: FolderOpened,
+      label: t("customers.todayFiles"),
+      value: stat("followUpFiles", items.reduce((total, item) => total + countTodayFiles(item), 0)),
+      hint: t("customers.todayFilesHint")
+    },
+    {
+      key: "messages",
+      tone: "purple",
+      icon: ChatDotRound,
+      label: t("customers.todayMessages"),
+      value: stat("messages", items.reduce((total, item) => total + countTodayMessages(item), 0)),
+      hint: t("customers.todayMessagesHint")
+    },
+    {
+      key: "logins",
+      tone: "cyan",
+      icon: UserFilled,
+      label: t("customers.todayCustomerLogins"),
+      value: stat(
+        "customerLogins",
+        customers.value.filter((customer) => isToday(customer.lastLoginAt || customer.lastLogin)).length
+      ),
+      hint: t("customers.todayCustomerLoginsHint")
+    }
+  ];
+});
+const overviewDailyTrend = computed(() => {
+  const days = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - offset);
+    const key = localDateKey(date);
+    days.push({
+      key,
+      label: new Intl.DateTimeFormat(currentLocale.value || "zh-CN", {
+        month: "numeric",
+        day: "numeric"
+      }).format(date),
+      created: overviewShipments.value.filter((item) => localDateKey(item.createdAt) === key).length,
+      updated: overviewShipments.value.filter((item) => isMeaningfulUpdate(item) && localDateKey(item.updatedAt) === key).length
+    });
+  }
+  return days;
+});
+const overviewTrendHasData = computed(() =>
+  overviewDailyTrend.value.some((day) => day.created > 0 || day.updated > 0)
+);
+const overviewTodayComposition = computed(() =>
+  overviewKpis.value.map((metric) => ({
+    name: metric.label,
+    value: Number(metric.value) || 0,
+    itemStyle: { color: overviewMetricColor(metric.tone) }
+  }))
+);
+const overviewTodayHasData = computed(() =>
+  overviewTodayComposition.value.some((item) => item.value > 0)
+);
+const overviewResourceSeries = computed(() => [
+  { name: t("customers.directoryTitle"), value: customers.value.length },
+  { name: t("customers.tabShipmentManagement"), value: overviewShipmentTotal.value },
+  { name: t("customers.overseaAgentManagement"), value: activeAgentCount.value },
+  { name: t("customers.activeCustomers"), value: activeCustomerCount.value }
+]);
+const overviewResourcesHaveData = computed(() =>
+  overviewResourceSeries.value.some((item) => item.value > 0)
+);
+const overviewShipmentStatusDistribution = computed(() => {
+  const counts = new Map();
+  overviewShipments.value.forEach((shipment) => {
+    const status = String(shipment?.trackingStatus || "").trim()
+      || t("customers.overviewUnknownStatus");
+    counts.set(status, (counts.get(status) || 0) + 1);
+  });
+  return Array.from(counts, ([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value);
+});
+const overviewStatusHasData = computed(() =>
+  overviewShipmentStatusDistribution.value.some((item) => item.value > 0)
+);
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
 const unboundAvailableShipments = computed(() => {
   const boundIds = new Set(shipments.value.map((item) => item.shipmentId));
@@ -2689,6 +3165,30 @@ watch(transferAgents, (items) => {
   agentPage.value = boundedPage(agentPage.value, items.length, agentPageSize.value);
 });
 
+watch(menuItem, (item) => {
+  if (item === "overview") {
+    void initializeOverviewCharts();
+  } else {
+    disposeOverviewCharts();
+  }
+});
+
+watch(
+  [
+    overviewDailyTrend,
+    overviewTodayComposition,
+    overviewResourceSeries,
+    overviewShipmentStatusDistribution,
+    prefersReducedMotion
+  ],
+  () => {
+    if (menuItem.value === "overview") {
+      void nextTick().then(renderOverviewCharts);
+    }
+  },
+  { deep: true }
+);
+
 watch(displayedAvailableShipments, (items) => {
   const visibleIds = new Set(items.map((item) => item.shipmentId));
   selectedShipmentRows.value = selectedShipmentRows.value
@@ -2707,6 +3207,13 @@ watch(selectedShipment, (shipment) => {
 }, { immediate: true });
 
 onMounted(() => {
+  overviewMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  prefersReducedMotion.value = overviewMotionQuery.matches;
+  const handleMotionPreference = (event) => {
+    prefersReducedMotion.value = event.matches;
+  };
+  overviewMotionQuery.addEventListener?.("change", handleMotionPreference);
+  overviewMotionPreferenceHandler = handleMotionPreference;
   batchTrackClockTimer = window.setInterval(() => {
     batchTrackClock.value = Date.now();
   }, 1000);
@@ -2716,6 +3223,12 @@ onMounted(() => {
   void restoreBatchTrackTask();
 });
 onUnmounted(() => {
+  disposeOverviewCharts();
+  if (overviewMotionQuery && overviewMotionPreferenceHandler) {
+    overviewMotionQuery.removeEventListener?.("change", overviewMotionPreferenceHandler);
+  }
+  overviewMotionQuery = null;
+  overviewMotionPreferenceHandler = null;
   window.clearTimeout(toastTimer);
   window.clearTimeout(batchTrackPollTimer);
   window.clearInterval(batchTrackClockTimer);
@@ -2731,6 +3244,7 @@ function navigateTo(item) {
   menuItem.value = item;
   subView.value = "list";
   if (item === "agents") void loadTransferAgents();
+  if (item === "overview") void loadOverviewMetrics();
 }
 
 function pageSlice(items, page, pageSize) {
@@ -2774,6 +3288,11 @@ function selectedAgentOptionLabel(value) {
 function openPersonalProfile() {
   personalProfileForm.displayName = props.currentUser?.displayName || "";
   personalProfileError.value = "";
+  personalPasswordForm.currentPassword = "";
+  personalPasswordForm.newPassword = "";
+  personalPasswordForm.confirmPassword = "";
+  personalPasswordError.value = "";
+  personalPasswordSuccess.value = "";
   personalProfileOpen.value = true;
 }
 
@@ -2795,6 +3314,493 @@ async function savePersonalProfile() {
     personalProfileError.value = error?.message || t("portal.profileSaveFailed");
   } finally {
     personalProfileSaving.value = false;
+  }
+}
+
+async function savePersonalPassword() {
+  const currentPassword = personalPasswordForm.currentPassword;
+  const newPassword = personalPasswordForm.newPassword;
+  personalPasswordError.value = "";
+  personalPasswordSuccess.value = "";
+  if (!currentPassword || !newPassword || !personalPasswordForm.confirmPassword) {
+    personalPasswordError.value = t("portal.passwordFieldsRequired");
+    return;
+  }
+  if (newPassword !== personalPasswordForm.confirmPassword) {
+    personalPasswordError.value = t("portal.passwordMismatch");
+    return;
+  }
+  const strong = newPassword.length >= 12
+    && newPassword.length <= 128
+    && /[A-Z]/.test(newPassword)
+    && /[a-z]/.test(newPassword)
+    && /\d/.test(newPassword)
+    && /[^A-Za-z0-9]/.test(newPassword)
+    && !newPassword.toLowerCase().includes(String(props.currentUser?.username || "").toLowerCase());
+  if (!strong) {
+    personalPasswordError.value = t("portal.passwordRule");
+    return;
+  }
+  personalPasswordSaving.value = true;
+  try {
+    await changeOwnPassword(currentPassword, newPassword);
+    personalPasswordForm.currentPassword = "";
+    personalPasswordForm.newPassword = "";
+    personalPasswordForm.confirmPassword = "";
+    personalPasswordSuccess.value = t("portal.passwordChanged");
+  } catch (error) {
+    personalPasswordError.value = error?.message || t("portal.passwordChangeFailed");
+  } finally {
+    personalPasswordSaving.value = false;
+  }
+}
+
+function localDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function isToday(value) {
+  return Boolean(value) && localDateKey(value) === localDateKey(new Date());
+}
+
+function isMeaningfulUpdate(item) {
+  if (!item?.updatedAt) return false;
+  if (!item.createdAt) return true;
+  const created = new Date(item.createdAt).getTime();
+  const updated = new Date(item.updatedAt).getTime();
+  if (Number.isNaN(created) || Number.isNaN(updated)) return true;
+  return updated - created > 1000;
+}
+
+function isCreatedToday(item) {
+  return isToday(item?.createdAt);
+}
+
+function isUpdatedToday(item) {
+  return isMeaningfulUpdate(item) && isToday(item?.updatedAt);
+}
+
+function countTodayFiles(item) {
+  const direct = Number(item?.todayFileCount);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const files = Array.isArray(item?.files) ? item.files : [];
+  return files.filter((file) => isToday(file?.uploadedAt || file?.createdAt)).length;
+}
+
+function countTodayMessages(item) {
+  const direct = Number(item?.todayMessageCount ?? item?.todayCommentCount);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const messages = Array.isArray(item?.messages)
+    ? item.messages
+    : Array.isArray(item?.comments) ? item.comments : [];
+  return messages.filter((message) => isToday(message?.createdAt)).length;
+}
+
+function overviewMetricColor(tone) {
+  return {
+    blue: "#4389d5",
+    amber: "#e0a23a",
+    green: "#35a77a",
+    purple: "#7c6fd1",
+    cyan: "#2da5ba"
+  }[tone] || "#4389d5";
+}
+
+function overviewChartAnimation() {
+  return {
+    animation: !prefersReducedMotion.value,
+    animationDuration: prefersReducedMotion.value ? 0 : 560,
+    animationDurationUpdate: prefersReducedMotion.value ? 0 : 260,
+    animationEasing: "cubicOut",
+    animationEasingUpdate: "cubicOut"
+  };
+}
+
+function overviewChartTextStyle() {
+  return {
+    color: "#667d91",
+    fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif'
+  };
+}
+
+function overviewTrendOption() {
+  const createdName = t("customers.todayNewBusiness");
+  const updatedName = t("customers.todayUpdatedBusiness");
+  return {
+    ...overviewChartAnimation(),
+    color: ["#4389d5", "#e0a23a"],
+    textStyle: overviewChartTextStyle(),
+    tooltip: {
+      trigger: "axis",
+      confine: true,
+      backgroundColor: "rgba(21, 42, 61, .94)",
+      borderWidth: 0,
+      textStyle: { color: "#fff", fontSize: 11 },
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(67, 137, 213, .07)" } }
+    },
+    legend: {
+      top: 2,
+      right: 4,
+      itemWidth: 14,
+      itemHeight: 8,
+      itemGap: 16,
+      textStyle: { color: "#6f8497", fontSize: 10 }
+    },
+    grid: { top: 42, right: 20, bottom: 12, left: 12, containLabel: true },
+    xAxis: {
+      type: "category",
+      boundaryGap: true,
+      data: overviewDailyTrend.value.map((day) => day.label),
+      axisLine: { lineStyle: { color: "#dfe8f0" } },
+      axisTick: { show: false },
+      axisLabel: { color: "#7b8fa2", fontSize: 10, margin: 12 }
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: "#8da0b1", fontSize: 9 },
+      splitLine: { lineStyle: { color: "#edf2f6", type: "dashed" } }
+    },
+    series: [
+      {
+        name: createdName,
+        type: "bar",
+        barMaxWidth: 28,
+        data: overviewDailyTrend.value.map((day) => day.created),
+        itemStyle: {
+          borderRadius: [7, 7, 2, 2],
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "#72b7ec" },
+              { offset: 1, color: "#397ec1" }
+            ]
+          }
+        },
+        emphasis: { itemStyle: { shadowBlur: 10, shadowColor: "rgba(57, 126, 193, .28)" } }
+      },
+      {
+        name: updatedName,
+        type: "line",
+        smooth: 0.35,
+        symbol: "circle",
+        symbolSize: 7,
+        data: overviewDailyTrend.value.map((day) => day.updated),
+        lineStyle: { width: 3, color: "#e0a23a" },
+        itemStyle: { color: "#fff", borderColor: "#e0a23a", borderWidth: 3 },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(224, 162, 58, .20)" },
+              { offset: 1, color: "rgba(224, 162, 58, 0)" }
+            ]
+          }
+        }
+      }
+    ]
+  };
+}
+
+function overviewDonutOption(data, total, seriesName) {
+  return {
+    ...overviewChartAnimation(),
+    color: ["#4389d5", "#35a77a", "#e0a23a", "#7c6fd1", "#2da5ba", "#e66d75", "#8aa2b6"],
+    textStyle: overviewChartTextStyle(),
+    title: {
+      text: String(total),
+      subtext: t("customers.overviewTotal"),
+      left: "34%",
+      top: "35%",
+      textAlign: "center",
+      textStyle: { color: "#1f425d", fontSize: 24, fontWeight: 760 },
+      subtextStyle: { color: "#8ba0b2", fontSize: 9, lineHeight: 18 }
+    },
+    tooltip: {
+      trigger: "item",
+      confine: true,
+      backgroundColor: "rgba(21, 42, 61, .94)",
+      borderWidth: 0,
+      textStyle: { color: "#fff", fontSize: 11 },
+      formatter: "{b}<br/>{c} · {d}%"
+    },
+    legend: {
+      type: "scroll",
+      orient: "vertical",
+      right: 0,
+      top: "center",
+      width: "40%",
+      itemWidth: 9,
+      itemHeight: 9,
+      itemGap: 11,
+      pageIconSize: 9,
+      pageTextStyle: { color: "#8396a8", fontSize: 9 },
+      textStyle: { color: "#647b8f", fontSize: 9, width: 112, overflow: "truncate" }
+    },
+    series: [
+      {
+        name: seriesName,
+        type: "pie",
+        center: ["34%", "49%"],
+        radius: ["52%", "72%"],
+        minAngle: 4,
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderColor: "#fff",
+          borderWidth: 3,
+          borderRadius: 5
+        },
+        label: { show: false },
+        labelLine: { show: false },
+        emphasis: {
+          scaleSize: 7,
+          label: { show: false },
+          itemStyle: { shadowBlur: 16, shadowColor: "rgba(32, 65, 92, .18)" }
+        },
+        data
+      }
+    ],
+    media: [
+      {
+        query: { maxWidth: 390 },
+        option: {
+          title: { left: "50%", top: "29%" },
+          legend: {
+            orient: "horizontal",
+            left: "center",
+            right: "auto",
+            top: "auto",
+            bottom: 0,
+            width: "92%"
+          },
+          series: [{ center: ["50%", "42%"], radius: ["43%", "61%"] }]
+        }
+      }
+    ]
+  };
+}
+
+function overviewResourcesOption() {
+  const data = [...overviewResourceSeries.value].reverse();
+  return {
+    ...overviewChartAnimation(),
+    textStyle: overviewChartTextStyle(),
+    tooltip: {
+      trigger: "axis",
+      confine: true,
+      axisPointer: { type: "shadow" },
+      backgroundColor: "rgba(21, 42, 61, .94)",
+      borderWidth: 0,
+      textStyle: { color: "#fff", fontSize: 11 }
+    },
+    grid: { top: 12, right: 42, bottom: 10, left: 8, containLabel: true },
+    xAxis: {
+      type: "value",
+      minInterval: 1,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      splitLine: { lineStyle: { color: "#edf2f6", type: "dashed" } }
+    },
+    yAxis: {
+      type: "category",
+      data: data.map((item) => item.name),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: "#627b90",
+        fontSize: 10,
+        width: 108,
+        overflow: "truncate",
+        margin: 13
+      }
+    },
+    series: [
+      {
+        name: t("customers.overviewResourceTitle"),
+        type: "bar",
+        barWidth: 18,
+        showBackground: true,
+        backgroundStyle: { color: "#f0f4f8", borderRadius: 9 },
+        label: {
+          show: true,
+          position: "right",
+          distance: 8,
+          color: "#2a536f",
+          fontSize: 10,
+          fontWeight: 760
+        },
+        itemStyle: {
+          borderRadius: 9,
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 1,
+            y2: 0,
+            colorStops: [
+              { offset: 0, color: "#337fbe" },
+              { offset: 1, color: "#60b8ca" }
+            ]
+          }
+        },
+        data: data.map((item) => item.value)
+      }
+    ]
+  };
+}
+
+function renderOverviewCharts() {
+  if (menuItem.value !== "overview") return;
+  if (overviewTrendHasData.value) {
+    overviewChartInstances.trend?.setOption(overviewTrendOption(), true);
+  } else {
+    overviewChartInstances.trend?.clear();
+  }
+  if (overviewTodayHasData.value) {
+    const total = overviewTodayComposition.value.reduce((sum, item) => sum + item.value, 0);
+    overviewChartInstances.today?.setOption(
+      overviewDonutOption(
+        overviewTodayComposition.value,
+        total,
+        t("customers.overviewTodayCompositionTitle")
+      ),
+      true
+    );
+  } else {
+    overviewChartInstances.today?.clear();
+  }
+  if (overviewResourcesHaveData.value) {
+    overviewChartInstances.resources?.setOption(overviewResourcesOption(), true);
+  } else {
+    overviewChartInstances.resources?.clear();
+  }
+  if (overviewStatusHasData.value) {
+    const total = overviewShipmentStatusDistribution.value
+      .reduce((sum, item) => sum + item.value, 0);
+    overviewChartInstances.status?.setOption(
+      overviewDonutOption(
+        overviewShipmentStatusDistribution.value,
+        total,
+        t("customers.overviewShipmentStatusTitle")
+      ),
+      true
+    );
+  } else {
+    overviewChartInstances.status?.clear();
+  }
+}
+
+function resizeOverviewCharts() {
+  Object.values(overviewChartInstances).forEach((chart) => chart?.resize());
+}
+
+function disposeOverviewCharts() {
+  window.removeEventListener("resize", resizeOverviewCharts);
+  overviewChartResizeObserver?.disconnect();
+  overviewChartResizeObserver = null;
+  Object.keys(overviewChartInstances).forEach((key) => {
+    overviewChartInstances[key]?.dispose();
+    overviewChartInstances[key] = null;
+  });
+}
+
+async function initializeOverviewCharts() {
+  await nextTick();
+  if (menuItem.value !== "overview") return;
+  const targets = [
+    ["trend", overviewTrendChartRef.value],
+    ["today", overviewTodayChartRef.value],
+    ["resources", overviewResourcesChartRef.value],
+    ["status", overviewStatusChartRef.value]
+  ];
+  targets.forEach(([key, element]) => {
+    if (!element) return;
+    if (overviewChartInstances[key]?.getDom() !== element) {
+      overviewChartInstances[key]?.dispose();
+      overviewChartInstances[key] = initEChart(element, null, { renderer: "canvas" });
+    }
+  });
+  overviewChartResizeObserver?.disconnect();
+  window.removeEventListener("resize", resizeOverviewCharts);
+  window.addEventListener("resize", resizeOverviewCharts, { passive: true });
+  if (typeof ResizeObserver !== "undefined") {
+    overviewChartResizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(resizeOverviewCharts);
+    });
+    targets.forEach(([, element]) => {
+      if (element) overviewChartResizeObserver.observe(element);
+    });
+  }
+  renderOverviewCharts();
+  window.requestAnimationFrame(resizeOverviewCharts);
+}
+
+async function loadOverviewMetrics() {
+  if (loadingOverviewMetrics.value) return;
+  loadingOverviewMetrics.value = true;
+  overviewMetricsError.value = "";
+  try {
+    const [firstPage, agentsResponse, todayStats] = await Promise.all([
+      fetchAvailableBusinessShipments({ page: 1, pageSize: 100 }),
+      isManager.value
+        ? fetchCustomerTransferAgents().catch((error) => {
+            markApiErrorHandled(error);
+            return { items: transferAgents.value };
+          })
+        : Promise.resolve({ items: [] }),
+      isManager.value
+        ? fetchBusinessDashboardTodayStats().catch((error) => {
+            markApiErrorHandled(error);
+            return null;
+          })
+        : Promise.resolve(null)
+    ]);
+    const firstItems = Array.isArray(firstPage?.items) ? firstPage.items : [];
+    const total = Number(firstPage?.total || firstItems.length);
+    const totalPages = Math.max(1, Math.ceil(total / 100));
+    const pageLimit = Math.min(totalPages, 20);
+    const additionalPages = [];
+    for (let page = 2; page <= pageLimit; page += 1) {
+      additionalPages.push(fetchAvailableBusinessShipments({ page, pageSize: 100 }));
+    }
+    const responses = additionalPages.length ? await Promise.all(additionalPages) : [];
+    overviewShipments.value = [
+      ...firstItems,
+      ...responses.flatMap((response) => Array.isArray(response?.items) ? response.items : [])
+    ].map(normalizeBusinessShipment);
+    overviewShipmentTotal.value = total;
+    transferAgents.value = Array.isArray(agentsResponse?.items) ? agentsResponse.items : [];
+    overviewTodayStats.value = todayStats;
+    if (totalPages > pageLimit) {
+      overviewMetricsError.value = t("customers.overviewPartialData", {
+        count: overviewShipments.value.length,
+        total
+      });
+    }
+  } catch (error) {
+    overviewShipments.value = [...availableShipments.value];
+    overviewShipmentTotal.value = shipmentTotal.value || availableShipments.value.length;
+    overviewTodayStats.value = null;
+    overviewMetricsError.value = error?.message || t("customers.overviewLoadFailed");
+  } finally {
+    loadingOverviewMetrics.value = false;
   }
 }
 
@@ -2867,12 +3873,7 @@ function openAgentCreateDialog() {
 
 async function submitAgentCreate() {
   agentCreateError.value = "";
-  const strong = agentCreateForm.password.length >= 12
-    && /[A-Z]/.test(agentCreateForm.password)
-    && /[a-z]/.test(agentCreateForm.password)
-    && /\d/.test(agentCreateForm.password)
-    && /[^A-Za-z0-9]/.test(agentCreateForm.password);
-  if (!agentCreateForm.username || !agentCreateForm.displayName || !strong) {
+  if (!canCreateAgent.value) {
     agentCreateError.value = t("customers.createOverseaAgentValidation");
     return;
   }
@@ -2889,6 +3890,237 @@ async function submitAgentCreate() {
     agentCreateError.value = error?.message || t("customers.createOverseaAgentFailed");
   } finally {
     creatingAgent.value = false;
+  }
+}
+
+function isValidAgentUsername(value) {
+  return /^[\p{L}\p{N}._-]{2,64}$/u.test(String(value || "").trim());
+}
+
+function isValidAgentDisplayName(value) {
+  const length = String(value || "").trim().length;
+  return length >= 2 && length <= 80;
+}
+
+function isStrongAgentPassword(value, username = "") {
+  const password = String(value || "");
+  return password.length >= 12
+    && password.length <= 128
+    && /[A-Z]/.test(password)
+    && /[a-z]/.test(password)
+    && /\d/.test(password)
+    && /[^A-Za-z0-9]/.test(password)
+    && !password.toLowerCase().includes(String(username || "").toLowerCase());
+}
+
+function openAgentBatchImport() {
+  agentBatchFileName.value = "";
+  agentBatchRows.value = [];
+  agentBatchError.value = "";
+  agentBatchDropzoneActive.value = false;
+  agentBatchDialogOpen.value = true;
+}
+
+function closeAgentBatchImport() {
+  if (importingAgents.value) return;
+  agentBatchDialogOpen.value = false;
+  agentBatchFileName.value = "";
+  agentBatchRows.value = [];
+  agentBatchError.value = "";
+  if (agentBatchFileInput.value) agentBatchFileInput.value.value = "";
+}
+
+async function downloadAgentImportTemplate() {
+  try {
+    const XLSX = await loadXlsxModule();
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      [
+        "\u7528\u6237\u540d*",
+        "\u663e\u793a\u540d\u79f0*",
+        "\u521d\u59cb\u5bc6\u7801*"
+      ],
+      ["oversea-agent-01", "Oversea Agent 01", "StrongPass#2026"]
+    ]);
+    worksheet["!cols"] = [{ wch: 26 }, { wch: 30 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(workbook, worksheet, "OVERSEA AGENTS");
+    XLSX.writeFile(workbook, `oversea-agent-import-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  } catch (error) {
+    agentBatchError.value = error?.message || t("customers.agentTemplateFailed");
+  }
+}
+
+function normalizeAgentHeader(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\*/g, "")
+    .replace(/[\s/\\._()（）:：-]+/g, "");
+}
+
+function findAgentColumn(headers, aliases) {
+  const normalizedAliases = new Set(aliases.map(normalizeAgentHeader));
+  return headers.findIndex((header) => normalizedAliases.has(normalizeAgentHeader(header)));
+}
+
+function validateAgentImportRows(sourceRows) {
+  const usernames = new Set();
+  return sourceRows.map((source, index) => {
+    const username = String(source.username || "").trim();
+    const displayName = String(source.displayName || "").trim();
+    const password = String(source.password || "");
+    const errors = [];
+    if (!isValidAgentUsername(username)) errors.push(t("customers.agentUsernameRule"));
+    if (!isValidAgentDisplayName(displayName)) errors.push(t("customers.agentDisplayNameRule"));
+    if (!isStrongAgentPassword(password, username)) errors.push(t("customers.agentPasswordRule"));
+    const key = username.toLocaleLowerCase();
+    if (key && usernames.has(key)) errors.push(t("customers.agentDuplicateUsername", { username }));
+    if (key) usernames.add(key);
+    return {
+      rowNumber: Number(source.rowNumber) || index + 2,
+      username,
+      displayName,
+      password,
+      errors,
+      status: errors.length ? "INVALID" : "READY",
+      resultMessage: ""
+    };
+  });
+}
+
+async function parseAgentWorkbook(file) {
+  const XLSX = await loadXlsxModule();
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) throw new Error(t("customers.agentWorkbookEmpty"));
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    header: 1,
+    defval: "",
+    raw: false
+  });
+  const aliases = {
+    username: ["USERNAME", "\u7528\u6237\u540d", "\u767b\u5f55\u540d"],
+    displayName: ["DISPLAY NAME", "DISPLAYNAME", "\u663e\u793a\u540d\u79f0", "\u59d3\u540d"],
+    password: ["INITIAL PASSWORD", "PASSWORD", "\u521d\u59cb\u5bc6\u7801", "\u5bc6\u7801"]
+  };
+  const headerRowIndex = rows.slice(0, 10).findIndex((row) => {
+    const headers = Array.isArray(row) ? row : [];
+    return findAgentColumn(headers, aliases.username) >= 0
+      && findAgentColumn(headers, aliases.displayName) >= 0
+      && findAgentColumn(headers, aliases.password) >= 0;
+  });
+  if (headerRowIndex < 0) throw new Error(t("customers.agentWorkbookHeaderMissing"));
+  const headers = rows[headerRowIndex];
+  const indexes = {
+    username: findAgentColumn(headers, aliases.username),
+    displayName: findAgentColumn(headers, aliases.displayName),
+    password: findAgentColumn(headers, aliases.password)
+  };
+  const sourceRows = rows.slice(headerRowIndex + 1)
+    .map((row, index) => ({
+      rowNumber: headerRowIndex + index + 2,
+      username: row?.[indexes.username],
+      displayName: row?.[indexes.displayName],
+      password: row?.[indexes.password]
+    }))
+    .filter((row) => row.username || row.displayName || row.password);
+  if (!sourceRows.length) throw new Error(t("customers.agentWorkbookNoRows"));
+  if (sourceRows.length > 200) throw new Error(t("customers.agentWorkbookTooManyRows"));
+  return validateAgentImportRows(sourceRows);
+}
+
+async function processAgentWorkbook(file) {
+  agentBatchError.value = "";
+  agentBatchRows.value = [];
+  if (!file) return;
+  if (!/\.(xlsx|xls|csv)$/i.test(file.name || "")) {
+    agentBatchError.value = t("customers.agentWorkbookUnsupported");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    agentBatchError.value = t("customers.agentWorkbookTooLarge");
+    return;
+  }
+  parsingAgentFile.value = true;
+  try {
+    agentBatchRows.value = await parseAgentWorkbook(file);
+    agentBatchFileName.value = file.name;
+  } catch (error) {
+    agentBatchError.value = error?.message || t("customers.agentWorkbookParseFailed");
+  } finally {
+    parsingAgentFile.value = false;
+  }
+}
+
+function handleAgentWorkbook(event) {
+  const file = event?.target?.files?.[0];
+  void processAgentWorkbook(file);
+}
+
+function handleAgentBatchDrop(event) {
+  agentBatchDropzoneActive.value = false;
+  const file = event?.dataTransfer?.files?.[0];
+  void processAgentWorkbook(file);
+}
+
+function agentBatchRowClass({ row }) {
+  if (row.status === "CREATED") return "is-created";
+  if (row.status === "FAILED" || row.errors.length) return "is-invalid";
+  return "";
+}
+
+async function submitAgentBatchImport() {
+  const rows = agentBatchRows.value.filter((row) => row.status === "READY" && !row.errors.length);
+  if (!rows.length || agentBatchInvalidCount.value || importingAgents.value) return;
+  importingAgents.value = true;
+  agentBatchError.value = "";
+  try {
+    const payload = rows.map((row) => ({
+      username: row.username,
+      displayName: row.displayName,
+      password: row.password
+    }));
+    try {
+      await batchCreateOverseaAgentEmployees(payload);
+      rows.forEach((row) => {
+        row.status = "CREATED";
+      });
+    } catch (error) {
+      if (![404, 405].includes(Number(error?.status))) throw error;
+      markApiErrorHandled(error);
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < rows.length) {
+          const row = rows[cursor++];
+          row.status = "IMPORTING";
+          try {
+            await createOverseaAgentEmployee({
+              username: row.username,
+              displayName: row.displayName,
+              password: row.password
+            });
+            row.status = "CREATED";
+          } catch (itemError) {
+            row.status = "FAILED";
+            row.resultMessage = itemError?.message || t("customers.createOverseaAgentFailed");
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, rows.length) }, () => worker()));
+    }
+    await loadTransferAgents();
+    showSuccess("customers.agentBatchFinished", {
+      created: agentBatchRows.value.filter((row) => row.status === "CREATED").length,
+      failed: agentBatchRows.value.filter((row) => row.status === "FAILED").length
+    });
+  } catch (error) {
+    markApiErrorHandled(error);
+    rows.forEach((row) => {
+      if (row.status === "IMPORTING") row.status = "READY";
+    });
+    agentBatchError.value = error?.message || t("customers.agentBatchCreateFailed");
+  } finally {
+    importingAgents.value = false;
   }
 }
 
@@ -5473,6 +6705,40 @@ function showError(error, fallbackKey) {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
+.system-message-button {
+  position: relative;
+  display: inline-flex;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 8px;
+  color: #d7e7f5;
+  background: rgba(255, 255, 255, .06);
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+.system-message-button:hover {
+  border-color: rgba(114, 207, 255, .45);
+  background: rgba(91, 174, 226, .14);
+  transform: translateY(-1px);
+}
+.system-message-button > i {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  color: #fff;
+  background: #ef596f;
+  box-shadow: 0 0 0 3px rgba(239, 89, 111, .14);
+  place-items: center;
+  font-size: 9px;
+  font-style: normal;
+}
 
 /* ---- Workspace Layout ---- */
 .workspace-layout {
@@ -5490,14 +6756,16 @@ function showError(error, fallbackKey) {
   flex-direction: column;
   background: linear-gradient(180deg, #f5f7fa 0%, #eceff4 100%);
   border-right: 1px solid #dce1e8;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 12px 0;
 }
 .sidebar-nav {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 4px;
   padding: 0 8px;
+  overflow-y: auto;
 }
 .sidebar-nav button {
   display: flex;
@@ -5525,6 +6793,55 @@ function showError(error, fallbackKey) {
   background: #e0e7ff;
   font-weight: 800;
 }
+.sidebar-profile-card {
+  display: grid;
+  width: calc(100% - 16px);
+  min-width: 0;
+  margin: auto 8px 0;
+  padding: 10px;
+  border: 1px solid #d4deea;
+  border-radius: 11px;
+  color: #25415d;
+  background: rgba(255, 255, 255, .88);
+  box-shadow: 0 10px 24px rgba(38, 70, 102, .08);
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.sidebar-profile-card:hover {
+  border-color: #9cc4e7;
+  box-shadow: 0 14px 30px rgba(38, 100, 154, .13);
+  transform: translateY(-2px);
+}
+.sidebar-profile-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(135deg, #226fb5, #55b9d0);
+  box-shadow: 0 7px 16px rgba(34, 111, 181, .22);
+  place-items: center;
+  font-size: 13px;
+  font-weight: 850;
+}
+.sidebar-profile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.sidebar-profile-copy b,
+.sidebar-profile-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-profile-copy b { font-size: 11px; }
+.sidebar-profile-copy small { color: #7d91a5; font-size: 9px; }
+.sidebar-profile-card > .el-icon { color: #8aa1b8; font-size: 12px; }
 
 /* ---- Main Content Area ---- */
 .workspace-main {
@@ -5592,30 +6909,39 @@ function showError(error, fallbackKey) {
   box-shadow: 0 8px 14px rgba(15, 29, 46, 0.06);
 }
 .shipment-customer-filter {
-  flex: 0 0 230px;
-  width: 230px;
+  flex: 0 1 190px;
+  width: 190px;
+  min-width: 156px;
+  max-width: 210px;
 }
 .shipment-customer-filter-label {
   display: block;
   min-width: 0;
   overflow: hidden;
   color: #18324b;
+  font-size: 10px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .shipment-toolbar-control {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 10px;
   white-space: nowrap;
 }
 .shipment-channel-select {
-  flex: 0 0 170px;
-  width: 170px;
+  flex: 0 1 144px;
+  width: 144px;
+  min-width: 128px;
+}
+.shipment-toolbar-control :deep(.el-select__selected-item),
+.shipment-toolbar-control :deep(.el-select__placeholder) {
+  font-size: 10px;
 }
 .shipment-workspace-side {
   width: 380px;
@@ -5901,6 +7227,216 @@ function showError(error, fallbackKey) {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+}
+.business-overview {
+  display: grid;
+  gap: 18px;
+}
+.business-overview-header {
+  margin-bottom: 0;
+  padding: 4px 0 2px;
+}
+.business-overview-header p {
+  margin: 6px 0 0;
+  color: #71869a;
+  font-size: 12px;
+}
+.business-overview-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #3982be;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.business-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.business-kpi-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 132px;
+  padding: 15px;
+  border: 1px solid #d9e5ef;
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(75, 139, 199, .14), transparent 44%),
+    #fff;
+  box-shadow: 0 10px 30px rgba(33, 64, 92, .075);
+  align-content: space-between;
+  overflow: hidden;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  animation: business-kpi-in 400ms ease both;
+}
+.business-kpi-card:nth-child(2) { animation-delay: 45ms; }
+.business-kpi-card:nth-child(3) { animation-delay: 90ms; }
+.business-kpi-card:nth-child(4) { animation-delay: 135ms; }
+.business-kpi-card:nth-child(5) { animation-delay: 180ms; }
+.business-kpi-card:hover {
+  box-shadow: 0 16px 34px rgba(33, 78, 119, .13);
+  transform: translateY(-2px);
+}
+.business-kpi-card::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: #3a83c1;
+  content: "";
+}
+.business-kpi-card__top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.business-kpi-card__top > span:last-child {
+  overflow: hidden;
+  color: #536f88;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.business-kpi-card__icon {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #347fc0;
+  background: #eaf4fc;
+  place-items: center;
+  font-size: 17px;
+  box-shadow: inset 0 0 0 1px rgba(52, 127, 192, .08);
+}
+.business-kpi-card__value {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+.business-kpi-card__value > b {
+  color: #193750;
+  font-size: clamp(26px, 2.2vw, 36px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.business-kpi-card__value > small {
+  overflow: hidden;
+  color: #8a9daf;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.business-kpi-card.is-amber::before { background: #e4a83d; }
+.business-kpi-card.is-green::before { background: #3dad80; }
+.business-kpi-card.is-purple::before { background: #7c6fd1; }
+.business-kpi-card.is-cyan::before { background: #35a8bd; }
+.business-kpi-card.is-amber .business-kpi-card__icon { color: #c9871b; background: #fff5df; }
+.business-kpi-card.is-green .business-kpi-card__icon { color: #278a67; background: #e8f8f1; }
+.business-kpi-card.is-purple .business-kpi-card__icon { color: #6b5cc3; background: #f0edff; }
+.business-kpi-card.is-cyan .business-kpi-card__icon { color: #238ca0; background: #e7f7fa; }
+.business-chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, .9fr);
+  gap: 14px;
+}
+.business-chart-card {
+  min-width: 0;
+  padding: 17px 18px 14px;
+  border: 1px solid #dbe6ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(33, 64, 92, .065);
+  overflow: hidden;
+}
+.business-chart-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.business-chart-card > header > div {
+  display: grid;
+  gap: 3px;
+}
+.business-chart-card header b { color: #203d57; font-size: 13px; }
+.business-chart-card header small {
+  color: #8a9daf;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.business-chart-body {
+  position: relative;
+  min-height: 280px;
+  margin-top: 6px;
+}
+.business-echart {
+  width: 100%;
+  height: 280px;
+}
+.business-chart-empty {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  inset: 0;
+  background: rgba(255, 255, 255, .94);
+  place-items: center;
+}
+.business-chart-empty :deep(.el-empty) { padding: 16px 0; }
+.business-chart-empty :deep(.el-empty__description) { margin-top: 4px; }
+.business-chart-empty :deep(.el-empty__description p) {
+  color: #91a3b3;
+  font-size: 10px;
+}
+.business-chart-body :deep(.el-loading-mask) {
+  background: rgba(255, 255, 255, .82);
+}
+.business-overview-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f0dfb7;
+  border-radius: 10px;
+  color: #916d28;
+  background: #fff8e7;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.shipment-remark-cell {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.shipment-remark-cell > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shipment-today-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.shipment-list-table .shipment-today-tags {
+  flex-wrap: nowrap;
+}
+.shipment-list-table .table-action-buttons--single-line .el-button {
+  padding-inline: 8px;
+}
+.shipment-today-tags :deep(.el-tag) {
+  height: 19px;
+  padding-inline: 6px;
+  font-size: 9px;
+}
+@keyframes business-kpi-in {
+  from { opacity: 0; transform: translateY(9px); }
 }
 .customer-table-avatar {
   display: inline-grid;
@@ -6041,8 +7577,20 @@ function showError(error, fallbackKey) {
 
 .shipment-pagination {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   justify-content: flex-end;
   padding: 18px 0 4px;
+  overflow: hidden;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.shipment-pagination :deep(.el-pagination__sizes),
+.shipment-pagination :deep(.el-select) {
+  max-width: 112px;
+}
+.shipment-pagination :deep(.el-pagination__total) {
+  margin-right: 8px;
 }
 
 /* Main card header */
@@ -7620,6 +9168,172 @@ function showError(error, fallbackKey) {
   flex: 0 0 auto !important;
   min-width: 160px;
 }
+.agent-create-intro,
+.agent-batch-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 15px;
+  border: 1px solid #d6e5f2;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(72, 167, 215, .13), transparent 40%),
+    linear-gradient(135deg, #f2f8ff, #fbfdff);
+}
+.agent-create-intro > span {
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, #2878bc, #56b9d2);
+  box-shadow: 0 9px 20px rgba(40, 120, 188, .2);
+  place-items: center;
+}
+.agent-create-intro > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.agent-create-intro b { color: #1e405b; font-size: 13px; }
+.agent-create-intro small { color: #71879b; font-size: 10px; line-height: 1.6; }
+.agent-create-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+.agent-create-form .agent-password-field,
+.agent-create-form .el-alert {
+  grid-column: 1 / -1;
+}
+.agent-field-hint {
+  display: block;
+  margin-top: 5px;
+  color: #8295a8;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.agent-password-rules {
+  display: grid;
+  width: 100%;
+  margin-top: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.agent-password-rules span {
+  display: inline-flex;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #8a6270;
+  background: #fff3f5;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+}
+.agent-password-rules span.is-valid {
+  color: #267458;
+  background: #eefaf5;
+}
+.agent-password-rules i { font-style: normal; font-weight: 850; }
+.agent-batch-intro {
+  justify-content: space-between;
+  align-items: center;
+}
+.agent-batch-intro > div {
+  display: grid;
+  gap: 4px;
+}
+.agent-batch-intro h3 {
+  margin: 0;
+  color: #1d3b55;
+  font-size: 16px;
+}
+.agent-batch-intro p {
+  margin: 0;
+  color: #73899d;
+  font-size: 10px;
+}
+.agent-import-dropzone {
+  display: grid;
+  min-height: 148px;
+  padding: 22px;
+  border: 1px dashed #abc8df;
+  border-radius: 13px;
+  color: #58758e;
+  background:
+    radial-gradient(circle at 50% -25%, rgba(61, 139, 201, .13), transparent 54%),
+    #f8fbfe;
+  place-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+.agent-import-dropzone:hover,
+.agent-import-dropzone.is-dragover {
+  border-color: #438fca;
+  background-color: #f1f8ff;
+  transform: translateY(-2px);
+}
+.agent-import-dropzone.has-file {
+  border-color: #63b694;
+  background-color: #f3fcf7;
+}
+.agent-import-dropzone input { display: none; }
+.agent-import-dropzone > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: #2f78b4;
+  background: #e5f2fd;
+  place-items: center;
+  font-size: 17px;
+}
+.agent-import-dropzone b { color: #264964; font-size: 12px; }
+.agent-import-dropzone small { color: #8498aa; font-size: 9px; }
+.agent-batch-summary {
+  display: grid;
+  margin: 14px 0 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.agent-batch-summary > span {
+  display: grid;
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid #dce6ef;
+  border-radius: 9px;
+  background: #f7fafc;
+  align-content: center;
+  gap: 2px;
+}
+.agent-batch-summary b { color: #274a65; font-size: 20px; }
+.agent-batch-summary small { color: #8397aa; font-size: 9px; }
+.agent-batch-summary .is-valid { border-color: #bde3d2; background: #f1fbf6; }
+.agent-batch-summary .is-invalid { border-color: #efc4ca; background: #fff5f6; }
+.agent-batch-summary .is-created { border-color: #bed9ee; background: #f1f8fe; }
+.agent-batch-preview { margin-bottom: 12px; }
+.agent-batch-preview :deep(.is-invalid td) { background: #fff7f8 !important; }
+.agent-batch-preview :deep(.is-created td) { background: #f4fbf7 !important; }
+.agent-password-mask {
+  color: #667f94;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .08em;
+}
+.agent-row-errors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.agent-row-errors span {
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: #9c3d4b;
+  background: #fff0f2;
+  font-size: 9px;
+}
 .operations-profile-hero {
   display: flex;
   align-items: center;
@@ -7630,8 +9344,9 @@ function showError(error, fallbackKey) {
   border-radius: 12px;
   background: linear-gradient(135deg, #f1f8ff, #f8fbff);
 }
-.operations-profile-hero > span {
+.operations-profile-avatar {
   display: grid;
+  flex: 0 0 44px;
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -7643,10 +9358,33 @@ function showError(error, fallbackKey) {
 }
 .operations-profile-hero > div {
   display: grid;
+  flex: 1;
   gap: 3px;
 }
 .operations-profile-hero b { color: #18324b; }
 .operations-profile-hero small { color: #73889c; }
+.operations-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.operations-profile-section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dae5ee;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+.operations-profile-section.is-security {
+  background: linear-gradient(180deg, #fffcf7, #fff);
+}
+.operations-profile-section > header {
+  display: grid;
+  margin-bottom: 13px;
+  gap: 3px;
+}
+.operations-profile-section header b { color: #23435d; font-size: 13px; }
+.operations-profile-section header small { color: #8296a8; font-size: 9px; line-height: 1.5; }
 .operations-profile-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7655,6 +9393,23 @@ function showError(error, fallbackKey) {
 .operations-profile-form .el-form-item:nth-child(3),
 .operations-profile-form .el-alert {
   grid-column: 1 / -1;
+}
+.operations-profile-form > .el-button,
+.operations-password-form > .el-button {
+  justify-self: end;
+}
+.operations-password-form {
+  display: grid;
+}
+.operations-password-rule {
+  display: block;
+  margin: -7px 0 12px;
+  color: #8a785d;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.operations-password-form .el-alert {
+  margin-bottom: 10px;
 }
 @keyframes operations-overlay-in {
   from { opacity: 0; }
@@ -7843,6 +9598,16 @@ button:disabled {
   .workspace-main {
     padding: 14px 12px;
   }
+  .business-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .business-chart-grid,
+  .operations-profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .shipment-pagination :deep(.el-pagination__total) {
+    display: none;
+  }
 }
 @media (max-width: 680px) {
   .customer-access-page {
@@ -7857,6 +9622,7 @@ button:disabled {
     width: 100%;
     flex: 0 0 auto;
     max-height: none;
+    padding-bottom: 8px;
   }
   .shipment-workspace-main > .list-page-header {
     top: 0;
@@ -7874,6 +9640,7 @@ button:disabled {
   .sidebar-nav {
     flex-direction: row;
     padding: 4px 6px;
+    overflow-x: auto;
   }
   .sidebar-nav button {
     flex: 1;
@@ -7881,6 +9648,41 @@ button:disabled {
     min-height: 36px;
     padding: 6px 8px;
     font-size: 10px;
+  }
+  .sidebar-profile-card {
+    width: calc(100% - 12px);
+    margin: 5px 6px 0;
+  }
+  .system-message-button > span {
+    display: none;
+  }
+  .business-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .business-chart-card {
+    padding-inline: 14px;
+  }
+  .business-chart-body,
+  .business-echart {
+    height: 252px;
+    min-height: 252px;
+  }
+  .agent-create-form,
+  .agent-password-rules {
+    grid-template-columns: 1fr;
+  }
+  .agent-batch-intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .agent-batch-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .operations-profile-form {
+    grid-template-columns: 1fr;
+  }
+  .operations-profile-form .el-form-item {
+    grid-column: 1 / -1;
   }
   .main-card-header {
     flex-direction: column;
@@ -7955,6 +9757,12 @@ button:disabled {
   *, *::before, *::after {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+  .business-kpi-card {
+    animation: none !important;
+  }
+  .business-kpi-card:hover {
+    transform: none;
   }
 }
 

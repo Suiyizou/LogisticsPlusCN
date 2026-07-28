@@ -972,6 +972,314 @@ a {
   font-size: 13px;
 }
 
+/* Unified system-message entry and daily announcement dialog. */
+.tracking-system-messages {
+  position: relative;
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  color: #315b79;
+  border: 1px solid #d2e0eb;
+  border-radius: 10px;
+  background: #f7fbfe;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: 180ms ease;
+}
+
+.tracking-system-messages[hidden] {
+  display: none;
+}
+
+.tracking-system-messages:hover {
+  color: #086da9;
+  border-color: #78b9df;
+  background: #eef8fd;
+  transform: translateY(-1px);
+}
+
+.tracking-system-messages svg {
+  width: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.tracking-system-messages b {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #f06449;
+  font-size: 9px;
+}
+
+.system-announcement-dialog {
+  width: min(780px, calc(100vw - 30px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(31, 111, 164, .22);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 28px 100px rgba(8, 39, 65, .32);
+}
+
+.system-announcement-dialog::backdrop {
+  background: rgba(4, 20, 34, .62);
+  backdrop-filter: blur(7px);
+}
+
+.system-announcement-panel {
+  display: grid;
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.system-announcement-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 24px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 87% 0, rgba(104, 225, 235, .28), transparent 35%),
+    linear-gradient(125deg, #0b2b46, #155f8e);
+}
+
+.system-announcement-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .12);
+}
+
+.system-announcement-icon svg {
+  width: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.system-announcement-panel > header small {
+  display: block;
+  margin-bottom: 4px;
+  color: #9bdef5;
+  font: 800 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .16em;
+}
+
+.system-announcement-panel > header strong {
+  font-size: 21px;
+}
+
+#system-announcement-close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  place-items: center;
+  color: #d8effa;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 12px;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.system-announcement-body {
+  min-height: 280px;
+  padding: 24px 28px;
+  overflow: auto;
+  background: #fff;
+}
+
+.system-announcement-card + .system-announcement-card {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid #dfe9f0;
+}
+
+.system-announcement-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #758c9d;
+  font-size: 11px;
+}
+
+.system-announcement-card-meta span,
+.system-announcement-card-meta em {
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-style: normal;
+  font-weight: 780;
+}
+
+.system-announcement-card-meta span {
+  color: #176795;
+  background: #e8f5fb;
+}
+
+.system-announcement-card-meta em {
+  color: #bd4e34;
+  background: #fff0eb;
+}
+
+.system-announcement-card-meta time {
+  margin-left: auto;
+}
+
+.system-announcement-card h3 {
+  margin: 16px 0 13px;
+  color: #102c43;
+  font-size: clamp(21px, 3vw, 28px);
+  letter-spacing: -.035em;
+}
+
+.system-announcement-card > img,
+.system-announcement-markdown img {
+  display: block;
+  max-width: 100%;
+  max-height: 300px;
+  margin: 14px 0 18px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.system-announcement-markdown {
+  color: #425e72;
+  font-size: 14px;
+  line-height: 1.78;
+}
+
+.system-announcement-markdown p,
+.system-announcement-markdown ul,
+.system-announcement-markdown blockquote {
+  margin: 0 0 13px;
+}
+
+.system-announcement-markdown h3,
+.system-announcement-markdown h4,
+.system-announcement-markdown h5 {
+  margin: 17px 0 9px;
+  color: #173c57;
+  font-size: 16px;
+}
+
+.system-announcement-markdown blockquote {
+  padding: 10px 14px;
+  border-left: 3px solid #44a6ce;
+  background: #f1f8fb;
+}
+
+.system-announcement-markdown a {
+  color: #1675b2;
+}
+
+.system-announcement-markdown code {
+  padding: 2px 5px;
+  color: #7d3f75;
+  border-radius: 5px;
+  background: #f4eef5;
+}
+
+.system-announcement-empty {
+  display: grid;
+  min-height: 240px;
+  place-content: center;
+  justify-items: center;
+  color: #607b8f;
+  text-align: center;
+}
+
+.system-announcement-empty b {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 14px;
+  place-items: center;
+  color: #168363;
+  border-radius: 18px;
+  background: #e8f8f2;
+  font-size: 23px;
+}
+
+.system-announcement-empty strong {
+  color: #173950;
+  font-size: 17px;
+}
+
+.system-announcement-empty p {
+  margin: 8px 0 0;
+}
+
+.system-announcement-panel > footer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 22px;
+  border-top: 1px solid #dfe9f0;
+  background: #f7fafc;
+}
+
+.system-announcement-panel > footer span {
+  margin-right: auto;
+  color: #7890a2;
+  font-size: 11px;
+}
+
+#system-announcement-acknowledge {
+  min-height: 38px;
+  padding: 0 18px;
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #177eb8, #125f94);
+  font-weight: 760;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .tracking-system-messages {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .tracking-system-messages span {
+    display: none;
+  }
+
+  .system-announcement-panel > header,
+  .system-announcement-body {
+    padding-right: 19px;
+    padding-left: 19px;
+  }
+
+  .system-announcement-panel > footer span {
+    display: none;
+  }
+}
+
 .history-loading {
   display: flex;
   min-height: 168px;

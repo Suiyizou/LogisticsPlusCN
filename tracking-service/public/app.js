@@ -137,6 +137,12 @@ const trackingAccountName = document.querySelector("#tracking-account-name");
 const trackingAccountRole = document.querySelector("#tracking-account-role");
 const trackingAccountMenu = document.querySelector("#tracking-account-menu");
 const trackingAccountLogoutButton = document.querySelector("#tracking-account-logout");
+const systemMessagesButton = document.querySelector("#system-messages-button");
+const systemMessagesCount = document.querySelector("#system-messages-count");
+const systemAnnouncementDialog = document.querySelector("#system-announcement-dialog");
+const systemAnnouncementBody = document.querySelector("#system-announcement-body");
+const systemAnnouncementClose = document.querySelector("#system-announcement-close");
+const systemAnnouncementAcknowledge = document.querySelector("#system-announcement-acknowledge");
 const relatedFilesAuthRequired = document.querySelector("#related-files-auth-required");
 const relatedFilesAuthTitle = document.querySelector("#related-files-auth-title");
 const relatedFilesAuthDescription = document.querySelector("#related-files-auth-description");
@@ -509,6 +515,18 @@ const MESSAGES = {
     "account.roleAdmin": "Administrator",
     "account.roleBusiness": "Business operator",
     "account.roleUser": "Internal user",
+    "announcement.open": "Open system messages",
+    "announcement.systemMessages": "System messages",
+    "announcement.title": "System announcements",
+    "announcement.close": "Close announcements",
+    "announcement.todayOnly": "Only announcements effective today are shown.",
+    "announcement.acknowledge": "Got it",
+    "announcement.emptyTitle": "No new announcements today",
+    "announcement.emptyHint": "Published system messages will appear here.",
+    "announcement.customer": "Customers",
+    "announcement.employee": "Employees",
+    "announcement.all": "Everyone",
+    "announcement.unread": "Unread",
     "welcome.greeting": "Welcome",
     "welcome.subtitle": ", welcome to the tracking platform.",
     "files.trigger": "Shipment files",
@@ -1045,6 +1063,18 @@ const MESSAGES = {
     "account.roleAdmin": "系统管理员",
     "account.roleBusiness": "业务员",
     "account.roleUser": "内部用户",
+    "announcement.open": "\u6253\u5f00\u7cfb\u7edf\u6d88\u606f",
+    "announcement.systemMessages": "\u7cfb\u7edf\u6d88\u606f",
+    "announcement.title": "\u7cfb\u7edf\u901a\u77e5\u516c\u544a",
+    "announcement.close": "\u5173\u95ed\u516c\u544a",
+    "announcement.todayOnly": "\u4ec5\u5c55\u793a\u5f53\u65e5\u6709\u6548\u516c\u544a\u3002",
+    "announcement.acknowledge": "\u6211\u77e5\u9053\u4e86",
+    "announcement.emptyTitle": "\u4eca\u65e5\u6682\u65e0\u65b0\u516c\u544a",
+    "announcement.emptyHint": "\u5df2\u53d1\u5e03\u7684\u7cfb\u7edf\u6d88\u606f\u4f1a\u51fa\u73b0\u5728\u8fd9\u91cc\u3002",
+    "announcement.customer": "\u5ba2\u6237\u53ef\u89c1",
+    "announcement.employee": "\u5458\u5de5\u53ef\u89c1",
+    "announcement.all": "\u5168\u5458\u53ef\u89c1",
+    "announcement.unread": "\u672a\u8bfb",
     "welcome.greeting": "欢迎",
     "welcome.subtitle": "，欢迎使用追踪平台。",
     "files.trigger": "票单文件",
@@ -1559,6 +1589,12 @@ let relatedFilesUploading = false;
 let relatedFilesCloseTimer = null;
 let relatedFilesCategoryOpen = false;
 let trackingAccountMenuOpen = false;
+let systemAnnouncements = [];
+let systemAnnouncementsLoading = false;
+let systemAnnouncementLoadPromise = null;
+let systemAnnouncementLoadingFingerprint = "";
+let systemAnnouncementAutoOpenRequested = false;
+let systemAnnouncementSessionFingerprint = "";
 let customerAssignedHistory = [];
 let internalTrackedHistory = [];
 let relatedFilesExpiredSessionKind = "";
@@ -1914,6 +1950,296 @@ function fileAuthHeaders(session = readFileSession()) {
   if (session.kind === "CUSTOMER") return { "X-Customer-Token": session.token };
   if (session.kind === "INTERNAL") return { "X-Auth-Token": session.token };
   return {};
+}
+
+function announcementListPath(session) {
+  return session.kind === "CUSTOMER"
+    ? "/api/customer/announcements/today"
+    : "/api/announcements/today";
+}
+
+function announcementReadPath(session, id) {
+  const encodedId = encodeURIComponent(id);
+  return session.kind === "CUSTOMER"
+    ? `/api/customer/announcements/${encodedId}/read`
+    : `/api/announcements/${encodedId}/read`;
+}
+
+function announcementIdentity(session = readFileSession()) {
+  const principal = session?.principal ?? session?.user ?? session?.storedSession ?? {};
+  return [
+    session?.kind || "ANONYMOUS",
+    principal.id || principal.userId || principal.customerId || "",
+    principal.username || principal.customerCode || principal.loginName || ""
+  ].join(":");
+}
+
+function announcementLocalReadKey(item, session = readFileSession()) {
+  const date = String(item?.displayDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  return `shipment-track:announcement-read:${announcementIdentity(session)}:${date}:${item?.id ?? "unknown"}`;
+}
+
+function announcementWasReadLocally(item, session) {
+  try {
+    return localStorage.getItem(announcementLocalReadKey(item, session)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberAnnouncementRead(item, session) {
+  try {
+    localStorage.setItem(announcementLocalReadKey(item, session), "1");
+  } catch {
+    // Server-side receipts remain authoritative when storage is unavailable.
+  }
+}
+
+function announcementSafeUrl(value, { image = false } = {}) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const resolved = new URL(raw, window.location.origin);
+    if (["https:", "http:"].includes(resolved.protocol)) return resolved.href;
+    if (
+      image &&
+      resolved.protocol === "data:" &&
+      /^data:image\/(?:png|jpe?g|gif|webp);/i.test(raw)
+    ) {
+      return raw;
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function announcementEscapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function announcementInlineMarkdown(value) {
+  let output = announcementEscapeHtml(value);
+  output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => {
+    const safe = announcementSafeUrl(url, { image: true });
+    return safe
+      ? `<img src="${announcementEscapeHtml(safe)}" alt="${alt}" loading="lazy">`
+      : "";
+  });
+  output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
+    const safe = announcementSafeUrl(url);
+    return safe
+      ? `<a href="${announcementEscapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : label;
+  });
+  return output
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function announcementMarkdown(markdown) {
+  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  const blocks = [];
+  let list = [];
+  const flushList = () => {
+    if (!list.length) return;
+    blocks.push(`<ul>${list.map((item) => `<li>${announcementInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    list = [];
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (/^[-*]\s+/.test(line)) {
+      list.push(line.replace(/^[-*]\s+/, ""));
+      continue;
+    }
+    flushList();
+    if (!line) continue;
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const level = Math.min(5, heading[1].length + 2);
+      blocks.push(`<h${level}>${announcementInlineMarkdown(heading[2])}</h${level}>`);
+    } else if (/^>\s?/.test(line)) {
+      blocks.push(`<blockquote>${announcementInlineMarkdown(line.replace(/^>\s?/, ""))}</blockquote>`);
+    } else {
+      blocks.push(`<p>${announcementInlineMarkdown(line)}</p>`);
+    }
+  }
+  flushList();
+  return blocks.join("");
+}
+
+function announcementAudienceLabel(audience) {
+  if (audience === "CUSTOMER") return t("announcement.customer");
+  if (audience === "EMPLOYEE") return t("announcement.employee");
+  return t("announcement.all");
+}
+
+function renderSystemAnnouncementButton() {
+  const session = readFileSession();
+  const authenticated = ["INTERNAL", "CUSTOMER"].includes(session.kind);
+  systemMessagesButton.hidden = !authenticated;
+  const unread = systemAnnouncements.filter((item) => !item?.read).length;
+  systemMessagesCount.textContent = unread > 99 ? "99+" : String(unread);
+  systemMessagesCount.hidden = unread === 0;
+}
+
+function renderSystemAnnouncements() {
+  systemAnnouncementBody.replaceChildren();
+  if (!systemAnnouncements.length) {
+    const empty = document.createElement("section");
+    empty.className = "system-announcement-empty";
+    const mark = document.createElement("b");
+    mark.textContent = "✓";
+    const title = document.createElement("strong");
+    title.textContent = t("announcement.emptyTitle");
+    const hint = document.createElement("p");
+    hint.textContent = t("announcement.emptyHint");
+    empty.append(mark, title, hint);
+    systemAnnouncementBody.append(empty);
+    return;
+  }
+
+  for (const item of systemAnnouncements) {
+    const card = document.createElement("article");
+    card.className = "system-announcement-card";
+    const meta = document.createElement("div");
+    meta.className = "system-announcement-card-meta";
+    const audience = document.createElement("span");
+    audience.textContent = announcementAudienceLabel(item.audience);
+    const date = document.createElement("time");
+    date.textContent = formatLocalDateTime(item.displayDate || item.publishedAt || item.createdAt);
+    meta.append(audience, date);
+    if (!item.read) {
+      const unread = document.createElement("em");
+      unread.textContent = t("announcement.unread");
+      meta.append(unread);
+    }
+    const title = document.createElement("h3");
+    title.textContent = item.title || t("announcement.title");
+    card.append(meta, title);
+
+    const imageUrl = announcementSafeUrl(item.imageUrl || item.illustrationRef, { image: true });
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = item.title || t("announcement.title");
+      image.loading = "lazy";
+      card.append(image);
+    }
+
+    const content = document.createElement("div");
+    content.className = "system-announcement-markdown";
+    content.innerHTML = announcementMarkdown(item.contentMarkdown) || `<p>${t("announcement.emptyHint")}</p>`;
+    card.append(content);
+    systemAnnouncementBody.append(card);
+  }
+}
+
+function openSystemAnnouncements() {
+  renderSystemAnnouncements();
+  if (!systemAnnouncementDialog.open) systemAnnouncementDialog.showModal();
+}
+
+function acknowledgeSystemAnnouncements() {
+  const session = readFileSession();
+  const unreadItems = systemAnnouncements.filter((item) => !item?.read);
+  if (unreadItems.length) {
+    unreadItems.forEach((item) => rememberAnnouncementRead(item, session));
+    systemAnnouncements = systemAnnouncements.map((item) => ({ ...item, read: true }));
+    renderSystemAnnouncementButton();
+    void Promise.allSettled(
+      unreadItems.map((item) =>
+        fetch(announcementReadPath(session, item.id), {
+          method: "POST",
+          headers: fileAuthHeaders(session)
+        })
+      )
+    );
+  }
+}
+
+function closeSystemAnnouncements({ acknowledge = true } = {}) {
+  if (acknowledge) acknowledgeSystemAnnouncements();
+  if (systemAnnouncementDialog.open) systemAnnouncementDialog.close();
+}
+
+async function loadSystemAnnouncements({ autoOpen = false, force = false } = {}) {
+  const session = readFileSession();
+  if (!["INTERNAL", "CUSTOMER"].includes(session.kind)) {
+    systemAnnouncements = [];
+    systemAnnouncementAutoOpenRequested = false;
+    systemAnnouncementSessionFingerprint = "";
+    renderSystemAnnouncementButton();
+    return;
+  }
+  const fingerprint = fileSessionFingerprint(session);
+  if (systemAnnouncementLoadPromise) {
+    if (systemAnnouncementLoadingFingerprint === fingerprint) {
+      systemAnnouncementAutoOpenRequested ||= autoOpen;
+      return systemAnnouncementLoadPromise;
+    }
+    await systemAnnouncementLoadPromise;
+    return loadSystemAnnouncements({ autoOpen, force: true });
+  }
+  if (!force && fingerprint === systemAnnouncementSessionFingerprint) {
+    if (autoOpen && systemAnnouncements.some((item) => !item.read)) {
+      openSystemAnnouncements();
+    }
+    return;
+  }
+
+  systemAnnouncementAutoOpenRequested = autoOpen;
+  systemAnnouncementLoadingFingerprint = fingerprint;
+  systemAnnouncementsLoading = true;
+  const requestPromise = (async () => {
+    try {
+      const response = await fetch(announcementListPath(session), {
+        headers: fileAuthHeaders(session)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (fileSessionFingerprint(readFileSession()) !== fingerprint) return;
+      const items = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.items)
+          ? payload.items
+          : Array.isArray(payload?.content)
+            ? payload.content
+            : [];
+      systemAnnouncements = items.map((item) => ({
+        ...item,
+        read: Boolean(item?.read || announcementWasReadLocally(item, session))
+      }));
+      systemAnnouncementSessionFingerprint = fingerprint;
+      renderSystemAnnouncementButton();
+      if (
+        systemAnnouncementAutoOpenRequested &&
+        systemAnnouncements.some((item) => !item.read)
+      ) {
+        openSystemAnnouncements();
+      }
+    } catch {
+      if (fileSessionFingerprint(readFileSession()) === fingerprint) {
+        systemAnnouncements = [];
+        systemAnnouncementSessionFingerprint = "";
+        renderSystemAnnouncementButton();
+      }
+    } finally {
+      if (systemAnnouncementLoadingFingerprint === fingerprint) {
+        systemAnnouncementsLoading = false;
+        systemAnnouncementLoadPromise = null;
+        systemAnnouncementLoadingFingerprint = "";
+        systemAnnouncementAutoOpenRequested = false;
+      }
+    }
+  })();
+  systemAnnouncementLoadPromise = requestPromise;
+  return requestPromise;
 }
 
 function shipmentFilesPath(session, shipmentId) {
@@ -8850,6 +9176,24 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !documentDrawerLayer.hidden) closeDocumentDrawer();
 });
 
+systemMessagesButton?.addEventListener("click", async () => {
+  await loadSystemAnnouncements({ autoOpen: false, force: true });
+  openSystemAnnouncements();
+});
+
+systemAnnouncementClose?.addEventListener("click", () => {
+  void closeSystemAnnouncements();
+});
+
+systemAnnouncementAcknowledge?.addEventListener("click", () => {
+  void closeSystemAnnouncements();
+});
+
+systemAnnouncementDialog?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  void closeSystemAnnouncements();
+});
+
 function trackingQueryFromLocation() {
   const search = new URLSearchParams(window.location.search);
   const number = search.get("number");
@@ -8897,6 +9241,7 @@ window.addEventListener("pageshow", () => {
   synchronizeRelatedFilesSession(readFileSession(), { expiredKind: "" });
   renderRelatedFilesDrawer();
   renderTrackingAccount();
+  void loadSystemAnnouncements({ autoOpen: false });
 });
 
 clearLegacyBrowserSnapshots();
@@ -8918,7 +9263,11 @@ async function initializeTrackingPage() {
     await showView("tracking", { updateLocation: false });
     const waitToken = beginSystemWait("history", "wait.history");
     try {
-      await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
+      await Promise.all([
+        loadCustomerAssignedHistory(),
+        loadInternalTrackedHistory(),
+        loadSystemAnnouncements({ autoOpen: true })
+      ]);
       const restored = showStoredTrackingQuery(initialQuery);
       if (!restored) form.requestSubmit();
     } finally {
@@ -8931,7 +9280,11 @@ async function initializeTrackingPage() {
     : "overview", {
     updateLocation: false
   });
-  await Promise.all([loadCustomerAssignedHistory(), loadInternalTrackedHistory()]);
+  await Promise.all([
+    loadCustomerAssignedHistory(),
+    loadInternalTrackedHistory(),
+    loadSystemAnnouncements({ autoOpen: true })
+  ]);
 }
 
 void initializeTrackingPage();
@@ -8950,6 +9303,7 @@ window.addEventListener("storage", (event) => {
     event.key === CUSTOMER_AUTH_SESSION_KEY
   ) {
     renderTrackingAccount(readFileSession());
+    void loadSystemAnnouncements({ autoOpen: true });
   }
 });
 void refreshChannelStatus();

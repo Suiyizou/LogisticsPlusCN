@@ -601,7 +601,8 @@ public class ShipmentTrackingService {
     List<CustomerAssignedShipment> records = jdbcTemplate.query(
         """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
-               s.last_tracked_at, s.job_number, s.client_po_number, s.client_name_code,
+               s.last_tracked_at, s.created_at, s.updated_at,
+               s.job_number, s.client_po_number, s.client_name_code,
                s.original_bill_of_lading, s.business_note,
                assigned.assigned_at, assigned.publication_status,
                r.reference_type, r.reference_no_raw,
@@ -657,6 +658,8 @@ public class ShipmentTrackingService {
                 rs.getString("original_bill_of_lading")
             ),
             rs.getString("business_note"),
+            instant(rs, "created_at"),
+            instant(rs, "updated_at"),
             instant(rs, "assigned_at"),
             rs.getString("publication_status"),
             rs.getBoolean("agent_followed"),
@@ -677,6 +680,8 @@ public class ShipmentTrackingService {
       item.put("referenceNo", record.referenceNo());
       item.put("trackingStatus", record.trackingStatus());
       item.put("note", record.note());
+      item.put("createdAt", record.createdAt() == null ? null : record.createdAt().toString());
+      item.put("updatedAt", record.updatedAt() == null ? null : record.updatedAt().toString());
       item.put("assignedAt", record.assignedAt() == null ? null : record.assignedAt().toString());
       item.put("publicationStatus", record.publicationStatus());
       item.put("forwarderJobNumber", record.businessFields().jobNumber());
@@ -2829,6 +2834,8 @@ public class ShipmentTrackingService {
       Instant lastTrackedAt,
       ImportedBusinessFields businessFields,
       String note,
+      Instant createdAt,
+      Instant updatedAt,
       Instant assignedAt,
       String publicationStatus,
       boolean followed,

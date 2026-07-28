@@ -32,6 +32,30 @@ class CustomerAccessFlowTest {
   private AuthenticatedUser employee;
   private MockHttpServletRequest httpRequest;
 
+  @Test
+  void batchCreatesOverseaAgentEmployeesAtomically() {
+    Map<String, Object> result = customerService.batchCreateOverseaAgentEmployees(
+        new OverseaAgentBatchCreateRequest(List.of(
+            new CreateOverseaAgentEmployeeRequest(
+                "agent.batch.one", "Batch Agent One", "Strong!Pass2026#One"
+            ),
+            new CreateOverseaAgentEmployeeRequest(
+                "agent.batch.two", "Batch Agent Two", "Strong!Pass2026#Two"
+            )
+        )),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(result)
+        .containsEntry("total", 2)
+        .containsEntry("atomic", true);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_users WHERE username LIKE 'agent.batch.%'",
+        Integer.class
+    )).isEqualTo(2);
+  }
+
   @BeforeEach
   void setUp() {
     DriverManagerDataSource dataSource = new DriverManagerDataSource(
@@ -1587,12 +1611,16 @@ class CustomerAccessFlowTest {
   private void createSchema() {
     jdbcTemplate.execute("""
         CREATE TABLE cp_users (
-          id BIGINT PRIMARY KEY,
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
           username VARCHAR(64) NOT NULL,
           display_name VARCHAR(80) NOT NULL,
           role VARCHAR(24) NOT NULL,
           party_role VARCHAR(20) NOT NULL,
-          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          password_salt VARCHAR(128),
+          password_hash VARCHAR(256),
+          password_iterations INT,
+          created_by BIGINT
         )
         """);
     jdbcTemplate.execute("""

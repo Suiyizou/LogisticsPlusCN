@@ -234,6 +234,48 @@ test("every result element registered by the renderer exists in the page", () =>
   assert.deepEqual(missingIds, [], `renderer references missing DOM ids: ${missingIds.join(", ")}`);
 });
 
+test("system announcements are audience-scoped, read-once, and safely rendered", () => {
+  for (const id of [
+    "system-messages-button",
+    "system-messages-count",
+    "system-announcement-dialog",
+    "system-announcement-body",
+    "system-announcement-close",
+    "system-announcement-acknowledge"
+  ]) {
+    assert.match(indexSource, new RegExp(`id="${id}"`));
+  }
+  assert.match(
+    appSource,
+    /function announcementListPath[\s\S]*?\/api\/customer\/announcements\/today[\s\S]*?\/api\/announcements\/today/
+  );
+  assert.match(
+    appSource,
+    /function announcementReadPath[\s\S]*?\/api\/customer\/announcements\/\$\{encodedId\}\/read[\s\S]*?\/api\/announcements\/\$\{encodedId\}\/read/
+  );
+  assert.match(
+    appSource,
+    /function announcementLocalReadKey[\s\S]*?announcement-read:[\s\S]*?announcementIdentity/
+  );
+  assert.match(
+    appSource,
+    /loadSystemAnnouncements\(\{ autoOpen: true \}\)/
+  );
+  assert.match(
+    appSource,
+    /systemAnnouncementAutoOpenRequested[\s\S]*?systemAnnouncements\.some\(\(item\) => !item\.read\)/
+  );
+  assert.match(
+    appSource,
+    /function announcementInlineMarkdown[\s\S]*?announcementEscapeHtml\(value\)[\s\S]*?announcementSafeUrl/
+  );
+  assert.match(
+    appSource,
+    /function announcementSafeUrl[\s\S]*?\["https:", "http:"\][\s\S]*?\^data:image/
+  );
+  assert.match(stylesSource, /\.tracking-system-messages[\s\S]*?\.system-announcement-dialog/);
+});
+
 test("business overview de-duplicates shipments and filters them by assigned customer", () => {
   assert.match(indexSource, /id="history-customer-filter"/);
   assert.match(appSource, /function uniqueHistoryEntries[\s\S]*?historyShipmentKey/);

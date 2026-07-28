@@ -10,20 +10,32 @@
     <AdminDashboard
       v-else-if="activePage === 'admin' && currentUser?.role === 'ADMIN'"
       :current-user="currentUser"
+      :announcement-count="unreadAnnouncementCount"
       @logout="handleLogout"
       @user-updated="handleUserUpdated"
+      @open-announcements="openAnnouncements"
     />
     <BusinessCustomerPage
       v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
       :current-user="currentUser"
+      :announcement-count="unreadAnnouncementCount"
       @logout="handleLogout"
       @user-updated="handleUserUpdated"
+      @open-announcements="openAnnouncements"
     />
     <WorkbenchPortal
       v-else
       :current-user="currentUser"
+      :announcement-count="unreadAnnouncementCount"
       @logout="handleLogout"
       @user-updated="handleUserUpdated"
+      @open-announcements="openAnnouncements"
+    />
+    <SystemAnnouncementDialog
+      v-if="authChecked && currentUser"
+      v-model="announcementDialogOpen"
+      :announcements="announcements"
+      @dismiss="dismissAnnouncements"
     />
     <SystemWaitOverlay
       :visible="loginRedirecting"
@@ -37,8 +49,10 @@ import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch }
 import { useRoute, useRouter } from "vue-router";
 import AsyncPageError from "./components/AsyncPageError.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
+import SystemAnnouncementDialog from "./components/SystemAnnouncementDialog.vue";
 import SystemWaitOverlay from "./components/SystemWaitOverlay.vue";
 import { fetchAdminMe, logoutAdmin } from "./services/adminApi";
+import { fetchTodayAnnouncements, markAnnouncementRead } from "./services/announcementApi";
 import { clearSession, isSessionExpired, storedToken, storedUser } from "./services/authSession";
 import { elementPlusLocale, t } from "./i18n";
 
@@ -48,6 +62,13 @@ const authChecked = ref(false);
 const currentUser = ref(storedUser());
 const loginRedirecting = ref(false);
 const loginRedirectText = ref("");
+const announcements = ref([]);
+const announcementDialogOpen = ref(false);
+const announcementLoading = ref(false);
+const unreadAnnouncementCount = computed(() =>
+  announcements.value.filter((item) => !item?.read).length
+);
+let loadedAnnouncementIdentity = "";
 const operationsPageNames = new Set(["workbenches", "customers", "admin"]);
 const operationsPageByPath = {
   "/workbenches": "workbenches",
@@ -110,6 +131,18 @@ watch([activePage, currentUser, authChecked], () => {
   }
 });
 
+watch(
+  [authChecked, () => currentUser.value?.id, () => currentUser.value?.username],
+  ([checked, id, username]) => {
+    if (!checked || (!id && !username)) return;
+    const identity = `${id || ""}:${username || ""}`;
+    if (identity === loadedAnnouncementIdentity) return;
+    loadedAnnouncementIdentity = identity;
+    void loadAnnouncements({ autoOpen: true });
+  },
+  { immediate: true }
+);
+
 async function initializeAuth() {
   const cachedUser = storedUser();
   if (!storedToken() || isSessionExpired()) {
@@ -151,16 +184,83 @@ async function handleLogout() {
   } catch {
     clearSession();
   }
+  announcements.value = [];
+  announcementDialogOpen.value = false;
+  loadedAnnouncementIdentity = "";
   currentUser.value = null;
   await router.push("/workbenches");
 }
 
 function handleAuthExpired() {
   clearSession();
+  announcements.value = [];
+  announcementDialogOpen.value = false;
+  loadedAnnouncementIdentity = "";
   currentUser.value = null;
 }
 
 function handleUserUpdated(user) {
   if (user) currentUser.value = user;
+}
+
+function localReadKey(item) {
+  const identity = currentUser.value?.id || currentUser.value?.username || "anonymous";
+  const date = String(item?.displayDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  return `cargo-planner-announcement-read:${identity}:${date}:${item?.id ?? "unknown"}`;
+}
+
+function wasReadLocally(item) {
+  try {
+    return localStorage.getItem(localReadKey(item)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberReadLocally(item) {
+  try {
+    localStorage.setItem(localReadKey(item), "1");
+  } catch {
+    // The server-side read record remains authoritative when storage is unavailable.
+  }
+}
+
+async function loadAnnouncements({ autoOpen = false } = {}) {
+  if (!currentUser.value || announcementLoading.value) return;
+  announcementLoading.value = true;
+  try {
+    const items = await fetchTodayAnnouncements();
+    announcements.value = items.map((item) => ({
+      ...item,
+      read: Boolean(item?.read || wasReadLocally(item))
+    }));
+    if (autoOpen && announcements.value.some((item) => !item.read)) {
+      announcementDialogOpen.value = true;
+    }
+  } catch {
+    announcements.value = [];
+  } finally {
+    announcementLoading.value = false;
+  }
+}
+
+async function openAnnouncements() {
+  await loadAnnouncements({ autoOpen: false });
+  announcementDialogOpen.value = true;
+}
+
+function dismissAnnouncements(items = announcements.value) {
+  const unreadIds = new Set(
+    items.filter((item) => !item?.read).map((item) => String(item?.id ?? ""))
+  );
+  if (!unreadIds.size) return;
+  announcements.value = announcements.value.map((item) => {
+    if (!unreadIds.has(String(item?.id ?? ""))) return item;
+    rememberReadLocally(item);
+    return { ...item, read: true };
+  });
+  void Promise.allSettled(
+    [...unreadIds].filter(Boolean).map((id) => markAnnouncementRead(id))
+  );
 }
 </script>

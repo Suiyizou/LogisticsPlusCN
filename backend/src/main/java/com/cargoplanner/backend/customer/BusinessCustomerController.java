@@ -56,6 +56,17 @@ public class BusinessCustomerController {
     return service.createOverseaAgentEmployee(request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/oversea-agents/batch")
+  public Map<String, Object> batchCreateOverseaAgents(
+      @Valid @RequestBody OverseaAgentBatchCreateRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.batchCreateOverseaAgentEmployees(
+        request, actor, ClientInfo.ip(httpRequest)
+    );
+  }
+
   @PatchMapping("/oversea-agents/{userId}")
   public Map<String, Object> updateOverseaAgent(
       @PathVariable long userId,

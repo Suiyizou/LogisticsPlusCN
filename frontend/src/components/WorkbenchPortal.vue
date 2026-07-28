@@ -33,6 +33,18 @@
         >
           {{ t("portal.customerWorkspace") }}
         </RouterLink>
+        <button
+          class="portal-message-button"
+          type="button"
+          :aria-label="systemMessageLabel"
+          @click="emit('open-announcements')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9Zm4 12h4" />
+          </svg>
+          <span>{{ systemMessageLabel }}</span>
+          <b v-if="announcementCount">{{ announcementCount > 99 ? "99+" : announcementCount }}</b>
+        </button>
         <el-dropdown trigger="click" placement="bottom-end" popper-class="portal-account-popper">
           <button class="portal-user portal-account-trigger" type="button" :aria-label="t('portal.personalInfo')">
             <span class="portal-avatar">{{ userInitial }}</span>
@@ -328,9 +340,10 @@ import { changeOwnPassword, updateOwnProfile } from "../services/adminApi";
 import { saveStoredUser } from "../services/authSession";
 
 const props = defineProps({
-  currentUser: { type: Object, default: null }
+  currentUser: { type: Object, default: null },
+  announcementCount: { type: Number, default: 0 }
 });
-const emit = defineEmits(["logout", "user-updated"]);
+const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 const { t } = useI18n();
 const passwordDialogOpen = ref(false);
 const profileDialogOpen = ref(false);
@@ -353,6 +366,7 @@ const roleLabel = computed(() => t({
   BUSINESS: "portal.roleBusiness",
   OVERSEA_AGENT: "portal.roleOverseaAgent"
 }[props.currentUser?.role] || "portal.roleEmployee"));
+const systemMessageLabel = computed(() => t("customers.systemMessages"));
 const currentYear = new Date().getFullYear();
 const todayText = computed(() => new Intl.DateTimeFormat(currentLocale.value === "en-US" ? "en-US" : "zh-CN", {
   month: "short",
@@ -588,6 +602,7 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link,
+.portal-message-button,
 .portal-account-trigger {
   display: inline-flex;
   align-items: center;
@@ -604,6 +619,48 @@ async function submitPasswordChange() {
 
 .portal-admin-link {
   padding: 0 11px;
+}
+
+.portal-message-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #b8ccde;
+  border: 1px solid rgba(151, 190, 221, 0.2);
+  border-radius: 9px;
+  background: rgba(15, 39, 59, 0.58);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.portal-message-button svg {
+  width: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.portal-message-button b {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  color: #fff;
+  border: 2px solid #0b2134;
+  border-radius: 999px;
+  background: #ff6f55;
+  font-size: 9px;
 }
 
 .portal-user {
@@ -665,6 +722,7 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link:hover,
+.portal-message-button:hover,
 .portal-account-trigger:hover {
   border-color: rgba(106, 215, 244, 0.52);
   color: #e8f8ff;
@@ -1186,6 +1244,7 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link,
+.portal-message-button,
 .portal-account-trigger {
   color: #45647f;
   border-color: rgba(59, 107, 151, 0.19);
@@ -1193,6 +1252,7 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link:hover,
+.portal-message-button:hover,
 .portal-account-trigger:hover {
   color: #0c6eaf;
   border-color: rgba(25, 126, 190, 0.42);
@@ -1345,8 +1405,15 @@ async function submitPasswordChange() {
 @media (max-width: 1050px) {
   .portal-live-status,
   .portal-admin-link,
+  .portal-message-button span,
   .portal-user-copy {
     display: none;
+  }
+
+  .portal-message-button {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
   }
 
   .portal-hero {

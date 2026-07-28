@@ -192,6 +192,32 @@ public class BusinessCustomerService {
   }
 
   @Transactional
+  public Map<String, Object> batchCreateOverseaAgentEmployees(
+      OverseaAgentBatchCreateRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    List<CreateOverseaAgentEmployeeRequest> requests =
+        request == null || request.items() == null ? List.of() : request.items();
+    if (requests.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one overseas agent is required");
+    }
+    if (requests.size() > 200) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 200 overseas agents can be created at once");
+    }
+    List<Map<String, Object>> items = new ArrayList<>(requests.size());
+    for (CreateOverseaAgentEmployeeRequest item : requests) {
+      items.add(createOverseaAgentEmployee(item, actor, ipAddress));
+    }
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("items", items);
+    response.put("total", items.size());
+    response.put("atomic", true);
+    return response;
+  }
+
+  @Transactional
   public Map<String, Object> updateOverseaAgent(
       long userId,
       UpdateOverseaAgentRequest request,
@@ -1292,7 +1318,8 @@ public class BusinessCustomerService {
                s.original_bill_of_lading, s.last_refresh_result,
                s.last_refresh_error_code, s.last_refresh_error,
                s.last_refresh_attempts, s.last_refresh_proxy_attempts,
-               s.last_refresh_at, s.last_tracked_at, s.updated_at
+               s.last_refresh_at, s.last_tracked_at,
+               s.created_at AS shipment_created_at, s.updated_at
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -1324,6 +1351,7 @@ public class BusinessCustomerService {
     value.put("trackingStatus", trackingStatus);
     value.put("note", rs.getString("business_note"));
     value.put("lastTrackedAt", lastTrackedAt != null ? lastTrackedAt : fetchedAt);
+    value.put("createdAt", instantString(rs, "shipment_created_at"));
     value.put("updatedAt", updatedAt != null ? updatedAt : fetchedAt);
     value.put("customerCount", 0L);
     value.put("boundRoles", List.of());
@@ -3009,7 +3037,7 @@ public class BusinessCustomerService {
                s.business_note, s.last_refresh_result, s.last_refresh_error_code,
                s.last_refresh_error, s.last_refresh_attempts,
                s.last_refresh_proxy_attempts, s.last_refresh_at,
-               s.last_tracked_at, s.fresh_until, s.updated_at,
+                s.last_tracked_at, s.fresh_until, s.created_at, s.updated_at,
                a.relationship_role, a.publication_status, a.published_at, a.published_by,
                a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
                r.reference_type, r.reference_no_raw
@@ -3030,7 +3058,7 @@ public class BusinessCustomerService {
                s.business_note, s.last_refresh_result, s.last_refresh_error_code,
                s.last_refresh_error, s.last_refresh_attempts,
                s.last_refresh_proxy_attempts, s.last_refresh_at,
-               s.last_tracked_at, s.updated_at,
+                s.last_tracked_at, s.created_at, s.updated_at,
                r.reference_type, r.reference_no_raw,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id) AS customer_count,
                (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'SHIPPER') AS shipper_count,
@@ -3112,6 +3140,7 @@ public class BusinessCustomerService {
     value.put("note", rs.getString("business_note"));
     value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
     value.put("freshUntil", instantString(rs, "fresh_until"));
+    value.put("createdAt", instantString(rs, "created_at"));
     value.put("updatedAt", instantString(rs, "updated_at"));
     value.put("relationshipRole", rs.getString("relationship_role"));
     value.put("publicationStatus", rs.getString("publication_status"));
@@ -3132,6 +3161,7 @@ public class BusinessCustomerService {
     value.put("trackingStatus", rs.getString("tracking_status"));
     value.put("note", rs.getString("business_note"));
     value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
+    value.put("createdAt", instantString(rs, "created_at"));
     value.put("updatedAt", instantString(rs, "updated_at"));
     putRefreshOutcome(value, rs);
     value.put("customerCount", rs.getLong("customer_count"));
