@@ -1,0 +1,399 @@
+/*
+ * Shipment Track implementation of the Drewes Logistics unified UI layer.
+ * Source of truth: /design-system/drewes-logistics-operations/MASTER.md
+ */
+:root {
+  color-scheme: light;
+  --color-primary: #0f172a;
+  --color-on-primary: #ffffff;
+  --color-secondary: #334155;
+  --color-accent: #0369a1;
+  --color-accent-hover: #075985;
+  --color-accent-soft: #eaf5fb;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f5f8fb;
+  --color-foreground: #0f172a;
+  --color-muted: #64748b;
+  --color-quiet: #8492a6;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-success: #047857;
+  --color-success-soft: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-destructive: #b91c1c;
+  --color-destructive-soft: #fff1f2;
+  --color-ring: #0369a1;
+
+  --font-ui: "Fira Sans", "Segoe UI Variable", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-data: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 8px 24px rgba(15, 23, 42, 0.065);
+  --shadow-card-hover: 0 12px 30px rgba(15, 23, 42, 0.09);
+  --shadow-overlay: 0 24px 64px rgba(15, 23, 42, 0.2);
+  --motion-fast: 160ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Bridge the tracking workbench's existing semantic variables. */
+  --canvas: var(--color-background);
+  --canvas-deep: #eef3f7;
+  --surface: var(--color-surface);
+  --surface-solid: var(--color-surface);
+  --surface-soft: var(--color-surface-subtle);
+  --ink: var(--color-foreground);
+  --muted: var(--color-muted);
+  --quiet: var(--color-quiet);
+  --line: var(--color-border);
+  --line-strong: var(--color-border-strong);
+  --forest: var(--color-accent);
+  --forest-deep: var(--color-accent-hover);
+  --teal: #0f766e;
+  --teal-soft: #ecfdf5;
+  --coral: var(--color-accent);
+  --coral-soft: var(--color-accent-soft);
+  --accent: var(--color-accent);
+  --accent-deep: var(--color-accent-hover);
+  --accent-soft: var(--color-accent-soft);
+  --accent-line: #b8d8e8;
+  --accent-shadow: rgba(3, 105, 161, 0.2);
+  --success: var(--color-success);
+  --success-soft: var(--color-success-soft);
+  --success-line: #a7d7c5;
+  --red: var(--color-destructive);
+  --shadow: var(--shadow-card);
+  --shadow-soft: var(--shadow-sm);
+
+  --el-color-primary: var(--color-accent);
+  --el-color-primary-dark-2: #064e73;
+  --el-color-primary-light-3: #4f91b7;
+  --el-color-primary-light-7: #b8d8e8;
+  --el-color-primary-light-9: var(--color-accent-soft);
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-destructive);
+  --el-border-radius-base: var(--radius-control);
+  --el-border-color: var(--color-border-strong);
+  --el-border-color-light: var(--color-border);
+  --el-fill-color-light: var(--color-surface-subtle);
+  --el-text-color-primary: var(--color-foreground);
+  --el-text-color-regular: var(--color-secondary);
+  --el-text-color-secondary: var(--color-muted);
+}
+
+html {
+  min-width: 320px;
+  background: var(--color-background);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:where(a, button, [role="button"], input, select, textarea, summary) {
+  touch-action: manipulation;
+}
+
+:where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+  outline: 3px solid rgba(3, 105, 161, 0.25);
+  outline-offset: 2px;
+}
+
+:where(button, [role="button"], a[href]):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+.app-shell {
+  background: var(--color-background);
+}
+
+.sidebar {
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.035);
+}
+
+.brand-copy strong,
+.tracking-account-copy strong {
+  color: var(--color-foreground);
+}
+
+.brand-copy small,
+.tracking-account-copy small,
+.nav-title,
+.sidebar-foot span {
+  color: var(--color-muted);
+}
+
+.nav-item {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--color-secondary);
+  transition:
+    color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+
+.nav-item:hover {
+  border-color: #b8d8e8;
+  background: #f1f8fc;
+  color: var(--color-accent-hover);
+}
+
+.nav-item.is-active {
+  border-color: #b8d8e8;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.nav-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: var(--color-muted);
+  place-items: center;
+}
+
+.nav-icon svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.nav-item:hover .nav-icon,
+.nav-item.is-active .nav-icon {
+  background: #dceef7;
+  color: var(--color-accent-hover);
+}
+
+.topbar {
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(12px);
+}
+
+.workspace {
+  background: var(--color-background);
+}
+
+:where(
+  .panel,
+  .history-card,
+  .shipment-history-card,
+  .shipment-history-item,
+  .metric-card,
+  .query-card,
+  .result-card,
+  .profile-panel,
+  .agent-shipment-card
+) {
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+:where(
+  .history-card,
+  .shipment-history-card,
+  .shipment-history-item,
+  .metric-card,
+  .result-card,
+  .agent-shipment-card
+):hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.shipment-history-item,
+.metric-card {
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.shipment-history-item:hover,
+.metric-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.panel-header {
+  border-bottom-color: var(--color-border);
+}
+
+.panel-header strong,
+.history-heading strong {
+  color: var(--color-foreground);
+}
+
+.panel-header small,
+.history-heading small,
+.history-empty p {
+  color: var(--color-muted);
+}
+
+:where(button, .button, input, select, textarea) {
+  border-radius: var(--radius-control);
+}
+
+:where(input, select, textarea) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+}
+
+:where(input, select, textarea):hover {
+  border-color: #8fbfd8;
+}
+
+:where(input, select, textarea):focus {
+  border-color: var(--color-ring);
+  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.14);
+}
+
+:where(.primary-button, .query-submit, button.primary, .agent-update-task-close-action) {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-primary);
+  box-shadow: 0 6px 14px rgba(3, 105, 161, 0.18);
+}
+
+:where(.primary-button, .query-submit, button.primary, .agent-update-task-close-action):hover {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+  box-shadow: 0 8px 18px rgba(3, 105, 161, 0.22);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.table-scroll {
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  color: var(--color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+thead th {
+  border-bottom-color: var(--color-border);
+  background: #f3f6f9;
+  color: var(--color-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+tbody td {
+  border-bottom-color: var(--color-border);
+}
+
+tbody tr:hover {
+  background: #f2f8fc;
+}
+
+:where(dialog, .modal, .drawer, .agent-update-task-dialog) {
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-overlay);
+}
+
+:where(dialog, .modal, .drawer, .agent-update-task-dialog)::backdrop {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.history-loading,
+.history-empty,
+.table-empty {
+  color: var(--color-muted);
+}
+
+@media (max-width: 768px) {
+  body {
+    font-size: 16px;
+  }
+
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  .nav-item,
+  .tracking-system-messages,
+  .tracking-account-trigger {
+    min-height: 44px;
+  }
+
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  .nav-item,
+  .tracking-system-messages,
+  .tracking-account-trigger {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

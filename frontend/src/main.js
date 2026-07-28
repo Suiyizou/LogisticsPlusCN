@@ -25,6 +25,7 @@ async function mountApplication() {
     appRouter = router;
     installSurface = () => installLegacyDomI18n();
   }
+  await import("./design-system.css");
 
   const app = createApp(RootComponent);
   if (appRouter) app.use(appRouter);
