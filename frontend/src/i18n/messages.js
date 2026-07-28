@@ -2239,7 +2239,7 @@ Object.assign(messages["en-US"].customers, {
 Object.assign(messages["zh-CN"].customers, {
   shipmentExcelImport: "Excel 批量导入票单",
   dialogKickerShipmentExcelImport: "完整票单批量录入",
-  shipmentExcelImportDescription: "通过多工作表 Excel 一次创建多张完整票单。上传后先校验主信息、四节点路线、预计时间、箱型数量及可选的中转港、运输分段和箱级详情。",
+  shipmentExcelImportDescription: "通过多工作表 Excel 一次导入多张完整票单；同一承运人和业务单号再次导入时，会覆盖更新原票单的已填写信息。",
   downloadShipmentExcelTemplate: "下载完整导入模板",
   chooseShipmentExcel: "选择或拖入票单 Excel",
   shipmentExcelSheetsHint: "支持 .xlsx/.xls；请优先使用系统模板中的票单主表、中转港、分段运输、箱型数量和箱级详情工作表。",
@@ -2255,6 +2255,7 @@ Object.assign(messages["zh-CN"].customers, {
   importNeedsFix: "需修正",
   importReady: "可导入",
   importPending: "等待导入",
+  importUpdated: "已覆盖更新",
   shipmentExcelImportProgress: "导入进度 {done}/{total}（成功 {succeeded}，失败 {failed}）",
   downloadImportResults: "下载导入结果",
   importValidShipments: "导入 {count} 张票单",
@@ -2269,7 +2270,7 @@ Object.assign(messages["zh-CN"].customers, {
 Object.assign(messages["en-US"].customers, {
   shipmentExcelImport: "Import shipments from Excel",
   dialogKickerShipmentExcelImport: "COMPLETE SHIPMENT BATCH ENTRY",
-  shipmentExcelImportDescription: "Create complete shipment records from a multi-sheet workbook. The preview validates primary data, four route nodes, estimated times, equipment quantities, and optional transshipments, routing legs, and container details.",
+  shipmentExcelImportDescription: "Import complete shipment records from a multi-sheet workbook. Re-importing the same carrier and reference updates the existing shipment with the supplied values.",
   downloadShipmentExcelTemplate: "Download complete template",
   chooseShipmentExcel: "Choose or drop a shipment workbook",
   shipmentExcelSheetsHint: "Supports .xlsx/.xls. Use the supplied Shipments, Transshipments, Routing Legs, Container Types, and Containers sheets.",
@@ -2285,6 +2286,7 @@ Object.assign(messages["en-US"].customers, {
   importNeedsFix: "Needs correction",
   importReady: "Ready",
   importPending: "Waiting",
+  importUpdated: "Updated existing shipment",
   shipmentExcelImportProgress: "Progress {done}/{total} ({succeeded} succeeded, {failed} failed)",
   downloadImportResults: "Download results",
   importValidShipments: "Import {count} shipments",

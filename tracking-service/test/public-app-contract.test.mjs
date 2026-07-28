@@ -407,6 +407,18 @@ test("overseas agents manually update only their assigned shipment list", () => 
     appSource,
     /function sortHistoryByEta[\s\S]*?historyEtaSort === "desc"[\s\S]*?historyEtaTimestamp/
   );
+  assert.match(
+    appSource,
+    /function historyEtaTimestamp[\s\S]*?Date\.parse\(timing\.arrivalTime \?\? ""\)/
+  );
+  assert.match(
+    appSource,
+    /followingOnly:[\s\S]*?etaSort: historyEtaSort/
+  );
+  assert.match(
+    appSource,
+    /historyEtaSortSelect\?\.addEventListener\("change", async[\s\S]*?historyPage = 1;[\s\S]*?loadCustomerAssignedHistory\(\)/
+  );
 });
 
 test("business users can explicitly select the alternate proxy channel", () => {

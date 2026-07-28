@@ -1396,6 +1396,87 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void shipmentExcelReimportOverwritesTheOwnedShipmentInsteadOfCreatingADuplicate()
+      throws Exception {
+    Map<String, Object> customer = customerService.create(
+        new CreateCustomerRequest(
+            "excel-overwrite", "StrongPass9", "Excel Overwrite", "SHIPPER", "EXCEL-01"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = String.valueOf(customer.get("id"));
+    CreateBusinessShipmentRequest initial = new CreateBusinessShipmentRequest(
+        "COSCO", "BOOKING", "6508205930", "Pending update", "Initial note",
+        "JOB-OLD", "VESSEL OLD", "SHANGHAI", "LONG BEACH", "PO-OLD",
+        "2026-07-01", "2026-07-20", null, null, null,
+        "SHANGHAI", "2 x 40HQ", "EXCEL-01"
+    );
+    Map<String, Object> created = customerService.createAssignedShipment(
+        new AssignedBusinessShipmentRequest(customerId, true, initial, false),
+        business,
+        "127.0.0.1"
+    );
+    CreateBusinessShipmentRequest replacement = new CreateBusinessShipmentRequest(
+        "COSCO", "BOOKING", "6508205930", "Vessel departed", "Updated note",
+        "JOB-NEW", "VESSEL NEW", "NINGBO", "LOS ANGELES", "PO-NEW",
+        "2026-07-05", "2026-07-28", "2026-07-06", null, null,
+        "PACIFIC OCEAN", "3 x 40HQ", "EXCEL-01"
+    );
+
+    Map<String, Object> updated = customerService.createAssignedShipment(
+        new AssignedBusinessShipmentRequest(customerId, true, replacement, true),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(updated)
+        .containsEntry("shipmentId", created.get("shipmentId"))
+        .containsEntry("overwritten", true)
+        .containsEntry("published", true);
+    assertThat(jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM cp_shipment_references
+        WHERE carrier_code = 'COSCO' AND reference_type = 'BOOKING'
+          AND reference_no_normalized = '6508205930'
+        """,
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForMap(
+        "SELECT job_number, client_po_number, business_note FROM cp_shipments WHERE public_id = ?",
+        created.get("shipmentId")
+    )).containsEntry("JOB_NUMBER", "JOB-NEW")
+        .containsEntry("CLIENT_PO_NUMBER", "PO-NEW")
+        .containsEntry("BUSINESS_NOTE", "Updated note");
+    String snapshotJson = jdbcTemplate.queryForObject(
+        """
+        SELECT t.snapshot_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ?
+        """,
+        String.class,
+        created.get("shipmentId")
+    );
+    JsonNode snapshot = new ObjectMapper().readTree(snapshotJson);
+    assertThat(snapshot.path("keyTimes").path("estimatedFinalArrival").path("time").asText())
+        .isEqualTo("2026-07-28");
+    assertThat(snapshot.path("routingLegs").get(0).path("vesselName").asText())
+        .isEqualTo("VESSEL NEW");
+    assertThat(jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*)
+        FROM cp_customer_shipment_access a
+        JOIN cp_customers c ON c.id = a.customer_id
+        WHERE c.public_id = ? AND a.publication_status = 'PUBLISHED'
+        """,
+        Integer.class,
+        customerId
+    )).isEqualTo(1);
+  }
+
+  @Test
   void manualSnapshotUpdatesMergeIntoCurrentPayloadAndNoteOnlyWritesDoNotTouchIt()
       throws Exception {
     String carrierSnapshot = """

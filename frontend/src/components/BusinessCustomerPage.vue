@@ -774,7 +774,7 @@
                   @selection-change="handleShipmentSelectionChange"
                 >
                   <el-table-column v-if="isManager" type="selection" width="42" />
-                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="48" />
+                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="68" align="center" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="165">
                     <template #default="{ row }">
                       <div>
@@ -809,7 +809,7 @@
                       <span v-else>—</span>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.shipmentStatus')" width="132">
+                  <el-table-column :label="t('customers.shipmentStatus')" min-width="176">
                     <template #default="{ row }">
                       <div class="shipment-status-stack">
                         <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || '—' }}</span>
@@ -825,7 +825,7 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.remark')" min-width="240">
+                  <el-table-column :label="t('customers.remark')" width="168">
                     <template #default="{ row }">
                       <div class="shipment-remark-cell">
                         <div class="shipment-today-tags">
@@ -839,7 +839,7 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.lastTrackedAt')" width="132">
+                  <el-table-column :label="t('customers.lastTrackedAt')" width="164">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
                   <el-table-column :label="t('customers.actions')" :width="isManager ? 234 : 94" fixed="right">
@@ -2123,7 +2123,13 @@
               <span
                 v-for="result in shipmentExcelImportResults"
                 :key="result.importKey"
-                :class="result.status === 'CREATED' ? 'is-created' : result.status === 'FAILED' ? 'is-failed' : 'is-pending'"
+                :class="result.status === 'CREATED'
+                  ? 'is-created'
+                  : result.status === 'UPDATED'
+                    ? 'is-updated'
+                    : result.status === 'FAILED'
+                      ? 'is-failed'
+                      : 'is-pending'"
               >
                 <b>{{ result.referenceNo || result.importKey }}</b>
                 <small>{{ result.message }}</small>
@@ -3353,7 +3359,22 @@ onMounted(() => {
   batchTrackClockTimer = window.setInterval(() => {
     batchTrackClock.value = Date.now();
   }, 1000);
-  const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
+  const query = new URLSearchParams(window.location.search);
+  const requestedSection = query.get("section") || "";
+  const allowedSections = isManager.value
+    ? ["overview", "customers", "shipments", "agents", "handover"]
+    : ["customers", "shipments"];
+  if (allowedSections.includes(requestedSection)) {
+    menuItem.value = requestedSection;
+    subView.value = "list";
+  }
+  const requestedShipment = query.get("shipment") || "";
+  if (requestedShipment && isManager.value) {
+    menuItem.value = "shipments";
+    subView.value = "detail";
+    selectedShipmentId.value = requestedShipment;
+  }
+  const requestedCustomer = query.get("customer") || "";
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
   if (menuItem.value === "overview") void loadOverviewMetrics();
@@ -5520,15 +5541,17 @@ async function startShipmentExcelImport() {
       cursor += 1;
       const item = items[index];
       try {
-        await createBusinessShipment(
+        const response = await createBusinessShipment(
           item.payload,
           shipmentExcelCustomerId.value,
-          shipmentExcelPublishToCustomer.value
+          shipmentExcelPublishToCustomer.value,
+          true
         );
+        const overwritten = response?.overwritten === true;
         shipmentExcelImportResults.value[index] = {
           ...shipmentExcelImportResults.value[index],
-          status: "CREATED",
-          message: t("customers.importCreated")
+          status: overwritten ? "UPDATED" : "CREATED",
+          message: t(overwritten ? "customers.importUpdated" : "customers.importCreated")
         };
         shipmentExcelImportProgress.value.succeeded += 1;
       } catch (error) {
@@ -8881,6 +8904,11 @@ function showError(error, fallbackKey) {
 
 .shipment-excel-import-result-list .is-created {
   border-color: #bfe5d4;
+}
+
+.shipment-excel-import-result-list .is-updated {
+  border-color: #b9d7f5;
+  background: #f5faff;
 }
 
 .shipment-excel-import-result-list .is-failed {

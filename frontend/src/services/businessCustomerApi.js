@@ -148,10 +148,15 @@ export function resolvePendingClientMatch(matchId, customerId) {
   });
 }
 
-export function createBusinessShipment(payload, customerId, publishToCustomer = true) {
+export function createBusinessShipment(
+  payload,
+  customerId,
+  publishToCustomer = true,
+  overwriteExisting = false
+) {
   return request("/business/customers/shipments", {
     method: "POST",
-    body: { customerId, publishToCustomer, shipment: payload }
+    body: { customerId, publishToCustomer, shipment: payload, overwriteExisting }
   });
 }
 

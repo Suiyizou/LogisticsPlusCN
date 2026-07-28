@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -674,6 +675,116 @@ class ShipmentTrackingServiceTest {
     )).isInstanceOfSatisfying(ApiException.class, error ->
         assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN)
     );
+  }
+
+  @Test
+  void sortsCustomerShipmentsByDisplayedArrivalBeforeApplyingPagination() {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, status, party_role,
+          customer_code_hash, customer_code_prefix, created_by, responsible_agent_id
+        ) VALUES (
+          700, 'sort-customer-id', 'sort-customer', 'Sort Customer', 'ACTIVE', 'SHIPPER',
+          'sort-customer-hash', 'SORT', 2, 2
+        )
+        """
+    );
+    List<String> snapshots = List.of(
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-0"},"summary":{"latestEvent":{"name":"Arrived"}},
+         "routingLegs":[{"mode":"SEA","actualArrival":"2026-07-07T00:00:00Z","estimatedArrival":"2026-08-20T00:00:00Z"}]}
+        """,
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-1"},"summary":{"latestEvent":{"name":"Sailing"}},
+         "keyTimes":{"estimatedFinalArrival":{"time":"2026-08-13T00:00:00Z"}}}
+        """,
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-2"},"summary":{"latestEvent":{"name":"Sailing"}},
+         "keyTimes":{"estimatedFinalArrival":{"time":"2026-07-28T00:00:00Z"}}}
+        """,
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-3"},"summary":{"latestEvent":{"name":"Sailing"}},
+         "keyTimes":{"estimatedFinalArrival":{"time":"2026-07-15T00:00:00Z"}}}
+        """,
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-4"},"summary":{"latestEvent":{"name":"Sailing"}},
+         "keyTimes":{"estimatedFinalArrival":{"time":"2026-07-09T00:00:00Z"}}}
+        """,
+        """
+        {"tracking":{"type":"BOOKING","number":"SORT-5"},"summary":{"latestEvent":{"name":"Sailing"}},
+         "keyTimes":{"estimatedFinalArrival":{"time":"2026-07-01T00:00:00Z"}}}
+        """
+    );
+    for (int index = 0; index < snapshots.size(); index += 1) {
+      long id = 1700L + index;
+      String reference = "SORT-" + index;
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_shipments (
+            id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
+            created_at, updated_at
+          ) VALUES (?, ?, 'COSCO', 'In transit', 2, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          """,
+          id,
+          "sort-shipment-" + index
+      );
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_shipment_references (
+            id, shipment_id, carrier_code, reference_type, reference_no_raw,
+            reference_no_normalized, primary_reference
+          ) VALUES (?, ?, 'COSCO', 'BOOKING', ?, ?, TRUE)
+          """,
+          id,
+          id,
+          reference,
+          reference
+      );
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_tracking_snapshots (
+            id, shipment_id, query_reference_type, query_reference_no, queried_by,
+            queried_by_username, source_channel, snapshot_json, payload_sha256,
+            fetched_at, fresh_until, created_at
+          ) VALUES (?, ?, 'BOOKING', ?, 2, 'business', 'AUTO', ?, REPEAT('a', 64),
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          """,
+          id,
+          id,
+          reference,
+          snapshots.get(index)
+      );
+      jdbcTemplate.update(
+          "UPDATE cp_shipments SET current_snapshot_id = ? WHERE id = ?",
+          id,
+          id
+      );
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_shipment_access (
+            shipment_id, customer_id, relationship_role, publication_status, assigned_by
+          ) VALUES (?, 700, 'SHIPPER', 'PUBLISHED', 2)
+          """,
+          id
+      );
+    }
+
+    CustomerPrincipal customer = new CustomerPrincipal(
+        700, "sort-customer-id", "sort-customer", "Sort Customer", "SHIPPER", "ACTIVE"
+    );
+    ObjectNode firstPage = service.listAssignedSnapshots(
+        customer, 1, 5, false, null, "desc"
+    );
+    ObjectNode secondPage = service.listAssignedSnapshots(
+        customer, 2, 5, false, null, "desc"
+    );
+
+    assertThat(firstPage.path("items").findValuesAsText("referenceNo"))
+        .containsExactly("SORT-1", "SORT-2", "SORT-3", "SORT-4", "SORT-0");
+    assertThat(secondPage.path("items").findValuesAsText("referenceNo"))
+        .containsExactly("SORT-5");
+    assertThat(firstPage.path("etaSort").asText()).isEqualTo("desc");
   }
 
   @Test

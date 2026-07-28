@@ -20,6 +20,11 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -550,6 +555,20 @@ public class ShipmentTrackingService {
       boolean requestedFollowingOnly,
       String requestedCustomerPublicId
   ) {
+    return listAssignedSnapshots(
+        customer, requestedPage, requestedPageSize, requestedFollowingOnly,
+        requestedCustomerPublicId, null
+    );
+  }
+
+  public ObjectNode listAssignedSnapshots(
+      CustomerPrincipal customer,
+      int requestedPage,
+      int requestedPageSize,
+      boolean requestedFollowingOnly,
+      String requestedCustomerPublicId,
+      String requestedEtaSort
+  ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
@@ -558,6 +577,7 @@ public class ShipmentTrackingService {
     );
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
+    String etaSort = normalizeEtaSort(requestedEtaSort);
     boolean overseaAgent = isOverseaAgent(customer);
     long followAgentId = overseaAgent ? customer.id() : -1L;
     boolean followingOnly = requestedFollowingOnly && overseaAgent;
@@ -596,10 +616,11 @@ public class ShipmentTrackingService {
     listParameters.addAll(accessQuery.parameters());
     listParameters.add(followingOnly);
     listParameters.add(followAgentId);
-    listParameters.add(pageSize);
-    listParameters.add(offset);
-    List<CustomerAssignedShipment> records = jdbcTemplate.query(
-        """
+    if (etaSort == null) {
+      listParameters.add(pageSize);
+      listParameters.add(offset);
+    }
+    String listSql = """
         SELECT s.id AS shipment_id, s.public_id, s.carrier_code, s.tracking_status,
                s.last_tracked_at, s.created_at, s.updated_at,
                s.job_number, s.client_po_number, s.client_name_code,
@@ -640,8 +661,10 @@ public class ShipmentTrackingService {
         )
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         ORDER BY assigned.assigned_at DESC, s.updated_at DESC
-        LIMIT ? OFFSET ?
-        """.formatted(accessQuery.predicate(), publicationFilter),
+        """.formatted(accessQuery.predicate(), publicationFilter);
+    if (etaSort == null) listSql += " LIMIT ? OFFSET ?";
+    List<CustomerAssignedShipment> records = jdbcTemplate.query(
+        listSql,
         (rs, rowNumber) -> new CustomerAssignedShipment(
             new CachedShipment(
                 rs.getLong("shipment_id"), rs.getString("public_id"),
@@ -667,6 +690,12 @@ public class ShipmentTrackingService {
         ),
         listParameters.toArray()
     );
+    if (etaSort != null) {
+      sortAssignedShipmentsByArrival(records, etaSort);
+      int fromIndex = Math.min(offset, records.size());
+      int toIndex = Math.min(fromIndex + pageSize, records.size());
+      records = new ArrayList<>(records.subList(fromIndex, toIndex));
+    }
     Map<Long, List<AssignedCustomer>> assignedCustomers =
         assignedCustomersByShipment(customer, records, selectedCustomerId);
     ObjectNode response = objectMapper.createObjectNode();
@@ -723,6 +752,7 @@ public class ShipmentTrackingService {
     response.put("totalPages", totalPages);
     response.put("customerReadOnly", true);
     response.put("followingOnly", followingOnly);
+    response.put("etaSort", etaSort == null ? "" : etaSort);
     response.put("overseaAgentManagement", overseaAgent);
     if (overseaAgent) {
       List<AssignedCustomer> agentCustomers = overseaAgentCustomers(customer);
@@ -753,6 +783,101 @@ public class ShipmentTrackingService {
     capabilities.put("refreshTracking", overseaAgent);
     capabilities.put("manageFollowing", overseaAgent);
     return response;
+  }
+
+  private String normalizeEtaSort(String requestedEtaSort) {
+    if (requestedEtaSort == null || requestedEtaSort.isBlank()) return null;
+    String normalized = requestedEtaSort.trim().toLowerCase(Locale.ROOT);
+    return "asc".equals(normalized) || "desc".equals(normalized) ? normalized : null;
+  }
+
+  private void sortAssignedShipmentsByArrival(
+      List<CustomerAssignedShipment> records,
+      String direction
+  ) {
+    int multiplier = "desc".equals(direction) ? -1 : 1;
+    records.sort((left, right) -> {
+      Long leftTime = assignedShipmentArrivalTimestamp(left);
+      Long rightTime = assignedShipmentArrivalTimestamp(right);
+      if (leftTime == null && rightTime == null) {
+        return String.valueOf(left.referenceNo())
+            .compareToIgnoreCase(String.valueOf(right.referenceNo()));
+      }
+      if (leftTime == null) return 1;
+      if (rightTime == null) return -1;
+      int timeComparison = Long.compare(leftTime, rightTime);
+      if (timeComparison != 0) return timeComparison * multiplier;
+      return String.valueOf(left.referenceNo())
+          .compareToIgnoreCase(String.valueOf(right.referenceNo()));
+    });
+  }
+
+  private Long assignedShipmentArrivalTimestamp(CustomerAssignedShipment record) {
+    String snapshotJson = record.cached().snapshotJson();
+    if (snapshotJson == null || snapshotJson.isBlank()) return null;
+    try {
+      JsonNode snapshot = objectMapper.readTree(snapshotJson);
+      JsonNode keyTimes = snapshot.path("keyTimes");
+      JsonNode lastLeg = null;
+      JsonNode lastOceanLeg = null;
+      JsonNode legs = snapshot.path("routingLegs");
+      if (legs.isArray()) {
+        for (JsonNode leg : legs) {
+          lastLeg = leg;
+          if ("SEA".equalsIgnoreCase(leg.path("mode").asText())) lastOceanLeg = leg;
+        }
+      }
+      JsonNode arrivalLeg = lastOceanLeg == null ? lastLeg : lastOceanLeg;
+      String displayedArrival = firstNonBlankText(
+          arrivalLeg == null ? null : arrivalLeg.path("actualArrival").asText(null),
+          keyTimes.path("actualArrival").path("time").asText(null),
+          keyTimes.path("estimatedDelivery").path("actualTime").asText(null),
+          arrivalLeg == null ? null : arrivalLeg.path("estimatedArrival").asText(null),
+          keyTimes.path("estimatedFinalArrival").path("time").asText(null),
+          keyTimes.path("estimatedArrival").path("time").asText(null),
+          keyTimes.path("estimatedDelivery").path("time").asText(null)
+      );
+      return parseShipmentTimestamp(displayedArrival);
+    } catch (JsonProcessingException ignored) {
+      return null;
+    }
+  }
+
+  private String firstNonBlankText(String... values) {
+    for (String value : values) {
+      if (value != null && !value.isBlank()) return value.trim();
+    }
+    return null;
+  }
+
+  private Long parseShipmentTimestamp(String rawValue) {
+    if (rawValue == null || rawValue.isBlank()) return null;
+    String value = rawValue.trim();
+    try {
+      return Instant.parse(value).toEpochMilli();
+    } catch (DateTimeParseException ignored) {
+      // Continue with offset-free carrier and manually-entered date formats.
+    }
+    try {
+      return OffsetDateTime.parse(value).toInstant().toEpochMilli();
+    } catch (DateTimeParseException ignored) {
+      // Continue with a local timestamp.
+    }
+    try {
+      return LocalDateTime.parse(value.replace(' ', 'T'))
+          .toInstant(ZoneOffset.UTC)
+          .toEpochMilli();
+    } catch (DateTimeParseException ignored) {
+      // Continue with a date-only value.
+    }
+    try {
+      return LocalDate.parse(value.length() >= 10 ? value.substring(0, 10) : value)
+          .atStartOfDay()
+          .toInstant(ZoneOffset.UTC)
+          .toEpochMilli();
+    } catch (DateTimeParseException ignored) {
+      return null;
+    }
   }
 
   public ObjectNode updateOverseaAgentAssignedShipment(

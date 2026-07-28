@@ -123,7 +123,7 @@ assert.match(businessCustomerApi, /request\(`\/business\/shipments\?\$\{query\}`
 assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}`\)/);
 assert.match(
   businessCustomerApi,
-  /request\("\/business\/customers\/shipments", \{\s*method: "POST",\s*body: \{ customerId, publishToCustomer, shipment: payload \}\s*\}\)/
+  /request\("\/business\/customers\/shipments", \{\s*method: "POST",\s*body: \{ customerId, publishToCustomer, shipment: payload, overwriteExisting \}\s*\}\)/
 );
 assert.match(businessCustomerApi, /request\("\/business\/shipments\/batch-refresh"/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
@@ -206,9 +206,19 @@ assert.match(businessCustomerPage, /downloadShipmentExcelTemplate/);
 assert.match(businessCustomerPage, /parseManualShipmentImportWorkbook/);
 assert.match(
   businessCustomerPage,
-  /await createBusinessShipment\(\s*item\.payload,\s*shipmentExcelCustomerId\.value,\s*shipmentExcelPublishToCustomer\.value\s*\)/
+  /const response = await createBusinessShipment\(\s*item\.payload,\s*shipmentExcelCustomerId\.value,\s*shipmentExcelPublishToCustomer\.value,\s*true\s*\)/
 );
+assert.match(businessCustomerPage, /response\?\.overwritten === true/);
+assert.match(businessCustomerPage, /status: overwritten \? "UPDATED" : "CREATED"/);
 assert.match(businessCustomerPage, /shipmentExcelImportResults/);
+const shipmentTableSource = businessCustomerPage.slice(
+  businessCustomerPage.indexOf('ref="shipmentTableRef"'),
+  businessCustomerPage.indexOf("</el-table>", businessCustomerPage.indexOf('ref="shipmentTableRef"'))
+);
+assert.match(shipmentTableSource, /type="index"[^>]*width="68"/);
+assert.match(shipmentTableSource, /customers\.shipmentStatus[^>]*min-width="176"/);
+assert.match(shipmentTableSource, /customers\.remark[^>]*width="168"/);
+assert.match(shipmentTableSource, /customers\.lastTrackedAt[^>]*width="164"/);
 
 const shipmentSaveSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function saveShipmentDetail"),

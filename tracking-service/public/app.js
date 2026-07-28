@@ -4626,7 +4626,8 @@ async function loadCustomerAssignedHistory() {
     const query = new URLSearchParams({
       page: String(historyPage),
       pageSize: String(historyPageSize),
-      followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session))
+      followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session)),
+      etaSort: historyEtaSort
     });
     if (isOverseaAgentSession(session) && historyCustomerFilter) {
       query.set("customerId", historyCustomerFilter);
@@ -7567,7 +7568,7 @@ async function refreshAllOverseaAgentShipments() {
 
 function historyEtaTimestamp(entry) {
   const timing = historyTiming(entry?.snapshot ?? {});
-  const parsed = Date.parse(timing.estimatedArrival ?? timing.arrivalTime ?? "");
+  const parsed = Date.parse(timing.arrivalTime ?? "");
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -8984,9 +8985,14 @@ historyCustomerFilterSelect?.addEventListener("change", async () => {
   }
 });
 
-historyEtaSortSelect?.addEventListener("change", () => {
+historyEtaSortSelect?.addEventListener("change", async () => {
   historyEtaSort = historyEtaSortSelect.value === "desc" ? "desc" : "asc";
-  renderHistory();
+  historyPage = 1;
+  if (readFileSession().kind === "CUSTOMER") {
+    await loadCustomerAssignedHistory();
+  } else {
+    renderHistory();
+  }
 });
 
 historyFollowingFilter?.addEventListener("click", async () => {

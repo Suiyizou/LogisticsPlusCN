@@ -1793,10 +1793,40 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Select a customer before creating a shipment");
     }
     requireManaged(request.customerId(), actor);
-    Map<String, Object> created = createShipment(request.shipment(), actor, ipAddress);
-    Object rawShipmentId = created.get("shipmentId");
+    if (request.shipment() == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment is required");
+    }
+    CreateBusinessShipmentRequest shipmentRequest = request.shipment();
+    String carrier = normalizeCarrier(shipmentRequest.carrier());
+    String referenceType = normalizeReferenceType(shipmentRequest.referenceType());
+    String referenceNo = normalizeShipmentReference(
+        carrier, referenceType, shipmentRequest.referenceNo()
+    );
+    boolean overwriteExisting = Boolean.TRUE.equals(request.overwriteExisting());
+    ShipmentRecord existing = overwriteExisting
+        ? findShipmentByReference(carrier, referenceType, referenceNo)
+        : null;
+    Map<String, Object> saved;
+    boolean overwritten = existing != null;
+    if (overwritten) {
+      requireShipmentAssignmentAuthority(existing, actor);
+      String incomingNote = hasText(shipmentRequest.note()) ? shipmentRequest.note() : null;
+      updateShipment(
+          existing.publicId(),
+          new UpdateBusinessShipmentRequest(
+              null, null, null, incomingNote
+          ),
+          actor,
+          ipAddress
+      );
+      updateManualSnapshot(existing.publicId(), shipmentRequest, actor, ipAddress);
+      saved = requireAvailableShipment(existing.publicId(), actor);
+    } else {
+      saved = createShipment(shipmentRequest, actor, ipAddress);
+    }
+    Object rawShipmentId = saved.get("shipmentId");
     if (rawShipmentId == null) {
-      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Created shipment id is unavailable");
+      throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Saved shipment id is unavailable");
     }
     String shipmentId = String.valueOf(rawShipmentId);
     bindShipment(
@@ -1815,9 +1845,10 @@ public class BusinessCustomerService {
           ipAddress
       );
     }
-    Map<String, Object> response = new LinkedHashMap<>(created);
+    Map<String, Object> response = new LinkedHashMap<>(saved);
     response.put("customerId", request.customerId());
     response.put("published", publish);
+    response.put("overwritten", overwritten);
     return response;
   }
 
@@ -3113,6 +3144,58 @@ public class BusinessCustomerService {
     );
     if (shipments.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Tracked shipment not found");
     return shipments.get(0);
+  }
+
+  private ShipmentRecord findShipmentByReference(
+      String carrier,
+      String referenceType,
+      String referenceNo
+  ) {
+    String normalized = normalizeReference(referenceNo);
+    boolean sharedCoscoIdentity = isSharedCoscoNumericIdentity(
+        carrier, referenceType, normalized
+    );
+    String canonical = sharedCoscoIdentity && normalized.startsWith("COSU")
+        ? normalized.substring(4)
+        : normalized;
+    String sql = sharedCoscoIdentity
+        ? """
+          SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
+          FROM cp_shipment_references r
+          JOIN cp_shipments s ON s.id = r.shipment_id
+          WHERE r.carrier_code = ?
+            AND r.reference_type IN ('BOOKING', 'BILLOFLADING')
+            AND r.reference_no_normalized IN (?, ?)
+          ORDER BY CASE WHEN r.reference_type = ? THEN 0 ELSE 1 END,
+                   r.primary_reference DESC, r.id ASC
+          LIMIT 1
+          """
+        : """
+          SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
+          FROM cp_shipment_references r
+          JOIN cp_shipments s ON s.id = r.shipment_id
+          WHERE r.carrier_code = ? AND r.reference_type = ?
+            AND r.reference_no_normalized = ?
+          ORDER BY r.primary_reference DESC, r.id ASC
+          LIMIT 1
+          """;
+    List<ShipmentRecord> records = sharedCoscoIdentity
+        ? jdbcTemplate.query(
+            sql,
+            this::mapShipment,
+            carrier,
+            canonical,
+            "COSU" + canonical,
+            referenceType
+        )
+        : jdbcTemplate.query(
+            sql,
+            this::mapShipment,
+            carrier,
+            referenceType,
+            normalized
+        );
+    return records.isEmpty() ? null : records.get(0);
   }
 
   private ShipmentRecord requireShipment(String publicId) {
