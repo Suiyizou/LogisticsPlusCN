@@ -50,21 +50,40 @@
       </div>
 
       <nav class="admin-console-nav">
-        <template v-for="(item, index) in adminPages" :key="item.key">
-          <p
-            v-if="index === 0 || item.group !== adminPages[index - 1].group"
-            class="admin-nav-group-label"
-          >{{ item.groupLabel }}</p>
+        <section
+          v-for="group in adminNavGroups"
+          :key="group.key"
+          class="admin-nav-accordion"
+          :class="{ current: group.children.some((item) => item.key === activeAdminPage) }"
+        >
           <button
+            class="admin-nav-group-trigger"
             type="button"
-            :class="{ active: activeAdminPage === item.key }"
-            @click="selectAdminPage(item.key)"
+            :aria-expanded="expandedAdminGroup === group.key"
+            @click="toggleAdminGroup(group.key)"
           >
-            <span>{{ item.no }}</span>
-            <b>{{ item.label }}</b>
-            <small>{{ item.description }}</small>
+            <span>{{ group.no }}</span>
+            <b>{{ group.label }}</b>
+            <small>{{ group.description }}</small>
+            <i aria-hidden="true"></i>
           </button>
-        </template>
+          <Transition name="admin-nav-fold">
+            <div v-if="expandedAdminGroup === group.key" class="admin-nav-children">
+              <button
+                v-for="item in group.children"
+                :key="item.key"
+                class="admin-nav-child"
+                type="button"
+                :class="{ active: activeAdminPage === item.key }"
+                @click="selectAdminPage(item.key)"
+              >
+                <span>{{ item.no }}</span>
+                <b>{{ item.label }}</b>
+                <small>{{ item.description }}</small>
+              </button>
+            </div>
+          </Transition>
+        </section>
       </nav>
     </aside>
 
@@ -327,18 +346,17 @@
         <article class="admin-panel">
           <div class="admin-panel-head">
             <div>
-              <p>Shipment Track</p>
-              <h2>{{ ui('admin.platform.title') }}</h2>
+              <p>Customer Management</p>
+              <h2>{{ platformActionCopy.customerTitle }}</h2>
             </div>
             <div class="admin-inline-actions">
               <span>{{ ui('admin.platform.summary', {
                 customers: platformInfo?.customerCount || 0,
                 assigned: platformInfo?.assignedCustomerCount || 0
               }) }}</span>
-              <RouterLink class="admin-inline-link primary" to="/customers">
-                {{ t("admin.console.openTrackingManagement") }}
-              </RouterLink>
-              <button type="button" @click="loadDashboard">{{ ui('admin.files.refresh') }}</button>
+              <button type="button" :disabled="loading" @click="refreshPlatformPage">
+                {{ ui('admin.files.refresh') }}
+              </button>
             </div>
           </div>
           <div class="admin-table-wrap">
@@ -368,7 +386,7 @@
                   <div class="admin-platform-row-actions">
                     <RouterLink
                       class="admin-row-action"
-                      :to="{ path: '/customers', query: { customer: row.customerId } }"
+                      :to="{ path: '/customers', query: { section: 'customers', customer: row.customerId } }"
                     >
                       {{ t("admin.console.manage") }}
                     </RouterLink>
@@ -397,6 +415,89 @@
             :total="platformTotal"
             @current-change="changePlatformPage"
             @size-change="changePlatformPageSize"
+          />
+        </article>
+      </section>
+
+      <section v-else-if="activeAdminPage === 'tickets'" class="admin-page-pane">
+        <article class="admin-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>Shipment Management</p>
+              <h2>{{ ticketCopy.title }}</h2>
+            </div>
+            <div class="admin-inline-actions">
+              <span>{{ ticketCopy.total.replace("{count}", String(adminTicketTotal)) }}</span>
+              <RouterLink
+                class="admin-inline-link primary"
+                :to="{ path: '/customers', query: { section: 'shipments' } }"
+              >
+                {{ ticketCopy.openFullManagement }}
+              </RouterLink>
+              <button type="button" :disabled="loading" @click="loadAdminTicketPage">
+                {{ ticketCopy.refresh }}
+              </button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table
+              :data="adminTickets"
+              row-key="shipmentId"
+              stripe
+              class="standard-information-table"
+            >
+              <el-table-column :label="ticketCopy.referenceNo" min-width="170" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b>{{ row.referenceNo || row.shipmentId || "-" }}</b>
+                  <small>{{ adminTicketReferenceType(row.referenceType) }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.carrier" width="100">
+                <template #default="{ row }">{{ row.carrier || "-" }}</template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.customer" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ adminTicketClientLabel(row) }}</template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.owner" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">{{ adminTicketOwnerLabel(row) }}</template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.boundUsers" min-width="170" show-overflow-tooltip>
+                <template #default="{ row }">{{ adminTicketBoundUsersLabel(row) }}</template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.status" min-width="140" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="admin-status" :class="{ off: !row.trackingStatus }">
+                    {{ row.trackingStatus || ticketCopy.pending }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.updatedAt" width="150">
+                <template #default="{ row }">{{ formatDate(row.lastTrackedAt || row.updatedAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ticketCopy.actions" width="104" fixed="right">
+                <template #default="{ row }">
+                  <RouterLink
+                    class="admin-row-action"
+                    :to="{ path: '/customers', query: { section: 'shipments', shipment: row.shipmentId } }"
+                  >
+                    {{ ticketCopy.manage }}
+                  </RouterLink>
+                </template>
+              </el-table-column>
+              <template #empty>{{ ticketCopy.empty }}</template>
+            </el-table>
+          </div>
+          <el-pagination
+            v-if="adminTicketTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="adminTicketPage"
+            :page-size="adminTicketPageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="adminTicketTotal"
+            @current-change="changeAdminTicketPage"
+            @size-change="changeAdminTicketPageSize"
           />
         </article>
       </section>
@@ -1308,6 +1409,7 @@ import {
   updateEmployee,
   updateLlmSettings
 } from "../services/adminApi";
+import { fetchAvailableBusinessShipments } from "../services/businessCustomerApi";
 import { markApiErrorHandled } from "../services/apiClient";
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
@@ -1324,12 +1426,20 @@ const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 const rawAdminPages = [
   { key: "overview", no: "01", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u540e\u53f0\u6982\u89c8", description: "\u7cfb\u7edf\u7528\u6237\u4e0e\u64cd\u4f5c\u8d8b\u52bf", eyebrow: "Executive Overview", title: "\u4f01\u4e1a\u7cfb\u7edf\u603b\u89c8", subtitle: "\u4ece\u4f01\u4e1a\u7ba1\u7406\u89c6\u89d2\u67e5\u770b\u8d26\u53f7\u89c4\u6a21\u3001\u7cfb\u7edf\u6d3b\u8dc3\u5ea6\u548c\u7ba1\u7406\u64cd\u4f5c\u8d8b\u52bf\u3002" },
   { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
-  { key: "employees", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
-  { key: "platform", no: "04", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
-  { key: "announcements", no: "05", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u4f7f\u7528\u53ef\u89c6\u5316\u5de5\u5177\u7f16\u8f91\u516c\u544a\u3001\u4e0a\u4f20\u56fe\u7247\u5e76\u914d\u7f6e\u5f53\u65e5\u53ef\u89c1\u8303\u56f4\u3002" },
-  { key: "devices", no: "06", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
-  { key: "files", no: "07", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
-  { key: "system", no: "08", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
+  { key: "employees", no: "01", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
+  { key: "platform", no: "02", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5ba2\u6237\u7ba1\u7406", description: "\u5ba2\u6237\u8d26\u53f7\u4e0e\u8d1f\u8d23\u5173\u7cfb", eyebrow: "Customer Management", title: "\u5ba2\u6237\u7ba1\u7406", subtitle: "\u5168\u5c40\u67e5\u770b\u5ba2\u6237\u8d26\u53f7\u3001\u8d1f\u8d23\u4e1a\u52a1\u5458\u3001\u6d77\u5916\u4ee3\u7406\u548c\u5df2\u7ed1\u5b9a\u7968\u5355\u3002" },
+  { key: "tickets", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u7968\u5355\u7ba1\u7406", description: "\u5168\u5c40\u7968\u5355\u4e0e\u8ddf\u8e2a\u72b6\u6001", eyebrow: "Shipment Management", title: "\u7968\u5355\u7ba1\u7406", subtitle: "\u7edf\u4e00\u67e5\u770b\u5168\u4f01\u4e1a\u7968\u5355\u3001\u7ed1\u5b9a\u5ba2\u6237\u3001\u8d1f\u8d23\u5458\u5de5\u548c\u8ddf\u8e2a\u72b6\u6001\u3002" },
+  { key: "devices", no: "01", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
+  { key: "files", no: "02", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
+  { key: "announcements", no: "01", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u4f7f\u7528\u53ef\u89c6\u5316\u5de5\u5177\u7f16\u8f91\u516c\u544a\u3001\u4e0a\u4f20\u56fe\u7247\u5e76\u914d\u7f6e\u5f53\u65e5\u53ef\u89c1\u8303\u56f4\u3002" },
+  { key: "system", no: "02", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
+];
+
+const rawAdminNavGroups = [
+  { key: "overview", no: "01", label: "\u4f01\u4e1a\u603b\u89c8", description: "\u7cfb\u7edf\u5168\u5c40\u4e0e\u5ba1\u8ba1" },
+  { key: "tracking", no: "02", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5458\u5de5\u3001\u5ba2\u6237\u4e0e\u7968\u5355" },
+  { key: "security", no: "03", label: "\u5b89\u5168\u4e0e\u8d44\u4ea7", description: "\u8bbe\u5907\u4f1a\u8bdd\u4e0e\u4e1a\u52a1\u6587\u4ef6" },
+  { key: "settings", no: "04", label: "\u7cfb\u7edf\u914d\u7f6e", description: "\u516c\u544a\u4e0e\u7cfb\u7edf\u7b56\u7565" }
 ];
 
 const loading = ref(false);
@@ -1345,6 +1455,11 @@ const platformInfo = ref(null);
 const platformTotal = ref(0);
 const platformPage = ref(1);
 const platformPageSize = ref(20);
+const adminTickets = ref([]);
+const adminTicketTotal = ref(0);
+const adminTicketPage = ref(1);
+const adminTicketPageSize = ref(20);
+const adminTicketsLoaded = ref(false);
 const announcements = ref([]);
 const announcementTotal = ref(0);
 const announcementPage = ref(1);
@@ -1395,6 +1510,7 @@ const overviewStatusChartRef = ref(null);
 const overviewOperationChartRef = ref(null);
 const llmSettings = ref(null);
 const activeAdminPage = ref("overview");
+const expandedAdminGroup = ref("overview");
 const loginForm = reactive({ username: "admin", password: "" });
 const employeeDialogOpen = ref(false);
 const editingEmployeeId = ref("");
@@ -1533,16 +1649,65 @@ const OVERVIEW_COPY = {
 
 const PLATFORM_ACTION_COPY = {
   "zh-CN": {
+    customerTitle: "\u5ba2\u6237\u8d26\u53f7\u4e0e\u8d1f\u8d23\u5173\u7cfb",
     delete: "\u5220\u9664",
     cancel: "\u53d6\u6d88",
     confirm: "\u786e\u8ba4\u5220\u9664\u5ba2\u6237\u300c{name}\u300d\u5417\uff1f\u5220\u9664\u540e\u8be5\u5ba2\u6237\u5c06\u65e0\u6cd5\u767b\u5f55\uff0c\u5386\u53f2\u7968\u5355\u6570\u636e\u4f1a\u4fdd\u7559\u3002",
     success: "\u5ba2\u6237\u5df2\u5220\u9664"
   },
   "en-US": {
+    customerTitle: "Customer accounts and ownership",
     delete: "Delete",
     cancel: "Cancel",
     confirm: "Delete customer “{name}”? The customer will no longer be able to sign in; historical shipment data is retained.",
     success: "Customer deleted"
+  }
+};
+
+const TICKET_COPY = {
+  "zh-CN": {
+    title: "\u5168\u5c40\u7968\u5355\u7ba1\u7406",
+    total: "\u5171 {count} \u6761\u7968\u5355",
+    openFullManagement: "\u8fdb\u5165\u5b8c\u6574\u7968\u5355\u7ba1\u7406",
+    refresh: "\u5237\u65b0",
+    referenceNo: "\u53c2\u8003\u53f7",
+    carrier: "\u8239\u516c\u53f8",
+    customer: "\u5ba2\u6237\u53f7 / \u5ba2\u6237\u540d",
+    owner: "\u8d1f\u8d23\u5458\u5de5",
+    boundUsers: "\u7ed1\u5b9a\u7528\u6237",
+    status: "\u8ddf\u8e2a\u72b6\u6001",
+    updatedAt: "\u66f4\u65b0\u65f6\u95f4",
+    actions: "\u64cd\u4f5c",
+    manage: "\u7ba1\u7406",
+    empty: "\u6682\u65e0\u7968\u5355",
+    pending: "\u5f85\u8ddf\u8e2a",
+    referenceTypes: {
+      BOOKING: "\u8ba2\u8231\u53f7",
+      BILLOFLADING: "\u63d0\u5355\u53f7",
+      CONTAINER: "\u96c6\u88c5\u7bb1\u53f7"
+    }
+  },
+  "en-US": {
+    title: "Global shipment management",
+    total: "{count} shipments",
+    openFullManagement: "Open full shipment management",
+    refresh: "Refresh",
+    referenceNo: "Reference",
+    carrier: "Carrier",
+    customer: "Client no. / name",
+    owner: "Responsible employee",
+    boundUsers: "Bound users",
+    status: "Tracking status",
+    updatedAt: "Updated",
+    actions: "Actions",
+    manage: "Manage",
+    empty: "No shipments",
+    pending: "Pending",
+    referenceTypes: {
+      BOOKING: "Booking no.",
+      BILLOFLADING: "Bill of lading",
+      CONTAINER: "Container no."
+    }
   }
 };
 
@@ -1712,6 +1877,9 @@ const overviewCopy = computed(() =>
 const platformActionCopy = computed(() =>
   PLATFORM_ACTION_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
 );
+const ticketCopy = computed(() =>
+  TICKET_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
+);
 const announcementQuickTags = computed(() => announcementCopy.value.quickTags);
 
 const adminPages = computed(() => rawAdminPages.map((item) => ({
@@ -1720,6 +1888,12 @@ const adminPages = computed(() => rawAdminPages.map((item) => ({
   description: item.descriptionKey ? ui(item.descriptionKey) : tr(item.description),
   title: item.titleKey ? ui(item.titleKey) : tr(item.title),
   subtitle: item.subtitleKey ? ui(item.subtitleKey) : tr(item.subtitle)
+})));
+const adminNavGroups = computed(() => rawAdminNavGroups.map((group) => ({
+  ...group,
+  label: tr(group.label),
+  description: tr(group.description),
+  children: adminPages.value.filter((item) => item.group === group.key)
 })));
 const activePageMeta = computed(() =>
   adminPages.value.find((item) => item.key === activeAdminPage.value) || adminPages.value[0]
@@ -1769,6 +1943,8 @@ watch(() => props.currentUser, (user) => {
 }, { immediate: true });
 
 watch(activeAdminPage, async (page) => {
+  expandedAdminGroup.value = rawAdminPages.find((item) => item.key === page)?.group
+    || expandedAdminGroup.value;
   if (page !== "overview") return;
   await nextTick();
   renderOverviewCharts();
@@ -1838,6 +2014,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
     llmSettings.value = llmData;
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     if (activeAdminPage.value === "announcements") await loadAnnouncementPageWithoutLoading();
+    if (activeAdminPage.value === "tickets") await loadAdminTicketPageWithoutLoading();
     syncLlmForm(llmData);
     await nextTick();
     renderOverviewCharts();
@@ -1853,6 +2030,13 @@ function selectAdminPage(page) {
   if (page === "announcements" && !announcementsLoaded.value) {
     void withLoading(loadAnnouncementPageWithoutLoading);
   }
+  if (page === "tickets" && !adminTicketsLoaded.value) {
+    void withLoading(loadAdminTicketPageWithoutLoading);
+  }
+}
+
+function toggleAdminGroup(group) {
+  expandedAdminGroup.value = expandedAdminGroup.value === group ? "" : group;
 }
 
 function renderOverviewCharts() {
@@ -2051,6 +2235,28 @@ async function loadPlatformPage() {
   platformTotal.value = Number(data?.total || 0);
 }
 
+async function refreshPlatformPage() {
+  await withLoading(loadPlatformPage);
+}
+
+async function loadAdminTicketPageWithoutLoading() {
+  const data = await fetchAvailableBusinessShipments({
+    page: adminTicketPage.value,
+    pageSize: adminTicketPageSize.value
+  });
+  adminTickets.value = Array.isArray(data?.items)
+    ? data.items.map(normalizeAdminTicket).filter(Boolean)
+    : [];
+  adminTicketTotal.value = Number(data?.total || 0);
+  adminTicketPage.value = Number(data?.page || adminTicketPage.value);
+  adminTicketPageSize.value = Number(data?.pageSize || adminTicketPageSize.value);
+  adminTicketsLoaded.value = true;
+}
+
+async function loadAdminTicketPage() {
+  await withLoading(loadAdminTicketPageWithoutLoading);
+}
+
 async function loadAnnouncementPageWithoutLoading() {
   const data = await fetchAdminAnnouncements({
     page: announcementPage.value - 1,
@@ -2105,6 +2311,17 @@ async function changePlatformPageSize(size) {
   platformPageSize.value = size;
   platformPage.value = 1;
   await withLoading(loadPlatformPage);
+}
+
+async function changeAdminTicketPage(page) {
+  adminTicketPage.value = page;
+  await withLoading(loadAdminTicketPageWithoutLoading);
+}
+
+async function changeAdminTicketPageSize(size) {
+  adminTicketPageSize.value = size;
+  adminTicketPage.value = 1;
+  await withLoading(loadAdminTicketPageWithoutLoading);
 }
 
 async function handleDeletePlatformCustomer(row) {
@@ -3190,6 +3407,61 @@ function partyRoleText(partyRole, role) {
 
 function platformRowKey(row) {
   return `${row?.customerId || "customer"}:${row?.agentUserId || "unassigned"}`;
+}
+
+function normalizeAdminTicket(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const envelope = payload.item && typeof payload.item === "object" ? payload.item : payload;
+  const shipment = envelope.shipment && typeof envelope.shipment === "object"
+    ? envelope.shipment
+    : envelope;
+  const normalized = {
+    ...shipment,
+    ...(envelope.shipment ? envelope : {})
+  };
+  delete normalized.shipment;
+  return normalized;
+}
+
+function adminTicketReferenceType(type) {
+  const key = String(type || "").toUpperCase().replaceAll("_", "");
+  return ticketCopy.value.referenceTypes[key] || type || "-";
+}
+
+function adminTicketClientLabel(row) {
+  const code = row?.clientNo || row?.clientNameCode || row?.clientCode || "";
+  const name = row?.clientName || row?.customerDisplayName || "";
+  if (code && name && String(code).toLowerCase() !== String(name).toLowerCase()) {
+    return `${code} · ${name}`;
+  }
+  if (code || name) return code || name;
+  const customer = Array.isArray(row?.boundCustomers) ? row.boundCustomers[0] : null;
+  return customer?.clientCode || customer?.displayName || customer?.username || "-";
+}
+
+function adminTicketOwnerLabel(row) {
+  const direct = row?.responsibleAgentDisplayName
+    || row?.businessDisplayName
+    || row?.responsibleAgentUsername
+    || row?.businessUsername;
+  if (direct) return direct;
+  const users = Array.isArray(row?.participants) ? row.participants : [];
+  const owner = users.find((user) =>
+    user?.accountRole === "BUSINESS"
+    || user?.bindingRole === "RESPONSIBLE"
+    || user?.role === "BUSINESS"
+  );
+  return owner?.displayName || owner?.username || "-";
+}
+
+function adminTicketBoundUsersLabel(row) {
+  const users = Array.isArray(row?.boundUsers) ? row.boundUsers : [];
+  if (!users.length) return "-";
+  const labels = users.map((user) => user?.displayName || user?.username || user?.clientCode)
+    .filter(Boolean);
+  if (!labels.length) return "-";
+  const visible = labels.slice(0, 3).join("\u3001");
+  return labels.length > 3 ? `${visible} +${labels.length - 3}` : visible;
 }
 
 function statusText(status) {
