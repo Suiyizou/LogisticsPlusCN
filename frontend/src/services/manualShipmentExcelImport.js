@@ -184,14 +184,15 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
 
     const carrier = normalizeCarrier(source.carrier);
     const referenceType = "BOOKING";
+    const referenceNo = normalizeBookingReference(carrier, source.referenceNo);
     if (source.carrier && !carrier) errors.push("\u627f\u8fd0\u4eba\u4ec5\u652f\u6301 COSCO \u6216 CMA");
     if (importKey) {
       const normalizedKey = normalizeKey(importKey);
       if (seenKeys.has(normalizedKey)) errors.push(`\u5bfc\u5165\u7f16\u53f7\u91cd\u590d\uff1a${importKey}`);
       seenKeys.add(normalizedKey);
     }
-    const identity = `${carrier}|${referenceType}|${normalizeKey(source.referenceNo)}`;
-    if (carrier && referenceType && source.referenceNo) {
+    const identity = `${carrier}|${referenceType}|${normalizeKey(referenceNo)}`;
+    if (carrier && referenceType && referenceNo) {
       if (seenReferences.has(identity)) errors.push(`\u627f\u8fd0\u4eba\u3001\u5355\u53f7\u7c7b\u578b\u548c\u4e1a\u52a1\u5355\u53f7\u91cd\u590d\uff1a${source.referenceNo}`);
       seenReferences.add(identity);
     }
@@ -266,7 +267,7 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
     const payload = {
       carrier,
       referenceType,
-      referenceNo: text(source.referenceNo),
+      referenceNo,
       trackingStatus: text(source.latestEventName),
       latestEventName: text(source.latestEventName),
       latestEventLocation: text(source.latestEventLocation),
@@ -281,7 +282,7 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
       forwarderJobNumber: text(source.forwarderJobNumber),
       clientNameCode: text(source.clientNameCode),
       clientPoNumber: text(source.clientPoNumber),
-      bookingNumber: text(source.referenceNo),
+      bookingNumber: referenceNo,
       billOfLading: text(source.billOfLading),
       vesselVoyage: text(source.vesselVoyage),
       trafficTerm: text(source.trafficTerm),
@@ -298,7 +299,7 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
     return {
       importKey,
       rowNumber: source.__rowNumber,
-      referenceNo: text(source.referenceNo),
+      referenceNo,
       carrier: carrier || text(source.carrier),
       referenceType,
       errors: unique(errors),
@@ -521,6 +522,14 @@ function normalizeCarrier(value) {
   if (normalized.includes("COSCO") || normalized === "COSU") return "COSCO";
   if (normalized.includes("CMA")) return "CMA";
   return "";
+}
+
+function normalizeBookingReference(carrier, value) {
+  const normalized = text(value).replace(/\s+/g, "").toUpperCase();
+  if (carrier === "COSCO" && /^COSU[0-9]{6,20}$/.test(normalized)) {
+    return normalized.slice(4);
+  }
+  return normalized;
 }
 
 function normalizeTransportMode(value) {

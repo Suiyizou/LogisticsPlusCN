@@ -915,7 +915,13 @@ public class ShipmentBatchTrackingService {
           "Shipment row " + (index + 1) + " must use a booking number"
       );
     }
-    String number = compact(clean(request.number(), 128, null));
+    String carrier = clean(request.carrier(), 32, null);
+    if (carrier != null) carrier = carrier.toUpperCase(Locale.ROOT);
+    String number = canonicalBookingNumber(
+        carrier,
+        type,
+        compact(clean(request.number(), 128, null))
+    );
     String displayNumber = clean(request.displayNumber(), 128, null);
     ShipmentImportDetails details = sanitizeImportedDetails(request.importedDetails());
     if (displayNumber == null || displayNumber.isBlank()) {
@@ -927,8 +933,6 @@ public class ShipmentBatchTrackingService {
           "Shipment row " + (index + 1) + " has no shipment number"
       );
     }
-    String carrier = clean(request.carrier(), 32, null);
-    if (carrier != null) carrier = carrier.toUpperCase(Locale.ROOT);
     boolean supportedCarrier = carrier != null && List.of("COSCO", "CMA").contains(carrier);
     boolean manualOnly = Boolean.TRUE.equals(request.manualOnly()) || !supportedCarrier;
     ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
@@ -949,7 +953,11 @@ public class ShipmentBatchTrackingService {
     }
     String carrier = clean(request.carrier(), 32, "").toUpperCase(Locale.ROOT);
     String type = clean(request.type(), 24, "").toUpperCase(Locale.ROOT);
-    String number = compact(clean(request.number(), 128, null));
+    String number = canonicalBookingNumber(
+        carrier,
+        type,
+        compact(clean(request.number(), 128, null))
+    );
     if (!List.of("COSCO", "CMA").contains(carrier)
         || !"BOOKING".equals(type)
         || number.isBlank()) {
@@ -969,6 +977,15 @@ public class ShipmentBatchTrackingService {
         null
     );
     return new BatchItem(normalized, number, false);
+  }
+
+  private String canonicalBookingNumber(String carrier, String type, String number) {
+    if ("COSCO".equals(carrier)
+        && "BOOKING".equals(type)
+        && number.matches("COSU[0-9]{6,20}")) {
+      return number.substring(4);
+    }
+    return number;
   }
 
   private ShipmentImportDetails sanitizeImportedDetails(ShipmentImportDetails details) {

@@ -184,6 +184,7 @@ public class ShipmentTrackingService {
     if (!carrier.matches("[A-Z0-9_-]{2,32}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier code format is invalid");
     }
+    referenceNo = canonicalBookingQueryNumber(carrier, type, referenceNo);
     details = sanitizeImportedDetails(details, prefix, originalBill);
 
     ShipmentReference reference = new ShipmentReference(
@@ -2540,7 +2541,11 @@ public class ShipmentTrackingService {
           "Use the booking number for tracking; the bill of lading cannot be used as a query identity"
       );
     }
-    String number = normalizeReference(input.number());
+    String number = canonicalBookingQueryNumber(
+        carrier,
+        type,
+        normalizeReference(input.number())
+    );
     if (!number.matches("[A-Z0-9-]{4,35}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Shipment number format is invalid");
     }
@@ -2793,6 +2798,20 @@ public class ShipmentTrackingService {
   private String canonicalIdentityNumber(String carrier, String type, String normalizedNumber) {
     String normalized = normalizeReference(normalizedNumber);
     if (isSharedCoscoNumericIdentity(carrier, type, normalized) && normalized.startsWith("COSU")) {
+      return normalized.substring(4);
+    }
+    return normalized;
+  }
+
+  private String canonicalBookingQueryNumber(
+      String carrier,
+      String type,
+      String normalizedNumber
+  ) {
+    String normalized = normalizeReference(normalizedNumber);
+    if ("COSCO".equals(carrier)
+        && "BOOKING".equals(type)
+        && normalized.matches("COSU[0-9]{6,20}")) {
       return normalized.substring(4);
     }
     return normalized;

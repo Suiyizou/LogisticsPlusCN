@@ -1416,11 +1416,28 @@ class CustomerAccessFlowTest {
         "127.0.0.1"
     );
     CreateBusinessShipmentRequest replacement = new CreateBusinessShipmentRequest(
-        "COSCO", "BOOKING", "6508205930", "Vessel departed", "Updated note",
+        "COSCO", "BOOKING", "COSU6508205930", "Vessel departed", "Updated note",
         "JOB-NEW", "VESSEL NEW", "NINGBO", "LOS ANGELES", "PO-NEW",
         "2026-07-05", "2026-07-28", "2026-07-06", null, null,
         "PACIFIC OCEAN", "3 x 40HQ", "EXCEL-01"
     );
+
+    Map<String, Object> conflictCheck = customerService.inspectShipmentImportConflicts(
+        new ShipmentImportConflictCheckRequest(List.of(replacement)),
+        business
+    );
+    assertThat(conflictCheck)
+        .containsEntry("checked", 1)
+        .containsEntry("existingCount", 1)
+        .containsEntry("snapshotConflictCount", 1);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> conflicts =
+        (List<Map<String, Object>>) conflictCheck.get("conflicts");
+    assertThat(conflicts).singleElement().satisfies(conflict -> assertThat(conflict)
+        .containsEntry("shipmentId", created.get("shipmentId"))
+        .containsEntry("referenceType", "BOOKING")
+        .containsEntry("referenceNo", "6508205930")
+        .containsEntry("hasCurrentSnapshot", true));
 
     Map<String, Object> updated = customerService.createAssignedShipment(
         new AssignedBusinessShipmentRequest(customerId, true, replacement, true),

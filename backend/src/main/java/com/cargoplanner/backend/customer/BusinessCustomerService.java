@@ -1320,6 +1320,11 @@ public class BusinessCustomerService {
     String raw = rs.getString("reference_no_raw");
     String carrier = rs.getString("carrier_code");
     String referenceType = rs.getString("reference_type");
+    if (isSharedCoscoNumericIdentity(carrier, referenceType, normalized)) {
+      normalized = normalizeReference(normalized);
+      if (normalized.startsWith("COSU")) normalized = normalized.substring(4);
+      referenceType = "BOOKING";
+    }
     return new RefreshableShipment(
         rs.getString("shipment_public_id"),
         carrier,
@@ -1835,6 +1840,64 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment reference already exists");
     }
     return requireAvailableShipment(publicId, actor);
+  }
+
+  public Map<String, Object> inspectShipmentImportConflicts(
+      ShipmentImportConflictCheckRequest request,
+      AuthenticatedUser actor
+  ) {
+    requireManager(actor);
+    List<CreateBusinessShipmentRequest> shipments =
+        request == null || request.shipments() == null ? List.of() : request.shipments();
+    if (shipments.size() > 300) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 300 shipments can be checked");
+    }
+
+    Set<String> checkedIdentities = new LinkedHashSet<>();
+    List<Map<String, Object>> conflicts = new ArrayList<>();
+    int snapshotConflictCount = 0;
+    for (CreateBusinessShipmentRequest shipment : shipments) {
+      if (shipment == null) continue;
+      String carrier = normalizeCarrier(shipment.carrier());
+      String referenceType = normalizeReferenceType(shipment.referenceType());
+      String referenceNo = normalizeShipmentReference(
+          carrier, referenceType, shipment.referenceNo()
+      );
+      String identity = durableReferenceIdentity(carrier, referenceType, referenceNo);
+      if (!checkedIdentities.add(identity)) continue;
+
+      ShipmentRecord existing = findShipmentByReference(carrier, referenceType, referenceNo);
+      if (existing == null) continue;
+      requireShipmentAssignmentAuthority(existing, actor);
+      Integer currentSnapshotCount = jdbcTemplate.queryForObject(
+          """
+          SELECT COUNT(*)
+          FROM cp_shipments s
+          JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+          WHERE s.id = ? AND t.invalidated_at IS NULL
+          """,
+          Integer.class,
+          existing.id()
+      );
+      boolean hasCurrentSnapshot =
+          currentSnapshotCount != null && currentSnapshotCount > 0;
+      if (hasCurrentSnapshot) snapshotConflictCount += 1;
+
+      Map<String, Object> conflict = new LinkedHashMap<>();
+      conflict.put("shipmentId", existing.publicId());
+      conflict.put("carrier", carrier);
+      conflict.put("referenceType", referenceType);
+      conflict.put("referenceNo", referenceNo);
+      conflict.put("hasCurrentSnapshot", hasCurrentSnapshot);
+      conflicts.add(conflict);
+    }
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("checked", checkedIdentities.size());
+    response.put("existingCount", conflicts.size());
+    response.put("snapshotConflictCount", snapshotConflictCount);
+    response.put("conflicts", conflicts);
+    return response;
   }
 
   @Transactional
@@ -3980,7 +4043,8 @@ public class BusinessCustomerService {
 
   private String normalizeShipmentReference(String carrier, String type, String value) {
     String normalized = normalizeReference(value);
-    if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)
+    if ("COSCO".equals(carrier)
+        && ("BOOKING".equals(type) || "BILLOFLADING".equals(type))
         && normalized.matches("COSU[0-9]{6,20}")) {
       normalized = normalized.substring(4);
     }

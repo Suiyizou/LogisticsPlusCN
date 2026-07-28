@@ -169,6 +169,13 @@ export function createBusinessShipment(
   });
 }
 
+export function inspectBusinessShipmentImportConflicts(shipments) {
+  return request("/business/customers/shipments/import-conflicts", {
+    method: "POST",
+    body: { shipments }
+  });
+}
+
 export function updateBusinessShipment(shipmentId, payload) {
   return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}`, {
     method: "PATCH",

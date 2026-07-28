@@ -60,6 +60,15 @@ assert.deepEqual(completeImport.items[0].payload.containerTypes, [{ type: "40HQ"
 assert.equal(completeImport.items[0].payload.containers[0].number, "TEMU6003424");
 assert.deepEqual(completeImport.items[0].payload.serviceScopes, ["OCEAN", "INLAND"]);
 
+const cosuCompleteTemplate = buildManualShipmentImportTemplate(XLSX);
+const cosuMainSheet = cosuCompleteTemplate.Sheets[cosuCompleteTemplate.SheetNames[1]];
+cosuMainSheet.C2 = { t: "s", v: "COSU6508205930" };
+const cosuCompleteImport = parseManualShipmentImportWorkbook(cosuCompleteTemplate, XLSX);
+assert.equal(cosuCompleteImport.valid, 1);
+assert.equal(cosuCompleteImport.items[0].referenceType, "BOOKING");
+assert.equal(cosuCompleteImport.items[0].referenceNo, "6508205930");
+assert.equal(cosuCompleteImport.items[0].payload.bookingNumber, "6508205930");
+
 const invalidTemplate = buildManualShipmentImportTemplate(XLSX);
 invalidTemplate.Sheets["箱型数量"] = XLSX.utils.aoa_to_sheet([
   ["导入编号*", "箱型*", "数量*"]
@@ -91,6 +100,16 @@ assert.equal(punctuationItems[0].number, "ABC/123.45");
 assert.equal(punctuationItems[0].manualOnly, false);
 assert.equal(punctuationItems[0].type, "BOOKING");
 
+const cosuBookingSheet = prepareSheet("COSU", [
+  ["BOOKING NO."],
+  ["COSU 6502406170"]
+]);
+const cosuBookingItems = buildShipmentBatchItems(cosuBookingSheet, 0);
+assert.equal(cosuBookingItems.length, 1);
+assert.equal(cosuBookingItems[0].carrier, "COSCO");
+assert.equal(cosuBookingItems[0].type, "BOOKING");
+assert.equal(cosuBookingItems[0].number, "6502406170");
+
 const businessCustomerPage = readFileSync(
   new URL("../src/components/BusinessCustomerPage.vue", import.meta.url),
   "utf8"
@@ -104,6 +123,10 @@ assert.match(businessCustomerApi, /request\(`\/business\/shipments\/\$\{encodeUR
 assert.match(
   businessCustomerApi,
   /request\("\/business\/customers\/shipments", \{\s*method: "POST",\s*body: \{ customerId, publishToCustomer, shipment: payload, overwriteExisting \}\s*\}\)/
+);
+assert.match(
+  businessCustomerApi,
+  /request\("\/business\/customers\/shipments\/import-conflicts"/
 );
 assert.match(businessCustomerApi, /request\("\/business\/shipments\/batch-refresh"/);
 assert.doesNotMatch(businessCustomerApi, /business\/customers\/available-shipments/);
@@ -178,7 +201,7 @@ assert.match(manualCreateSource, /containerTypes,/);
 assert.match(manualCreateSource, /containers/);
 assert.match(
   manualCreateSource,
-  /createBusinessShipment\(\s*buildManualShipmentPayload\(shipmentCreateForm\),\s*shipmentCreateCustomerId\.value,\s*shipmentCreatePublishToCustomer\.value\s*\)/
+  /prepareShipmentOverwriteReview\(\[payload\]\)[\s\S]*?createBusinessShipment\([\s\S]*?overwriteReview\.existingIdentities\.has/
 );
 assert.match(businessCustomerPage, /@click="openShipmentExcelImport"/);
 assert.match(businessCustomerPage, /v-if="shipmentExcelImportDialogOpen"/);
@@ -186,7 +209,7 @@ assert.match(businessCustomerPage, /downloadShipmentExcelTemplate/);
 assert.match(businessCustomerPage, /parseManualShipmentImportWorkbook/);
 assert.match(
   businessCustomerPage,
-  /const response = await createBusinessShipment\(\s*item\.payload,\s*shipmentExcelCustomerId\.value,\s*shipmentExcelPublishToCustomer\.value,\s*true\s*\)/
+  /prepareShipmentOverwriteReview\([\s\S]*?items\.map\(\(item\) => item\.payload\)[\s\S]*?const response = await createBusinessShipment\([\s\S]*?overwriteReview\.existingIdentities\.has/
 );
 assert.match(businessCustomerPage, /response\?\.overwritten === true/);
 assert.match(businessCustomerPage, /status: overwritten \? "UPDATED" : "CREATED"/);

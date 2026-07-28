@@ -529,7 +529,9 @@ export function normalizeTrackingRequest(input) {
     .trim()
     .replace(/\s+/g, "")
     .toUpperCase();
-  const number = normalizedNumber;
+  const number = type === "BOOKING" && /^COSU[0-9]{6,20}$/.test(normalizedNumber)
+    ? normalizedNumber.slice(4)
+    : normalizedNumber;
 
   if (!/^[A-Z0-9-]{4,35}$/.test(number)) {
     throw new HttpError(400, `${typeConfig.label}格式不正确`);

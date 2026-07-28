@@ -171,6 +171,14 @@ public class BusinessCustomerController {
     return service.createAssignedShipment(request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/shipments/import-conflicts")
+  public Map<String, Object> inspectShipmentImportConflicts(
+      @RequestBody ShipmentImportConflictCheckRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.inspectShipmentImportConflicts(request, actor);
+  }
+
   @PatchMapping("/shipments/{shipmentId}")
   public Map<String, Object> updateShipment(
       @PathVariable String shipmentId,

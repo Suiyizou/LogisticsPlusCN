@@ -2449,6 +2449,7 @@ import {
   fetchShipmentBatchTask,
   handoverBusinessCustomers,
   invalidateBusinessShipmentSnapshot,
+  inspectBusinessShipmentImportConflicts,
   resetBusinessCustomerPassword,
   resetOverseaAgentPassword,
   setBusinessShipmentPublication,
@@ -5542,6 +5543,20 @@ async function startShipmentExcelImport() {
   if (!canStartShipmentExcelImport.value) return;
   const items = shipmentExcelImportPreview.value.items;
   shipmentExcelImporting.value = true;
+  let overwriteReview;
+  try {
+    overwriteReview = await prepareShipmentOverwriteReview(
+      items.map((item) => item.payload)
+    );
+  } catch (error) {
+    showError(error, "customers.shipmentExcelImportConflictCheckFailed");
+    shipmentExcelImporting.value = false;
+    return;
+  }
+  if (!overwriteReview.approved) {
+    shipmentExcelImporting.value = false;
+    return;
+  }
   shipmentExcelImportProgress.value = {
     total: items.length,
     done: 0,
@@ -5567,7 +5582,9 @@ async function startShipmentExcelImport() {
           item.payload,
           shipmentExcelCustomerId.value,
           shipmentExcelPublishToCustomer.value,
-          true
+          overwriteReview.existingIdentities.has(
+            shipmentImportIdentity(item.payload)
+          )
         );
         const overwritten = response?.overwritten === true;
         shipmentExcelImportResults.value[index] = {
@@ -5834,14 +5851,55 @@ function closeShipmentCreateDialog() {
   resetShipmentCreateForm();
 }
 
+function shipmentImportIdentity(shipment) {
+  const carrier = String(shipment?.carrier || "COSCO").trim().toUpperCase();
+  const referenceType = "BOOKING";
+  let referenceNo = String(
+    shipment?.referenceNo || shipment?.bookingNumber || ""
+  ).replace(/\s+/g, "").trim().toUpperCase();
+  if (carrier === "COSCO" && /^COSU[0-9]{6,20}$/.test(referenceNo)) {
+    referenceNo = referenceNo.slice(4);
+  }
+  return `${carrier}|${referenceType}|${referenceNo}`;
+}
+
+async function prepareShipmentOverwriteReview(shipments) {
+  const response = await inspectBusinessShipmentImportConflicts(shipments);
+  const conflicts = Array.isArray(response?.conflicts) ? response.conflicts : [];
+  const snapshotConflicts = conflicts.filter((item) => item?.hasCurrentSnapshot);
+  if (snapshotConflicts.length) {
+    const references = snapshotConflicts
+      .slice(0, 5)
+      .map((item) => item.referenceNo)
+      .filter(Boolean)
+      .join("、");
+    const confirmed = window.confirm(t("customers.confirmOverwriteSnapshots", {
+      count: snapshotConflicts.length,
+      references,
+      more: snapshotConflicts.length > 5
+        ? t("customers.moreOverwriteSnapshots", { count: snapshotConflicts.length - 5 })
+        : ""
+    }));
+    if (!confirmed) return { approved: false, existingIdentities: new Set() };
+  }
+  return {
+    approved: true,
+    existingIdentities: new Set(conflicts.map(shipmentImportIdentity))
+  };
+}
+
 async function createShipment() {
   if (creatingShipment.value || !shipmentCreateCustomerId.value) return;
   creatingShipment.value = true;
   try {
+    const payload = buildManualShipmentPayload(shipmentCreateForm);
+    const overwriteReview = await prepareShipmentOverwriteReview([payload]);
+    if (!overwriteReview.approved) return;
     await createBusinessShipment(
-      buildManualShipmentPayload(shipmentCreateForm),
+      payload,
       shipmentCreateCustomerId.value,
-      shipmentCreatePublishToCustomer.value
+      shipmentCreatePublishToCustomer.value,
+      overwriteReview.existingIdentities.has(shipmentImportIdentity(payload))
     );
     shipmentPage.value = 1;
     await loadAvailableShipments();

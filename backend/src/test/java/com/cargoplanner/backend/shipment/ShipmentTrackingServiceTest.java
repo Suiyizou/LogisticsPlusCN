@@ -423,7 +423,7 @@ class ShipmentTrackingServiceTest {
             "COSCO",
             "AUTO",
             "BOOKING",
-            "6502406170",
+            "COSU6502406170",
             false,
             details
         ),

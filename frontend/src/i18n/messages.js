@@ -1191,6 +1191,8 @@ messages["zh-CN"].customers = {
   deleteShipment: "删除票单",
   deleteShipmentConfirm: "确认删除这张票单吗？票单的客户绑定和查询快照也会一并删除；存在附件时不能删除。",
   shipmentCreated: "票单已创建。",
+  confirmOverwriteSnapshots: "检测到 {count} 张相同票单已有当前快照：{references}{more}。继续录入将覆盖原快照，是否确认？",
+  moreOverwriteSnapshots: "，另有 {count} 张",
   shipmentSaved: "票单已更新。",
   shipmentDeleted: "票单已删除。",
   shipmentCreateFailed: "票单创建失败。",
@@ -1463,6 +1465,8 @@ messages["en-US"].customers = {
   deleteShipment: "Delete shipment",
   deleteShipmentConfirm: "Delete this shipment? Customer assignments and tracking snapshots are removed too. Shipments with files cannot be deleted.",
   shipmentCreated: "Shipment created.",
+  confirmOverwriteSnapshots: "{count} matching shipment(s) already have a current snapshot: {references}{more}. Continuing will replace the existing snapshot. Proceed?",
+  moreOverwriteSnapshots: ", plus {count} more",
   shipmentSaved: "Shipment updated.",
   shipmentDeleted: "Shipment deleted.",
   shipmentCreateFailed: "Could not create the shipment.",
@@ -2262,6 +2266,7 @@ Object.assign(messages["zh-CN"].customers, {
   shipmentExcelTemplateFailed: "完整票单 Excel 模板生成失败。",
   shipmentExcelUnsupportedFile: "请选择 .xlsx 或 .xls 格式的 Excel 文件。",
   shipmentExcelFileTooLarge: "Excel 文件不能超过 10 MB。",
+  shipmentExcelImportConflictCheckFailed: "无法检查重复票单，请稍后重试；本次尚未写入任何票单。",
   shipmentExcelImportItemFailed: "该票单创建失败。",
   shipmentExcelImportFinished: "批量导入完成：成功 {succeeded} 张，失败 {failed} 张。",
   shipmentExcelResultsFailed: "导入结果 Excel 生成失败。"
@@ -2293,6 +2298,7 @@ Object.assign(messages["en-US"].customers, {
   shipmentExcelTemplateFailed: "Could not generate the complete shipment Excel template.",
   shipmentExcelUnsupportedFile: "Choose an .xlsx or .xls workbook.",
   shipmentExcelFileTooLarge: "The workbook cannot exceed 10 MB.",
+  shipmentExcelImportConflictCheckFailed: "Could not check for duplicate shipments. Nothing has been imported; try again.",
   shipmentExcelImportItemFailed: "This shipment could not be created.",
   shipmentExcelImportFinished: "Batch import finished: {succeeded} succeeded and {failed} failed.",
   shipmentExcelResultsFailed: "Could not generate the import-results workbook."

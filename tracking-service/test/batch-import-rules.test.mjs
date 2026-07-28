@@ -64,6 +64,23 @@ test("normalizes booking candidates without deriving a bill identity", () => {
   );
 });
 
+test("recognizes a COSU-prefixed booking and queries only its numeric suffix", () => {
+  const candidate = normalizeShipmentCandidate(
+    "BOOKING",
+    " COSU 6502406170 "
+  );
+  assert.deepEqual(candidate, {
+    carrier: "COSCO",
+    carrierPrefix: "COSU",
+    type: "BOOKING",
+    number: "6502406170",
+    originalBillOfLading: null,
+    displayNumber: "COSU 6502406170",
+    manualOnly: false,
+    unsupportedCarrierPrefix: false
+  });
+});
+
 test("manual column selection is fixed to booking numbers", () => {
   const rows = [
     ["Reference", "Job"],

@@ -89,7 +89,7 @@ class ShipmentBatchTrackingServiceTest {
             "HAYDEN-TRACKING INFORMATION.xlsx",
             List.of(
                 new ShipmentBatchItemRequest(
-                    "cosu-row", "COSCO", "BOOKING", "6502406170",
+                    "cosu-row", "COSCO", "BOOKING", "COSU6502406170",
                     "COSU6502406170", false, cosuDetails
                 ),
                 new ShipmentBatchItemRequest(

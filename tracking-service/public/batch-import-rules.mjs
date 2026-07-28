@@ -82,6 +82,19 @@ export function normalizeShipmentCandidate(type, rawValue) {
   const compact = compactShipmentNumber(sourceText);
   if (!compact) return null;
   const displayText = cleanCellText(sourceText) || compact;
+  const cosuBooking = compact.match(COSU_NUMBER_PATTERN);
+  if (cosuBooking) {
+    return {
+      carrier: "COSCO",
+      carrierPrefix: "COSU",
+      type: "BOOKING",
+      number: cosuBooking[1],
+      originalBillOfLading: null,
+      displayNumber: displayText,
+      manualOnly: false,
+      unsupportedCarrierPrefix: false
+    };
+  }
 
   return {
     carrier: null,

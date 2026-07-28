@@ -74,13 +74,13 @@ test("normalizes and validates tracking input", () => {
   assert.throws(() => normalizeTrackingRequest({ type: "BILLOFLADING", number: "@@" }));
 });
 
-test("canonicalizes legacy bill requests to the booking query path", () => {
+test("canonicalizes COSU-prefixed references to the numeric booking query path", () => {
   const legacy = normalizeTrackingRequest({
     type: "BILLOFLADING",
     number: " COSU 6502406170 "
   });
   assert.equal(legacy.type, "BOOKING");
-  assert.equal(legacy.number, "COSU6502406170");
+  assert.equal(legacy.number, "6502406170");
 });
 
 test("exposes a multi-carrier adapter registry", () => {

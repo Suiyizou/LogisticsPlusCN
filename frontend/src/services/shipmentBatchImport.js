@@ -95,11 +95,11 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
 
     const rowClientCode = valueAt(row, fieldIndexes.clientNameCode);
     if (rowClientCode) clientNameCode = rowClientCode;
-    const bookingNumber = extractManualReference(selectedValue);
-    if (!bookingNumber) continue;
     const carrier = normalizeCarrier(
       valueAt(row, fieldIndexes.carrier) || defaultCarrier
     );
+    const bookingNumber = extractManualReference(selectedValue, carrier);
+    if (!bookingNumber) continue;
     const supportedCarrier = ["COSCO", "CMA"].includes(carrier);
     let volume = valueAt(row, fieldIndexes.volume);
     if (normalizeHeader(volume) === "VOLUME") volume = "";
@@ -143,12 +143,16 @@ function findHeaderIndex(headers, aliases) {
   return headers.findIndex((header) => normalizedAliases.has(normalizeHeader(header)));
 }
 
-function extractManualReference(value) {
+function extractManualReference(value, carrier) {
   const upper = cellText(value).toUpperCase();
   const tokens = upper.match(/[A-Z0-9][A-Z0-9./-]{3,}/g) || [];
-  return tokens
+  const selected = tokens
     .map((token) => token.replace(/[./-]+$/g, ""))
     .find((token) => /\d/.test(token) && token.length >= 4) || "";
+  if (carrier === "COSCO" && /^COSU[0-9]{6,20}$/.test(selected)) {
+    return selected.slice(4);
+  }
+  return selected;
 }
 
 function valueAt(row, index) {
