@@ -68,7 +68,7 @@
           <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
             <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
           </button>
-          <button @click="$router.push({ path: '/workbenches', query: { profile: '1' } })">
+          <button @click="openPersonalProfile">
             <el-icon><User /></el-icon><span>{{ t("customers.personalInfo") }}</span>
           </button>
         </nav>
@@ -100,21 +100,33 @@
                 <div v-if="isManager" class="list-page-actions">
                   <el-input v-model="customerSearch" :placeholder="t('customers.searchCustomerPlaceholder')" prefix-icon="Search" clearable style="width:240px" />
                   <el-button type="primary" @click="createDialogOpen = true"><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button>
-                  <el-button type="primary" plain @click="openAgentCreateDialog"><el-icon><UserFilled /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
                   <el-button @click="openBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button>
+                  <el-button
+                    type="success"
+                    plain
+                    :disabled="!selectedCustomerRows.length"
+                    @click="openCustomerTransfer(selectedCustomerRows[0], true)"
+                  >{{ t("customers.transferSelected", { count: selectedCustomerRows.length }) }}</el-button>
+                  <el-button
+                    type="danger"
+                    plain
+                    :disabled="!selectedCustomerRows.length || mutatingCustomer"
+                    @click="deleteSelectedCustomers"
+                  >{{ t("customers.deleteSelectedCustomers", { count: selectedCustomerRows.length }) }}</el-button>
                 </div>
               </div>
               <el-table
                 ref="customerTableRef"
-                :data="filteredCustomers"
+                :data="paginatedCustomers"
                 stripe
                 v-loading="loadingCustomers"
                 style="width:100%"
-                table-layout="auto"
                 class="customer-directory-table"
+                @selection-change="handleCustomerSelectionChange"
               >
-                <el-table-column type="index" :label="t('customers.index')" width="60" />
-                <el-table-column :label="t('customers.displayName')" min-width="180">
+                <el-table-column v-if="isManager" type="selection" width="44" />
+                <el-table-column type="index" :index="customerRowIndex" :label="t('customers.index')" width="58" />
+                <el-table-column :label="t('customers.displayName')" min-width="168">
                   <template #default="{ row }">
                     <div class="customer-name-cell">
                       <span class="customer-table-avatar">{{ customerInitial(row) }}</span>
@@ -125,8 +137,8 @@
                     </div>
                   </template>
                 </el-table-column>
-                <el-table-column prop="clientCode" :label="t('customers.clientCode')" width="150" />
-                <el-table-column prop="overseaAgentDisplayName" :label="t('customers.targetAgent')" min-width="150">
+                <el-table-column prop="clientCode" :label="t('customers.clientCode')" width="138" class-name="customer-code-column" />
+                <el-table-column prop="overseaAgentDisplayName" :label="t('customers.targetAgent')" min-width="142" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.overseaAgentDisplayName || t("customers.unassigned") }}</template>
                 </el-table-column>
                 <el-table-column :label="t('customers.partyRole')" width="120">
@@ -135,7 +147,7 @@
                 <el-table-column :label="t('customers.shipmentCount')" width="100" align="center">
                   <template #default="{ row }">{{ row.shipmentCount || 0 }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.remark')" min-width="200" show-overflow-tooltip>
+                <el-table-column :label="t('customers.remark')" min-width="150" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.remark || '—' }}</template>
                 </el-table-column>
                 <el-table-column :label="t('customers.status')" width="100">
@@ -143,28 +155,40 @@
                     <el-tag :type="row.status==='ACTIVE'?'success':'danger'" size="small">{{ statusLabel(row.status) }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('customers.createdAt')" width="170">
+                <el-table-column :label="t('customers.createdAt')" width="152">
                   <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.actions')" :width="isManager ? 560 : 120" fixed="right">
+                <el-table-column :label="t('customers.actions')" :width="isManager ? 318 : 110" fixed="right">
                   <template #default="{ row }">
-                    <div class="table-action-buttons table-action-buttons--spacious">
-                      <el-button type="primary" plain @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
+                    <div class="table-action-buttons table-action-buttons--single-line">
+                      <el-button size="small" type="primary" plain @click.stop="viewCustomerDetail(row)">{{ t("customers.detail") }}</el-button>
                       <template v-if="isManager">
-                        <el-button type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
+                        <el-button size="small" type="primary" plain @click.stop="openEditCustomer(row)">{{ t("customers.edit") }}</el-button>
                         <el-button
+                          size="small"
                           type="success"
                           plain
                           :disabled="!isTransferableCustomer(row)"
                           @click.stop="openCustomerTransfer(row)"
-                        >{{ row.overseaAgentUserId ? t("customers.changeAgent") : t("customers.assignAgent") }}</el-button>
-                        <el-button type="warning" plain @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                        <el-button type="danger" plain @click.stop="deleteCustomerRow(row)">{{ t("customers.deleteCustomer") }}</el-button>
+                        >{{ t("customers.assignAgentShort") }}</el-button>
+                        <el-button size="small" type="warning" plain @click.stop="openResetPassword(row)">{{ t("customers.resetPassword") }}</el-button>
                       </template>
                     </div>
                   </template>
                 </el-table-column>
               </el-table>
+              <el-pagination
+                v-if="filteredCustomers.length"
+                class="shipment-pagination unified-pagination"
+                background
+                layout="prev, pager, next, sizes, total"
+                :current-page="customerPage"
+                :page-size="customerPageSize"
+                :page-sizes="[10, 20, 50]"
+                :total="filteredCustomers.length"
+                @current-change="customerPage = $event"
+                @size-change="changeCustomerPageSize"
+              />
             </div>
           </template>
           <!-- Detail view -->
@@ -447,26 +471,41 @@
                 <el-button type="primary" @click="openAgentCreateDialog"><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
               </div>
             </div>
-            <el-table :data="transferAgents" border stripe v-loading="loadingTransferAgents" class="standard-information-table">
-              <el-table-column type="index" :label="t('customers.index')" width="70" />
+            <el-table :data="paginatedTransferAgents" border stripe v-loading="loadingTransferAgents" class="standard-information-table">
+              <el-table-column type="index" :index="agentRowIndex" :label="t('customers.index')" width="70" />
               <el-table-column prop="username" :label="t('customers.username')" min-width="160" />
               <el-table-column prop="displayName" :label="t('customers.displayName')" min-width="180" />
               <el-table-column prop="linkedCustomerCount" :label="t('customers.shipmentCount')" width="130" align="center" />
               <el-table-column :label="t('customers.status')" width="120">
                 <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'">{{ statusLabel(row.status) }}</el-tag></template>
               </el-table-column>
-              <el-table-column :label="t('customers.actions')" width="360" fixed="right">
+              <el-table-column :label="t('customers.actions')" width="330" fixed="right">
                 <template #default="{ row }">
-                  <el-button type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
-                  <el-button type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                  <el-button
-                    :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
-                    plain
-                    @click="toggleAgentStatus(row)"
-                  >{{ row.status === 'ACTIVE' ? t("customers.disable") : t("customers.enable") }}</el-button>
+                  <div class="table-action-buttons table-action-buttons--single-line">
+                    <el-button size="small" type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
+                    <el-button size="small" type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                    <el-button
+                      size="small"
+                      :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
+                      plain
+                      @click="toggleAgentStatus(row)"
+                    >{{ row.status === 'ACTIVE' ? t("customers.disable") : t("customers.enable") }}</el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
+            <el-pagination
+              v-if="transferAgents.length"
+              class="shipment-pagination unified-pagination"
+              background
+              layout="prev, pager, next, sizes, total"
+              :current-page="agentPage"
+              :page-size="agentPageSize"
+              :page-sizes="[10, 20, 50]"
+              :total="transferAgents.length"
+              @current-change="agentPage = $event"
+              @size-change="changeAgentPageSize"
+            />
           </div>
         </div>
 
@@ -485,7 +524,7 @@
                       <span>{{ t("customers.customerFilterLabel") }}</span>
                       <el-select
                         v-model="shipmentCustomerFilter"
-                        class="shipment-customer-filter"
+                        class="business-select shipment-customer-filter"
                         :placeholder="t('customers.filterByCustomer')"
                         clearable
                         filterable
@@ -505,7 +544,7 @@
                       <span>{{ t("customers.trackingChannel") }}</span>
                       <el-select
                         v-model="shipmentTrackingChannel"
-                        class="shipment-channel-select"
+                        class="business-select shipment-channel-select"
                         :disabled="batchTrackRunning || refreshingShipment"
                       >
                         <el-option :label="t('customers.trackingChannelAuto')" value="AUTO" />
@@ -563,7 +602,7 @@
                     <template #default="{ row }">
                       <div>
                         <b>{{ row.referenceNo || row.shipmentId }}</b>
-                        <div style="margin-top:4px"><small>{{ row.carrier }} · {{ referenceTypeLabel(row.referenceType) }}</small></div>
+                        <div class="shipment-reference-type"><small>{{ referenceTypeLabel(row.referenceType) }}</small></div>
                       </div>
                     </template>
                   </el-table-column>
@@ -615,9 +654,9 @@
                   <el-table-column :label="t('customers.lastTrackedAt')" width="160">
                     <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.actions')" :width="isManager ? 380 : 110" fixed="right">
+                  <el-table-column :label="t('customers.actions')" :width="isManager ? 282 : 110" fixed="right">
                     <template #default="{ row }">
-                      <div class="table-action-buttons table-action-buttons--spacious">
+                      <div class="table-action-buttons table-action-buttons--single-line">
                         <el-button size="small" type="info" plain @click.stop="trackShipmentInWorkspace(row)">{{ t("customers.view") }}</el-button>
                         <template v-if="isManager">
                           <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{ t("customers.edit") }}</el-button>
@@ -689,13 +728,16 @@
                         <label>
                           <span>{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span>
                           <el-select v-model="batchTrackCustomerId" filterable class="business-select">
-                            <el-option
-                              v-for="customer in assignableCustomers"
-                              :key="customer.id"
+                          <el-option
+                            v-for="customer in assignableCustomers"
+                            :key="customer.id"
                               :value="customer.id"
-                              :label="customerFilterOptionLabel(customer)"
-                            />
-                          </el-select>
+                            :label="customerFilterOptionLabel(customer)"
+                          />
+                          <template #label="{ value }">
+                            <span class="business-select-value">{{ selectedCustomerOptionLabel(value) }}</span>
+                          </template>
+                        </el-select>
                         </label>
                         <el-checkbox v-model="batchTrackPublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
                       </div>
@@ -1272,9 +1314,12 @@
               <el-option
                 v-for="agent in transferAgents"
                 :key="agent.id"
-                :value="agent.id"
+                :value="String(agent.id)"
                 :label="`${agent.displayName} (@${agent.username})`"
               />
+              <template #label="{ value }">
+                <span class="business-select-value">{{ selectedAgentOptionLabel(value) }}</span>
+              </template>
             </el-select>
           </label>
           <small class="customer-transfer-hint">{{ t("customers.transferPermissionHint") }}</small>
@@ -1435,6 +1480,9 @@
                     :value="customer.id"
                     :label="customerFilterOptionLabel(customer)"
                   />
+                  <template #label="{ value }">
+                    <span class="business-select-value">{{ selectedCustomerOptionLabel(value) }}</span>
+                  </template>
                 </el-select>
               </label>
               <el-checkbox v-model="shipmentCreatePublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
@@ -1732,6 +1780,9 @@
                   :value="customer.id"
                   :label="customerFilterOptionLabel(customer)"
                 />
+                <template #label="{ value }">
+                  <span class="business-select-value">{{ selectedCustomerOptionLabel(value) }}</span>
+                </template>
               </el-select>
             </label>
             <el-checkbox v-model="shipmentExcelPublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
@@ -1884,6 +1935,38 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="personalProfileOpen"
+      class="operations-profile-dialog"
+      :title="t('portal.personalInfoTitle')"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <div class="operations-profile-hero">
+        <span>{{ displayName.slice(0, 1).toUpperCase() }}</span>
+        <div>
+          <b>{{ displayName }}</b>
+          <small>@{{ currentUser?.username }}</small>
+        </div>
+      </div>
+      <el-form class="operations-profile-form" label-position="top" @submit.prevent="savePersonalProfile">
+        <el-form-item :label="t('portal.accountUsername')">
+          <el-input :model-value="currentUser?.username" disabled />
+        </el-form-item>
+        <el-form-item :label="t('portal.accountRole')">
+          <el-input :model-value="personalRoleLabel" disabled />
+        </el-form-item>
+        <el-form-item :label="t('portal.displayName')">
+          <el-input v-model.trim="personalProfileForm.displayName" maxlength="80" show-word-limit />
+        </el-form-item>
+        <el-alert v-if="personalProfileError" :title="personalProfileError" type="error" :closable="false" show-icon />
+      </el-form>
+      <template #footer>
+        <el-button :disabled="personalProfileSaving" @click="personalProfileOpen = false">{{ t("customers.cancel") }}</el-button>
+        <el-button type="primary" :loading="personalProfileSaving" @click="savePersonalProfile">{{ t("portal.saveProfile") }}</el-button>
+      </template>
+    </el-dialog>
+
     <div v-if="toastMessage" class="customer-toast" role="status">{{ toastMessage }}</div>
   </main>
 </template>
@@ -1938,7 +2021,8 @@ import {
   parseCustomerImportWorkbook,
   validateCustomerImportRows
 } from "../services/customerExcelImport";
-import { storedToken } from "../services/authSession";
+import { updateOwnProfile } from "../services/adminApi";
+import { saveStoredUser, storedToken } from "../services/authSession";
 import { markApiErrorHandled } from "../services/apiClient";
 import {
   User,
@@ -1956,7 +2040,7 @@ import {
 const props = defineProps({
   currentUser: { type: Object, default: null }
 });
-const emit = defineEmits(["logout"]);
+const emit = defineEmits(["logout", "user-updated"]);
 const { t } = useI18n();
 const isManager = computed(() => ["BUSINESS", "ADMIN"].includes(props.currentUser?.role));
 let xlsxModulePromise;
@@ -1973,12 +2057,20 @@ function waitForNextPaint() {
 const customers = ref([]);
 const customerTableRef = ref(null);
 const selectedCustomerRows = ref([]);
+const customerPage = ref(1);
+const customerPageSize = ref(10);
+const agentPage = ref(1);
+const agentPageSize = ref(10);
 const selectedCustomerId = ref("");
 const shipments = ref([]);
 const availableShipments = ref([]);
 const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
 const accountMenuOpen = ref(false);
+const personalProfileOpen = ref(false);
+const personalProfileSaving = ref(false);
+const personalProfileError = ref("");
+const personalProfileForm = reactive({ displayName: "" });
 const createDialogOpen = ref(false);
 const agentCreateDialogOpen = ref(false);
 const creatingAgent = ref(false);
@@ -2176,6 +2268,11 @@ let batchTrackPollTimer = 0;
 let batchTrackClockTimer = 0;
 
 const displayName = computed(() => props.currentUser?.displayName || props.currentUser?.username || t("customers.businessOperator"));
+const personalRoleLabel = computed(() => t({
+  ADMIN: "portal.roleAdmin",
+  BUSINESS: "portal.roleBusiness",
+  OVERSEA_AGENT: "portal.roleOverseaAgent"
+}[props.currentUser?.role] || "portal.roleEmployee"));
 const selectedCustomer = computed(() => customers.value.find((item) => item.id === selectedCustomerId.value) || null);
 const unboundAvailableShipments = computed(() => {
   const boundIds = new Set(shipments.value.map((item) => item.shipmentId));
@@ -2200,6 +2297,8 @@ const filteredCustomers = computed(() => {
     (c.responsibleAgentDisplayName || "").toLowerCase().includes(query)
   );
 });
+const paginatedCustomers = computed(() => pageSlice(filteredCustomers.value, customerPage.value, customerPageSize.value));
+const paginatedTransferAgents = computed(() => pageSlice(transferAgents.value, agentPage.value, agentPageSize.value));
 
 const linkableCustomers = computed(() => customers.value.filter((customer) =>
   customer.id !== selectedCustomerId.value
@@ -2578,6 +2677,18 @@ watch([shipmentCustomerFilter, refreshIssuesOnly], () => {
   void loadAvailableShipments();
 });
 
+watch(customerSearch, () => {
+  customerPage.value = 1;
+});
+
+watch(filteredCustomers, (items) => {
+  customerPage.value = boundedPage(customerPage.value, items.length, customerPageSize.value);
+});
+
+watch(transferAgents, (items) => {
+  agentPage.value = boundedPage(agentPage.value, items.length, agentPageSize.value);
+});
+
 watch(displayedAvailableShipments, (items) => {
   const visibleIds = new Set(items.map((item) => item.shipmentId));
   selectedShipmentRows.value = selectedShipmentRows.value
@@ -2620,6 +2731,71 @@ function navigateTo(item) {
   menuItem.value = item;
   subView.value = "list";
   if (item === "agents") void loadTransferAgents();
+}
+
+function pageSlice(items, page, pageSize) {
+  const size = Math.max(1, Number(pageSize));
+  const start = (Math.max(1, Number(page)) - 1) * size;
+  return items.slice(start, start + size);
+}
+
+function boundedPage(page, total, pageSize) {
+  return Math.min(Math.max(1, Number(page)), Math.max(1, Math.ceil(Number(total || 0) / Number(pageSize || 1))));
+}
+
+function customerRowIndex(index) {
+  return (customerPage.value - 1) * customerPageSize.value + index + 1;
+}
+
+function agentRowIndex(index) {
+  return (agentPage.value - 1) * agentPageSize.value + index + 1;
+}
+
+function changeCustomerPageSize(size) {
+  customerPageSize.value = Number(size);
+  customerPage.value = 1;
+}
+
+function changeAgentPageSize(size) {
+  agentPageSize.value = Number(size);
+  agentPage.value = 1;
+}
+
+function selectedCustomerOptionLabel(value) {
+  const customer = assignableCustomers.value.find((item) => String(item.id) === String(value));
+  return customer ? customerFilterOptionLabel(customer) : "";
+}
+
+function selectedAgentOptionLabel(value) {
+  const agent = transferAgents.value.find((item) => String(item.id) === String(value));
+  return agent ? `${agent.displayName} (@${agent.username})` : "";
+}
+
+function openPersonalProfile() {
+  personalProfileForm.displayName = props.currentUser?.displayName || "";
+  personalProfileError.value = "";
+  personalProfileOpen.value = true;
+}
+
+async function savePersonalProfile() {
+  const nextName = personalProfileForm.displayName.trim();
+  personalProfileError.value = "";
+  if (nextName.length < 2) {
+    personalProfileError.value = t("portal.displayNameRule");
+    return;
+  }
+  personalProfileSaving.value = true;
+  try {
+    const user = await updateOwnProfile(nextName);
+    saveStoredUser(user);
+    emit("user-updated", user);
+    personalProfileOpen.value = false;
+    showSuccess("portal.profileSaved");
+  } catch (error) {
+    personalProfileError.value = error?.message || t("portal.profileSaveFailed");
+  } finally {
+    personalProfileSaving.value = false;
+  }
 }
 
 function selectCustomerFromList(row) {
@@ -2728,11 +2904,13 @@ async function loadTransferAgents() {
   }
 }
 
-async function openCustomerTransfer(customer) {
+async function openCustomerTransfer(customer, preserveSelection = false) {
   if (!customer || loadingTransferAgents.value) return;
-  selectedCustomerRows.value = [customer];
+  if (!preserveSelection) selectedCustomerRows.value = [customer];
   transferDialogOpen.value = true;
-  transferForm.targetAgentId = customer.overseaAgentUserId || null;
+  transferForm.targetAgentId = customer.overseaAgentUserId == null
+    ? null
+    : String(customer.overseaAgentUserId);
   loadingTransferAgents.value = true;
   try {
     const response = await fetchCustomerTransferAgents();
@@ -2743,6 +2921,24 @@ async function openCustomerTransfer(customer) {
     showError(error, "customers.loadTransferAgentsFailed");
   } finally {
     loadingTransferAgents.value = false;
+  }
+}
+
+async function deleteSelectedCustomers() {
+  const rows = [...selectedCustomerRows.value];
+  if (!rows.length || mutatingCustomer.value) return;
+  if (!window.confirm(t("customers.confirmDeleteSelectedCustomers", { count: rows.length }))) return;
+  mutatingCustomer.value = true;
+  try {
+    await Promise.all(rows.map((row) => deleteBusinessCustomer(row.id)));
+    selectedCustomerRows.value = [];
+    customerTableRef.value?.clearSelection?.();
+    await Promise.all([loadCustomers(), loadAvailableShipments()]);
+    showSuccess("customers.selectedCustomersArchived", { count: rows.length });
+  } catch (error) {
+    showError(error, "customers.deleteCustomerFailed");
+  } finally {
+    mutatingCustomer.value = false;
   }
 }
 
@@ -5396,6 +5592,7 @@ function showError(error, fallbackKey) {
   box-shadow: 0 8px 14px rgba(15, 29, 46, 0.06);
 }
 .shipment-customer-filter {
+  flex: 0 0 230px;
   width: 230px;
 }
 .shipment-customer-filter-label {
@@ -5409,6 +5606,7 @@ function showError(error, fallbackKey) {
 }
 .shipment-toolbar-control {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   color: #64748b;
@@ -5416,6 +5614,7 @@ function showError(error, fallbackKey) {
   white-space: nowrap;
 }
 .shipment-channel-select {
+  flex: 0 0 170px;
   width: 170px;
 }
 .shipment-workspace-side {
@@ -5743,6 +5942,47 @@ function showError(error, fallbackKey) {
 .table-action-buttons--spacious .el-button {
   padding-left: 18px;
   padding-right: 18px;
+}
+.table-action-buttons--single-line {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.table-action-buttons--single-line .el-button {
+  min-width: 0;
+  margin: 0;
+  padding-inline: 11px;
+}
+.customer-directory-table :deep(.customer-code-column .cell) {
+  color: #1d5f91;
+  font: 700 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.shipment-reference-type {
+  margin-top: 4px;
+  color: #74879b;
+}
+.business-select-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #18324b;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:deep(.el-select__selection) {
+  min-width: 0;
+}
+:deep(.el-select__selected-item) {
+  min-width: 0;
+  max-width: 100%;
+  color: #18324b;
+  opacity: 1;
+}
+:deep(.el-select__selected-item > span) {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .required-star {
@@ -6135,6 +6375,7 @@ function showError(error, fallbackKey) {
   padding: 24px;
   background: rgba(8, 20, 36, 0.62);
   backdrop-filter: blur(8px);
+  animation: operations-overlay-in 220ms ease both;
 }
 .customer-code-dialog {
   display: grid;
@@ -6145,6 +6386,7 @@ function showError(error, fallbackKey) {
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 64px rgba(6, 24, 44, 0.28);
+  animation: operations-dialog-in 300ms cubic-bezier(.2, .8, .2, 1) both;
 }
 .customer-code-dialog h2 {
   margin: 0;
@@ -6937,10 +7179,26 @@ function showError(error, fallbackKey) {
 /* Batch import dialog */
 .customer-batch-dialog,
 .customer-credential-dialog {
+  position: relative;
   width: min(1180px, calc(100vw - 48px));
   max-height: min(92vh, 980px);
   padding: 26px 28px 0;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 94% 0%, rgba(71, 151, 226, .12), transparent 28%),
+    linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+}
+.customer-batch-dialog::before {
+  position: absolute;
+  top: 0;
+  left: 28px;
+  right: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2e7cca, #55c7d9, #2e7cca);
+  background-size: 200% 100%;
+  content: "";
+  animation: customer-batch-shimmer 3.5s linear infinite;
 }
 .customer-batch-heading {
   display: flex;
@@ -7020,6 +7278,17 @@ function showError(error, fallbackKey) {
   border-radius: 9px;
   background: #fff;
   gap: 9px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  animation: customer-rule-in 360ms ease both;
+}
+.customer-import-rules article:nth-child(2) { animation-delay: 45ms; }
+.customer-import-rules article:nth-child(3) { animation-delay: 90ms; }
+.customer-import-rules article:nth-child(4) { animation-delay: 135ms; }
+.customer-import-rules article:nth-child(5) { animation-delay: 180ms; }
+.customer-import-rules article:hover {
+  border-color: #9bc5e8;
+  box-shadow: 0 10px 24px rgba(35, 105, 167, .1);
+  transform: translateY(-2px);
 }
 .customer-import-rules article > strong {
   display: inline-grid;
@@ -7062,6 +7331,11 @@ function showError(error, fallbackKey) {
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.customer-batch-tabs button:hover {
+  border-color: #8dbbe3;
+  transform: translateY(-1px);
 }
 .customer-batch-tabs button.is-active {
   color: #1a4f80;
@@ -7091,6 +7365,14 @@ function showError(error, fallbackKey) {
   resize: vertical;
   font: inherit;
   font-size: 12px;
+  background: linear-gradient(180deg, #fff, #fbfdff);
+  box-shadow: 0 8px 22px rgba(39, 91, 138, .05);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.customer-batch-textarea textarea:focus {
+  border-color: #438fd2;
+  box-shadow: 0 0 0 3px rgba(67, 143, 210, .12), 0 12px 28px rgba(39, 91, 138, .08);
+  outline: none;
 }
 .customer-batch-textarea small {
   color: #889aaf;
@@ -7337,6 +7619,57 @@ function showError(error, fallbackKey) {
 .customer-batch-actions button {
   flex: 0 0 auto !important;
   min-width: 160px;
+}
+.operations-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -4px 0 18px;
+  padding: 14px;
+  border: 1px solid #d8e6f2;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f1f8ff, #f8fbff);
+}
+.operations-profile-hero > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #226fb5, #4aa4d7);
+  font-size: 18px;
+  font-weight: 850;
+  place-items: center;
+}
+.operations-profile-hero > div {
+  display: grid;
+  gap: 3px;
+}
+.operations-profile-hero b { color: #18324b; }
+.operations-profile-hero small { color: #73889c; }
+.operations-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+.operations-profile-form .el-form-item:nth-child(3),
+.operations-profile-form .el-alert {
+  grid-column: 1 / -1;
+}
+@keyframes operations-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes operations-dialog-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes customer-batch-shimmer {
+  to { background-position: -200% 0; }
+}
+@keyframes customer-rule-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .customer-field-rule {
   color: #71879b;

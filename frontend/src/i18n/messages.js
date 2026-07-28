@@ -1821,7 +1821,7 @@ Object.assign(messages["zh-CN"].customers, {
   publishAllDraftsConfirm: "确认将当前客户的 {count} 张待发布票单逐张发布？无有效运输数据的票单会保留为待发布。",
   publishAllDraftsSuccess: "已向客户发布 {count} 张票单，刷新客户总览即可查看。",
   publishAllDraftsPartial: "已发布 {published} 张，另有 {failed} 张因运输数据不完整而保留为待发布。",
-  clientCode: "客户码（唯一识别码）",
+  clientCode: "客户码",
   clientCodePlaceholder: "例如 HAYDEN01",
   pendingMatches: "Client Code 待确认队列",
   pendingMatchesHint: "批量导入无法唯一匹配时，由业务员绑定到当前客户；绑定后仍需确认发布。",
@@ -2026,7 +2026,7 @@ Object.assign(messages["en-US"].customers, {
   publishAllDraftsConfirm: "Publish the {count} draft shipments to this customer one by one? Shipments without valid operational data will remain drafts.",
   publishAllDraftsSuccess: "Published {count} shipments. Refresh the customer overview to see them.",
   publishAllDraftsPartial: "Published {published} shipments; {failed} remain drafts because their operational data is incomplete.",
-  clientCode: "Client Code (matching key)",
+  clientCode: "Client Code",
   clientCodePlaceholder: "For example, HAYDEN01",
   pendingMatches: "Client Code review queue",
   pendingMatchesHint: "When batch import cannot find one customer, bind the item to the selected customer and publish it separately.",
@@ -2484,6 +2484,24 @@ messages["en-US"].admin.list = {
   noEndpoints: "No endpoint statistics"
 };
 
+messages["zh-CN"].admin.console = {
+  viewAudit: "查看审计",
+  recordCount: "{count} 条记录",
+  refreshAudit: "刷新审计",
+  accountCount: "{count} 个账号",
+  openTrackingManagement: "进入货踪管理",
+  manage: "管理"
+};
+
+messages["en-US"].admin.console = {
+  viewAudit: "View audit",
+  recordCount: "{count} records",
+  refreshAudit: "Refresh audit",
+  accountCount: "{count} accounts",
+  openTrackingManagement: "Open tracking management",
+  manage: "Manage"
+};
+
 Object.assign(messages["zh-CN"].customers, {
   overview: "总览",
   overviewHint: "汇总客户、票单与海外代理，并从左侧进入具体业务。",
@@ -2501,6 +2519,10 @@ Object.assign(messages["zh-CN"].customers, {
   deleteCustomerFailed: "客户删除失败。",
   confirmAgentStatusChange: "确认更改海外代理“{name}”的状态吗？",
   refresh: "刷新"
+  ,assignAgentShort: "分配代理"
+  ,deleteSelectedCustomers: "删除所选（{count}）"
+  ,confirmDeleteSelectedCustomers: "确认删除所选的 {count} 个客户吗？有关联票单的客户将安全归档，历史记录会保留。"
+  ,selectedCustomersArchived: "已删除或安全归档 {count} 个客户。"
   ,transferDescription: "为当前客户选择一个海外代理；保存后，该代理可跟进相关票单、文件和留言。"
   ,targetAgent: "海外代理"
   ,targetAgentPlaceholder: "选择可用海外代理"
@@ -2528,6 +2550,10 @@ Object.assign(messages["en-US"].customers, {
   deleteCustomerFailed: "Could not delete the customer.",
   confirmAgentStatusChange: "Change the status of overseas agent “{name}”?",
   refresh: "Refresh"
+  ,assignAgentShort: "Assign agent"
+  ,deleteSelectedCustomers: "Delete selected ({count})"
+  ,confirmDeleteSelectedCustomers: "Delete the {count} selected customers? Customers with shipment history will be safely archived."
+  ,selectedCustomersArchived: "{count} customers were deleted or safely archived."
   ,transferDescription: "Select one overseas agent for this customer. The agent can then follow related shipments, files, and comments."
   ,targetAgent: "Overseas agent"
   ,targetAgentPlaceholder: "Select an available overseas agent"

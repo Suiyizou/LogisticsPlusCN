@@ -17,6 +17,7 @@
       v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
       :current-user="currentUser"
       @logout="handleLogout"
+      @user-updated="handleUserUpdated"
     />
     <WorkbenchPortal
       v-else
@@ -47,7 +48,23 @@ const authChecked = ref(false);
 const currentUser = ref(storedUser());
 const loginRedirecting = ref(false);
 const loginRedirectText = ref("");
-const activePage = computed(() => String(route.name || "workbenches"));
+const operationsPageNames = new Set(["workbenches", "customers", "admin"]);
+const operationsPageByPath = {
+  "/workbenches": "workbenches",
+  "/customers": "customers",
+  "/admin": "admin"
+};
+const normalizeOperationsPath = (path) => String(path || "").replace(/\/+$/, "") || "/";
+const activePage = computed(() => {
+  const routeName = String(route.name || "");
+  if (operationsPageNames.has(routeName)) return routeName;
+
+  // The first render can run before vue-router resolves its initial location.
+  // Fall back to the actual browser path instead of briefly mounting workbenches.
+  const routePath = normalizeOperationsPath(route.path);
+  const browserPath = normalizeOperationsPath(window.location.pathname);
+  return operationsPageByPath[routePath] || operationsPageByPath[browserPath] || "workbenches";
+});
 
 const loadingPage = {
   name: "LoadingOperationsPage",

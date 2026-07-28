@@ -33,25 +33,27 @@
         >
           {{ t("portal.customerWorkspace") }}
         </RouterLink>
-        <div class="portal-user">
-          <span class="portal-avatar">{{ userInitial }}</span>
-          <span>
-            <strong>{{ displayName }}</strong>
-            <small>{{ roleLabel }}</small>
-          </span>
-        </div>
-        <button class="portal-password" type="button" @click="openProfileDialog">
-          {{ t("portal.personalInfo") }}
-        </button>
-        <button class="portal-password" type="button" @click="openPasswordDialog">
-          {{ t("portal.changePassword") }}
-        </button>
-        <button class="portal-logout" type="button" @click="emit('logout')">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M8 3H4.8A1.8 1.8 0 0 0 3 4.8v10.4A1.8 1.8 0 0 0 4.8 17H8M12.5 6.5 16 10l-3.5 3.5M16 10H7" />
-          </svg>
-          <span>{{ t("portal.logout") }}</span>
-        </button>
+        <el-dropdown trigger="click" placement="bottom-end" popper-class="portal-account-popper">
+          <button class="portal-user portal-account-trigger" type="button" :aria-label="t('portal.personalInfo')">
+            <span class="portal-avatar">{{ userInitial }}</span>
+            <span class="portal-user-copy">
+              <strong>{{ displayName }}</strong>
+              <small>{{ roleLabel }}</small>
+            </span>
+            <svg class="portal-account-chevron" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="openProfileDialog">{{ t("portal.personalInfo") }}</el-dropdown-item>
+              <el-dropdown-item @click="openPasswordDialog">{{ t("portal.changePassword") }}</el-dropdown-item>
+              <el-dropdown-item class="portal-account-menu-logout" divided @click="emit('logout')">
+                {{ t("portal.logout") }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </header>
 
@@ -317,7 +319,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
@@ -371,12 +373,6 @@ function openProfileDialog() {
   profileError.value = "";
   profileDialogOpen.value = true;
 }
-
-onMounted(() => {
-  if (new URLSearchParams(window.location.search).get("profile") === "1") {
-    openProfileDialog();
-  }
-});
 
 async function submitProfile() {
   profileError.value = "";
@@ -565,7 +561,9 @@ async function submitPasswordChange() {
 }
 
 .portal-header-actions {
-  gap: 12px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .portal-live-status {
@@ -590,7 +588,7 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link,
-.portal-logout {
+.portal-account-trigger {
   display: inline-flex;
   align-items: center;
   min-height: 38px;
@@ -605,12 +603,36 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link {
-  padding: 0 13px;
+  padding: 0 11px;
 }
 
 .portal-user {
   gap: 9px;
-  padding-left: 4px;
+}
+
+.portal-account-trigger {
+  min-width: 0;
+  padding: 4px 8px 4px 5px;
+  cursor: pointer;
+}
+
+.portal-account-trigger:focus-visible {
+  outline: 2px solid rgba(50, 158, 216, 0.55);
+  outline-offset: 2px;
+}
+
+.portal-account-chevron {
+  width: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  transition: transform 0.2s ease;
+}
+
+.portal-account-trigger[aria-expanded="true"] .portal-account-chevron {
+  transform: rotate(180deg);
 }
 
 .portal-avatar {
@@ -626,7 +648,7 @@ async function submitPasswordChange() {
   font-weight: 800;
 }
 
-.portal-user > span:last-child {
+.portal-user-copy {
   display: grid;
   gap: 1px;
   min-width: 72px;
@@ -642,26 +664,42 @@ async function submitPasswordChange() {
   font-size: 10px;
 }
 
-.portal-logout {
-  gap: 7px;
-  padding: 0 12px;
-  cursor: pointer;
-}
-
-.portal-logout svg {
-  width: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.6;
-}
-
 .portal-admin-link:hover,
-.portal-logout:hover {
+.portal-account-trigger:hover {
   border-color: rgba(106, 215, 244, 0.52);
   color: #e8f8ff;
   background: rgba(29, 82, 108, 0.42);
+}
+
+:global(.portal-account-popper.el-popper) {
+  min-width: 176px;
+  overflow: hidden;
+  border-color: rgba(54, 103, 146, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 42px rgba(30, 70, 109, 0.16);
+}
+
+:global(.portal-account-popper .el-dropdown-menu) {
+  padding: 6px;
+  background: transparent;
+}
+
+:global(.portal-account-popper .el-dropdown-menu__item) {
+  min-height: 38px;
+  border-radius: 8px;
+  color: #35536e;
+  font-size: 13px;
+}
+
+:global(.portal-account-popper .el-dropdown-menu__item:not(.is-disabled):focus),
+:global(.portal-account-popper .el-dropdown-menu__item:not(.is-disabled):hover) {
+  color: #087ec1;
+  background: #edf7ff;
+}
+
+:global(.portal-account-popper .portal-account-menu-logout) {
+  color: #bf4b55;
 }
 
 .portal-content {
@@ -1148,14 +1186,14 @@ async function submitPasswordChange() {
 }
 
 .portal-admin-link,
-.portal-logout {
+.portal-account-trigger {
   color: #45647f;
   border-color: rgba(59, 107, 151, 0.19);
   background: rgba(245, 249, 254, 0.92);
 }
 
 .portal-admin-link:hover,
-.portal-logout:hover {
+.portal-account-trigger:hover {
   color: #0c6eaf;
   border-color: rgba(25, 126, 190, 0.42);
   background: #edf7ff;
@@ -1307,7 +1345,7 @@ async function submitPasswordChange() {
 @media (max-width: 1050px) {
   .portal-live-status,
   .portal-admin-link,
-  .portal-user > span:last-child {
+  .portal-user-copy {
     display: none;
   }
 
@@ -1326,19 +1364,12 @@ async function submitPasswordChange() {
     padding: 0 18px;
   }
 
-  .portal-brand-copy small,
-  .portal-logout span {
+  .portal-brand-copy small {
     display: none;
   }
 
   .portal-header-actions {
     gap: 7px;
-  }
-
-  .portal-logout {
-    width: 38px;
-    justify-content: center;
-    padding: 0;
   }
 
   .portal-content {

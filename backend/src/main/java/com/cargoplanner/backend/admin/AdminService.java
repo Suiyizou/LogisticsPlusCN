@@ -61,6 +61,23 @@ public class AdminService {
     );
   }
 
+  public Map<String, Object> employeePage(int page, int size) {
+    int safePage = safePage(page);
+    int safeSize = safeSize(size);
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        """
+        SELECT id, username, display_name, role, party_role, status, created_at, updated_at, last_login_at
+        FROM cp_users
+        ORDER BY role = 'ADMIN' DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+        this::mapUserRow,
+        safeSize,
+        pageOffset(safePage, safeSize)
+    );
+    return pageResult(items, safePage, safeSize, count("SELECT COUNT(*) FROM cp_users"));
+  }
+
   @Transactional
   public Map<String, Object> createEmployee(CreateEmployeeRequest request, AuthenticatedUser admin, String ip) {
     validateStrongPassword(request.password());
@@ -280,10 +297,28 @@ public class AdminService {
         FROM cp_login_devices d
         JOIN cp_users u ON u.id = d.user_id
         ORDER BY d.online DESC, d.last_seen_at DESC, d.id DESC
-        LIMIT 200
         """,
         this::mapDeviceRow
     );
+  }
+
+  public Map<String, Object> devicePage(int page, int size) {
+    int safePage = safePage(page);
+    int safeSize = safeSize(size);
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        """
+        SELECT d.id, d.user_id, u.username, u.display_name, d.device_id, d.device_name, d.mac_address,
+               d.ip_address, d.user_agent, d.online, d.logged_in_at, d.last_seen_at, d.revoked_at
+        FROM cp_login_devices d
+        JOIN cp_users u ON u.id = d.user_id
+        ORDER BY d.online DESC, d.last_seen_at DESC, d.id DESC
+        LIMIT ? OFFSET ?
+        """,
+        this::mapDeviceRow,
+        safeSize,
+        pageOffset(safePage, safeSize)
+    );
+    return pageResult(items, safePage, safeSize, count("SELECT COUNT(*) FROM cp_login_devices"));
   }
 
   @Transactional
@@ -359,24 +394,7 @@ public class AdminService {
                  agent_user.display_name, agent_user.status
         ORDER BY c.created_at DESC, c.id DESC
         """,
-        (rs, rowNum) -> {
-          Map<String, Object> row = new LinkedHashMap<>();
-          row.put("customerId", rs.getString("public_id"));
-          row.put("customerUsername", rs.getString("username"));
-          row.put("customerDisplayName", rs.getString("display_name"));
-          row.put("clientCode", rs.getString("client_code"));
-          row.put("partyRole", rs.getString("party_role"));
-          row.put("customerStatus", rs.getString("status"));
-          row.put("businessUserId", nullableLong(rs, "business_user_id"));
-          row.put("businessUsername", rs.getString("business_username"));
-          row.put("businessDisplayName", rs.getString("business_display_name"));
-          row.put("agentUserId", nullableLong(rs, "agent_user_id"));
-          row.put("agentUsername", rs.getString("agent_username"));
-          row.put("agentDisplayName", rs.getString("agent_display_name"));
-          row.put("agentStatus", rs.getString("agent_status"));
-          row.put("shipmentCount", rs.getLong("shipment_count"));
-          return row;
-        }
+        this::mapPlatformRow
     );
     long assigned = customers.stream().filter(row -> row.get("agentUserId") != null).count();
     return Map.of(
@@ -388,9 +406,67 @@ public class AdminService {
     );
   }
 
-  private List<Map<String, Object>> recentApiAudit() {
+  public Map<String, Object> platformInfoPage(int page, int size) {
+    int safePage = safePage(page);
+    int safeSize = safeSize(size);
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        """
+        SELECT c.public_id, c.username, c.display_name, c.client_code, c.party_role, c.status,
+               business_user.id AS business_user_id,
+               business_user.username AS business_username,
+               business_user.display_name AS business_display_name,
+               agent_user.id AS agent_user_id,
+               agent_user.username AS agent_username,
+               agent_user.display_name AS agent_display_name,
+               agent_user.status AS agent_status,
+               COUNT(DISTINCT access.shipment_id) AS shipment_count
+        FROM cp_customers c
+        LEFT JOIN cp_users business_user ON business_user.id = c.responsible_agent_id
+        LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
+        LEFT JOIN cp_users agent_user ON agent_user.id = assignment.employee_user_id
+        LEFT JOIN cp_customer_shipment_access access ON access.customer_id = c.id
+        GROUP BY c.id, c.public_id, c.username, c.display_name, c.client_code,
+                 c.party_role, c.status, business_user.id, business_user.username,
+                 business_user.display_name, agent_user.id, agent_user.username,
+                 agent_user.display_name, agent_user.status
+        ORDER BY c.created_at DESC, c.id DESC
+        LIMIT ? OFFSET ?
+        """,
+        this::mapPlatformRow,
+        safeSize,
+        pageOffset(safePage, safeSize)
+    );
+    long total = count(
+        """
+        SELECT COUNT(*)
+        FROM (
+          SELECT c.id, assignment.employee_user_id
+          FROM cp_customers c
+          LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
+          GROUP BY c.id, assignment.employee_user_id
+        ) platform_rows
+        """
+    );
+    long customerCount = count("SELECT COUNT(*) FROM cp_customers");
+    long assignedCustomerCount = count(
+        "SELECT COUNT(DISTINCT customer_id) FROM cp_customer_employee_assignments"
+    );
+    Map<String, Object> result = pageResult(items, safePage, safeSize, total);
+    result.put("platform", "Shipment Track");
+    result.put("customerCount", customerCount);
+    result.put("assignedCustomerCount", assignedCustomerCount);
+    result.put("unassignedCustomerCount", Math.max(0L, customerCount - assignedCustomerCount));
+    return result;
+  }
+
+  public Map<String, Object> apiAuditPage(int page, int size) {
+    int safePage = safePage(page);
+    int safeSize = safeSize(size);
+    long total = 0L;
+    List<Map<String, Object>> items = List.of();
     try {
-      return jdbcTemplate.query(
+      total = count("SELECT COUNT(*) FROM cp_admin_audit_log WHERE action = 'API_REQUEST'");
+      items = jdbcTemplate.query(
           """
           SELECT id, admin_user_id, username_snapshot, role_snapshot,
                  http_method, request_path, http_status, success, duration_ms,
@@ -398,29 +474,60 @@ public class AdminService {
           FROM cp_admin_audit_log
           WHERE action = 'API_REQUEST'
           ORDER BY created_at DESC, id DESC
-          LIMIT 100
+          LIMIT ? OFFSET ?
           """,
-          (rs, rowNum) -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", rs.getLong("id"));
-            row.put("userId", nullableLong(rs, "admin_user_id"));
-            row.put("username", rs.getString("username_snapshot"));
-            row.put("role", rs.getString("role_snapshot"));
-            row.put("method", rs.getString("http_method"));
-            row.put("path", rs.getString("request_path"));
-            row.put("status", rs.getObject("http_status"));
-            row.put("success", rs.getObject("success"));
-            row.put("durationMs", rs.getObject("duration_ms"));
-            row.put("requestId", rs.getString("request_id"));
-            row.put("ipAddress", rs.getString("ip_address"));
-            row.put("userAgent", rs.getString("user_agent"));
-            row.put("createdAt", stringTimestamp(rs, "created_at"));
-            return row;
-          }
+          this::mapApiAuditRow,
+          safeSize,
+          pageOffset(safePage, safeSize)
       );
     } catch (DataAccessException ignored) {
-      return List.of();
+      total = 0L;
+      items = List.of();
     }
+    return pageResult(items, safePage, safeSize, total);
+  }
+
+  private List<Map<String, Object>> recentApiAudit() {
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> items = (List<Map<String, Object>>) apiAuditPage(0, 20).get("items");
+    return items;
+  }
+
+  private Map<String, Object> mapApiAuditRow(ResultSet rs, int rowNum) throws SQLException {
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("id", rs.getLong("id"));
+    row.put("userId", nullableLong(rs, "admin_user_id"));
+    row.put("username", rs.getString("username_snapshot"));
+    row.put("role", rs.getString("role_snapshot"));
+    row.put("method", rs.getString("http_method"));
+    row.put("path", rs.getString("request_path"));
+    row.put("status", rs.getObject("http_status"));
+    row.put("success", rs.getObject("success"));
+    row.put("durationMs", rs.getObject("duration_ms"));
+    row.put("requestId", rs.getString("request_id"));
+    row.put("ipAddress", rs.getString("ip_address"));
+    row.put("userAgent", rs.getString("user_agent"));
+    row.put("createdAt", stringTimestamp(rs, "created_at"));
+    return row;
+  }
+
+  private Map<String, Object> mapPlatformRow(ResultSet rs, int rowNum) throws SQLException {
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("customerId", rs.getString("public_id"));
+    row.put("customerUsername", rs.getString("username"));
+    row.put("customerDisplayName", rs.getString("display_name"));
+    row.put("clientCode", rs.getString("client_code"));
+    row.put("partyRole", rs.getString("party_role"));
+    row.put("customerStatus", rs.getString("status"));
+    row.put("businessUserId", nullableLong(rs, "business_user_id"));
+    row.put("businessUsername", rs.getString("business_username"));
+    row.put("businessDisplayName", rs.getString("business_display_name"));
+    row.put("agentUserId", nullableLong(rs, "agent_user_id"));
+    row.put("agentUsername", rs.getString("agent_username"));
+    row.put("agentDisplayName", rs.getString("agent_display_name"));
+    row.put("agentStatus", rs.getString("agent_status"));
+    row.put("shipmentCount", rs.getLong("shipment_count"));
+    return row;
   }
 
   private Map<String, Object> findUser(Long userId) {
@@ -498,6 +605,32 @@ public class AdminService {
   private long count(String sql) {
     Long value = jdbcTemplate.queryForObject(sql, Long.class);
     return value == null ? 0 : value;
+  }
+
+  private int safePage(int page) {
+    return Math.max(0, page);
+  }
+
+  private int safeSize(int size) {
+    return Math.max(1, Math.min(100, size));
+  }
+
+  private long pageOffset(int page, int size) {
+    return (long) page * size;
+  }
+
+  private Map<String, Object> pageResult(
+      List<Map<String, Object>> items,
+      int page,
+      int pageSize,
+      long total
+  ) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("items", items);
+    result.put("page", page);
+    result.put("pageSize", pageSize);
+    result.put("total", total);
+    return result;
   }
 
   private String normalizeRole(String role, String fallback) {

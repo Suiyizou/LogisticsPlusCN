@@ -50,17 +50,21 @@
       </div>
 
       <nav class="admin-console-nav">
-        <button
-          v-for="item in adminPages"
-          :key="item.key"
-          type="button"
-          :class="{ active: activeAdminPage === item.key }"
-          @click="selectAdminPage(item.key)"
-        >
-          <span>{{ item.no }}</span>
-          <b>{{ item.label }}</b>
-          <small>{{ item.description }}</small>
-        </button>
+        <template v-for="(item, index) in adminPages" :key="item.key">
+          <p
+            v-if="index === 0 || item.group !== adminPages[index - 1].group"
+            class="admin-nav-group-label"
+          >{{ item.groupLabel }}</p>
+          <button
+            type="button"
+            :class="{ active: activeAdminPage === item.key }"
+            @click="selectAdminPage(item.key)"
+          >
+            <span>{{ item.no }}</span>
+            <b>{{ item.label }}</b>
+            <small>{{ item.description }}</small>
+          </button>
+        </template>
       </nav>
     </aside>
 
@@ -135,7 +139,7 @@
                 <p>Recent Events</p>
                 <h2>最近登录事件</h2>
               </div>
-              <button type="button" @click="activeAdminPage = 'audit'">查看审计</button>
+              <button type="button" @click="scrollToAudit">{{ t("admin.console.viewAudit") }}</button>
             </div>
             <ul class="admin-activity-list">
               <li v-for="event in recentEvents" :key="event.id">
@@ -148,6 +152,74 @@
             </ul>
           </article>
         </div>
+
+        <article ref="auditSectionRef" class="admin-panel admin-audit-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>API Audit Trail</p>
+              <h2>{{ ui('admin.audit.apiTitle') }}</h2>
+            </div>
+            <div class="admin-inline-actions">
+              <span>{{ t("admin.console.recordCount", { count: apiAuditTotal }) }}</span>
+              <button type="button" :disabled="loading" @click="loadApiAuditPage">
+                {{ t("admin.console.refreshAudit") }}
+              </button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table
+              :data="apiAuditRows"
+              row-key="id"
+              stripe
+              class="standard-information-table admin-audit-table"
+            >
+              <el-table-column :label="ui('admin.audit.time')" width="148">
+                <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.userRole')" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b>{{ row.username || '-' }}</b>
+                  <small>{{ row.role || '-' }} · ID {{ row.userId || '-' }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.endpoint')" min-width="250" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b>{{ row.method }} {{ row.path }}</b>
+                  <small>{{ row.requestId || '-' }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.result')" width="96">
+                <template #default="{ row }">
+                  <el-tag :type="Number(row.status) < 400 ? 'success' : 'danger'">
+                    {{ row.status || '-' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.duration')" width="92">
+                <template #default="{ row }">{{ row.durationMs ?? 0 }} ms</template>
+              </el-table-column>
+              <el-table-column :label="ui('admin.audit.ipDevice')" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b>{{ row.ipAddress || '-' }}</b>
+                  <small>{{ row.userAgent || '-' }}</small>
+                </template>
+              </el-table-column>
+              <template #empty>{{ ui('admin.audit.empty') }}</template>
+            </el-table>
+          </div>
+          <el-pagination
+            v-if="apiAuditTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="apiAuditPage"
+            :page-size="apiAuditPageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="apiAuditTotal"
+            @current-change="changeApiAuditPage"
+            @size-change="changeApiAuditPageSize"
+          />
+        </article>
       </section>
 
       <section v-else-if="activeAdminPage === 'employees'" class="admin-page-pane">
@@ -158,19 +230,19 @@
               <h2>员工管理</h2>
             </div>
             <div class="admin-inline-actions">
-              <span>{{ employees.length }} 个账号</span>
+              <span>{{ t("admin.console.accountCount", { count: employeeTotal }) }}</span>
               <button class="primary" type="button" @click="openEmployeeDialog()">新增员工</button>
               <button type="button" @click="loadDashboard">刷新</button>
             </div>
           </div>
           <div class="admin-table-wrap">
-            <el-table :data="normalizedEmployees" row-key="id" stripe class="standard-information-table">
-              <el-table-column prop="username" :label="t('admin.list.username')" min-width="140" />
-              <el-table-column prop="displayName" :label="t('admin.list.displayName')" min-width="150" />
-              <el-table-column :label="t('admin.list.systemRole')" width="150">
+            <el-table :data="pagedEmployees" row-key="id" stripe class="standard-information-table">
+              <el-table-column prop="username" :label="t('admin.list.username')" min-width="128" show-overflow-tooltip />
+              <el-table-column prop="displayName" :label="t('admin.list.displayName')" min-width="136" show-overflow-tooltip />
+              <el-table-column :label="t('admin.list.systemRole')" width="126">
                 <template #default="{ row: user }">{{ roleText(user.role) }}</template>
               </el-table-column>
-              <el-table-column :label="t('admin.employee.partyRole')" width="150">
+              <el-table-column :label="t('admin.employee.partyRole')" width="126">
                 <template #default="{ row: user }">{{ partyRoleText(user.partyRole, user.role) }}</template>
               </el-table-column>
               <el-table-column :label="t('admin.list.status')" width="100">
@@ -180,10 +252,10 @@
                     </span>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.lastLogin')" min-width="170">
+              <el-table-column :label="t('admin.list.lastLogin')" width="142">
                 <template #default="{ row: user }">{{ formatDate(user.lastLoginAt) }}</template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.actions')" width="320" fixed="right">
+              <el-table-column :label="t('admin.list.actions')" width="304" fixed="right">
                 <template #default="{ row: user }">
                     <div class="table-actions">
                       <button type="button" @click="openEmployeeDialog(user)">{{ t("admin.employee.edit") }}</button>
@@ -203,6 +275,18 @@
               <template #empty>{{ t("admin.employee.empty") }}</template>
             </el-table>
           </div>
+          <el-pagination
+            v-if="employeeTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="employeePage"
+            :page-size="employeePageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="employeeTotal"
+            @current-change="changeEmployeePage"
+            @size-change="changeEmployeePageSize"
+          />
         </article>
       </section>
 
@@ -218,34 +302,59 @@
                 customers: platformInfo?.customerCount || 0,
                 assigned: platformInfo?.assignedCustomerCount || 0
               }) }}</span>
+              <RouterLink class="admin-inline-link primary" to="/customers">
+                {{ t("admin.console.openTrackingManagement") }}
+              </RouterLink>
               <button type="button" @click="loadDashboard">{{ ui('admin.files.refresh') }}</button>
             </div>
           </div>
           <div class="admin-table-wrap">
-            <el-table :data="platformCustomers" row-key="customerId" border stripe class="standard-information-table">
-              <el-table-column :label="ui('admin.platform.business')" min-width="170">
+            <el-table :data="pagedPlatformCustomers" :row-key="platformRowKey" stripe class="standard-information-table">
+              <el-table-column :label="ui('admin.platform.business')" min-width="148" show-overflow-tooltip>
                 <template #default="{ row }"><b>{{ row.businessDisplayName || '-' }}</b><small>@{{ row.businessUsername || '-' }}</small></template>
               </el-table-column>
-              <el-table-column :label="ui('admin.platform.agent')" min-width="180">
+              <el-table-column :label="ui('admin.platform.agent')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row }">
                   <b>{{ row.agentDisplayName || ui('admin.platform.unassigned') }}</b>
                   <small>{{ row.agentUsername ? `@${row.agentUsername}` : '-' }}</small>
                 </template>
               </el-table-column>
-              <el-table-column :label="ui('admin.platform.customer')" min-width="180">
+              <el-table-column :label="ui('admin.platform.customer')" min-width="158" show-overflow-tooltip>
                 <template #default="{ row }"><b>{{ row.customerDisplayName || row.customerUsername }}</b><small>@{{ row.customerUsername }}</small></template>
               </el-table-column>
-              <el-table-column prop="clientCode" :label="ui('admin.platform.clientCode')" min-width="140" />
+              <el-table-column prop="clientCode" :label="ui('admin.platform.clientCode')" width="128" show-overflow-tooltip />
               <el-table-column :label="ui('admin.platform.partyRole')" width="130">
                 <template #default="{ row }">{{ partyRoleText(row.partyRole) }}</template>
               </el-table-column>
               <el-table-column prop="shipmentCount" :label="ui('admin.platform.shipments')" width="120" align="center" />
-              <el-table-column :label="ui('admin.list.status')" width="110">
+              <el-table-column :label="t('admin.list.status')" width="110">
                 <template #default="{ row }"><span class="admin-status" :class="{ off: row.customerStatus !== 'ACTIVE' }">{{ statusText(row.customerStatus) }}</span></template>
+              </el-table-column>
+              <el-table-column :label="t('admin.list.actions')" width="94" fixed="right">
+                <template #default="{ row }">
+                  <RouterLink
+                    class="admin-row-action"
+                    :to="{ path: '/customers', query: { customer: row.customerId } }"
+                  >
+                    {{ t("admin.console.manage") }}
+                  </RouterLink>
+                </template>
               </el-table-column>
               <template #empty>{{ ui('admin.platform.empty') }}</template>
             </el-table>
           </div>
+          <el-pagination
+            v-if="platformTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="platformPage"
+            :page-size="platformPageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="platformTotal"
+            @current-change="changePlatformPage"
+            @size-change="changePlatformPageSize"
+          />
         </article>
       </section>
 
@@ -276,26 +385,26 @@
             </div>
           </div>
           <div class="admin-table-wrap">
-            <el-table :data="normalizedDevices" row-key="id" stripe class="standard-information-table devices">
-              <el-table-column :label="t('admin.list.user')" min-width="170">
+            <el-table :data="pagedDevices" row-key="id" stripe class="standard-information-table devices">
+              <el-table-column :label="t('admin.list.user')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row: device }">{{ device.displayName }} / {{ device.username }}</template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.device')" min-width="200">
+              <el-table-column :label="t('admin.list.device')" min-width="180" show-overflow-tooltip>
                 <template #default="{ row: device }">
                     <b>{{ device.deviceName || "Web 设备" }}</b>
                     <small>{{ device.deviceId }}</small>
                 </template>
               </el-table-column>
-              <el-table-column prop="ipAddress" label="IP" min-width="130">
+              <el-table-column prop="ipAddress" label="IP" width="126">
                 <template #default="{ row: device }">{{ device.ipAddress || "-" }}</template>
               </el-table-column>
-              <el-table-column label="MAC" min-width="150">
+              <el-table-column label="MAC" width="146" show-overflow-tooltip>
                 <template #default="{ row: device }">{{ device.macAddress || t("admin.list.webMacUnavailable") }}</template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.loginAt')" min-width="170">
+              <el-table-column :label="t('admin.list.loginAt')" width="142">
                 <template #default="{ row: device }">{{ formatDate(device.loggedInAt) }}</template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.lastSeen')" min-width="170">
+              <el-table-column :label="t('admin.list.lastSeen')" width="142">
                 <template #default="{ row: device }">{{ formatDate(device.lastSeenAt) }}</template>
               </el-table-column>
               <el-table-column :label="t('admin.list.status')" width="90">
@@ -316,6 +425,18 @@
               <template #empty>{{ t("admin.list.noDevices") }}</template>
             </el-table>
           </div>
+          <el-pagination
+            v-if="deviceTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="devicePage"
+            :page-size="devicePageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="deviceTotal"
+            @current-change="changeDevicePage"
+            @size-change="changeDevicePageSize"
+          />
         </article>
       </section>
 
@@ -490,6 +611,18 @@
               <template #empty>{{ ui('admin.files.shipmentEmpty') }}</template>
             </el-table>
           </div>
+          <el-pagination
+            v-if="adminShipmentFileTotal"
+            class="admin-pagination"
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="adminShipmentFilePage"
+            :page-size="adminShipmentFilePageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="adminShipmentFileTotal"
+            @current-change="changeAdminShipmentFilePage"
+            @size-change="changeAdminShipmentFilePageSize"
+          />
         </article>
       </section>
 
@@ -586,75 +719,6 @@
         </article>
       </section>
 
-      <section v-else class="admin-page-pane">
-        <article class="admin-panel">
-          <div class="admin-panel-head">
-            <div>
-              <p>API Audit Trail</p>
-              <h2>{{ ui('admin.audit.apiTitle') }}</h2>
-            </div>
-          </div>
-          <div class="admin-table-wrap">
-            <el-table :data="recentApiAudit" row-key="id" border stripe class="standard-information-table">
-              <el-table-column :label="ui('admin.audit.time')" width="170">
-                <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.audit.userRole')" min-width="170">
-                <template #default="{ row }"><b>{{ row.username || '-' }}</b><small>{{ row.role || '-' }} · ID {{ row.userId || '-' }}</small></template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.audit.endpoint')" min-width="300">
-                <template #default="{ row }"><b>{{ row.method }} {{ row.path }}</b><small>{{ row.requestId || '-' }}</small></template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.audit.result')" width="110">
-                <template #default="{ row }"><el-tag :type="Number(row.status) < 400 ? 'success' : 'danger'">{{ row.status || '-' }}</el-tag></template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.audit.duration')" width="100">
-                <template #default="{ row }">{{ row.durationMs ?? 0 }} ms</template>
-              </el-table-column>
-              <el-table-column :label="ui('admin.audit.ipDevice')" min-width="220">
-                <template #default="{ row }"><b>{{ row.ipAddress || '-' }}</b><small>{{ row.userAgent || '-' }}</small></template>
-              </el-table-column>
-              <template #empty>{{ ui('admin.audit.empty') }}</template>
-            </el-table>
-          </div>
-        </article>
-        <div class="admin-dashboard-grid">
-          <article class="admin-panel">
-            <div class="admin-panel-head">
-              <div>
-                <p>Audit Trail</p>
-                <h2>登录审计</h2>
-              </div>
-            </div>
-            <ul class="admin-activity-list audit">
-              <li v-for="event in recentEvents" :key="event.id">
-                <span :class="eventClass(event.eventType)">{{ eventTypeText(event.eventType) }}</span>
-                <b>{{ event.username || "-" }}</b>
-                <small>{{ event.ipAddress || "-" }}</small>
-                <em>{{ event.message || "-" }}</em>
-                <strong>{{ formatDate(event.createdAt) }}</strong>
-              </li>
-              <li v-if="!recentEvents.length" class="admin-empty-row">暂无审计记录</li>
-            </ul>
-          </article>
-
-          <article class="admin-panel">
-            <div class="admin-panel-head">
-              <div>
-                <p>Hot Endpoints</p>
-                <h2>接口访问排行</h2>
-              </div>
-            </div>
-            <div class="admin-table-wrap">
-              <el-table :data="topEndpoints" row-key="endpoint" stripe class="standard-information-table endpoints">
-                <el-table-column prop="endpoint" :label="t('admin.list.endpoint')" min-width="280" />
-                <el-table-column prop="hits" :label="t('admin.list.requests')" width="120" />
-                <template #empty>{{ t("admin.list.noEndpoints") }}</template>
-              </el-table>
-            </div>
-          </article>
-        </div>
-      </section>
     </main>
 
     <div v-if="employeeDialogOpen" class="modal-backdrop">
@@ -824,7 +888,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
@@ -836,6 +900,7 @@ import {
   fetchAdminMe,
   fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
+  fetchAuditLog,
   fetchDevices,
   fetchEmployees,
   fetchLlmSettings,
@@ -860,13 +925,12 @@ const props = defineProps({
 const emit = defineEmits(["logout", "user-updated"]);
 
 const rawAdminPages = [
-  { key: "overview", no: "01", label: "后台概览", description: "指标与运行监控", eyebrow: "Admin Console", title: "后台总览", subtitle: "查看账号、设备、接口运行的关键状态。" },
-  { key: "employees", no: "02", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
-  { key: "platform", no: "03", label: "\u5e73\u53f0\u4fe1\u606f", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Platform Information", title: "\u8d27\u8e2a\u5e73\u53f0\u4fe1\u606f", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
-  { key: "devices", no: "04", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
-  { key: "files", no: "05", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
-  { key: "system", no: "06", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" },
-  { key: "audit", no: "07", label: "\u5ba1\u8ba1\u65e5\u5fd7", description: "\u767b\u5f55\u4e0e\u63a5\u53e3\u8bb0\u5f55", eyebrow: "Audit Log", title: "\u5ba1\u8ba1\u65e5\u5fd7", subtitle: "\u8ffd\u8e2a\u767b\u5f55\u4e8b\u4ef6\u548c\u63a5\u53e3\u8bbf\u95ee\u70ed\u5ea6\u3002" }
+  { key: "overview", no: "01", group: "monitor", groupLabel: "\u8fd0\u884c\u76d1\u63a7", label: "\u540e\u53f0\u6982\u89c8", description: "\u6307\u6807\u3001\u5ba1\u8ba1\u4e0e\u8fd0\u884c\u76d1\u63a7", eyebrow: "Admin Console", title: "\u540e\u53f0\u6982\u89c8\u4e0e\u5ba1\u8ba1", subtitle: "\u96c6\u4e2d\u67e5\u770b\u8d26\u53f7\u3001\u8bbe\u5907\u3001\u767b\u5f55\u4e8b\u4ef6\u4e0e\u63a5\u53e3\u8bbf\u95ee\u5ba1\u8ba1\u3002" },
+  { key: "employees", no: "02", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
+  { key: "platform", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
+  { key: "devices", no: "04", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
+  { key: "files", no: "05", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
+  { key: "system", no: "06", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
 ];
 
 const loading = ref(false);
@@ -875,12 +939,28 @@ const message = ref("");
 const hasError = ref(false);
 const currentUser = ref(props.currentUser);
 const employees = ref([]);
+const employeeTotal = ref(0);
+const employeePage = ref(1);
+const employeePageSize = ref(20);
 const platformInfo = ref(null);
+const platformTotal = ref(0);
+const platformPage = ref(1);
+const platformPageSize = ref(20);
 const devices = ref([]);
+const deviceTotal = ref(0);
+const devicePage = ref(1);
+const devicePageSize = ref(20);
+const apiAuditRows = ref([]);
+const apiAuditTotal = ref(0);
+const apiAuditPage = ref(1);
+const apiAuditPageSize = ref(20);
+const auditSectionRef = ref(null);
 const adminWorkspaceFiles = ref([]);
 const adminWorkspaceFileTotal = ref(0);
 const adminShipmentFiles = ref([]);
 const adminShipmentFileTotal = ref(0);
+const adminShipmentFilePage = ref(1);
+const adminShipmentFilePageSize = ref(20);
 const adminFilesLoaded = ref(false);
 const includeExpiredFiles = ref(false);
 const activeAdminFileSection = ref("shipment");
@@ -929,10 +1009,12 @@ const activePageMeta = computed(() =>
 const displayAdminName = computed(() => repairMojibake(currentUser.value?.displayName || "管理员"));
 const normalizedEmployees = computed(() => employees.value.map(normalizeDisplayName));
 const normalizedDevices = computed(() => devices.value.map(normalizeDisplayName));
+const pagedEmployees = computed(() => normalizedEmployees.value);
+const pagedDevices = computed(() => normalizedDevices.value);
 const onlineDevices = computed(() => normalizedDevices.value.filter((device) => device.online));
 const recentEvents = computed(() => monitoring.value?.recentEvents || []);
 const platformCustomers = computed(() => platformInfo.value?.items || []);
-const recentApiAudit = computed(() => monitoring.value?.recentApiAudit || []);
+const pagedPlatformCustomers = computed(() => platformCustomers.value);
 const topEndpoints = computed(() => monitoring.value?.runtime?.topEndpoints || []);
 const runtimeFailedRequestCount = computed(() => Number(monitoring.value?.runtime?.failedRequests || 0));
 const runtimeHasFailedRequests = computed(() => runtimeFailedRequestCount.value > 0);
@@ -997,22 +1079,29 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
       emit("user-updated", currentUser.value);
     }
     const [
-      employeeRows,
-      deviceRows,
+      employeeData,
+      deviceData,
       monitoringData,
       platformData,
+      auditData,
       llmData
     ] = await Promise.all([
-      fetchEmployees(),
-      fetchDevices(),
+      fetchEmployees({ page: employeePage.value - 1, size: employeePageSize.value }),
+      fetchDevices({ page: devicePage.value - 1, size: devicePageSize.value }),
       fetchMonitoring(),
-      fetchPlatformInfo(),
+      fetchPlatformInfo({ page: platformPage.value - 1, size: platformPageSize.value }),
+      fetchAuditLog({ page: apiAuditPage.value - 1, size: apiAuditPageSize.value }),
       fetchLlmSettings()
     ]);
-    employees.value = employeeRows;
-    devices.value = deviceRows;
+    employees.value = Array.isArray(employeeData?.items) ? employeeData.items : [];
+    employeeTotal.value = Number(employeeData?.total || 0);
+    devices.value = Array.isArray(deviceData?.items) ? deviceData.items : [];
+    deviceTotal.value = Number(deviceData?.total || 0);
     monitoring.value = monitoringData;
     platformInfo.value = platformData;
+    platformTotal.value = Number(platformData?.total || 0);
+    apiAuditRows.value = Array.isArray(auditData?.items) ? auditData.items : [];
+    apiAuditTotal.value = Number(auditData?.total || 0);
     llmSettings.value = llmData;
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     syncLlmForm(llmData);
@@ -1027,9 +1116,99 @@ function selectAdminPage(page) {
   }
 }
 
+async function loadEmployeePage() {
+  const data = await fetchEmployees({
+    page: employeePage.value - 1,
+    size: employeePageSize.value
+  });
+  employees.value = Array.isArray(data?.items) ? data.items : [];
+  employeeTotal.value = Number(data?.total || 0);
+}
+
+async function loadDevicePage() {
+  const data = await fetchDevices({
+    page: devicePage.value - 1,
+    size: devicePageSize.value
+  });
+  devices.value = Array.isArray(data?.items) ? data.items : [];
+  deviceTotal.value = Number(data?.total || 0);
+}
+
+async function loadPlatformPage() {
+  const data = await fetchPlatformInfo({
+    page: platformPage.value - 1,
+    size: platformPageSize.value
+  });
+  platformInfo.value = data;
+  platformTotal.value = Number(data?.total || 0);
+}
+
+async function loadApiAuditPage() {
+  const data = await fetchAuditLog({
+    page: apiAuditPage.value - 1,
+    size: apiAuditPageSize.value
+  });
+  apiAuditRows.value = Array.isArray(data?.items) ? data.items : [];
+  apiAuditTotal.value = Number(data?.total || 0);
+}
+
+async function changeEmployeePage(page) {
+  employeePage.value = page;
+  await withLoading(loadEmployeePage);
+}
+
+async function changeEmployeePageSize(size) {
+  employeePageSize.value = size;
+  employeePage.value = 1;
+  await withLoading(loadEmployeePage);
+}
+
+async function changeDevicePage(page) {
+  devicePage.value = page;
+  await withLoading(loadDevicePage);
+}
+
+async function changeDevicePageSize(size) {
+  devicePageSize.value = size;
+  devicePage.value = 1;
+  await withLoading(loadDevicePage);
+}
+
+async function changePlatformPage(page) {
+  platformPage.value = page;
+  await withLoading(loadPlatformPage);
+}
+
+async function changePlatformPageSize(size) {
+  platformPageSize.value = size;
+  platformPage.value = 1;
+  await withLoading(loadPlatformPage);
+}
+
+async function changeApiAuditPage(page) {
+  apiAuditPage.value = page;
+  await withLoading(loadApiAuditPage);
+}
+
+async function changeApiAuditPageSize(size) {
+  apiAuditPageSize.value = size;
+  apiAuditPage.value = 1;
+  await withLoading(loadApiAuditPage);
+}
+
+async function scrollToAudit() {
+  activeAdminPage.value = "overview";
+  await nextTick();
+  auditSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function loadAdminFileListsWithoutLoading() {
   const [shipmentResult] = await Promise.allSettled([
-    fetchAdminShipmentFiles({ page: 0, size: 200, includeDeleted: true })
+    fetchAdminShipmentFiles({
+      page: adminShipmentFilePage.value - 1,
+      size: adminShipmentFilePageSize.value,
+      includeDeleted: true
+    })
   ]);
   if (shipmentResult.status === "fulfilled") {
     const data = shipmentResult.value;
@@ -1176,13 +1355,24 @@ async function handleDeleteDevice(device) {
 async function loadAdminShipmentFiles() {
   await withLoading(async () => {
     const response = await fetchAdminShipmentFiles({
-      page: 0,
-      size: 200,
+      page: adminShipmentFilePage.value - 1,
+      size: adminShipmentFilePageSize.value,
       includeDeleted: true
     });
     adminShipmentFiles.value = Array.isArray(response?.items) ? response.items : [];
     adminShipmentFileTotal.value = Number(response?.total ?? adminShipmentFiles.value.length);
   });
+}
+
+async function changeAdminShipmentFilePage(page) {
+  adminShipmentFilePage.value = page;
+  await loadAdminShipmentFiles();
+}
+
+async function changeAdminShipmentFilePageSize(size) {
+  adminShipmentFilePageSize.value = size;
+  adminShipmentFilePage.value = 1;
+  await loadAdminShipmentFiles();
 }
 
 async function handleDownloadShipmentFile(file) {
@@ -1310,8 +1500,8 @@ async function handleDeleteShipmentFile(file) {
 
 async function loadAdminShipmentFilesWithoutLoading() {
   const response = await fetchAdminShipmentFiles({
-    page: 0,
-    size: 200,
+    page: adminShipmentFilePage.value - 1,
+    size: adminShipmentFilePageSize.value,
     includeDeleted: true
   });
   adminShipmentFiles.value = Array.isArray(response?.items) ? response.items : [];
@@ -1425,6 +1615,10 @@ function partyRoleText(partyRole, role) {
     SHIPPER: "customers.roleShipper",
     CONSIGNEE: "customers.roleConsignee"
   }[normalized] || "customers.roleShipper");
+}
+
+function platformRowKey(row) {
+  return `${row?.customerId || "customer"}:${row?.agentUserId || "unassigned"}`;
 }
 
 function statusText(status) {
@@ -1592,3 +1786,105 @@ const CP1252_BYTES = {
   "Ÿ": 0x9f
 };
 </script>
+
+<style scoped>
+.admin-nav-group-label {
+  grid-column: 1 / -1;
+  margin: 10px 8px 2px;
+  color: #8a9aae;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-nav-group-label:first-child {
+  margin-top: 2px;
+}
+
+.admin-page-pane {
+  animation: admin-pane-enter 0.28s ease both;
+}
+
+.admin-audit-panel {
+  margin-top: 16px;
+  scroll-margin-top: 20px;
+}
+
+.admin-table-wrap :deep(.el-table__cell) {
+  padding: 9px 0;
+}
+
+.table-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.table-actions button {
+  min-width: 0;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.admin-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 2px 2px;
+}
+
+.admin-inline-link,
+.admin-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #c7d9ed;
+  border-radius: 8px;
+  color: #245f99;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.admin-inline-link:hover,
+.admin-row-action:hover {
+  border-color: #6ca7e2;
+  box-shadow: 0 7px 18px rgb(47 128 209 / 14%);
+  transform: translateY(-1px);
+}
+
+.admin-inline-link.primary {
+  border-color: #2f80d1;
+  background: #2f80d1;
+  color: #fff;
+}
+
+.admin-row-action {
+  min-height: 30px;
+  padding: 0 11px;
+}
+
+@keyframes admin-pane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page-pane {
+    animation: none;
+  }
+
+  .admin-inline-link,
+  .admin-row-action {
+    transition: none;
+  }
+}
+</style>

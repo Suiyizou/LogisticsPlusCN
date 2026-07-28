@@ -58,8 +58,8 @@ export async function updateOwnProfile(displayName) {
   });
 }
 
-export async function fetchEmployees() {
-  return request("/admin/employees");
+export async function fetchEmployees(options = {}) {
+  return request(`/admin/employees?${pageParams(options)}`);
 }
 
 export async function createEmployee(payload) {
@@ -78,8 +78,8 @@ export async function deleteEmployee(id) {
   return request(`/admin/employees/${id}`, { method: "DELETE" });
 }
 
-export async function fetchDevices() {
-  return request("/admin/devices");
+export async function fetchDevices(options = {}) {
+  return request(`/admin/devices?${pageParams(options)}`);
 }
 
 export async function kickDevice(id) {
@@ -94,8 +94,19 @@ export async function fetchMonitoring() {
   return request("/admin/monitoring");
 }
 
-export async function fetchPlatformInfo() {
-  return request("/admin/platform-info");
+export async function fetchAuditLog(options = {}) {
+  return request(`/admin/audit-log?${pageParams(options)}`);
+}
+
+export async function fetchPlatformInfo(options = {}) {
+  return request(`/admin/platform-info?${pageParams(options)}`);
+}
+
+function pageParams(options = {}) {
+  const params = new URLSearchParams();
+  params.set("page", String(Math.max(0, Number(options.page || 0))));
+  params.set("size", String(Math.max(1, Number(options.size || 20))));
+  return params.toString();
 }
 
 export async function fetchLlmSettings() {

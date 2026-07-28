@@ -5,7 +5,6 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ClientInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -15,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -29,8 +29,11 @@ public class AdminController {
   }
 
   @GetMapping("/employees")
-  public List<Map<String, Object>> employees() {
-    return adminService.listEmployees();
+  public Map<String, Object> employees(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    return adminService.employeePage(page, size);
   }
 
   @PostMapping("/employees")
@@ -71,8 +74,11 @@ public class AdminController {
   }
 
   @GetMapping("/devices")
-  public List<Map<String, Object>> devices() {
-    return adminService.listDevices();
+  public Map<String, Object> devices(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    return adminService.devicePage(page, size);
   }
 
   @PostMapping("/devices/{id}/kick")
@@ -98,9 +104,20 @@ public class AdminController {
     return adminService.monitoring();
   }
 
+  @GetMapping("/audit-log")
+  public Map<String, Object> auditLog(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    return adminService.apiAuditPage(page, size);
+  }
+
   @GetMapping("/platform-info")
-  public Map<String, Object> platformInfo() {
-    return adminService.platformInfo();
+  public Map<String, Object> platformInfo(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size
+  ) {
+    return adminService.platformInfoPage(page, size);
   }
 
   @GetMapping("/settings/llm")

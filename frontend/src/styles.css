@@ -7543,6 +7543,19 @@ select,
   box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(22, 93, 255, 0.1);
 }
 
+.el-select__selection {
+  z-index: 1;
+}
+
+.el-select__placeholder {
+  z-index: 3 !important;
+  pointer-events: none;
+}
+
+.el-select__input-wrapper:not(.is-hidden) {
+  z-index: 2 !important;
+}
+
 .el-input-number,
 .el-input-number .el-input__wrapper {
   border-radius: var(--app-control-radius);
@@ -8875,5 +8888,160 @@ select,
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+/* Unified data-management surface for customer operations and the admin console. */
+.customer-access-page .el-table,
+.admin-console-shell .el-table,
+.standard-information-table,
+.customer-access-page .el-table__inner-wrapper,
+.admin-console-shell .el-table__inner-wrapper,
+.standard-information-table .el-table__inner-wrapper {
+  border-radius: 10px !important;
+}
+
+.customer-access-page .el-dialog,
+.admin-console-shell .el-dialog,
+.square-dialog {
+  border-radius: 14px !important;
+}
+
+.customer-access-page .el-table__row > td.el-table__cell,
+.admin-console-shell .el-table__row > td.el-table__cell {
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.customer-access-page .el-table__row:hover > td.el-table__cell,
+.admin-console-shell .el-table__row:hover > td.el-table__cell {
+  background: #f4f8ff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.78);
+}
+
+.admin-nav-group-label {
+  margin: 14px 8px 2px;
+  color: #8a9bb0;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.admin-console-nav > .admin-nav-group-label:first-child {
+  margin-top: 2px;
+}
+
+.admin-console-shell .table-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.admin-console-shell .table-actions button {
+  min-height: 32px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.admin-inline-link,
+.admin-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #bdd1e6;
+  border-radius: 9px;
+  color: #1768b0;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.admin-inline-link.primary,
+.admin-row-action:hover {
+  border-color: #78aee2;
+  color: #0d63aa;
+  background: #edf6ff;
+}
+
+.admin-inline-link:hover,
+.admin-row-action:hover {
+  box-shadow: 0 8px 18px rgba(28, 106, 176, 0.12);
+  transform: translateY(-1px);
+}
+
+.admin-pagination,
+.unified-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 2px 0;
+}
+
+.admin-pagination .el-pager li,
+.admin-pagination button,
+.unified-pagination .el-pager li,
+.unified-pagination button {
+  border-radius: 8px !important;
+}
+
+.admin-audit-table .cell b,
+.admin-audit-table .cell small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-audit-table .cell small {
+  margin-top: 2px;
+  color: #7b8da3;
+  font-size: 11px;
+}
+
+.admin-page-pane {
+  animation: admin-page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes admin-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page-pane,
+  .customer-access-page .el-table__row > td.el-table__cell,
+  .admin-console-shell .el-table__row > td.el-table__cell,
+  .admin-inline-link,
+  .admin-row-action {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-pagination,
+  .unified-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .admin-console-shell .table-actions {
+    flex-wrap: wrap;
   }
 }
