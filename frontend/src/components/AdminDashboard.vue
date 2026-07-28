@@ -363,14 +363,24 @@
               <el-table-column :label="t('admin.list.status')" width="110">
                 <template #default="{ row }"><span class="admin-status" :class="{ off: row.customerStatus !== 'ACTIVE' }">{{ statusText(row.customerStatus) }}</span></template>
               </el-table-column>
-              <el-table-column :label="t('admin.list.actions')" width="94" fixed="right">
+              <el-table-column :label="t('admin.list.actions')" width="168" fixed="right">
                 <template #default="{ row }">
-                  <RouterLink
-                    class="admin-row-action"
-                    :to="{ path: '/customers', query: { customer: row.customerId } }"
-                  >
-                    {{ t("admin.console.manage") }}
-                  </RouterLink>
+                  <div class="admin-platform-row-actions">
+                    <RouterLink
+                      class="admin-row-action"
+                      :to="{ path: '/customers', query: { customer: row.customerId } }"
+                    >
+                      {{ t("admin.console.manage") }}
+                    </RouterLink>
+                    <button
+                      class="admin-row-action danger"
+                      type="button"
+                      :disabled="loading"
+                      @click="handleDeletePlatformCustomer(row)"
+                    >
+                      {{ platformActionCopy.delete }}
+                    </button>
+                  </div>
                 </template>
               </el-table-column>
               <template #empty>{{ ui('admin.platform.empty') }}</template>
@@ -891,26 +901,35 @@
                   </el-select>
                 </label>
               </div>
-              <div class="announcement-image-field">
-                <label>
-                  <span>{{ announcementCopy.imageUrl }}</span>
-                  <div class="announcement-image-input-row">
-                    <input
-                      v-model.trim="announcementForm.imageUrl"
-                      type="text"
-                      placeholder="https://example.com/image.jpg"
-                    />
-                    <button
-                      type="button"
-                      :disabled="announcementImageUploading"
-                      @click="announcementImageInputRef?.click()"
-                    >
-                      {{ announcementImageUploading
-                        ? announcementCopy.uploadingImage
-                        : announcementCopy.uploadImage }}
-                    </button>
-                  </div>
-                </label>
+              <div
+                class="announcement-image-field"
+                :class="{ 'is-dragging': announcementImageDragging }"
+                @dragenter.prevent="announcementImageDragging = true"
+                @dragover.prevent="announcementImageDragging = true"
+                @dragleave="handleAnnouncementImageDragLeave"
+                @drop.prevent="handleAnnouncementCoverDrop"
+              >
+                <span class="announcement-field-label">{{ announcementCopy.coverImage }}</span>
+                <button
+                  class="announcement-image-dropzone"
+                  type="button"
+                  :disabled="announcementImageUploading"
+                  @click="chooseAnnouncementImage('cover')"
+                >
+                  <img
+                    v-if="announcementImageUrl(announcementForm)"
+                    :src="announcementImageUrl(announcementForm)"
+                    :alt="announcementForm.title || announcementCopy.coverImage"
+                  />
+                  <span v-else class="announcement-image-drop-icon" aria-hidden="true">+</span>
+                  <span>
+                    <b>{{ announcementImageUploading
+                      ? announcementCopy.uploadingImage
+                      : announcementCopy.dropImage }}</b>
+                    <small>{{ announcementCopy.uploadHint }}</small>
+                  </span>
+                  <em>{{ announcementCopy.chooseImage }}</em>
+                </button>
                 <input
                   ref="announcementImageInputRef"
                   class="announcement-file-input"
@@ -918,7 +937,14 @@
                   accept="image/jpeg,image/png,image/gif"
                   @change="handleAnnouncementImageUpload"
                 />
-                <small>{{ announcementCopy.uploadHint }}</small>
+                <label class="announcement-image-url-field">
+                  <span>{{ announcementCopy.imageUrl }}</span>
+                  <input
+                    v-model.trim="announcementForm.imageUrl"
+                    type="text"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                </label>
                 <small v-if="announcementUploadedPath" class="announcement-storage-path">
                   <b>{{ announcementCopy.storagePath }}</b>
                   <code>{{ announcementUploadedPath }}</code>
@@ -928,19 +954,74 @@
                 <span>{{ announcementCopy.illustrationRef }}</span>
                 <input v-model.trim="announcementForm.illustrationRef" :placeholder="announcementCopy.illustrationPlaceholder" />
               </label>
-              <label class="announcement-markdown-field">
-                <span>
-                  {{ announcementCopy.markdown }}
-                  <button class="announcement-insert-image" type="button" @click="insertAnnouncementImageMarkdown">
-                    {{ announcementCopy.insertImage }}
-                  </button>
-                </span>
-                <textarea
-                  v-model="announcementForm.contentMarkdown"
-                  rows="15"
-                  :placeholder="announcementCopy.markdownPlaceholder"
-                ></textarea>
-              </label>
+              <div class="announcement-rich-field">
+                <span class="announcement-field-label">{{ announcementCopy.content }}</span>
+                <div class="announcement-rich-toolbar" :aria-label="announcementCopy.toolbar">
+                  <button type="button" :title="announcementCopy.heading2" @mousedown.prevent="applyAnnouncementFormat('formatBlock', 'h2')">H2</button>
+                  <button type="button" :title="announcementCopy.heading3" @mousedown.prevent="applyAnnouncementFormat('formatBlock', 'h3')">H3</button>
+                  <button type="button" :title="announcementCopy.bold" @mousedown.prevent="applyAnnouncementFormat('bold')"><b>B</b></button>
+                  <button type="button" :title="announcementCopy.italic" @mousedown.prevent="applyAnnouncementFormat('italic')"><i>I</i></button>
+                  <button type="button" :title="announcementCopy.bulletList" @mousedown.prevent="applyAnnouncementFormat('insertUnorderedList')">•</button>
+                  <button type="button" :title="announcementCopy.numberedList" @mousedown.prevent="applyAnnouncementFormat('insertOrderedList')">1.</button>
+                  <button type="button" :title="announcementCopy.quote" @mousedown.prevent="applyAnnouncementFormat('formatBlock', 'blockquote')">“”</button>
+                  <button type="button" :title="announcementCopy.link" @mousedown.prevent="insertAnnouncementLink">↗</button>
+                  <button type="button" :title="announcementCopy.insertImage" @mousedown.prevent="insertAnnouncementImageIntoEditor()">▧</button>
+                  <span class="announcement-toolbar-divider" aria-hidden="true"></span>
+                  <details class="announcement-toolbar-palette" @mousedown="rememberAnnouncementEditorSelection">
+                    <summary :title="announcementCopy.emoji">☺</summary>
+                    <div>
+                      <button
+                        v-for="item in ANNOUNCEMENT_EMOJIS"
+                        :key="item"
+                        type="button"
+                        @mousedown.prevent="insertAnnouncementEditorText(item)"
+                      >{{ item }}</button>
+                    </div>
+                  </details>
+                  <details class="announcement-toolbar-palette" @mousedown="rememberAnnouncementEditorSelection">
+                    <summary :title="announcementCopy.symbol">Ω</summary>
+                    <div>
+                      <button
+                        v-for="item in ANNOUNCEMENT_SYMBOLS"
+                        :key="item"
+                        type="button"
+                        @mousedown.prevent="insertAnnouncementEditorText(item)"
+                      >{{ item }}</button>
+                    </div>
+                  </details>
+                  <details class="announcement-toolbar-palette announcement-toolbar-tags" @mousedown="rememberAnnouncementEditorSelection">
+                    <summary :title="announcementCopy.tag">#</summary>
+                    <div>
+                      <button
+                        v-for="item in announcementQuickTags"
+                        :key="item"
+                        type="button"
+                        @mousedown.prevent="insertAnnouncementEditorText(item)"
+                      >{{ item }}</button>
+                    </div>
+                  </details>
+                  <span class="announcement-toolbar-spacer"></span>
+                  <button type="button" :title="announcementCopy.undo" @mousedown.prevent="applyAnnouncementFormat('undo')">↶</button>
+                  <button type="button" :title="announcementCopy.redo" @mousedown.prevent="applyAnnouncementFormat('redo')">↷</button>
+                  <button type="button" :title="announcementCopy.clearFormat" @mousedown.prevent="applyAnnouncementFormat('removeFormat')">Tx</button>
+                </div>
+                <div
+                  ref="announcementEditorRef"
+                  class="announcement-rich-editor"
+                  contenteditable="true"
+                  role="textbox"
+                  aria-multiline="true"
+                  :data-placeholder="announcementCopy.contentPlaceholder"
+                  @focus="rememberAnnouncementEditorSelection"
+                  @input="syncAnnouncementMarkdownFromEditor"
+                  @keyup="rememberAnnouncementEditorSelection"
+                  @mouseup="rememberAnnouncementEditorSelection"
+                  @paste="handleAnnouncementEditorPaste"
+                  @dragover.prevent
+                  @drop="handleAnnouncementEditorDrop"
+                ></div>
+                <small>{{ announcementCopy.editorHint }}</small>
+              </div>
               <p v-if="announcementDialogError" class="announcement-dialog-error" role="alert">
                 {{ announcementDialogError }}
               </p>
@@ -1198,6 +1279,7 @@ import {
   createAdminAnnouncement,
   createEmployee,
   deleteAdminAnnouncement,
+  deletePlatformCustomer,
   deleteAdminShipmentFile,
   deleteDevice,
   deleteEmployee,
@@ -1244,7 +1326,7 @@ const rawAdminPages = [
   { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
   { key: "employees", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
   { key: "platform", no: "04", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
-  { key: "announcements", no: "05", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u7f16\u8f91 Markdown \u516c\u544a\u3001\u914d\u7f6e\u53ef\u89c1\u8303\u56f4\u4e0e\u5f53\u65e5\u5c55\u793a\u65e5\u671f\u3002" },
+  { key: "announcements", no: "05", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u4f7f\u7528\u53ef\u89c6\u5316\u5de5\u5177\u7f16\u8f91\u516c\u544a\u3001\u4e0a\u4f20\u56fe\u7247\u5e76\u914d\u7f6e\u5f53\u65e5\u53ef\u89c1\u8303\u56f4\u3002" },
   { key: "devices", no: "06", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
   { key: "files", no: "07", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
   { key: "system", no: "08", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
@@ -1272,7 +1354,10 @@ const announcementDialogOpen = ref(false);
 const editingAnnouncementId = ref("");
 const announcementDialogError = ref("");
 const announcementImageInputRef = ref(null);
+const announcementEditorRef = ref(null);
 const announcementImageUploading = ref(false);
+const announcementImageDragging = ref(false);
+const announcementImageInsertMode = ref("cover");
 const announcementUploadedPath = ref("");
 const announcementPreviewRecord = ref(null);
 const announcementForm = reactive({
@@ -1339,6 +1424,7 @@ const filePreviewDialog = reactive({
   isError: false
 });
 let filePreviewObjectUrl = null;
+let announcementEditorRange = null;
 const llmForm = reactive({
   enabled: true,
   baseUrl: "https://api.deepseek.com",
@@ -1445,6 +1531,24 @@ const OVERVIEW_COPY = {
   }
 };
 
+const PLATFORM_ACTION_COPY = {
+  "zh-CN": {
+    delete: "\u5220\u9664",
+    cancel: "\u53d6\u6d88",
+    confirm: "\u786e\u8ba4\u5220\u9664\u5ba2\u6237\u300c{name}\u300d\u5417\uff1f\u5220\u9664\u540e\u8be5\u5ba2\u6237\u5c06\u65e0\u6cd5\u767b\u5f55\uff0c\u5386\u53f2\u7968\u5355\u6570\u636e\u4f1a\u4fdd\u7559\u3002",
+    success: "\u5ba2\u6237\u5df2\u5220\u9664"
+  },
+  "en-US": {
+    delete: "Delete",
+    cancel: "Cancel",
+    confirm: "Delete customer “{name}”? The customer will no longer be able to sign in; historical shipment data is retained.",
+    success: "Customer deleted"
+  }
+};
+
+const ANNOUNCEMENT_EMOJIS = ["\ud83d\ude00", "\ud83d\ude80", "\ud83d\udce6", "\ud83d\udea2", "\u2705", "\u26a0\ufe0f", "\ud83d\udce2", "\ud83d\udca1", "\ud83d\udccd", "\ud83d\udcc5"];
+const ANNOUNCEMENT_SYMBOLS = ["\u2022", "\u25e6", "\u2713", "\u2605", "\u2192", "\u203b", "\u2116", "\u2139", "\u00b7", "\u00a7"];
+
 const ANNOUNCEMENT_COPY = {
   "zh-CN": {
     systemMessages: "\u7cfb\u7edf\u6d88\u606f",
@@ -1470,18 +1574,40 @@ const ANNOUNCEMENT_COPY = {
     cancel: "\u53d6\u6d88",
     saveDraft: "\u4fdd\u5b58",
     titlePlaceholder: "\u4f8b\u5982\uff1a\u4eca\u65e5\u8d27\u8e2a\u5e73\u53f0\u5347\u7ea7\u901a\u77e5",
-    imageUrl: "\u5934\u56fe URL\uff08\u53ef\u9009\uff09",
+    coverImage: "\u516c\u544a\u56fe\u7247\uff08\u53ef\u9009\uff09",
+    imageUrl: "\u6216\u4f7f\u7528\u5916\u90e8\u56fe\u7247 URL",
     uploadImage: "\u4e0a\u4f20\u5230\u7cfb\u7edf\u786c\u76d8",
     uploadingImage: "\u4e0a\u4f20\u4e2d\u2026",
-    uploadHint: "\u652f\u6301 JPG\u3001PNG\u3001GIF\uff0c\u6700\u5927 10 MB\u3002\u4e0a\u4f20\u540e\u4f1a\u81ea\u52a8\u586b\u5165\u7cfb\u7edf URL\u3002",
+    dropImage: "\u5c06\u56fe\u7247\u62d6\u5230\u8fd9\u91cc",
+    chooseImage: "\u9009\u62e9\u56fe\u7247",
+    uploadHint: "\u6216\u70b9\u51fb\u9009\u62e9 JPG\u3001PNG\u3001GIF\uff0c\u6700\u5927 10 MB\uff0c\u6587\u4ef6\u5b58\u5165\u7cfb\u7edf\u786c\u76d8\u3002",
     storagePath: "\u786c\u76d8\u5b58\u50a8\u8def\u5f84",
     uploadSuccess: "\u56fe\u7247\u5df2\u4e0a\u4f20\u5230\u7cfb\u7edf\u786c\u76d8",
     uploadFailed: "\u56fe\u7247\u4e0a\u4f20\u5931\u8d25",
     illustrationRef: "\u63d2\u56fe\u5f15\u7528/\u8bf4\u660e\uff08\u53ef\u9009\uff09",
     illustrationPlaceholder: "\u56fe\u7247\u6765\u6e90\u3001\u7248\u6743\u6216\u5185\u90e8\u7d20\u6750\u7f16\u53f7",
-    markdown: "Markdown \u6b63\u6587",
-    insertImage: "\u63d2\u5165\u56fe\u7247 Markdown",
-    markdownPlaceholder: "# \u516c\u544a\u8981\u70b9\n\n\u8bf7\u8f93\u5165\u6b63\u6587\uff0c\u652f\u6301 **\u52a0\u7c97**\u3001\u5217\u8868\u3001\u94fe\u63a5\u4e0e ![alt](https://...)\u3002",
+    content: "\u516c\u544a\u6b63\u6587",
+    toolbar: "\u516c\u544a\u5bcc\u6587\u672c\u5de5\u5177\u680f",
+    contentPlaceholder: "\u76f4\u63a5\u8f93\u5165\u516c\u544a\u6b63\u6587\uff0c\u7528\u4e0a\u65b9\u5de5\u5177\u9009\u62e9\u6807\u9898\u3001\u5217\u8868\u3001\u6807\u7b7e\u548c\u8868\u60c5\u3002",
+    editorHint: "\u652f\u6301\u76f4\u63a5\u7f16\u8f91\u683c\u5f0f\uff1b\u56fe\u7247\u4e5f\u53ef\u62d6\u5165\u6b63\u6587\uff0c\u7cfb\u7edf\u4f1a\u5148\u4e0a\u4f20\u518d\u63d2\u5165\u3002",
+    heading2: "\u4e8c\u7ea7\u6807\u9898",
+    heading3: "\u4e09\u7ea7\u6807\u9898",
+    bold: "\u52a0\u7c97",
+    italic: "\u659c\u4f53",
+    bulletList: "\u9879\u76ee\u7b26\u53f7",
+    numberedList: "\u7f16\u53f7\u5217\u8868",
+    quote: "\u5f15\u7528",
+    link: "\u63d2\u5165\u94fe\u63a5",
+    linkPrompt: "\u8bf7\u8f93\u5165 http/https \u94fe\u63a5",
+    invalidLink: "\u94fe\u63a5\u5fc5\u987b\u4f7f\u7528 http \u6216 https\u3002",
+    emoji: "\u8868\u60c5",
+    symbol: "\u7b26\u53f7",
+    tag: "\u5feb\u6377\u6807\u7b7e",
+    undo: "\u64a4\u9500",
+    redo: "\u91cd\u505a",
+    clearFormat: "\u6e05\u9664\u683c\u5f0f",
+    quickTags: ["\u3010\u91cd\u8981\u3011", "\u3010\u7d27\u6025\u3011", "\u3010\u66f4\u65b0\u3011", "\u3010\u7ef4\u62a4\u3011", "\u3010\u63d0\u9192\u3011", "\u3010\u901a\u77e5\u3011"],
+    insertImage: "\u63d2\u5165\u56fe\u7247",
     livePreview: "\u5b9e\u65f6\u9884\u89c8",
     untitled: "\u672a\u547d\u540d\u516c\u544a",
     customer: "\u5ba2\u6237\u53ef\u89c1",
@@ -1490,7 +1616,7 @@ const ANNOUNCEMENT_COPY = {
     draft: "\u8349\u7a3f",
     published: "\u5df2\u53d1\u5e03",
     disabled: "\u5df2\u505c\u7528",
-    required: "\u8bf7\u5b8c\u6574\u586b\u5199\u6807\u9898\u3001\u5c55\u793a\u65e5\u671f\u548c Markdown \u6b63\u6587\u3002",
+    required: "\u8bf7\u5b8c\u6574\u586b\u5199\u6807\u9898\u3001\u5c55\u793a\u65e5\u671f\u548c\u516c\u544a\u6b63\u6587\u3002",
     invalidImage: "\u5934\u56fe\u5730\u5740\u5fc5\u987b\u4e3a http/https URL \u6216\u7cfb\u7edf\u56fe\u7247\u8def\u5f84\u3002",
     created: "\u516c\u544a\u5df2\u521b\u5efa",
     updated: "\u516c\u544a\u5df2\u66f4\u65b0",
@@ -1498,7 +1624,7 @@ const ANNOUNCEMENT_COPY = {
     disabledSuccess: "\u516c\u544a\u5df2\u505c\u7528",
     deletedSuccess: "\u516c\u544a\u5df2\u5220\u9664",
     deleteConfirm: "\u786e\u8ba4\u5220\u9664\u516c\u544a\u300c{title}\u300d\u5417\uff1f",
-    imageUrlNeeded: "\u8bf7\u5148\u586b\u5199\u5934\u56fe URL\uff0c\u518d\u63d2\u5165 Markdown \u56fe\u7247\u3002"
+    imageUrlNeeded: "\u8bf7\u5148\u4e0a\u4f20\u56fe\u7247\uff0c\u6216\u586b\u5199\u56fe\u7247 URL\u3002"
   },
   "en-US": {
     systemMessages: "System messages",
@@ -1524,18 +1650,40 @@ const ANNOUNCEMENT_COPY = {
     cancel: "Cancel",
     saveDraft: "Save",
     titlePlaceholder: "For example: Shipment tracking platform update",
-    imageUrl: "Cover image URL (optional)",
+    coverImage: "Announcement image (optional)",
+    imageUrl: "Or use an external image URL",
     uploadImage: "Upload to system disk",
     uploadingImage: "Uploading\u2026",
-    uploadHint: "JPG, PNG, or GIF up to 10 MB. The system URL is filled in automatically.",
+    dropImage: "Drop an image here",
+    chooseImage: "Choose image",
+    uploadHint: "Or choose JPG, PNG, or GIF up to 10 MB. The file is stored on the system disk.",
     storagePath: "Disk storage path",
     uploadSuccess: "Image uploaded to the system disk",
     uploadFailed: "Image upload failed",
     illustrationRef: "Illustration reference (optional)",
     illustrationPlaceholder: "Source, copyright note, or internal asset reference",
-    markdown: "Markdown content",
-    insertImage: "Insert Markdown image",
-    markdownPlaceholder: "# Highlights\n\nSupports **bold**, lists, links, and ![alt](https://...).",
+    content: "Announcement content",
+    toolbar: "Rich-text toolbar",
+    contentPlaceholder: "Write directly, then choose headings, lists, tags, symbols, and emoji from the toolbar.",
+    editorHint: "Format content directly. Images can also be dropped into the editor and will be uploaded before insertion.",
+    heading2: "Heading 2",
+    heading3: "Heading 3",
+    bold: "Bold",
+    italic: "Italic",
+    bulletList: "Bulleted list",
+    numberedList: "Numbered list",
+    quote: "Quote",
+    link: "Insert link",
+    linkPrompt: "Enter an http/https link",
+    invalidLink: "Links must use http or https.",
+    emoji: "Emoji",
+    symbol: "Symbols",
+    tag: "Quick tags",
+    undo: "Undo",
+    redo: "Redo",
+    clearFormat: "Clear formatting",
+    quickTags: ["[Important]", "[Urgent]", "[Update]", "[Maintenance]", "[Reminder]", "[Notice]"],
+    insertImage: "Insert image",
     livePreview: "Live preview",
     untitled: "Untitled announcement",
     customer: "Customers",
@@ -1544,7 +1692,7 @@ const ANNOUNCEMENT_COPY = {
     draft: "Draft",
     published: "Published",
     disabled: "Disabled",
-    required: "Title, display date, and Markdown content are required.",
+    required: "Title, display date, and announcement content are required.",
     invalidImage: "The cover image must use an http/https URL or a system image path.",
     created: "Announcement created",
     updated: "Announcement updated",
@@ -1552,7 +1700,7 @@ const ANNOUNCEMENT_COPY = {
     disabledSuccess: "Announcement disabled",
     deletedSuccess: "Announcement deleted",
     deleteConfirm: "Delete announcement “{title}”?",
-    imageUrlNeeded: "Enter a cover image URL before inserting Markdown."
+    imageUrlNeeded: "Upload an image or enter an image URL first."
   }
 };
 const announcementCopy = computed(() =>
@@ -1561,6 +1709,10 @@ const announcementCopy = computed(() =>
 const overviewCopy = computed(() =>
   OVERVIEW_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
 );
+const platformActionCopy = computed(() =>
+  PLATFORM_ACTION_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
+);
+const announcementQuickTags = computed(() => announcementCopy.value.quickTags);
 
 const adminPages = computed(() => rawAdminPages.map((item) => ({
   ...item,
@@ -1955,6 +2107,29 @@ async function changePlatformPageSize(size) {
   await withLoading(loadPlatformPage);
 }
 
+async function handleDeletePlatformCustomer(row) {
+  const name = row?.customerDisplayName || row?.customerUsername || row?.customerId || "-";
+  const prompt = platformActionCopy.value.confirm.replace("{name}", name);
+  try {
+    await ElMessageBox.confirm(prompt, platformActionCopy.value.delete, {
+      type: "warning",
+      confirmButtonText: platformActionCopy.value.delete,
+      cancelButtonText: platformActionCopy.value.cancel,
+      customClass: "admin-error-message-box"
+    });
+  } catch {
+    return;
+  }
+  await withLoading(async () => {
+    await deletePlatformCustomer(row.customerId);
+    if (platformCustomers.value.length === 1 && platformPage.value > 1) {
+      platformPage.value -= 1;
+    }
+    await loadPlatformPage();
+    showMessage(platformActionCopy.value.success);
+  }, { popupError: true });
+}
+
 async function changeAnnouncementPage(page) {
   announcementPage.value = page;
   await withLoading(loadAnnouncementPageWithoutLoading);
@@ -2013,6 +2188,10 @@ function resetAnnouncementForm() {
   announcementForm.illustrationRef = "";
   announcementForm.audience = "ALL";
   announcementForm.displayDate = todayDateString();
+  announcementImageInsertMode.value = "cover";
+  announcementImageDragging.value = false;
+  announcementEditorRange = null;
+  if (announcementEditorRef.value) announcementEditorRef.value.innerHTML = "";
 }
 
 function openAnnouncementEditor(record = null) {
@@ -2028,6 +2207,7 @@ function openAnnouncementEditor(record = null) {
   announcementForm.audience = announcementAudience(record);
   announcementForm.displayDate = record?.displayDate || todayDateString();
   announcementDialogOpen.value = true;
+  void nextTick(syncAnnouncementEditorFromMarkdown);
 }
 
 function closeAnnouncementEditor() {
@@ -2045,18 +2225,60 @@ function closeAnnouncementPreview() {
   announcementPreviewRecord.value = null;
 }
 
+function chooseAnnouncementImage(mode = "cover") {
+  announcementImageInsertMode.value = mode;
+  announcementImageInputRef.value?.click();
+}
+
+function handleAnnouncementImageDragLeave(event) {
+  if (event?.currentTarget?.contains(event?.relatedTarget)) return;
+  announcementImageDragging.value = false;
+}
+
+function handleAnnouncementCoverDrop(event) {
+  announcementImageDragging.value = false;
+  const file = announcementImageFileFrom(event?.dataTransfer?.files);
+  if (!file) return;
+  void uploadAnnouncementImageFile(file, { insertIntoEditor: false });
+}
+
 async function handleAnnouncementImageUpload(event) {
   const input = event?.target;
-  const file = input?.files?.[0];
-  if (!file) return;
+  const file = announcementImageFileFrom(input?.files);
+  if (!file) {
+    if (input) input.value = "";
+    return;
+  }
+  await uploadAnnouncementImageFile(file, {
+    insertIntoEditor: announcementImageInsertMode.value === "body"
+  });
+  if (input) input.value = "";
+}
+
+function announcementImageFileFrom(files) {
+  return Array.from(files || []).find((file) =>
+    /^image\/(?:jpeg|png|gif)$/i.test(file?.type || "")
+    || /\.(?:jpe?g|png|gif)$/i.test(file?.name || "")
+  );
+}
+
+async function uploadAnnouncementImageFile(file, { insertIntoEditor = false } = {}) {
+  if (!file || announcementImageUploading.value) return;
   announcementDialogError.value = "";
   announcementImageUploading.value = true;
   try {
     const uploaded = await uploadAdminAnnouncementImage(file);
-    announcementForm.imageUrl = String(uploaded?.url || "");
+    const uploadedUrl = String(uploaded?.url || "");
+    if (!insertIntoEditor) announcementForm.imageUrl = uploadedUrl;
     announcementUploadedPath.value = String(uploaded?.storagePath || "");
     if (!announcementForm.illustrationRef.trim()) {
       announcementForm.illustrationRef = String(uploaded?.originalName || file.name || "");
+    }
+    if (insertIntoEditor) {
+      insertAnnouncementImageIntoEditor(
+        uploadedUrl,
+        String(uploaded?.originalName || file.name || "")
+      );
     }
     showMessage(announcementCopy.value.uploadSuccess);
   } catch (error) {
@@ -2064,7 +2286,7 @@ async function handleAnnouncementImageUpload(event) {
     announcementDialogError.value = error?.message || announcementCopy.value.uploadFailed;
   } finally {
     announcementImageUploading.value = false;
-    if (input) input.value = "";
+    announcementImageInsertMode.value = "cover";
   }
 }
 
@@ -2146,16 +2368,226 @@ async function handleDeleteAnnouncement(record) {
   }, { popupError: true });
 }
 
-function insertAnnouncementImageMarkdown() {
-  const url = safeAnnouncementUrl(announcementForm.imageUrl);
+function syncAnnouncementEditorFromMarkdown() {
+  const editor = announcementEditorRef.value;
+  if (!editor) return;
+  editor.innerHTML = renderAnnouncementMarkdown(announcementForm.contentMarkdown);
+  announcementEditorRange = null;
+}
+
+function syncAnnouncementMarkdownFromEditor() {
+  const editor = announcementEditorRef.value;
+  if (!editor) return;
+  announcementForm.contentMarkdown = announcementEditorToMarkdown(editor);
+  rememberAnnouncementEditorSelection();
+}
+
+function rememberAnnouncementEditorSelection() {
+  const editor = announcementEditorRef.value;
+  const selection = window.getSelection?.();
+  if (!editor || !selection?.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const node = range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+    ? range.commonAncestorContainer.parentNode
+    : range.commonAncestorContainer;
+  if (node === editor || editor.contains(node)) {
+    announcementEditorRange = range.cloneRange();
+  }
+}
+
+function restoreAnnouncementEditorSelection() {
+  const editor = announcementEditorRef.value;
+  if (!editor) return false;
+  editor.focus();
+  const selection = window.getSelection?.();
+  if (!selection) return false;
+  selection.removeAllRanges();
+  if (announcementEditorRange) {
+    try {
+      selection.addRange(announcementEditorRange);
+      return true;
+    } catch {
+      announcementEditorRange = null;
+    }
+  }
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  selection.addRange(range);
+  announcementEditorRange = range.cloneRange();
+  return true;
+}
+
+function applyAnnouncementFormat(command, value = null) {
+  if (!restoreAnnouncementEditorSelection()) return;
+  document.execCommand(command, false, value);
+  syncAnnouncementMarkdownFromEditor();
+}
+
+function insertAnnouncementEditorText(value) {
+  if (!restoreAnnouncementEditorSelection()) return;
+  document.execCommand("insertText", false, String(value || ""));
+  syncAnnouncementMarkdownFromEditor();
+}
+
+function insertAnnouncementEditorHtml(html) {
+  if (!restoreAnnouncementEditorSelection()) return;
+  document.execCommand("insertHTML", false, html);
+  syncAnnouncementMarkdownFromEditor();
+}
+
+function insertAnnouncementLink() {
+  rememberAnnouncementEditorSelection();
+  const entered = window.prompt(announcementCopy.value.linkPrompt, "https://");
+  if (!entered) return;
+  const url = safeAnnouncementUrl(entered);
   if (!url) {
-    announcementDialogError.value = announcementCopy.value.imageUrlNeeded;
+    announcementDialogError.value = announcementCopy.value.invalidLink;
     return;
   }
   announcementDialogError.value = "";
-  const alt = announcementForm.illustrationRef.trim() || announcementForm.title.trim() || "illustration";
-  const markdown = `![${alt.replace(/[\[\]]/g, "")}](${url})`;
-  announcementForm.contentMarkdown = `${announcementForm.contentMarkdown.trimEnd()}${announcementForm.contentMarkdown.trim() ? "\n\n" : ""}${markdown}`;
+  if (!restoreAnnouncementEditorSelection()) return;
+  const selection = window.getSelection?.();
+  if (selection && !selection.isCollapsed) {
+    document.execCommand("createLink", false, url);
+  } else {
+    insertAnnouncementEditorHtml(
+      `<a href="${escapeAnnouncementHtml(url)}">${escapeAnnouncementHtml(url)}</a>`
+    );
+    return;
+  }
+  syncAnnouncementMarkdownFromEditor();
+}
+
+function insertAnnouncementImageIntoEditor(source = "", altText = "") {
+  const rawSource = String(source || announcementForm.imageUrl || "").trim();
+  const url = safeAnnouncementUrl(rawSource);
+  if (!url) {
+    chooseAnnouncementImage("body");
+    return;
+  }
+  announcementDialogError.value = "";
+  const alt = String(
+    altText
+      || announcementForm.illustrationRef
+      || announcementForm.title
+      || "illustration"
+  ).replace(/[\[\]]/g, "");
+  const storedSource = announcementPortableUrl(rawSource, url);
+  insertAnnouncementEditorHtml(
+    `<img src="${escapeAnnouncementHtml(storedSource)}" alt="${escapeAnnouncementHtml(alt)}">`
+  );
+}
+
+function handleAnnouncementEditorPaste(event) {
+  event.preventDefault();
+  rememberAnnouncementEditorSelection();
+  const text = event.clipboardData?.getData("text/plain") || "";
+  insertAnnouncementEditorText(text);
+}
+
+function handleAnnouncementEditorDrop(event) {
+  const file = announcementImageFileFrom(event?.dataTransfer?.files);
+  if (!file) return;
+  event.preventDefault();
+  const range = announcementDropRange(event);
+  if (range) announcementEditorRange = range;
+  void uploadAnnouncementImageFile(file, { insertIntoEditor: true });
+}
+
+function announcementDropRange(event) {
+  const editor = announcementEditorRef.value;
+  if (!editor) return null;
+  let range = document.caretRangeFromPoint?.(event.clientX, event.clientY) || null;
+  if (!range && document.caretPositionFromPoint) {
+    const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+    if (position) {
+      range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+    }
+  }
+  if (!range) return null;
+  const node = range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+    ? range.commonAncestorContainer.parentNode
+    : range.commonAncestorContainer;
+  return node === editor || editor.contains(node) ? range.cloneRange() : null;
+}
+
+function announcementEditorToMarkdown(editor) {
+  const blocks = Array.from(editor.childNodes)
+    .map((node) => announcementBlockToMarkdown(node))
+    .filter((value) => value.trim());
+  return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function announcementBlockToMarkdown(node) {
+  if (node.nodeType === Node.TEXT_NODE) return announcementTextValue(node.textContent);
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const tag = node.tagName.toLowerCase();
+  if (/^h[1-6]$/.test(tag)) {
+    const level = Math.max(1, Math.min(4, Number(tag.slice(1))));
+    return `${"#".repeat(level)} ${announcementInlineChildren(node).trim()}`;
+  }
+  if (tag === "ul" || tag === "ol") {
+    return Array.from(node.children)
+      .filter((item) => item.tagName?.toLowerCase() === "li")
+      .map((item, index) => `${tag === "ol" ? `${index + 1}.` : "-"} ${announcementInlineChildren(item).trim()}`)
+      .join("\n");
+  }
+  if (tag === "blockquote") {
+    return announcementInlineChildren(node)
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  }
+  if (tag === "pre") return `\`\`\`\n${node.textContent || ""}\n\`\`\``;
+  if (tag === "br") return "";
+  return announcementInlineChildren(node).trim();
+}
+
+function announcementInlineChildren(node) {
+  return Array.from(node.childNodes).map(announcementInlineNodeToMarkdown).join("");
+}
+
+function announcementInlineNodeToMarkdown(node) {
+  if (node.nodeType === Node.TEXT_NODE) return announcementTextValue(node.textContent);
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const tag = node.tagName.toLowerCase();
+  const content = announcementInlineChildren(node);
+  if (tag === "br") return "\n";
+  if (tag === "strong" || tag === "b") return content ? `**${content}**` : "";
+  if (tag === "em" || tag === "i") return content ? `*${content}*` : "";
+  if (tag === "code") return content ? `\`${content}\`` : "";
+  if (tag === "a") {
+    const raw = node.getAttribute("href") || "";
+    const safe = safeAnnouncementUrl(raw);
+    return safe ? `[${content || safe}](${announcementPortableUrl(raw, safe)})` : content;
+  }
+  if (tag === "img") {
+    const raw = node.getAttribute("src") || "";
+    const safe = safeAnnouncementUrl(raw);
+    const alt = String(node.getAttribute("alt") || "illustration").replace(/[\[\]]/g, "");
+    return safe ? `![${alt}](${announcementPortableUrl(raw, safe)})` : "";
+  }
+  return content;
+}
+
+function announcementTextValue(value) {
+  return String(value || "").replace(/\u00a0/g, " ");
+}
+
+function announcementPortableUrl(raw, safe) {
+  try {
+    const parsed = new URL(safe, window.location.origin);
+    if (parsed.origin === window.location.origin
+        && parsed.pathname.startsWith("/api/public/announcement-images/")) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    return safe;
+  }
+  return String(raw || "").trim() || safe;
 }
 
 function safeAnnouncementUrl(value) {
@@ -2164,6 +2596,12 @@ function safeAnnouncementUrl(value) {
   try {
     const url = new URL(source, window.location.origin);
     if (!["http:", "https:"].includes(url.protocol)) return "";
+    const storedImage = url.pathname.match(
+      /\/(?:tracking\/)?api\/public\/announcement-images\/([a-f0-9]{32}\.(?:jpe?g|png|gif))$/i
+    );
+    if (storedImage) {
+      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin).href;
+    }
     return url.href;
   } catch {
     return "";
@@ -2171,10 +2609,7 @@ function safeAnnouncementUrl(value) {
 }
 
 function announcementImageUrl(record) {
-  const explicit = safeAnnouncementUrl(record?.imageUrl);
-  if (explicit) return explicit;
-  const match = String(record?.contentMarkdown || "").match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/i);
-  return safeAnnouncementUrl(match?.[1]);
+  return safeAnnouncementUrl(record?.imageUrl);
 }
 
 function announcementExcerpt(value) {
@@ -3224,7 +3659,7 @@ const CP1252_BYTES = {
 
 .announcement-image-field {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .announcement-image-field > small {
@@ -3234,28 +3669,99 @@ const CP1252_BYTES = {
   line-height: 1.5;
 }
 
-.announcement-image-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-
-.announcement-image-input-row button {
-  min-height: 42px;
-  padding: 0 13px;
-  border: 1px solid #8eb7dc;
-  border-radius: 9px;
-  color: #256b9f;
-  background: #eef7ff;
+.announcement-field-label {
+  color: #39536c;
   font-size: 12px;
   font-weight: 800;
+}
+
+.announcement-image-dropzone {
+  display: grid;
+  min-height: 92px;
+  padding: 10px 12px;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px dashed #86b6df;
+  border-radius: 11px;
+  color: #315e82;
+  background: linear-gradient(135deg, #f5faff, #edf7ff);
   cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.announcement-image-field.is-dragging .announcement-image-dropzone,
+.announcement-image-dropzone:hover:not(:disabled) {
+  border-color: #2f80d1;
+  background: #e8f5ff;
+  transform: translateY(-1px);
+}
+
+.announcement-image-dropzone > img,
+.announcement-image-drop-icon {
+  width: 64px;
+  height: 64px;
+  border: 1px solid #c7dbea;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.announcement-image-dropzone > img {
+  object-fit: cover;
+}
+
+.announcement-image-drop-icon {
+  display: grid;
+  place-items: center;
+  color: #2f80d1;
+  font-size: 29px;
+  font-weight: 300;
+}
+
+.announcement-image-dropzone > span:not(.announcement-image-drop-icon) {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.announcement-image-dropzone b {
+  color: #1f4f75;
+  font-size: 13px;
+}
+
+.announcement-image-dropzone small {
+  color: #72899e;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.announcement-image-dropzone em {
+  padding: 7px 10px;
+  border: 1px solid #9dc3e3;
+  border-radius: 7px;
+  color: #256b9f;
+  background: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
   white-space: nowrap;
 }
 
-.announcement-image-input-row button:disabled {
+.announcement-image-dropzone:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.announcement-image-url-field {
+  gap: 6px !important;
+}
+
+.announcement-image-url-field > span {
+  color: #6d8195 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
 }
 
 .announcement-file-input {
@@ -3283,23 +3789,169 @@ const CP1252_BYTES = {
   gap: 12px;
 }
 
-.announcement-markdown-field > span {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
+.announcement-rich-field {
+  display: grid;
+  gap: 7px;
 }
 
-.announcement-insert-image {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid #b8cee4;
-  border-radius: 7px;
-  color: #276da8;
-  background: #f4f9ff;
+.announcement-rich-field > small {
+  color: #72869a;
   font-size: 11px;
-  font-weight: 800;
+  line-height: 1.45;
+}
+
+.announcement-rich-toolbar {
+  position: relative;
+  display: flex;
+  min-height: 40px;
+  padding: 5px;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid #bed0e2;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  background: #f4f8fc;
+}
+
+.announcement-rich-toolbar > button,
+.announcement-toolbar-palette > summary,
+.announcement-toolbar-palette div button {
+  display: inline-grid;
+  min-width: 30px;
+  min-height: 28px;
+  padding: 0 7px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #365b7b;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
+}
+
+.announcement-rich-toolbar > button:hover,
+.announcement-toolbar-palette > summary:hover,
+.announcement-toolbar-palette[open] > summary {
+  border-color: #a9c8e2;
+  background: #fff;
+}
+
+.announcement-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 2px;
+  background: #cad8e5;
+}
+
+.announcement-toolbar-spacer {
+  flex: 1 1 12px;
+}
+
+.announcement-toolbar-palette {
+  position: relative;
+}
+
+.announcement-toolbar-palette > summary {
+  list-style: none;
+}
+
+.announcement-toolbar-palette > summary::-webkit-details-marker {
+  display: none;
+}
+
+.announcement-toolbar-palette > div {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 7px);
+  left: 0;
+  display: grid;
+  width: 186px;
+  padding: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid #c8d8e7;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgb(29 66 101 / 17%);
+}
+
+.announcement-toolbar-palette div button {
+  padding: 0;
+  font-size: 16px;
+}
+
+.announcement-toolbar-palette div button:hover {
+  background: #edf6ff;
+}
+
+.announcement-toolbar-tags > div {
+  width: 240px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.announcement-toolbar-tags div button {
+  padding: 0 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.announcement-rich-editor {
+  min-height: 285px;
+  max-height: 440px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #bed0e2;
+  border-radius: 0 0 9px 9px;
+  outline: none;
+  color: #18324c;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.7;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.announcement-rich-editor:focus {
+  border-color: #4c9bde;
+  box-shadow: 0 0 0 3px rgb(47 128 209 / 11%);
+}
+
+.announcement-rich-editor:empty::before {
+  color: #9aaabb;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.announcement-rich-editor h2,
+.announcement-rich-editor h3,
+.announcement-rich-editor p,
+.announcement-rich-editor ul,
+.announcement-rich-editor ol,
+.announcement-rich-editor blockquote {
+  margin: 0 0 10px;
+}
+
+.announcement-rich-editor ul,
+.announcement-rich-editor ol {
+  padding-left: 22px;
+}
+
+.announcement-rich-editor blockquote {
+  padding: 8px 11px;
+  border-left: 3px solid #61a5dc;
+  color: #516b82;
+  background: #f3f8fc;
+}
+
+.announcement-rich-editor img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin: 10px 0;
+  border-radius: 9px;
+  object-fit: contain;
 }
 
 .announcement-dialog-error {
@@ -3504,6 +4156,32 @@ const CP1252_BYTES = {
   padding: 0 11px;
 }
 
+.admin-platform-row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.admin-row-action.danger {
+  border-color: #e5b6bb;
+  color: #b64752;
+  background: #fff8f8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-row-action.danger:hover:not(:disabled) {
+  border-color: #d76d77;
+  box-shadow: 0 7px 18px rgb(196 69 80 / 12%);
+}
+
+.admin-row-action.danger:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 @keyframes admin-pane-enter {
   from {
     opacity: 0;
@@ -3549,8 +4227,18 @@ const CP1252_BYTES = {
     grid-template-columns: 1fr;
   }
 
-  .announcement-image-input-row {
-    grid-template-columns: 1fr;
+  .announcement-image-dropzone {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .announcement-image-dropzone > img,
+  .announcement-image-drop-icon {
+    width: 54px;
+    height: 54px;
+  }
+
+  .announcement-image-dropzone em {
+    display: none;
   }
 
   .announcement-editor-modal,

@@ -67,6 +67,9 @@
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
             <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
+          <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
+            <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
+          </button>
           <button v-if="isManager" :class="{ active: menuItem === 'handover' }" @click="navigateTo('handover')">
             <el-icon><Operation /></el-icon><span>{{ t("customers.businessHandover") }}</span>
           </button>
@@ -571,6 +574,60 @@
           </transition>
         </div>
 
+        <div v-else-if="menuItem === 'agents'" key="agents" class="workspace-view">
+          <div class="list-page list-page-full">
+            <div class="list-page-header">
+              <div>
+                <h2>{{ t("customers.overseaAgentManagement") }}</h2>
+                <p>{{ t("customers.overseaAgentManagementHint") }}</p>
+              </div>
+              <div class="list-page-actions">
+                <el-button @click="loadTransferAgents"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
+                <el-button type="primary" plain @click="openAgentBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchCreateAgents") }}</el-button>
+                <el-button type="primary" @click="openAgentCreateDialog"><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
+              </div>
+            </div>
+            <el-table
+              :data="paginatedTransferAgents"
+              border
+              stripe
+              v-loading="loadingTransferAgents"
+              class="standard-information-table"
+            >
+              <el-table-column type="index" :index="agentRowIndex" :label="t('customers.index')" width="70" />
+              <el-table-column prop="username" :label="t('customers.username')" min-width="160" />
+              <el-table-column prop="displayName" :label="t('customers.displayName')" min-width="180" />
+              <el-table-column prop="linkedCustomerCount" :label="t('customers.linkedCustomerCount')" width="130" align="center" />
+              <el-table-column :label="t('customers.status')" width="120">
+                <template #default="{ row }">
+                  <el-tag type="success">{{ statusLabel(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('customers.actions')" width="330" fixed="right">
+                <template #default="{ row }">
+                  <div class="table-action-buttons table-action-buttons--single-line">
+                    <el-button size="small" type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
+                    <el-button size="small" type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
+                    <el-button size="small" type="danger" plain @click="toggleAgentStatus(row)">{{ t("customers.disable") }}</el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-if="transferAgents.length"
+              class="shipment-pagination unified-pagination"
+              background
+              layout="prev, pager, next, sizes, total"
+              :current-page="agentPage"
+              :page-size="agentPageSize"
+              :page-sizes="[10, 20, 50]"
+              :total="transferAgents.length"
+              @current-change="agentPage = $event"
+              @size-change="changeAgentPageSize"
+            />
+          </div>
+        </div>
+
         <div v-else-if="menuItem === 'handover'" key="handover" class="workspace-view">
           <div class="list-page list-page-full business-handover-page">
             <div class="list-page-header">
@@ -768,15 +825,14 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.remark')" min-width="190" show-overflow-tooltip>
+                  <el-table-column :label="t('customers.remark')" min-width="240">
                     <template #default="{ row }">
                       <div class="shipment-remark-cell">
-                        <span>{{ row.note || row.remark || '—' }}</span>
-                        <div v-if="isCreatedToday(row) || isUpdatedToday(row)" class="shipment-today-tags">
-                          <el-tag v-if="isCreatedToday(row)" class="shipment-today-tag is-created" type="success" effect="dark">
+                        <div class="shipment-today-tags">
+                          <el-tag v-if="isCreatedToday(row)" class="shipment-today-tag is-created" type="danger" effect="dark">
                             {{ t("customers.todayNewBusiness") }}
                           </el-tag>
-                          <el-tag v-if="isUpdatedToday(row)" class="shipment-today-tag is-updated" type="danger" effect="dark">
+                          <el-tag v-if="isUpdatedToday(row)" class="shipment-today-tag is-updated" type="success" effect="dark">
                             {{ t("customers.todayUpdatedBusiness") }}
                           </el-tag>
                         </div>
@@ -3324,6 +3380,7 @@ function navigateTo(item) {
   }
   menuItem.value = item;
   subView.value = "list";
+  if (item === "agents") void loadTransferAgents();
   if (item === "handover") void loadBusinessHandoverAgents();
   if (item === "overview") void loadOverviewMetrics();
 }
@@ -7055,24 +7112,24 @@ function showError(error, fallbackKey) {
   box-shadow: 0 8px 14px rgba(15, 29, 46, 0.06);
 }
 .shipment-customer-filter {
-  flex: 0 1 190px;
-  width: 190px;
-  min-width: 156px;
-  max-width: 210px;
+  flex: 0 0 250px;
+  width: 250px;
+  min-width: 250px;
+  max-width: 280px;
 }
 .shipment-customer-filter-label {
   display: block;
   min-width: 0;
   overflow: hidden;
   color: #18324b;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .shipment-toolbar-control {
   display: inline-flex;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   align-items: center;
   gap: 8px;
@@ -7082,16 +7139,18 @@ function showError(error, fallbackKey) {
   white-space: nowrap;
 }
 .shipment-channel-select {
-  flex: 0 1 144px;
-  width: 144px;
-  min-width: 128px;
+  flex: 0 0 210px;
+  width: 210px;
+  min-width: 210px;
 }
 .shipment-toolbar-control :deep(.el-select__selected-item),
 .shipment-toolbar-control :deep(.el-select__placeholder) {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
 }
 .shipment-toolbar-control :deep(.el-select__wrapper) {
-  min-height: 40px;
+  min-height: 46px;
+  padding: 0 14px;
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 0 0 1px #c8d6e5 inset, 0 4px 12px rgba(29, 65, 96, .05);
@@ -7566,19 +7625,16 @@ function showError(error, fallbackKey) {
   line-height: 1.5;
 }
 .shipment-remark-cell {
-  display: grid;
+  display: flex;
+  align-items: center;
   min-width: 0;
-  gap: 6px;
-}
-.shipment-remark-cell > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .shipment-today-tags {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  min-height: 27px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 7px;
 }
 .shipment-list-table .shipment-today-tags {
   flex-wrap: nowrap;
@@ -7588,20 +7644,20 @@ function showError(error, fallbackKey) {
 }
 .shipment-today-tags :deep(.el-tag) {
   height: 25px;
-  padding-inline: 9px;
+  padding-inline: 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 3px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: .01em;
-  box-shadow: 0 4px 10px rgba(26, 69, 52, .14);
+  box-shadow: 0 4px 10px rgba(143, 26, 45, .16);
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-created) {
-  background: #16865f;
+  background: #ff3b4e;
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-updated) {
-  background: #d43d4f;
-  box-shadow: 0 4px 10px rgba(153, 36, 53, .16);
+  background: #16b86a;
+  box-shadow: 0 4px 10px rgba(18, 132, 78, .18);
 }
 @keyframes business-kpi-in {
   from { opacity: 0; transform: translateY(9px); }

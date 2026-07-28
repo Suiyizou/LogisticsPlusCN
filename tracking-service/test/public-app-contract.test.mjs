@@ -273,6 +273,15 @@ test("system announcements are audience-scoped, read-once, and safely rendered",
     appSource,
     /function announcementSafeUrl[\s\S]*?\["https:", "http:"\][\s\S]*?\^data:image/
   );
+  assert.match(
+    appSource,
+    /function announcementSafeUrl[\s\S]*?\/api\/public\/announcement-images\/\$\{storedImage\[1\]\}/
+  );
+  assert.match(
+    appSource,
+    /function announcementMarkdown[\s\S]*?const ordered[\s\S]*?nextType = unordered \? "ul" : "ol"/
+  );
+  assert.doesNotMatch(appSource, /item\.imageUrl \|\| item\.illustrationRef/);
   assert.match(stylesSource, /\.tracking-system-messages[\s\S]*?\.system-announcement-dialog/);
 });
 
@@ -468,6 +477,14 @@ test("overview shows a database loading state without exposing one-click update"
   assert.match(
     appSource,
     /historyLoadingState = true;[\s\S]*?historyLoading\.hidden = !historyLoadingState/
+  );
+  assert.match(
+    appSource,
+    /async function loadCustomerAssignedHistory[\s\S]*?catch \{[\s\S]*?historyLoadFailed = true/
+  );
+  assert.match(
+    appSource,
+    /historyLoadFailed[\s\S]*?"history\.loadFailedTitle"[\s\S]*?"history\.loadFailedDescription"/
   );
 });
 

@@ -82,19 +82,28 @@ public class BusinessCustomerService {
     List<CustomerRecord> records;
     if (actor.isAdmin()) {
       records = jdbcTemplate.query(
-          baseCustomerSelect() + " ORDER BY c.created_at DESC, c.id DESC",
+          baseCustomerSelect()
+              + " WHERE c.status = 'ACTIVE'"
+              + " AND c.party_role IN ('SHIPPER', 'CONSIGNEE')"
+              + " ORDER BY c.created_at DESC, c.id DESC",
           this::mapCustomer
       );
     } else if (actor.isBusiness()) {
       records = jdbcTemplate.query(
-          baseCustomerSelect() + " WHERE c.responsible_agent_id = ? ORDER BY c.created_at DESC, c.id DESC",
+          baseCustomerSelect()
+              + " WHERE c.responsible_agent_id = ?"
+              + " AND c.status = 'ACTIVE'"
+              + " AND c.party_role IN ('SHIPPER', 'CONSIGNEE')"
+              + " ORDER BY c.created_at DESC, c.id DESC",
           this::mapCustomer,
           actor.id()
       );
     } else {
       records = jdbcTemplate.query(
           baseCustomerSelect() + """
-               WHERE EXISTS (
+               WHERE c.status = 'ACTIVE'
+                 AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
+                 AND EXISTS (
                  SELECT 1 FROM cp_customer_employee_assignments employee_assignment
                  WHERE employee_assignment.customer_id = c.id
                    AND employee_assignment.employee_user_id = ?
@@ -117,10 +126,13 @@ public class BusinessCustomerService {
         """
         SELECT u.id, u.username, u.display_name, u.status,
                (SELECT COUNT(*) FROM cp_customer_employee_assignments assignment
-                WHERE assignment.employee_user_id = u.id) AS linked_customer_count
+                JOIN cp_customers linked_customer ON linked_customer.id = assignment.customer_id
+                WHERE assignment.employee_user_id = u.id
+                  AND linked_customer.status = 'ACTIVE'
+                  AND linked_customer.party_role IN ('SHIPPER', 'CONSIGNEE')) AS linked_customer_count
         FROM cp_users u
-        WHERE u.role = 'OVERSEA_AGENT'
-        ORDER BY u.status = 'ACTIVE' DESC, u.display_name, u.username, u.id
+        WHERE u.role = 'OVERSEA_AGENT' AND u.status = 'ACTIVE'
+        ORDER BY u.display_name, u.username, u.id
         """,
         (rs, rowNumber) -> {
           Map<String, Object> value = new LinkedHashMap<>();
@@ -144,8 +156,8 @@ public class BusinessCustomerService {
                 WHERE customer.responsible_agent_id = u.id
                   AND customer.status = 'ACTIVE') AS customer_count
         FROM cp_users u
-        WHERE u.role = 'BUSINESS'
-        ORDER BY u.status = 'ACTIVE' DESC, u.display_name, u.username, u.id
+        WHERE u.role = 'BUSINESS' AND u.status = 'ACTIVE'
+        ORDER BY u.display_name, u.username, u.id
         """,
         (rs, rowNumber) -> {
           long userId = rs.getLong("id");

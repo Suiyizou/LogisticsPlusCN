@@ -901,7 +901,7 @@ public class ShipmentTrackingService {
     jdbcTemplate.query(
         ("""
         SELECT DISTINCT a.shipment_id, c.id AS customer_id, c.public_id,
-               c.display_name, c.client_code, c.party_role
+               c.display_name, c.username, c.client_code, c.party_role
         FROM cp_customer_shipment_access a
         JOIN cp_customers c ON c.id = a.customer_id AND c.status = 'ACTIVE'
         WHERE a.shipment_id IN (%s)

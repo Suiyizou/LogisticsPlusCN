@@ -405,6 +405,8 @@ const MESSAGES = {
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
     "history.loadingDescription": "Loading the latest records from the database…",
+    "history.loadFailedTitle": "Shipment list could not be loaded",
+    "history.loadFailedDescription": "The server could not return your shipments. Please retry shortly.",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.accountEmptyTitle": "No shipments are bound to this account yet",
@@ -953,6 +955,8 @@ const MESSAGES = {
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
     "history.loadingDescription": "正在从数据库读取最新票单，请稍候…",
+    "history.loadFailedTitle": "票单列表加载失败",
+    "history.loadFailedDescription": "服务器暂时无法返回您的票单，请稍后重试。",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.accountEmptyTitle": "当前账户还没有绑定票单",
@@ -1597,6 +1601,7 @@ let systemAnnouncementAutoOpenRequested = false;
 let systemAnnouncementSessionFingerprint = "";
 let customerAssignedHistory = [];
 let internalTrackedHistory = [];
+let historyLoadFailed = false;
 let relatedFilesExpiredSessionKind = "";
 let platformPrincipalAwaitingRefresh = false;
 let customerPrincipalAwaitingRefresh = false;
@@ -2000,6 +2005,12 @@ function announcementSafeUrl(value, { image = false } = {}) {
   if (!raw) return "";
   try {
     const resolved = new URL(raw, window.location.origin);
+    const storedImage = resolved.pathname.match(
+      /\/(?:tracking\/)?api\/public\/announcement-images\/([a-f0-9]{32}\.(?:jpe?g|png|gif))$/i
+    );
+    if (image && storedImage) {
+      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin).href;
+    }
     if (["https:", "http:"].includes(resolved.protocol)) return resolved.href;
     if (
       image &&
@@ -2039,6 +2050,7 @@ function announcementInlineMarkdown(value) {
   });
   return output
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
@@ -2046,15 +2058,22 @@ function announcementMarkdown(markdown) {
   const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
   const blocks = [];
   let list = [];
+  let listType = "";
   const flushList = () => {
     if (!list.length) return;
-    blocks.push(`<ul>${list.map((item) => `<li>${announcementInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    blocks.push(`<${listType}>${list.map((item) => `<li>${announcementInlineMarkdown(item)}</li>`).join("")}</${listType}>`);
     list = [];
+    listType = "";
   };
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (/^[-*]\s+/.test(line)) {
-      list.push(line.replace(/^[-*]\s+/, ""));
+    const unordered = line.match(/^[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const nextType = unordered ? "ul" : "ol";
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      list.push((unordered || ordered)[1]);
       continue;
     }
     flushList();
@@ -2123,7 +2142,7 @@ function renderSystemAnnouncements() {
     title.textContent = item.title || t("announcement.title");
     card.append(meta, title);
 
-    const imageUrl = announcementSafeUrl(item.imageUrl || item.illustrationRef, { image: true });
+    const imageUrl = announcementSafeUrl(item.imageUrl, { image: true });
     if (imageUrl) {
       const image = document.createElement("img");
       image.src = imageUrl;
@@ -4595,10 +4614,12 @@ async function loadCustomerAssignedHistory() {
   const session = readFileSession();
   if (session.kind !== "CUSTOMER" || !session.token) {
     customerAssignedHistory = [];
+    historyLoadFailed = false;
     historyScopeCustomer = null;
     historyAvailableCustomers = [];
     return;
   }
+  historyLoadFailed = false;
   historyLoadingState = true;
   renderHistory();
   try {
@@ -4713,6 +4734,7 @@ async function loadCustomerAssignedHistory() {
     }
   } catch {
     customerAssignedHistory = [];
+    historyLoadFailed = true;
     historyAvailableCustomers = [];
     resetHistoryPagination();
     showError(customerFacingTrackingError(), "error");
@@ -4727,8 +4749,10 @@ async function loadInternalTrackedHistory() {
   historyScopeCustomer = null;
   if (session.kind !== "INTERNAL" || !session.token) {
     internalTrackedHistory = [];
+    historyLoadFailed = false;
     return;
   }
+  historyLoadFailed = false;
   historyLoadingState = true;
   renderHistory();
   try {
@@ -4824,6 +4848,7 @@ async function loadInternalTrackedHistory() {
     renderHistory();
   } catch {
     internalTrackedHistory = [];
+    historyLoadFailed = true;
     resetHistoryPagination();
   } finally {
     historyLoadingState = false;
@@ -7612,22 +7637,26 @@ function renderHistory() {
     }
   }
   historyEmptyTitle.textContent = t(
-    searchHasNoResults
-      ? "history.searchEmptyTitle"
-      : agentManagement
-        ? "agent.emptyTitle"
-      : accountBound
-        ? "history.accountEmptyTitle"
-        : "history.emptyTitle"
+    historyLoadFailed
+      ? "history.loadFailedTitle"
+      : searchHasNoResults
+        ? "history.searchEmptyTitle"
+        : agentManagement
+          ? "agent.emptyTitle"
+        : accountBound
+          ? "history.accountEmptyTitle"
+          : "history.emptyTitle"
   );
   historyEmptyDescription.textContent = t(
-    searchHasNoResults
-      ? "history.searchEmptyDescription"
-      : agentManagement
-        ? "agent.emptyDescription"
-      : accountBound
-        ? "history.accountEmptyDescription"
-        : "history.emptyDescription"
+    historyLoadFailed
+      ? "history.loadFailedDescription"
+      : searchHasNoResults
+        ? "history.searchEmptyDescription"
+        : agentManagement
+          ? "agent.emptyDescription"
+        : accountBound
+          ? "history.accountEmptyDescription"
+          : "history.emptyDescription"
   );
   historyLoading.hidden = !historyLoadingState;
   historyEmpty.hidden = historyLoadingState || history.length > 0;

@@ -256,6 +256,43 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void customerDirectoryShowsOnlyActiveShippersAndConsignees() {
+    Map<String, Object> activeCustomer = customerService.create(
+        new CreateCustomerRequest(
+            "active-shipper", "SecurePass!23", "Active Shipper", "SHIPPER", "ACTIVE-001"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    Map<String, Object> archivedCustomer = customerService.create(
+        new CreateCustomerRequest(
+            "archived-consignee", "SecurePass!23", "Archived Consignee", "CONSIGNEE", "ARCH-001"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    customerService.create(
+        new CreateCustomerRequest(
+            "legacy-oversea", "SecurePass!23", "Legacy Oversea", "OVERSEA_AGENT"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    customerService.disable(
+        (String) archivedCustomer.get("id"),
+        business,
+        "127.0.0.1"
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> directory =
+        (List<Map<String, Object>>) customerService.list(business).get("items");
+
+    assertThat(directory).extracting(item -> item.get("id"))
+        .containsExactly(activeCustomer.get("id"));
+  }
+
+  @Test
   void customerCodeLoginAndExplicitShipmentBindingEnforceOwnership() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest("acme-shipper", "SecurePass!23", "ACME Shipper", "SHIPPER"),
@@ -671,7 +708,10 @@ class CustomerAccessFlowTest {
     )).isEqualTo(jdbcTemplate.queryForObject(
         "SELECT id FROM cp_customers WHERE public_id = ?", Long.class, targetAgent.get("id")
     ));
-    assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(3);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> directory =
+        (List<Map<String, Object>>) customerService.list(business).get("items");
+    assertThat(directory).extracting(item -> item.get("id")).containsExactly(customerId);
     assertThat(shipmentAccessService.requireAccess("shipment-public-id", business).shipmentId())
         .isEqualTo(10);
     assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(

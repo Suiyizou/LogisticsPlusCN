@@ -1173,6 +1173,7 @@ a {
 
 .system-announcement-markdown p,
 .system-announcement-markdown ul,
+.system-announcement-markdown ol,
 .system-announcement-markdown blockquote {
   margin: 0 0 13px;
 }

@@ -106,6 +106,10 @@ export async function fetchPlatformInfo(options = {}) {
   return request(`/admin/platform-info?${pageParams(options)}`);
 }
 
+export async function deletePlatformCustomer(id) {
+  return request(`/business/customers/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function fetchAdminAnnouncements(options = {}) {
   return request(`/admin/announcements?${pageParams(options)}`);
 }

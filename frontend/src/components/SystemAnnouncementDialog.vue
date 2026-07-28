@@ -50,9 +50,9 @@
         </div>
         <h3>{{ activeItem.title || copy.untitled }}</h3>
         <img
-          v-if="safeImageUrl(activeItem.imageUrl || activeItem.illustrationRef)"
+          v-if="safeImageUrl(activeItem.imageUrl)"
           class="system-announcement-cover"
-          :src="safeImageUrl(activeItem.imageUrl || activeItem.illustrationRef)"
+          :src="safeImageUrl(activeItem.imageUrl)"
           :alt="activeItem.title || copy.title"
         />
         <div
@@ -145,6 +145,12 @@ function safeUrl(value, { image = false } = {}) {
   if (!raw) return "";
   try {
     const resolved = new URL(raw, window.location.origin);
+    const storedImage = resolved.pathname.match(
+      /\/(?:tracking\/)?api\/public\/announcement-images\/([a-f0-9]{32}\.(?:jpe?g|png|gif))$/i
+    );
+    if (image && storedImage) {
+      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin).href;
+    }
     if (resolved.protocol === "https:" || resolved.protocol === "http:") return resolved.href;
     if (image && resolved.protocol === "data:" && /^data:image\/(?:png|jpe?g|gif|webp);/i.test(raw)) {
       return raw;
@@ -181,6 +187,7 @@ function renderInline(value) {
       : label;
   });
   output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  output = output.replace(/\*([^*]+)\*/g, "<em>$1</em>");
   output = output.replace(/`([^`]+)`/g, "<code>$1</code>");
   return output;
 }
@@ -189,17 +196,24 @@ function renderMarkdown(markdown) {
   const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
   const blocks = [];
   let list = [];
+  let listType = "";
 
   const flushList = () => {
     if (!list.length) return;
-    blocks.push(`<ul>${list.map((item) => `<li>${renderInline(item)}</li>`).join("")}</ul>`);
+    blocks.push(`<${listType}>${list.map((item) => `<li>${renderInline(item)}</li>`).join("")}</${listType}>`);
     list = [];
+    listType = "";
   };
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (/^[-*]\s+/.test(line)) {
-      list.push(line.replace(/^[-*]\s+/, ""));
+    const unordered = line.match(/^[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const nextType = unordered ? "ul" : "ol";
+      if (listType && listType !== nextType) flushList();
+      listType = nextType;
+      list.push((unordered || ordered)[1]);
       continue;
     }
     flushList();
@@ -419,6 +433,7 @@ function renderMarkdown(markdown) {
 
 .system-announcement-markdown :deep(p),
 .system-announcement-markdown :deep(ul),
+.system-announcement-markdown :deep(ol),
 .system-announcement-markdown :deep(blockquote) {
   margin: 0 0 13px;
 }

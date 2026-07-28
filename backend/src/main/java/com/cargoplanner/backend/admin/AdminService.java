@@ -517,6 +517,8 @@ public class AdminService {
         LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
         LEFT JOIN cp_users agent_user ON agent_user.id = assignment.employee_user_id
         LEFT JOIN cp_customer_shipment_access access ON access.customer_id = c.id
+        WHERE c.status = 'ACTIVE'
+          AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
         GROUP BY c.id, c.public_id, c.username, c.display_name, c.client_code,
                  c.party_role, c.status, business_user.id, business_user.username,
                  business_user.display_name, agent_user.id, agent_user.username,
@@ -554,6 +556,8 @@ public class AdminService {
         LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
         LEFT JOIN cp_users agent_user ON agent_user.id = assignment.employee_user_id
         LEFT JOIN cp_customer_shipment_access access ON access.customer_id = c.id
+        WHERE c.status = 'ACTIVE'
+          AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
         GROUP BY c.id, c.public_id, c.username, c.display_name, c.client_code,
                  c.party_role, c.status, business_user.id, business_user.username,
                  business_user.display_name, agent_user.id, agent_user.username,
@@ -572,13 +576,23 @@ public class AdminService {
           SELECT c.id, assignment.employee_user_id
           FROM cp_customers c
           LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
+          WHERE c.status = 'ACTIVE'
+            AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
           GROUP BY c.id, assignment.employee_user_id
         ) platform_rows
         """
     );
-    long customerCount = count("SELECT COUNT(*) FROM cp_customers");
+    long customerCount = count(
+        "SELECT COUNT(*) FROM cp_customers WHERE status = 'ACTIVE' AND party_role IN ('SHIPPER', 'CONSIGNEE')"
+    );
     long assignedCustomerCount = count(
-        "SELECT COUNT(DISTINCT customer_id) FROM cp_customer_employee_assignments"
+        """
+        SELECT COUNT(DISTINCT assignment.customer_id)
+        FROM cp_customer_employee_assignments assignment
+        JOIN cp_customers customer ON customer.id = assignment.customer_id
+        WHERE customer.status = 'ACTIVE'
+          AND customer.party_role IN ('SHIPPER', 'CONSIGNEE')
+        """
     );
     Map<String, Object> result = pageResult(items, safePage, safeSize, total);
     result.put("platform", "Shipment Track");

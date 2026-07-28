@@ -2522,21 +2522,22 @@ Object.assign(messages["zh-CN"].customers, {
   personalInfo: "个人信息",
   overseaAgentManagement: "海外代理",
   overseaAgentManagementHint: "由唯一业务员统一创建、维护和停用海外代理账号。",
+  linkedCustomerCount: "客户数量",
   selectCustomerFirst: "先选择客户",
   customer: "客户",
   publishAfterCreate: "创建后立即发布给客户",
   assignAgent: "为该客户分配代理",
   changeAgent: "为客户更换代理",
   deleteCustomer: "删除客户",
-  confirmDeleteCustomer: "确认删除客户“{name}”吗？有关联票单时将安全归档并撤销登录权限，历史记录会保留。",
-  customerArchived: "客户已删除或安全归档。",
+  confirmDeleteCustomer: "确认删除客户“{name}”吗？删除后将撤销登录权限，历史业务记录仍会保留。",
+  customerArchived: "客户已删除。",
   deleteCustomerFailed: "客户删除失败。",
   confirmAgentStatusChange: "确认更改海外代理“{name}”的状态吗？",
   refresh: "刷新"
   ,assignAgentShort: "分配代理"
   ,deleteSelectedCustomers: "删除所选（{count}）"
-  ,confirmDeleteSelectedCustomers: "确认删除所选的 {count} 个客户吗？有关联票单的客户将安全归档，历史记录会保留。"
-  ,selectedCustomersArchived: "已删除或安全归档 {count} 个客户。"
+  ,confirmDeleteSelectedCustomers: "确认删除所选的 {count} 个客户吗？删除后将撤销登录权限，历史业务记录仍会保留。"
+  ,selectedCustomersArchived: "已删除 {count} 个客户。"
   ,transferDescription: "为当前客户选择一个海外代理；保存后，该代理可跟进相关票单、文件和留言。"
   ,targetAgent: "海外代理"
   ,targetAgentPlaceholder: "选择可用海外代理"
@@ -2553,21 +2554,22 @@ Object.assign(messages["en-US"].customers, {
   personalInfo: "Personal information",
   overseaAgentManagement: "Overseas agents",
   overseaAgentManagementHint: "The single business operator creates, maintains, and disables overseas-agent accounts.",
+  linkedCustomerCount: "Customers",
   selectCustomerFirst: "Select customer first",
   customer: "Customer",
   publishAfterCreate: "Publish to the customer after creation",
   assignAgent: "Assign agent",
   changeAgent: "Change agent",
   deleteCustomer: "Delete customer",
-  confirmDeleteCustomer: "Delete “{name}”? Customers with shipment history are safely archived and their access is revoked.",
-  customerArchived: "Customer deleted or safely archived.",
+  confirmDeleteCustomer: "Delete “{name}”? Sign-in access will be revoked while historical business records remain available.",
+  customerArchived: "Customer deleted.",
   deleteCustomerFailed: "Could not delete the customer.",
   confirmAgentStatusChange: "Change the status of overseas agent “{name}”?",
   refresh: "Refresh"
   ,assignAgentShort: "Assign agent"
   ,deleteSelectedCustomers: "Delete selected ({count})"
-  ,confirmDeleteSelectedCustomers: "Delete the {count} selected customers? Customers with shipment history will be safely archived."
-  ,selectedCustomersArchived: "{count} customers were deleted or safely archived."
+  ,confirmDeleteSelectedCustomers: "Delete the {count} selected customers? Sign-in access will be revoked while historical business records remain available."
+  ,selectedCustomersArchived: "{count} customers deleted."
   ,transferDescription: "Select one overseas agent for this customer. The agent can then follow related shipments, files, and comments."
   ,targetAgent: "Overseas agent"
   ,targetAgentPlaceholder: "Select an available overseas agent"
