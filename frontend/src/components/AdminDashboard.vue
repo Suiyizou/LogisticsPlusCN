@@ -33,7 +33,7 @@
     </form>
   </section>
 
-  <section v-else class="admin-console-shell">
+  <section v-else class="admin-console-shell" :class="{ 'is-table-page-switching': adminPageTransitioning }">
     <aside class="admin-console-sidebar">
     <RouterLink class="admin-console-brand" to="/workbenches">
         <span class="brand-mark"><img src="/favicon.svg" alt="" /></span>
@@ -263,13 +263,11 @@
             v-if="apiAuditTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="apiAuditPage"
             :page-size="apiAuditPageSize"
-            :page-sizes="[10, 20, 50, 100]"
             :total="apiAuditTotal"
             @current-change="changeApiAuditPage"
-            @size-change="changeApiAuditPageSize"
           />
         </article>
       </section>
@@ -331,13 +329,11 @@
             v-if="employeeTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="employeePage"
             :page-size="employeePageSize"
-            :page-sizes="[10, 20, 50]"
             :total="employeeTotal"
             @current-change="changeEmployeePage"
-            @size-change="changeEmployeePageSize"
           />
         </article>
       </section>
@@ -408,13 +404,11 @@
             v-if="platformTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="platformPage"
             :page-size="platformPageSize"
-            :page-sizes="[10, 20, 50]"
             :total="platformTotal"
             @current-change="changePlatformPage"
-            @size-change="changePlatformPageSize"
           />
         </article>
       </section>
@@ -491,13 +485,11 @@
             v-if="adminTicketTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="adminTicketPage"
             :page-size="adminTicketPageSize"
-            :page-sizes="[10, 20, 50, 100]"
             :total="adminTicketTotal"
             @current-change="changeAdminTicketPage"
-            @size-change="changeAdminTicketPageSize"
           />
         </article>
       </section>
@@ -586,13 +578,11 @@
             v-if="announcementTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="announcementPage"
             :page-size="announcementPageSize"
-            :page-sizes="[10, 20, 50]"
             :total="announcementTotal"
             @current-change="changeAnnouncementPage"
-            @size-change="changeAnnouncementPageSize"
           />
         </article>
       </section>
@@ -668,13 +658,11 @@
             v-if="deviceTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="devicePage"
             :page-size="devicePageSize"
-            :page-sizes="[10, 20, 50]"
             :total="deviceTotal"
             @current-change="changeDevicePage"
-            @size-change="changeDevicePageSize"
           />
         </article>
       </section>
@@ -764,13 +752,11 @@
             v-if="adminWorkspaceFileTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="adminWorkspaceFilePage"
             :page-size="adminWorkspaceFilePageSize"
-            :page-sizes="[10, 20, 50]"
             :total="adminWorkspaceFileTotal"
             @current-change="changeAdminWorkspaceFilePage"
-            @size-change="changeAdminWorkspaceFilePageSize"
           />
         </article>
 
@@ -866,13 +852,11 @@
             v-if="adminShipmentFileTotal"
             class="admin-pagination"
             background
-            layout="prev, pager, next, sizes, total"
+            layout="prev, pager, next, total"
             :current-page="adminShipmentFilePage"
             :page-size="adminShipmentFilePageSize"
-            :page-sizes="[10, 20, 50, 100]"
             :total="adminShipmentFileTotal"
             @current-change="changeAdminShipmentFilePage"
-            @size-change="changeAdminShipmentFilePageSize"
           />
         </article>
       </section>
@@ -1510,6 +1494,7 @@ const overviewStatusChartRef = ref(null);
 const overviewOperationChartRef = ref(null);
 const llmSettings = ref(null);
 const activeAdminPage = ref("overview");
+const adminPageTransitioning = ref(false);
 const expandedAdminGroup = ref("overview");
 const loginForm = reactive({ username: "admin", password: "" });
 const employeeDialogOpen = ref(false);
@@ -2282,7 +2267,7 @@ async function loadApiAuditPage() {
 
 async function changeEmployeePage(page) {
   employeePage.value = page;
-  await withLoading(loadEmployeePage);
+  await withAdminPageTransition(() => withLoading(loadEmployeePage));
 }
 
 async function changeEmployeePageSize(size) {
@@ -2293,7 +2278,7 @@ async function changeEmployeePageSize(size) {
 
 async function changeDevicePage(page) {
   devicePage.value = page;
-  await withLoading(loadDevicePage);
+  await withAdminPageTransition(() => withLoading(loadDevicePage));
 }
 
 async function changeDevicePageSize(size) {
@@ -2304,7 +2289,7 @@ async function changeDevicePageSize(size) {
 
 async function changePlatformPage(page) {
   platformPage.value = page;
-  await withLoading(loadPlatformPage);
+  await withAdminPageTransition(() => withLoading(loadPlatformPage));
 }
 
 async function changePlatformPageSize(size) {
@@ -2315,7 +2300,7 @@ async function changePlatformPageSize(size) {
 
 async function changeAdminTicketPage(page) {
   adminTicketPage.value = page;
-  await withLoading(loadAdminTicketPageWithoutLoading);
+  await withAdminPageTransition(() => withLoading(loadAdminTicketPageWithoutLoading));
 }
 
 async function changeAdminTicketPageSize(size) {
@@ -2349,7 +2334,7 @@ async function handleDeletePlatformCustomer(row) {
 
 async function changeAnnouncementPage(page) {
   announcementPage.value = page;
-  await withLoading(loadAnnouncementPageWithoutLoading);
+  await withAdminPageTransition(() => withLoading(loadAnnouncementPageWithoutLoading));
 }
 
 async function changeAnnouncementPageSize(size) {
@@ -2360,7 +2345,18 @@ async function changeAnnouncementPageSize(size) {
 
 async function changeApiAuditPage(page) {
   apiAuditPage.value = page;
-  await withLoading(loadApiAuditPage);
+  await withAdminPageTransition(() => withLoading(loadApiAuditPage));
+}
+
+async function withAdminPageTransition(task) {
+  adminPageTransitioning.value = true;
+  try {
+    await task();
+  } finally {
+    window.setTimeout(() => {
+      adminPageTransitioning.value = false;
+    }, 140);
+  }
 }
 
 async function changeApiAuditPageSize(size) {
@@ -3117,7 +3113,7 @@ async function loadAdminWorkspaceFiles() {
 
 async function changeAdminWorkspaceFilePage(page) {
   adminWorkspaceFilePage.value = page;
-  await loadAdminWorkspaceFiles();
+  await withAdminPageTransition(loadAdminWorkspaceFiles);
 }
 
 async function changeAdminWorkspaceFilePageSize(size) {
@@ -3154,7 +3150,7 @@ async function loadAdminShipmentFiles() {
 
 async function changeAdminShipmentFilePage(page) {
   adminShipmentFilePage.value = page;
-  await loadAdminShipmentFiles();
+  await withAdminPageTransition(loadAdminShipmentFiles);
 }
 
 async function changeAdminShipmentFilePageSize(size) {
@@ -4536,6 +4532,22 @@ const CP1252_BYTES = {
   .admin-inline-link,
   .admin-row-action {
     transition: none;
+  }
+}
+
+.admin-console-shell :deep(.el-table__body-wrapper) {
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.admin-console-shell.is-table-page-switching :deep(.el-table__body-wrapper) {
+  opacity: .52;
+  transform: translateY(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-console-shell.is-table-page-switching :deep(.el-table__body-wrapper) {
+    opacity: 1;
+    transform: none;
   }
 }
 </style>

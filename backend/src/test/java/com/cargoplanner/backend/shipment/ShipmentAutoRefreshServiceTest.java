@@ -116,13 +116,13 @@ class ShipmentAutoRefreshServiceTest {
         {"snapshot":{"summary":{"latestEvent":{"name":"Discharged"}},
         "containers":[{"latestEvent":"Discharged"}]},"stale":false}
         """);
-    when(trackingService.refreshAutomatically("COSCO", "BILLOFLADING", "BL1"))
+    when(trackingService.refreshAutomatically("COSCO", "BOOKING", "BK1"))
         .thenReturn(response);
 
     assertThat(service.refreshDueShipments()).isEqualTo(1);
     assertThat(service.refreshDueShipments()).isZero();
 
-    verify(trackingService, times(1)).refreshAutomatically("COSCO", "BILLOFLADING", "BL1");
+    verify(trackingService, times(1)).refreshAutomatically("COSCO", "BOOKING", "BK1");
     assertThat(nextAttempt(1)).isAfter(NOW);
     assertThat(jdbcTemplate.queryForObject(
         "SELECT failure_count FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", Integer.class
@@ -160,14 +160,14 @@ class ShipmentAutoRefreshServiceTest {
     );
 
     assertThat(service.refreshDueShipments()).isZero();
-    verify(trackingService, never()).refreshAutomatically("COSCO", "BILLOFLADING", "BL1");
+    verify(trackingService, never()).refreshAutomatically("COSCO", "BOOKING", "BK1");
   }
 
   @Test
   void failureReleasesTheLeaseAndSchedulesAnExponentialRetry() {
     insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
     insertDueJob(1, NOW.minusSeconds(1));
-    when(trackingService.refreshAutomatically("COSCO", "BILLOFLADING", "BL1"))
+    when(trackingService.refreshAutomatically("COSCO", "BOOKING", "BK1"))
         .thenThrow(new IllegalStateException("temporary upstream failure"));
 
     assertThat(service.refreshDueShipments()).isEqualTo(1);
@@ -219,8 +219,8 @@ class ShipmentAutoRefreshServiceTest {
     jdbcTemplate.update("""
         INSERT INTO cp_shipment_references (
           id, shipment_id, carrier_code, reference_type, reference_no_normalized, primary_reference
-        ) VALUES (?, ?, 'COSCO', 'BILLOFLADING', ?, TRUE)
-        """, id, id, "BL" + id);
+        ) VALUES (?, ?, 'COSCO', 'BOOKING', ?, TRUE)
+        """, id, id, "BK" + id);
   }
 
   private void insertDueJob(long shipmentId, Instant nextAttempt) {

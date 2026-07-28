@@ -64,24 +64,23 @@ test("serves flag icons through the tracking API path", async (context) => {
 });
 
 test("normalizes and validates tracking input", () => {
-  assert.deepEqual(normalizeTrackingRequest({ type: "billoflading", number: " 6502 077380 " }), {
-    type: "BILLOFLADING",
-    number: "6502077380",
-    label: "提单号",
-    businessNumberType: "blNumber"
+  const normalized = normalizeTrackingRequest({
+    type: "billoflading",
+    number: " 6502 077380 "
   });
+  assert.equal(normalized.type, "BOOKING");
+  assert.equal(normalized.number, "6502077380");
+  assert.equal(normalized.businessNumberType, "bookingNumber");
   assert.throws(() => normalizeTrackingRequest({ type: "BILLOFLADING", number: "@@" }));
 });
 
-test("removes the COSU display prefix before a bill reaches the tracking adapter", () => {
-  assert.equal(
-    normalizeTrackingRequest({ type: "BILLOFLADING", number: " COSU 6502406170 " }).number,
-    "6502406170"
-  );
-  assert.equal(
-    normalizeTrackingRequest({ type: "BOOKING", number: "COSU6502406170" }).number,
-    "COSU6502406170"
-  );
+test("canonicalizes legacy bill requests to the booking query path", () => {
+  const legacy = normalizeTrackingRequest({
+    type: "BILLOFLADING",
+    number: " COSU 6502406170 "
+  });
+  assert.equal(legacy.type, "BOOKING");
+  assert.equal(legacy.number, "COSU6502406170");
 });
 
 test("exposes a multi-carrier adapter registry", () => {

@@ -48,6 +48,13 @@ export function updateOverseaAgent(userId, payload) {
   });
 }
 
+export function resetOverseaAgentPassword(userId) {
+  return request(
+    `/business/customers/oversea-agents/${encodeURIComponent(userId)}/reset-password`,
+    { method: "POST" }
+  );
+}
+
 export function deleteOverseaAgent(userId) {
   return request(`/business/customers/oversea-agents/${encodeURIComponent(userId)}`, {
     method: "DELETE"
@@ -99,11 +106,13 @@ export function fetchAvailableBusinessShipments({
   page = 1,
   pageSize = 20,
   customerId = "",
-  refreshIssuesOnly = false
+  refreshIssuesOnly = false,
+  businessFilter = ""
 } = {}) {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (customerId) query.set("customerId", customerId);
   if (refreshIssuesOnly) query.set("refreshIssuesOnly", "true");
+  if (businessFilter) query.set("businessFilter", businessFilter);
   return request(`/business/shipments?${query}`);
 }
 

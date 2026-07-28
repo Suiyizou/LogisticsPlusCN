@@ -544,7 +544,7 @@ const MESSAGES = {
     "files.customerLoginAction": "Sign in with user code",
     "files.customerSignedOut": "Customer session ended. Public shipment tracking remains available.",
     "files.customerLoginExpired": "Your customer session has expired. Sign in again with your user code to access assigned files.",
-    "files.customerNotAssigned": "This shipment is not assigned to your customer account. Ask your service representative to link the booking or bill number.",
+    "files.customerNotAssigned": "This shipment is not assigned to your customer account. Ask your service representative to link the booking number.",
     "files.forbidden": "Your account does not have access to the files for this shipment.",
     "files.logisticsRoleAgent": "Freight agent",
     "files.logisticsRoleShipper": "Shipper",
@@ -638,7 +638,7 @@ const MESSAGES = {
     "batch.subtitle": "Import an Excel or CSV list and process it as a background task",
     "batch.localBadge": "Background task",
     "batch.selectFile": "Select Excel / CSV",
-    "batch.columns": "Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.",
+    "batch.columns": "Uses the Booking column as the shipment identity. M/B/L No., Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are supplementary information.",
     "batch.localNotice": "After it starts, the task continues in the background. Use Terminate task below to stop pending queries.",
     "batch.resume": "Continue pending queries",
     "batch.stop": "Terminate task",
@@ -657,7 +657,7 @@ const MESSAGES = {
     "batch.pending": "Pending",
     "batch.parsing": "Reading {name}…",
     "batch.unsupportedFile": "Choose an .xlsx, .xls, or .csv file no larger than 2 MB.",
-    "batch.noRecognizedColumns": "No supported column was found. Use Booking / Booking Ref / Booking No. or Bill of Lading / B/L / MBL / M/B/L No.",
+    "batch.noRecognizedColumns": "No booking-number column was found. Use Booking / Booking Ref / Booking No.",
     "batch.noRows": "No valid shipment numbers were found in the recognized columns.",
     "batch.workerUnsupported": "This browser cannot process spreadsheets in a background worker.",
     "batch.workerFailed": "The background spreadsheet parser stopped unexpectedly.",
@@ -738,7 +738,7 @@ const MESSAGES = {
     "error.http": "Tracking failed (HTTP {status})",
     "notice.cacheTitle": "Live refresh unavailable",
     "empty.title": "Ready when you are",
-    "empty.description": "Enter a bill, booking or container number to begin.",
+    "empty.description": "Enter a booking or container number to begin.",
     "metrics.actualDeparture": "Actual departure",
     "metrics.actualArrival": "Actual arrival",
     "metrics.estimatedDeparture": "Estimated departure",
@@ -1094,7 +1094,7 @@ const MESSAGES = {
     "files.customerLoginAction": "使用用户码重新登录",
     "files.customerSignedOut": "已退出客户登录，仍可继续使用公开货物追踪。",
     "files.customerLoginExpired": "客户登录已过期，请重新使用用户码登录后查看已关联文件。",
-    "files.customerNotAssigned": "这票货物尚未关联到您的客户账号，请联系业务员绑定对应订舱号或提单号。",
+    "files.customerNotAssigned": "这票货物尚未关联到您的客户账号，请联系业务员绑定对应订舱号。",
     "files.forbidden": "当前账号无权查看这票货物的相关文件。",
     "files.logisticsRoleAgent": "货运代理",
     "files.logisticsRoleShipper": "发货人",
@@ -1188,7 +1188,7 @@ const MESSAGES = {
     "batch.subtitle": "导入 Excel 或 CSV 清单后，以后台任务逐票处理",
     "batch.localBadge": "后台任务",
     "batch.selectFile": "选择 Excel / CSV",
-    "batch.columns": "支持 M/B/L NO.、提单号和订舱号列；同时导入 Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code。",
+    "batch.columns": "统一使用订舱号列作为票单标识；M/B/L NO.、提单号、Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code 仅作为附属信息导入。",
     "batch.localNotice": "任务开始后在后台运行；如需停止后续查询，请点击下方“终止任务”。",
     "batch.resume": "继续查询待处理项目",
     "batch.stop": "终止任务",
@@ -1207,7 +1207,7 @@ const MESSAGES = {
     "batch.pending": "待处理",
     "batch.parsing": "正在读取 {name}…",
     "batch.unsupportedFile": "请选择不超过 2 MB 的 .xlsx、.xls 或 .csv 文件。",
-    "batch.noRecognizedColumns": "没有找到支持的列，请使用 Booking / Booking Ref / 订舱号或 Bill of Lading / B/L / MBL / M/B/L NO. / 提单号。",
+    "batch.noRecognizedColumns": "没有找到订舱号列，请使用 Booking / Booking Ref / Booking No. / 订舱号。",
     "batch.noRows": "识别到的列中没有有效运输单号。",
     "batch.workerUnsupported": "当前浏览器无法在后台线程中处理表格。",
     "batch.workerFailed": "后台表格解析器意外停止。",
@@ -1288,7 +1288,7 @@ const MESSAGES = {
     "error.http": "查询失败（HTTP {status}）",
     "notice.cacheTitle": "实时刷新暂不可用",
     "empty.title": "等待查询",
-    "empty.description": "输入提单号、订舱号或箱号即可开始。",
+    "empty.description": "输入订舱号或箱号即可开始。",
     "metrics.actualDeparture": "实际离港",
     "metrics.actualArrival": "实际到港",
     "metrics.estimatedDeparture": "预计离港",
@@ -4088,7 +4088,7 @@ function createCountryFlag(countryCode) {
 }
 
 function trackingTypeLabel(type) {
-  return t(TYPE_KEYS[type] ?? "type.bill");
+  return t(TYPE_KEYS[type] ?? "type.booking");
 }
 
 const IMPORT_DETAIL_LIMITS = Object.freeze({
@@ -4116,10 +4116,11 @@ function normalizeImportedDetails(details) {
 }
 
 function normalizeQuery(query) {
+  const requestedType = String(query.type ?? "BOOKING").trim().toUpperCase();
   const normalized = {
     carrier: String(query.carrier ?? "COSCO").trim().toUpperCase(),
     channel: String(query.channel ?? "AUTO").trim().toUpperCase(),
-    type: String(query.type ?? "BILLOFLADING").trim().toUpperCase(),
+    type: requestedType === "CONTAINER" ? "CONTAINER" : "BOOKING",
     number: String(query.number ?? "")
       .trim()
       .replace(/\s+/g, "")
@@ -4137,7 +4138,7 @@ function trackingQueryKey(query) {
 
 function snapshotStorageIdentity(snapshot) {
   const provider = String(snapshot?.provider?.code ?? "COSCO").trim().toUpperCase();
-  const type = String(snapshot?.tracking?.type ?? "BILLOFLADING").trim().toUpperCase();
+  const type = String(snapshot?.tracking?.type ?? "BOOKING").trim().toUpperCase();
   const number = String(snapshot?.tracking?.number ?? "").trim().toUpperCase();
   return `${provider}:${type}:${number}`;
 }
@@ -4668,7 +4669,7 @@ async function loadCustomerAssignedHistory() {
           item.carrier || serverSnapshot?.tracking?.carrier || "COSCO"
         ).toUpperCase();
         const referenceType = String(
-          item.referenceType || serverSnapshot?.tracking?.type || "BILLOFLADING"
+          item.referenceType || serverSnapshot?.tracking?.type || "BOOKING"
         ).toUpperCase();
         const referenceNo = String(
           item.referenceNo || serverSnapshot?.tracking?.number || ""
@@ -4788,7 +4789,7 @@ async function loadInternalTrackedHistory() {
           item.carrier || serverSnapshot?.tracking?.carrier || serverSnapshot?.provider?.code || "COSCO"
         ).toUpperCase();
         const referenceType = String(
-          item.referenceType || serverSnapshot?.tracking?.type || "BILLOFLADING"
+          item.referenceType || serverSnapshot?.tracking?.type || "BOOKING"
         ).toUpperCase();
         const referenceNo = String(
           item.referenceNo || item.trackingNumber || serverSnapshot?.tracking?.number || ""
@@ -4997,7 +4998,8 @@ function restoreBatchState() {
     const items = stored.items
       .slice(0, BATCH_IMPORT_LIMIT)
       .map((item, index) => {
-        const type = item?.type === "BOOKING" ? "BOOKING" : "BILLOFLADING";
+        if (item?.type !== "BOOKING") return null;
+        const type = "BOOKING";
         const carrier = ["COSCO", "CMA"].includes(item?.carrier) ? item.carrier : null;
         const number = String(item?.number ?? "")
           .trim()
@@ -5417,7 +5419,7 @@ function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
       ? ` · ${t("batch.previewRecommended")}`
       : "";
     option.textContent = `${spreadsheetColumnName(column.index)} · ${column.label}${recommended}`;
-    option.dataset.suggestedType = column.suggestedType ?? column.type ?? "BILLOFLADING";
+    option.dataset.suggestedType = "BOOKING";
     return option;
   });
   batchPreviewColumn.replaceChildren(...options);
@@ -5426,9 +5428,7 @@ function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
     ? String(suggested)
     : options[0]?.value ?? "";
   const selectedOption = batchPreviewColumn.selectedOptions[0];
-  batchPreviewType.value = selectedOption?.dataset.suggestedType === "BOOKING"
-    ? "BOOKING"
-    : "BILLOFLADING";
+  batchPreviewType.value = "BOOKING";
   batchPreviewConfirm.disabled = !batchPreviewColumn.value;
   renderBatchPreviewTable(sheet);
 }
@@ -5483,7 +5483,19 @@ function hideBatchColumnPreview({ clearFile = true } = {}) {
 }
 
 function startImportedBatch(fileName, imported) {
-  const items = Array.isArray(imported?.items) ? imported.items : [];
+  const selectedCarrier = ["COSCO", "CMA"].includes(carrierSelect.value)
+    ? carrierSelect.value
+    : "COSCO";
+  const items = Array.isArray(imported?.items)
+    ? imported.items.map((item) => ({
+        ...item,
+        carrier: item.carrier ?? selectedCarrier,
+        type: "BOOKING",
+        manualOnly: false,
+        status: item.status === "manual" ? "pending" : item.status,
+        source: null
+      }))
+    : [];
   batchState = {
     version: BATCH_VERSION,
     fileName,
@@ -7272,7 +7284,7 @@ function isRefreshableOverseaAgentShipment(item) {
   const carrier = String(item.carrier || "").toUpperCase();
   const referenceType = String(item.referenceType || "").toUpperCase();
   if (!["COSCO", "CMA"].includes(carrier)) return false;
-  if (!["BOOKING", "BILLOFLADING"].includes(referenceType)) return false;
+  if (referenceType !== "BOOKING") return false;
   const status = [
     item.trackingStatus,
     item.snapshot?.tracking?.status,
@@ -8513,7 +8525,7 @@ checkChannelsButton?.addEventListener("click", async () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: trackingType.value || "BILLOFLADING",
+          type: trackingType.value || "BOOKING",
           number: shipmentNumber
         })
       })
@@ -8676,9 +8688,7 @@ batchPreviewSheet?.addEventListener("change", () => {
 
 batchPreviewColumn?.addEventListener("change", () => {
   const selectedOption = batchPreviewColumn.selectedOptions[0];
-  batchPreviewType.value = selectedOption?.dataset.suggestedType === "BOOKING"
-    ? "BOOKING"
-    : "BILLOFLADING";
+  batchPreviewType.value = "BOOKING";
   renderBatchPreviewTable();
 });
 
@@ -9236,7 +9246,7 @@ function trackingQueryFromLocation() {
   return normalizeQuery({
     carrier: search.get("carrier") || "COSCO",
     channel: search.get("channel") || "AUTO",
-    type: search.get("type") || "BILLOFLADING",
+    type: search.get("type") || "BOOKING",
     number
   });
 }

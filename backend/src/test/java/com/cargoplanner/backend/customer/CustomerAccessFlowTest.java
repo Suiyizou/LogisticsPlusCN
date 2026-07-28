@@ -1069,7 +1069,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void refreshesLegacyNumericCoscoBillRowsAsBookingNumbers() {
+  void excludesLegacyBillOnlyRowsFromBookingRefreshQueues() {
     jdbcTemplate.update(
         """
         UPDATE cp_shipment_references
@@ -1079,20 +1079,13 @@ class CustomerAccessFlowTest {
         """
     );
 
-    ShipmentBatchItemRequest oneClick = customerService.listUnfinishedTrackingItems(business)
-        .stream()
-        .filter(item -> "refresh-shipment-public-id".equals(item.id()))
-        .findFirst()
-        .orElseThrow();
-    ShipmentBatchItemRequest selected = customerService.listSelectedTrackingItems(
+    assertThat(customerService.listUnfinishedTrackingItems(business))
+        .noneMatch(item -> "refresh-shipment-public-id".equals(item.id()));
+    assertThatThrownBy(() -> customerService.listSelectedTrackingItems(
         business, List.of("shipment-public-id")
-    ).get(0);
-
-    assertThat(oneClick.type()).isEqualTo("BOOKING");
-    assertThat(oneClick.number()).isEqualTo("9508245590");
-    assertThat(selected.type()).isEqualTo("BOOKING");
-    assertThat(selected.number()).isEqualTo("9508245590");
-    assertThat(oneClick.displayNumber()).isEqualTo("COSU9508245590");
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST)
+    );
   }
 
   @Test
@@ -1278,14 +1271,14 @@ class CustomerAccessFlowTest {
     Map<String, Object> updated = customerService.updateShipment(
         shipmentId,
         new UpdateBusinessShipmentRequest(
-            "BILLOFLADING", "COSU1234567890", "In transit", "Customer notified"
+            "BOOKING", "NEW-BOOKING-101", "In transit", "Customer notified"
         ),
         business,
         "127.0.0.1"
     );
     assertThat(updated)
-        .containsEntry("referenceType", "BILLOFLADING")
-        .containsEntry("referenceNo", "1234567890")
+        .containsEntry("referenceType", "BOOKING")
+        .containsEntry("referenceNo", "NEW-BOOKING-101")
         .containsEntry("trackingStatus", "Booking confirmed")
         .containsEntry("note", "Customer notified");
     assertThat(jdbcTemplate.queryForObject(
@@ -1324,7 +1317,7 @@ class CustomerAccessFlowTest {
         "SELECT COUNT(*) FROM cp_shipments WHERE public_id = ?", Integer.class, shipmentId
     )).isZero();
     assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = '1234567890'",
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_no_normalized = 'NEW-BOOKING-101'",
         Integer.class
     )).isZero();
     assertThat(jdbcTemplate.queryForObject(
@@ -1340,23 +1333,23 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void rejectsAndHidesCrossTypeDuplicatesForCoscoNumericBusinessNumbers() {
-    customerService.createShipment(
+  void rejectsNewBillIdentityAndHidesLegacyCrossTypeDuplicates() {
+    assertThatThrownBy(() -> customerService.createShipment(
         new CreateBusinessShipmentRequest(
             "COSCO", "BILLOFLADING", "9508245590", "Pending update", null
         ),
         business,
         "127.0.0.1"
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST)
     );
 
-    assertThatThrownBy(() -> customerService.createShipment(
+    customerService.createShipment(
         new CreateBusinessShipmentRequest(
             "COSCO", "BOOKING", "9508245590", "Pending update", null
         ),
         business,
         "127.0.0.1"
-    )).isInstanceOfSatisfying(ApiException.class, error ->
-        assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT)
     );
 
     // Simulate a pair created by an older deployment before cross-type identity

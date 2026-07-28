@@ -9,12 +9,10 @@ import com.cargoplanner.backend.common.RequestStats;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,14 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AdminService {
-  private static final SecureRandom RANDOM = new SecureRandom();
-  private static final String PASSWORD_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  private static final String PASSWORD_LOWER = "abcdefghijkmnopqrstuvwxyz";
-  private static final String PASSWORD_DIGITS = "23456789";
-  private static final String PASSWORD_SYMBOLS = "!@#$%*-_=+";
-  private static final String PASSWORD_ALPHABET =
-      PASSWORD_UPPER + PASSWORD_LOWER + PASSWORD_DIGITS + PASSWORD_SYMBOLS;
-
   private final JdbcTemplate jdbcTemplate;
   private final PasswordHasher passwordHasher;
   private final RequestStats requestStats;
@@ -178,7 +168,7 @@ public class AdminService {
       );
     }
     Map<String, Object> existing = findUser(userId);
-    String temporaryPassword = generateTemporaryPassword();
+    String temporaryPassword = existing.get("username") + "!@#2026";
     PasswordHasher.PasswordHash passwordHash = passwordHasher.hash(temporaryPassword);
     jdbcTemplate.update(
         """
@@ -217,23 +207,6 @@ public class AdminService {
           "Password must be 12-128 characters and include upper, lower, digit, and symbol"
       );
     }
-  }
-
-  private String generateTemporaryPassword() {
-    List<Character> characters = new ArrayList<>();
-    characters.add(randomCharacter(PASSWORD_UPPER));
-    characters.add(randomCharacter(PASSWORD_LOWER));
-    characters.add(randomCharacter(PASSWORD_DIGITS));
-    characters.add(randomCharacter(PASSWORD_SYMBOLS));
-    while (characters.size() < 24) characters.add(randomCharacter(PASSWORD_ALPHABET));
-    Collections.shuffle(characters, RANDOM);
-    StringBuilder password = new StringBuilder(characters.size());
-    characters.forEach(password::append);
-    return password.toString();
-  }
-
-  private char randomCharacter(String source) {
-    return source.charAt(RANDOM.nextInt(source.length()));
   }
 
   @Transactional

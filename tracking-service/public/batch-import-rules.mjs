@@ -40,7 +40,8 @@ const DETAIL_HEADERS = new Map([
   ["eta", "estimatedArrival"], ["\u9884\u8ba1\u5230\u6e2f", "estimatedArrival"],
   ["volume", "volume"], ["containerquantity", "volume"], ["\u7bb1\u91cf", "volume"],
   ["clientcode", "clientNameCode"], ["clientnamecode", "clientNameCode"],
-  ["\u5ba2\u6237\u4ee3\u7801", "clientNameCode"]
+  ["\u5ba2\u6237\u4ee3\u7801", "clientNameCode"],
+  ...[...BILL_OF_LADING_HEADERS].map((header) => [header, "originalBillOfLading"])
 ].map(([header, key]) => [normalizeHeader(header), key]));
 
 const CARRIER_BY_PREFIX = Object.freeze({ COSU: "COSCO", CMDU: "CMA" });
@@ -48,7 +49,6 @@ const CARRIER_BY_PREFIX = Object.freeze({ COSU: "COSCO", CMDU: "CMA" });
 function headerType(value) {
   const normalized = normalizeHeader(value);
   if (BOOKING_HEADERS.has(normalized)) return "BOOKING";
-  if (BILL_OF_LADING_HEADERS.has(normalized)) return "BILLOFLADING";
   return null;
 }
 
@@ -77,38 +77,21 @@ function splitShipmentCell(value) {
 }
 
 export function normalizeShipmentCandidate(type, rawValue) {
+  if (String(type ?? "BOOKING").trim().toUpperCase() !== "BOOKING") return null;
   const sourceText = String(rawValue ?? "").normalize("NFKC").trim();
   const compact = compactShipmentNumber(sourceText);
   if (!compact) return null;
   const displayText = cleanCellText(sourceText) || compact;
 
-  const cosuMatch = compact.match(COSU_NUMBER_PATTERN);
-  if (cosuMatch) {
-    return {
-      carrier: "COSCO",
-      carrierPrefix: "COSU",
-      type: "BILLOFLADING",
-      number: cosuMatch[1],
-      originalBillOfLading: compact,
-      displayNumber: displayText,
-      manualOnly: false,
-      unsupportedCarrierPrefix: false
-    };
-  }
-
-  const prefixMatch = type === "BILLOFLADING"
-    ? compact.match(/^([A-Z]{4})([A-Z0-9./-]{4,60})$/)
-    : null;
-  const carrierPrefix = prefixMatch?.[1] ?? null;
   return {
-    carrier: carrierPrefix ? (CARRIER_BY_PREFIX[carrierPrefix] ?? null) : null,
-    carrierPrefix,
-    type,
+    carrier: null,
+    carrierPrefix: null,
+    type: "BOOKING",
     number: compact,
-    originalBillOfLading: type === "BILLOFLADING" ? compact : null,
+    originalBillOfLading: null,
     displayNumber: displayText,
     manualOnly: true,
-    unsupportedCarrierPrefix: carrierPrefix !== "COSU"
+    unsupportedCarrierPrefix: false
   };
 }
 
@@ -168,43 +151,7 @@ function recognizedHeaderOptions(rows) {
 }
 
 function inferredCosuOptions(rows) {
-  const occurrences = new Map();
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-    for (const [columnIndex, value] of (rows[rowIndex] ?? []).entries()) {
-      const matches = splitShipmentCell(value)
-        .map(compactShipmentNumber)
-        .filter((candidate) => COSU_NUMBER_PATTERN.test(candidate)).length;
-      if (matches === 0) continue;
-      const current = occurrences.get(columnIndex) ?? { count: 0, firstRowIndex: rowIndex };
-      current.count += matches;
-      current.firstRowIndex = Math.min(current.firstRowIndex, rowIndex);
-      occurrences.set(columnIndex, current);
-    }
-  }
-
-  return [...occurrences.entries()].map(([columnIndex, occurrence]) => {
-    const maxHeaderIndex = Math.min(occurrence.firstRowIndex - 1, HEADER_SCAN_LIMIT - 1);
-    let rowIndex = Math.max(0, maxHeaderIndex);
-    let bestDetailCount = -1;
-    for (let candidateRowIndex = 0; candidateRowIndex <= maxHeaderIndex; candidateRowIndex += 1) {
-      const detailCount = (rows[candidateRowIndex] ?? []).reduce(
-        (total, value) => total + (DETAIL_HEADERS.has(normalizeHeader(value)) ? 1 : 0),
-        0
-      );
-      if (detailCount >= bestDetailCount) {
-        bestDetailCount = detailCount;
-        rowIndex = candidateRowIndex;
-      }
-    }
-    return {
-      rowIndex,
-      columnIndex,
-      type: "BILLOFLADING",
-      inferred: true,
-      cosuCount: occurrence.count,
-      candidateCount: countCandidateNumbers(rows, rowIndex, columnIndex, "BILLOFLADING")
-    };
-  });
+  return [];
 }
 
 function compareColumnOptions(left, right) {
@@ -213,7 +160,6 @@ function compareColumnOptions(left, right) {
   }
   if (right.cosuCount !== left.cosuCount) return right.cosuCount - left.cosuCount;
   if (left.inferred !== right.inferred) return Number(left.inferred) - Number(right.inferred);
-  if (left.type !== right.type) return left.type === "BILLOFLADING" ? -1 : 1;
   if (right.candidateCount !== left.candidateCount) return right.candidateCount - left.candidateCount;
   if (left.rowIndex !== right.rowIndex) return left.rowIndex - right.rowIndex;
   return left.columnIndex - right.columnIndex;
@@ -291,7 +237,7 @@ export function buildBatchPreview(rows, options = {}) {
       suggestedType: type ?? (
         index === suggestedColumnIndex
           ? recommended.queryColumns[0].type
-          : "BILLOFLADING"
+          : "BOOKING"
       )
     };
   });
@@ -299,8 +245,8 @@ export function buildBatchPreview(rows, options = {}) {
     headerRowIndex,
     suggestedColumnIndex,
     suggestedType: suggestedColumnIndex == null
-      ? "BILLOFLADING"
-      : columns[suggestedColumnIndex]?.suggestedType ?? "BILLOFLADING",
+      ? "BOOKING"
+      : columns[suggestedColumnIndex]?.suggestedType ?? "BOOKING",
     columns,
     previewRows: previewSource.map((row, offset) => ({
       rowIndex: previewStartRowIndex + offset,
@@ -322,10 +268,10 @@ export function selectBatchColumn(rows, selection = {}) {
   if (!Number.isInteger(columnIndex) || columnIndex < 0 || columnIndex >= columnCount) {
     throw new RangeError("Selected tracking column is invalid");
   }
-  const inferredType = headerType(rows[rowIndex]?.[columnIndex]) ?? "BILLOFLADING";
+  const inferredType = headerType(rows[rowIndex]?.[columnIndex]) ?? "BOOKING";
   const type = String(selection.type ?? inferredType).trim().toUpperCase();
-  if (!["BILLOFLADING", "BOOKING"].includes(type)) {
-    throw new RangeError("Selected tracking type is invalid");
+  if (type !== "BOOKING") {
+    throw new RangeError("Selected tracking type must be BOOKING");
   }
   return {
     rowIndex,
@@ -372,7 +318,7 @@ export function collectBatchItems(rows, header, unique = new Map()) {
       for (const rawCandidate of splitShipmentCell(row?.[column.columnIndex])) {
         const candidate = normalizeShipmentCandidate(column.type, rawCandidate);
         if (!candidate) continue;
-        const itemType = column.preserveType ? column.type : (candidate.type ?? column.type);
+        const itemType = "BOOKING";
         const carrierKey = candidate.carrier ?? candidate.carrierPrefix ?? "MANUAL";
         const key = `${carrierKey}:${itemType}:${candidate.number}`;
         if (unique.has(key)) continue;

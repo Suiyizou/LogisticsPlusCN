@@ -391,8 +391,8 @@ class ShipmentBatchTrackingResilienceTest {
     return new ShipmentBatchItemRequest(
         id,
         "COSCO",
-        "BILLOFLADING",
-        number.substring(4),
+        "BOOKING",
+        number,
         number,
         false,
         details

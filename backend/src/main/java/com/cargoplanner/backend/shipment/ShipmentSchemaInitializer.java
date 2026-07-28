@@ -206,6 +206,21 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "idx_cp_shipments_responsible_agent",
         "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_responsible_agent (responsible_agent_id, updated_at)"
     );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_responsible_created",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_responsible_created (responsible_agent_id, created_at)"
+    );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_created_at",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_created_at (created_at)"
+    );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_updated_at",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_updated_at (updated_at)"
+    );
     addConstraintIfMissing(
         "cp_shipments",
         "fk_cp_shipments_responsible_agent",
@@ -240,6 +255,16 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "cp_shipments",
         "last_refresh_result",
         "ALTER TABLE cp_shipments ADD COLUMN last_refresh_result VARCHAR(16) NULL AFTER original_bill_of_lading"
+    );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_refresh_result_updated",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_refresh_result_updated (last_refresh_result, updated_at)"
+    );
+    addIndexIfMissing(
+        "cp_shipments",
+        "idx_cp_shipments_responsible_refresh",
+        "ALTER TABLE cp_shipments ADD INDEX idx_cp_shipments_responsible_refresh (responsible_agent_id, last_refresh_result, updated_at)"
     );
     addColumnIfMissing(
         "cp_shipments",
@@ -624,6 +649,11 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           INDEX idx_cp_shipments_carrier_time (carrier_code, last_tracked_at),
           INDEX idx_cp_shipments_fresh_until (fresh_until),
           INDEX idx_cp_shipments_responsible_agent (responsible_agent_id, updated_at),
+          INDEX idx_cp_shipments_responsible_created (responsible_agent_id, created_at),
+          INDEX idx_cp_shipments_created_at (created_at),
+          INDEX idx_cp_shipments_updated_at (updated_at),
+          INDEX idx_cp_shipments_refresh_result_updated (last_refresh_result, updated_at),
+          INDEX idx_cp_shipments_responsible_refresh (responsible_agent_id, last_refresh_result, updated_at),
           CONSTRAINT fk_cp_shipments_created_by FOREIGN KEY (created_by) REFERENCES cp_users(id) ON DELETE SET NULL,
           CONSTRAINT fk_cp_shipments_responsible_agent FOREIGN KEY (responsible_agent_id) REFERENCES cp_users(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci

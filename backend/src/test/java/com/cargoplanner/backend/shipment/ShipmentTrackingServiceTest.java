@@ -187,7 +187,7 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void persistsAliasesAndUsesMysqlCacheForLaterReferenceQueries() {
+  void persistsAliasesButRejectsBillOfLadingQueries() {
     ObjectNode first = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "bk-10001", false),
         employee
@@ -209,31 +209,30 @@ class ShipmentTrackingServiceTest {
     )).isZero();
     assertThat(first.path("fileAccess").asBoolean()).isFalse();
 
-    ObjectNode second = service.track(
+    assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "BL-90001", false),
         employee
-    );
-
-    assertThat(second.path("shipmentId").asText()).isEqualTo(shipmentId);
-    assertThat(second.path("cacheSource").asText()).isEqualTo("MYSQL");
-    assertThat(second.path("cached").asBoolean()).isTrue();
+    )).isInstanceOfSatisfying(ApiException.class, error -> {
+      assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(error.code()).isEqualTo("BOOKING_REFERENCE_REQUIRED");
+    });
     verify(adapterClient, times(1))
         .track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
   }
 
   @Test
-  void bookingRefreshReusesTheExistingCoscoNumericBillShipment() throws Exception {
-    NormalizedTrackRequest bill = new NormalizedTrackRequest(
-        "COSCO", "AUTO", "BILLOFLADING", "6507943350"
+  void bookingRefreshReusesTheExistingBookingShipment() throws Exception {
+    NormalizedTrackRequest initialBooking = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "6507943350"
     );
-    when(adapterClient.track(bill)).thenReturn(objectMapper.readTree("""
+    when(adapterClient.track(initialBooking)).thenReturn(objectMapper.readTree("""
         {
           "snapshot": {
             "channel": "NETWORK",
             "fetchedAt": "2026-07-16T10:00:00Z",
-            "tracking": {"type": "BILLOFLADING", "number": "6507943350"},
+            "tracking": {"type": "BOOKING", "number": "6507943350"},
             "summary": {
-              "billOfLading": "6507943350",
+              "bookingNumbers": ["6507943350"],
               "origin": {"name": "Shanghai"},
               "destination": {"name": "Long Beach"},
               "latestEvent": {"name": "Booking confirmed"}
@@ -242,7 +241,7 @@ class ShipmentTrackingServiceTest {
         }
         """));
     ObjectNode initial = service.track(
-        new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "6507943350", false),
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "6507943350", false),
         business
     );
 
@@ -287,14 +286,14 @@ class ShipmentTrackingServiceTest {
   @Test
   void rejectsCarrierStatusTextDisguisedAsABillReference() throws Exception {
     NormalizedTrackRequest request = new NormalizedTrackRequest(
-        "COSCO", "AUTO", "BILLOFLADING", "6508063160"
+        "COSCO", "AUTO", "BOOKING", "6508063160"
     );
     when(adapterClient.track(request)).thenReturn(objectMapper.readTree("""
         {
           "snapshot": {
             "channel": "NETWORK",
             "fetchedAt": "2026-07-16T10:00:00Z",
-            "tracking": {"type": "BILLOFLADING", "number": "6508063160"},
+            "tracking": {"type": "BOOKING", "number": "6508063160"},
             "summary": {
               "billOfLading": "6508063160 B/L Not Ready",
               "origin": {"name": "Shanghai"},
@@ -306,7 +305,7 @@ class ShipmentTrackingServiceTest {
         """));
 
     service.track(
-        new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "6508063160", false),
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "6508063160", false),
         business
     );
 
@@ -329,7 +328,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectNode cached = service.track(
         new ShipmentTrackRequest(
-            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, imported
+            "COSCO", "AUTO", "BOOKING", "BK-10001", false, imported
         ),
         business
     );
@@ -345,7 +344,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectNode unchanged = service.track(
         new ShipmentTrackRequest(
-            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, imported
+            "COSCO", "AUTO", "BOOKING", "BK-10001", false, imported
         ),
         business
     );
@@ -358,7 +357,7 @@ class ShipmentTrackingServiceTest {
     );
     ObjectNode overwritten = service.track(
         new ShipmentTrackRequest(
-            "COSCO", "AUTO", "BILLOFLADING", "BL-90001", false, changed
+            "COSCO", "AUTO", "BOOKING", "BK-10001", false, changed
         ),
         business
     );
@@ -371,7 +370,7 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void stripsCosuForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
+  void usesBookingForTheAdapterAndPersistsMissingSpreadsheetDetails() throws Exception {
     jdbcTemplate.update(
         "INSERT INTO cp_customers (public_id, username, display_name, created_by, "
             + "responsible_agent_id, status, client_code, party_role) "
@@ -381,7 +380,7 @@ class ShipmentTrackingServiceTest {
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
         "COSCO",
         "AUTO",
-        "BILLOFLADING",
+        "BOOKING",
         "6502406170"
     );
     JsonNode adapterResponse = objectMapper.readTree("""
@@ -390,7 +389,7 @@ class ShipmentTrackingServiceTest {
             "provider": {"code": "COSCO"},
             "channel": "NETWORK",
             "fetchedAt": "2026-07-16T10:00:00Z",
-            "tracking": {"type": "BILLOFLADING", "number": "6502406170"},
+            "tracking": {"type": "BOOKING", "number": "6502406170"},
             "summary": {
               "billOfLading": "6502406170",
               "origin": {"name": "Shanghai"},
@@ -423,8 +422,8 @@ class ShipmentTrackingServiceTest {
         new ShipmentTrackRequest(
             "COSCO",
             "AUTO",
-            "BILLOFLADING",
-            "COSU6502406170",
+            "BOOKING",
+            "6502406170",
             false,
             details
         ),
@@ -666,8 +665,8 @@ class ShipmentTrackingServiceTest {
         new ShipmentTrackRequest(
             "COSCO",
             "AUTO",
-            "BILLOFLADING",
-            "COSU6502406170",
+            "BOOKING",
+            "6502406170",
             false,
             details
         ),
@@ -1137,7 +1136,7 @@ class ShipmentTrackingServiceTest {
     String shipmentId = parent.path("shipmentId").asText();
     String taskId = "batch_1234567890abcdef";
     NormalizedTrackRequest listRequest = new NormalizedTrackRequest(
-        "COSCO", "AUTO", "BILLOFLADING", "BL-90001", taskId
+        "COSCO", "AUTO", "BOOKING", "BK-10001", taskId
     );
     when(adapterClient.discoverContainers(listRequest)).thenReturn(objectMapper.readTree("""
         {
@@ -1152,7 +1151,7 @@ class ShipmentTrackingServiceTest {
         """));
 
     ObjectNode discovered = service.discoverBatchContainers(
-        shipmentId, "BL-90001", taskId, business
+        shipmentId, "BK-10001", taskId, business
     );
     assertThat(discovered.path("containers")).hasSize(1);
 
@@ -1327,7 +1326,7 @@ class ShipmentTrackingServiceTest {
         "HW202600059", "6-Jun-26", "11-Jun-26", null, "Hayden US"
     );
     ShipmentBatchItemRequest firstRequest = new ShipmentBatchItemRequest(
-        "row-1", null, "BILLOFLADING", "784-84422343",
+        "row-1", null, "BOOKING", "784-84422343",
         "784-84422343 空运", true, firstDetails
     );
 
@@ -1354,7 +1353,7 @@ class ShipmentTrackingServiceTest {
     );
     ObjectNode second = service.recordImportedPlaceholder(
         new ShipmentBatchItemRequest(
-            "row-1", null, "BILLOFLADING", "784-84422343",
+            "row-1", null, "BOOKING", "784-84422343",
             "784-84422343 空运", true, secondDetails
         ),
         business
@@ -1380,7 +1379,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectNode unchanged = service.recordImportedPlaceholder(
         new ShipmentBatchItemRequest(
-            "row-1", null, "BILLOFLADING", "784-84422343",
+            "row-1", null, "BOOKING", "784-84422343",
             "784-84422343 绌鸿繍", true, secondDetails
         ),
         business
@@ -1404,7 +1403,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectNode punctuationReference = service.recordImportedPlaceholder(
         new ShipmentBatchItemRequest(
-            "row-punctuation", "UNSUPPORTED", "BILLOFLADING", "ABC/123.45",
+            "row-punctuation", "UNSUPPORTED", "BOOKING", "ABC/123.45",
             "ABC/123.45 manual note", true,
             new ShipmentImportDetails(
                 null, "ABC/123.45", "LJSH26060099", null, null, null,
@@ -1431,7 +1430,7 @@ class ShipmentTrackingServiceTest {
         Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
     );
     ShipmentBatchItemRequest request = new ShipmentBatchItemRequest(
-        "race-row", "UNSUPPORTED", "BILLOFLADING", "RACE/123.45",
+        "race-row", "UNSUPPORTED", "BOOKING", "RACE/123.45",
         "RACE/123.45", true,
         new ShipmentImportDetails(
             null, "RACE/123.45", "JOB-RACE", null, null, null,
@@ -1514,7 +1513,7 @@ class ShipmentTrackingServiceTest {
     );
 
     NormalizedTrackRequest normalized = new NormalizedTrackRequest(
-        "COSCO", "AUTO", "BILLOFLADING", "6502406170"
+        "COSCO", "AUTO", "BOOKING", "6502406170"
     );
     when(adapterClient.track(normalized, true)).thenReturn(objectMapper.readTree("""
         {
@@ -1522,7 +1521,7 @@ class ShipmentTrackingServiceTest {
             "provider": {"code": "COSCO"},
             "channel": "NETWORK",
             "fetchedAt": "2026-07-16T10:05:00Z",
-            "tracking": {"type": "BILLOFLADING", "number": "6502406170"},
+            "tracking": {"type": "BOOKING", "number": "6502406170"},
             "summary": {
               "billOfLading": "6502406170",
               "origin": {"name": "Shanghai"},
@@ -1536,7 +1535,7 @@ class ShipmentTrackingServiceTest {
 
     ObjectNode refreshed = service.track(
         new ShipmentTrackRequest(
-            "COSCO", "AUTO", "BILLOFLADING", "COSU6502406170", true
+            "COSCO", "AUTO", "BOOKING", "6502406170", true
         ),
         business
     );

@@ -8,8 +8,7 @@ const CONTAINER_SHEET_NAMES = ["\u7bb1\u7ea7\u8be6\u60c5", "CONTAINERS", "CONTAI
 const MAIN_COLUMNS = [
   column("importKey", "\u5bfc\u5165\u7f16\u53f7*", "IMPORT KEY", true),
   column("carrier", "\u627f\u8fd0\u4eba*", "CARRIER", true),
-  column("referenceType", "\u5355\u53f7\u7c7b\u578b*", "REFERENCE TYPE", true),
-  column("referenceNo", "\u4e1a\u52a1\u5355\u53f7*", "REFERENCE NO", true),
+  column("referenceNo", "\u8ba2\u8231\u53f7*", "BOOKING NUMBER", true),
   column("latestEventName", "\u6700\u65b0\u52a8\u6001*", "LATEST EVENT", true),
   column("latestEventLocation", "\u6700\u65b0\u52a8\u6001\u5730\u70b9", "LATEST EVENT LOCATION"),
   column("latestEventTime", "\u6700\u65b0\u52a8\u6001\u65f6\u95f4", "LATEST EVENT TIME"),
@@ -26,7 +25,6 @@ const MAIN_COLUMNS = [
   column("forwarderJobNumber", "\u4e1a\u52a1 JOB NUMBER", "FORWARDER JOB NUMBER"),
   column("clientNameCode", "\u5ba2\u6237\u540d\u79f0\u4ee3\u7801", "CLIENT NAME CODE"),
   column("clientPoNumber", "\u5ba2\u6237 PO NO.", "CLIENT PO NUMBER"),
-  column("bookingNumber", "\u8ba2\u8231\u53f7", "BOOKING NUMBER"),
   column("billOfLading", "\u63d0\u5355\u53f7 / Master B/L", "BILL OF LADING"),
   column("vesselVoyage", "\u8239\u540d / \u822a\u6b21", "VESSEL / VOYAGE"),
   column("trafficTerm", "\u8fd0\u8f93\u6761\u6b3e", "TRAFFIC TERM"),
@@ -91,7 +89,7 @@ export function buildManualShipmentImportTemplate(xlsx) {
     ["4. \u6bcf\u5f20\u7968\u5355\u81f3\u5c11\u5728\u201c\u7bb1\u578b\u6570\u91cf\u201d\u5de5\u4f5c\u8868\u586b\u5199\u4e00\u79cd\u7bb1\u578b\u548c\u6570\u91cf\u3002"],
     ["5. \u5206\u6bb5\u8fd0\u8f93\u3001\u7bb1\u53f7\u548c\u7bb1\u7ea7\u8be6\u60c5\u5747\u4e3a\u9009\u586b\uff1b\u670d\u52a1\u7c7b\u522b\u4f7f\u7528 OCEAN|INLAND|CUSTOMS|WAREHOUSE\u3002"],
     ["6. \u65f6\u95f4\u5efa\u8bae\u4f7f\u7528 yyyy-mm-dd hh:mm\uff1b\u56fd\u5bb6\u4ee3\u7801\u4f7f\u7528 CN\u3001US \u7b49\u4e24\u4f4d\u4ee3\u7801\u3002"],
-    ["7. \u627f\u8fd0\u4eba\u652f\u6301 COSCO\u3001CMA\uff1b\u5355\u53f7\u7c7b\u578b\u652f\u6301 BOOKING\u3001BILLOFLADING\u3002"]
+    ["7. \u627f\u8fd0\u4eba\u652f\u6301 COSCO\u3001CMA\uff1b\u7968\u5355\u5fc5\u987b\u4f7f\u7528\u8ba2\u8231\u53f7\u5efa\u7acb\uff0c\u63d0\u5355\u53f7\u4ec5\u4f5c\u4e3a\u9644\u5c5e\u4fe1\u606f\u3002"]
   ], [90]);
   appendTemplateSheet(
     xlsx,
@@ -176,8 +174,7 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
     const importKey = text(source.importKey) || text(source.referenceNo);
     requireValue(errors, source, "importKey", "\u5bfc\u5165\u7f16\u53f7");
     requireValue(errors, source, "carrier", "\u627f\u8fd0\u4eba");
-    requireValue(errors, source, "referenceType", "\u5355\u53f7\u7c7b\u578b");
-    requireValue(errors, source, "referenceNo", "\u4e1a\u52a1\u5355\u53f7");
+    requireValue(errors, source, "referenceNo", "\u8ba2\u8231\u53f7");
     requireValue(errors, source, "latestEventName", "\u6700\u65b0\u52a8\u6001");
     requireValue(errors, source, "estimatedDeparture", "\u9884\u8ba1\u79bb\u6e2f ETD");
     requireValue(errors, source, "estimatedArrival", "\u9884\u8ba1\u5230\u6e2f ETA");
@@ -186,11 +183,8 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
     }
 
     const carrier = normalizeCarrier(source.carrier);
-    const referenceType = normalizeReferenceType(source.referenceType);
+    const referenceType = "BOOKING";
     if (source.carrier && !carrier) errors.push("\u627f\u8fd0\u4eba\u4ec5\u652f\u6301 COSCO \u6216 CMA");
-    if (source.referenceType && !referenceType) {
-      errors.push("\u5355\u53f7\u7c7b\u578b\u4ec5\u652f\u6301 BOOKING \u6216 BILLOFLADING");
-    }
     if (importKey) {
       const normalizedKey = normalizeKey(importKey);
       if (seenKeys.has(normalizedKey)) errors.push(`\u5bfc\u5165\u7f16\u53f7\u91cd\u590d\uff1a${importKey}`);
@@ -287,10 +281,8 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
       forwarderJobNumber: text(source.forwarderJobNumber),
       clientNameCode: text(source.clientNameCode),
       clientPoNumber: text(source.clientPoNumber),
-      bookingNumber: text(source.bookingNumber)
-        || (referenceType === "BOOKING" ? text(source.referenceNo) : ""),
-      billOfLading: text(source.billOfLading)
-        || (referenceType === "BILLOFLADING" ? text(source.referenceNo) : ""),
+      bookingNumber: text(source.referenceNo),
+      billOfLading: text(source.billOfLading),
       vesselVoyage: text(source.vesselVoyage),
       trafficTerm: text(source.trafficTerm),
       serviceScopes,
@@ -308,7 +300,7 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
       rowNumber: source.__rowNumber,
       referenceNo: text(source.referenceNo),
       carrier: carrier || text(source.carrier),
-      referenceType: referenceType || text(source.referenceType),
+      referenceType,
       errors: unique(errors),
       warnings: unique(warnings),
       payload
@@ -392,7 +384,6 @@ function mainExampleRow() {
   Object.assign(values, {
     importKey: "SHIP-001",
     carrier: "COSCO",
-    referenceType: "BOOKING",
     referenceNo: "6508205930",
     latestEventName: "Booking confirmed",
     latestEventLocation: "Shanghai",
@@ -411,7 +402,7 @@ function mainExampleRow() {
     forwarderJobNumber: "LJSH26070001",
     clientNameCode: "HAYDEN",
     clientPoNumber: "PO-2026-001",
-    bookingNumber: "6508205930",
+    billOfLading: "COSU6508205930",
     vesselVoyage: "COSCO SHIPPING / 001E",
     trafficTerm: "CY | CY",
     serviceScopes: "OCEAN|INLAND",
@@ -529,15 +520,6 @@ function normalizeCarrier(value) {
   const normalized = normalizeHeader(value);
   if (normalized.includes("COSCO") || normalized === "COSU") return "COSCO";
   if (normalized.includes("CMA")) return "CMA";
-  return "";
-}
-
-function normalizeReferenceType(value) {
-  const normalized = normalizeHeader(value);
-  if (["BOOKING", "BOOKINGNO", "\u8ba2\u8231\u53f7", "\u8ba2\u8231"].includes(normalized)) return "BOOKING";
-  if (["BILLOFLADING", "BL", "MBL", "\u63d0\u5355\u53f7", "\u63d0\u5355"].includes(normalized)) {
-    return "BILLOFLADING";
-  }
   return "";
 }
 

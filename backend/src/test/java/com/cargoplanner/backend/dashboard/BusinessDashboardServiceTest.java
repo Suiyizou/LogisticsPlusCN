@@ -50,7 +50,12 @@ class BusinessDashboardServiceTest {
         .containsEntry("updatedShipments", 1L)
         .containsEntry("followUpFiles", 1L)
         .containsEntry("messages", 1L)
-        .containsEntry("customerLogins", 2L);
+        .containsEntry("customerLogins", 2L)
+        .containsEntry("shipmentTotal", 2L)
+        .containsEntry("customerTotal", 1L)
+        .containsEntry("activeAgentCount", 1L);
+    assertThat((Iterable<?>) result.get("dailyTrend")).hasSize(7);
+    assertThat((Iterable<?>) result.get("shipmentStatusDistribution")).hasSize(2);
   }
 
   @Test
@@ -61,7 +66,10 @@ class BusinessDashboardServiceTest {
         .containsEntry("updatedShipments", 1L)
         .containsEntry("followUpFiles", 2L)
         .containsEntry("messages", 2L)
-        .containsEntry("customerLogins", 3L);
+        .containsEntry("customerLogins", 3L)
+        .containsEntry("shipmentTotal", 3L)
+        .containsEntry("customerTotal", 2L)
+        .containsEntry("activeAgentCount", 1L);
   }
 
   private void createSchema() {
@@ -70,6 +78,7 @@ class BusinessDashboardServiceTest {
         CREATE TABLE cp_shipments (
           id BIGINT PRIMARY KEY,
           responsible_agent_id BIGINT,
+          tracking_status VARCHAR(80),
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
         )
@@ -98,7 +107,18 @@ class BusinessDashboardServiceTest {
         """
         CREATE TABLE cp_customers (
           id BIGINT PRIMARY KEY,
-          responsible_agent_id BIGINT NOT NULL
+          responsible_agent_id BIGINT NOT NULL,
+          party_role VARCHAR(20) NOT NULL DEFAULT 'SHIPPER',
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+        )
+        """
+    );
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE cp_users (
+          id BIGINT PRIMARY KEY,
+          role VARCHAR(24) NOT NULL,
+          status VARCHAR(20) NOT NULL
         )
         """
     );
@@ -151,6 +171,11 @@ class BusinessDashboardServiceTest {
           (301, 2)
         """
     );
+    jdbcTemplate.update(
+        "INSERT INTO cp_users (id, role, status) VALUES (500, 'OVERSEA_AGENT', 'ACTIVE')"
+    );
+    jdbcTemplate.update("UPDATE cp_shipments SET tracking_status = 'IN_TRANSIT' WHERE id = 10");
+    jdbcTemplate.update("UPDATE cp_shipments SET tracking_status = 'DELIVERED' WHERE id = 11");
     jdbcTemplate.update(
         """
         INSERT INTO cp_customer_sessions (id, customer_id, created_at) VALUES

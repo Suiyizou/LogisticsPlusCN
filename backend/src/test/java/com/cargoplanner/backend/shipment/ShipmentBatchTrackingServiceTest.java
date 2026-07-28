@@ -52,7 +52,7 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
-  void tracksOnlyCosuRowsWithThePrefixRemovedAndStoresOtherRowsForManualEntry()
+  void tracksSupportedBookingRowsAndStoresUnsupportedRowsForManualEntry()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectMapper objectMapper = new ObjectMapper();
@@ -89,11 +89,11 @@ class ShipmentBatchTrackingServiceTest {
             "HAYDEN-TRACKING INFORMATION.xlsx",
             List.of(
                 new ShipmentBatchItemRequest(
-                    "cosu-row", "COSCO", "BILLOFLADING", "123456",
+                    "cosu-row", "COSCO", "BOOKING", "6502406170",
                     "COSU6502406170", false, cosuDetails
                 ),
                 new ShipmentBatchItemRequest(
-                    "manual-row", null, "BILLOFLADING", "SHZY5B667700",
+                    "manual-row", null, "BOOKING", "SHZY5B667700",
                     "SMLMSHZY5B667700", true, manualDetails
                 )
             )
@@ -116,7 +116,7 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
-  void rejectsConflictingExplicitCosuNumbersBeforeStartingCarrierWork() {
+  void rejectsBillOfLadingRowsBeforeStartingCarrierWork() {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     executor = Executors.newSingleThreadExecutor();
     service = new ShipmentBatchTrackingService(
@@ -193,7 +193,7 @@ class ShipmentBatchTrackingServiceTest {
         new ShipmentBatchTaskRequest(
             "containers.xlsx",
             List.of(new ShipmentBatchItemRequest(
-                "row-containers", "COSCO", "BILLOFLADING", "6502406170",
+                "row-containers", "COSCO", "BOOKING", "6502406170",
                 "COSU6502406170", false, details
             ))
         ),
@@ -255,11 +255,11 @@ class ShipmentBatchTrackingServiceTest {
             "order.xlsx",
             List.of(
                 new ShipmentBatchItemRequest(
-                    "row-1", "COSCO", "BILLOFLADING", "6502406170",
+                    "row-1", "COSCO", "BOOKING", "6502406170",
                     "COSU6502406170", false, first
                 ),
                 new ShipmentBatchItemRequest(
-                    "row-2", "COSCO", "BILLOFLADING", "6502406171",
+                    "row-2", "COSCO", "BOOKING", "6502406171",
                     "COSU6502406171", false, second
                 )
             )
@@ -460,7 +460,7 @@ class ShipmentBatchTrackingServiceTest {
         new ShipmentBatchTaskRequest(
             "summary-only.xlsx",
             List.of(new ShipmentBatchItemRequest(
-                "row-summary", "COSCO", "BILLOFLADING", "6502406170",
+                "row-summary", "COSCO", "BOOKING", "6502406170",
                 "COSU6502406170", false, details
             ))
         ),
@@ -519,11 +519,11 @@ class ShipmentBatchTrackingServiceTest {
             "HAYDEN-TRACKING INFORMATION.xlsx",
             List.of(
                 new ShipmentBatchItemRequest(
-                    "row-1", "COSCO", "BILLOFLADING", "6502406170",
+                    "row-1", "COSCO", "BOOKING", "6502406170",
                     "COSU6502406170", false, firstDetails
                 ),
                 new ShipmentBatchItemRequest(
-                    "row-2", "COSCO", "BILLOFLADING", "6502406171",
+                    "row-2", "COSCO", "BOOKING", "6502406171",
                     "COSU6502406171", false, secondDetails
                 )
             )

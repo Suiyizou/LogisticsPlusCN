@@ -20,14 +20,15 @@
     @user-updated="handleUserUpdated"
   />
   <WorkbenchPortal
-    v-else-if="activePage === 'workbenches'"
+    v-else-if="activePage === 'workbenches' && currentUser?.role !== 'OVERSEA_AGENT'"
     key="workbenches"
     :current-user="currentUser"
     @logout="handleLogout"
     @user-updated="handleUserUpdated"
   />
   <BusinessCustomerPage
-    v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN'].includes(currentUser?.role)"
+    v-else-if="(activePage === 'customers' || (activePage === 'workbenches' && currentUser?.role === 'OVERSEA_AGENT'))
+      && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
     key="customers"
     :current-user="currentUser"
     @logout="handleLogout"
@@ -1282,10 +1283,13 @@ watch([workspaceReady, activePage, plannerMode, cargoTypeCount], () => {
 });
 watch([activePage, currentUser, authChecked], () => {
   if (authChecked.value && activePage.value === "admin" && currentUser.value?.role !== "ADMIN") {
+    router.replace(currentUser.value?.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches");
+  }
+  if (authChecked.value && activePage.value === "customers" && !["BUSINESS", "ADMIN", "OVERSEA_AGENT"].includes(currentUser.value?.role)) {
     router.replace("/workbenches");
   }
-  if (authChecked.value && activePage.value === "customers" && !["BUSINESS", "ADMIN"].includes(currentUser.value?.role)) {
-    router.replace("/workbenches");
+  if (authChecked.value && activePage.value === "workbenches" && currentUser.value?.role === "OVERSEA_AGENT") {
+    router.replace("/customers");
   }
 });
 
@@ -1316,7 +1320,7 @@ async function handleLoggedIn(user) {
   currentUser.value = user;
   profileVersion.value += 1;
   const isAdmin = user?.role === "ADMIN";
-  const target = isAdmin ? "/admin" : "/workbenches";
+  const target = isAdmin ? "/admin" : user?.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches";
   loginRedirectText.value = t(isAdmin ? "portal.enteringAdmin" : "portal.entering");
   loginRedirecting.value = true;
   await router.replace(target);

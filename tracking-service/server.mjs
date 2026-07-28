@@ -92,7 +92,7 @@ const CHANNEL_C_MONITOR_INTERVAL_MS =
 const CHANNEL_C_MONITOR_ENABLED =
   String(process.env.CHANNEL_C_MONITOR_ENABLED ?? "true").toLowerCase() !== "false";
 const CHANNEL_C_MONITOR_REQUEST = Object.freeze({
-  type: process.env.CHANNEL_C_MONITOR_TYPE ?? "BILLOFLADING",
+  type: process.env.CHANNEL_C_MONITOR_TYPE ?? "BOOKING",
   number: process.env.CHANNEL_C_MONITOR_NUMBER ?? "6502077380"
 });
 
@@ -517,7 +517,8 @@ async function readJsonBody(request) {
 }
 
 export function normalizeTrackingRequest(input) {
-  const type = String(input?.type ?? "BILLOFLADING").toUpperCase();
+  const requestedType = String(input?.type ?? "BOOKING").toUpperCase();
+  const type = requestedType === "BILLOFLADING" ? "BOOKING" : requestedType;
   const typeConfig = TRACKING_TYPES[type];
 
   if (!typeConfig) {
@@ -528,11 +529,7 @@ export function normalizeTrackingRequest(input) {
     .trim()
     .replace(/\s+/g, "")
     .toUpperCase();
-  // COSU is the SCAC prefix carried in imported B/L cells. COSCO's tracking
-  // endpoints expect the numeric bill value, not the prefixed display value.
-  const number = type === "BILLOFLADING"
-    ? normalizedNumber.replace(/^COSU(?=[0-9]{4,31}$)/, "")
-    : normalizedNumber;
+  const number = normalizedNumber;
 
   if (!/^[A-Z0-9-]{4,35}$/.test(number)) {
     throw new HttpError(400, `${typeConfig.label}格式不正确`);

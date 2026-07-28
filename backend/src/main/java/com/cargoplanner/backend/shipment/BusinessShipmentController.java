@@ -35,10 +35,11 @@ public class BusinessShipmentController {
       @RequestParam(defaultValue = "20") int pageSize,
       @RequestParam(required = false) String customerId,
       @RequestParam(defaultValue = "false") boolean refreshIssuesOnly,
+      @RequestParam(required = false) String businessFilter,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
     return shipmentService.listShipmentSnapshots(
-        actor, page, pageSize, customerId, refreshIssuesOnly
+        actor, page, pageSize, customerId, refreshIssuesOnly, businessFilter
     );
   }
 

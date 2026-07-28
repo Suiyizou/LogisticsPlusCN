@@ -7,7 +7,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -161,8 +163,142 @@ public class BusinessDashboardService {
     response.put("followUpFiles", followUpFiles);
     response.put("messages", messages);
     response.put("customerLogins", customerLogins);
+    response.putAll(resourceStats(actor));
+    response.put("dailyTrend", dailyTrend(actor, date));
+    response.put("shipmentStatusDistribution", shipmentStatusDistribution(actor));
     response.put("definitions", definitions);
     return response;
+  }
+
+  private Map<String, Object> resourceStats(AuthenticatedUser actor) {
+    boolean global = actor.isAdmin();
+    long shipmentTotal = global
+        ? count("SELECT COUNT(*) FROM cp_shipments")
+        : count(
+            "SELECT COUNT(*) FROM cp_shipments WHERE responsible_agent_id = ?",
+            actor.id()
+        );
+    long customerTotal = global
+        ? count(
+            """
+            SELECT COUNT(*) FROM cp_customers
+            WHERE status = 'ACTIVE' AND party_role IN ('SHIPPER', 'CONSIGNEE')
+            """
+        )
+        : count(
+            """
+            SELECT COUNT(*) FROM cp_customers
+            WHERE status = 'ACTIVE' AND party_role IN ('SHIPPER', 'CONSIGNEE')
+              AND responsible_agent_id = ?
+            """,
+            actor.id()
+        );
+    long activeAgentCount = count(
+        "SELECT COUNT(*) FROM cp_users WHERE role = 'OVERSEA_AGENT' AND status = 'ACTIVE'"
+    );
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("shipmentTotal", shipmentTotal);
+    result.put("customerTotal", customerTotal);
+    result.put("activeCustomerCount", customerTotal);
+    result.put("activeAgentCount", activeAgentCount);
+    return result;
+  }
+
+  private List<Map<String, Object>> dailyTrend(
+      AuthenticatedUser actor,
+      LocalDate today
+  ) {
+    LocalDate firstDay = today.minusDays(6);
+    Timestamp start = Timestamp.from(firstDay.atStartOfDay(BUSINESS_ZONE).toInstant());
+    Timestamp end = Timestamp.from(today.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant());
+    Map<LocalDate, long[]> counts = new LinkedHashMap<>();
+    for (int offset = 0; offset < 7; offset++) {
+      counts.put(firstDay.plusDays(offset), new long[] {0L, 0L});
+    }
+    collectDailyCounts(
+        counts,
+        """
+        SELECT CAST(s.created_at AS DATE) AS event_day, COUNT(*) AS event_count
+        FROM cp_shipments s
+        WHERE s.created_at >= ? AND s.created_at < ?
+        """,
+        actor,
+        start,
+        end,
+        0
+    );
+    collectDailyCounts(
+        counts,
+        """
+        SELECT CAST(s.updated_at AS DATE) AS event_day, COUNT(*) AS event_count
+        FROM cp_shipments s
+        WHERE s.updated_at >= ? AND s.updated_at < ?
+          AND s.updated_at > s.created_at
+        """,
+        actor,
+        start,
+        end,
+        1
+    );
+    List<Map<String, Object>> result = new ArrayList<>();
+    counts.forEach((day, values) -> {
+      Map<String, Object> item = new LinkedHashMap<>();
+      item.put("date", day.toString());
+      item.put("created", values[0]);
+      item.put("updated", values[1]);
+      result.add(item);
+    });
+    return result;
+  }
+
+  private void collectDailyCounts(
+      Map<LocalDate, long[]> target,
+      String sqlPrefix,
+      AuthenticatedUser actor,
+      Timestamp start,
+      Timestamp end,
+      int valueIndex
+  ) {
+    boolean global = actor.isAdmin();
+    String sql = sqlPrefix
+        + (global ? "" : " AND s.responsible_agent_id = ?")
+        + " GROUP BY CAST(" + (valueIndex == 0 ? "s.created_at" : "s.updated_at") + " AS DATE)"
+        + " ORDER BY event_day";
+    List<Object> parameters = new ArrayList<>(List.of(start, end));
+    if (!global) parameters.add(actor.id());
+    jdbcTemplate.query(
+        sql,
+        rs -> {
+          LocalDate day = rs.getDate("event_day").toLocalDate();
+          long[] values = target.get(day);
+          if (values != null) values[valueIndex] = rs.getLong("event_count");
+        },
+        parameters.toArray()
+    );
+  }
+
+  private List<Map<String, Object>> shipmentStatusDistribution(AuthenticatedUser actor) {
+    boolean global = actor.isAdmin();
+    String sql = """
+        SELECT COALESCE(NULLIF(TRIM(s.tracking_status), ''), 'UNKNOWN') AS status_name,
+               COUNT(*) AS status_count
+        FROM cp_shipments s
+        """
+        + (global ? "" : " WHERE s.responsible_agent_id = ?")
+        + " GROUP BY COALESCE(NULLIF(TRIM(s.tracking_status), ''), 'UNKNOWN')"
+        + " ORDER BY status_count DESC, status_name";
+    List<Map<String, Object>> result = new ArrayList<>();
+    jdbcTemplate.query(
+        sql,
+        rs -> {
+          Map<String, Object> item = new LinkedHashMap<>();
+          item.put("name", rs.getString("status_name"));
+          item.put("value", rs.getLong("status_count"));
+          result.add(item);
+        },
+        global ? new Object[0] : new Object[] {actor.id()}
+    );
+    return result;
   }
 
   private long count(String sql, Object... parameters) {

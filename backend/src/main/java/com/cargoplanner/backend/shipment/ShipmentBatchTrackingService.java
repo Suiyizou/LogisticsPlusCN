@@ -908,13 +908,18 @@ public class ShipmentBatchTrackingService {
     if (request == null) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row " + (index + 1) + " is empty");
     }
-    String type = clean(request.type(), 24, "BILLOFLADING").toUpperCase(Locale.ROOT);
+    String type = clean(request.type(), 24, "BOOKING").toUpperCase(Locale.ROOT);
+    if (!"BOOKING".equals(type)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Shipment row " + (index + 1) + " must use a booking number"
+      );
+    }
     String number = compact(clean(request.number(), 128, null));
     String displayNumber = clean(request.displayNumber(), 128, null);
     ShipmentImportDetails details = sanitizeImportedDetails(request.importedDetails());
-    String originalBill = compact(details == null ? null : details.originalBillOfLading());
     if (displayNumber == null || displayNumber.isBlank()) {
-      displayNumber = originalBill.isBlank() ? number : originalBill;
+      displayNumber = number;
     }
     if (number.isBlank()) {
       throw new ApiException(
@@ -922,41 +927,20 @@ public class ShipmentBatchTrackingService {
           "Shipment row " + (index + 1) + " has no shipment number"
       );
     }
-    String originalBillCosu = cosuDigits(originalBill);
-    String displayNumberCosu = cosuDigits(displayNumber);
-    String suppliedNumberCosu = cosuDigits(number);
-    List<String> distinctCosuNumbers = java.util.stream.Stream.of(
-            originalBillCosu, displayNumberCosu, suppliedNumberCosu
-        )
-        .filter(value -> value != null && !value.isBlank())
-        .distinct()
-        .toList();
-    if (distinctCosuNumbers.size() > 1) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Shipment row " + (index + 1) + " contains conflicting COSU numbers"
-      );
-    }
-    String matchedCosuNumber = distinctCosuNumbers.isEmpty()
-        ? null
-        : distinctCosuNumbers.get(0);
-    String queryNumber = matchedCosuNumber == null
-        ? (number.startsWith("COSU") ? number.substring(4) : number)
-        : matchedCosuNumber;
-    boolean cosu = "BILLOFLADING".equals(type)
-        && "COSCO".equalsIgnoreCase(request.carrier())
-        && matchedCosuNumber != null;
-    boolean manualOnly = Boolean.TRUE.equals(request.manualOnly()) || !cosu;
+    String carrier = clean(request.carrier(), 32, null);
+    if (carrier != null) carrier = carrier.toUpperCase(Locale.ROOT);
+    boolean supportedCarrier = carrier != null && List.of("COSCO", "CMA").contains(carrier);
+    boolean manualOnly = Boolean.TRUE.equals(request.manualOnly()) || !supportedCarrier;
     ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
         clean(request.id(), 120, "row-" + (index + 1)),
-        cosu ? "COSCO" : clean(request.carrier(), 32, null),
+        carrier,
         type,
         number,
         displayNumber,
         manualOnly,
         details
     );
-    return new BatchItem(normalized, queryNumber, manualOnly);
+    return new BatchItem(normalized, number, manualOnly);
   }
 
   private BatchItem normalizeExistingReference(ShipmentBatchItemRequest request, int index) {
@@ -967,18 +951,13 @@ public class ShipmentBatchTrackingService {
     String type = clean(request.type(), 24, "").toUpperCase(Locale.ROOT);
     String number = compact(clean(request.number(), 128, null));
     if (!List.of("COSCO", "CMA").contains(carrier)
-        || !List.of("BOOKING", "BILLOFLADING").contains(type)
+        || !"BOOKING".equals(type)
         || number.isBlank()) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Shipment row " + (index + 1) + " has no supported booking or bill reference"
+          "Shipment row " + (index + 1) + " has no supported booking reference"
       );
     }
-    String queryNumber = "COSCO".equals(carrier)
-        && "BILLOFLADING".equals(type)
-        && number.startsWith("COSU")
-        ? number.substring(4)
-        : number;
     String displayNumber = clean(request.displayNumber(), 128, number);
     ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
         clean(request.id(), 120, "refresh-" + (index + 1)),
@@ -989,7 +968,7 @@ public class ShipmentBatchTrackingService {
         false,
         null
     );
-    return new BatchItem(normalized, queryNumber, false);
+    return new BatchItem(normalized, number, false);
   }
 
   private ShipmentImportDetails sanitizeImportedDetails(ShipmentImportDetails details) {
@@ -1162,11 +1141,6 @@ public class ShipmentBatchTrackingService {
     return Normalizer.normalize(value, Normalizer.Form.NFKC)
         .replaceAll("\\s+", "")
         .toUpperCase(Locale.ROOT);
-  }
-
-  private String cosuDigits(String value) {
-    String normalized = compact(value);
-    return normalized.matches("COSU[0-9]{6,20}") ? normalized.substring(4) : null;
   }
 
   private String iso(Instant value) {

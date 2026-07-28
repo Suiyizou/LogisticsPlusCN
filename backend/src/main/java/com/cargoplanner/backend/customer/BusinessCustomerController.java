@@ -93,6 +93,17 @@ public class BusinessCustomerController {
     return service.updateOverseaAgent(userId, request, actor, ClientInfo.ip(httpRequest));
   }
 
+  @PostMapping("/oversea-agents/{userId}/reset-password")
+  public Map<String, Object> resetOverseaAgentPassword(
+      @PathVariable long userId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.resetOverseaAgentPassword(
+        userId, actor, ClientInfo.ip(httpRequest)
+    );
+  }
+
   @DeleteMapping("/oversea-agents/{userId}")
   public Map<String, Object> deleteOverseaAgent(
       @PathVariable long userId,

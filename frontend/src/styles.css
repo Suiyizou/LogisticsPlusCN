@@ -8576,6 +8576,94 @@ select,
   line-height: 1.5;
 }
 
+/* Shared operations design system for the administrator and business consoles. */
+:where(.admin-console-shell, .customer-access-page) {
+  --ops-primary: #176eaa;
+  --ops-surface: #fff;
+  --ops-surface-muted: #f4f8fb;
+  --ops-border: #d7e3ed;
+  --ops-text: #152c43;
+  --ops-muted: #657d94;
+  --ops-shadow: 0 10px 28px rgba(25, 65, 100, 0.07);
+  color: var(--ops-text);
+  background: #edf3f7;
+}
+
+:where(.admin-console-shell, .customer-access-page) :is(.admin-panel, .list-page-full, .main-card) {
+  border-color: var(--ops-border);
+  border-radius: 12px;
+  background: var(--ops-surface);
+  box-shadow: var(--ops-shadow);
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-button {
+  min-height: 36px;
+  border-radius: 8px;
+  font-weight: 700;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-button:hover:not(:disabled) {
+  box-shadow: 0 6px 16px rgba(19, 89, 140, 0.12);
+}
+
+:where(.admin-console-shell, .customer-access-page) button:not(.el-button):active:not(:disabled) {
+  transform: none;
+}
+
+:where(.admin-console-shell, .customer-access-page)
+  :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+  min-height: 40px;
+  border-radius: 8px;
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-form-item__label {
+  color: #38536d;
+  font-weight: 700;
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-table th.el-table__cell {
+  height: 44px;
+  color: #365069;
+  background: var(--ops-surface-muted);
+  font-weight: 800;
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-pagination {
+  gap: 4px;
+  color: var(--ops-muted);
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-pagination button,
+:where(.admin-console-shell, .customer-access-page) .el-pager li {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+:where(.admin-console-shell, .customer-access-page) .el-pager li.is-active {
+  background: var(--ops-primary);
+  box-shadow: 0 5px 12px rgba(23, 110, 170, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.admin-console-shell, .customer-access-page),
+  :where(.admin-console-shell, .customer-access-page) *,
+  :where(.admin-console-shell, .customer-access-page) *::before,
+  :where(.admin-console-shell, .customer-access-page) *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
 .admin-health-pill {
   padding: 6px 10px;
   border-radius: 999px;
@@ -9065,7 +9153,6 @@ select,
 .admin-inline-link:hover,
 .admin-row-action:hover {
   box-shadow: 0 8px 18px rgba(28, 106, 176, 0.12);
-  transform: translateY(-1px);
 }
 
 .admin-pagination,
@@ -9098,7 +9185,7 @@ select,
 }
 
 .admin-page-pane {
-  animation: admin-page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: admin-page-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes admin-page-enter {

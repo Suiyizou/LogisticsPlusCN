@@ -264,7 +264,7 @@ public class ShipmentAutoRefreshService {
       RefreshReference reference = findRefreshReference(candidate.shipmentId());
       RefreshClaim claim = new RefreshClaim(candidate, token, reference);
       if (reference == null) {
-        recordFailure(claim, "No durable booking or bill-of-lading reference is available");
+        recordFailure(claim, "No booking reference is available");
       } else {
         claims.add(claim);
       }
@@ -278,9 +278,8 @@ public class ShipmentAutoRefreshService {
         SELECT s.carrier_code, r.reference_type, r.reference_no_normalized
         FROM cp_shipments s
         JOIN cp_shipment_references r ON r.shipment_id = s.id
-        WHERE s.id = ? AND r.reference_type IN ('BILLOFLADING', 'BOOKING')
-        ORDER BY CASE WHEN r.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                 r.primary_reference DESC,
+        WHERE s.id = ? AND r.reference_type = 'BOOKING'
+        ORDER BY r.primary_reference DESC,
                  r.id
         LIMIT 1
         """,

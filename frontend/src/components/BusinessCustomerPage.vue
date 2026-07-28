@@ -1,7 +1,7 @@
 <template>
   <main class="customer-access-page" data-i18n-ignore>
     <header class="customer-access-header">
-      <RouterLink class="customer-access-brand" to="/workbenches">
+      <RouterLink class="customer-access-brand" :to="roleHomePath">
         <img src="/favicon.svg" alt="" />
         <span>
           <strong>DrewesLogistics</strong>
@@ -22,7 +22,7 @@
             <i aria-hidden="true">&#x2304;</i>
           </button>
           <div v-if="accountMenuOpen" class="customer-account-menu">
-            <RouterLink to="/workbenches" @click="accountMenuOpen = false">{{ t("customers.backWorkbench") }}</RouterLink>
+            <RouterLink v-if="isManager" to="/workbenches" @click="accountMenuOpen = false">{{ t("customers.backWorkbench") }}</RouterLink>
             <button type="button" @click="emit('logout')">{{ t("customers.logout") }}</button>
           </div>
         </div>
@@ -58,20 +58,20 @@
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
         <nav class="sidebar-nav">
-          <button :class="{ active: menuItem === 'overview' }" @click="navigateTo('overview')">
+          <button v-if="isManager" :class="{ active: menuItem === 'overview' }" @click="navigateTo('overview')">
             <el-icon><DataBoard /></el-icon><span>{{ t("customers.overview") }}</span>
           </button>
           <button :class="{ active: menuItem === 'customers' }" @click="navigateTo('customers')">
             <el-icon><User /></el-icon><span>{{ t("customers.tabCustomerManagement") }}</span>
           </button>
+          <button v-if="isManager || isOverseaAgent" :class="{ active: menuItem === 'handover' }" @click="navigateTo('handover')">
+            <el-icon><Operation /></el-icon><span>{{ isOverseaAgent ? t("customers.businessTransfer") : t("customers.businessHandover") }}</span>
+          </button>
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
-            <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
+            <el-icon><Document /></el-icon><span>{{ isOverseaAgent ? t("customers.shipmentOverview") : t("customers.tabShipmentManagement") }}</span>
           </button>
           <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
             <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
-          </button>
-          <button v-if="isManager" :class="{ active: menuItem === 'handover' }" @click="navigateTo('handover')">
-            <el-icon><Operation /></el-icon><span>{{ t("customers.businessHandover") }}</span>
           </button>
         </nav>
         <button type="button" class="sidebar-profile-card" @click="openPersonalProfile">
@@ -234,6 +234,7 @@
                 v-loading="loadingCustomers"
                 style="width:100%"
                 class="customer-directory-table"
+                :class="{ 'is-page-switching': tablePageTransitioning }"
                 @selection-change="handleCustomerSelectionChange"
               >
                 <el-table-column v-if="isManager" type="selection" width="44" />
@@ -293,13 +294,11 @@
                 v-if="filteredCustomers.length"
                 class="shipment-pagination unified-pagination"
                 background
-                layout="prev, pager, next, sizes, total"
+                layout="prev, pager, next, total"
                 :current-page="customerPage"
                 :page-size="customerPageSize"
-                :page-sizes="[10, 20, 50]"
                 :total="filteredCustomers.length"
-                @current-change="customerPage = $event"
-                @size-change="changeCustomerPageSize"
+                @current-change="changeCustomerPage"
               />
             </div>
           </template>
@@ -452,7 +451,6 @@
                         <el-form-item :label="t('customers.referenceType')">
                           <el-select v-model="bindForm.referenceType" class="business-select" popper-class="business-select-popper">
                             <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                            <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
                           </el-select>
                         </el-form-item>
                       </el-col>
@@ -559,13 +557,11 @@
                   v-if="shipmentTotal > shipmentPageSize"
                   class="shipment-pagination"
                   background
-                  layout="prev, pager, next, sizes, total"
+                  layout="prev, pager, next, total"
                   :current-page="shipmentPage"
                   :page-size="shipmentPageSize"
-                  :page-sizes="[10, 20, 50, 100]"
                   :total="shipmentTotal"
                   @current-change="changeShipmentPage"
-                  @size-change="changeShipmentPageSize"
                 />
               </el-card>
             </el-card>
@@ -593,6 +589,7 @@
               stripe
               v-loading="loadingTransferAgents"
               class="standard-information-table"
+              :class="{ 'is-page-switching': tablePageTransitioning }"
             >
               <el-table-column type="index" :index="agentRowIndex" :label="t('customers.index')" width="70" />
               <el-table-column prop="username" :label="t('customers.username')" min-width="160" />
@@ -617,13 +614,11 @@
               v-if="transferAgents.length"
               class="shipment-pagination unified-pagination"
               background
-              layout="prev, pager, next, sizes, total"
+              layout="prev, pager, next, total"
               :current-page="agentPage"
               :page-size="agentPageSize"
-              :page-sizes="[10, 20, 50]"
               :total="transferAgents.length"
-              @current-change="agentPage = $event"
-              @size-change="changeAgentPageSize"
+              @current-change="changeAgentPage"
             />
           </div>
         </div>
@@ -633,13 +628,16 @@
             <div class="list-page-header">
               <div>
                 <span class="business-overview-kicker">{{ t("customers.businessHandoverKicker") }}</span>
-                <h2>{{ t("customers.businessHandover") }}</h2>
+                <h2>{{ isOverseaAgent ? t("customers.businessTransfer") : t("customers.businessHandover") }}</h2>
                 <p>{{ t("customers.businessHandoverHint") }}</p>
               </div>
               <el-button :loading="loadingBusinessHandoverAgents" @click="loadBusinessHandoverAgents">
                 <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
               </el-button>
             </div>
+            <p v-if="isOverseaAgent" class="business-handover-readonly">
+              {{ t("customers.businessHandoverReadonlyHint") }}
+            </p>
             <el-table
               :data="businessHandoverAgents"
               stripe
@@ -667,7 +665,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('customers.actions')" width="180" fixed="right">
+              <el-table-column v-if="isManager" :label="t('customers.actions')" width="180" fixed="right">
                 <template #default="{ row }">
                   <el-button
                     type="primary"
@@ -692,7 +690,7 @@
             <div class="list-page list-page-full shipment-workspace">
               <div class="shipment-workspace-main">
                 <div class="list-page-header">
-                  <h2>{{ t("customers.availableShipments") }}</h2>
+                  <h2>{{ isOverseaAgent ? t("customers.shipmentOverview") : t("customers.availableShipments") }}</h2>
                   <div class="list-page-actions">
                     <label v-if="isManager" class="shipment-toolbar-control">
                       <span>{{ t("customers.customerFilterLabel") }}</span>
@@ -710,9 +708,19 @@
                           :label="`${customerFilterOptionLabel(customer)} (${customer.shipmentCount})`"
                           :value="customer.id"
                         />
-                        <template #label="{ value }">
-                          <span class="shipment-customer-filter-label">{{ shipmentCustomerSelectedLabel(value) }}</span>
-                        </template>
+                      </el-select>
+                    </label>
+                    <label class="shipment-toolbar-control">
+                      <span>{{ t("customers.businessFilterLabel") }}</span>
+                      <el-select
+                        v-model="shipmentBusinessFilter"
+                        class="business-select shipment-business-filter"
+                        popper-class="business-select-popper shipment-filter-popper"
+                      >
+                        <el-option value="" :label="t('customers.businessFilterAll')" />
+                        <el-option value="TODAY_CREATED" :label="t('customers.todayNewBusiness')" />
+                        <el-option value="TODAY_UPDATED" :label="t('customers.todayUpdatedBusiness')" />
+                        <el-option value="PENDING" :label="t('customers.pendingBusinessUpdate')" />
                       </el-select>
                     </label>
                     <label class="shipment-toolbar-control">
@@ -771,10 +779,11 @@
                   v-loading="loadingAvailableShipments"
                   style="width:100%"
                   class="shipment-list-table"
+                  :class="{ 'is-page-switching': tablePageTransitioning }"
                   @selection-change="handleShipmentSelectionChange"
                 >
                   <el-table-column v-if="isManager" type="selection" width="42" />
-                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="68" align="center" />
+                  <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="52" align="center" header-align="center" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="165">
                     <template #default="{ row }">
                       <div>
@@ -783,13 +792,13 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.carrier')" width="86">
+                  <el-table-column :label="t('customers.carrier')" width="72" align="center">
                     <template #default="{ row }">{{ row.carrier || '—' }}</template>
                   </el-table-column>
                   <el-table-column :label="t('customers.clientNoName')" min-width="135" show-overflow-tooltip>
                     <template #default="{ row }">{{ shipmentClientLabel(row) }}</template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.boundUsers')" min-width="160">
+                  <el-table-column :label="t('customers.boundUsers')" min-width="230">
                     <template #default="{ row }">
                       <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
                         <el-tag
@@ -825,7 +834,7 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.remark')" width="168">
+                  <el-table-column :label="t('customers.remark')" width="220">
                     <template #default="{ row }">
                       <div class="shipment-remark-cell">
                         <div class="shipment-today-tags">
@@ -834,6 +843,12 @@
                           </el-tag>
                           <el-tag v-if="isUpdatedToday(row)" class="shipment-today-tag is-updated" type="success" effect="dark">
                             {{ t("customers.todayUpdatedBusiness") }}
+                          </el-tag>
+                          <el-tag v-if="isPendingBusinessUpdate(row)" class="shipment-today-tag is-pending" type="warning" effect="plain">
+                            {{ t("customers.pendingBusinessUpdate") }}
+                          </el-tag>
+                          <el-tag v-if="hasRefreshIssue(row)" class="shipment-today-tag is-failed" type="danger" effect="plain">
+                            {{ t("customers.businessUpdateFailed") }}
                           </el-tag>
                         </div>
                       </div>
@@ -859,13 +874,11 @@
                   v-if="shipmentTotal > shipmentPageSize"
                   class="shipment-pagination unified-pagination"
                   background
-                  layout="prev, pager, next, sizes, total"
+                  layout="prev, pager, next, total"
                   :current-page="shipmentPage"
                   :page-size="shipmentPageSize"
-                  :page-sizes="[10, 20, 50, 100]"
                   :total="shipmentTotal"
                   @current-change="changeShipmentPage"
-                  @size-change="changeShipmentPageSize"
                 />
                 <el-dialog
                   v-model="batchBusinessFieldsDialogOpen"
@@ -926,6 +939,13 @@
                             <span class="business-select-value">{{ selectedCustomerOptionLabel(value) }}</span>
                           </template>
                         </el-select>
+                        </label>
+                        <label>
+                          <span>{{ t("customers.carrier") }} <i class="required-star">*</i></span>
+                          <el-select v-model="batchTrackCarrier" class="business-select" popper-class="business-select-popper">
+                            <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
+                            <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                          </el-select>
                         </label>
                         <el-checkbox v-model="batchTrackPublishToCustomer">{{ t("customers.publishAfterCreate") }}</el-checkbox>
                       </div>
@@ -1129,7 +1149,6 @@
                     <el-form-item :label="t('customers.referenceType')">
                       <el-select v-model="detailForm.referenceType" class="business-select" popper-class="business-select-popper">
                         <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                        <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
                       </el-select>
                     </el-form-item>
                     <el-form-item :label="t('customers.referenceNo')">
@@ -1684,20 +1703,33 @@
         <h2>{{ t("customers.resetPassword") }}</h2>
         <p>{{ t("customers.resetPasswordDescription", { name: selectedCustomer?.displayName || selectedCustomer?.username || '' }) }}</p>
         <form class="customer-dialog-form" @submit.prevent="resetPassword">
-          <label>
-            <span>{{ t("customers.newPassword") }}</span>
-            <input v-model="passwordResetForm.password" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" :placeholder="t('customers.customerPasswordPlaceholder')" required />
-            <small class="customer-field-rule">{{ t("customers.passwordRule") }}</small>
-          </label>
-          <label>
-            <span>{{ t("customers.confirmPassword") }}</span>
-            <input v-model="passwordResetForm.confirmPassword" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" required />
-          </label>
+          <div class="password-rule-preview">
+            <span>{{ t("customers.defaultPasswordRule") }}</span>
+            <code>{{ selectedCustomer?.username }}!@#2026</code>
+          </div>
           <div class="customer-dialog-actions">
             <button type="button" @click="closeResetPasswordDialog">{{ t("customers.cancel") }}</button>
             <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">{{ t("customers.confirmResetPassword") }}</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div v-if="passwordResetResult.open" class="customer-code-overlay" role="presentation" @click.self="closePasswordResetResult">
+      <section class="customer-code-dialog password-result-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.passwordResetResultTitle')">
+        <span class="customer-code-kicker">{{ t("customers.dialogKickerSecureReset") }}</span>
+        <h2>{{ t("customers.passwordResetResultTitle") }}</h2>
+        <p>{{ t("customers.passwordResetResultHint") }}</p>
+        <dl class="password-result-grid">
+          <div><dt>{{ t("customers.username") }}</dt><dd>{{ passwordResetResult.username }}</dd></div>
+          <div><dt>{{ t("customers.newPassword") }}</dt><dd><code>{{ passwordResetResult.password }}</code></dd></div>
+        </dl>
+        <div class="customer-dialog-actions">
+          <button type="button" @click="copyPasswordResetResult">
+            {{ passwordResetResult.copied ? t("customers.copied") : t("customers.copyCredentials") }}
+          </button>
+          <button class="customer-access-primary" type="button" @click="closePasswordResetResult">{{ t("customers.close") }}</button>
+        </div>
       </section>
     </div>
 
@@ -1754,7 +1786,6 @@
                 <span>{{ t("customers.referenceType") }} <i class="required-star">*</i></span>
                 <el-select v-model="shipmentCreateForm.referenceType" class="business-select" popper-class="business-select-popper">
                   <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                  <el-option value="BILLOFLADING" :label="t('customers.referenceBill')" />
                 </el-select>
               </label>
               <label>
@@ -2419,6 +2450,7 @@ import {
   handoverBusinessCustomers,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
+  resetOverseaAgentPassword,
   setBusinessShipmentPublication,
   transferBusinessCustomers,
   unbindBusinessCustomerShipment,
@@ -2479,6 +2511,8 @@ const props = defineProps({
 const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 const { t } = useI18n();
 const isManager = computed(() => ["BUSINESS", "ADMIN"].includes(props.currentUser?.role));
+const isOverseaAgent = computed(() => props.currentUser?.role === "OVERSEA_AGENT");
+const roleHomePath = computed(() => isOverseaAgent.value ? "/customers" : "/workbenches");
 let xlsxModulePromise;
 
 function loadXlsxModule() {
@@ -2502,6 +2536,11 @@ const shipments = ref([]);
 const availableShipments = ref([]);
 const loadingCustomers = ref(false);
 const loadingAvailableShipments = ref(false);
+const customersLoaded = ref(false);
+const shipmentsLoaded = ref(false);
+const transferAgentsLoaded = ref(false);
+const handoverAgentsLoaded = ref(false);
+const tablePageTransitioning = ref(false);
 const accountMenuOpen = ref(false);
 const personalProfileOpen = ref(false);
 const personalProfileSaving = ref(false);
@@ -2567,6 +2606,12 @@ const transferringCustomers = ref(false);
 const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
+const passwordResetResult = reactive({
+  open: false,
+  username: "",
+  password: "",
+  copied: false
+});
 const shipmentCreateDialogOpen = ref(false);
 const shipmentExcelImportDialogOpen = ref(false);
 const shipmentExcelImportFileInput = ref(null);
@@ -2612,7 +2657,6 @@ const batchTrackDropzoneActive = ref(false);
 const batchTrackFileParsing = ref(false);
 const batchTrackText = ref("");
 const batchTrackCarrier = ref("COSCO");
-const batchTrackType = ref("BILLOFLADING");
 const batchTrackRunning = ref(false);
 const batchTrackResults = ref([]);
 const batchTrackProgress = ref({ total: 0, done: 0, succeeded: 0, partial: 0, manual: 0, failed: 0, pending: 0, status: "" });
@@ -2647,6 +2691,7 @@ const batchBusinessFieldsDialogOpen = ref(false);
 const batchBusinessFieldRows = ref([]);
 const batchSavingBusinessFields = ref(false);
 const shipmentCustomerFilter = ref("");
+const shipmentBusinessFilter = ref("");
 const refreshIssuesOnly = ref(false);
 const shipmentPage = ref(1);
 const shipmentPageSize = ref(20);
@@ -2670,7 +2715,6 @@ const createForm = reactive({
 const agentCreateForm = reactive({ username: "", displayName: "", password: "" });
 const isEditMode = ref(false);
 const editingCustomerId = ref("");
-const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const editForm = reactive({ username: "", displayName: "", clientCode: "", partyRole: "SHIPPER" });
 const transferForm = reactive({ targetAgentId: null });
 const bindForm = reactive({ shipmentId: "", carrier: "COSCO", referenceType: "BOOKING", referenceNo: "" });
@@ -2699,7 +2743,7 @@ let shipmentRequestSequence = 0;
 let shipmentListRequestSequence = 0;
 let toastTimer = 0;
 
-const menuItem = ref(isManager.value ? "overview" : "shipments");
+const menuItem = ref(isManager.value ? "overview" : "customers");
 const subView = ref("list");
 const customerSearch = ref("");
 const selectedShipmentId = ref("");
@@ -2712,7 +2756,11 @@ const batchTrackSelectedSheet = computed(() =>
   batchTrackSheets.value.find((sheet) => sheet.name === batchTrackSelectedSheetName.value) || null
 );
 const batchTrackItems = computed(() =>
-  buildShipmentBatchItems(batchTrackSelectedSheet.value, batchTrackSelectedColumnIndex.value)
+  buildShipmentBatchItems(
+    batchTrackSelectedSheet.value,
+    batchTrackSelectedColumnIndex.value,
+    batchTrackCarrier.value
+  )
 );
 const batchTrackProblemResults = computed(() =>
   batchTrackResults.value.filter((item) => ["failed", "partial"].includes(item.status))
@@ -2835,6 +2883,17 @@ const overviewKpis = computed(() => {
   ];
 });
 const overviewDailyTrend = computed(() => {
+  if (Array.isArray(overviewTodayStats.value?.dailyTrend)) {
+    return overviewTodayStats.value.dailyTrend.map((day) => ({
+      key: String(day.date || ""),
+      label: new Intl.DateTimeFormat(currentLocale.value || "zh-CN", {
+        month: "numeric",
+        day: "numeric"
+      }).format(new Date(`${day.date}T00:00:00`)),
+      created: Number(day.created || 0),
+      updated: Number(day.updated || 0)
+    }));
+  }
   const days = [];
   for (let offset = 6; offset >= 0; offset -= 1) {
     const date = new Date();
@@ -2867,15 +2926,35 @@ const overviewTodayHasData = computed(() =>
   overviewTodayComposition.value.some((item) => item.value > 0)
 );
 const overviewResourceSeries = computed(() => [
-  { name: t("customers.directoryTitle"), value: customers.value.length },
-  { name: t("customers.tabShipmentManagement"), value: overviewShipmentTotal.value },
-  { name: t("customers.overseaAgentManagement"), value: activeAgentCount.value },
-  { name: t("customers.activeCustomers"), value: activeCustomerCount.value }
+  {
+    name: t("customers.directoryTitle"),
+    value: Number(overviewTodayStats.value?.customerTotal ?? customers.value.length)
+  },
+  {
+    name: t("customers.tabShipmentManagement"),
+    value: Number(overviewTodayStats.value?.shipmentTotal ?? overviewShipmentTotal.value)
+  },
+  {
+    name: t("customers.overseaAgentManagement"),
+    value: Number(overviewTodayStats.value?.activeAgentCount ?? activeAgentCount.value)
+  },
+  {
+    name: t("customers.activeCustomers"),
+    value: Number(overviewTodayStats.value?.activeCustomerCount ?? activeCustomerCount.value)
+  }
 ]);
 const overviewResourcesHaveData = computed(() =>
   overviewResourceSeries.value.some((item) => item.value > 0)
 );
 const overviewShipmentStatusDistribution = computed(() => {
+  if (Array.isArray(overviewTodayStats.value?.shipmentStatusDistribution)) {
+    return overviewTodayStats.value.shipmentStatusDistribution.map((item) => ({
+      name: String(item.name || item.status || "").trim() === "UNKNOWN"
+        ? t("customers.overviewUnknownStatus")
+        : String(item.name || item.status || ""),
+      value: Number(item.value ?? item.count ?? 0)
+    }));
+  }
   const counts = new Map();
   overviewShipments.value.forEach((shipment) => {
     const status = String(shipment?.trackingStatus || "").trim()
@@ -3004,6 +3083,13 @@ function hasRefreshIssue(shipment) {
   return ["FAILED", "PARTIAL"].includes(String(shipment?.lastRefreshResult || "").toUpperCase());
 }
 
+function isPendingBusinessUpdate(shipment) {
+  if (hasRefreshIssue(shipment)) return false;
+  const status = String(shipment?.trackingStatus || "").trim().toUpperCase();
+  return !shipment?.lastTrackedAt
+    || status.includes("PENDING");
+}
+
 function refreshOutcomeTooltip(shipment) {
   const parts = [
     shipment?.lastRefreshErrorCode,
@@ -3076,96 +3162,6 @@ function batchTrackElapsedText(result) {
   return hours > 0
     ? `${padded(hours)}:${padded(minutes)}:${padded(seconds)}`
     : `${padded(minutes)}:${padded(seconds)}`;
-}
-
-const CARRIER_PREFIX_MAP = {
-  COSU: "COSCO",
-  CCLU: "COSCO",
-  CMAU: "CMA",
-  CMDU: "CMA",
-  MAEU: "MAERSK",
-  MSCU: "MSC",
-  HLCU: "HAPAG",
-  HMM: "HMM",
-  ONEY: "ONE",
-  OOLU: "OOCL",
-  YMLU: "YANGMING",
-  WHLU: "WANHAI",
-  ZIMU: "ZIM",
-  EVER: "EVERGREEN",
-  EGLV: "EVERGREEN"
-};
-
-const BILL_OF_LADING_PREFIXES = [
-  "COSU", "CCLU", "CSCU", "COAU", "OOLU", "EGLV", "WHLC",
-  "CMAU", "CMDU", "CMAC", "ANLU", "MAEU", "MSCU", "MEDU",
-  "HLCU", "HMMN", "ONEY", "YMLU", "WHLU", "ZIMU", "PILU",
-  "SMLU", "TSLU", "RCLU", "SAFM", "KMTU", "NCLU"
-];
-
-const BOOKING_PREFIXES = [
-  "SHA", "NGB", "SZC", "YNT", "QDG", "DLC", "XMN", "TSN",
-  "HKG", "NNG", "CSX", "WUH", "CGO", "CTU", "CKG"
-];
-
-function extractReferenceToken(value) {
-  const raw = String(value || "").replace(/[,;\|\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!raw) return "";
-  const text = raw.toUpperCase();
-
-  /* step 1: match carrier BL prefixes like COSU followed by 7-12 alphanumeric chars */
-  const billPrefix = BILL_OF_LADING_PREFIXES.find((prefix) => text.includes(prefix));
-  if (billPrefix) {
-    const match = text.match(new RegExp(`\\b${billPrefix}[A-Z0-9]{7,12}\\b`));
-    if (match) return match[0];
-  }
-
-  /* step 2: generic 4-letter prefix + 7-10 digits, prefer the longer match */
-  const genericMatches = [...text.matchAll(/\b([A-Z]{4}\d{7,10})\b/g)].map((m) => m[1]);
-  if (genericMatches.length) {
-    return genericMatches.reduce((a, b) => (a.length >= b.length ? a : b));
-  }
-
-  /* step 3: booking number = port code + 9+ digits */
-  const bookingMatch = text.match(/\b([A-Z]{3}\d{9,})\b/);
-  if (bookingMatch && BOOKING_PREFIXES.some((p) => text.startsWith(p))) {
-    return bookingMatch[1];
-  }
-
-  /* step 4: fallback to any 8+ alphanumeric token containing both letters and digits */
-  const fallback = text.match(/\b([A-Z0-9]{8,})\b/);
-  if (fallback && /[A-Z]/.test(fallback[1]) && /\d/.test(fallback[1])) {
-    return fallback[1];
-  }
-
-  return "";
-}
-
-function findReferenceInRow(row) {
-  for (const cell of row) {
-    const token = extractReferenceToken(cell);
-    if (token && token.length >= 8 && /[A-Z]/.test(token) && /\d/.test(token)) {
-      return token;
-    }
-  }
-  return "";
-}
-
-function detectCarrierFromNumber(number) {
-  const upper = String(number || "").toUpperCase();
-  const prefix = Object.keys(CARRIER_PREFIX_MAP).find((p) => upper.startsWith(p));
-  return prefix ? CARRIER_PREFIX_MAP[prefix] : "";
-}
-
-function resolveBatchTrackRequest(number, defaultCarrier, defaultType) {
-  const upper = String(number || "").toUpperCase();
-  const detected = detectCarrierFromNumber(upper);
-  const carrier = detected || defaultCarrier;
-  let type = defaultType || "BILLOFLADING";
-  if (upper.startsWith("COSU") || upper.startsWith("CCLU")) type = "BILLOFLADING";
-  else if (upper.startsWith("CMAU") || upper.startsWith("CMDU")) type = "BILLOFLADING";
-  else if (/^[A-Z]{4}\d{7}$/.test(upper)) type = "CONTAINER";
-  return { carrier, type, number: upper };
 }
 
 function isCustomerBoundToSelectedShipment(customerId) {
@@ -3290,7 +3286,7 @@ watch(shipmentFilterCustomers, (items) => {
   }
 });
 
-watch([shipmentCustomerFilter, refreshIssuesOnly], () => {
+watch([shipmentCustomerFilter, shipmentBusinessFilter, refreshIssuesOnly], () => {
   shipmentPage.value = 1;
   void loadAvailableShipments();
 });
@@ -3363,21 +3359,19 @@ onMounted(() => {
   const requestedSection = query.get("section") || "";
   const allowedSections = isManager.value
     ? ["overview", "customers", "shipments", "agents", "handover"]
-    : ["customers", "shipments"];
+    : ["customers", "handover", "shipments"];
   if (allowedSections.includes(requestedSection)) {
     menuItem.value = requestedSection;
     subView.value = "list";
   }
   const requestedShipment = query.get("shipment") || "";
-  if (requestedShipment && isManager.value) {
+  if (requestedShipment) {
     menuItem.value = "shipments";
     subView.value = "detail";
     selectedShipmentId.value = requestedShipment;
   }
   const requestedCustomer = query.get("customer") || "";
-  void loadCustomers(requestedCustomer);
-  void loadAvailableShipments();
-  if (menuItem.value === "overview") void loadOverviewMetrics();
+  void loadMenuData(menuItem.value, requestedCustomer);
   void restoreBatchTrackTask();
 });
 onUnmounted(() => {
@@ -3401,9 +3395,41 @@ function navigateTo(item) {
   }
   menuItem.value = item;
   subView.value = "list";
-  if (item === "agents") void loadTransferAgents();
-  if (item === "handover") void loadBusinessHandoverAgents();
-  if (item === "overview") void loadOverviewMetrics();
+  void loadMenuData(item);
+}
+
+async function loadMenuData(item, preferredCustomerId = "") {
+  if (item === "overview") {
+    await loadOverviewMetrics();
+    return;
+  }
+  if (item === "customers") {
+    if (!customersLoaded.value || preferredCustomerId) {
+      await loadCustomers(preferredCustomerId, { selectFirst: Boolean(preferredCustomerId) });
+    }
+    return;
+  }
+  if (item === "shipments") {
+    const jobs = [];
+    if (!customersLoaded.value && isManager.value) {
+      jobs.push(loadCustomers("", { selectFirst: false }));
+    }
+    if (!shipmentsLoaded.value) jobs.push(loadAvailableShipments());
+    await Promise.all(jobs);
+    return;
+  }
+  if (item === "agents" && !transferAgentsLoaded.value) {
+    await loadTransferAgents();
+    return;
+  }
+  if (item === "handover") {
+    const jobs = [];
+    if (!handoverAgentsLoaded.value) jobs.push(loadBusinessHandoverAgents());
+    if (isManager.value && !customersLoaded.value) {
+      jobs.push(loadCustomers("", { selectFirst: false }));
+    }
+    await Promise.all(jobs);
+  }
 }
 
 function handleWorkspaceViewEntered() {
@@ -3428,14 +3454,24 @@ function agentRowIndex(index) {
   return (agentPage.value - 1) * agentPageSize.value + index + 1;
 }
 
-function changeCustomerPageSize(size) {
-  customerPageSize.value = Number(size);
-  customerPage.value = 1;
+function runTablePageTransition(callback) {
+  tablePageTransitioning.value = true;
+  callback();
+  window.setTimeout(() => {
+    tablePageTransitioning.value = false;
+  }, prefersReducedMotion.value ? 0 : 160);
 }
 
-function changeAgentPageSize(size) {
-  agentPageSize.value = Number(size);
-  agentPage.value = 1;
+function changeCustomerPage(page) {
+  runTablePageTransition(() => {
+    customerPage.value = Number(page);
+  });
+}
+
+function changeAgentPage(page) {
+  runTablePageTransition(() => {
+    agentPage.value = Number(page);
+  });
 }
 
 function selectedCustomerOptionLabel(value) {
@@ -3920,43 +3956,10 @@ async function loadOverviewMetrics() {
   loadingOverviewMetrics.value = true;
   overviewMetricsError.value = "";
   try {
-    const [firstPage, agentsResponse, todayStats] = await Promise.all([
-      fetchAvailableBusinessShipments({ page: 1, pageSize: 100 }),
-      isManager.value
-        ? fetchCustomerTransferAgents().catch((error) => {
-            markApiErrorHandled(error);
-            return { items: transferAgents.value };
-          })
-        : Promise.resolve({ items: [] }),
-      isManager.value
-        ? fetchBusinessDashboardTodayStats().catch((error) => {
-            markApiErrorHandled(error);
-            return null;
-          })
-        : Promise.resolve(null)
-    ]);
-    const firstItems = Array.isArray(firstPage?.items) ? firstPage.items : [];
-    const total = Number(firstPage?.total || firstItems.length);
-    const totalPages = Math.max(1, Math.ceil(total / 100));
-    const pageLimit = Math.min(totalPages, 20);
-    const additionalPages = [];
-    for (let page = 2; page <= pageLimit; page += 1) {
-      additionalPages.push(fetchAvailableBusinessShipments({ page, pageSize: 100 }));
-    }
-    const responses = additionalPages.length ? await Promise.all(additionalPages) : [];
-    overviewShipments.value = [
-      ...firstItems,
-      ...responses.flatMap((response) => Array.isArray(response?.items) ? response.items : [])
-    ].map(normalizeBusinessShipment);
-    overviewShipmentTotal.value = total;
-    transferAgents.value = Array.isArray(agentsResponse?.items) ? agentsResponse.items : [];
+    const todayStats = await fetchBusinessDashboardTodayStats();
     overviewTodayStats.value = todayStats;
-    if (totalPages > pageLimit) {
-      overviewMetricsError.value = t("customers.overviewPartialData", {
-        count: overviewShipments.value.length,
-        total
-      });
-    }
+    overviewShipmentTotal.value = Number(todayStats?.shipmentTotal || 0);
+    overviewShipments.value = [];
   } catch (error) {
     overviewShipments.value = [...availableShipments.value];
     overviewShipmentTotal.value = shipmentTotal.value || availableShipments.value.length;
@@ -3995,17 +3998,18 @@ function buildShipmentCustomerMap() {
   shipmentCustomerMap.value = map;
 }
 
-async function loadCustomers(preferredId = "") {
+async function loadCustomers(preferredId = "", { selectFirst = true } = {}) {
   loadingCustomers.value = true;
   clearMessage();
   try {
     const response = await fetchBusinessCustomers();
     customers.value = Array.isArray(response?.items) ? response.items : [];
+    customersLoaded.value = true;
     loadingCustomers.value = false;
     const nextId = preferredId || selectedCustomerId.value;
     if (nextId && customers.value.some((item) => item.id === nextId)) {
       await selectCustomer(nextId);
-    } else if (customers.value[0]) {
+    } else if (selectFirst && customers.value[0]) {
       await selectCustomer(customers.value[0].id);
     } else {
       selectedCustomerId.value = "";
@@ -4024,6 +4028,7 @@ async function loadBusinessHandoverAgents() {
   try {
     const response = await fetchBusinessHandoverAgents();
     businessHandoverAgents.value = Array.isArray(response?.items) ? response.items : [];
+    handoverAgentsLoaded.value = true;
   } catch (error) {
     businessHandoverAgents.value = [];
     showError(error, "customers.loadBusinessHandoverAgentsFailed");
@@ -4353,6 +4358,7 @@ async function loadTransferAgents() {
   try {
     const response = await fetchCustomerTransferAgents();
     transferAgents.value = Array.isArray(response?.items) ? response.items : [];
+    transferAgentsLoaded.value = true;
   } catch (error) {
     showError(error, "customers.loadTransferAgentsFailed");
   } finally {
@@ -4441,11 +4447,15 @@ async function editAgentDisplayName(agent) {
 }
 
 async function resetAgentPassword(agent) {
-  const password = window.prompt(t("customers.newPassword"));
-  if (password == null) return;
+  if (!window.confirm(t("customers.confirmDefaultPasswordReset", {
+    name: agent.displayName || agent.username
+  }))) return;
   try {
-    await updateOverseaAgent(agent.id, { password });
-    showSuccess("customers.passwordReset");
+    const response = await resetOverseaAgentPassword(agent.id);
+    openPasswordResetResult(
+      response?.username || agent.username,
+      response?.temporaryPassword || `${agent.username}!@#2026`
+    );
   } catch (error) {
     showError(error, "customers.resetPasswordFailed");
   }
@@ -4547,7 +4557,8 @@ async function loadAvailableShipments() {
       page: shipmentPage.value,
       pageSize: shipmentPageSize.value,
       customerId: shipmentCustomerFilter.value,
-      refreshIssuesOnly: refreshIssuesOnly.value
+      refreshIssuesOnly: refreshIssuesOnly.value,
+      businessFilter: shipmentBusinessFilter.value
     });
     if (requestSequence !== shipmentListRequestSequence) return;
     availableShipments.value = Array.isArray(response?.items)
@@ -4557,6 +4568,7 @@ async function loadAvailableShipments() {
     shipmentRefreshIssueTotal.value = Number(response?.refreshIssueTotal || 0);
     shipmentPage.value = Number(response?.page || shipmentPage.value);
     shipmentPageSize.value = Number(response?.pageSize || shipmentPageSize.value);
+    shipmentsLoaded.value = true;
     buildShipmentCustomerMap();
   } catch (error) {
     if (requestSequence === shipmentListRequestSequence) {
@@ -4570,15 +4582,10 @@ async function loadAvailableShipments() {
 }
 
 function changeShipmentPage(page) {
-  shipmentPage.value = page;
-  selectedShipmentRows.value = [];
-  void loadAvailableShipments();
-}
-
-function changeShipmentPageSize(pageSize) {
-  shipmentPageSize.value = pageSize;
-  shipmentPage.value = 1;
-  selectedShipmentRows.value = [];
+  runTablePageTransition(() => {
+    shipmentPage.value = page;
+    selectedShipmentRows.value = [];
+  });
   void loadAvailableShipments();
 }
 
@@ -5220,34 +5227,49 @@ async function saveCustomer() {
 
 function closeResetPasswordDialog() {
   resetPasswordDialogOpen.value = false;
-  passwordResetForm.password = "";
-  passwordResetForm.confirmPassword = "";
 }
 
 function openResetPassword(row) {
   selectedCustomerId.value = row.id;
-  passwordResetForm.password = "";
-  passwordResetForm.confirmPassword = "";
   resetPasswordDialogOpen.value = true;
 }
 
 async function resetPassword() {
   if (!selectedCustomer.value || mutatingCustomer.value) return;
-  if (passwordResetForm.password !== passwordResetForm.confirmPassword) {
-    pageMessage.value = t("customers.passwordMismatch");
-    messageIsError.value = true;
-    return;
-  }
+  const username = selectedCustomer.value.username;
+  const temporaryPassword = `${username}!@#2026`;
   mutatingCustomer.value = true;
   clearMessage();
   try {
-    await resetBusinessCustomerPassword(selectedCustomer.value.id, passwordResetForm.password);
+    await resetBusinessCustomerPassword(selectedCustomer.value.id, temporaryPassword);
     closeResetPasswordDialog();
-    showSuccess("customers.passwordResetSuccess");
+    openPasswordResetResult(username, temporaryPassword);
   } catch (error) {
     showError(error, "customers.passwordResetFailed");
   } finally {
     mutatingCustomer.value = false;
+  }
+}
+
+function openPasswordResetResult(username, password) {
+  passwordResetResult.username = String(username || "");
+  passwordResetResult.password = String(password || "");
+  passwordResetResult.copied = false;
+  passwordResetResult.open = true;
+}
+
+function closePasswordResetResult() {
+  passwordResetResult.open = false;
+  passwordResetResult.copied = false;
+}
+
+async function copyPasswordResetResult() {
+  const text = `${t("customers.username")}: ${passwordResetResult.username}\n${t("customers.newPassword")}: ${passwordResetResult.password}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    passwordResetResult.copied = true;
+  } catch {
+    passwordResetResult.copied = false;
   }
 }
 
@@ -6236,10 +6258,7 @@ function preferredTrackingReference(row) {
   ) {
     return { type: "BOOKING", number: numericCoscoReference };
   }
-  return {
-    type: originalType,
-    number: originalNumber
-  };
+  return { type: "BOOKING", number: originalType === "BOOKING" ? originalNumber : "" };
 }
 
 function trackShipmentInWorkspace(shipment) {
@@ -7135,10 +7154,10 @@ function showError(error, fallbackKey) {
   box-shadow: 0 8px 14px rgba(15, 29, 46, 0.06);
 }
 .shipment-customer-filter {
-  flex: 0 0 250px;
-  width: 250px;
-  min-width: 250px;
-  max-width: 280px;
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 240px;
 }
 .shipment-customer-filter-label {
   display: block;
@@ -7166,20 +7185,25 @@ function showError(error, fallbackKey) {
   width: 210px;
   min-width: 210px;
 }
+.shipment-business-filter {
+  flex: 0 0 168px;
+  width: 168px;
+  min-width: 168px;
+}
 .shipment-toolbar-control :deep(.el-select__selected-item),
 .shipment-toolbar-control :deep(.el-select__placeholder) {
   font-size: 14px;
   font-weight: 700;
 }
 .shipment-toolbar-control :deep(.el-select__wrapper) {
-  min-height: 46px;
-  padding: 0 14px;
-  border-radius: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c8d6e5 inset, 0 4px 12px rgba(29, 65, 96, .05);
+  box-shadow: 0 0 0 1px #c8d6e5 inset;
 }
 .shipment-toolbar-control :deep(.el-select__wrapper:hover) {
-  box-shadow: 0 0 0 1px #6fa7d5 inset, 0 7px 16px rgba(29, 91, 145, .09);
+  box-shadow: 0 0 0 1px #6fa7d5 inset;
 }
 .shipment-workspace-side {
   width: 380px;
@@ -7260,8 +7284,17 @@ function showError(error, fallbackKey) {
 }
 .shipment-bound-user-tags {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 4px;
+}
+.shipment-bound-user-tags :deep(.el-tag) {
+  min-width: 0;
+  max-width: 98px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shipment-status-stack {
@@ -7402,26 +7435,32 @@ function showError(error, fallbackKey) {
 }
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1);
   will-change: opacity, transform;
+}
+.fade-leave-active {
+  transition-duration: 120ms;
 }
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(4px);
 }
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .8, .2, 1);
   will-change: opacity, transform;
+}
+.fade-slide-leave-active {
+  transition-duration: 120ms;
 }
 .fade-slide-enter-from {
   opacity: 0;
-  transform: translateX(28px);
+  transform: translateX(5px);
 }
 .fade-slide-leave-to {
   opacity: 0;
-  transform: translateX(-28px);
+  transform: translateX(-4px);
 }
 .workspace-view,
 .subview-wrap {
@@ -7681,6 +7720,38 @@ function showError(error, fallbackKey) {
 .shipment-today-tags :deep(.shipment-today-tag.is-updated) {
   background: #16b86a;
   box-shadow: 0 4px 10px rgba(18, 132, 78, .18);
+}
+.shipment-today-tags :deep(.shipment-today-tag.is-pending) {
+  color: #9a5a05;
+  border: 1px solid #efc46c;
+  background: #fff8e8;
+  box-shadow: none;
+}
+.shipment-today-tags :deep(.shipment-today-tag.is-failed) {
+  color: #b43d3d;
+  border: 1px solid #efb0b0;
+  background: #fff2f2;
+  box-shadow: none;
+}
+.shipment-list-table :deep(.el-table__body-wrapper),
+.customer-directory-table :deep(.el-table__body-wrapper),
+.standard-information-table :deep(.el-table__body-wrapper) {
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.is-page-switching :deep(.el-table__body-wrapper) {
+  opacity: .52;
+  transform: translateY(3px);
+}
+.shipment-list-table :deep(.el-table__cell:first-child .cell) {
+  white-space: nowrap;
+}
+.business-handover-readonly {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #cddfec;
+  border-radius: 8px;
+  color: #46657f;
+  background: #f4f9fc;
 }
 @keyframes business-kpi-in {
   from { opacity: 0; transform: translateY(9px); }
@@ -8285,7 +8356,45 @@ function showError(error, fallbackKey) {
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 64px rgba(6, 24, 44, 0.28);
-  animation: operations-dialog-in 300ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: operations-dialog-in 190ms cubic-bezier(.2, .8, .2, 1) both;
+}
+.password-rule-preview {
+  display: grid !important;
+  gap: 8px !important;
+  padding: 14px;
+  border: 1px solid #d6e3ee;
+  border-radius: 10px;
+  color: #5c7186;
+  background: #f6f9fc;
+}
+.password-rule-preview code,
+.password-result-grid code {
+  color: #0e5f97;
+  font: 800 14px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.password-result-grid {
+  display: grid !important;
+  gap: 8px !important;
+  margin: 0;
+}
+.password-result-grid > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #dce6ef;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+.password-result-grid dt {
+  color: #657b90;
+  font-weight: 700;
+}
+.password-result-grid dd {
+  margin: 0;
+  color: #17314a;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 .customer-code-dialog h2 {
   margin: 0;

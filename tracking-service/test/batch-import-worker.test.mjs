@@ -48,14 +48,14 @@ test("worker previews first, then honors the confirmed sheet, header, column, an
   assert.equal(preview.phase, "preview");
   assert.equal(preview.suggestedSheetName, "Sheet1");
   assert.equal(preview.suggestedHeaderRowIndex, 0);
-  assert.equal(preview.suggestedColumnIndex, 2);
+  assert.equal(preview.suggestedColumnIndex, 0);
   assert.deepEqual(preview.recommendedColumn, {
     sheetName: "Sheet1",
     headerRowIndex: 0,
-    columnIndex: 2,
-    type: "BILLOFLADING"
+    columnIndex: 0,
+    type: "BOOKING"
   });
-  assert.equal(preview.columns[2].label, "M/B/L NO.");
+  assert.equal(preview.columns[0].label, "Booking No.");
   assert.equal(preview.previewRows[0].rowIndex, 0);
   assert.equal("items" in preview, false);
 
@@ -78,5 +78,6 @@ test("worker previews first, then honors the confirmed sheet, header, column, an
   });
   assert.deepEqual(selected.items.map((item) => item.number), ["BOOKING-001", "BOOKING-002"]);
   assert.equal(selected.items.every((item) => item.type === "BOOKING"), true);
+  assert.equal(selected.items[0].importedDetails.originalBillOfLading, "COSU6502406170");
   assert.equal(selected.items[1].importedDetails.clientNameCode, "Hayden US");
 });

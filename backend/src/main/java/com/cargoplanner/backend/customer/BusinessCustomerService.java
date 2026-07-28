@@ -148,7 +148,7 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listBusinessHandoverAgents(AuthenticatedUser actor) {
-    requireManager(actor);
+    requireOperationsReader(actor);
     List<Map<String, Object>> agents = jdbcTemplate.query(
         """
         SELECT u.id, u.username, u.display_name, u.status,
@@ -304,6 +304,34 @@ public class BusinessCustomerService {
     audit(actor, "UPDATE_OVERSEA_AGENT", userId,
         "Updated overseas agent " + existing.get("username") + " (" + status + ")", ipAddress);
     return requireOverseaAgent(userId);
+  }
+
+  @Transactional
+  public Map<String, Object> resetOverseaAgentPassword(
+      long userId,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    Map<String, Object> existing = requireOverseaAgent(userId);
+    String username = String.valueOf(existing.get("username"));
+    String temporaryPassword = username + "!@#2026";
+    PasswordHash hash = passwordHasher.hash(temporaryPassword);
+    jdbcTemplate.update(
+        """
+        UPDATE cp_users
+        SET password_salt = ?, password_hash = ?, password_iterations = ?,
+            updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = ? AND role = 'OVERSEA_AGENT'
+        """,
+        hash.salt(), hash.hash(), hash.iterations(), userId
+    );
+    jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
+    audit(actor, "RESET_OVERSEA_AGENT_PASSWORD", userId,
+        "Reset password for overseas agent " + username, ipAddress);
+    Map<String, Object> response = new LinkedHashMap<>(requireOverseaAgent(userId));
+    response.put("temporaryPassword", temporaryPassword);
+    return response;
   }
 
   @Transactional
@@ -1069,6 +1097,19 @@ public class BusinessCustomerService {
       String customerPublicId,
       boolean refreshIssuesOnly
   ) {
+    return listShipmentSnapshots(
+        actor, requestedPage, requestedPageSize, customerPublicId, refreshIssuesOnly, null
+    );
+  }
+
+  public Map<String, Object> listShipmentSnapshots(
+      AuthenticatedUser actor,
+      int requestedPage,
+      int requestedPageSize,
+      String customerPublicId,
+      boolean refreshIssuesOnly,
+      String businessFilter
+  ) {
     requireOperationsReader(actor);
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
@@ -1088,17 +1129,30 @@ public class BusinessCustomerService {
           + "WHERE a.shipment_id = s.id AND c.public_id = ?)");
       parameters.add(normalizedCustomerId);
     }
+    String normalizedBusinessFilter = businessFilter == null
+        ? ""
+        : businessFilter.trim().toUpperCase(Locale.ROOT);
+    switch (normalizedBusinessFilter) {
+      case "TODAY_CREATED" -> filters.add("s.created_at >= CURRENT_DATE");
+      case "TODAY_UPDATED" -> filters.add(
+          "s.updated_at >= CURRENT_DATE AND s.created_at < CURRENT_DATE"
+      );
+      case "PENDING" -> filters.add(
+          "(s.last_tracked_at IS NULL OR UPPER(COALESCE(s.tracking_status, '')) LIKE '%PENDING%') "
+              + "AND UPPER(COALESCE(s.last_refresh_result, '')) NOT IN ('FAILED', 'PARTIAL')"
+      );
+      default -> {
+        // Empty and unknown values deliberately mean no business-state filter.
+      }
+    }
     String baseWhere = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
-    long refreshIssueTotal = shipmentCount(
-        baseWhere + (baseWhere.isEmpty() ? " WHERE " : " AND ")
-            + "UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')",
-        parameters
-    );
+    ShipmentCounts shipmentCounts = shipmentCounts(baseWhere, parameters);
+    long refreshIssueTotal = shipmentCounts.refreshIssues();
     if (refreshIssuesOnly) {
       filters.add("UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')");
     }
     String where = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
-    long total = shipmentCount(where, parameters);
+    long total = refreshIssuesOnly ? refreshIssueTotal : shipmentCounts.total();
     int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
     if (totalPages == 0) page = 1;
     else if (page > totalPages) page = totalPages;
@@ -1125,13 +1179,23 @@ public class BusinessCustomerService {
     return response;
   }
 
-  private long shipmentCount(String where, List<Object> parameters) {
-    Long count = jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipments s" + where,
-        Long.class,
+  private ShipmentCounts shipmentCounts(String where, List<Object> parameters) {
+    return jdbcTemplate.queryForObject(
+        """
+        SELECT COUNT(*) AS total_count,
+               COALESCE(SUM(
+                 CASE WHEN UPPER(COALESCE(s.last_refresh_result, ''))
+                           IN ('FAILED', 'PARTIAL')
+                      THEN 1 ELSE 0 END
+               ), 0) AS refresh_issue_count
+        FROM cp_shipments s
+        """ + where,
+        (rs, rowNumber) -> new ShipmentCounts(
+            rs.getLong("total_count"),
+            rs.getLong("refresh_issue_count")
+        ),
         parameters.toArray()
     );
-    return count == null ? 0 : count;
   }
 
   /**
@@ -1154,9 +1218,8 @@ public class BusinessCustomerService {
         JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-            AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC
+            AND r2.reference_type = 'BOOKING'
+          ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
@@ -1194,9 +1257,8 @@ public class BusinessCustomerService {
         JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-            AND r2.reference_type IN ('BOOKING', 'BILLOFLADING')
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC
+            AND r2.reference_type = 'BOOKING'
+          ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
@@ -2095,12 +2157,13 @@ public class BusinessCustomerService {
     List<Long> activeSnapshotIds = jdbcTemplate.query(
         """
         SELECT id FROM cp_tracking_snapshots
-        WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
+        WHERE shipment_id = ? AND queried_by = ?
+          AND query_reference_type = ? AND query_reference_no = ?
           AND invalidated_at IS NULL
         ORDER BY id DESC LIMIT 1 FOR UPDATE
         """,
         (rs, rowNumber) -> rs.getLong("id"),
-        actor.id(), referenceType, referenceNo
+        shipmentId, actor.id(), referenceType, referenceNo
     );
     long snapshotId;
     if (activeSnapshotIds.isEmpty()) {
@@ -3123,8 +3186,11 @@ public class BusinessCustomerService {
     }
     String carrier = normalizeCode(request.carrier(), "COSCO");
     String type = normalizeCode(request.referenceType(), "BOOKING");
-    if (!REFERENCE_TYPES.contains(type)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported shipment reference type");
+    if (!"BOOKING".equals(type)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Shipment binding must use the booking number"
+      );
     }
     String reference = normalizeReference(request.referenceNo());
     if (reference.isBlank()) {
@@ -3909,9 +3975,12 @@ public class BusinessCustomerService {
   }
 
   private String normalizeReferenceType(String value) {
-    String normalized = normalizeCode(value, "BILLOFLADING");
-    if (!REFERENCE_TYPES.contains(normalized)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported shipment reference type");
+    String normalized = normalizeCode(value, "BOOKING");
+    if (!"BOOKING".equals(normalized)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "New and updated shipments must use the booking number; the bill of lading is supplementary data only"
+      );
     }
     return normalized;
   }
@@ -4081,6 +4150,7 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
+  private record ShipmentCounts(long total, long refreshIssues) {}
 
   private record BusinessHandoverAgent(long id, String username, String displayName) {}
   private record TransferAgent(

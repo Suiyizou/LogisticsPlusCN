@@ -8,36 +8,20 @@ import {
   parseManualShipmentImportWorkbook
 } from "../src/services/manualShipmentExcelImport.js";
 
-const headers = ["JOB NUMBER", "VESSEL /VOY", "MB/L NO.", "POL", "POD", "PO NO.", "ETD", "ETA", "", "Client Code"];
-const cosuNumbers = Array.from({ length: 30 }, (_, index) => `COSU${String(6502406170 + index)}`);
-const manualNumbers = [
-  "784-84422343 \u7a7a\u8fd0",
-  "SMLMSHZY5B667700 -\u8239\u4e1cSML",
-  "SHFO6C125200",
-  "784-84594366 BY AIR",
-  "CPJQTA45TACHOU09\n\u96c6\u6e2f\u7f16\u53f7SIS2607045"
-];
-const references = [
-  manualNumbers[0],
-  ...cosuNumbers.slice(0, 4),
-  manualNumbers[1],
-  ...cosuNumbers.slice(4, 10),
-  manualNumbers[2],
-  manualNumbers[3],
-  ...cosuNumbers.slice(10),
-  manualNumbers[4]
-];
-const rows = [headers, ...references.map((reference, index) => [
+const headers = ["JOB NUMBER", "VESSEL /VOY", "BOOKING NO.", "POL", "POD", "PO NO.", "ETD", "ETA", "", "Client Code", "MB/L NO."];
+const bookingNumbers = Array.from({ length: 35 }, (_, index) => `BK${String(6502406170 + index)}`);
+const rows = [headers, ...bookingNumbers.map((bookingNumber, index) => [
   `LJSH${26060000 + index}`,
   `VESSEL ${index + 1}E`,
-  reference,
+  bookingNumber,
   "SHANGHAI",
   "LONG BEACH",
   `HW2026${String(index).padStart(5, "0")}`,
   "2026-07-01",
   "2026-07-16",
   index === 0 ? "VOLUME" : "2*40HC",
-  index === 0 ? "Hayden US" : ""
+  index === 0 ? "Hayden US" : "",
+  index < 30 ? `COSU${String(6502406170 + index)}` : ""
 ])];
 
 const sheet = prepareSheet("Sheet1", rows);
@@ -47,19 +31,14 @@ assert.equal(sheet.previewRows.length, 9);
 
 const items = buildShipmentBatchItems(sheet, 2);
 assert.equal(items.length, 35);
-assert.equal(items.filter((item) => !item.manualOnly).length, 30);
-assert.equal(items.filter((item) => item.manualOnly).length, 5);
-assert.ok(items.filter((item) => !item.manualOnly).every((item) => /^\d+$/.test(item.number)));
+assert.equal(items.filter((item) => !item.manualOnly).length, 35);
+assert.equal(items.filter((item) => item.manualOnly).length, 0);
+assert.ok(items.every((item) => item.type === "BOOKING"));
+assert.deepEqual(items.map((item) => item.number), bookingNumbers);
 assert.ok(items.every((item) => item.importedDetails.clientNameCode === "Hayden US"));
 assert.equal(items[0].importedDetails.volume, "");
 assert.equal(items[1].importedDetails.volume, "2*40HC");
-assert.deepEqual(items.filter((item) => item.manualOnly).map((item) => item.number), [
-  "784-84422343",
-  "SMLMSHZY5B667700",
-  "SHFO6C125200",
-  "784-84594366",
-  "CPJQTA45TACHOU09"
-]);
+assert.equal(items[0].importedDetails.originalBillOfLading, "COSU6502406170");
 
 const completeTemplate = buildManualShipmentImportTemplate(XLSX);
 assert.deepEqual(completeTemplate.SheetNames, [
@@ -103,13 +82,14 @@ const resultWorkbook = buildManualShipmentImportResultWorkbook([
 assert.deepEqual(resultWorkbook.SheetNames, ["导入结果"]);
 
 const punctuationSheet = prepareSheet("Manual", [
-  ["MB/L NO."],
+  ["BOOKING NO."],
   ["ABC/123.45 manual note"]
 ]);
 const punctuationItems = buildShipmentBatchItems(punctuationSheet, 0);
 assert.equal(punctuationItems.length, 1);
 assert.equal(punctuationItems[0].number, "ABC/123.45");
-assert.equal(punctuationItems[0].manualOnly, true);
+assert.equal(punctuationItems[0].manualOnly, false);
+assert.equal(punctuationItems[0].type, "BOOKING");
 
 const businessCustomerPage = readFileSync(
   new URL("../src/components/BusinessCustomerPage.vue", import.meta.url),
@@ -215,9 +195,9 @@ const shipmentTableSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf('ref="shipmentTableRef"'),
   businessCustomerPage.indexOf("</el-table>", businessCustomerPage.indexOf('ref="shipmentTableRef"'))
 );
-assert.match(shipmentTableSource, /type="index"[^>]*width="68"/);
+assert.match(shipmentTableSource, /type="index"[^>]*width="52"/);
 assert.match(shipmentTableSource, /customers\.shipmentStatus[^>]*min-width="176"/);
-assert.match(shipmentTableSource, /customers\.remark[^>]*width="168"/);
+assert.match(shipmentTableSource, /customers\.remark[^>]*width="220"/);
 assert.match(shipmentTableSource, /customers\.lastTrackedAt[^>]*width="164"/);
 
 const shipmentSaveSource = businessCustomerPage.slice(

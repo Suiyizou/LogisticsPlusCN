@@ -161,24 +161,24 @@ public class ShipmentTrackingService {
     if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row is required");
 
     ShipmentImportDetails details = input.importedDetails();
-    String type = normalizeCode(input.type(), "BILLOFLADING");
-    if (!isDurableReferenceType(type)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Only booking or bill-of-lading rows can be imported");
+    String type = normalizeCode(input.type(), "BOOKING");
+    if (!"BOOKING".equals(type)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "BOOKING_REFERENCE_REQUIRED",
+          "Shipment imports must use the booking number; the bill of lading is supplementary data only"
+      );
     }
     String originalBill = cleanImported(details == null ? null : details.originalBillOfLading(), 64);
     String displayNumber = cleanImported(input.displayNumber(), 128);
     String suppliedNumber = cleanImported(input.number(), 128);
     String referenceNo = normalizeReference(
-        originalBill != null ? originalBill : displayNumber != null ? displayNumber : suppliedNumber
+        suppliedNumber != null ? suppliedNumber : displayNumber
     );
     if (!referenceNo.matches("[A-Z0-9./-]{4,128}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
     }
     String prefix = cleanImported(details == null ? null : details.carrierPrefix(), 8);
-    if (prefix == null && "BILLOFLADING".equals(type)
-        && referenceNo.matches("[A-Z]{4}[A-Z0-9./-]{4,124}")) {
-      prefix = referenceNo.substring(0, 4);
-    }
     String requestedCarrier = cleanImported(input.carrier(), 32);
     String carrier = normalizeCode(prefix != null ? prefix : requestedCarrier, "UNSUPPORTED");
     if (!carrier.matches("[A-Z0-9_-]{2,32}")) {
@@ -413,10 +413,10 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
     NormalizedTrackRequest request = normalize(input);
-    if (!isDurableReferenceType(request.type())) {
+    if (!"BOOKING".equals(request.type())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Customers can only open assigned booking or bill-of-lading records"
+          "Customers can only open assigned shipments by booking number"
       );
     }
     CustomerAccessQuery accessQuery = customerAccessQuery(
@@ -1542,10 +1542,10 @@ public class ShipmentTrackingService {
   ) {
     requireBatchShipmentAccess(shipmentPublicId, user);
     NormalizedTrackRequest request = normalize(input);
-    if (!"COSCO".equals(request.carrier()) || "CONTAINER".equals(request.type())) {
+    if (!"COSCO".equals(request.carrier()) || !"BOOKING".equals(request.type())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Supplemental details are available for COSCO bill or booking queries only"
+          "Supplemental details require a COSCO booking number"
       );
     }
     Integer referenceMatches = jdbcTemplate.queryForObject(
@@ -1616,15 +1616,18 @@ public class ShipmentTrackingService {
 
   ObjectNode discoverBatchContainers(
       String shipmentPublicId,
-      String billNumber,
+      String bookingNumber,
       String batchTaskId,
       AuthenticatedUser user
   ) {
     requireBatchShipmentAccess(shipmentPublicId, user);
     NormalizedTrackRequest request = normalize(new ShipmentTrackRequest(
-        "COSCO", "AUTO", "BILLOFLADING", billNumber, false, null, batchTaskId
+        "COSCO", "AUTO", "BOOKING", bookingNumber, false, null, batchTaskId
     ));
     JsonNode discovered = adapterClient.discoverContainers(request);
+    if (discovered == null || discovered.isNull()) {
+      return objectMapper.createObjectNode();
+    }
     mergeContainersIntoCurrentSnapshot(
         shipmentPublicId,
         discovered.path("containers"),
@@ -2233,13 +2236,14 @@ public class ShipmentTrackingService {
     List<Long> currentIds = jdbcTemplate.query(
         """
         SELECT id FROM cp_tracking_snapshots
-        WHERE queried_by = ? AND query_reference_type = ? AND query_reference_no = ?
+        WHERE shipment_id = ? AND queried_by = ?
+          AND query_reference_type = ? AND query_reference_no = ?
           AND invalidated_at IS NULL
         ORDER BY id DESC
         LIMIT 1 FOR UPDATE
         """,
         (rs, rowNumber) -> rs.getLong("id"),
-        queriedBy, request.type(), request.number()
+        shipmentId, queriedBy, request.type(), request.number()
     );
     if (!currentIds.isEmpty()) {
       long id = currentIds.get(0);
@@ -2525,17 +2529,18 @@ public class ShipmentTrackingService {
     if (!SUPPORTED_CHANNELS.contains(channel)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported tracking channel");
     }
-    String type = normalizeCode(input.type(), "BILLOFLADING");
+    String type = normalizeCode(input.type(), "BOOKING");
     if (!SUPPORTED_TYPES.contains(type)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported shipment number type");
     }
-    String number = normalizeReference(input.number());
-    if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)) {
-      java.util.regex.Matcher prefixed = number.matches("COSU[0-9]{6,20}")
-          ? java.util.regex.Pattern.compile("^COSU([0-9]{6,20})$").matcher(number)
-          : null;
-      if (prefixed != null && prefixed.matches()) number = prefixed.group(1);
+    if ("BILLOFLADING".equals(type)) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "BOOKING_REFERENCE_REQUIRED",
+          "Use the booking number for tracking; the bill of lading cannot be used as a query identity"
+      );
     }
+    String number = normalizeReference(input.number());
     if (!number.matches("[A-Z0-9-]{4,35}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Shipment number format is invalid");
     }
@@ -2567,10 +2572,6 @@ public class ShipmentTrackingService {
       );
     }
 
-    String rawNumber = normalizeReference(input == null ? null : input.number());
-    boolean derivedCosu = "COSCO".equals(request.carrier())
-        && "BILLOFLADING".equals(request.type())
-        && rawNumber.matches("COSU[0-9]{6,20}");
     String carrierPrefix = cleanImported(
         supplied == null ? null : supplied.carrierPrefix(),
         8
@@ -2579,10 +2580,6 @@ public class ShipmentTrackingService {
         supplied == null ? null : supplied.originalBillOfLading(),
         64
     );
-    if (derivedCosu) {
-      if (carrierPrefix == null) carrierPrefix = "COSU";
-      if (originalBill == null) originalBill = rawNumber;
-    }
     if (carrierPrefix != null) {
       carrierPrefix = carrierPrefix.toUpperCase(Locale.ROOT);
       if (!carrierPrefix.matches("[A-Z0-9]{2,8}")) {
@@ -2595,11 +2592,8 @@ public class ShipmentTrackingService {
         throw new ApiException(HttpStatus.BAD_REQUEST, "Original bill of lading format is invalid");
       }
     }
-    if (carrierPrefix != null && originalBill == null) {
-      originalBill = carrierPrefix + request.number();
-    }
     if (carrierPrefix != null && originalBill != null
-        && (!originalBill.startsWith(carrierPrefix) || !originalBill.endsWith(request.number()))) {
+        && !originalBill.startsWith(carrierPrefix)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier prefix does not match the bill of lading");
     }
 

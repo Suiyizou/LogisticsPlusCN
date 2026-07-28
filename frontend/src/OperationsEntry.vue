@@ -16,7 +16,8 @@
       @open-announcements="openAnnouncements"
     />
     <BusinessCustomerPage
-      v-else-if="activePage === 'customers' && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
+      v-else-if="(activePage === 'customers' || (activePage === 'workbenches' && currentUser?.role === 'OVERSEA_AGENT'))
+        && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
       :current-user="currentUser"
       :announcement-count="unreadAnnouncementCount"
       @logout="handleLogout"
@@ -124,10 +125,13 @@ onUnmounted(() => {
 
 watch([activePage, currentUser, authChecked], () => {
   if (!authChecked.value || !currentUser.value) return;
+  const overseaHome = currentUser.value.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches";
   if (activePage.value === "admin" && currentUser.value.role !== "ADMIN") {
-    void router.replace("/workbenches");
+    void router.replace(overseaHome);
   } else if (activePage.value === "customers" && !["BUSINESS", "ADMIN", "OVERSEA_AGENT"].includes(currentUser.value.role)) {
     void router.replace("/workbenches");
+  } else if (activePage.value === "workbenches" && currentUser.value.role === "OVERSEA_AGENT") {
+    void router.replace("/customers");
   }
 });
 
@@ -167,11 +171,17 @@ async function initializeAuth() {
 
 async function handleLoggedIn(user) {
   const isAdmin = user?.role === "ADMIN";
+  const isOverseaAgent = user?.role === "OVERSEA_AGENT";
+  const target = isAdmin ? "/admin" : isOverseaAgent ? "/customers" : "/workbenches";
   loginRedirectText.value = t(isAdmin ? "portal.enteringAdmin" : "portal.entering");
   loginRedirecting.value = true;
   try {
-    await (isAdmin ? loadAdminDashboard() : loadWorkbenchPortal());
-    await router.replace(isAdmin ? "/admin" : "/workbenches");
+    await (isAdmin
+      ? loadAdminDashboard()
+      : isOverseaAgent
+        ? loadBusinessCustomerPage()
+        : loadWorkbenchPortal());
+    await router.replace(target);
     currentUser.value = user;
   } finally {
     loginRedirecting.value = false;

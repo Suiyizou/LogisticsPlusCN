@@ -1,14 +1,24 @@
 const TRACKING_HEADER_ALIASES = new Set([
-  "MBLNO",
-  "MASTERBLNO",
-  "MASTERBILLOFLADING",
-  "BLNO",
-  "BILLOFLADING",
-  "\u63d0\u5355\u53f7",
-  "\u4e3b\u63d0\u5355\u53f7"
+  "BOOKING",
+  "BOOKINGNO",
+  "BOOKINGNUMBER",
+  "BOOKINGREFERENCE",
+  "\u8ba2\u8231\u53f7",
+  "\u8ba2\u8231\u7f16\u53f7",
+  "\u8ba2\u8231\u53c2\u8003\u53f7"
 ]);
 
 const FIELD_ALIASES = {
+  carrier: ["CARRIER", "CARRIERCODE", "\u627f\u8fd0\u4eba", "\u8239\u516c\u53f8"],
+  originalBillOfLading: [
+    "MBLNO",
+    "MASTERBLNO",
+    "MASTERBILLOFLADING",
+    "BLNO",
+    "BILLOFLADING",
+    "\u63d0\u5355\u53f7",
+    "\u4e3b\u63d0\u5355\u53f7"
+  ],
   forwarderJobNumber: ["JOBNUMBER", "FORWARDERJOBNUMBER", "\u4e1a\u52a1\u5355\u53f7"],
   vesselVoyage: ["VESSELVOY", "VESSELVOYAGE", "\u8239\u540d\u822a\u6b21"],
   portOfLoading: ["POL", "PORTOFLOADING", "\u8d77\u8fd0\u6e2f"],
@@ -63,7 +73,7 @@ export function prepareSheet(name, sourceRows) {
   };
 }
 
-export function buildShipmentBatchItems(sheet, selectedColumnIndex) {
+export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarrier = "COSCO") {
   if (!sheet || !Number.isInteger(Number(selectedColumnIndex))) return [];
   const columnIndex = Number(selectedColumnIndex);
   const headers = sheet.headers || [];
@@ -85,24 +95,23 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex) {
 
     const rowClientCode = valueAt(row, fieldIndexes.clientNameCode);
     if (rowClientCode) clientNameCode = rowClientCode;
-    const cosuMatch = selectedValue.toUpperCase().match(/COSU\s*([0-9]{6,20})/);
-    const manualReference = cosuMatch ? "" : extractManualReference(selectedValue);
-    if (!cosuMatch && !manualReference) continue;
-
-    const displayNumber = cosuMatch ? `COSU${cosuMatch[1]}` : manualReference;
-    const prefix = cosuMatch ? "COSU" : (manualReference.match(/^[A-Z]{4}/)?.[0] || "UNSUPPORTED");
+    const bookingNumber = extractManualReference(selectedValue);
+    if (!bookingNumber) continue;
+    const carrier = normalizeCarrier(
+      valueAt(row, fieldIndexes.carrier) || defaultCarrier
+    );
+    const supportedCarrier = ["COSCO", "CMA"].includes(carrier);
     let volume = valueAt(row, fieldIndexes.volume);
     if (normalizeHeader(volume) === "VOLUME") volume = "";
     items.push({
       id: `${sheet.name}-row-${rowIndex + 1}`,
-      carrier: cosuMatch ? "COSCO" : prefix,
-      type: "BILLOFLADING",
-      number: cosuMatch ? cosuMatch[1] : manualReference,
-      displayNumber,
-      manualOnly: !cosuMatch,
+      carrier: carrier || null,
+      type: "BOOKING",
+      number: bookingNumber,
+      displayNumber: bookingNumber,
+      manualOnly: !supportedCarrier,
       importedDetails: {
-        carrierPrefix: prefix,
-        originalBillOfLading: displayNumber,
+        originalBillOfLading: valueAt(row, fieldIndexes.originalBillOfLading),
         forwarderJobNumber: valueAt(row, fieldIndexes.forwarderJobNumber),
         vesselVoyage: valueAt(row, fieldIndexes.vesselVoyage),
         portOfLoading: valueAt(row, fieldIndexes.portOfLoading),
@@ -116,6 +125,13 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex) {
     });
   }
   return items;
+}
+
+function normalizeCarrier(value) {
+  const normalized = normalizeHeader(value);
+  if (normalized === "COSCO" || normalized === "COSCOSHIPPING") return "COSCO";
+  if (normalized === "CMA" || normalized === "CMACGM") return "CMA";
+  return normalized;
 }
 
 export function normalizeHeader(value) {
