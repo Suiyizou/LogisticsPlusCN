@@ -104,6 +104,11 @@ public class AdminController {
     return adminService.monitoring();
   }
 
+  @GetMapping("/overview")
+  public Map<String, Object> overview() {
+    return adminService.systemOverview();
+  }
+
   @GetMapping("/audit-log")
   public Map<String, Object> auditLog(
       @RequestParam(defaultValue = "0") int page,

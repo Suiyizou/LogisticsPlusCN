@@ -47,6 +47,22 @@ public class BusinessCustomerController {
     return service.listTransferAgents(actor);
   }
 
+  @GetMapping("/handover-agents")
+  public Map<String, Object> handoverAgents(
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listBusinessHandoverAgents(actor);
+  }
+
+  @PostMapping("/handover")
+  public Map<String, Object> handover(
+      @RequestBody BusinessCustomerHandoverRequest request,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
+      HttpServletRequest httpRequest
+  ) {
+    return service.handoverCustomers(request, actor, ClientInfo.ip(httpRequest));
+  }
+
   @PostMapping("/oversea-agents")
   public Map<String, Object> createOverseaAgent(
       @Valid @RequestBody CreateOverseaAgentEmployeeRequest request,

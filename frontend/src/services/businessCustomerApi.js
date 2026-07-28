@@ -18,6 +18,14 @@ export function fetchCustomerTransferAgents() {
   return request("/business/customers/transfer-agents");
 }
 
+export function fetchBusinessHandoverAgents() {
+  return request("/business/customers/handover-agents");
+}
+
+export function handoverBusinessCustomers(payload) {
+  return request("/business/customers/handover", { method: "POST", body: payload });
+}
+
 export function createOverseaAgentEmployee(payload) {
   return request("/business/customers/oversea-agents", { method: "POST", body: payload });
 }

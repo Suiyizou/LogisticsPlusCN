@@ -135,6 +135,37 @@ public class BusinessCustomerService {
     return Map.of("items", agents, "total", agents.size());
   }
 
+  public Map<String, Object> listBusinessHandoverAgents(AuthenticatedUser actor) {
+    requireManager(actor);
+    List<Map<String, Object>> agents = jdbcTemplate.query(
+        """
+        SELECT u.id, u.username, u.display_name, u.status,
+               (SELECT COUNT(*) FROM cp_customers customer
+                WHERE customer.responsible_agent_id = u.id
+                  AND customer.status = 'ACTIVE') AS customer_count
+        FROM cp_users u
+        WHERE u.role = 'BUSINESS'
+        ORDER BY u.status = 'ACTIVE' DESC, u.display_name, u.username, u.id
+        """,
+        (rs, rowNumber) -> {
+          long userId = rs.getLong("id");
+          Map<String, Object> value = new LinkedHashMap<>();
+          value.put("id", userId);
+          value.put("username", rs.getString("username"));
+          value.put("displayName", rs.getString("display_name"));
+          value.put("status", rs.getString("status"));
+          value.put("customerCount", rs.getLong("customer_count"));
+          value.put("current", userId == actor.id());
+          return value;
+        }
+    );
+    return Map.of(
+        "items", agents,
+        "total", agents.size(),
+        "currentUserId", actor.id()
+    );
+  }
+
   @Transactional
   public Map<String, Object> createOverseaAgentEmployee(
       CreateOverseaAgentEmployeeRequest request,
@@ -695,6 +726,105 @@ public class BusinessCustomerService {
     response.put("targetAgentName", target.displayName());
     response.put("businessHistoryRetained", true);
     response.put("assignmentMode", target.internalEmployee() ? "OVERSEA_AGENT" : "LEGACY_CUSTOMER");
+    return response;
+  }
+
+  @Transactional
+  public Map<String, Object> handoverCustomers(
+      BusinessCustomerHandoverRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    requireManager(actor);
+    LinkedHashSet<String> customerIds = new LinkedHashSet<>();
+    if (request != null && request.customerIds() != null) {
+      for (String customerId : request.customerIds()) {
+        if (customerId != null && !customerId.isBlank()) {
+          customerIds.add(customerId.trim());
+        }
+      }
+    }
+    if (customerIds.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one customer is required");
+    }
+    if (customerIds.size() > 200) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A customer handover cannot exceed 200 customers");
+    }
+    Long targetUserId = request == null ? null : request.targetBusinessUserId();
+    if (targetUserId == null) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business user is required");
+    }
+    if (targetUserId == actor.id()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Customers are already assigned to the current user");
+    }
+    BusinessHandoverAgent target = requireBusinessHandoverAgent(targetUserId);
+    String reason = request == null || request.reason() == null
+        ? null
+        : ClientInfo.trim(request.reason().trim(), 500);
+    String batchId = UUID.randomUUID().toString();
+    int relatedShipments = 0;
+
+    for (String customerId : customerIds.stream().sorted().toList()) {
+      lockCustomer(customerId);
+      CustomerRecord customer = requireManaged(customerId, actor);
+      if (!UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Only shipper or consignee customers can be handed over"
+        );
+      }
+      if (!"ACTIVE".equals(customer.status())) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Only active customers can be handed over");
+      }
+      if (customer.responsibleAgentId() == target.id()) {
+        throw new ApiException(
+            HttpStatus.CONFLICT,
+            "Customer " + customer.displayName() + " is already assigned to the target business user"
+        );
+      }
+      List<Long> shipmentIds = jdbcTemplate.query(
+          "SELECT shipment_id FROM cp_customer_shipment_access WHERE customer_id = ? ORDER BY shipment_id",
+          (rs, rowNumber) -> rs.getLong(1),
+          customer.id()
+      );
+      jdbcTemplate.update(
+          "UPDATE cp_customers SET responsible_agent_id = ? WHERE id = ?",
+          target.id(),
+          customer.id()
+      );
+      for (Long shipmentId : shipmentIds) {
+        grantBusinessHandoverParticipant(shipmentId, target.id(), actor.id());
+      }
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_transfer_log (
+            batch_id, customer_id, from_agent_id, to_agent_id, initiated_by,
+            retained_previous_access, shipment_count, ip_address
+          ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+          """,
+          batchId,
+          customer.id(),
+          customer.responsibleAgentId(),
+          target.id(),
+          actor.id(),
+          shipmentIds.size(),
+          ClientInfo.trim(ipAddress, 64)
+      );
+      String detail = "Batch " + batchId + ": handed over " + customer.displayName()
+          + " from business user " + customer.responsibleAgentId()
+          + " to " + target.id() + " (" + target.displayName() + ")"
+          + (reason == null || reason.isBlank() ? "" : "; reason: " + reason);
+      audit(actor, "HANDOVER_CUSTOMER", customer.id(), detail, ipAddress);
+      relatedShipments += shipmentIds.size();
+    }
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("batchId", batchId);
+    response.put("transferred", customerIds.size());
+    response.put("relatedShipments", relatedShipments);
+    response.put("targetBusinessUserId", target.id());
+    response.put("targetBusinessUserName", target.displayName());
+    response.put("previousAccessRetained", true);
     return response;
   }
 
@@ -3370,6 +3500,23 @@ public class BusinessCustomerService {
     }
   }
 
+  private void grantBusinessHandoverParticipant(long shipmentId, long userId, long actorId) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_participants (
+          shipment_id, user_id, participant_role, granted_by
+        ) VALUES (?, ?, 'CUSTOMER_OWNER', ?)
+        ON DUPLICATE KEY UPDATE
+          participant_role = VALUES(participant_role),
+          granted_by = VALUES(granted_by),
+          updated_at = CURRENT_TIMESTAMP(6)
+        """,
+        shipmentId,
+        userId,
+        actorId
+    );
+  }
+
   private void requireOperationsReader(AuthenticatedUser actor) {
     if (actor == null
         || (!actor.isBusiness() && !actor.isAdmin() && !actor.isOverseaAgent())) {
@@ -3469,6 +3616,27 @@ public class BusinessCustomerService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Target overseas agent is not active");
     }
     return agents.get(0);
+  }
+
+  private BusinessHandoverAgent requireBusinessHandoverAgent(long userId) {
+    List<BusinessHandoverAgent> users = jdbcTemplate.query(
+        """
+        SELECT id, username, display_name
+        FROM cp_users
+        WHERE id = ? AND role = 'BUSINESS' AND status = 'ACTIVE'
+        FOR UPDATE
+        """,
+        (rs, rowNumber) -> new BusinessHandoverAgent(
+            rs.getLong("id"),
+            rs.getString("username"),
+            rs.getString("display_name")
+        ),
+        userId
+    );
+    if (users.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Target business user is not active");
+    }
+    return users.get(0);
   }
 
   private void ensureShipmentRoleAvailable(long shipmentId, long customerId, String role) {
@@ -3818,6 +3986,8 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
+
+  private record BusinessHandoverAgent(long id, String username, String displayName) {}
   private record TransferAgent(
       long id,
       String publicId,

@@ -4641,6 +4641,7 @@ select {
   border-radius: 4px;
   color: #405870;
   font-weight: 650;
+  font-size: 14px;
   transition:
     color 140ms ease,
     background-color 140ms ease,
@@ -7541,6 +7542,17 @@ select,
 .el-select__wrapper.is-focused,
 .el-textarea__inner:focus {
   box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(22, 93, 255, 0.1);
+}
+
+.shipment-filter-popper.el-popper {
+  border-radius: 10px;
+  box-shadow: 0 16px 38px rgba(18, 52, 82, 0.17);
+}
+
+.shipment-filter-popper .el-select-dropdown__item {
+  min-height: 40px;
+  padding: 0 13px;
+  font-size: 14px;
 }
 
 .el-select__selection {

@@ -44,6 +44,10 @@ app:
     cleanup-interval-ms: ${APP_WORKSPACE_FILE_CLEANUP_INTERVAL_MS:3600000}
     max-file-size-bytes: ${APP_WORKSPACE_FILE_MAX_SIZE_BYTES:83886080}
     allowed-extensions: ${APP_WORKSPACE_FILE_ALLOWED_EXTENSIONS:xlsx,xls,csv,tsv}
+  announcement-images:
+    root: ${APP_ANNOUNCEMENT_IMAGE_ROOT:./uploads/announcement-images}
+    max-file-size-bytes: ${APP_ANNOUNCEMENT_IMAGE_MAX_SIZE_BYTES:10485760}
+    allowed-extensions: ${APP_ANNOUNCEMENT_IMAGE_ALLOWED_EXTENSIONS:jpg,jpeg,png,gif}
   shipment-tracking:
     adapter-base-url: ${APP_TRACKING_ADAPTER_BASE_URL:http://127.0.0.1:3000}
     adapter-key: ${APP_TRACKING_ADAPTER_KEY:}

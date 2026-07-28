@@ -94,6 +94,10 @@ export async function fetchMonitoring() {
   return request("/admin/monitoring");
 }
 
+export async function fetchAdminOverview() {
+  return request("/admin/overview");
+}
+
 export async function fetchAuditLog(options = {}) {
   return request(`/admin/audit-log?${pageParams(options)}`);
 }
@@ -127,6 +131,12 @@ export async function publishAdminAnnouncement(id) {
 
 export async function disableAdminAnnouncement(id) {
   return request(`/admin/announcements/${encodeURIComponent(id)}/disable`, { method: "POST" });
+}
+
+export async function uploadAdminAnnouncementImage(file) {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/admin/announcement-images", { method: "POST", body });
 }
 
 function pageParams(options = {}) {
@@ -206,9 +216,10 @@ async function downloadAdminFile(path, fileName) {
 }
 
 async function request(path, options = {}) {
+  const multipart = options.body instanceof FormData;
   return requestJson(path, {
     method: options.method || "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: multipart ? {} : { "Content-Type": "application/json" },
     body: options.body
   }, configuredBase);
 }

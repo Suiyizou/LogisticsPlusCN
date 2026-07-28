@@ -92,72 +92,101 @@
       <section v-if="activeAdminPage === 'overview'" class="admin-page-pane">
         <div class="admin-metrics">
           <div>
-            <span>员工账号</span>
-            <strong>{{ monitoring?.userCount ?? "-" }}</strong>
-            <small>管理员 {{ monitoring?.adminCount ?? 0 }} 个</small>
+            <span>{{ overviewCopy.totalUsers }}</span>
+            <strong>{{ systemOverview?.totalUsers ?? "-" }}</strong>
+            <small>{{ overviewCopy.totalUsersHint
+              .replace("{internal}", String(systemOverview?.internalUserCount ?? 0))
+              .replace("{customers}", String(systemOverview?.customerCount ?? 0)) }}</small>
           </div>
           <div>
-            <span>在线设备</span>
-            <strong>{{ monitoring?.onlineDeviceCount ?? "-" }}</strong>
-            <small>上限 {{ monitoring?.deviceLimit ?? 5 }} 台/账号</small>
+            <span>{{ overviewCopy.activeUsers }}</span>
+            <strong>{{ systemOverview?.activeUsers ?? "-" }}</strong>
+            <small>{{ overviewCopy.activeUsersHint }}</small>
           </div>
           <div>
-            <span>今日登录</span>
-            <strong>{{ monitoring?.loginSuccessToday ?? "-" }}</strong>
-            <small>成功会话</small>
+            <span>{{ overviewCopy.onlineDevices }}</span>
+            <strong>{{ systemOverview?.onlineDeviceCount ?? "-" }}</strong>
+            <small>{{ overviewCopy.onlineDevicesHint }}</small>
           </div>
           <div>
-            <span>登录异常</span>
-            <strong>{{ monitoring?.loginFailToday ?? "-" }}</strong>
-            <small>失败/限流</small>
+            <span>{{ overviewCopy.management30d }}</span>
+            <strong>{{ systemOverview?.managementActions30d ?? "-" }}</strong>
+            <small>{{ overviewCopy.management30dHint }}</small>
           </div>
           <div>
-            <span>接口请求</span>
-            <strong>{{ monitoring?.runtime?.totalRequests ?? 0 }}</strong>
-            <small>失败 {{ monitoring?.runtime?.failedRequests ?? 0 }}</small>
+            <span>{{ overviewCopy.todayActivity }}</span>
+            <strong>{{ systemOverview?.operationsToday ?? "-" }}</strong>
+            <small>{{ overviewCopy.todayActivityHint }}</small>
           </div>
         </div>
 
-        <div class="admin-dashboard-grid">
-          <article class="admin-panel">
+        <div class="admin-overview-chart-grid">
+          <article class="admin-panel admin-overview-chart-card admin-overview-chart-card--wide">
             <div class="admin-panel-head">
               <div>
-                <p>Runtime</p>
-                <h2>运行监控</h2>
+                <p>Activity Trend</p>
+                <h2>{{ overviewCopy.activityTrend }}</h2>
               </div>
-              <span class="admin-health-pill" :class="{ warn: runtimeHasFailedRequests }">
-                {{ runtimeHealthLabel }}
-              </span>
+              <span>{{ overviewCopy.activityTrendHint }}</span>
             </div>
-            <div class="admin-runtime-list">
-              <span><b>服务时间</b>{{ formatDate(monitoring?.serverTime) }}</span>
-              <span><b>启动时间</b>{{ formatDate(monitoring?.runtime?.startedAt) }}</span>
-              <span><b>堆内存</b>{{ monitoring?.runtime?.heapUsedMb ?? 0 }} / {{ monitoring?.runtime?.heapMaxMb ?? 0 }} MB</span>
-              <span><b>内存占用</b>{{ heapPercent }}%</span>
-            </div>
+            <div
+              ref="overviewActivityChartRef"
+              class="admin-overview-echart"
+              role="img"
+              :aria-label="overviewCopy.activityTrend"
+            ></div>
           </article>
 
-          <article class="admin-panel">
+          <article class="admin-panel admin-overview-chart-card">
             <div class="admin-panel-head">
               <div>
-                <p>Recent Events</p>
-                <h2>最近登录事件</h2>
+                <p>User Composition</p>
+                <h2>{{ overviewCopy.userComposition }}</h2>
               </div>
-              <button type="button" @click="scrollToAudit">{{ t("admin.console.viewAudit") }}</button>
             </div>
-            <ul class="admin-activity-list">
-              <li v-for="event in recentEvents" :key="event.id">
-                <span :class="eventClass(event.eventType)">{{ eventTypeText(event.eventType) }}</span>
-                <b>{{ event.username || "-" }}</b>
-                <small>{{ event.ipAddress || "-" }}</small>
-                <em>{{ formatDate(event.createdAt) }}</em>
-              </li>
-              <li v-if="!recentEvents.length" class="admin-empty-row">暂无登录事件</li>
-            </ul>
+            <div
+              ref="overviewUserChartRef"
+              class="admin-overview-echart"
+              role="img"
+              :aria-label="overviewCopy.userComposition"
+            ></div>
+          </article>
+
+          <article class="admin-panel admin-overview-chart-card">
+            <div class="admin-panel-head">
+              <div>
+                <p>Account Status</p>
+                <h2>{{ overviewCopy.accountStatus }}</h2>
+              </div>
+            </div>
+            <div
+              ref="overviewStatusChartRef"
+              class="admin-overview-echart"
+              role="img"
+              :aria-label="overviewCopy.accountStatus"
+            ></div>
+          </article>
+
+          <article class="admin-panel admin-overview-chart-card admin-overview-chart-card--wide">
+            <div class="admin-panel-head">
+              <div>
+                <p>Management Actions</p>
+                <h2>{{ overviewCopy.operationTypes }}</h2>
+              </div>
+              <span>{{ overviewCopy.operationTypesHint }}</span>
+            </div>
+            <div
+              ref="overviewOperationChartRef"
+              class="admin-overview-echart admin-overview-echart--bar"
+              role="img"
+              :aria-label="overviewCopy.operationTypes"
+            ></div>
           </article>
         </div>
+      </section>
 
-        <article ref="auditSectionRef" class="admin-panel admin-audit-panel">
+      <section v-else-if="activeAdminPage === 'audit'" class="admin-page-pane">
+        <article class="admin-panel admin-audit-panel">
           <div class="admin-panel-head">
             <div>
               <p>API Audit Trail</p>
@@ -862,10 +891,39 @@
                   </el-select>
                 </label>
               </div>
-              <label>
-                <span>{{ announcementCopy.imageUrl }}</span>
-                <input v-model.trim="announcementForm.imageUrl" type="url" placeholder="https://example.com/image.jpg" />
-              </label>
+              <div class="announcement-image-field">
+                <label>
+                  <span>{{ announcementCopy.imageUrl }}</span>
+                  <div class="announcement-image-input-row">
+                    <input
+                      v-model.trim="announcementForm.imageUrl"
+                      type="text"
+                      placeholder="https://example.com/image.jpg"
+                    />
+                    <button
+                      type="button"
+                      :disabled="announcementImageUploading"
+                      @click="announcementImageInputRef?.click()"
+                    >
+                      {{ announcementImageUploading
+                        ? announcementCopy.uploadingImage
+                        : announcementCopy.uploadImage }}
+                    </button>
+                  </div>
+                </label>
+                <input
+                  ref="announcementImageInputRef"
+                  class="announcement-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif"
+                  @change="handleAnnouncementImageUpload"
+                />
+                <small>{{ announcementCopy.uploadHint }}</small>
+                <small v-if="announcementUploadedPath" class="announcement-storage-path">
+                  <b>{{ announcementCopy.storagePath }}</b>
+                  <code>{{ announcementUploadedPath }}</code>
+                </small>
+              </div>
               <label>
                 <span>{{ announcementCopy.illustrationRef }}</span>
                 <input v-model.trim="announcementForm.illustrationRef" :placeholder="announcementCopy.illustrationPlaceholder" />
@@ -970,15 +1028,28 @@
             <span>姓名</span>
             <input v-model.trim="employeeForm.displayName" placeholder="例如 张三" />
           </label>
-          <label v-if="!editingEmployeeId">
-            <span>{{ t("admin.employee.initialPassword") }}</span>
+          <label v-if="!editingEmployeeIsSelf">
+            <span>{{ t(editingEmployeeId ? "admin.employee.newPassword" : "admin.employee.initialPassword") }}</span>
             <input
               v-model="employeeForm.password"
               type="password"
-              :placeholder="t('admin.employee.passwordPlaceholder')"
+              :placeholder="t(editingEmployeeId ? 'admin.employee.newPasswordPlaceholder' : 'admin.employee.passwordPlaceholder')"
+              @input="employeeDialogError = ''"
+            />
+            <small v-if="editingEmployeeId">{{ t("admin.employee.passwordOptionalHint") }}</small>
+          </label>
+          <label v-if="!editingEmployeeIsSelf">
+            <span>{{ t("admin.employee.confirmPassword") }}</span>
+            <input
+              v-model="employeeForm.passwordConfirm"
+              type="password"
+              :placeholder="t('admin.employee.confirmPasswordPlaceholder')"
               @input="employeeDialogError = ''"
             />
           </label>
+          <p v-if="editingEmployeeIsSelf" class="admin-hint">
+            {{ t("admin.employee.selfPasswordEditHint") }}
+          </p>
           <label>
             <span>角色</span>
             <el-select
@@ -1115,8 +1186,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
+import { init as initEChart, use as useECharts } from "echarts/core";
+import { BarChart, LineChart, PieChart } from "echarts/charts";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
   clearAdminToken,
@@ -1131,6 +1206,7 @@ import {
   downloadAdminShipmentFile,
   fetchAdminAnnouncements,
   fetchAdminMe,
+  fetchAdminOverview,
   fetchAdminWorkspaceFiles,
   fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
@@ -1145,6 +1221,7 @@ import {
   publishAdminAnnouncement,
   resetEmployeePassword,
   storedAdminToken,
+  uploadAdminAnnouncementImage,
   updateAdminAnnouncement,
   updateEmployee,
   updateLlmSettings
@@ -1154,6 +1231,8 @@ import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
 
+useECharts([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+
 const props = defineProps({
   currentUser: { type: Object, default: null },
   announcementCount: { type: Number, default: 0 }
@@ -1161,13 +1240,14 @@ const props = defineProps({
 const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 
 const rawAdminPages = [
-  { key: "overview", no: "01", group: "monitor", groupLabel: "\u8fd0\u884c\u76d1\u63a7", label: "\u540e\u53f0\u6982\u89c8", description: "\u6307\u6807\u3001\u5ba1\u8ba1\u4e0e\u8fd0\u884c\u76d1\u63a7", eyebrow: "Admin Console", title: "\u540e\u53f0\u6982\u89c8\u4e0e\u5ba1\u8ba1", subtitle: "\u96c6\u4e2d\u67e5\u770b\u8d26\u53f7\u3001\u8bbe\u5907\u3001\u767b\u5f55\u4e8b\u4ef6\u4e0e\u63a5\u53e3\u8bbf\u95ee\u5ba1\u8ba1\u3002" },
-  { key: "employees", no: "02", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
-  { key: "platform", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
-  { key: "announcements", no: "04", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u7f16\u8f91 Markdown \u516c\u544a\u3001\u914d\u7f6e\u53ef\u89c1\u8303\u56f4\u4e0e\u5f53\u65e5\u5c55\u793a\u65e5\u671f\u3002" },
-  { key: "devices", no: "05", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
-  { key: "files", no: "06", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
-  { key: "system", no: "07", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
+  { key: "overview", no: "01", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u540e\u53f0\u6982\u89c8", description: "\u7cfb\u7edf\u7528\u6237\u4e0e\u64cd\u4f5c\u8d8b\u52bf", eyebrow: "Executive Overview", title: "\u4f01\u4e1a\u7cfb\u7edf\u603b\u89c8", subtitle: "\u4ece\u4f01\u4e1a\u7ba1\u7406\u89c6\u89d2\u67e5\u770b\u8d26\u53f7\u89c4\u6a21\u3001\u7cfb\u7edf\u6d3b\u8dc3\u5ea6\u548c\u7ba1\u7406\u64cd\u4f5c\u8d8b\u52bf\u3002" },
+  { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
+  { key: "employees", no: "03", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u552f\u4e00\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
+  { key: "platform", no: "04", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u8d27\u8e2a\u5e73\u53f0", description: "\u5ba2\u6237\u3001\u4ee3\u7406\u4e0e\u7968\u5355", eyebrow: "Shipment Tracking Platform", title: "\u8d27\u8e2a\u5e73\u53f0", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e3a\u5ba2\u6237\u5206\u914d\u7684\u6d77\u5916\u4ee3\u7406\u3001\u5ba2\u6237\u7801\u4e0e\u7968\u5355\u6570\u91cf\u3002" },
+  { key: "announcements", no: "05", group: "business", groupLabel: "\u4e1a\u52a1\u4e0e\u8d26\u53f7", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u7f16\u8f91 Markdown \u516c\u544a\u3001\u914d\u7f6e\u53ef\u89c1\u8303\u56f4\u4e0e\u5f53\u65e5\u5c55\u793a\u65e5\u671f\u3002" },
+  { key: "devices", no: "06", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
+  { key: "files", no: "07", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
+  { key: "system", no: "08", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u7cfb\u7edf\u7ba1\u7406", description: "\u7b56\u7565\u4e0e\u670d\u52a1\u72b6\u6001", eyebrow: "System Settings", title: "\u7cfb\u7edf\u7ba1\u7406", subtitle: "\u96c6\u4e2d\u653e\u7f6e\u8d26\u53f7\u7b56\u7565\u3001\u670d\u52a1\u72b6\u6001\u548c\u540e\u7eed\u8fd0\u7ef4\u5165\u53e3\u3002" }
 ];
 
 const loading = ref(false);
@@ -1191,6 +1271,9 @@ const announcementsLoaded = ref(false);
 const announcementDialogOpen = ref(false);
 const editingAnnouncementId = ref("");
 const announcementDialogError = ref("");
+const announcementImageInputRef = ref(null);
+const announcementImageUploading = ref(false);
+const announcementUploadedPath = ref("");
 const announcementPreviewRecord = ref(null);
 const announcementForm = reactive({
   title: "",
@@ -1208,7 +1291,6 @@ const apiAuditRows = ref([]);
 const apiAuditTotal = ref(0);
 const apiAuditPage = ref(1);
 const apiAuditPageSize = ref(20);
-const auditSectionRef = ref(null);
 const adminWorkspaceFiles = ref([]);
 const adminWorkspaceFileTotal = ref(0);
 const adminWorkspaceFilePage = ref(1);
@@ -1221,13 +1303,26 @@ const adminFilesLoaded = ref(false);
 const includeExpiredFiles = ref(false);
 const activeAdminFileSection = ref("shipment");
 const monitoring = ref(null);
+const systemOverview = ref(null);
+const overviewActivityChartRef = ref(null);
+const overviewUserChartRef = ref(null);
+const overviewStatusChartRef = ref(null);
+const overviewOperationChartRef = ref(null);
 const llmSettings = ref(null);
 const activeAdminPage = ref("overview");
 const loginForm = reactive({ username: "admin", password: "" });
 const employeeDialogOpen = ref(false);
 const editingEmployeeId = ref("");
 const employeeDialogError = ref("");
-const employeeForm = reactive({ username: "", displayName: "", password: "", role: "OVERSEA_AGENT", partyRole: "AGENT", status: "ACTIVE" });
+const employeeForm = reactive({
+  username: "",
+  displayName: "",
+  password: "",
+  passwordConfirm: "",
+  role: "OVERSEA_AGENT",
+  partyRole: "AGENT",
+  status: "ACTIVE"
+});
 const temporaryPasswordDialog = reactive({
   open: false,
   username: "",
@@ -1251,6 +1346,104 @@ const llmForm = reactive({
   apiKey: "",
   clearApiKey: false
 });
+
+const overviewChartInstances = {
+  activity: null,
+  users: null,
+  status: null,
+  operations: null
+};
+
+const OVERVIEW_COPY = {
+  "zh-CN": {
+    totalUsers: "\u7cfb\u7edf\u7528\u6237",
+    totalUsersHint: "\u5185\u90e8 {internal} \u00b7 \u5ba2\u6237 {customers}",
+    activeUsers: "\u6d3b\u8dc3\u8d26\u53f7",
+    activeUsersHint: "\u5185\u90e8\u5458\u5de5\u4e0e\u5ba2\u6237\u5408\u8ba1",
+    onlineDevices: "\u5728\u7ebf\u8bbe\u5907",
+    onlineDevicesHint: "\u5f53\u524d\u6709\u6548\u4f1a\u8bdd\u8bbe\u5907",
+    management30d: "\u8fd1 30 \u65e5\u7ba1\u7406\u64cd\u4f5c",
+    management30dHint: "\u7528\u6237\u3001\u516c\u544a\u3001\u8bbe\u5907\u4e0e\u914d\u7f6e\u53d8\u66f4",
+    todayActivity: "\u4eca\u65e5\u7cfb\u7edf\u6d3b\u52a8",
+    todayActivityHint: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u7ba1\u7406\u64cd\u4f5c",
+    activityTrend: "\u8fd1 7 \u65e5\u7cfb\u7edf\u6d3b\u52a8\u8d8b\u52bf",
+    activityTrendHint: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u7ba1\u7406\u64cd\u4f5c\u6309\u65e5\u5bf9\u6bd4",
+    userComposition: "\u7cfb\u7edf\u7528\u6237\u6784\u6210",
+    accountStatus: "\u8d26\u53f7\u72b6\u6001",
+    operationTypes: "\u8fd1 30 \u65e5\u7ba1\u7406\u64cd\u4f5c\u5206\u5e03",
+    operationTypesHint: "\u4e0d\u542b\u666e\u901a\u63a5\u53e3\u8bbf\u95ee",
+    apiRequests: "\u63a5\u53e3\u8bbf\u95ee",
+    managementActions: "\u7ba1\u7406\u64cd\u4f5c",
+    active: "\u6b63\u5e38",
+    disabled: "\u5df2\u505c\u7528",
+    noOperations: "\u6682\u65e0\u7ba1\u7406\u64cd\u4f5c",
+    roles: {
+      ADMIN: "\u7ba1\u7406\u5458",
+      BUSINESS: "\u4e1a\u52a1\u5458",
+      OVERSEA_AGENT: "\u6d77\u5916\u4ee3\u7406",
+      CUSTOMER: "\u5ba2\u6237"
+    },
+    actions: {
+      CREATE_USER: "\u65b0\u589e\u7528\u6237",
+      UPDATE_USER: "\u4fee\u6539\u7528\u6237",
+      RESET_PASSWORD: "\u91cd\u7f6e\u5bc6\u7801",
+      DELETE_USER: "\u505c\u7528\u7528\u6237",
+      KICK_DEVICE: "\u8bbe\u5907\u4e0b\u7ebf",
+      DELETE_DEVICE: "\u5220\u9664\u8bbe\u5907",
+      CREATE_ANNOUNCEMENT: "\u65b0\u589e\u516c\u544a",
+      UPDATE_ANNOUNCEMENT: "\u4fee\u6539\u516c\u544a",
+      PUBLISH_ANNOUNCEMENT: "\u53d1\u5e03\u516c\u544a",
+      DISABLE_ANNOUNCEMENT: "\u505c\u7528\u516c\u544a",
+      DELETE_ANNOUNCEMENT: "\u5220\u9664\u516c\u544a",
+      UPLOAD_ANNOUNCEMENT_IMAGE: "\u4e0a\u4f20\u516c\u544a\u56fe\u7247",
+      UPDATE_LLM_SETTINGS: "\u4fee\u6539\u6a21\u578b\u914d\u7f6e"
+    }
+  },
+  "en-US": {
+    totalUsers: "System users",
+    totalUsersHint: "Internal {internal} \u00b7 Customers {customers}",
+    activeUsers: "Active accounts",
+    activeUsersHint: "Internal employees and customers",
+    onlineDevices: "Online devices",
+    onlineDevicesHint: "Devices with an active session",
+    management30d: "30-day admin actions",
+    management30dHint: "User, announcement, device, and settings changes",
+    todayActivity: "Activity today",
+    todayActivityHint: "API visits and management actions",
+    activityTrend: "7-day system activity",
+    activityTrendHint: "Daily API visits versus management actions",
+    userComposition: "System user composition",
+    accountStatus: "Account status",
+    operationTypes: "30-day management actions",
+    operationTypesHint: "Excludes routine API access",
+    apiRequests: "API visits",
+    managementActions: "Management actions",
+    active: "Active",
+    disabled: "Disabled",
+    noOperations: "No management actions",
+    roles: {
+      ADMIN: "Administrators",
+      BUSINESS: "Business",
+      OVERSEA_AGENT: "Overseas agents",
+      CUSTOMER: "Customers"
+    },
+    actions: {
+      CREATE_USER: "Create user",
+      UPDATE_USER: "Update user",
+      RESET_PASSWORD: "Reset password",
+      DELETE_USER: "Disable user",
+      KICK_DEVICE: "Sign out device",
+      DELETE_DEVICE: "Delete device",
+      CREATE_ANNOUNCEMENT: "Create announcement",
+      UPDATE_ANNOUNCEMENT: "Update announcement",
+      PUBLISH_ANNOUNCEMENT: "Publish announcement",
+      DISABLE_ANNOUNCEMENT: "Disable announcement",
+      DELETE_ANNOUNCEMENT: "Delete announcement",
+      UPLOAD_ANNOUNCEMENT_IMAGE: "Upload announcement image",
+      UPDATE_LLM_SETTINGS: "Update model settings"
+    }
+  }
+};
 
 const ANNOUNCEMENT_COPY = {
   "zh-CN": {
@@ -1278,6 +1471,12 @@ const ANNOUNCEMENT_COPY = {
     saveDraft: "\u4fdd\u5b58",
     titlePlaceholder: "\u4f8b\u5982\uff1a\u4eca\u65e5\u8d27\u8e2a\u5e73\u53f0\u5347\u7ea7\u901a\u77e5",
     imageUrl: "\u5934\u56fe URL\uff08\u53ef\u9009\uff09",
+    uploadImage: "\u4e0a\u4f20\u5230\u7cfb\u7edf\u786c\u76d8",
+    uploadingImage: "\u4e0a\u4f20\u4e2d\u2026",
+    uploadHint: "\u652f\u6301 JPG\u3001PNG\u3001GIF\uff0c\u6700\u5927 10 MB\u3002\u4e0a\u4f20\u540e\u4f1a\u81ea\u52a8\u586b\u5165\u7cfb\u7edf URL\u3002",
+    storagePath: "\u786c\u76d8\u5b58\u50a8\u8def\u5f84",
+    uploadSuccess: "\u56fe\u7247\u5df2\u4e0a\u4f20\u5230\u7cfb\u7edf\u786c\u76d8",
+    uploadFailed: "\u56fe\u7247\u4e0a\u4f20\u5931\u8d25",
     illustrationRef: "\u63d2\u56fe\u5f15\u7528/\u8bf4\u660e\uff08\u53ef\u9009\uff09",
     illustrationPlaceholder: "\u56fe\u7247\u6765\u6e90\u3001\u7248\u6743\u6216\u5185\u90e8\u7d20\u6750\u7f16\u53f7",
     markdown: "Markdown \u6b63\u6587",
@@ -1292,7 +1491,7 @@ const ANNOUNCEMENT_COPY = {
     published: "\u5df2\u53d1\u5e03",
     disabled: "\u5df2\u505c\u7528",
     required: "\u8bf7\u5b8c\u6574\u586b\u5199\u6807\u9898\u3001\u5c55\u793a\u65e5\u671f\u548c Markdown \u6b63\u6587\u3002",
-    invalidImage: "\u5934\u56fe\u5730\u5740\u5fc5\u987b\u4e3a http/https URL\u3002",
+    invalidImage: "\u5934\u56fe\u5730\u5740\u5fc5\u987b\u4e3a http/https URL \u6216\u7cfb\u7edf\u56fe\u7247\u8def\u5f84\u3002",
     created: "\u516c\u544a\u5df2\u521b\u5efa",
     updated: "\u516c\u544a\u5df2\u66f4\u65b0",
     publishedSuccess: "\u516c\u544a\u5df2\u53d1\u5e03",
@@ -1326,6 +1525,12 @@ const ANNOUNCEMENT_COPY = {
     saveDraft: "Save",
     titlePlaceholder: "For example: Shipment tracking platform update",
     imageUrl: "Cover image URL (optional)",
+    uploadImage: "Upload to system disk",
+    uploadingImage: "Uploading\u2026",
+    uploadHint: "JPG, PNG, or GIF up to 10 MB. The system URL is filled in automatically.",
+    storagePath: "Disk storage path",
+    uploadSuccess: "Image uploaded to the system disk",
+    uploadFailed: "Image upload failed",
     illustrationRef: "Illustration reference (optional)",
     illustrationPlaceholder: "Source, copyright note, or internal asset reference",
     markdown: "Markdown content",
@@ -1340,7 +1545,7 @@ const ANNOUNCEMENT_COPY = {
     published: "Published",
     disabled: "Disabled",
     required: "Title, display date, and Markdown content are required.",
-    invalidImage: "The cover image must use an http/https URL.",
+    invalidImage: "The cover image must use an http/https URL or a system image path.",
     created: "Announcement created",
     updated: "Announcement updated",
     publishedSuccess: "Announcement published",
@@ -1352,6 +1557,9 @@ const ANNOUNCEMENT_COPY = {
 };
 const announcementCopy = computed(() =>
   ANNOUNCEMENT_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
+);
+const overviewCopy = computed(() =>
+  OVERVIEW_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
 );
 
 const adminPages = computed(() => rawAdminPages.map((item) => ({
@@ -1370,33 +1578,23 @@ const normalizedDevices = computed(() => devices.value.map(normalizeDisplayName)
 const pagedEmployees = computed(() => normalizedEmployees.value);
 const pagedDevices = computed(() => normalizedDevices.value);
 const onlineDevices = computed(() => normalizedDevices.value.filter((device) => device.online));
-const recentEvents = computed(() => monitoring.value?.recentEvents || []);
+const editingEmployeeIsSelf = computed(() =>
+  Boolean(editingEmployeeId.value)
+  && String(editingEmployeeId.value) === String(currentUser.value?.id)
+);
 const platformCustomers = computed(() => platformInfo.value?.items || []);
 const pagedPlatformCustomers = computed(() => platformCustomers.value);
 const announcementEditorPreviewHtml = computed(() =>
   renderAnnouncementMarkdown(announcementForm.contentMarkdown)
-);
-const topEndpoints = computed(() => monitoring.value?.runtime?.topEndpoints || []);
-const runtimeFailedRequestCount = computed(() => Number(monitoring.value?.runtime?.failedRequests || 0));
-const runtimeHasFailedRequests = computed(() => runtimeFailedRequestCount.value > 0);
-const runtimeHealthLabel = computed(() =>
-  runtimeHasFailedRequests.value
-    ? ui("admin.runtimeHasFailedRequests", { count: runtimeFailedRequestCount.value })
-    : ui("admin.runtimeRunningNormally")
 );
 const llmStatusText = computed(() => {
   if (!llmSettings.value) return tr("未加载");
   if (!llmSettings.value.enabled) return tr("已关闭");
   return tr(llmSettings.value.apiKeyConfigured ? "已启用" : "缺少 Key");
 });
-const heapPercent = computed(() => {
-  const used = Number(monitoring.value?.runtime?.heapUsedMb || 0);
-  const max = Number(monitoring.value?.runtime?.heapMaxMb || 0);
-  if (!max) return 0;
-  return Math.round((used / max) * 100);
-});
 
 onMounted(async () => {
+  window.addEventListener("resize", resizeOverviewCharts);
   if (storedAdminToken()) {
     initialLoading.value = true;
     try {
@@ -1405,11 +1603,30 @@ onMounted(async () => {
       initialLoading.value = false;
     }
   }
+  await nextTick();
+  renderOverviewCharts();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", resizeOverviewCharts);
+  Object.values(overviewChartInstances).forEach((chart) => chart?.dispose());
 });
 
 watch(() => props.currentUser, (user) => {
   currentUser.value = user;
 }, { immediate: true });
+
+watch(activeAdminPage, async (page) => {
+  if (page !== "overview") return;
+  await nextTick();
+  renderOverviewCharts();
+});
+
+watch(currentLocale, async () => {
+  if (activeAdminPage.value !== "overview") return;
+  await nextTick();
+  renderOverviewCharts();
+});
 
 watch(() => employeeForm.role, (role) => {
   employeeForm.partyRole = "AGENT";
@@ -1443,6 +1660,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
       employeeData,
       deviceData,
       monitoringData,
+      overviewData,
       platformData,
       auditData,
       llmData
@@ -1450,6 +1668,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
       fetchEmployees({ page: employeePage.value - 1, size: employeePageSize.value }),
       fetchDevices({ page: devicePage.value - 1, size: devicePageSize.value }),
       fetchMonitoring(),
+      fetchAdminOverview(),
       fetchPlatformInfo({ page: platformPage.value - 1, size: platformPageSize.value }),
       fetchAuditLog({ page: apiAuditPage.value - 1, size: apiAuditPageSize.value }),
       fetchLlmSettings()
@@ -1459,6 +1678,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
     devices.value = Array.isArray(deviceData?.items) ? deviceData.items : [];
     deviceTotal.value = Number(deviceData?.total || 0);
     monitoring.value = monitoringData;
+    systemOverview.value = overviewData;
     platformInfo.value = platformData;
     platformTotal.value = Number(platformData?.total || 0);
     apiAuditRows.value = Array.isArray(auditData?.items) ? auditData.items : [];
@@ -1467,6 +1687,8 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     if (activeAdminPage.value === "announcements") await loadAnnouncementPageWithoutLoading();
     syncLlmForm(llmData);
+    await nextTick();
+    renderOverviewCharts();
     if (showSuccess) showMessage("后台数据已刷新");
   });
 }
@@ -1479,6 +1701,175 @@ function selectAdminPage(page) {
   if (page === "announcements" && !announcementsLoaded.value) {
     void withLoading(loadAnnouncementPageWithoutLoading);
   }
+}
+
+function renderOverviewCharts() {
+  if (activeAdminPage.value !== "overview" || !systemOverview.value) return;
+  const activityChart = ensureOverviewChart(
+    "activity",
+    overviewActivityChartRef.value
+  );
+  const userChart = ensureOverviewChart("users", overviewUserChartRef.value);
+  const statusChart = ensureOverviewChart("status", overviewStatusChartRef.value);
+  const operationChart = ensureOverviewChart(
+    "operations",
+    overviewOperationChartRef.value
+  );
+  if (!activityChart || !userChart || !statusChart || !operationChart) return;
+
+  const trend = Array.isArray(systemOverview.value.activityTrend)
+    ? systemOverview.value.activityTrend
+    : [];
+  activityChart.setOption({
+    animationDuration: 450,
+    color: ["#2f80d1", "#e49a32"],
+    tooltip: { trigger: "axis" },
+    legend: {
+      bottom: 0,
+      itemWidth: 18,
+      textStyle: { color: "#61758b", fontSize: 11 }
+    },
+    grid: { left: 45, right: 22, top: 22, bottom: 48 },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: trend.map((item) => formatOverviewDate(item.date)),
+      axisLine: { lineStyle: { color: "#ccd8e5" } },
+      axisLabel: { color: "#6c8197" }
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      splitLine: { lineStyle: { color: "#edf2f7" } },
+      axisLabel: { color: "#8495a7" }
+    },
+    series: [
+      {
+        name: overviewCopy.value.apiRequests,
+        type: "line",
+        smooth: true,
+        symbolSize: 7,
+        areaStyle: { color: "rgba(47, 128, 209, .10)" },
+        data: trend.map((item) => Number(item.apiRequests || 0))
+      },
+      {
+        name: overviewCopy.value.managementActions,
+        type: "line",
+        smooth: true,
+        symbolSize: 7,
+        areaStyle: { color: "rgba(228, 154, 50, .08)" },
+        data: trend.map((item) => Number(item.managementActions || 0))
+      }
+    ]
+  }, true);
+
+  userChart.setOption(overviewDonutOption(
+    (systemOverview.value.userComposition || []).map((item) => ({
+      name: overviewCopy.value.roles[item.code] || item.code,
+      value: Number(item.value || 0)
+    })),
+    ["#2f80d1", "#48a8cf", "#7a6bd1", "#42a878"]
+  ), true);
+
+  statusChart.setOption(overviewDonutOption(
+    (systemOverview.value.accountStatus || []).map((item) => ({
+      name: item.code === "ACTIVE" ? overviewCopy.value.active : overviewCopy.value.disabled,
+      value: Number(item.value || 0)
+    })),
+    ["#35a477", "#c8d2dd"]
+  ), true);
+
+  const operationItems = Array.isArray(systemOverview.value.operationTypes)
+    ? systemOverview.value.operationTypes
+    : [];
+  const displayOperations = operationItems.length
+    ? [...operationItems].reverse()
+    : [{ code: "EMPTY", value: 0 }];
+  operationChart.setOption({
+    animationDuration: 450,
+    color: ["#4f8ecf"],
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (items) => {
+        const item = items?.[0];
+        return `${item?.name || ""}<br>${overviewCopy.value.managementActions}: ${item?.value || 0}`;
+      }
+    },
+    grid: { left: 138, right: 28, top: 16, bottom: 28 },
+    xAxis: {
+      type: "value",
+      minInterval: 1,
+      splitLine: { lineStyle: { color: "#edf2f7" } },
+      axisLabel: { color: "#8495a7" }
+    },
+    yAxis: {
+      type: "category",
+      data: displayOperations.map((item) => operationActionLabel(item.code)),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: "#536b82", fontSize: 11 }
+    },
+    series: [{
+      type: "bar",
+      barMaxWidth: 22,
+      itemStyle: { borderRadius: [0, 5, 5, 0] },
+      data: displayOperations.map((item) => Number(item.value || 0))
+    }]
+  }, true);
+}
+
+function ensureOverviewChart(key, element) {
+  if (!element) return null;
+  const existing = overviewChartInstances[key];
+  if (existing?.getDom() === element && !existing.isDisposed()) return existing;
+  existing?.dispose();
+  overviewChartInstances[key] = initEChart(element);
+  return overviewChartInstances[key];
+}
+
+function overviewDonutOption(data, colors) {
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  return {
+    animationDuration: 450,
+    color: colors,
+    tooltip: { trigger: "item", formatter: "{b}<br>{c} ({d}%)" },
+    legend: {
+      bottom: 0,
+      left: "center",
+      itemWidth: 12,
+      itemHeight: 8,
+      textStyle: { color: "#61758b", fontSize: 10 }
+    },
+    series: [{
+      type: "pie",
+      radius: ["49%", "70%"],
+      center: ["50%", "44%"],
+      avoidLabelOverlap: true,
+      itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 4 },
+      label: {
+        color: "#536b82",
+        formatter: total ? "{b}\n{c}" : overviewCopy.value.noOperations
+      },
+      labelLine: { length: 10, length2: 8 },
+      data
+    }]
+  };
+}
+
+function operationActionLabel(code) {
+  if (code === "EMPTY") return overviewCopy.value.noOperations;
+  return overviewCopy.value.actions[code]
+    || String(code || "-").toLowerCase().replaceAll("_", " ");
+}
+
+function formatOverviewDate(value) {
+  const parts = String(value || "").split("-");
+  return parts.length === 3 ? `${parts[1]}/${parts[2]}` : String(value || "-");
+}
+
+function resizeOverviewCharts() {
+  Object.values(overviewChartInstances).forEach((chart) => chart?.resize());
 }
 
 async function loadEmployeePage() {
@@ -1586,12 +1977,6 @@ async function changeApiAuditPageSize(size) {
   await withLoading(loadApiAuditPage);
 }
 
-async function scrollToAudit() {
-  activeAdminPage.value = "overview";
-  await nextTick();
-  auditSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
 function todayDateString() {
   const now = new Date();
   const year = now.getFullYear();
@@ -1624,6 +2009,7 @@ function resetAnnouncementForm() {
   announcementForm.title = "";
   announcementForm.contentMarkdown = "";
   announcementForm.imageUrl = "";
+  announcementUploadedPath.value = "";
   announcementForm.illustrationRef = "";
   announcementForm.audience = "ALL";
   announcementForm.displayDate = todayDateString();
@@ -1635,6 +2021,9 @@ function openAnnouncementEditor(record = null) {
   announcementForm.title = record?.title || "";
   announcementForm.contentMarkdown = record?.contentMarkdown || "";
   announcementForm.imageUrl = record?.imageUrl || "";
+  announcementUploadedPath.value = String(record?.imageUrl || "").startsWith("/api/public/announcement-images/")
+    ? String(record.imageUrl).replace("/api/public/", "")
+    : "";
   announcementForm.illustrationRef = record?.illustrationRef || "";
   announcementForm.audience = announcementAudience(record);
   announcementForm.displayDate = record?.displayDate || todayDateString();
@@ -1654,6 +2043,29 @@ function openAnnouncementPreview(record) {
 
 function closeAnnouncementPreview() {
   announcementPreviewRecord.value = null;
+}
+
+async function handleAnnouncementImageUpload(event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+  announcementDialogError.value = "";
+  announcementImageUploading.value = true;
+  try {
+    const uploaded = await uploadAdminAnnouncementImage(file);
+    announcementForm.imageUrl = String(uploaded?.url || "");
+    announcementUploadedPath.value = String(uploaded?.storagePath || "");
+    if (!announcementForm.illustrationRef.trim()) {
+      announcementForm.illustrationRef = String(uploaded?.originalName || file.name || "");
+    }
+    showMessage(announcementCopy.value.uploadSuccess);
+  } catch (error) {
+    markApiErrorHandled(error);
+    announcementDialogError.value = error?.message || announcementCopy.value.uploadFailed;
+  } finally {
+    announcementImageUploading.value = false;
+    if (input) input.value = "";
+  }
 }
 
 function announcementPayload() {
@@ -1903,6 +2315,7 @@ function openEmployeeDialog(user = null) {
   employeeForm.username = user?.username || "";
   employeeForm.displayName = user?.displayName || "";
   employeeForm.password = "";
+  employeeForm.passwordConfirm = "";
   employeeForm.role = user?.role || "OVERSEA_AGENT";
   employeeForm.partyRole = user?.partyRole || "AGENT";
   employeeForm.status = user?.status || "ACTIVE";
@@ -1916,6 +2329,7 @@ function closeEmployeeDialog() {
   employeeForm.username = "";
   employeeForm.displayName = "";
   employeeForm.password = "";
+  employeeForm.passwordConfirm = "";
   employeeForm.role = "OVERSEA_AGENT";
   employeeForm.partyRole = "AGENT";
   employeeForm.status = "ACTIVE";
@@ -1923,8 +2337,14 @@ function closeEmployeeDialog() {
 
 async function handleSaveEmployee() {
   employeeDialogError.value = "";
-  if (!editingEmployeeId.value && !isStrongEmployeePassword(employeeForm.password)) {
+  const passwordProvided = Boolean(employeeForm.password || employeeForm.passwordConfirm);
+  if ((!editingEmployeeId.value || passwordProvided) && !isStrongEmployeePassword(employeeForm.password)) {
     employeeDialogError.value = t("admin.employee.passwordRuleError");
+    return;
+  }
+  if ((!editingEmployeeId.value || passwordProvided)
+      && employeeForm.password !== employeeForm.passwordConfirm) {
+    employeeDialogError.value = t("admin.employee.passwordMismatch");
     return;
   }
   await withLoading(async () => {
@@ -1934,10 +2354,12 @@ async function handleSaveEmployee() {
         displayName: employeeForm.displayName,
         role: employeeForm.role,
         partyRole: employeeForm.partyRole,
-        status: employeeForm.status
+        status: employeeForm.status,
+        password: employeeForm.password || null
       });
     } else {
-      await createEmployee({ ...employeeForm });
+      const { passwordConfirm, ...payload } = employeeForm;
+      await createEmployee(payload);
     }
     closeEmployeeDialog();
     await loadDashboard(false);
@@ -2521,8 +2943,32 @@ const CP1252_BYTES = {
 }
 
 .admin-audit-panel {
-  margin-top: 16px;
   scroll-margin-top: 20px;
+}
+
+.admin-overview-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.admin-overview-chart-card--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-overview-chart-card .admin-panel-head > span {
+  max-width: 420px;
+  text-align: right;
+}
+
+.admin-overview-echart {
+  width: 100%;
+  height: 300px;
+}
+
+.admin-overview-echart--bar {
+  height: 320px;
 }
 
 .admin-table-wrap :deep(.el-table__cell) {
@@ -2776,6 +3222,61 @@ const CP1252_BYTES = {
   box-shadow: 0 0 0 1px #bed0e2 inset;
 }
 
+.announcement-image-field {
+  display: grid;
+  gap: 7px;
+}
+
+.announcement-image-field > small {
+  color: #7b8da1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.announcement-image-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.announcement-image-input-row button {
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid #8eb7dc;
+  border-radius: 9px;
+  color: #256b9f;
+  background: #eef7ff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.announcement-image-input-row button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.announcement-file-input {
+  display: none;
+}
+
+.announcement-storage-path {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+  align-items: center;
+}
+
+.announcement-storage-path code {
+  overflow: hidden;
+  color: #286b9d;
+  font-family: Consolas, "Courier New", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .announcement-field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3015,6 +3516,14 @@ const CP1252_BYTES = {
 }
 
 @media (max-width: 980px) {
+  .admin-overview-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-overview-chart-card--wide {
+    grid-column: auto;
+  }
+
   .announcement-editor-grid {
     grid-template-columns: 1fr;
   }
@@ -3037,6 +3546,10 @@ const CP1252_BYTES = {
   }
 
   .announcement-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .announcement-image-input-row {
     grid-template-columns: 1fr;
   }
 

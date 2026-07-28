@@ -318,12 +318,12 @@ public class AnnouncementService {
         """
         SELECT a.id, a.title, a.content_markdown, a.image_url, a.illustration_ref,
                a.audience, a.display_date, a.status, a.created_by, a.published_at,
-               a.created_at, a.updated_at, reads.read_at
+               a.created_at, a.updated_at, announcement_read.read_at
         FROM cp_announcements a
-        LEFT JOIN cp_announcement_reads reads
-          ON reads.announcement_id = a.id
-         AND reads.reader_type = ?
-         AND reads.reader_id = ?
+        LEFT JOIN cp_announcement_reads announcement_read
+          ON announcement_read.announcement_id = a.id
+         AND announcement_read.reader_type = ?
+         AND announcement_read.reader_id = ?
         WHERE a.status = 'PUBLISHED'
           AND a.display_date = ?
           AND a.audience IN (?, 'ALL')

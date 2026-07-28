@@ -56,6 +56,65 @@ class CustomerAccessFlowTest {
     )).isEqualTo(2);
   }
 
+  @Test
+  void handsOwnedCustomersToAnotherBusinessUserAndRetainsShipmentHistory() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "handover-customer", "SecurePass!23", "Handover Customer", "SHIPPER"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) created.get("id");
+    Long internalCustomerId = jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          customer_id, shipment_id, relationship_role, publication_status, assigned_by
+        ) VALUES (?, 10, 'SHIPPER', 'PUBLISHED', 1)
+        """,
+        internalCustomerId
+    );
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> agents =
+        (List<Map<String, Object>>) customerService.listBusinessHandoverAgents(business).get("items");
+    assertThat(agents).extracting(item -> item.get("username"))
+        .containsExactly("sales-1", "sales-2");
+
+    Map<String, Object> result = customerService.handoverCustomers(
+        new BusinessCustomerHandoverRequest(List.of(customerId), 2L, "Cover the next sailing"),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(result)
+        .containsEntry("transferred", 1)
+        .containsEntry("relatedShipments", 1)
+        .containsEntry("targetBusinessUserName", "Business Two")
+        .containsEntry("previousAccessRetained", true);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    )).isEqualTo(2L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_transfer_log WHERE customer_id = ? AND from_agent_id = 1 AND to_agent_id = 2",
+        Integer.class,
+        internalCustomerId
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
+        Integer.class
+    )).isEqualTo(1);
+    assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
+    assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
+  }
+
   @BeforeEach
   void setUp() {
     DriverManagerDataSource dataSource = new DriverManagerDataSource(

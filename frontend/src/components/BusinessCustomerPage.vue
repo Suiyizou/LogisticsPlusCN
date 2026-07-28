@@ -67,8 +67,8 @@
           <button :class="{ active: menuItem === 'shipments' }" @click="navigateTo('shipments')">
             <el-icon><Document /></el-icon><span>{{ t("customers.tabShipmentManagement") }}</span>
           </button>
-          <button v-if="isManager" :class="{ active: menuItem === 'agents' }" @click="navigateTo('agents')">
-            <el-icon><UserFilled /></el-icon><span>{{ t("customers.overseaAgentManagement") }}</span>
+          <button v-if="isManager" :class="{ active: menuItem === 'handover' }" @click="navigateTo('handover')">
+            <el-icon><Operation /></el-icon><span>{{ t("customers.businessHandover") }}</span>
           </button>
         </nav>
         <button type="button" class="sidebar-profile-card" @click="openPersonalProfile">
@@ -82,7 +82,7 @@
       </aside>
 
       <div class="workspace-main">
-        <transition name="fade" mode="out-in" appear>
+        <transition name="fade" mode="out-in" appear @after-enter="handleWorkspaceViewEntered">
         <!-- CUSTOMER MANAGEMENT -->
         <div v-if="menuItem === 'overview'" key="overview" class="workspace-view">
           <div class="list-page list-page-full business-overview" v-loading="loadingOverviewMetrics">
@@ -571,51 +571,58 @@
           </transition>
         </div>
 
-        <div v-else-if="menuItem === 'agents'" key="agents" class="workspace-view">
-          <div class="list-page list-page-full">
+        <div v-else-if="menuItem === 'handover'" key="handover" class="workspace-view">
+          <div class="list-page list-page-full business-handover-page">
             <div class="list-page-header">
-              <div><h2>{{ t("customers.overseaAgentManagement") }}</h2><p>{{ t("customers.overseaAgentManagementHint") }}</p></div>
-              <div class="list-page-actions">
-                <el-button @click="loadTransferAgents"><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button>
-                <el-button type="primary" plain @click="openAgentBatchImport"><el-icon><Upload /></el-icon>{{ t("customers.batchCreateAgents") }}</el-button>
-                <el-button type="primary" @click="openAgentCreateDialog"><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button>
+              <div>
+                <span class="business-overview-kicker">{{ t("customers.businessHandoverKicker") }}</span>
+                <h2>{{ t("customers.businessHandover") }}</h2>
+                <p>{{ t("customers.businessHandoverHint") }}</p>
               </div>
+              <el-button :loading="loadingBusinessHandoverAgents" @click="loadBusinessHandoverAgents">
+                <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
+              </el-button>
             </div>
-            <el-table :data="paginatedTransferAgents" border stripe v-loading="loadingTransferAgents" class="standard-information-table">
-              <el-table-column type="index" :index="agentRowIndex" :label="t('customers.index')" width="70" />
-              <el-table-column prop="username" :label="t('customers.username')" min-width="160" />
-              <el-table-column prop="displayName" :label="t('customers.displayName')" min-width="180" />
-              <el-table-column prop="linkedCustomerCount" :label="t('customers.shipmentCount')" width="130" align="center" />
-              <el-table-column :label="t('customers.status')" width="120">
-                <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'">{{ statusLabel(row.status) }}</el-tag></template>
-              </el-table-column>
-              <el-table-column :label="t('customers.actions')" width="330" fixed="right">
+            <el-table
+              :data="businessHandoverAgents"
+              stripe
+              v-loading="loadingBusinessHandoverAgents"
+              class="standard-information-table business-handover-table"
+            >
+              <el-table-column type="index" :label="t('customers.index')" width="70" />
+              <el-table-column :label="t('customers.businessOperator')" min-width="240">
                 <template #default="{ row }">
-                  <div class="table-action-buttons table-action-buttons--single-line">
-                    <el-button size="small" type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
-                    <el-button size="small" type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                    <el-button
-                      size="small"
-                      :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
-                      plain
-                      @click="toggleAgentStatus(row)"
-                    >{{ row.status === 'ACTIVE' ? t("customers.disable") : t("customers.enable") }}</el-button>
+                  <div class="handover-agent-cell">
+                    <span class="handover-agent-avatar">{{ (row.displayName || row.username || "?").slice(0, 1).toUpperCase() }}</span>
+                    <span>
+                      <b>{{ row.displayName || row.username }}</b>
+                      <small>@{{ row.username }}</small>
+                    </span>
+                    <el-tag v-if="row.current" type="info" effect="plain">{{ t("customers.currentBusinessOperator") }}</el-tag>
                   </div>
                 </template>
               </el-table-column>
+              <el-table-column prop="customerCount" :label="t('customers.ownedCustomerCount')" width="160" align="center" />
+              <el-table-column :label="t('customers.status')" width="120">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'" effect="light">
+                    {{ statusLabel(row.status) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('customers.actions')" width="180" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    type="primary"
+                    :disabled="row.current || row.status !== 'ACTIVE' || !handoverEligibleCustomers.length"
+                    @click="openBusinessHandover(row)"
+                  >{{ t("customers.startBusinessHandover") }}</el-button>
+                </template>
+              </el-table-column>
+              <template #empty>
+                <el-empty :description="t('customers.noBusinessOperators')" />
+              </template>
             </el-table>
-            <el-pagination
-              v-if="transferAgents.length"
-              class="shipment-pagination unified-pagination"
-              background
-              layout="prev, pager, next, sizes, total"
-              :current-page="agentPage"
-              :page-size="agentPageSize"
-              :page-sizes="[10, 20, 50]"
-              :total="transferAgents.length"
-              @current-change="agentPage = $event"
-              @size-change="changeAgentPageSize"
-            />
           </div>
         </div>
 
@@ -635,6 +642,7 @@
                       <el-select
                         v-model="shipmentCustomerFilter"
                         class="business-select shipment-customer-filter"
+                        popper-class="business-select-popper shipment-filter-popper"
                         :placeholder="t('customers.filterByCustomer')"
                         clearable
                         filterable
@@ -655,6 +663,7 @@
                       <el-select
                         v-model="shipmentTrackingChannel"
                         class="business-select shipment-channel-select"
+                        popper-class="business-select-popper shipment-filter-popper"
                         :disabled="batchTrackRunning || refreshingShipment"
                       >
                         <el-option :label="t('customers.trackingChannelAuto')" value="AUTO" />
@@ -764,10 +773,10 @@
                       <div class="shipment-remark-cell">
                         <span>{{ row.note || row.remark || '—' }}</span>
                         <div v-if="isCreatedToday(row) || isUpdatedToday(row)" class="shipment-today-tags">
-                          <el-tag v-if="isCreatedToday(row)" size="small" type="success" effect="light">
+                          <el-tag v-if="isCreatedToday(row)" class="shipment-today-tag is-created" type="success" effect="dark">
                             {{ t("customers.todayNewBusiness") }}
                           </el-tag>
-                          <el-tag v-if="isUpdatedToday(row)" size="small" type="warning" effect="light">
+                          <el-tag v-if="isUpdatedToday(row)" class="shipment-today-tag is-updated" type="danger" effect="dark">
                             {{ t("customers.todayUpdatedBusiness") }}
                           </el-tag>
                         </div>
@@ -792,7 +801,7 @@
                 </el-table>
                 <el-pagination
                   v-if="shipmentTotal > shipmentPageSize"
-                  class="shipment-pagination"
+                  class="shipment-pagination unified-pagination"
                   background
                   layout="prev, pager, next, sizes, total"
                   :current-page="shipmentPage"
@@ -1421,7 +1430,7 @@
 
     <div v-if="transferDialogOpen" class="customer-code-overlay" role="presentation" @click.self="closeCustomerTransfer">
       <section class="customer-code-dialog customer-transfer-dialog" role="dialog" aria-modal="true" :aria-label="t('customers.transferTitle')">
-        <span class="customer-code-kicker">CUSTOMER HANDOVER</span>
+        <span class="customer-code-kicker">OVERSEA AGENT ASSIGNMENT</span>
         <h2>{{ t("customers.transferTitle") }}</h2>
         <p>{{ t("customers.transferDescription", { count: selectedCustomerRows.length }) }}</p>
         <form class="customer-dialog-form" @submit.prevent="submitCustomerTransfer">
@@ -1459,6 +1468,66 @@
         </form>
       </section>
     </div>
+
+    <el-dialog
+      v-model="businessHandoverDialogOpen"
+      :title="t('customers.businessHandoverDialogTitle')"
+      width="min(620px, 92vw)"
+      append-to-body
+      class="business-handover-dialog"
+      @closed="resetBusinessHandoverForm"
+    >
+      <div class="handover-target-summary">
+        <span class="handover-agent-avatar">{{ (businessHandoverTarget?.displayName || "?").slice(0, 1).toUpperCase() }}</span>
+        <span>
+          <small>{{ t("customers.handoverTargetBusinessOperator") }}</small>
+          <b>{{ businessHandoverTarget?.displayName }} (@{{ businessHandoverTarget?.username }})</b>
+        </span>
+      </div>
+      <el-form label-position="top">
+        <el-form-item :label="t('customers.handoverCustomers')">
+          <el-select
+            v-model="businessHandoverForm.customerIds"
+            class="business-select"
+            popper-class="business-select-popper"
+            multiple
+            filterable
+            collapse-tags
+            :max-collapse-tags="3"
+            :placeholder="t('customers.handoverCustomersPlaceholder')"
+          >
+            <el-option
+              v-for="customer in handoverEligibleCustomers"
+              :key="customer.id"
+              :value="customer.id"
+              :label="customerFilterOptionLabel(customer)"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('customers.handoverReason')">
+          <el-input
+            v-model="businessHandoverForm.reason"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+            :placeholder="t('customers.handoverReasonPlaceholder')"
+          />
+        </el-form-item>
+      </el-form>
+      <p class="handover-permission-hint">{{ t("customers.businessHandoverPermissionHint") }}</p>
+      <template #footer>
+        <el-button :disabled="submittingBusinessHandover" @click="businessHandoverDialogOpen = false">
+          {{ t("customers.cancel") }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="submittingBusinessHandover"
+          :disabled="!businessHandoverForm.customerIds.length"
+          @click="submitBusinessHandover"
+        >{{ t("customers.confirmBusinessHandover") }}</el-button>
+      </template>
+    </el-dialog>
 
     <div v-if="batchCredentialRows.length" class="customer-code-overlay" role="presentation">
       <section
@@ -2278,12 +2347,14 @@ import {
   deleteBusinessShipment,
   fetchAvailableBusinessShipments,
   fetchBusinessDashboardTodayStats,
+  fetchBusinessHandoverAgents,
   fetchBusinessCustomers,
   fetchBusinessCustomerShipments,
   fetchBusinessShipmentSnapshot,
   fetchCustomerTransferAgents,
   fetchOverseaAgentLinkedCustomers,
   fetchShipmentBatchTask,
+  handoverBusinessCustomers,
   invalidateBusinessShipmentSnapshot,
   resetBusinessCustomerPassword,
   setBusinessShipmentPublication,
@@ -2390,6 +2461,12 @@ const parsingAgentFile = ref(false);
 const importingAgents = ref(false);
 const agentBatchRows = ref([]);
 const agentBatchError = ref("");
+const businessHandoverAgents = ref([]);
+const loadingBusinessHandoverAgents = ref(false);
+const businessHandoverDialogOpen = ref(false);
+const businessHandoverTarget = ref(null);
+const submittingBusinessHandover = ref(false);
+const businessHandoverForm = reactive({ customerIds: [], reason: "" });
 const overviewShipments = ref([]);
 const overviewShipmentTotal = ref(0);
 const overviewTodayStats = ref(null);
@@ -2560,7 +2637,7 @@ let shipmentRequestSequence = 0;
 let shipmentListRequestSequence = 0;
 let toastTimer = 0;
 
-const menuItem = ref(isManager.value ? "customers" : "shipments");
+const menuItem = ref(isManager.value ? "overview" : "shipments");
 const subView = ref("list");
 const customerSearch = ref("");
 const selectedShipmentId = ref("");
@@ -2791,6 +2868,9 @@ const assignableCustomers = computed(() =>
   customers.value.filter((customer) =>
     customer.status === "ACTIVE" && ["SHIPPER", "CONSIGNEE"].includes(customer.partyRole)
   )
+);
+const handoverEligibleCustomers = computed(() =>
+  customers.value.filter(isTransferableCustomer)
 );
 
 const refreshIssueCount = computed(() => shipmentRefreshIssueTotal.value);
@@ -3220,6 +3300,7 @@ onMounted(() => {
   const requestedCustomer = new URLSearchParams(window.location.search).get("customer") || "";
   void loadCustomers(requestedCustomer);
   void loadAvailableShipments();
+  if (menuItem.value === "overview") void loadOverviewMetrics();
   void restoreBatchTrackTask();
 });
 onUnmounted(() => {
@@ -3243,8 +3324,12 @@ function navigateTo(item) {
   }
   menuItem.value = item;
   subView.value = "list";
-  if (item === "agents") void loadTransferAgents();
+  if (item === "handover") void loadBusinessHandoverAgents();
   if (item === "overview") void loadOverviewMetrics();
+}
+
+function handleWorkspaceViewEntered() {
+  if (menuItem.value === "overview") void initializeOverviewCharts();
 }
 
 function pageSlice(items, page, pageSize) {
@@ -3852,6 +3937,67 @@ async function loadCustomers(preferredId = "") {
     showError(error, "customers.loadFailed");
   } finally {
     loadingCustomers.value = false;
+  }
+}
+
+async function loadBusinessHandoverAgents() {
+  if (loadingBusinessHandoverAgents.value) return;
+  loadingBusinessHandoverAgents.value = true;
+  try {
+    const response = await fetchBusinessHandoverAgents();
+    businessHandoverAgents.value = Array.isArray(response?.items) ? response.items : [];
+  } catch (error) {
+    businessHandoverAgents.value = [];
+    showError(error, "customers.loadBusinessHandoverAgentsFailed");
+  } finally {
+    loadingBusinessHandoverAgents.value = false;
+  }
+}
+
+function openBusinessHandover(agent) {
+  if (!agent || agent.current || agent.status !== "ACTIVE") return;
+  businessHandoverTarget.value = agent;
+  businessHandoverForm.customerIds = [];
+  businessHandoverForm.reason = "";
+  businessHandoverDialogOpen.value = true;
+}
+
+function resetBusinessHandoverForm() {
+  businessHandoverTarget.value = null;
+  businessHandoverForm.customerIds = [];
+  businessHandoverForm.reason = "";
+}
+
+async function submitBusinessHandover() {
+  if (
+    submittingBusinessHandover.value
+    || !businessHandoverTarget.value
+    || !businessHandoverForm.customerIds.length
+  ) return;
+  submittingBusinessHandover.value = true;
+  try {
+    const response = await handoverBusinessCustomers({
+      customerIds: [...businessHandoverForm.customerIds],
+      targetBusinessUserId: Number(businessHandoverTarget.value.id),
+      reason: businessHandoverForm.reason.trim()
+    });
+    const targetName = response?.targetBusinessUserName
+      || businessHandoverTarget.value.displayName
+      || businessHandoverTarget.value.username;
+    businessHandoverDialogOpen.value = false;
+    showSuccess("customers.businessHandoverSuccess", {
+      count: Number(response?.transferred || businessHandoverForm.customerIds.length),
+      agent: targetName
+    });
+    await Promise.all([
+      loadCustomers(),
+      loadBusinessHandoverAgents(),
+      loadAvailableShipments()
+    ]);
+  } catch (error) {
+    showError(error, "customers.businessHandoverFailed");
+  } finally {
+    submittingBusinessHandover.value = false;
   }
 }
 
@@ -6919,7 +7065,7 @@ function showError(error, fallbackKey) {
   min-width: 0;
   overflow: hidden;
   color: #18324b;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6929,9 +7075,10 @@ function showError(error, fallbackKey) {
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
-  gap: 6px;
-  color: #64748b;
-  font-size: 10px;
+  gap: 8px;
+  color: #526b82;
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
 }
 .shipment-channel-select {
@@ -6941,7 +7088,16 @@ function showError(error, fallbackKey) {
 }
 .shipment-toolbar-control :deep(.el-select__selected-item),
 .shipment-toolbar-control :deep(.el-select__placeholder) {
-  font-size: 10px;
+  font-size: 13px;
+}
+.shipment-toolbar-control :deep(.el-select__wrapper) {
+  min-height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #c8d6e5 inset, 0 4px 12px rgba(29, 65, 96, .05);
+}
+.shipment-toolbar-control :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px #6fa7d5 inset, 0 7px 16px rgba(29, 91, 145, .09);
 }
 .shipment-workspace-side {
   width: 380px;
@@ -7431,9 +7587,21 @@ function showError(error, fallbackKey) {
   padding-inline: 8px;
 }
 .shipment-today-tags :deep(.el-tag) {
-  height: 19px;
-  padding-inline: 6px;
-  font-size: 9px;
+  height: 25px;
+  padding-inline: 9px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  box-shadow: 0 4px 10px rgba(26, 69, 52, .14);
+}
+.shipment-today-tags :deep(.shipment-today-tag.is-created) {
+  background: #16865f;
+}
+.shipment-today-tags :deep(.shipment-today-tag.is-updated) {
+  background: #d43d4f;
+  box-shadow: 0 4px 10px rgba(153, 36, 53, .16);
 }
 @keyframes business-kpi-in {
   from { opacity: 0; transform: translateY(9px); }
@@ -7580,17 +7748,121 @@ function showError(error, fallbackKey) {
   width: 100%;
   max-width: 100%;
   justify-content: flex-end;
-  padding: 18px 0 4px;
+  padding: 18px 2px 4px;
   overflow: hidden;
   flex-wrap: wrap;
   row-gap: 8px;
 }
 .shipment-pagination :deep(.el-pagination__sizes),
 .shipment-pagination :deep(.el-select) {
-  max-width: 112px;
+  width: 96px;
+  max-width: 96px;
+}
+.shipment-pagination :deep(.el-pagination__sizes) {
+  margin: 0 6px 0 8px;
+}
+.shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #c7d5e4 inset;
+}
+.shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
+  color: #28445e;
+  font-size: 13px;
+  font-weight: 700;
+}
+.shipment-pagination :deep(.btn-prev),
+.shipment-pagination :deep(.btn-next),
+.shipment-pagination :deep(.el-pager li) {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px !important;
+  font-size: 13px;
+}
+.shipment-pagination :deep(.el-pager li.is-active) {
+  background: #287ccb;
+  box-shadow: 0 5px 12px rgba(40, 124, 203, .22);
 }
 .shipment-pagination :deep(.el-pagination__total) {
   margin-right: 8px;
+  color: #60758a;
+  font-size: 13px;
+}
+
+.business-handover-page .list-page-header p {
+  margin: 6px 0 0;
+  color: #71869a;
+  font-size: 13px;
+}
+.business-handover-table {
+  border: 1px solid #dbe5ef;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.handover-agent-cell {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.handover-agent-cell > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.handover-agent-cell b {
+  color: #203d57;
+  font-size: 14px;
+}
+.handover-agent-cell small {
+  color: #7c91a5;
+  font-size: 12px;
+}
+.handover-agent-avatar {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, #2878bc, #56b9d2);
+  box-shadow: 0 7px 16px rgba(40, 120, 188, .18);
+  font-size: 14px;
+  font-weight: 850;
+  place-items: center;
+}
+.handover-target-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #cfe0ef;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f1f8ff, #fbfdff);
+}
+.handover-target-summary > span:last-child {
+  display: grid;
+  gap: 4px;
+}
+.handover-target-summary small {
+  color: #72889c;
+  font-size: 11px;
+}
+.handover-target-summary b {
+  color: #1e405b;
+  font-size: 14px;
+}
+.handover-permission-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d8e6f1;
+  border-radius: 9px;
+  color: #5d758a;
+  background: #f7fafc;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 /* Main card header */

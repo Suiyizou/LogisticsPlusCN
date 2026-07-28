@@ -243,6 +243,12 @@ APP_WORKSPACE_FILE_MAX_SIZE_BYTES=83886080
 When the backend runs outside Docker, set `APP_WORKSPACE_FILE_ROOT` to an absolute writable path;
 otherwise it uses `./uploads`. Expired files are removed by an hourly scheduled cleanup.
 
+Announcement images uploaded by an administrator are stored persistently under
+`/app/uploads/announcement-images` in Docker (the `workspace-files` volume), or under
+`./uploads/announcement-images` outside Docker. Set `APP_ANNOUNCEMENT_IMAGE_ROOT` to use a
+different writable directory. The default per-image limit is 10 MB and can be changed with
+`APP_ANNOUNCEMENT_IMAGE_MAX_SIZE_BYTES`.
+
 User APIs are rooted at `/api/workspace-files`. Administrators can list and inspect all users'
 uploads through `/api/admin/workspace-files`. Existing databases must apply the
 `cp_workspace_files` statement from `backend/sql/schema.sql` once during upgrade.
