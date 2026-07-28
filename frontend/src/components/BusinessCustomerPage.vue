@@ -5807,8 +5807,7 @@ function buildManualShipmentPayload(form) {
     volume,
     bookingNumber: form.bookingNumber
       || (form.referenceType === "BOOKING" ? form.referenceNo : ""),
-    billOfLading: form.billOfLading
-      || (form.referenceType === "BILLOFLADING" ? form.referenceNo : ""),
+    billOfLading: form.billOfLading,
     serviceScopes: [...form.serviceScopes],
     routeNodes,
     routingLegs,
@@ -6612,12 +6611,16 @@ function shipmentBoundUsers(shipment) {
 
 function boundUserLabel(user) {
   const role = String(user?.role || "").toUpperCase();
-  let roleName = "";
-  if (["AGENT", "OVERSEA_AGENT", "SHIPPER", "CONSIGNEE"].includes(role)) {
-    roleName = partyRoleLabel(role);
-  } else if (role) {
-    roleName = role.replaceAll("_", " ");
-  }
+  const roleKey = {
+    ADMIN: "portal.roleAdmin",
+    BUSINESS: "portal.roleBusiness",
+    OVERSEA_AGENT: "portal.roleOverseaAgent",
+    EMPLOYEE: "portal.roleEmployee",
+    AGENT: "customers.roleAgent",
+    SHIPPER: "customers.roleShipper",
+    CONSIGNEE: "customers.roleConsignee"
+  }[role];
+  const roleName = roleKey ? t(roleKey) : role ? role.replaceAll("_", " ") : "";
   return roleName ? `${user.name} (${roleName})` : user.name;
 }
 

@@ -77,7 +77,7 @@ export const messages = {
           tracking: {
             kicker: "公开服务 · Cargo Tracking",
             title: "从参考号到关键节点，快速掌握货物动态。",
-            description: "无需登录即可进入货物追踪，按提单号、订舱号或箱号查询承运人运输节点。",
+            description: "无需登录即可进入货物追踪，按订舱号或箱号查询承运人运输节点。",
             action: "立即查询货物"
           }
         }
@@ -601,7 +601,7 @@ export const messages = {
           tracking: {
             kicker: "Public service · Cargo Tracking",
             title: "Move from a reference number to the milestones that matter.",
-            description: "Open shipment tracking without signing in and query carrier milestones by bill of lading, booking, or container number.",
+            description: "Open shipment tracking without signing in and query carrier milestones by booking or container number.",
             action: "Track cargo now"
           }
         }
@@ -811,7 +811,7 @@ export const messages = {
       tracking: {
         label: "Shipment visibility",
         title: "Shipment tracking workbench",
-        description: "Search by bill of lading, booking, or container number and review milestones and estimated arrival.",
+        description: "Search by booking or container number and review milestones and estimated arrival.",
         featureReferences: "Reference search",
         featureRoute: "Route milestones",
         featureChannels: "Dual channels"

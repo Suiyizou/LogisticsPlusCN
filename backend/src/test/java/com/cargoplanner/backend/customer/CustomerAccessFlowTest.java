@@ -950,7 +950,9 @@ class CustomerAccessFlowTest {
     List<Map<String, Object>> participants =
         (List<Map<String, Object>>) participantShipment.get("participants");
     assertThat(participants).extracting(item -> item.get("role"))
-        .containsOnly("OVERSEA_AGENT");
+        .containsOnly("BUSINESS");
+    assertThat(participants).extracting(item -> item.get("accountRole"))
+        .containsOnly("BUSINESS");
     assertThat(participants).extracting(item -> item.get("bindingRole"))
         .containsExactlyInAnyOrder("RESPONSIBLE_AGENT", "OPERATOR");
 
@@ -1144,7 +1146,10 @@ class CustomerAccessFlowTest {
           List<Map<String, Object>> boundUsers =
               (List<Map<String, Object>>) item.get("boundUsers");
           assertThat(boundUsers).extracting(user -> user.get("role"))
-              .containsExactly("OVERSEA_AGENT", "SHIPPER", "CONSIGNEE");
+              .containsExactly("BUSINESS", "SHIPPER", "CONSIGNEE");
+          assertThat(boundUsers.get(0))
+              .containsEntry("accountRole", "BUSINESS")
+              .containsEntry("partyRole", "OVERSEA_AGENT");
         });
 
     jdbcTemplate.update(

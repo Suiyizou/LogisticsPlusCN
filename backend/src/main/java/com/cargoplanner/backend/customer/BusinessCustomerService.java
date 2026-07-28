@@ -1320,15 +1320,6 @@ public class BusinessCustomerService {
     String raw = rs.getString("reference_no_raw");
     String carrier = rs.getString("carrier_code");
     String referenceType = rs.getString("reference_type");
-    if ("COSCO".equalsIgnoreCase(carrier)
-        && "BILLOFLADING".equalsIgnoreCase(referenceType)
-        && normalized != null && normalized.matches("(?:COSU)?[0-9]{8,12}")) {
-      if (normalized.startsWith("COSU")) normalized = normalized.substring(4);
-      // COSCO issues this numeric identity as the booking reference before a
-      // bill of lading is ready. Background refreshes must therefore query it
-      // as BOOKING even when an older imported row was labelled as a bill.
-      referenceType = "BOOKING";
-    }
     return new RefreshableShipment(
         rs.getString("shipment_public_id"),
         carrier,
@@ -1480,9 +1471,11 @@ public class BusinessCustomerService {
     user.put("displayName", rs.getString("display_name"));
     user.put("kind", "INTERNAL");
     String partyRole = rs.getString("party_role");
-    user.put("role", "AGENT".equalsIgnoreCase(partyRole) ? "OVERSEA_AGENT" : partyRole);
+    String accountRole = rs.getString("account_role");
+    user.put("role", accountRole);
+    user.put("partyRole", partyRole);
     user.put("bindingRole", bindingRole);
-    user.put("accountRole", rs.getString("account_role"));
+    user.put("accountRole", accountRole);
     user.put("clientCode", null);
     usersByShipment.computeIfAbsent(shipmentId, key -> new LinkedHashMap<>())
         .putIfAbsent(userId, user);
