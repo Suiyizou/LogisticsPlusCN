@@ -116,6 +116,49 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
+  void deduplicatesTheSameCarrierBookingBeforeStartingWork() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "tracked-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        17L, "operator-duplicate", "Operator", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "duplicates.xlsx",
+            List.of(
+                new ShipmentBatchItemRequest(
+                    "row-1", "COSCO", "BOOKING", "COSU6502406170",
+                    "COSU6502406170", false, null
+                ),
+                new ShipmentBatchItemRequest(
+                    "row-2", "COSCO", "BOOKING", "6502406170",
+                    "6502406170", false, null
+                )
+            )
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals(1, completed.get("total"));
+    assertEquals(1, completed.get("ignoredDuplicateCount"));
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService, times(1)).track(requestCaptor.capture(), any());
+    assertEquals("BOOKING", requestCaptor.getValue().type());
+    assertEquals("6502406170", requestCaptor.getValue().number());
+    assertEquals(Boolean.TRUE, requestCaptor.getValue().forceRefresh());
+  }
+
+  @Test
   void rejectsBillOfLadingRowsBeforeStartingCarrierWork() {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     executor = Executors.newSingleThreadExecutor();

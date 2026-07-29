@@ -87,7 +87,7 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
   }
 
   let clientNameCode = "";
-  const items = [];
+  const itemsByBooking = new Map();
   for (let rowIndex = 1; rowIndex < (sheet.rows || []).length; rowIndex += 1) {
     const row = sheet.rows[rowIndex] || [];
     const selectedValue = cellText(row[columnIndex]);
@@ -103,7 +103,7 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
     const supportedCarrier = ["COSCO", "CMA"].includes(carrier);
     let volume = valueAt(row, fieldIndexes.volume);
     if (normalizeHeader(volume) === "VOLUME") volume = "";
-    items.push({
+    const item = {
       id: `${sheet.name}-row-${rowIndex + 1}`,
       carrier: carrier || null,
       type: "BOOKING",
@@ -122,9 +122,18 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
         volume,
         clientNameCode
       }
-    });
+    };
+    const identity = `${carrier}|${bookingNumber}`;
+    const existing = itemsByBooking.get(identity);
+    if (!existing) {
+      itemsByBooking.set(identity, item);
+      continue;
+    }
+    for (const [field, value] of Object.entries(item.importedDetails)) {
+      if (!existing.importedDetails[field] && value) existing.importedDetails[field] = value;
+    }
   }
-  return items;
+  return [...itemsByBooking.values()];
 }
 
 function normalizeCarrier(value) {

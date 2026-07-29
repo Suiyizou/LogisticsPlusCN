@@ -1573,12 +1573,16 @@ public class BusinessCustomerService {
     switch (normalizedBusinessFilter) {
       case "TODAY_CREATED" -> filters.add("s.created_at >= CURRENT_DATE");
       case "TODAY_UPDATED" -> filters.add(
-          "s.updated_at >= CURRENT_DATE AND s.created_at < CURRENT_DATE"
+          businessStateSql("TODAY_UPDATED")
       );
       case "PENDING" -> filters.add(
-          "(s.last_tracked_at IS NULL OR UPPER(COALESCE(s.tracking_status, '')) LIKE '%PENDING%') "
-              + "AND UPPER(COALESCE(s.last_refresh_result, '')) NOT IN ('FAILED', 'PARTIAL')"
+          "(" + businessStateSql("MANUAL_REQUIRED") + " OR "
+              + businessStateSql("TODAY_PENDING") + ")"
       );
+      case "COMPLETED" -> filters.add(businessStateSql("COMPLETED"));
+      case "UPDATE_FAILED" -> filters.add(businessStateSql("UPDATE_FAILED"));
+      case "MANUAL_REQUIRED" -> filters.add(businessStateSql("MANUAL_REQUIRED"));
+      case "TODAY_PENDING" -> filters.add(businessStateSql("TODAY_PENDING"));
       default -> {
         // Empty and unknown values deliberately mean no business-state filter.
       }
@@ -1627,6 +1631,8 @@ public class BusinessCustomerService {
                       THEN 1 ELSE 0 END
                ), 0) AS refresh_issue_count
         FROM cp_shipments s
+        LEFT JOIN cp_tracking_snapshots t
+          ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
         """ + where,
         (rs, rowNumber) -> new ShipmentCounts(
             rs.getLong("total_count"),
@@ -1634,6 +1640,27 @@ public class BusinessCustomerService {
         ),
         parameters.toArray()
     );
+  }
+
+  private String businessStateSql(String state) {
+    String completed =
+        "UPPER(COALESCE(s.tracking_status, '')) LIKE '%EMPTY RETURNED%'";
+    String failed =
+        "UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')";
+    String manualRequired =
+        "(t.id IS NULL OR UPPER(COALESCE(t.source_channel, '')) = 'IMPORTED_MANUAL' "
+            + "OR s.last_tracked_at IS NULL)";
+    return switch (state) {
+      case "COMPLETED" -> "(" + completed + ")";
+      case "UPDATE_FAILED" -> "(NOT (" + completed + ") AND " + failed + ")";
+      case "MANUAL_REQUIRED" -> "(NOT (" + completed + ") AND NOT (" + failed + ") AND "
+          + manualRequired + ")";
+      case "TODAY_UPDATED" -> "(NOT (" + completed + ") AND NOT (" + failed + ") "
+          + "AND NOT (" + manualRequired + ") AND s.last_tracked_at >= CURRENT_DATE)";
+      case "TODAY_PENDING" -> "(NOT (" + completed + ") AND NOT (" + failed + ") "
+          + "AND NOT (" + manualRequired + ") AND s.last_tracked_at < CURRENT_DATE)";
+      default -> "1 = 1";
+    };
   }
 
   /**
@@ -1661,7 +1688,8 @@ public class BusinessCustomerService {
           LIMIT 1
         )
         WHERE s.carrier_code IN ('COSCO', 'CMA')
-          AND UPPER(COALESCE(s.tracking_status, '')) <> 'EMPTY_RETURNED'
+          AND REPLACE(UPPER(COALESCE(s.tracking_status, '')), '_', ' ')
+                NOT LIKE '%EMPTY RETURNED%'
         """;
     List<RefreshableShipment> candidates = actor.isAdmin()
         ? jdbcTemplate.query(
@@ -1959,7 +1987,25 @@ public class BusinessCustomerService {
                s.last_refresh_error_code, s.last_refresh_error,
                s.last_refresh_attempts, s.last_refresh_proxy_attempts,
                s.last_refresh_at, s.last_tracked_at,
-               s.created_at AS shipment_created_at, s.updated_at
+               s.created_at AS shipment_created_at, s.updated_at,
+               CASE
+                 WHEN UPPER(COALESCE(s.tracking_status, '')) LIKE '%EMPTY RETURNED%'
+                   THEN 'COMPLETED'
+                 WHEN UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')
+                   THEN 'UPDATE_FAILED'
+                 WHEN t.id IS NULL OR UPPER(COALESCE(t.source_channel, '')) = 'IMPORTED_MANUAL'
+                      OR s.last_tracked_at IS NULL
+                   THEN 'MANUAL_REQUIRED'
+                 WHEN s.last_tracked_at >= CURRENT_DATE
+                   THEN 'TODAY_UPDATED'
+                 ELSE 'TODAY_PENDING'
+               END AS business_state,
+               CASE
+                 WHEN t.id IS NOT NULL
+                      AND UPPER(COALESCE(t.source_channel, '')) <> 'IMPORTED_MANUAL'
+                      AND s.last_tracked_at IS NOT NULL
+                   THEN TRUE ELSE FALSE
+               END AS has_valid_tracking
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
@@ -1990,13 +2036,16 @@ public class BusinessCustomerService {
     value.put("referenceNo", referenceNo);
     value.put("trackingStatus", trackingStatus);
     value.put("note", rs.getString("business_note"));
-    value.put("lastTrackedAt", lastTrackedAt != null ? lastTrackedAt : fetchedAt);
+    value.put("lastTrackedAt", lastTrackedAt);
+    value.put("snapshotFetchedAt", fetchedAt);
     value.put("createdAt", instantString(rs, "shipment_created_at"));
     value.put("updatedAt", updatedAt != null ? updatedAt : fetchedAt);
     value.put("customerCount", 0L);
     value.put("boundRoles", List.of());
     value.put("snapshotJson", snapshotJson);
     value.put("sourceChannel", rs.getString("source_channel"));
+    value.put("businessState", rs.getString("business_state"));
+    value.put("hasValidTracking", rs.getBoolean("has_valid_tracking"));
     value.put("forwarderJobNumber", rs.getString("job_number"));
     value.put("clientPoNumber", rs.getString("client_po_number"));
     value.put("clientNameCode", rs.getString("client_name_code"));
@@ -2287,8 +2336,8 @@ public class BusinessCustomerService {
     requireManager(actor);
     List<CreateBusinessShipmentRequest> shipments =
         request == null || request.shipments() == null ? List.of() : request.shipments();
-    if (shipments.size() > 300) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 300 shipments can be checked");
+    if (shipments.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 500 shipments can be checked");
     }
 
     Set<String> checkedIdentities = new LinkedHashSet<>();

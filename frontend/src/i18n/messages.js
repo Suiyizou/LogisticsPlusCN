@@ -2910,3 +2910,27 @@ Object.assign(messages["en-US"].customers, {
   copied: "Copied",
   close: "Close"
 });
+
+Object.assign(messages["zh-CN"].customers, {
+  businessFilterLabel: "业务状态",
+  businessCompleted: "业务已完结",
+  manualEntryRequired: "待手工录入",
+  todayPendingUpdate: "今日待更新",
+  notTrackedYet: "尚未有效追踪",
+  taskElapsed: "任务用时 {time}",
+  elapsedUnderSecond: "<1 秒",
+  batchTrackChecking: "正在检查票单...",
+  batchTrackExistingConfirm: "发现 {count} 个订舱号已存在：{references}{more}。继续后只更新原票单，不会新建重复业务。是否继续？"
+});
+
+Object.assign(messages["en-US"].customers, {
+  businessFilterLabel: "Business status",
+  businessCompleted: "Completed",
+  manualEntryRequired: "Manual entry required",
+  todayPendingUpdate: "Update due today",
+  notTrackedYet: "No valid tracking yet",
+  taskElapsed: "Task elapsed {time}",
+  elapsedUnderSecond: "<1 sec",
+  batchTrackChecking: "Checking existing shipments...",
+  batchTrackExistingConfirm: "{count} booking number(s) already exist: {references}{more}. Continuing updates the existing shipments once and will not create duplicate business records. Continue?"
+});

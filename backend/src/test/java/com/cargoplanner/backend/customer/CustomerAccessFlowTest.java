@@ -1049,7 +1049,10 @@ class CustomerAccessFlowTest {
     Map<String, Object> participantShipment = available.stream()
         .filter(item -> "participant-shipment".equals(item.get("shipmentId")))
         .findFirst().orElseThrow();
-    assertThat(participantShipment).containsEntry("dataAvailable", true);
+    assertThat(participantShipment)
+        .containsEntry("dataAvailable", true)
+        .containsEntry("hasValidTracking", false)
+        .containsEntry("businessState", "UPDATE_FAILED");
     assertThat(participantShipment)
         .containsEntry("lastRefreshResult", "PARTIAL")
         .containsEntry("lastRefreshErrorCode", "COSCO_PROXY_POOL_EXHAUSTED")
@@ -1069,7 +1072,11 @@ class CustomerAccessFlowTest {
     Map<String, Object> emptyShipment = available.stream()
         .filter(item -> "empty-owned-shipment".equals(item.get("shipmentId")))
         .findFirst().orElseThrow();
-    assertThat(emptyShipment).containsEntry("dataAvailable", false).containsEntry("snapshot", null);
+    assertThat(emptyShipment)
+        .containsEntry("dataAvailable", false)
+        .containsEntry("hasValidTracking", false)
+        .containsEntry("businessState", "MANUAL_REQUIRED")
+        .containsEntry("snapshot", null);
     assertThat(emptyShipment).containsEntry("referenceNo", "EMPTY-10001");
 
     Map<String, Object> detail = customerService.getShipmentSnapshot(business, "participant-shipment");

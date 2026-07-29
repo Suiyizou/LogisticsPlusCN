@@ -110,6 +110,17 @@ assert.equal(cosuBookingItems[0].carrier, "COSCO");
 assert.equal(cosuBookingItems[0].type, "BOOKING");
 assert.equal(cosuBookingItems[0].number, "6502406170");
 
+const duplicateBookingSheet = prepareSheet("Duplicates", [
+  ["BOOKING NO.", "JOB NUMBER", "POL"],
+  ["6502406170", "JOB-001", ""],
+  ["COSU6502406170", "", "SHANGHAI"]
+]);
+const duplicateBookingItems = buildShipmentBatchItems(duplicateBookingSheet, 0);
+assert.equal(duplicateBookingItems.length, 1);
+assert.equal(duplicateBookingItems[0].number, "6502406170");
+assert.equal(duplicateBookingItems[0].importedDetails.forwarderJobNumber, "JOB-001");
+assert.equal(duplicateBookingItems[0].importedDetails.portOfLoading, "SHANGHAI");
+
 const businessCustomerPage = readFileSync(
   new URL("../src/components/BusinessCustomerPage.vue", import.meta.url),
   "utf8"
@@ -220,8 +231,12 @@ const shipmentTableSource = businessCustomerPage.slice(
 );
 assert.match(shipmentTableSource, /type="index"[^>]*width="70"/);
 assert.match(shipmentTableSource, /customers\.shipmentStatus[^>]*min-width="205"/);
-assert.match(shipmentTableSource, /customers\.remark[^>]*width="220"/);
+assert.match(shipmentTableSource, /customers\.remark[^>]*width="200"/);
 assert.match(shipmentTableSource, /customers\.lastTrackedAt[^>]*width="164"/);
+assert.match(shipmentTableSource, /shipmentBusinessStateLabel\(row\)/);
+assert.doesNotMatch(shipmentTableSource, /row\.lastTrackedAt \|\| row\.updatedAt/);
+assert.match(businessCustomerPage, /confirmExistingBatchBookings\(batchTrackItems\.value\)/);
+assert.match(businessCustomerPage, /customers\.elapsedUnderSecond/);
 
 const shipmentSaveSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf("async function saveShipmentDetail"),

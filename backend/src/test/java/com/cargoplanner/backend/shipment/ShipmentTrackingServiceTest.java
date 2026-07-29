@@ -15,6 +15,7 @@ import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRe
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -108,6 +109,45 @@ class ShipmentTrackingServiceTest {
 
     assertThat(autowiredConstructors).singleElement()
         .satisfies(constructor -> assertThat(constructor.getParameterCount()).isEqualTo(8));
+  }
+
+  @Test
+  void importedPlaceholderNeverShortCircuitsTheFirstCarrierQuery() throws Exception {
+    service.recordImportedPlaceholder(
+        new ShipmentBatchItemRequest(
+            "row-placeholder", "COSCO", "BOOKING", "BK-10001",
+            "BK-10001", false,
+            new ShipmentImportDetails(
+                "COSCO", "BL-90001", "JOB-10001", "TEST VESSEL / 001",
+                "SHANGHAI", "LONG BEACH", null, null, null, null, "Hayden US"
+            )
+        ),
+        business
+    );
+
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+
+    assertThat(response.path("cacheSource").asText()).isEqualTo("LIVE");
+    assertThat(jdbcTemplate.queryForObject(
+        """
+        SELECT t.source_channel
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        """,
+        String.class
+    )).isEqualTo("NETWORK");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipments", Integer.class
+    )).isEqualTo(1);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT last_tracked_at FROM cp_shipments", Timestamp.class
+    )).isNotNull();
+    verify(adapterClient).track(
+        new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001")
+    );
   }
 
   @Test

@@ -238,7 +238,7 @@
                 @selection-change="handleCustomerSelectionChange"
               >
                 <el-table-column v-if="isManager" type="selection" width="44" />
-                <el-table-column type="index" :index="customerRowIndex" :label="t('customers.index')" width="58" />
+                <el-table-column type="index" :index="customerRowIndex" :label="t('customers.index')" width="76" align="center" header-align="center" />
                 <el-table-column :label="t('customers.displayName')" min-width="168">
                   <template #default="{ row }">
                     <div class="customer-name-cell">
@@ -254,7 +254,7 @@
                 <el-table-column prop="overseaAgentDisplayName" :label="t('customers.targetAgent')" min-width="142" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.overseaAgentDisplayName || t("customers.unassigned") }}</template>
                 </el-table-column>
-                <el-table-column :label="t('customers.partyRole')" width="120">
+                <el-table-column :label="t('customers.partyRole')" width="156">
                   <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
                 </el-table-column>
                 <el-table-column :label="t('customers.shipmentCount')" width="100" align="center">
@@ -788,10 +788,18 @@
                     <p>{{ t("customers.availableShipmentsHint") }}</p>
                   </div>
                   <div v-if="isManager" class="shipment-heading-actions">
-                    <el-button type="primary" @click="shipmentCreateDialogOpen = true">
+                    <el-button
+                      type="primary"
+                      class="batch-track-primary-action"
+                      :disabled="refreshingShipment"
+                      @click="toggleBatchTrackPanel"
+                    >
+                      <el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}
+                    </el-button>
+                    <el-button plain @click="shipmentCreateDialogOpen = true">
                       <el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}
                     </el-button>
-                    <el-button type="primary" plain @click="openShipmentExcelImport">
+                    <el-button plain @click="openShipmentExcelImport">
                       <el-icon><Upload /></el-icon>{{ t("customers.shipmentExcelImport") }}
                     </el-button>
                   </div>
@@ -824,9 +832,11 @@
                         popper-class="business-select-popper shipment-filter-popper"
                       >
                         <el-option value="" :label="t('customers.businessFilterAll')" />
-                        <el-option value="TODAY_CREATED" :label="t('customers.todayNewBusiness')" />
+                        <el-option value="COMPLETED" :label="t('customers.businessCompleted')" />
+                        <el-option value="UPDATE_FAILED" :label="t('customers.businessUpdateFailed')" />
+                        <el-option value="MANUAL_REQUIRED" :label="t('customers.manualEntryRequired')" />
                         <el-option value="TODAY_UPDATED" :label="t('customers.todayUpdatedBusiness')" />
-                        <el-option value="PENDING" :label="t('customers.pendingBusinessUpdate')" />
+                        <el-option value="TODAY_PENDING" :label="t('customers.todayPendingUpdate')" />
                       </el-select>
                     </label>
                     <label class="shipment-toolbar-control">
@@ -841,12 +851,6 @@
                         <el-option :label="t('customers.trackingChannelProxy')" value="PROXY" />
                       </el-select>
                     </label>
-                    <el-button
-                      :type="refreshIssuesOnly ? 'danger' : ''"
-                      :plain="!refreshIssuesOnly"
-                      :disabled="!refreshIssueCount"
-                      @click="refreshIssuesOnly = !refreshIssuesOnly"
-                    >{{ t("customers.refreshIssuesOnly", { count: refreshIssueCount }) }}</el-button>
                     <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments">
                       <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
                     </el-button>
@@ -868,9 +872,6 @@
                     <el-button type="primary" :disabled="batchTrackRunning || refreshingShipment" @click="startRefreshAllShipments">
                       <el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}
                     </el-button>
-                    <el-button @click="toggleBatchTrackPanel" :type="batchTrackRunning || batchTrackDialogOpen ? 'primary' : ''">
-                      <el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}
-                    </el-button>
                   </div>
                 </section>
                 <el-table
@@ -888,9 +889,9 @@
                   <el-table-column type="index" :index="shipmentRowIndex" :label="t('customers.index')" width="70" align="center" header-align="center" />
                   <el-table-column :label="t('customers.referenceNo')" min-width="172">
                     <template #default="{ row }">
-                      <div>
+                      <div class="shipment-reference-cell">
                         <b>{{ row.referenceNo || row.shipmentId }}</b>
-                        <div class="shipment-reference-type"><small>{{ referenceTypeLabel(row.referenceType) }}</small></div>
+                        <small class="shipment-reference-type">{{ referenceTypeLabel(row.referenceType) }}</small>
                       </div>
                     </template>
                   </el-table-column>
@@ -936,28 +937,26 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('customers.remark')" width="220">
+                  <el-table-column :label="t('customers.remark')" width="200">
                     <template #default="{ row }">
                       <div class="shipment-remark-cell">
                         <div class="shipment-today-tags">
-                          <el-tag v-if="isCreatedToday(row)" class="shipment-today-tag is-created" type="danger" effect="dark">
+                          <el-tag
+                            class="shipment-today-tag"
+                            :type="shipmentBusinessStateTagType(row)"
+                            effect="plain"
+                          >
+                            {{ shipmentBusinessStateLabel(row) }}
+                          </el-tag>
+                          <el-tag v-if="isCreatedToday(row)" class="shipment-today-tag is-created" type="danger" effect="plain">
                             {{ t("customers.todayNewBusiness") }}
-                          </el-tag>
-                          <el-tag v-if="isUpdatedToday(row)" class="shipment-today-tag is-updated" type="success" effect="dark">
-                            {{ t("customers.todayUpdatedBusiness") }}
-                          </el-tag>
-                          <el-tag v-if="isPendingBusinessUpdate(row)" class="shipment-today-tag is-pending" type="warning" effect="plain">
-                            {{ t("customers.pendingBusinessUpdate") }}
-                          </el-tag>
-                          <el-tag v-if="hasRefreshIssue(row)" class="shipment-today-tag is-failed" type="danger" effect="plain">
-                            {{ t("customers.businessUpdateFailed") }}
                           </el-tag>
                         </div>
                       </div>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('customers.lastTrackedAt')" width="164">
-                    <template #default="{ row }">{{ formatDateTime(row.lastTrackedAt || row.updatedAt) }}</template>
+                    <template #default="{ row }">{{ row.lastTrackedAt ? formatDateTime(row.lastTrackedAt) : t("customers.notTrackedYet") }}</template>
                   </el-table-column>
                   <el-table-column :label="t('customers.actions')" :width="isManager ? 234 : 94" fixed="right">
                     <template #default="{ row }">
@@ -1021,12 +1020,12 @@
               <el-dialog
                 v-model="batchTrackDialogOpen"
                 :title="batchTrackDialogTitle"
-                width="min(920px, 94vw)"
+                width="min(1280px, 96vw)"
                 append-to-body
                 :destroy-on-close="false"
                 class="batch-track-task-dialog"
               >
-                <div class="shipment-workspace-side batch-track-task-dialog-body">
+                <div class="batch-track-task-dialog-body">
                   <div class="batch-track-panel">
                     <div v-show="!batchTrackRunning" class="batch-track-form">
                       <div class="assignment-customer-row">
@@ -1100,7 +1099,6 @@
                             :data="batchTrackPreviewRows"
                             border
                             size="small"
-                            max-height="260"
                             class="standard-information-table batch-track-preview-table"
                           >
                             <el-table-column
@@ -1120,7 +1118,12 @@
 
                     <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
                       <div class="batch-track-progress">
-                        <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
+                        <div class="batch-track-progress-summary">
+                          <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
+                          <el-tag v-if="batchTrackProgress.startedAt" size="small" effect="plain" type="info" class="batch-track-timer">
+                            {{ t("customers.taskElapsed", { time: batchTrackElapsedText(batchTrackProgress) }) }}
+                          </el-tag>
+                        </div>
                         <el-progress :percentage="batchTrackProgress.total ? Math.round(batchTrackProgress.done / batchTrackProgress.total * 100) : 0" :stroke-width="6" />
                       </div>
                       <el-alert
@@ -1197,10 +1200,14 @@
                       <button
                         class="customer-access-primary"
                         type="button"
-                        :disabled="batchTrackRunning || !batchTrackCustomerId || !batchTrackSelectedSheet || !batchTrackNumbers.length"
+                        :disabled="batchTrackRunning || batchTrackChecking || !batchTrackCustomerId || !batchTrackSelectedSheet || !batchTrackNumbers.length"
                         @click="startBatchTrack"
                       >
-                        {{ batchTrackRunning ? t("customers.batchTrackRunning") : t("customers.batchTrackStart") }}
+                        {{ batchTrackRunning
+                          ? t("customers.batchTrackRunning")
+                          : batchTrackChecking
+                            ? t("customers.batchTrackChecking")
+                            : t("customers.batchTrackStart") }}
                       </button>
                       <el-button native-type="button" @click="batchTrackDialogOpen = false">
                         {{ t("customers.close") }}
@@ -2789,6 +2796,7 @@ const batchTrackFileParsing = ref(false);
 const batchTrackText = ref("");
 const batchTrackCarrier = ref("COSCO");
 const batchTrackRunning = ref(false);
+const batchTrackChecking = ref(false);
 const batchTrackResults = ref([]);
 const batchTrackProgress = ref({ total: 0, done: 0, succeeded: 0, partial: 0, manual: 0, failed: 0, pending: 0, status: "" });
 const batchTrackFileInput = ref(null);
@@ -3214,6 +3222,42 @@ function isPendingBusinessUpdate(shipment) {
     || status.includes("PENDING");
 }
 
+function shipmentBusinessState(shipment) {
+  const provided = String(shipment?.businessState || "").toUpperCase();
+  if (["COMPLETED", "UPDATE_FAILED", "MANUAL_REQUIRED", "TODAY_UPDATED", "TODAY_PENDING"].includes(provided)) {
+    return provided;
+  }
+  const trackingStatus = String(shipment?.trackingStatus || "").replaceAll("_", " ").toUpperCase();
+  if (trackingStatus.includes("EMPTY RETURNED")) return "COMPLETED";
+  if (hasRefreshIssue(shipment)) return "UPDATE_FAILED";
+  if (shipment?.hasValidTracking === false
+      || String(shipment?.sourceChannel || "").toUpperCase() === "IMPORTED_MANUAL"
+      || !shipment?.lastTrackedAt) {
+    return "MANUAL_REQUIRED";
+  }
+  return isToday(shipment.lastTrackedAt) ? "TODAY_UPDATED" : "TODAY_PENDING";
+}
+
+function shipmentBusinessStateLabel(shipment) {
+  return t({
+    COMPLETED: "customers.businessCompleted",
+    UPDATE_FAILED: "customers.businessUpdateFailed",
+    MANUAL_REQUIRED: "customers.manualEntryRequired",
+    TODAY_UPDATED: "customers.todayUpdatedBusiness",
+    TODAY_PENDING: "customers.todayPendingUpdate"
+  }[shipmentBusinessState(shipment)]);
+}
+
+function shipmentBusinessStateTagType(shipment) {
+  return {
+    COMPLETED: "success",
+    UPDATE_FAILED: "danger",
+    MANUAL_REQUIRED: "warning",
+    TODAY_UPDATED: "success",
+    TODAY_PENDING: "info"
+  }[shipmentBusinessState(shipment)] || "info";
+}
+
 function refreshOutcomeTooltip(shipment) {
   const parts = [
     shipment?.lastRefreshErrorCode,
@@ -3277,6 +3321,9 @@ function batchTrackElapsedText(result) {
   if (elapsedMs <= 0 && Number.isFinite(startedAt)) {
     const end = Number.isFinite(finishedAt) ? finishedAt : batchTrackClock.value;
     elapsedMs = Math.max(0, end - startedAt);
+  }
+  if (Number.isFinite(startedAt) && elapsedMs < 1000) {
+    return t("customers.elapsedUnderSecond");
   }
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -4802,20 +4849,24 @@ async function loadShipmentDetailSnapshot() {
 }
 
 async function startBatchTrack() {
-  if (!batchTrackCustomerId.value || !batchTrackItems.value.length || batchTrackRunning.value) return;
+  if (!batchTrackCustomerId.value || !batchTrackItems.value.length
+      || batchTrackRunning.value || batchTrackChecking.value) return;
   batchTrackMode.value = "IMPORT";
-  batchTrackRunning.value = true;
+  batchTrackChecking.value = true;
   batchTrackCancelRequested.value = false;
   batchTrackProblemsOnly.value = false;
-  batchTrackResults.value = batchTrackItems.value.map((item, index) => ({
-    index: index + 1,
-    number: item.displayNumber,
-    carrier: item.carrier,
-    status: "pending",
-    message: t("customers.trackPending"),
-    failedSubtasks: []
-  }));
   try {
+    const approved = await confirmExistingBatchBookings(batchTrackItems.value);
+    if (!approved) return;
+    batchTrackRunning.value = true;
+    batchTrackResults.value = batchTrackItems.value.map((item, index) => ({
+      index: index + 1,
+      number: item.displayNumber,
+      carrier: item.carrier,
+      status: "pending",
+      message: t("customers.trackPending"),
+      failedSubtasks: []
+    }));
     const task = await createShipmentBatchTask({
       sourceFileName: batchTrackFileName.value,
       channel: shipmentTrackingChannel.value,
@@ -4842,7 +4893,32 @@ async function startBatchTrack() {
       errorCode: error?.code || "",
       failedSubtasks: []
     }];
+  } finally {
+    batchTrackChecking.value = false;
   }
+}
+
+async function confirmExistingBatchBookings(items) {
+  const shipments = items.map((item) => ({
+    carrier: item.carrier,
+    referenceType: "BOOKING",
+    referenceNo: item.number
+  }));
+  const response = await inspectBusinessShipmentImportConflicts(shipments);
+  const conflicts = Array.isArray(response?.conflicts) ? response.conflicts : [];
+  if (!conflicts.length) return true;
+  const references = conflicts
+    .slice(0, 6)
+    .map((item) => item.referenceNo)
+    .filter(Boolean)
+    .join(", ");
+  return window.confirm(t("customers.batchTrackExistingConfirm", {
+    count: conflicts.length,
+    references,
+    more: conflicts.length > 6
+      ? t("customers.moreOverwriteSnapshots", { count: conflicts.length - 6 })
+      : ""
+  }));
 }
 
 function prepareShipmentRefreshTask(mode) {
@@ -5033,6 +5109,11 @@ function applyBatchTrackTask(task) {
     failed: Number(task.failed || 0),
     pending: Number(task.pending || 0),
     status,
+    startedAt: task.startedAt || null,
+    finishedAt: task.finishedAt || null,
+    elapsedMs: Number(task.elapsedMs || 0),
+    elapsedObservedAt: taskObservedAt,
+    ignoredDuplicateCount: Number(task.ignoredDuplicateCount || 0),
     stopReason: String(task.stopReason || "").toUpperCase(),
     stopMessage: task.stopMessage || "",
     circuitFailureCount: Number(task.circuitFailureCount || 0),
@@ -7383,6 +7464,8 @@ function showError(error, fallbackKey) {
 .list-page-full {
   max-width: none;
   width: 100%;
+  padding: 20px 22px 22px;
+  box-sizing: border-box;
 }
 .list-page-full :deep(.el-table) {
   width: 100% !important;
@@ -7406,7 +7489,7 @@ function showError(error, fallbackKey) {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 6px 4px 18px;
+  padding: 0 0 18px;
 }
 .shipment-page-heading > div:first-child {
   min-width: 0;
@@ -7432,6 +7515,16 @@ function showError(error, fallbackKey) {
 }
 .shipment-heading-actions .el-button {
   margin: 0;
+}
+.batch-track-primary-action {
+  min-height: 44px;
+  padding-inline: 20px;
+  font-weight: 750;
+  box-shadow: 0 8px 18px rgba(3, 105, 161, .18);
+}
+.batch-track-primary-action:hover,
+.batch-track-primary-action:focus-visible {
+  box-shadow: 0 10px 22px rgba(3, 105, 161, .24);
 }
 .shipment-command-surface {
   display: grid;
@@ -7631,19 +7724,31 @@ function showError(error, fallbackKey) {
   justify-items: start;
   gap: 5px;
 }
+.shipment-reference-cell {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
 .batch-track-task-dialog-body {
   width: 100%;
   max-width: none;
-  height: min(76vh, 760px);
-  flex: 1 1 auto;
+  min-height: 0;
   position: static;
   top: auto;
-  overflow-y: auto;
-  padding-right: 4px;
+  overflow: visible;
 }
 :deep(.batch-track-task-dialog .el-dialog__body) {
-  padding-top: 8px;
-  overflow: hidden;
+  max-height: calc(100vh - 150px);
+  padding: 12px 24px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+:deep(.batch-track-task-dialog .el-dialog__header) {
+  margin-right: 0;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid #e2e8f0;
 }
 .batch-track-excel-rule {
   color: #6a8096;
@@ -7684,8 +7789,8 @@ function showError(error, fallbackKey) {
 
 .batch-track-preview-table-wrap {
   max-width: 100%;
-  max-height: 260px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid #dce6f1;
   border-radius: 0;
   background: #fff;
@@ -8039,15 +8144,16 @@ function showError(error, fallbackKey) {
 .shipment-today-tags :deep(.el-tag) {
   height: 25px;
   padding-inline: 10px;
-  border: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: .01em;
-  box-shadow: 0 4px 10px rgba(143, 26, 45, .16);
+  box-shadow: none;
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-created) {
-  background: #ff3b4e;
+  border-color: #fecdd3;
+  color: #be123c;
+  background: #fff1f2;
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-updated) {
   background: #16b86a;
@@ -8143,8 +8249,11 @@ function showError(error, fallbackKey) {
   font: 700 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 .shipment-reference-type {
-  margin-top: 4px;
+  flex: 0 0 auto;
   color: #74879b;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .business-select-value {
   display: block;
@@ -10897,6 +11006,13 @@ button:disabled {
   top: 0;
   z-index: 1;
 }
+.batch-track-progress-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .batch-track-result-list {
   max-height: none;
   overflow-y: visible;
@@ -11059,6 +11175,40 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.batch-track-task-dialog-body .batch-track-panel {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.batch-track-task-dialog-body .assignment-customer-row {
+  grid-template-columns: minmax(320px, 1.4fr) minmax(220px, .7fr) minmax(190px, auto);
+}
+.batch-track-task-dialog-body .batch-track-form {
+  margin-top: 0;
+}
+.batch-track-task-dialog-body .batch-track-results {
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+}
+.batch-track-task-dialog-body .batch-track-actions {
+  margin: 0 -24px;
+  padding: 14px 24px 18px;
+  box-shadow: 0 -8px 18px rgba(15, 23, 42, .05);
+}
+.customer-directory-table :deep(th.el-table__cell .cell),
+.customer-directory-table :deep(td.el-table__cell .cell) {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+@media (max-width: 900px) {
+  .assignment-customer-row,
+  .batch-track-task-dialog-body .assignment-customer-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
 @media (max-width: 760px) {
   .batch-track-subtask-list {
     grid-template-columns: 1fr;
@@ -11092,6 +11242,10 @@ button:disabled {
   .customer-batch-actions button {
     flex: 1 1 140px !important;
     min-width: 0;
+  }
+  .batch-track-progress-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

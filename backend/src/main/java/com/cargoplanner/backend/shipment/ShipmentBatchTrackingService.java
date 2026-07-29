@@ -155,7 +155,9 @@ public class ShipmentBatchTrackingService {
       ShipmentBatchTaskRequest request,
       AuthenticatedUser user
   ) {
-    return startInternal(request, user, "IMPORT", false, false);
+    // A batch import is a deliberate carrier query. Existing bookings must be
+    // refreshed once in place instead of being returned from an imported placeholder.
+    return startInternal(request, user, "IMPORT", false, true);
   }
 
   public synchronized Map<String, Object> startRefreshAll(
@@ -226,13 +228,18 @@ public class ShipmentBatchTrackingService {
     }
     if (existingTaskId != null) activeTaskByUser.remove(user.id(), existingTaskId);
 
-    List<BatchItem> items = new ArrayList<>();
+    Map<String, BatchItem> uniqueItems = new LinkedHashMap<>();
     for (int index = 0; index < requestedItems.size(); index++) {
-      items.add(trustedExistingReferences
+      BatchItem item = trustedExistingReferences
           ? normalizeExistingReference(requestedItems.get(index), index)
-          : normalizeItem(requestedItems.get(index), index));
+          : normalizeItem(requestedItems.get(index), index);
+      uniqueItems.putIfAbsent(
+          item.request.carrier() + "|" + item.request.type() + "|" + item.queryNumber,
+          item
+      );
     }
-    if (forceRefresh) {
+    List<BatchItem> items = new ArrayList<>(uniqueItems.values());
+    if (forceRefresh && !"IMPORT".equals(mode)) {
       items.forEach(this::initializeSupplementalSubtasks);
     }
     String taskId = "batch_" + UUID.randomUUID().toString().replace("-", "");
@@ -247,6 +254,7 @@ public class ShipmentBatchTrackingService {
         forceRefresh,
         "IMPORT".equals(mode) && request != null ? request.customerId() : null,
         "IMPORT".equals(mode) && request != null && !Boolean.FALSE.equals(request.publishToCustomer()),
+        requestedItems.size() - items.size(),
         now
     );
     tasks.put(taskId, task);
@@ -443,7 +451,8 @@ public class ShipmentBatchTrackingService {
   }
 
   private boolean refreshSupplementalDetails(BatchTask task, BatchItem item) {
-    if (!task.forceRefresh || !"COSCO".equals(item.request.carrier())) return true;
+    if (!task.forceRefresh || "IMPORT".equals(task.mode)
+        || !"COSCO".equals(item.request.carrier())) return true;
     if (item.shipmentId == null || item.shipmentId.isBlank()) {
       setFailedSupplementalSubtasks(
           task,
@@ -1082,6 +1091,7 @@ public class ShipmentBatchTrackingService {
       value.put("status", task.status);
       value.put("cancelRequested", task.cancelRequested.get());
       value.put("total", task.items.size());
+      value.put("ignoredDuplicateCount", task.ignoredDuplicateCount);
       value.put("succeeded", succeeded);
       value.put("failed", failed);
       value.put("partial", partial);
@@ -1185,6 +1195,7 @@ public class ShipmentBatchTrackingService {
     private final boolean forceRefresh;
     private final String customerId;
     private final boolean publishToCustomer;
+    private final int ignoredDuplicateCount;
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private final Instant createdAt;
     private volatile String status = "QUEUED";
@@ -1208,6 +1219,7 @@ public class ShipmentBatchTrackingService {
         boolean forceRefresh,
         String customerId,
         boolean publishToCustomer,
+        int ignoredDuplicateCount,
         Instant createdAt
     ) {
       this.id = id;
@@ -1219,6 +1231,7 @@ public class ShipmentBatchTrackingService {
       this.forceRefresh = forceRefresh;
       this.customerId = customerId;
       this.publishToCustomer = publishToCustomer;
+      this.ignoredDuplicateCount = Math.max(0, ignoredDuplicateCount);
       this.createdAt = createdAt;
       this.updatedAt = createdAt;
     }

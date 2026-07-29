@@ -1946,6 +1946,9 @@ public class ShipmentTrackingService {
   }
 
   private boolean hasMeaningfulTrackingData(JsonNode snapshot) {
+    if ("IMPORTED_MANUAL".equalsIgnoreCase(snapshot.path("channel").asText())) {
+      return false;
+    }
     if (arrayHasItems(snapshot.path("containers"))
         || arrayHasItems(snapshot.path("route"))
         || arrayHasItems(snapshot.path("routingLegs"))
