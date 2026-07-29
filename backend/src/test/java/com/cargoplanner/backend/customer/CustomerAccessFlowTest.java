@@ -30,6 +30,7 @@ class CustomerAccessFlowTest {
   private AuthenticatedUser business;
   private AuthenticatedUser otherBusiness;
   private AuthenticatedUser employee;
+  private AuthenticatedUser admin;
   private MockHttpServletRequest httpRequest;
 
   @Test
@@ -57,7 +58,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void handsOwnedCustomersToAnotherBusinessUserAndRetainsShipmentHistory() {
+  void customerHandoverRequiresAdminApprovalAndRetainsShipmentHistory() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(
             "handover-customer", "SecurePass!23", "Handover Customer", "SHIPPER"
@@ -86,17 +87,46 @@ class CustomerAccessFlowTest {
     assertThat(agents).extracting(item -> item.get("username"))
         .containsExactly("sales-1", "sales-2");
 
-    Map<String, Object> result = customerService.handoverCustomers(
+    Map<String, Object> application = customerService.handoverCustomers(
         new BusinessCustomerHandoverRequest(List.of(customerId), 2L, "Cover the next sailing"),
         business,
         "127.0.0.1"
     );
 
-    assertThat(result)
-        .containsEntry("transferred", 1)
-        .containsEntry("relatedShipments", 1)
+    assertThat(application)
+        .containsEntry("status", "PENDING")
+        .containsEntry("customerCount", 1)
         .containsEntry("targetBusinessUserName", "Business Two")
-        .containsEntry("previousAccessRetained", true);
+        .containsEntry("reason", "Cover the next sailing");
+    String requestId = (String) application.get("requestId");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    )).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_transfer_log WHERE customer_id = ? AND from_agent_id = 1 AND to_agent_id = 2",
+        Integer.class,
+        internalCustomerId
+    )).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
+        Integer.class
+    )).isZero();
+    assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(1);
+
+    Map<String, Object> approved = customerService.approveCustomerHandover(
+        requestId,
+        new CustomerHandoverDecisionRequest("Coverage confirmed"),
+        admin,
+        "127.0.0.2"
+    );
+
+    assertThat(approved)
+        .containsEntry("status", "APPROVED")
+        .containsEntry("shipmentCount", 1)
+        .containsEntry("reviewComment", "Coverage confirmed");
+    assertThat(approved.get("approvedBatchId")).isNotNull();
     assertThat(jdbcTemplate.queryForObject(
         "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
         Long.class,
@@ -113,6 +143,125 @@ class CustomerAccessFlowTest {
     )).isEqualTo(1);
     assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
     assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
+  }
+
+  @Test
+  void rejectedCustomerHandoverDoesNotChangeOwnershipAndCannotBeReviewedTwice() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "handover-rejected", "SecurePass!23", "Rejected Handover", "CONSIGNEE"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String customerId = (String) created.get("id");
+    Map<String, Object> application = customerService.handoverCustomers(
+        new BusinessCustomerHandoverRequest(
+            List.of(customerId),
+            2L,
+            "Temporary account coverage"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    String requestId = (String) application.get("requestId");
+
+    Map<String, Object> rejected = customerService.rejectCustomerHandover(
+        requestId,
+        new CustomerHandoverDecisionRequest("Coverage dates are incomplete"),
+        admin,
+        "127.0.0.2"
+    );
+
+    assertThat(rejected)
+        .containsEntry("status", "REJECTED")
+        .containsEntry("reviewComment", "Coverage dates are incomplete");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    )).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_transfer_log",
+        Integer.class
+    )).isZero();
+    assertThatThrownBy(() -> customerService.approveCustomerHandover(
+        requestId,
+        new CustomerHandoverDecisionRequest("Approve anyway"),
+        admin,
+        "127.0.0.2"
+    ))
+        .isInstanceOf(ApiException.class)
+        .extracting(error -> ((ApiException) error).status())
+        .isEqualTo(HttpStatus.CONFLICT);
+  }
+
+  @Test
+  void pendingCustomerHandoverBlocksDuplicateRequestsAndStaleApprovalIsAtomic() {
+    String firstCustomerId = (String) customerService.create(
+        new CreateCustomerRequest(
+            "handover-first", "SecurePass!23", "First Handover", "SHIPPER"
+        ),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    String secondCustomerId = (String) customerService.create(
+        new CreateCustomerRequest(
+            "handover-second", "SecurePass!23", "Second Handover", "CONSIGNEE"
+        ),
+        business,
+        "127.0.0.1"
+    ).get("id");
+    Map<String, Object> application = customerService.handoverCustomers(
+        new BusinessCustomerHandoverRequest(
+            List.of(firstCustomerId, secondCustomerId),
+            2L,
+            "Permanent portfolio reassignment"
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThatThrownBy(() -> customerService.handoverCustomers(
+        new BusinessCustomerHandoverRequest(
+            List.of(firstCustomerId),
+            2L,
+            "Duplicate request"
+        ),
+        business,
+        "127.0.0.1"
+    ))
+        .isInstanceOf(ApiException.class)
+        .extracting(error -> ((ApiException) error).status())
+        .isEqualTo(HttpStatus.CONFLICT);
+
+    jdbcTemplate.update(
+        "UPDATE cp_customers SET responsible_agent_id = 2 WHERE public_id = ?",
+        secondCustomerId
+    );
+    assertThatThrownBy(() -> customerService.approveCustomerHandover(
+        (String) application.get("requestId"),
+        new CustomerHandoverDecisionRequest("Approved"),
+        admin,
+        "127.0.0.2"
+    ))
+        .isInstanceOf(ApiException.class)
+        .extracting(error -> ((ApiException) error).status())
+        .isEqualTo(HttpStatus.CONFLICT);
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        firstCustomerId
+    )).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_transfer_log",
+        Integer.class
+    )).isZero();
+    assertThat(customerService.getCustomerHandoverRequest(
+        (String) application.get("requestId"),
+        business
+    )).containsEntry("status", "PENDING");
   }
 
   @BeforeEach
@@ -200,6 +349,9 @@ class CustomerAccessFlowTest {
         2, "sales-2", "Business Two", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
     );
     employee = new AuthenticatedUser(3, "employee", "Employee", "OVERSEA_AGENT", "ACTIVE", "AGENT");
+    admin = new AuthenticatedUser(
+        4, "admin", "Administrator", "ADMIN", "ACTIVE", "OVERSEA_AGENT"
+    );
     httpRequest = new MockHttpServletRequest();
     httpRequest.setRemoteAddr("127.0.0.1");
     httpRequest.addHeader("User-Agent", "Customer portal test");
@@ -1936,6 +2088,39 @@ class CustomerAccessFlowTest {
           shipment_count INT NOT NULL,
           ip_address VARCHAR(64),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_handover_requests (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+          source_agent_id BIGINT NOT NULL,
+          target_agent_id BIGINT NOT NULL,
+          requested_by BIGINT NOT NULL,
+          reason VARCHAR(500) NOT NULL,
+          customer_count INT NOT NULL,
+          shipment_count INT NOT NULL DEFAULT 0,
+          request_ip VARCHAR(64),
+          reviewed_by BIGINT,
+          review_comment VARCHAR(500),
+          review_ip VARCHAR(64),
+          approved_batch_id CHAR(36),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          reviewed_at TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_handover_request_items (
+          request_id BIGINT NOT NULL,
+          customer_id BIGINT NOT NULL,
+          customer_public_id_snapshot CHAR(36) NOT NULL,
+          customer_display_name_snapshot VARCHAR(80) NOT NULL,
+          source_agent_id BIGINT NOT NULL,
+          shipment_count INT NOT NULL DEFAULT 0,
+          transferred_at TIMESTAMP,
+          PRIMARY KEY (request_id, customer_id)
         )
         """);
     jdbcTemplate.execute("""

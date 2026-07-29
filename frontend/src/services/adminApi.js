@@ -110,6 +110,28 @@ export async function deletePlatformCustomer(id) {
   return request(`/business/customers/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function fetchCustomerHandovers(options = {}) {
+  const params = new URLSearchParams();
+  if (options.status != null) params.set("status", String(options.status));
+  params.set("page", String(Math.max(0, Number(options.page || 0))));
+  params.set("size", String(Math.min(100, Math.max(1, Number(options.size || 20)))));
+  return request(`/admin/customer-handovers?${params.toString()}`);
+}
+
+export async function approveCustomerHandover(requestId, reviewComment = "") {
+  return request(`/admin/customer-handovers/${encodeURIComponent(requestId)}/approve`, {
+    method: "POST",
+    body: { reviewComment }
+  });
+}
+
+export async function rejectCustomerHandover(requestId, reviewComment) {
+  return request(`/admin/customer-handovers/${encodeURIComponent(requestId)}/reject`, {
+    method: "POST",
+    body: { reviewComment }
+  });
+}
+
 export async function fetchAdminAnnouncements(options = {}) {
   return request(`/admin/announcements?${pageParams(options)}`);
 }

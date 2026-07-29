@@ -140,7 +140,7 @@ button:not(.el-button).wide {
   margin-bottom: 0;
 }
 
-input:not(.el-input__inner),
+input:not(.el-input__inner):not(.el-select__input),
 select {
   border: 1px solid #b9c8da;
   border-radius: 4px;
@@ -7517,11 +7517,26 @@ button:not(.el-button).active {
   background: linear-gradient(135deg, var(--app-primary) 0%, #2f7bff 100%);
 }
 
-input:not(.el-input__inner),
+input:not(.el-input__inner):not(.el-select__input),
 select,
 .admin-form-grid input {
   border-radius: var(--app-control-radius);
   font-size: 14px;
+}
+
+/*
+ * Element Plus renders a real input inside filterable selects. Keep that input
+ * visually transparent so the select wrapper remains the single control
+ * surface instead of appearing as a second nested field.
+ */
+.el-select__input {
+  min-height: 0;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none !important;
 }
 
 .el-input__wrapper,

@@ -888,6 +888,58 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
         """,
         """
+        CREATE TABLE IF NOT EXISTS cp_customer_handover_requests (
+          id BIGINT PRIMARY KEY AUTO_INCREMENT,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+          source_agent_id BIGINT NOT NULL,
+          target_agent_id BIGINT NOT NULL,
+          requested_by BIGINT NOT NULL,
+          reason VARCHAR(500) NOT NULL,
+          customer_count INT NOT NULL,
+          shipment_count INT NOT NULL DEFAULT 0,
+          request_ip VARCHAR(64) NULL,
+          reviewed_by BIGINT NULL,
+          review_comment VARCHAR(500) NULL,
+          review_ip VARCHAR(64) NULL,
+          approved_batch_id CHAR(36) NULL,
+          created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+          updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+          reviewed_at DATETIME(6) NULL,
+          INDEX idx_cp_customer_handover_status_time (status, created_at),
+          INDEX idx_cp_customer_handover_requester_time (requested_by, created_at),
+          INDEX idx_cp_customer_handover_source_time (source_agent_id, created_at),
+          INDEX idx_cp_customer_handover_target_time (target_agent_id, created_at),
+          CONSTRAINT fk_cp_customer_handover_source
+            FOREIGN KEY (source_agent_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_target
+            FOREIGN KEY (target_agent_id) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_requester
+            FOREIGN KEY (requested_by) REFERENCES cp_users(id),
+          CONSTRAINT fk_cp_customer_handover_reviewer
+            FOREIGN KEY (reviewed_by) REFERENCES cp_users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS cp_customer_handover_request_items (
+          request_id BIGINT NOT NULL,
+          customer_id BIGINT NOT NULL,
+          customer_public_id_snapshot CHAR(36) NOT NULL,
+          customer_display_name_snapshot VARCHAR(80) NOT NULL,
+          source_agent_id BIGINT NOT NULL,
+          shipment_count INT NOT NULL DEFAULT 0,
+          transferred_at DATETIME(6) NULL,
+          PRIMARY KEY (request_id, customer_id),
+          INDEX idx_cp_customer_handover_item_customer (customer_id, request_id),
+          CONSTRAINT fk_cp_customer_handover_item_request
+            FOREIGN KEY (request_id) REFERENCES cp_customer_handover_requests(id) ON DELETE CASCADE,
+          CONSTRAINT fk_cp_customer_handover_item_customer
+            FOREIGN KEY (customer_id) REFERENCES cp_customers(id),
+          CONSTRAINT fk_cp_customer_handover_item_source
+            FOREIGN KEY (source_agent_id) REFERENCES cp_users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """,
+        """
         CREATE TABLE IF NOT EXISTS cp_shipment_client_match_queue (
           id BIGINT PRIMARY KEY AUTO_INCREMENT,
           shipment_id BIGINT NOT NULL,

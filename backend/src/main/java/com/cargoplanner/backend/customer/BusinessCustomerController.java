@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -61,6 +62,24 @@ public class BusinessCustomerController {
       HttpServletRequest httpRequest
   ) {
     return service.handoverCustomers(request, actor, ClientInfo.ip(httpRequest));
+  }
+
+  @GetMapping("/handover-requests")
+  public Map<String, Object> handoverRequests(
+      @RequestParam(required = false) String status,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.listCustomerHandoverRequests(status, page, size, actor);
+  }
+
+  @GetMapping("/handover-requests/{requestId}")
+  public Map<String, Object> handoverRequest(
+      @PathVariable String requestId,
+      @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
+  ) {
+    return service.getCustomerHandoverRequest(requestId, actor);
   }
 
   @PostMapping("/oversea-agents")

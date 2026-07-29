@@ -26,6 +26,20 @@ export function handoverBusinessCustomers(payload) {
   return request("/business/customers/handover", { method: "POST", body: payload });
 }
 
+export function fetchBusinessHandoverRequests({
+  status = "",
+  page = 0,
+  size = 20
+} = {}) {
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  if (status) query.set("status", status);
+  return request(`/business/customers/handover-requests?${query}`);
+}
+
+export function fetchBusinessHandoverRequest(requestId) {
+  return request(`/business/customers/handover-requests/${encodeURIComponent(requestId)}`);
+}
+
 export function createOverseaAgentEmployee(payload) {
   return request("/business/customers/oversea-agents", { method: "POST", body: payload });
 }

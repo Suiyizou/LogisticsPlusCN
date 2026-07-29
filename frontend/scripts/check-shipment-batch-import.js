@@ -218,8 +218,8 @@ const shipmentTableSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf('ref="shipmentTableRef"'),
   businessCustomerPage.indexOf("</el-table>", businessCustomerPage.indexOf('ref="shipmentTableRef"'))
 );
-assert.match(shipmentTableSource, /type="index"[^>]*width="52"/);
-assert.match(shipmentTableSource, /customers\.shipmentStatus[^>]*min-width="176"/);
+assert.match(shipmentTableSource, /type="index"[^>]*width="70"/);
+assert.match(shipmentTableSource, /customers\.shipmentStatus[^>]*min-width="205"/);
 assert.match(shipmentTableSource, /customers\.remark[^>]*width="220"/);
 assert.match(shipmentTableSource, /customers\.lastTrackedAt[^>]*width="164"/);
 

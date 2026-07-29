@@ -273,7 +273,7 @@
       </section>
 
       <section v-else-if="activeAdminPage === 'employees'" class="admin-page-pane">
-        <article class="admin-panel">
+        <article class="admin-panel admin-employee-panel">
           <div class="admin-panel-head">
             <div>
               <p>Account List</p>
@@ -311,9 +311,9 @@
                       <button type="button" @click="openEmployeeDialog(user)">{{ t("admin.employee.edit") }}</button>
                       <button
                         type="button"
-                        :disabled="user.id === currentUser?.id"
+                        :disabled="loading || user.id === currentUser?.id"
                         :title="user.id === currentUser?.id ? t('admin.employee.selfResetDisabled') : ''"
-                        @click="handleResetPassword(user)"
+                        @click="openResetPasswordDialog(user, $event)"
                       >{{ t("admin.employee.resetPassword") }}</button>
                       <button type="button" @click="toggleEmployee(user)">
                         {{ user.status === "ACTIVE" ? "禁用" : "启用" }}
@@ -409,6 +409,135 @@
             :page-size="platformPageSize"
             :total="platformTotal"
             @current-change="changePlatformPage"
+          />
+        </article>
+      </section>
+
+      <section v-else-if="activeAdminPage === 'handovers'" class="admin-page-pane">
+        <article class="admin-panel admin-handover-panel">
+          <div class="admin-panel-head">
+            <div>
+              <p>Business Handover Review</p>
+              <h2>{{ handoverCopy.title }}</h2>
+            </div>
+            <div class="admin-inline-actions admin-handover-toolbar">
+              <span>{{ handoverCopy.summary.replace("{count}", String(customerHandoverTotal)) }}</span>
+              <label class="admin-handover-status-filter">
+                <span>{{ handoverCopy.statusFilter }}</span>
+                <el-select
+                  v-model="customerHandoverStatus"
+                  :aria-label="handoverCopy.statusFilter"
+                  @change="changeCustomerHandoverStatus"
+                >
+                  <el-option value="" :label="handoverCopy.all" />
+                  <el-option value="PENDING" :label="handoverCopy.pending" />
+                  <el-option value="APPROVED" :label="handoverCopy.approved" />
+                  <el-option value="REJECTED" :label="handoverCopy.rejected" />
+                </el-select>
+              </label>
+              <button type="button" :disabled="loading" @click="loadCustomerHandoverPage">
+                {{ handoverCopy.refresh }}
+              </button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <el-table
+              :data="customerHandovers"
+              row-key="requestId"
+              stripe
+              class="standard-information-table admin-handover-table"
+            >
+              <el-table-column :label="handoverCopy.request" width="154" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b class="handover-request-id">{{ row.requestId || '-' }}</b>
+                  <span class="handover-status" :class="handoverStatusClass(row.status)">
+                    {{ handoverStatusText(row.status) }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.route" min-width="250">
+                <template #default="{ row }">
+                  <div class="handover-route">
+                    <span>
+                      <small>{{ handoverCopy.source }}</small>
+                      <b>{{ handoverUserLabel(row, "source") }}</b>
+                      <em>@{{ handoverUserHandle(row, "source") }}</em>
+                    </span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M5 12h13M14 7l5 5-5 5" />
+                    </svg>
+                    <span>
+                      <small>{{ handoverCopy.target }}</small>
+                      <b>{{ handoverUserLabel(row, "target") }}</b>
+                      <em>@{{ handoverUserHandle(row, "target") }}</em>
+                    </span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.scope" min-width="210">
+                <template #default="{ row }">
+                  <div class="handover-customer-scope">
+                    <b>{{ handoverCustomerNames(row) }}</b>
+                    <small>
+                      {{ handoverCopy.pendingEffect
+                        .replace("{customers}", String(row.customerCount || row.customers?.length || 0))
+                        .replace("{shipments}", String(row.shipmentCount || 0)) }}
+                    </small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.reason" min-width="210" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="handover-reason">{{ row.reason || '-' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.requestedBy" width="164">
+                <template #default="{ row }">
+                  <b>{{ row.requestedBy?.displayName || row.requestedByUserName || '-' }}</b>
+                  <small>{{ formatDate(row.requestedAt) }}</small>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.review" min-width="180">
+                <template #default="{ row }">
+                  <div class="handover-review-result">
+                    <b>{{ row.reviewedBy?.displayName || handoverCopy.notReviewed }}</b>
+                    <small v-if="row.reviewComment">{{ row.reviewComment }}</small>
+                    <small v-else-if="row.reviewedAt">{{ formatDate(row.reviewedAt) }}</small>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="handoverCopy.actions" width="104" fixed="right">
+                <template #default="{ row }">
+                  <div class="table-actions">
+                    <button
+                      v-if="row.status === 'PENDING'"
+                      class="primary"
+                      type="button"
+                      :disabled="loading"
+                      @click="openHandoverDecisionDialog(row, $event)"
+                    >
+                      {{ handoverCopy.reviewAction }}
+                    </button>
+                    <span v-else class="handover-reviewed-mark">
+                      {{ handoverStatusText(row.status) }}
+                    </span>
+                  </div>
+                </template>
+              </el-table-column>
+              <template #empty>{{ handoverCopy.empty }}</template>
+            </el-table>
+          </div>
+          <el-pagination
+            v-if="customerHandoverTotal"
+            class="admin-pagination"
+            background
+            layout="sizes, prev, pager, next, total"
+            :page-sizes="[10, 20, 50, 100]"
+            :current-page="customerHandoverPage"
+            :page-size="customerHandoverPageSize"
+            :total="customerHandoverTotal"
+            @size-change="changeCustomerHandoverPageSize"
+            @current-change="changeCustomerHandoverPage"
           />
         </article>
       </section>
@@ -1264,22 +1393,215 @@
       </div>
     </div>
 
+    <div
+      v-if="handoverDecisionDialog.open"
+      class="modal-backdrop"
+      @click.self="closeHandoverDecisionDialog"
+    >
+      <div
+        class="modal handover-decision-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="handover-decision-dialog-title"
+        aria-describedby="handover-decision-dialog-description"
+        tabindex="-1"
+        @keydown.esc="closeHandoverDecisionDialog"
+      >
+        <header>
+          <div>
+            <p>HANDOVER REVIEW</p>
+            <h2 id="handover-decision-dialog-title">{{ handoverCopy.decisionTitle }}</h2>
+          </div>
+          <button
+            type="button"
+            :aria-label="ui('common.close')"
+            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
+            @click="closeHandoverDecisionDialog"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="handover-decision-content">
+          <div class="handover-decision-route">
+            <span>
+              <small>{{ handoverCopy.source }}</small>
+              <strong>{{ handoverUserLabel(handoverDecisionDialog.record, "source") }}</strong>
+            </span>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M5 12h13M14 7l5 5-5 5" />
+            </svg>
+            <span>
+              <small>{{ handoverCopy.target }}</small>
+              <strong>{{ handoverUserLabel(handoverDecisionDialog.record, "target") }}</strong>
+            </span>
+          </div>
+          <p id="handover-decision-dialog-description">{{ handoverCopy.decisionDescription }}</p>
+          <dl class="handover-decision-summary">
+            <div>
+              <dt>{{ handoverCopy.scope }}</dt>
+              <dd>
+                {{ handoverCopy.pendingEffect
+                  .replace("{customers}", String(handoverDecisionDialog.record?.customerCount || handoverDecisionDialog.record?.customers?.length || 0))
+                  .replace("{shipments}", String(handoverDecisionDialog.record?.shipmentCount || 0)) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ handoverCopy.reason }}</dt>
+              <dd>{{ handoverDecisionDialog.record?.reason || '-' }}</dd>
+            </div>
+          </dl>
+          <label class="handover-review-comment">
+            <span>{{ handoverCopy.comment }}</span>
+            <textarea
+              ref="handoverDecisionCommentRef"
+              v-model="handoverDecisionDialog.comment"
+              maxlength="500"
+              rows="4"
+              :placeholder="handoverCopy.commentPlaceholder"
+              :disabled="Boolean(handoverDecisionDialog.pendingAction)"
+              @input="handoverDecisionDialog.error = ''"
+            ></textarea>
+            <small>{{ handoverDecisionDialog.comment.length }}/500</small>
+          </label>
+          <p v-if="handoverDecisionDialog.error" class="handover-decision-error" role="alert">
+            {{ handoverDecisionDialog.error }}
+          </p>
+        </div>
+        <div class="modal-actions handover-decision-actions">
+          <button
+            type="button"
+            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
+            @click="closeHandoverDecisionDialog"
+          >
+            {{ handoverCopy.cancel }}
+          </button>
+          <button
+            class="danger ghost"
+            type="button"
+            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
+            @click="submitHandoverDecision('reject')"
+          >
+            {{ handoverDecisionDialog.pendingAction === "reject"
+              ? handoverCopy.rejecting
+              : handoverCopy.reject }}
+          </button>
+          <button
+            class="primary"
+            type="button"
+            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
+            @click="submitHandoverDecision('approve')"
+          >
+            {{ handoverDecisionDialog.pendingAction === "approve"
+              ? handoverCopy.approving
+              : handoverCopy.approve }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="resetPasswordDialog.open"
+      class="modal-backdrop"
+      @click.self="closeResetPasswordDialog"
+    >
+      <div
+        class="modal reset-password-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-password-dialog-title"
+        aria-describedby="reset-password-dialog-description"
+        tabindex="-1"
+        @keydown.esc="closeResetPasswordDialog"
+      >
+        <header>
+          <div>
+            <p>SECURITY ACTION</p>
+            <h2 id="reset-password-dialog-title">{{ t("admin.employee.resetPassword") }}</h2>
+          </div>
+          <button
+            type="button"
+            :aria-label="ui('common.close')"
+            :disabled="resetPasswordDialog.pending"
+            @click="closeResetPasswordDialog"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="reset-password-confirmation">
+          <div class="reset-password-account">
+            <span aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 3 5 6v5c0 4.6 2.8 8.8 7 10 4.2-1.2 7-5.4 7-10V6l-7-3Z" />
+                <path d="M9.5 12.2 11.2 14l3.6-4" />
+              </svg>
+            </span>
+            <strong>{{ resetPasswordDialog.username }}</strong>
+          </div>
+          <p id="reset-password-dialog-description">
+            {{ t("admin.employee.resetPasswordConfirm", { username: resetPasswordDialog.username }) }}
+          </p>
+          <div class="reset-password-security-note">
+            {{ t("admin.employee.temporaryPasswordWarning") }}
+          </div>
+          <p v-if="resetPasswordDialog.error" class="reset-password-error" role="alert">
+            {{ resetPasswordDialog.error }}
+          </p>
+        </div>
+        <div class="modal-actions reset-password-actions">
+          <button
+            type="button"
+            :disabled="resetPasswordDialog.pending"
+            @click="closeResetPasswordDialog"
+          >
+            {{ ui('common.cancel') }}
+          </button>
+          <button
+            ref="resetPasswordConfirmButtonRef"
+            class="primary"
+            type="button"
+            :disabled="resetPasswordDialog.pending"
+            @click="confirmResetPassword"
+          >
+            {{ resetPasswordDialog.pending
+              ? `${t("admin.employee.resetPassword")}…`
+              : t("admin.employee.resetPassword") }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="temporaryPasswordDialog.open" class="modal-backdrop">
-      <div class="modal temporary-password-modal" role="dialog" aria-modal="true">
+      <div
+        class="modal temporary-password-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="temporary-password-dialog-title"
+        aria-describedby="temporary-password-dialog-description"
+      >
         <header>
           <div>
             <p>RESET CREDENTIAL</p>
-            <h2>{{ t("admin.employee.temporaryPasswordTitle") }}</h2>
+            <h2 id="temporary-password-dialog-title">{{ t("admin.employee.temporaryPasswordTitle") }}</h2>
           </div>
-          <button type="button" @click="closeTemporaryPasswordDialog">×</button>
+          <button type="button" :aria-label="ui('common.close')" @click="closeTemporaryPasswordDialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
         </header>
         <div class="temporary-password-content">
-          <p>{{ t("admin.employee.temporaryPasswordDescription", { username: temporaryPasswordDialog.username }) }}</p>
+          <p id="temporary-password-dialog-description">
+            {{ t("admin.employee.temporaryPasswordDescription", { username: temporaryPasswordDialog.username }) }}
+          </p>
           <code>{{ temporaryPasswordDialog.password }}</code>
           <strong>{{ t("admin.employee.temporaryPasswordWarning") }}</strong>
         </div>
         <div class="modal-actions">
-          <button type="button" @click="copyTemporaryPassword">
+          <button ref="temporaryPasswordCopyButtonRef" type="button" @click="copyTemporaryPassword">
             {{ t(temporaryPasswordDialog.copied ? "admin.employee.temporaryPasswordCopied" : "admin.employee.copyTemporaryPassword") }}
           </button>
           <button class="primary" type="button" @click="closeTemporaryPasswordDialog">
@@ -1360,6 +1682,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import { CanvasRenderer } from "echarts/renderers";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
+  approveCustomerHandover,
   clearAdminToken,
   createAdminAnnouncement,
   createEmployee,
@@ -1378,6 +1701,7 @@ import {
   fetchAdminShipmentFileBlob,
   fetchAdminShipmentFiles,
   fetchAuditLog,
+  fetchCustomerHandovers,
   fetchDevices,
   fetchEmployees,
   fetchLlmSettings,
@@ -1386,6 +1710,7 @@ import {
   kickDevice,
   loginAdmin,
   publishAdminAnnouncement,
+  rejectCustomerHandover,
   resetEmployeePassword,
   storedAdminToken,
   uploadAdminAnnouncementImage,
@@ -1412,7 +1737,8 @@ const rawAdminPages = [
   { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
   { key: "employees", no: "01", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
   { key: "platform", no: "02", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5ba2\u6237\u7ba1\u7406", description: "\u5ba2\u6237\u8d26\u53f7\u4e0e\u8d1f\u8d23\u5173\u7cfb", eyebrow: "Customer Management", title: "\u5ba2\u6237\u7ba1\u7406", subtitle: "\u5168\u5c40\u67e5\u770b\u5ba2\u6237\u8d26\u53f7\u3001\u8d1f\u8d23\u4e1a\u52a1\u5458\u3001\u6d77\u5916\u4ee3\u7406\u548c\u5df2\u7ed1\u5b9a\u7968\u5355\u3002" },
-  { key: "tickets", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u7968\u5355\u7ba1\u7406", description: "\u5168\u5c40\u7968\u5355\u4e0e\u8ddf\u8e2a\u72b6\u6001", eyebrow: "Shipment Management", title: "\u7968\u5355\u7ba1\u7406", subtitle: "\u7edf\u4e00\u67e5\u770b\u5168\u4f01\u4e1a\u7968\u5355\u3001\u7ed1\u5b9a\u5ba2\u6237\u3001\u8d1f\u8d23\u5458\u5de5\u548c\u8ddf\u8e2a\u72b6\u6001\u3002" },
+  { key: "handovers", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u4e1a\u52a1\u4ea4\u63a5\u5ba1\u6279", description: "\u5ba2\u6237\u5f52\u5c5e\u53d8\u66f4\u5ba1\u6838", eyebrow: "Business Handover Review", title: "\u4e1a\u52a1\u4ea4\u63a5\u5ba1\u6279", subtitle: "\u5ba1\u6838\u4e1a\u52a1\u5458\u53d1\u8d77\u7684\u5ba2\u6237\u8f6c\u63a5\u7533\u8bf7\uff0c\u786e\u8ba4\u5ba2\u6237\u8303\u56f4\u3001\u63a5\u6536\u4eba\u548c\u4ea4\u63a5\u539f\u56e0\u540e\u518d\u6267\u884c\u5f52\u5c5e\u53d8\u66f4\u3002" },
+  { key: "tickets", no: "04", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u7968\u5355\u7ba1\u7406", description: "\u5168\u5c40\u7968\u5355\u4e0e\u8ddf\u8e2a\u72b6\u6001", eyebrow: "Shipment Management", title: "\u7968\u5355\u7ba1\u7406", subtitle: "\u7edf\u4e00\u67e5\u770b\u5168\u4f01\u4e1a\u7968\u5355\u3001\u7ed1\u5b9a\u5ba2\u6237\u3001\u8d1f\u8d23\u5458\u5de5\u548c\u8ddf\u8e2a\u72b6\u6001\u3002" },
   { key: "devices", no: "01", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
   { key: "files", no: "02", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
   { key: "announcements", no: "01", group: "settings", groupLabel: "\u7cfb\u7edf\u914d\u7f6e", label: "\u901a\u77e5\u516c\u544a", description: "\u5f53\u65e5\u6d88\u606f\u4e0e\u53ef\u89c1\u6027", eyebrow: "Announcement Center", title: "\u901a\u77e5\u516c\u544a", subtitle: "\u4f7f\u7528\u53ef\u89c6\u5316\u5de5\u5177\u7f16\u8f91\u516c\u544a\u3001\u4e0a\u4f20\u56fe\u7247\u5e76\u914d\u7f6e\u5f53\u65e5\u53ef\u89c1\u8303\u56f4\u3002" },
@@ -1439,6 +1765,12 @@ const platformInfo = ref(null);
 const platformTotal = ref(0);
 const platformPage = ref(1);
 const platformPageSize = ref(20);
+const customerHandovers = ref([]);
+const customerHandoverTotal = ref(0);
+const customerHandoverPage = ref(1);
+const customerHandoverPageSize = ref(20);
+const customerHandoverStatus = ref("PENDING");
+const customerHandoversLoaded = ref(false);
 const adminTickets = ref([]);
 const adminTicketTotal = ref(0);
 const adminTicketPage = ref(1);
@@ -1509,12 +1841,31 @@ const employeeForm = reactive({
   partyRole: "AGENT",
   status: "ACTIVE"
 });
+const resetPasswordConfirmButtonRef = ref(null);
+const temporaryPasswordCopyButtonRef = ref(null);
+const handoverDecisionCommentRef = ref(null);
+const resetPasswordDialog = reactive({
+  open: false,
+  userId: "",
+  username: "",
+  pending: false,
+  error: ""
+});
+const handoverDecisionDialog = reactive({
+  open: false,
+  record: null,
+  comment: "",
+  pendingAction: "",
+  error: ""
+});
 const temporaryPasswordDialog = reactive({
   open: false,
   username: "",
   password: "",
   copied: false
 });
+let handoverDecisionTrigger = null;
+let resetPasswordTrigger = null;
 const filePreviewDialog = reactive({
   open: false,
   kind: "",
@@ -1696,6 +2047,89 @@ const TICKET_COPY = {
   }
 };
 
+const HANDOVER_COPY = {
+  "zh-CN": {
+    title: "\u4e1a\u52a1\u4ea4\u63a5\u7533\u8bf7",
+    summary: "\u5171 {count} \u6761\u7533\u8bf7",
+    statusFilter: "\u5ba1\u6279\u72b6\u6001",
+    all: "\u5168\u90e8",
+    pending: "\u5f85\u5ba1\u6279",
+    approved: "\u5df2\u6279\u51c6",
+    rejected: "\u5df2\u9a73\u56de",
+    refresh: "\u5237\u65b0",
+    request: "\u7533\u8bf7\u7f16\u53f7",
+    route: "\u4ea4\u63a5\u65b9\u5411",
+    source: "\u79fb\u4ea4\u65b9",
+    target: "\u63a5\u6536\u65b9",
+    scope: "\u5ba2\u6237\u8303\u56f4",
+    customerUnit: "{count} \u4e2a\u5ba2\u6237",
+    shipmentUnit: "{count} \u5f20\u7968\u5355",
+    reason: "\u4ea4\u63a5\u539f\u56e0",
+    requestedBy: "\u7533\u8bf7\u4eba / \u65f6\u95f4",
+    review: "\u5ba1\u6279\u7ed3\u679c",
+    actions: "\u64cd\u4f5c",
+    reviewAction: "\u5ba1\u6838",
+    empty: "\u6682\u65e0\u4ea4\u63a5\u7533\u8bf7",
+    decisionTitle: "\u5ba1\u6838\u4e1a\u52a1\u4ea4\u63a5",
+    decisionDescription: "\u6279\u51c6\u540e\uff0c\u6240\u9009\u5ba2\u6237\u7684\u8d1f\u8d23\u4eba\u5c06\u53d8\u66f4\u4e3a\u63a5\u6536\u4e1a\u52a1\u5458\uff0c\u5173\u8054\u7968\u5355\u8bbf\u95ee\u6743\u9650\u4f1a\u4e00\u5e76\u8865\u5145\u3002",
+    comment: "\u5ba1\u6279\u610f\u89c1",
+    commentPlaceholder: "\u586b\u5199\u6279\u51c6\u5907\u6ce8\uff1b\u5982\u9700\u9a73\u56de\uff0c\u5fc5\u987b\u8bf4\u660e\u539f\u56e0\uff08\u6700\u591a 500 \u5b57\uff09",
+    cancel: "\u53d6\u6d88",
+    reject: "\u9a73\u56de\u7533\u8bf7",
+    approve: "\u6279\u51c6\u4ea4\u63a5",
+    approving: "\u6b63\u5728\u6279\u51c6\u2026",
+    rejecting: "\u6b63\u5728\u9a73\u56de\u2026",
+    rejectRequired: "\u9a73\u56de\u65f6\u5fc5\u987b\u586b\u5199\u5ba1\u6279\u610f\u89c1\u3002",
+    approvedSuccess: "\u4ea4\u63a5\u7533\u8bf7\u5df2\u6279\u51c6\uff0c\u5ba2\u6237\u5f52\u5c5e\u5df2\u66f4\u65b0\u3002",
+    rejectedSuccess: "\u4ea4\u63a5\u7533\u8bf7\u5df2\u9a73\u56de\u3002",
+    error: "\u5ba1\u6279\u672a\u5b8c\u6210\uff0c\u8bf7\u5237\u65b0\u540e\u91cd\u8bd5\u3002",
+    pendingEffect: "{customers} \u4e2a\u5ba2\u6237 \u00b7 {shipments} \u5f20\u5173\u8054\u7968\u5355",
+    reviewedBy: "\u5ba1\u6279\u4eba",
+    notReviewed: "\u5c1a\u672a\u5ba1\u6279",
+    customersMore: "\u53e6\u6709 {count} \u4e2a\u5ba2\u6237"
+  },
+  "en-US": {
+    title: "Business handover requests",
+    summary: "{count} requests",
+    statusFilter: "Review status",
+    all: "All",
+    pending: "Pending",
+    approved: "Approved",
+    rejected: "Rejected",
+    refresh: "Refresh",
+    request: "Request",
+    route: "Handover route",
+    source: "From",
+    target: "To",
+    scope: "Customer scope",
+    customerUnit: "{count} customers",
+    shipmentUnit: "{count} shipments",
+    reason: "Reason",
+    requestedBy: "Requested by / time",
+    review: "Review result",
+    actions: "Actions",
+    reviewAction: "Review",
+    empty: "No handover requests",
+    decisionTitle: "Review business handover",
+    decisionDescription: "Approval changes the selected customers' owner to the receiving business user and grants the related shipment access.",
+    comment: "Review comment",
+    commentPlaceholder: "Add an approval note. Rejections require a reason (500 characters maximum).",
+    cancel: "Cancel",
+    reject: "Reject request",
+    approve: "Approve handover",
+    approving: "Approving\u2026",
+    rejecting: "Rejecting\u2026",
+    rejectRequired: "A review comment is required when rejecting a request.",
+    approvedSuccess: "The handover was approved and customer ownership was updated.",
+    rejectedSuccess: "The handover request was rejected.",
+    error: "The review could not be completed. Refresh and try again.",
+    pendingEffect: "{customers} customers \u00b7 {shipments} related shipments",
+    reviewedBy: "Reviewed by",
+    notReviewed: "Not reviewed",
+    customersMore: "{count} more customers"
+  }
+};
+
 const ANNOUNCEMENT_EMOJIS = ["\ud83d\ude00", "\ud83d\ude80", "\ud83d\udce6", "\ud83d\udea2", "\u2705", "\u26a0\ufe0f", "\ud83d\udce2", "\ud83d\udca1", "\ud83d\udccd", "\ud83d\udcc5"];
 const ANNOUNCEMENT_SYMBOLS = ["\u2022", "\u25e6", "\u2713", "\u2605", "\u2192", "\u203b", "\u2116", "\u2139", "\u00b7", "\u00a7"];
 
@@ -1865,6 +2299,9 @@ const platformActionCopy = computed(() =>
 const ticketCopy = computed(() =>
   TICKET_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
 );
+const handoverCopy = computed(() =>
+  HANDOVER_COPY[currentLocale.value === "en-US" ? "en-US" : "zh-CN"]
+);
 const announcementQuickTags = computed(() => announcementCopy.value.quickTags);
 
 const adminPages = computed(() => rawAdminPages.map((item) => ({
@@ -2000,6 +2437,7 @@ async function loadDashboard(showSuccess = true, refreshUser = true) {
     if (activeAdminPage.value === "files") await loadAdminFileListsWithoutLoading();
     if (activeAdminPage.value === "announcements") await loadAnnouncementPageWithoutLoading();
     if (activeAdminPage.value === "tickets") await loadAdminTicketPageWithoutLoading();
+    if (activeAdminPage.value === "handovers") await loadCustomerHandoverPageWithoutLoading();
     syncLlmForm(llmData);
     await nextTick();
     renderOverviewCharts();
@@ -2017,6 +2455,9 @@ function selectAdminPage(page) {
   }
   if (page === "tickets" && !adminTicketsLoaded.value) {
     void withLoading(loadAdminTicketPageWithoutLoading);
+  }
+  if (page === "handovers" && !customerHandoversLoaded.value) {
+    void withLoading(loadCustomerHandoverPageWithoutLoading);
   }
 }
 
@@ -2224,6 +2665,21 @@ async function refreshPlatformPage() {
   await withLoading(loadPlatformPage);
 }
 
+async function loadCustomerHandoverPageWithoutLoading() {
+  const data = await fetchCustomerHandovers({
+    status: customerHandoverStatus.value,
+    page: customerHandoverPage.value - 1,
+    size: customerHandoverPageSize.value
+  });
+  customerHandovers.value = Array.isArray(data?.items) ? data.items : [];
+  customerHandoverTotal.value = Number(data?.total ?? customerHandovers.value.length);
+  customerHandoversLoaded.value = true;
+}
+
+async function loadCustomerHandoverPage() {
+  await withLoading(loadCustomerHandoverPageWithoutLoading);
+}
+
 async function loadAdminTicketPageWithoutLoading() {
   const data = await fetchAvailableBusinessShipments({
     page: adminTicketPage.value,
@@ -2298,6 +2754,22 @@ async function changePlatformPageSize(size) {
   await withLoading(loadPlatformPage);
 }
 
+async function changeCustomerHandoverStatus() {
+  customerHandoverPage.value = 1;
+  await withLoading(loadCustomerHandoverPageWithoutLoading);
+}
+
+async function changeCustomerHandoverPage(page) {
+  customerHandoverPage.value = page;
+  await withAdminPageTransition(() => withLoading(loadCustomerHandoverPageWithoutLoading));
+}
+
+async function changeCustomerHandoverPageSize(size) {
+  customerHandoverPageSize.value = size;
+  customerHandoverPage.value = 1;
+  await withLoading(loadCustomerHandoverPageWithoutLoading);
+}
+
 async function changeAdminTicketPage(page) {
   adminTicketPage.value = page;
   await withAdminPageTransition(() => withLoading(loadAdminTicketPageWithoutLoading));
@@ -2330,6 +2802,67 @@ async function handleDeletePlatformCustomer(row) {
     await loadPlatformPage();
     showMessage(platformActionCopy.value.success);
   }, { popupError: true });
+}
+
+function openHandoverDecisionDialog(row, event) {
+  if (!row?.requestId || row.status !== "PENDING" || loading.value) return;
+  handoverDecisionTrigger = event?.currentTarget || null;
+  handoverDecisionDialog.record = row;
+  handoverDecisionDialog.comment = "";
+  handoverDecisionDialog.pendingAction = "";
+  handoverDecisionDialog.error = "";
+  handoverDecisionDialog.open = true;
+  nextTick(() => handoverDecisionCommentRef.value?.focus());
+}
+
+function closeHandoverDecisionDialog() {
+  if (handoverDecisionDialog.pendingAction) return;
+  handoverDecisionDialog.open = false;
+  handoverDecisionDialog.record = null;
+  handoverDecisionDialog.comment = "";
+  handoverDecisionDialog.error = "";
+  const trigger = handoverDecisionTrigger;
+  handoverDecisionTrigger = null;
+  nextTick(() => trigger?.focus?.());
+}
+
+async function submitHandoverDecision(action) {
+  const record = handoverDecisionDialog.record;
+  if (!record?.requestId || handoverDecisionDialog.pendingAction) return;
+  const reviewComment = handoverDecisionDialog.comment.trim();
+  if (action === "reject" && !reviewComment) {
+    handoverDecisionDialog.error = handoverCopy.value.rejectRequired;
+    await nextTick();
+    handoverDecisionCommentRef.value?.focus();
+    return;
+  }
+
+  handoverDecisionDialog.pendingAction = action;
+  handoverDecisionDialog.error = "";
+  try {
+    if (action === "approve") {
+      await approveCustomerHandover(record.requestId, reviewComment);
+    } else {
+      await rejectCustomerHandover(record.requestId, reviewComment);
+    }
+    if (customerHandovers.value.length === 1 && customerHandoverPage.value > 1) {
+      customerHandoverPage.value -= 1;
+    }
+    handoverDecisionDialog.open = false;
+    handoverDecisionDialog.record = null;
+    handoverDecisionDialog.comment = "";
+    handoverDecisionDialog.pendingAction = "";
+    handoverDecisionTrigger = null;
+    await loadCustomerHandoverPageWithoutLoading();
+    showMessage(action === "approve"
+      ? handoverCopy.value.approvedSuccess
+      : handoverCopy.value.rejectedSuccess);
+  } catch (error) {
+    markApiErrorHandled(error);
+    handoverDecisionDialog.error = tr(error?.message || handoverCopy.value.error);
+  } finally {
+    handoverDecisionDialog.pendingAction = "";
+  }
 }
 
 async function changeAnnouncementPage(page) {
@@ -3027,20 +3560,57 @@ function isStrongEmployeePassword(value) {
     && /[^A-Za-z0-9]/.test(password);
 }
 
-async function handleResetPassword(user) {
-  if (user.id === currentUser.value?.id) return;
-  if (!window.confirm(t("admin.employee.resetPasswordConfirm", { username: user.username }))) return;
-  await withLoading(async () => {
-    const response = await resetEmployeePassword(user.id);
+function openResetPasswordDialog(user, event) {
+  if (!user?.id || user.id === currentUser.value?.id || loading.value) return;
+  resetPasswordTrigger = event?.currentTarget || null;
+  resetPasswordDialog.userId = user.id;
+  resetPasswordDialog.username = user.username || user.displayName || "";
+  resetPasswordDialog.error = "";
+  resetPasswordDialog.pending = false;
+  resetPasswordDialog.open = true;
+  nextTick(() => resetPasswordConfirmButtonRef.value?.focus());
+}
+
+function closeResetPasswordDialog() {
+  if (resetPasswordDialog.pending) return;
+  resetPasswordDialog.open = false;
+  resetPasswordDialog.userId = "";
+  resetPasswordDialog.username = "";
+  resetPasswordDialog.error = "";
+  const trigger = resetPasswordTrigger;
+  resetPasswordTrigger = null;
+  nextTick(() => trigger?.focus?.());
+}
+
+async function confirmResetPassword() {
+  if (!resetPasswordDialog.userId || resetPasswordDialog.pending) return;
+  const userId = resetPasswordDialog.userId;
+  const username = resetPasswordDialog.username;
+  resetPasswordDialog.pending = true;
+  resetPasswordDialog.error = "";
+  message.value = "";
+  hasError.value = false;
+  try {
+    const response = await resetEmployeePassword(userId);
     const temporaryPassword = String(response?.temporaryPassword ?? "");
     if (!temporaryPassword) throw new Error(t("admin.employee.temporaryPasswordMissing"));
+
+    resetPasswordDialog.open = false;
+    resetPasswordDialog.userId = "";
+    resetPasswordDialog.username = "";
     temporaryPasswordDialog.open = true;
-    temporaryPasswordDialog.username = user.username;
+    temporaryPasswordDialog.username = username;
     temporaryPasswordDialog.password = temporaryPassword;
     temporaryPasswordDialog.copied = false;
-    await loadDashboard(false);
-    showMessage(t("admin.employee.resetPasswordSuccess", { username: user.username }));
-  }, { popupError: true });
+    showMessage(t("admin.employee.resetPasswordSuccess", { username }));
+    await nextTick();
+    temporaryPasswordCopyButtonRef.value?.focus();
+  } catch (error) {
+    markApiErrorHandled(error);
+    resetPasswordDialog.error = tr(error?.message || t("admin.employee.errorFallback"));
+  } finally {
+    resetPasswordDialog.pending = false;
+  }
 }
 
 async function copyTemporaryPassword() {
@@ -3057,6 +3627,9 @@ function closeTemporaryPasswordDialog() {
   temporaryPasswordDialog.username = "";
   temporaryPasswordDialog.password = "";
   temporaryPasswordDialog.copied = false;
+  const trigger = resetPasswordTrigger;
+  resetPasswordTrigger = null;
+  nextTick(() => trigger?.focus?.());
 }
 
 async function toggleEmployee(user) {
@@ -3401,6 +3974,61 @@ function partyRoleText(partyRole, role) {
   }[normalized] || "customers.roleShipper");
 }
 
+function handoverUserRecord(row, direction) {
+  const prefix = direction === "target" ? "target" : "source";
+  return row?.[`${prefix}BusinessUser`] || {};
+}
+
+function handoverUserLabel(row, direction) {
+  const prefix = direction === "target" ? "target" : "source";
+  const user = handoverUserRecord(row, prefix);
+  return user.displayName
+    || row?.[`${prefix}BusinessUserName`]
+    || user.username
+    || "-";
+}
+
+function handoverUserHandle(row, direction) {
+  const prefix = direction === "target" ? "target" : "source";
+  const user = handoverUserRecord(row, prefix);
+  return user.username || row?.[`${prefix}BusinessUserId`] || "-";
+}
+
+function handoverCustomerNames(row) {
+  const customers = Array.isArray(row?.customers) ? row.customers : [];
+  const names = customers
+    .map((customer) => customer?.displayName || customer?.clientCode || customer?.id)
+    .filter(Boolean);
+  if (!names.length) {
+    return handoverCopy.value.customerUnit.replace(
+      "{count}",
+      String(row?.customerCount || 0)
+    );
+  }
+  const separator = currentLocale.value === "en-US" ? ", " : "\u3001";
+  const visible = names.slice(0, 2).join(separator);
+  const remaining = names.length - 2;
+  return remaining > 0
+    ? `${visible} \u00b7 ${handoverCopy.value.customersMore.replace("{count}", String(remaining))}`
+    : visible;
+}
+
+function handoverStatusText(status) {
+  const key = {
+    PENDING: "pending",
+    APPROVED: "approved",
+    REJECTED: "rejected"
+  }[String(status || "").toUpperCase()];
+  return key ? handoverCopy.value[key] : status || "-";
+}
+
+function handoverStatusClass(status) {
+  const normalized = String(status || "").toLowerCase();
+  return ["pending", "approved", "rejected"].includes(normalized)
+    ? normalized
+    : "pending";
+}
+
 function platformRowKey(row) {
   return `${row?.customerId || "customer"}:${row?.agentUserId || "unassigned"}`;
 }
@@ -3645,6 +4273,10 @@ const CP1252_BYTES = {
   animation: admin-pane-enter 0.28s ease both;
 }
 
+.admin-console-main {
+  padding: 22px clamp(18px, 2vw, 28px) 28px;
+}
+
 .admin-audit-panel {
   scroll-margin-top: 20px;
 }
@@ -3717,13 +4349,21 @@ const CP1252_BYTES = {
 
 .admin-page-pane .admin-panel {
   border-color: #d7e3ef;
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(251 253 255 / 98%));
+  padding: 20px 22px 22px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(25 65 100 / 6%);
+}
+
+.admin-page-pane .admin-panel:hover {
+  border-color: #c8d8e7;
+  box-shadow: 0 10px 28px rgb(25 65 100 / 8%);
+  transform: none;
 }
 
 .admin-page-pane .admin-panel-head {
   min-height: 48px;
-  padding-bottom: 12px;
+  margin-bottom: 16px;
+  padding: 0 2px 14px;
   border-bottom: 1px solid #e5edf5;
 }
 
@@ -3731,12 +4371,18 @@ const CP1252_BYTES = {
   width: 100%;
   min-width: 0;
   overflow-x: auto;
-  border: 1px solid #dce6f0;
+  border: 0;
+  border-top: 1px solid #dce6f0;
+  border-bottom: 1px solid #dce6f0;
   background: #fff;
 }
 
 .admin-table-wrap :deep(.el-table) {
   min-width: 760px;
+}
+
+.admin-table-wrap :deep(.el-table .cell) {
+  padding-inline: 14px;
 }
 
 .admin-table-wrap :deep(.el-table__header th) {
@@ -3784,6 +4430,407 @@ const CP1252_BYTES = {
   font-style: normal;
   font-weight: 800;
   line-height: 1;
+}
+
+.admin-handover-toolbar {
+  row-gap: 8px;
+}
+
+.admin-handover-status-filter {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #5d7187;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-handover-status-filter :deep(.el-select) {
+  width: 136px;
+}
+
+.handover-request-id {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 7px;
+  color: #223c55;
+  font: 600 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handover-status {
+  display: inline-flex;
+  min-height: 24px;
+  padding: 0 8px;
+  align-items: center;
+  border-radius: 999px;
+  color: #7b5715;
+  background: #fff4d8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.handover-status.approved {
+  color: #176b55;
+  background: #e5f7ef;
+}
+
+.handover-status.rejected {
+  color: #a5323e;
+  background: #ffedf0;
+}
+
+.handover-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.handover-route > span,
+.handover-customer-scope,
+.handover-review-result {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.handover-route small,
+.handover-route em,
+.handover-customer-scope small,
+.handover-review-result small {
+  overflow: hidden;
+  color: #74879a;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handover-route b,
+.handover-customer-scope b,
+.handover-review-result b {
+  overflow: hidden;
+  color: #243e57;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handover-route svg,
+.handover-decision-route svg {
+  width: 22px;
+  height: 22px;
+  color: #5b92bd;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.handover-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #435c73;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.handover-reviewed-mark {
+  color: #718397;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reset-password-modal,
+.temporary-password-modal,
+.handover-decision-modal {
+  width: min(600px, calc(100vw - 40px));
+  border-color: #d5e0ea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgb(15 32 51 / 24%);
+}
+
+.reset-password-modal > header,
+.temporary-password-modal > header,
+.handover-decision-modal > header {
+  padding: 20px 22px 18px;
+  background: #fff;
+}
+
+.reset-password-modal > header button,
+.temporary-password-modal > header button,
+.handover-decision-modal > header button {
+  display: inline-grid;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #5e7185;
+  background: transparent;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.reset-password-modal > header button svg,
+.temporary-password-modal > header button svg,
+.handover-decision-modal > header button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.reset-password-modal > header button:hover:not(:disabled),
+.temporary-password-modal > header button:hover:not(:disabled),
+.handover-decision-modal > header button:hover:not(:disabled) {
+  border-color: #d7e3ed;
+  background: #f4f8fb;
+}
+
+.reset-password-modal > header button:focus-visible,
+.temporary-password-modal > header button:focus-visible,
+.handover-decision-modal > header button:focus-visible,
+.reset-password-actions button:focus-visible,
+.temporary-password-modal > .modal-actions button:focus-visible,
+.handover-decision-modal > .modal-actions button:focus-visible,
+.handover-review-comment textarea:focus-visible {
+  outline: 3px solid rgb(3 105 161 / 20%);
+  outline-offset: 2px;
+}
+
+.reset-password-confirmation {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 22px;
+  color: #415970;
+}
+
+.reset-password-confirmation > p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.reset-password-account {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+}
+
+.reset-password-account > span {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 10px;
+  color: #176eaa;
+  background: #eaf4fb;
+}
+
+.reset-password-account svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.reset-password-account strong {
+  overflow: hidden;
+  color: #142d45;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reset-password-security-note {
+  padding: 10px 12px;
+  border-left: 3px solid #d49a32;
+  color: #76571d;
+  background: #fff9ec;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.reset-password-error {
+  padding: 10px 12px;
+  border-left: 3px solid #dc2626;
+  color: #a51d2c;
+  background: #fff3f4;
+  font-size: 13px;
+}
+
+.reset-password-modal > .modal-actions,
+.temporary-password-modal > .modal-actions {
+  margin: 0;
+  padding: 16px 22px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcfe;
+}
+
+.reset-password-modal > .modal-actions button,
+.temporary-password-modal > .modal-actions button {
+  min-height: 40px;
+  padding-inline: 16px;
+}
+
+.temporary-password-content {
+  padding: 20px 22px 22px;
+}
+
+.temporary-password-content > p {
+  margin: 0;
+}
+
+.temporary-password-content code {
+  border-radius: 8px;
+}
+
+.handover-decision-modal {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.handover-decision-content {
+  display: grid;
+  gap: 18px;
+  padding: 20px 22px 22px;
+  color: #415970;
+}
+
+.handover-decision-content > p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.handover-decision-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.handover-decision-route > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.handover-decision-route small {
+  color: #71869a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.handover-decision-route strong {
+  overflow: hidden;
+  color: #16334e;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handover-decision-summary {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid #e1e9f0;
+  border-bottom: 1px solid #e1e9f0;
+}
+
+.handover-decision-summary > div {
+  display: grid;
+  padding: 12px 0;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.handover-decision-summary > div + div {
+  border-top: 1px solid #edf1f5;
+}
+
+.handover-decision-summary dt {
+  color: #687d91;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.handover-decision-summary dd {
+  margin: 0;
+  color: #273f56;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.handover-review-comment {
+  display: grid;
+  gap: 7px;
+  color: #314b64;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.handover-review-comment textarea {
+  width: 100%;
+  min-height: 112px;
+  padding: 11px 12px;
+  resize: vertical;
+  border: 1px solid #bdccda;
+  border-radius: 8px;
+  outline: 0;
+  color: #1d354d;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.handover-review-comment textarea:focus {
+  border-color: #3282bd;
+  box-shadow: 0 0 0 3px rgb(3 105 161 / 12%);
+}
+
+.handover-review-comment > small {
+  justify-self: end;
+  color: #7a8c9e;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.handover-decision-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #dc2626;
+  color: #a51d2c;
+  background: #fff3f4;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.handover-decision-modal > .modal-actions {
+  margin: 0;
+  padding: 16px 22px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcfe;
+}
+
+.handover-decision-actions button {
+  min-height: 40px;
+  padding-inline: 16px;
 }
 
 .announcement-title-cell {
@@ -4480,6 +5527,14 @@ const CP1252_BYTES = {
 }
 
 @media (max-width: 680px) {
+  .admin-console-main {
+    padding: 14px;
+  }
+
+  .admin-page-pane .admin-panel {
+    padding: 16px;
+  }
+
   .admin-panel-head,
   .admin-inline-actions,
   .admin-top-actions {
@@ -4510,9 +5565,32 @@ const CP1252_BYTES = {
   }
 
   .announcement-editor-modal,
-  .announcement-preview-modal {
+  .announcement-preview-modal,
+  .reset-password-modal,
+  .temporary-password-modal,
+  .handover-decision-modal {
     width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
+  }
+
+  .reset-password-modal,
+  .temporary-password-modal,
+  .handover-decision-modal {
+    overflow-y: auto;
+  }
+
+  .handover-decision-route {
+    grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .handover-decision-summary > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .handover-decision-actions {
+    flex-wrap: wrap;
   }
 
   .announcement-editor-form {
