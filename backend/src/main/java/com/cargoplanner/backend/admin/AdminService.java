@@ -194,17 +194,15 @@ public class AdminService {
 
   private void validateStrongPassword(String password) {
     String value = password == null ? "" : password;
-    boolean valid = value.length() >= 12
+    boolean valid = value.length() >= 8
         && value.length() <= 128
-        && value.chars().anyMatch(Character::isUpperCase)
-        && value.chars().anyMatch(Character::isLowerCase)
-        && value.chars().anyMatch(Character::isDigit)
-        && value.chars().anyMatch(character -> !Character.isLetterOrDigit(character));
+        && value.chars().anyMatch(Character::isLetter)
+        && value.chars().anyMatch(Character::isDigit);
     boolean knownLegacyPassword = "123456".equals(value) || "Admin@123456".equals(value);
     if (!valid || knownLegacyPassword) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Password must be 12-128 characters and include upper, lower, digit, and symbol"
+          "Password must be 8-128 characters and include at least one letter and one number"
       );
     }
   }

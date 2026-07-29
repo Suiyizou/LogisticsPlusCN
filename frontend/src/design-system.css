@@ -257,6 +257,7 @@ textarea {
 /* Controls and feedback. */
 .el-button {
   min-height: 38px;
+  padding-inline: 16px;
   border-radius: var(--radius-control);
   font-weight: 650;
 }
@@ -289,6 +290,7 @@ button:disabled {
 }
 
 :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+  padding-inline: 14px;
   border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
@@ -307,6 +309,8 @@ button:disabled {
 }
 
 .el-tag {
+  min-height: 26px;
+  padding-inline: 9px;
   border-radius: 6px;
   font-weight: 650;
 }
@@ -352,6 +356,12 @@ button:disabled {
 .admin-table td {
   border-bottom-color: var(--color-border);
   color: var(--color-secondary);
+}
+
+.customer-access-page .el-table .cell,
+.admin-console-shell .el-table .cell,
+.standard-information-table .cell {
+  padding-inline: 14px;
 }
 
 .customer-access-page .el-table__row:hover > td.el-table__cell,

@@ -107,7 +107,7 @@ class AuthServicePasswordChangeTest {
 
     authService.changeOwnPassword(
         first.user(),
-        new ChangeOwnPasswordRequest("OldSecure!234", "NewSecure!567"),
+        new ChangeOwnPasswordRequest("OldSecure!234", "operator2026"),
         first.token(),
         request
     );
@@ -124,7 +124,7 @@ class AuthServicePasswordChangeTest {
         assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
     );
     assertThat(authService.login(
-        new LoginRequest("operator", "NewSecure!567", "device-c", "New password", null),
+        new LoginRequest("operator", "operator2026", "device-c", "New password", null),
         request
     ).user().role()).isEqualTo("BUSINESS");
     assertThat(jdbcTemplate.queryForObject(

@@ -58,7 +58,7 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void customerHandoverRequiresAdminApprovalAndRetainsShipmentHistory() {
+  void customerHandoverCompletesDirectlyAndRetainsShipmentHistory() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(
             "handover-customer", "SecurePass!23", "Handover Customer", "SHIPPER"
@@ -87,46 +87,19 @@ class CustomerAccessFlowTest {
     assertThat(agents).extracting(item -> item.get("username"))
         .containsExactly("sales-1", "sales-2");
 
-    Map<String, Object> application = customerService.handoverCustomers(
+    Map<String, Object> completed = customerService.handoverCustomers(
         new BusinessCustomerHandoverRequest(List.of(customerId), 2L, "Cover the next sailing"),
         business,
         "127.0.0.1"
     );
 
-    assertThat(application)
-        .containsEntry("status", "PENDING")
+    assertThat(completed)
+        .containsEntry("status", "APPROVED")
         .containsEntry("customerCount", 1)
+        .containsEntry("shipmentCount", 1)
         .containsEntry("targetBusinessUserName", "Business Two")
         .containsEntry("reason", "Cover the next sailing");
-    String requestId = (String) application.get("requestId");
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
-        Long.class,
-        customerId
-    )).isEqualTo(1L);
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_customer_transfer_log WHERE customer_id = ? AND from_agent_id = 1 AND to_agent_id = 2",
-        Integer.class,
-        internalCustomerId
-    )).isZero();
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
-        Integer.class
-    )).isZero();
-    assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(1);
-
-    Map<String, Object> approved = customerService.approveCustomerHandover(
-        requestId,
-        new CustomerHandoverDecisionRequest("Coverage confirmed"),
-        admin,
-        "127.0.0.2"
-    );
-
-    assertThat(approved)
-        .containsEntry("status", "APPROVED")
-        .containsEntry("shipmentCount", 1)
-        .containsEntry("reviewComment", "Coverage confirmed");
-    assertThat(approved.get("approvedBatchId")).isNotNull();
+    assertThat(completed.get("approvedBatchId")).isNotNull();
     assertThat(jdbcTemplate.queryForObject(
         "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
         Long.class,
@@ -143,10 +116,20 @@ class CustomerAccessFlowTest {
     )).isEqualTo(1);
     assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
     assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> adminRecords =
+        (List<Map<String, Object>>) customerService.listCustomerHandoverRequests(
+            null, 0, 20, admin
+        ).get("items");
+    assertThat(adminRecords).singleElement().satisfies(record ->
+        assertThat(record)
+            .containsEntry("status", "APPROVED")
+            .containsEntry("requestId", completed.get("requestId"))
+    );
   }
 
   @Test
-  void rejectedCustomerHandoverDoesNotChangeOwnershipAndCannotBeReviewedTwice() {
+  void completedDirectHandoverCannotBeReviewedAgain() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(
             "handover-rejected", "SecurePass!23", "Rejected Handover", "CONSIGNEE"
@@ -166,25 +149,6 @@ class CustomerAccessFlowTest {
     );
     String requestId = (String) application.get("requestId");
 
-    Map<String, Object> rejected = customerService.rejectCustomerHandover(
-        requestId,
-        new CustomerHandoverDecisionRequest("Coverage dates are incomplete"),
-        admin,
-        "127.0.0.2"
-    );
-
-    assertThat(rejected)
-        .containsEntry("status", "REJECTED")
-        .containsEntry("reviewComment", "Coverage dates are incomplete");
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
-        Long.class,
-        customerId
-    )).isEqualTo(1L);
-    assertThat(jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_customer_transfer_log",
-        Integer.class
-    )).isZero();
     assertThatThrownBy(() -> customerService.approveCustomerHandover(
         requestId,
         new CustomerHandoverDecisionRequest("Approve anyway"),
@@ -194,10 +158,24 @@ class CustomerAccessFlowTest {
         .isInstanceOf(ApiException.class)
         .extracting(error -> ((ApiException) error).status())
         .isEqualTo(HttpStatus.CONFLICT);
+    assertThatThrownBy(() -> customerService.rejectCustomerHandover(
+        requestId,
+        new CustomerHandoverDecisionRequest("Reject anyway"),
+        admin,
+        "127.0.0.2"
+    ))
+        .isInstanceOf(ApiException.class)
+        .extracting(error -> ((ApiException) error).status())
+        .isEqualTo(HttpStatus.CONFLICT);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
+        Long.class,
+        customerId
+    )).isEqualTo(2L);
   }
 
   @Test
-  void pendingCustomerHandoverBlocksDuplicateRequestsAndStaleApprovalIsAtomic() {
+  void directCustomerHandoverValidationIsAtomic() {
     String firstCustomerId = (String) customerService.create(
         new CreateCustomerRequest(
             "handover-first", "SecurePass!23", "First Handover", "SHIPPER"
@@ -212,7 +190,11 @@ class CustomerAccessFlowTest {
         business,
         "127.0.0.1"
     ).get("id");
-    Map<String, Object> application = customerService.handoverCustomers(
+    jdbcTemplate.update(
+        "UPDATE cp_customers SET responsible_agent_id = 2 WHERE public_id = ?",
+        secondCustomerId
+    );
+    assertThatThrownBy(() -> customerService.handoverCustomers(
         new BusinessCustomerHandoverRequest(
             List.of(firstCustomerId, secondCustomerId),
             2L,
@@ -220,34 +202,10 @@ class CustomerAccessFlowTest {
         ),
         business,
         "127.0.0.1"
-    );
-
-    assertThatThrownBy(() -> customerService.handoverCustomers(
-        new BusinessCustomerHandoverRequest(
-            List.of(firstCustomerId),
-            2L,
-            "Duplicate request"
-        ),
-        business,
-        "127.0.0.1"
     ))
         .isInstanceOf(ApiException.class)
         .extracting(error -> ((ApiException) error).status())
-        .isEqualTo(HttpStatus.CONFLICT);
-
-    jdbcTemplate.update(
-        "UPDATE cp_customers SET responsible_agent_id = 2 WHERE public_id = ?",
-        secondCustomerId
-    );
-    assertThatThrownBy(() -> customerService.approveCustomerHandover(
-        (String) application.get("requestId"),
-        new CustomerHandoverDecisionRequest("Approved"),
-        admin,
-        "127.0.0.2"
-    ))
-        .isInstanceOf(ApiException.class)
-        .extracting(error -> ((ApiException) error).status())
-        .isEqualTo(HttpStatus.CONFLICT);
+        .isIn(HttpStatus.NOT_FOUND, HttpStatus.FORBIDDEN);
 
     assertThat(jdbcTemplate.queryForObject(
         "SELECT responsible_agent_id FROM cp_customers WHERE public_id = ?",
@@ -258,10 +216,10 @@ class CustomerAccessFlowTest {
         "SELECT COUNT(*) FROM cp_customer_transfer_log",
         Integer.class
     )).isZero();
-    assertThat(customerService.getCustomerHandoverRequest(
-        (String) application.get("requestId"),
-        business
-    )).containsEntry("status", "PENDING");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_customer_handover_requests",
+        Integer.class
+    )).isZero();
   }
 
   @BeforeEach
@@ -397,7 +355,7 @@ class CustomerAccessFlowTest {
         .containsEntry("clientCode", "BATCH-001")
         .containsEntry("partyRole", "SHIPPER");
     assertThat(items.get(1).get("message").toString())
-        .contains("uppercase and lowercase");
+        .contains("at least one letter and one number");
     assertThat(jdbcTemplate.queryForMap(
         "SELECT display_name, client_code, party_role, remark FROM cp_customers WHERE username = ?",
         "batch-shipper"

@@ -188,7 +188,7 @@ public class BusinessCustomerService {
     String username = normalizeUsername(request == null ? null : request.username());
     String displayName = normalizeDisplayName(request == null ? null : request.displayName());
     String password = request == null ? null : request.password();
-    validateInternalPassword(password, username);
+    validateInternalPassword(password);
     PasswordHash passwordHash = passwordHasher.hash(password);
     try {
       jdbcTemplate.update(
@@ -280,7 +280,7 @@ public class BusinessCustomerService {
     }
     String password = request == null ? null : request.password();
     if (password != null && !password.isBlank()) {
-      validateInternalPassword(password, String.valueOf(existing.get("username")));
+      validateInternalPassword(password);
       PasswordHash hash = passwordHasher.hash(password);
       jdbcTemplate.update(
           """
@@ -775,7 +775,12 @@ public class BusinessCustomerService {
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
+    if (actor == null || !actor.isBusiness()) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Business operator permission is required for direct customer handover"
+      );
+    }
     LinkedHashSet<String> customerIds = new LinkedHashSet<>();
     if (request != null && request.customerIds() != null) {
       for (String customerId : request.customerIds()) {
@@ -833,24 +838,22 @@ public class BusinessCustomerService {
             "Customer " + customer.displayName() + " is already assigned to the target business user"
         );
       }
-      Integer pendingCount = jdbcTemplate.queryForObject(
+      jdbcTemplate.update(
           """
-          SELECT COUNT(*)
-          FROM cp_customer_handover_request_items request_item
-          JOIN cp_customer_handover_requests handover_request
-            ON handover_request.id = request_item.request_id
-          WHERE request_item.customer_id = ?
-            AND handover_request.status = 'PENDING'
+          UPDATE cp_customer_handover_requests
+          SET status = 'REJECTED',
+              review_comment = 'Superseded by direct handover workflow',
+              reviewed_at = CURRENT_TIMESTAMP(6),
+              updated_at = CURRENT_TIMESTAMP(6)
+          WHERE status = 'PENDING'
+            AND id IN (
+              SELECT request_id
+              FROM cp_customer_handover_request_items
+              WHERE customer_id = ?
+            )
           """,
-          Integer.class,
           customer.id()
       );
-      if (pendingCount != null && pendingCount > 0) {
-        throw new ApiException(
-            HttpStatus.CONFLICT,
-            "Customer " + customer.displayName() + " already has a pending handover request"
-        );
-      }
       Integer shipmentCount = jdbcTemplate.queryForObject(
           "SELECT COUNT(*) FROM cp_customer_shipment_access WHERE customer_id = ?",
           Integer.class,
@@ -906,11 +909,98 @@ public class BusinessCustomerService {
           applicationTarget.shipmentCount()
       );
     }
+    String batchId = UUID.randomUUID().toString();
+    int relatedShipments = 0;
+    for (CustomerHandoverApplicationTarget applicationTarget : targets) {
+      CustomerRecord customer = applicationTarget.customer();
+      List<Long> shipmentIds = jdbcTemplate.query(
+          """
+          SELECT shipment_id
+          FROM cp_customer_shipment_access
+          WHERE customer_id = ?
+          ORDER BY shipment_id
+          """,
+          (rs, rowNumber) -> rs.getLong(1),
+          customer.id()
+      );
+      int updated = jdbcTemplate.update(
+          """
+          UPDATE cp_customers
+          SET responsible_agent_id = ?
+          WHERE id = ? AND responsible_agent_id = ?
+          """,
+          target.id(),
+          customer.id(),
+          customer.responsibleAgentId()
+      );
+      if (updated != 1) {
+        throw new ApiException(
+            HttpStatus.CONFLICT,
+            "Customer ownership changed while the handover was being completed"
+        );
+      }
+      for (Long shipmentId : shipmentIds) {
+        grantBusinessHandoverParticipant(shipmentId, target.id(), actor.id());
+      }
+      jdbcTemplate.update(
+          """
+          INSERT INTO cp_customer_transfer_log (
+            batch_id, customer_id, from_agent_id, to_agent_id, initiated_by,
+            retained_previous_access, shipment_count, ip_address
+          ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+          """,
+          batchId,
+          customer.id(),
+          customer.responsibleAgentId(),
+          target.id(),
+          actor.id(),
+          shipmentIds.size(),
+          ClientInfo.trim(ipAddress, 64)
+      );
+      jdbcTemplate.update(
+          """
+          UPDATE cp_customer_handover_request_items
+          SET shipment_count = ?, transferred_at = CURRENT_TIMESTAMP(6)
+          WHERE request_id = ? AND customer_id = ?
+          """,
+          shipmentIds.size(),
+          requestId,
+          customer.id()
+      );
+      audit(
+          actor,
+          "DIRECT_CUSTOMER_HANDOVER",
+          customer.id(),
+          "Completed direct handover " + requestPublicId + " in batch " + batchId
+              + ": transferred " + customer.displayName()
+              + " from business user " + customer.responsibleAgentId()
+              + " to " + target.id() + " (" + target.displayName() + ")",
+          ipAddress
+      );
+      relatedShipments += shipmentIds.size();
+    }
+    int finalized = jdbcTemplate.update(
+        """
+        UPDATE cp_customer_handover_requests
+        SET status = 'APPROVED', reviewed_by = NULL, review_comment = NULL,
+            review_ip = NULL, reviewed_at = CURRENT_TIMESTAMP(6),
+            approved_batch_id = ?, shipment_count = ?,
+            updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = ? AND status = 'PENDING'
+        """,
+        batchId,
+        relatedShipments,
+        requestId
+    );
+    if (finalized != 1) {
+      throw new ApiException(HttpStatus.CONFLICT, "Customer handover could not be completed");
+    }
     auditCustomerHandover(
         actor,
-        "REQUEST_CUSTOMER_HANDOVER",
+        "COMPLETE_DIRECT_CUSTOMER_HANDOVER",
         requestId,
-        "Requested handover " + requestPublicId + " for " + targets.size()
+        "Completed direct handover " + requestPublicId + " in batch " + batchId
+            + " for " + targets.size()
             + " customer(s) from business user " + sourceAgentId
             + " to " + target.id() + " (" + target.displayName() + ")"
             + "; reason: " + reason,
@@ -4520,31 +4610,26 @@ public class BusinessCustomerService {
           "Customer password must contain 8-128 characters"
       );
     }
-    if (!value.matches(".*[A-Z].*")
-        || !value.matches(".*[a-z].*")
-        || !value.matches(".*\\d.*")) {
+    if (!value.chars().anyMatch(Character::isLetter)
+        || !value.chars().anyMatch(Character::isDigit)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Customer password must contain uppercase and lowercase letters and at least one number"
+          "Customer password must contain at least one letter and one number"
       );
     }
     return value;
   }
 
-  private void validateInternalPassword(String password, String username) {
+  private void validateInternalPassword(String password) {
     String value = password == null ? "" : password;
-    boolean valid = value.length() >= 12
+    boolean valid = value.length() >= 8
         && value.length() <= 128
-        && value.chars().anyMatch(Character::isUpperCase)
-        && value.chars().anyMatch(Character::isLowerCase)
-        && value.chars().anyMatch(Character::isDigit)
-        && value.chars().anyMatch(character -> !Character.isLetterOrDigit(character));
-    boolean containsUsername = username != null
-        && value.toLowerCase(Locale.ROOT).contains(username.toLowerCase(Locale.ROOT));
-    if (!valid || containsUsername) {
+        && value.chars().anyMatch(Character::isLetter)
+        && value.chars().anyMatch(Character::isDigit);
+    if (!valid) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Password must be 12-128 characters, include upper, lower, digit, and symbol, and not contain the username"
+          "Password must be 8-128 characters and include at least one letter and one number"
       );
     }
   }

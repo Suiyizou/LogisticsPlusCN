@@ -417,7 +417,7 @@
         <article class="admin-panel admin-handover-panel">
           <div class="admin-panel-head">
             <div>
-              <p>Business Handover Review</p>
+              <p>Business Handover Records</p>
               <h2>{{ handoverCopy.title }}</h2>
             </div>
             <div class="admin-inline-actions admin-handover-toolbar">
@@ -500,27 +500,8 @@
               <el-table-column :label="handoverCopy.review" min-width="180">
                 <template #default="{ row }">
                   <div class="handover-review-result">
-                    <b>{{ row.reviewedBy?.displayName || handoverCopy.notReviewed }}</b>
-                    <small v-if="row.reviewComment">{{ row.reviewComment }}</small>
-                    <small v-else-if="row.reviewedAt">{{ formatDate(row.reviewedAt) }}</small>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column :label="handoverCopy.actions" width="104" fixed="right">
-                <template #default="{ row }">
-                  <div class="table-actions">
-                    <button
-                      v-if="row.status === 'PENDING'"
-                      class="primary"
-                      type="button"
-                      :disabled="loading"
-                      @click="openHandoverDecisionDialog(row, $event)"
-                    >
-                      {{ handoverCopy.reviewAction }}
-                    </button>
-                    <span v-else class="handover-reviewed-mark">
-                      {{ handoverStatusText(row.status) }}
-                    </span>
+                    <b>{{ row.requestedBy?.displayName || row.requestedByUserName || handoverCopy.notReviewed }}</b>
+                    <small>{{ formatDate(row.reviewedAt || row.updatedAt || row.requestedAt) }}</small>
                   </div>
                 </template>
               </el-table-column>
@@ -1394,114 +1375,6 @@
     </div>
 
     <div
-      v-if="handoverDecisionDialog.open"
-      class="modal-backdrop"
-      @click.self="closeHandoverDecisionDialog"
-    >
-      <div
-        class="modal handover-decision-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="handover-decision-dialog-title"
-        aria-describedby="handover-decision-dialog-description"
-        tabindex="-1"
-        @keydown.esc="closeHandoverDecisionDialog"
-      >
-        <header>
-          <div>
-            <p>HANDOVER REVIEW</p>
-            <h2 id="handover-decision-dialog-title">{{ handoverCopy.decisionTitle }}</h2>
-          </div>
-          <button
-            type="button"
-            :aria-label="ui('common.close')"
-            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
-            @click="closeHandoverDecisionDialog"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M6 6l12 12M18 6 6 18" />
-            </svg>
-          </button>
-        </header>
-        <div class="handover-decision-content">
-          <div class="handover-decision-route">
-            <span>
-              <small>{{ handoverCopy.source }}</small>
-              <strong>{{ handoverUserLabel(handoverDecisionDialog.record, "source") }}</strong>
-            </span>
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M5 12h13M14 7l5 5-5 5" />
-            </svg>
-            <span>
-              <small>{{ handoverCopy.target }}</small>
-              <strong>{{ handoverUserLabel(handoverDecisionDialog.record, "target") }}</strong>
-            </span>
-          </div>
-          <p id="handover-decision-dialog-description">{{ handoverCopy.decisionDescription }}</p>
-          <dl class="handover-decision-summary">
-            <div>
-              <dt>{{ handoverCopy.scope }}</dt>
-              <dd>
-                {{ handoverCopy.pendingEffect
-                  .replace("{customers}", String(handoverDecisionDialog.record?.customerCount || handoverDecisionDialog.record?.customers?.length || 0))
-                  .replace("{shipments}", String(handoverDecisionDialog.record?.shipmentCount || 0)) }}
-              </dd>
-            </div>
-            <div>
-              <dt>{{ handoverCopy.reason }}</dt>
-              <dd>{{ handoverDecisionDialog.record?.reason || '-' }}</dd>
-            </div>
-          </dl>
-          <label class="handover-review-comment">
-            <span>{{ handoverCopy.comment }}</span>
-            <textarea
-              ref="handoverDecisionCommentRef"
-              v-model="handoverDecisionDialog.comment"
-              maxlength="500"
-              rows="4"
-              :placeholder="handoverCopy.commentPlaceholder"
-              :disabled="Boolean(handoverDecisionDialog.pendingAction)"
-              @input="handoverDecisionDialog.error = ''"
-            ></textarea>
-            <small>{{ handoverDecisionDialog.comment.length }}/500</small>
-          </label>
-          <p v-if="handoverDecisionDialog.error" class="handover-decision-error" role="alert">
-            {{ handoverDecisionDialog.error }}
-          </p>
-        </div>
-        <div class="modal-actions handover-decision-actions">
-          <button
-            type="button"
-            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
-            @click="closeHandoverDecisionDialog"
-          >
-            {{ handoverCopy.cancel }}
-          </button>
-          <button
-            class="danger ghost"
-            type="button"
-            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
-            @click="submitHandoverDecision('reject')"
-          >
-            {{ handoverDecisionDialog.pendingAction === "reject"
-              ? handoverCopy.rejecting
-              : handoverCopy.reject }}
-          </button>
-          <button
-            class="primary"
-            type="button"
-            :disabled="Boolean(handoverDecisionDialog.pendingAction)"
-            @click="submitHandoverDecision('approve')"
-          >
-            {{ handoverDecisionDialog.pendingAction === "approve"
-              ? handoverCopy.approving
-              : handoverCopy.approve }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div
       v-if="resetPasswordDialog.open"
       class="modal-backdrop"
       @click.self="closeResetPasswordDialog"
@@ -1682,7 +1555,6 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import { CanvasRenderer } from "echarts/renderers";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 import {
-  approveCustomerHandover,
   clearAdminToken,
   createAdminAnnouncement,
   createEmployee,
@@ -1710,7 +1582,6 @@ import {
   kickDevice,
   loginAdmin,
   publishAdminAnnouncement,
-  rejectCustomerHandover,
   resetEmployeePassword,
   storedAdminToken,
   uploadAdminAnnouncementImage,
@@ -1737,7 +1608,7 @@ const rawAdminPages = [
   { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
   { key: "employees", no: "01", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
   { key: "platform", no: "02", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5ba2\u6237\u7ba1\u7406", description: "\u5ba2\u6237\u8d26\u53f7\u4e0e\u8d1f\u8d23\u5173\u7cfb", eyebrow: "Customer Management", title: "\u5ba2\u6237\u7ba1\u7406", subtitle: "\u5168\u5c40\u67e5\u770b\u5ba2\u6237\u8d26\u53f7\u3001\u8d1f\u8d23\u4e1a\u52a1\u5458\u3001\u6d77\u5916\u4ee3\u7406\u548c\u5df2\u7ed1\u5b9a\u7968\u5355\u3002" },
-  { key: "handovers", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u4e1a\u52a1\u4ea4\u63a5\u5ba1\u6279", description: "\u5ba2\u6237\u5f52\u5c5e\u53d8\u66f4\u5ba1\u6838", eyebrow: "Business Handover Review", title: "\u4e1a\u52a1\u4ea4\u63a5\u5ba1\u6279", subtitle: "\u5ba1\u6838\u4e1a\u52a1\u5458\u53d1\u8d77\u7684\u5ba2\u6237\u8f6c\u63a5\u7533\u8bf7\uff0c\u786e\u8ba4\u5ba2\u6237\u8303\u56f4\u3001\u63a5\u6536\u4eba\u548c\u4ea4\u63a5\u539f\u56e0\u540e\u518d\u6267\u884c\u5f52\u5c5e\u53d8\u66f4\u3002" },
+  { key: "handovers", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u4e1a\u52a1\u4ea4\u63a5\u8bb0\u5f55", description: "\u5ba2\u6237\u5f52\u5c5e\u53d8\u66f4\u8bb0\u5f55", eyebrow: "Business Handover Records", title: "\u4e1a\u52a1\u4ea4\u63a5\u8bb0\u5f55", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e4b\u95f4\u5df2\u5b8c\u6210\u7684\u5ba2\u6237\u4ea4\u63a5\u3001\u63a5\u6536\u4eba\u3001\u5f71\u54cd\u8303\u56f4\u548c\u4ea4\u63a5\u539f\u56e0\uff0c\u4ec5\u4f5c\u5ba1\u8ba1\u7559\u75d5\u3002" },
   { key: "tickets", no: "04", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u7968\u5355\u7ba1\u7406", description: "\u5168\u5c40\u7968\u5355\u4e0e\u8ddf\u8e2a\u72b6\u6001", eyebrow: "Shipment Management", title: "\u7968\u5355\u7ba1\u7406", subtitle: "\u7edf\u4e00\u67e5\u770b\u5168\u4f01\u4e1a\u7968\u5355\u3001\u7ed1\u5b9a\u5ba2\u6237\u3001\u8d1f\u8d23\u5458\u5de5\u548c\u8ddf\u8e2a\u72b6\u6001\u3002" },
   { key: "devices", no: "01", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u8bbe\u5907\u767b\u5f55", description: "IP \u4e0e\u5728\u7ebf\u8bbe\u5907", eyebrow: "Device Sessions", title: "\u8bbe\u5907\u4e0e\u767b\u5f55", subtitle: "\u67e5\u770b\u5f53\u524d\u767b\u5f55\u8bbe\u5907\u3001IP\u3001\u4f1a\u8bdd\u72b6\u6001\u5e76\u6267\u884c\u4e0b\u7ebf\u3002" },
   { key: "files", no: "02", group: "security", groupLabel: "\u5b89\u5168\u4e0e\u8d44\u4ea7", label: "\u7968\u5355\u6587\u4ef6", description: "\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55", eyebrow: "Shipment Documents", title: "\u7968\u5355\u6587\u4ef6", subtitle: "\u96c6\u4e2d\u67e5\u770b\u957f\u671f\u5173\u8054\u5230\u7968\u5355\u7684\u4e1a\u52a1\u6587\u4ef6\u4e0e\u4e0a\u4f20\u8bb0\u5f55\u3002" },
@@ -1769,7 +1640,7 @@ const customerHandovers = ref([]);
 const customerHandoverTotal = ref(0);
 const customerHandoverPage = ref(1);
 const customerHandoverPageSize = ref(20);
-const customerHandoverStatus = ref("PENDING");
+const customerHandoverStatus = ref("");
 const customerHandoversLoaded = ref(false);
 const adminTickets = ref([]);
 const adminTicketTotal = ref(0);
@@ -1843,19 +1714,11 @@ const employeeForm = reactive({
 });
 const resetPasswordConfirmButtonRef = ref(null);
 const temporaryPasswordCopyButtonRef = ref(null);
-const handoverDecisionCommentRef = ref(null);
 const resetPasswordDialog = reactive({
   open: false,
   userId: "",
   username: "",
   pending: false,
-  error: ""
-});
-const handoverDecisionDialog = reactive({
-  open: false,
-  record: null,
-  comment: "",
-  pendingAction: "",
   error: ""
 });
 const temporaryPasswordDialog = reactive({
@@ -1864,7 +1727,6 @@ const temporaryPasswordDialog = reactive({
   password: "",
   copied: false
 });
-let handoverDecisionTrigger = null;
 let resetPasswordTrigger = null;
 const filePreviewDialog = reactive({
   open: false,
@@ -2049,15 +1911,15 @@ const TICKET_COPY = {
 
 const HANDOVER_COPY = {
   "zh-CN": {
-    title: "\u4e1a\u52a1\u4ea4\u63a5\u7533\u8bf7",
-    summary: "\u5171 {count} \u6761\u7533\u8bf7",
-    statusFilter: "\u5ba1\u6279\u72b6\u6001",
+    title: "\u4e1a\u52a1\u4ea4\u63a5\u8bb0\u5f55",
+    summary: "\u5171 {count} \u6761\u8bb0\u5f55",
+    statusFilter: "\u4ea4\u63a5\u72b6\u6001",
     all: "\u5168\u90e8",
-    pending: "\u5f85\u5ba1\u6279",
-    approved: "\u5df2\u6279\u51c6",
-    rejected: "\u5df2\u9a73\u56de",
+    pending: "\u5386\u53f2\u5f85\u5904\u7406",
+    approved: "\u5df2\u5b8c\u6210",
+    rejected: "\u5386\u53f2\u5df2\u9a73\u56de",
     refresh: "\u5237\u65b0",
-    request: "\u7533\u8bf7\u7f16\u53f7",
+    request: "\u8bb0\u5f55\u7f16\u53f7",
     route: "\u4ea4\u63a5\u65b9\u5411",
     source: "\u79fb\u4ea4\u65b9",
     target: "\u63a5\u6536\u65b9",
@@ -2065,11 +1927,11 @@ const HANDOVER_COPY = {
     customerUnit: "{count} \u4e2a\u5ba2\u6237",
     shipmentUnit: "{count} \u5f20\u7968\u5355",
     reason: "\u4ea4\u63a5\u539f\u56e0",
-    requestedBy: "\u7533\u8bf7\u4eba / \u65f6\u95f4",
-    review: "\u5ba1\u6279\u7ed3\u679c",
+    requestedBy: "\u4ea4\u63a5\u4eba / \u65f6\u95f4",
+    review: "\u5b8c\u6210\u8bb0\u5f55",
     actions: "\u64cd\u4f5c",
     reviewAction: "\u5ba1\u6838",
-    empty: "\u6682\u65e0\u4ea4\u63a5\u7533\u8bf7",
+    empty: "\u6682\u65e0\u4ea4\u63a5\u8bb0\u5f55",
     decisionTitle: "\u5ba1\u6838\u4e1a\u52a1\u4ea4\u63a5",
     decisionDescription: "\u6279\u51c6\u540e\uff0c\u6240\u9009\u5ba2\u6237\u7684\u8d1f\u8d23\u4eba\u5c06\u53d8\u66f4\u4e3a\u63a5\u6536\u4e1a\u52a1\u5458\uff0c\u5173\u8054\u7968\u5355\u8bbf\u95ee\u6743\u9650\u4f1a\u4e00\u5e76\u8865\u5145\u3002",
     comment: "\u5ba1\u6279\u610f\u89c1",
@@ -2085,19 +1947,19 @@ const HANDOVER_COPY = {
     error: "\u5ba1\u6279\u672a\u5b8c\u6210\uff0c\u8bf7\u5237\u65b0\u540e\u91cd\u8bd5\u3002",
     pendingEffect: "{customers} \u4e2a\u5ba2\u6237 \u00b7 {shipments} \u5f20\u5173\u8054\u7968\u5355",
     reviewedBy: "\u5ba1\u6279\u4eba",
-    notReviewed: "\u5c1a\u672a\u5ba1\u6279",
+    notReviewed: "\u4e1a\u52a1\u5458\u76f4\u63a5\u4ea4\u63a5",
     customersMore: "\u53e6\u6709 {count} \u4e2a\u5ba2\u6237"
   },
   "en-US": {
-    title: "Business handover requests",
-    summary: "{count} requests",
-    statusFilter: "Review status",
+    title: "Business handover records",
+    summary: "{count} records",
+    statusFilter: "Handover status",
     all: "All",
-    pending: "Pending",
-    approved: "Approved",
-    rejected: "Rejected",
+    pending: "Legacy pending",
+    approved: "Completed",
+    rejected: "Legacy rejected",
     refresh: "Refresh",
-    request: "Request",
+    request: "Record",
     route: "Handover route",
     source: "From",
     target: "To",
@@ -2105,11 +1967,11 @@ const HANDOVER_COPY = {
     customerUnit: "{count} customers",
     shipmentUnit: "{count} shipments",
     reason: "Reason",
-    requestedBy: "Requested by / time",
-    review: "Review result",
+    requestedBy: "Transferred by / time",
+    review: "Completion record",
     actions: "Actions",
     reviewAction: "Review",
-    empty: "No handover requests",
+    empty: "No handover records",
     decisionTitle: "Review business handover",
     decisionDescription: "Approval changes the selected customers' owner to the receiving business user and grants the related shipment access.",
     comment: "Review comment",
@@ -2125,7 +1987,7 @@ const HANDOVER_COPY = {
     error: "The review could not be completed. Refresh and try again.",
     pendingEffect: "{customers} customers \u00b7 {shipments} related shipments",
     reviewedBy: "Reviewed by",
-    notReviewed: "Not reviewed",
+    notReviewed: "Completed directly by business operator",
     customersMore: "{count} more customers"
   }
 };
@@ -2802,67 +2664,6 @@ async function handleDeletePlatformCustomer(row) {
     await loadPlatformPage();
     showMessage(platformActionCopy.value.success);
   }, { popupError: true });
-}
-
-function openHandoverDecisionDialog(row, event) {
-  if (!row?.requestId || row.status !== "PENDING" || loading.value) return;
-  handoverDecisionTrigger = event?.currentTarget || null;
-  handoverDecisionDialog.record = row;
-  handoverDecisionDialog.comment = "";
-  handoverDecisionDialog.pendingAction = "";
-  handoverDecisionDialog.error = "";
-  handoverDecisionDialog.open = true;
-  nextTick(() => handoverDecisionCommentRef.value?.focus());
-}
-
-function closeHandoverDecisionDialog() {
-  if (handoverDecisionDialog.pendingAction) return;
-  handoverDecisionDialog.open = false;
-  handoverDecisionDialog.record = null;
-  handoverDecisionDialog.comment = "";
-  handoverDecisionDialog.error = "";
-  const trigger = handoverDecisionTrigger;
-  handoverDecisionTrigger = null;
-  nextTick(() => trigger?.focus?.());
-}
-
-async function submitHandoverDecision(action) {
-  const record = handoverDecisionDialog.record;
-  if (!record?.requestId || handoverDecisionDialog.pendingAction) return;
-  const reviewComment = handoverDecisionDialog.comment.trim();
-  if (action === "reject" && !reviewComment) {
-    handoverDecisionDialog.error = handoverCopy.value.rejectRequired;
-    await nextTick();
-    handoverDecisionCommentRef.value?.focus();
-    return;
-  }
-
-  handoverDecisionDialog.pendingAction = action;
-  handoverDecisionDialog.error = "";
-  try {
-    if (action === "approve") {
-      await approveCustomerHandover(record.requestId, reviewComment);
-    } else {
-      await rejectCustomerHandover(record.requestId, reviewComment);
-    }
-    if (customerHandovers.value.length === 1 && customerHandoverPage.value > 1) {
-      customerHandoverPage.value -= 1;
-    }
-    handoverDecisionDialog.open = false;
-    handoverDecisionDialog.record = null;
-    handoverDecisionDialog.comment = "";
-    handoverDecisionDialog.pendingAction = "";
-    handoverDecisionTrigger = null;
-    await loadCustomerHandoverPageWithoutLoading();
-    showMessage(action === "approve"
-      ? handoverCopy.value.approvedSuccess
-      : handoverCopy.value.rejectedSuccess);
-  } catch (error) {
-    markApiErrorHandled(error);
-    handoverDecisionDialog.error = tr(error?.message || handoverCopy.value.error);
-  } finally {
-    handoverDecisionDialog.pendingAction = "";
-  }
 }
 
 async function changeAnnouncementPage(page) {
@@ -3552,12 +3353,10 @@ function isStrongEmployeePassword(value) {
   const password = String(value || "");
   const knownLegacyPassword = password === "123456" || password === "Admin@123456";
   return !knownLegacyPassword
-    && password.length >= 12
+    && password.length >= 8
     && password.length <= 128
-    && /[A-Z]/.test(password)
-    && /[a-z]/.test(password)
-    && /\d/.test(password)
-    && /[^A-Za-z0-9]/.test(password);
+    && /[A-Za-z]/.test(password)
+    && /\d/.test(password);
 }
 
 function openResetPasswordDialog(user, event) {

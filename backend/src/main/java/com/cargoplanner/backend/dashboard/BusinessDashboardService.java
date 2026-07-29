@@ -54,9 +54,12 @@ public class BusinessDashboardService {
             """
             SELECT COUNT(*) FROM cp_shipments s
             WHERE s.created_at >= ? AND s.created_at < ?
-              AND s.responsible_agent_id = ?
+              AND (s.responsible_agent_id = ? OR EXISTS (
+                SELECT 1 FROM cp_shipment_participants participant
+                WHERE participant.shipment_id = s.id AND participant.user_id = ?
+              ))
             """,
-            startTimestamp, endTimestamp, actor.id()
+            startTimestamp, endTimestamp, actor.id(), actor.id()
         );
     long updatedShipments = global
         ? count(
@@ -72,9 +75,12 @@ public class BusinessDashboardService {
             SELECT COUNT(*) FROM cp_shipments s
             WHERE s.updated_at >= ? AND s.updated_at < ?
               AND s.created_at < ?
-              AND s.responsible_agent_id = ?
+              AND (s.responsible_agent_id = ? OR EXISTS (
+                SELECT 1 FROM cp_shipment_participants participant
+                WHERE participant.shipment_id = s.id AND participant.user_id = ?
+              ))
             """,
-            startTimestamp, endTimestamp, startTimestamp, actor.id()
+            startTimestamp, endTimestamp, startTimestamp, actor.id(), actor.id()
         );
     long followUpFiles = global
         ? count(
@@ -94,9 +100,12 @@ public class BusinessDashboardService {
             JOIN cp_shipments s ON s.id = f.shipment_id
             WHERE f.created_at >= ? AND f.created_at < ?
               AND f.status <> 'DELETED'
-              AND s.responsible_agent_id = ?
+              AND (s.responsible_agent_id = ? OR EXISTS (
+                SELECT 1 FROM cp_shipment_participants participant
+                WHERE participant.shipment_id = s.id AND participant.user_id = ?
+              ))
             """,
-            startTimestamp, endTimestamp, actor.id()
+            startTimestamp, endTimestamp, actor.id(), actor.id()
         );
     long messages = global
         ? count(
@@ -114,9 +123,12 @@ public class BusinessDashboardService {
             FROM cp_shipment_file_comments c
             JOIN cp_shipments s ON s.id = c.shipment_id
             WHERE c.created_at >= ? AND c.created_at < ?
-              AND s.responsible_agent_id = ?
+              AND (s.responsible_agent_id = ? OR EXISTS (
+                SELECT 1 FROM cp_shipment_participants participant
+                WHERE participant.shipment_id = s.id AND participant.user_id = ?
+              ))
             """,
-            startTimestamp, endTimestamp, actor.id()
+            startTimestamp, endTimestamp, actor.id(), actor.id()
         );
     long customerLogins = global
         ? count(
@@ -157,7 +169,7 @@ public class BusinessDashboardService {
     Map<String, Object> response = new LinkedHashMap<>();
     response.put("date", date.toString());
     response.put("timeZone", BUSINESS_ZONE.getId());
-    response.put("scope", global ? "GLOBAL" : "RESPONSIBLE_AGENT");
+    response.put("scope", global ? "GLOBAL" : "SHIPMENT_ACCESS");
     response.put("newShipments", newShipments);
     response.put("updatedShipments", updatedShipments);
     response.put("followUpFiles", followUpFiles);
@@ -175,8 +187,14 @@ public class BusinessDashboardService {
     long shipmentTotal = global
         ? count("SELECT COUNT(*) FROM cp_shipments")
         : count(
-            "SELECT COUNT(*) FROM cp_shipments WHERE responsible_agent_id = ?",
-            actor.id()
+            """
+            SELECT COUNT(*) FROM cp_shipments s
+            WHERE s.responsible_agent_id = ? OR EXISTS (
+              SELECT 1 FROM cp_shipment_participants participant
+              WHERE participant.shipment_id = s.id AND participant.user_id = ?
+            )
+            """,
+            actor.id(), actor.id()
         );
     long customerTotal = global
         ? count(
@@ -261,11 +279,19 @@ public class BusinessDashboardService {
   ) {
     boolean global = actor.isAdmin();
     String sql = sqlPrefix
-        + (global ? "" : " AND s.responsible_agent_id = ?")
+        + (global ? "" : """
+             AND (s.responsible_agent_id = ? OR EXISTS (
+               SELECT 1 FROM cp_shipment_participants participant
+               WHERE participant.shipment_id = s.id AND participant.user_id = ?
+             ))
+            """)
         + " GROUP BY CAST(" + (valueIndex == 0 ? "s.created_at" : "s.updated_at") + " AS DATE)"
         + " ORDER BY event_day";
     List<Object> parameters = new ArrayList<>(List.of(start, end));
-    if (!global) parameters.add(actor.id());
+    if (!global) {
+      parameters.add(actor.id());
+      parameters.add(actor.id());
+    }
     jdbcTemplate.query(
         sql,
         rs -> {
@@ -284,7 +310,12 @@ public class BusinessDashboardService {
                COUNT(*) AS status_count
         FROM cp_shipments s
         """
-        + (global ? "" : " WHERE s.responsible_agent_id = ?")
+        + (global ? "" : """
+             WHERE s.responsible_agent_id = ? OR EXISTS (
+               SELECT 1 FROM cp_shipment_participants participant
+               WHERE participant.shipment_id = s.id AND participant.user_id = ?
+             )
+            """)
         + " GROUP BY COALESCE(NULLIF(TRIM(s.tracking_status), ''), 'UNKNOWN')"
         + " ORDER BY status_count DESC, status_name";
     List<Map<String, Object>> result = new ArrayList<>();
@@ -296,7 +327,7 @@ public class BusinessDashboardService {
           item.put("value", rs.getLong("status_count"));
           result.add(item);
         },
-        global ? new Object[0] : new Object[] {actor.id()}
+        global ? new Object[0] : new Object[] {actor.id(), actor.id()}
     );
     return result;
   }

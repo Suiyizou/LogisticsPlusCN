@@ -649,10 +649,6 @@
                 </li>
                 <li>
                   <span>2</span>
-                  <div><b>{{ t("customers.handoverWorkflowReview") }}</b><small>{{ t("customers.handoverWorkflowReviewHint") }}</small></div>
-                </li>
-                <li>
-                  <span>3</span>
                   <div><b>{{ t("customers.handoverWorkflowComplete") }}</b><small>{{ t("customers.handoverWorkflowCompleteHint") }}</small></div>
                 </li>
               </ol>
@@ -706,7 +702,7 @@
                     <template #default="{ row }">{{ formatDateTime(row.requestedAt) }}</template>
                   </el-table-column>
                   <el-table-column :label="t('customers.handoverReviewComment')" min-width="190" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.reviewComment || "—" }}</template>
+                    <template #default="{ row }">{{ formatDateTime(row.reviewedAt || row.updatedAt) }}</template>
                   </el-table-column>
                   <template #empty>
                     <el-empty :description="t('customers.noHandoverRequests')" />
@@ -1422,7 +1418,7 @@
           </label>
           <label v-if="!isEditMode">
             <span>{{ t("customers.createPassword") }} <i class="required-star">*</i></span>
-            <input v-model="createForm.password" type="password" minlength="8" maxlength="128" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" :placeholder="t('customers.customerPasswordPlaceholder')" required />
+            <input v-model="createForm.password" type="password" minlength="8" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*\d).{8,128}" autocomplete="new-password" :title="t('customers.passwordRule')" :placeholder="t('customers.customerPasswordPlaceholder')" required />
             <small class="customer-field-rule">{{ t("customers.passwordRule") }}</small>
           </label>
           <label>
@@ -2932,16 +2928,9 @@ const personalRoleLabel = computed(() => t({
 const agentPasswordChecks = computed(() => {
   const password = agentCreateForm.password;
   return [
-    { key: "length", valid: password.length >= 12, label: t("customers.agentPasswordLength") },
-    { key: "case", valid: /[A-Z]/.test(password) && /[a-z]/.test(password), label: t("customers.agentPasswordCase") },
-    { key: "number", valid: /\d/.test(password), label: t("customers.agentPasswordNumber") },
-    { key: "symbol", valid: /[^A-Za-z0-9]/.test(password), label: t("customers.agentPasswordSymbol") },
-    {
-      key: "username",
-      valid: Boolean(agentCreateForm.username)
-        && !password.toLowerCase().includes(agentCreateForm.username.toLowerCase()),
-      label: t("customers.agentPasswordUsername")
-    }
+    { key: "length", valid: password.length >= 8 && password.length <= 128, label: t("customers.agentPasswordLength") },
+    { key: "letter", valid: /[A-Za-z]/.test(password), label: t("customers.agentPasswordCase") },
+    { key: "number", valid: /\d/.test(password), label: t("customers.agentPasswordNumber") }
   ];
 });
 const canCreateAgent = computed(() =>
@@ -3665,13 +3654,10 @@ async function savePersonalPassword() {
     personalPasswordError.value = t("portal.passwordMismatch");
     return;
   }
-  const strong = newPassword.length >= 12
+  const strong = newPassword.length >= 8
     && newPassword.length <= 128
-    && /[A-Z]/.test(newPassword)
-    && /[a-z]/.test(newPassword)
-    && /\d/.test(newPassword)
-    && /[^A-Za-z0-9]/.test(newPassword)
-    && !newPassword.toLowerCase().includes(String(props.currentUser?.username || "").toLowerCase());
+    && /[A-Za-z]/.test(newPassword)
+    && /\d/.test(newPassword);
   if (!strong) {
     personalPasswordError.value = t("portal.passwordRule");
     return;
@@ -4329,15 +4315,12 @@ function isValidAgentDisplayName(value) {
   return length >= 2 && length <= 80;
 }
 
-function isStrongAgentPassword(value, username = "") {
+function isStrongAgentPassword(value) {
   const password = String(value || "");
-  return password.length >= 12
+  return password.length >= 8
     && password.length <= 128
-    && /[A-Z]/.test(password)
-    && /[a-z]/.test(password)
-    && /\d/.test(password)
-    && /[^A-Za-z0-9]/.test(password)
-    && !password.toLowerCase().includes(String(username || "").toLowerCase());
+    && /[A-Za-z]/.test(password)
+    && /\d/.test(password);
 }
 
 function openAgentBatchImport() {
@@ -6784,7 +6767,7 @@ function localizeCustomerImportResult(message) {
   if (/username or client code already exists/i.test(value)) {
     return t("customers.customerImportDuplicateServer");
   }
-  if (/password must contain uppercase/i.test(value)) {
+  if (/password must contain (uppercase|at least one letter)/i.test(value)) {
     return t("customers.customerImportPasswordComplexity");
   }
   if (/password must contain 8-128/i.test(value)) {
@@ -8303,7 +8286,7 @@ function showError(error, fallbackKey) {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 4px 14px rgba(21, 48, 72, .04);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   list-style: none;
 }
 .handover-workflow-strip li {

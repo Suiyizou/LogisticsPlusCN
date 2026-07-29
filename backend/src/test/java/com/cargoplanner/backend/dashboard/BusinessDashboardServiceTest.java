@@ -40,22 +40,22 @@ class BusinessDashboardServiceTest {
   }
 
   @Test
-  void businessStatsUseResponsibleScopeAndExcludeNewShipmentsFromUpdatedCount() {
+  void businessStatsIncludeOwnedAndParticipatingShipments() {
     Map<String, Object> result = service.todayStats(business);
 
     assertThat(result)
         .containsEntry("date", "2026-07-28")
-        .containsEntry("scope", "RESPONSIBLE_AGENT")
-        .containsEntry("newShipments", 1L)
+        .containsEntry("scope", "SHIPMENT_ACCESS")
+        .containsEntry("newShipments", 2L)
         .containsEntry("updatedShipments", 1L)
-        .containsEntry("followUpFiles", 1L)
-        .containsEntry("messages", 1L)
+        .containsEntry("followUpFiles", 2L)
+        .containsEntry("messages", 2L)
         .containsEntry("customerLogins", 2L)
-        .containsEntry("shipmentTotal", 2L)
+        .containsEntry("shipmentTotal", 3L)
         .containsEntry("customerTotal", 1L)
         .containsEntry("activeAgentCount", 1L);
     assertThat((Iterable<?>) result.get("dailyTrend")).hasSize(7);
-    assertThat((Iterable<?>) result.get("shipmentStatusDistribution")).hasSize(2);
+    assertThat((Iterable<?>) result.get("shipmentStatusDistribution")).hasSize(3);
   }
 
   @Test
@@ -81,6 +81,15 @@ class BusinessDashboardServiceTest {
           tracking_status VARCHAR(80),
           created_at TIMESTAMP NOT NULL,
           updated_at TIMESTAMP NOT NULL
+        )
+        """
+    );
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE cp_shipment_participants (
+          shipment_id BIGINT NOT NULL,
+          user_id BIGINT NOT NULL,
+          PRIMARY KEY (shipment_id, user_id)
         )
         """
     );
@@ -173,6 +182,9 @@ class BusinessDashboardServiceTest {
     );
     jdbcTemplate.update(
         "INSERT INTO cp_users (id, role, status) VALUES (500, 'OVERSEA_AGENT', 'ACTIVE')"
+    );
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipment_participants (shipment_id, user_id) VALUES (12, 1)"
     );
     jdbcTemplate.update("UPDATE cp_shipments SET tracking_status = 'IN_TRANSIT' WHERE id = 10");
     jdbcTemplate.update("UPDATE cp_shipments SET tracking_status = 'DELIVERED' WHERE id = 11");

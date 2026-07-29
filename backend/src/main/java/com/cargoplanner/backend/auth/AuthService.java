@@ -15,7 +15,6 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -224,7 +223,7 @@ public class AuthService {
       );
       throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
     }
-    validateStrongPassword(request.newPassword(), actor.username());
+    validateStrongPassword(request.newPassword());
     if (request.currentPassword().equals(request.newPassword())) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "New password must be different");
     }
@@ -326,21 +325,16 @@ public class AuthService {
     return users.isEmpty() ? null : users.get(0);
   }
 
-  private void validateStrongPassword(String password, String username) {
+  private void validateStrongPassword(String password) {
     String value = password == null ? "" : password;
-    boolean valid = value.length() >= 12
+    boolean valid = value.length() >= 8
         && value.length() <= 128
-        && value.chars().anyMatch(Character::isUpperCase)
-        && value.chars().anyMatch(Character::isLowerCase)
-        && value.chars().anyMatch(Character::isDigit)
-        && value.chars().anyMatch(character -> !Character.isLetterOrDigit(character));
-    boolean containsUsername = username != null
-        && !username.isBlank()
-        && value.toLowerCase(Locale.ROOT).contains(username.toLowerCase(Locale.ROOT));
-    if (!valid || containsUsername || "123456".equals(value) || "Admin@123456".equals(value)) {
+        && value.chars().anyMatch(Character::isLetter)
+        && value.chars().anyMatch(Character::isDigit);
+    if (!valid || "123456".equals(value) || "Admin@123456".equals(value)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Password must be 12-128 characters, include upper, lower, digit, and symbol, and not contain the username"
+          "Password must be 8-128 characters and include at least one letter and one number"
       );
     }
   }

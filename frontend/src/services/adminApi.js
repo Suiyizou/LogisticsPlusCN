@@ -118,20 +118,6 @@ export async function fetchCustomerHandovers(options = {}) {
   return request(`/admin/customer-handovers?${params.toString()}`);
 }
 
-export async function approveCustomerHandover(requestId, reviewComment = "") {
-  return request(`/admin/customer-handovers/${encodeURIComponent(requestId)}/approve`, {
-    method: "POST",
-    body: { reviewComment }
-  });
-}
-
-export async function rejectCustomerHandover(requestId, reviewComment) {
-  return request(`/admin/customer-handovers/${encodeURIComponent(requestId)}/reject`, {
-    method: "POST",
-    body: { reviewComment }
-  });
-}
-
 export async function fetchAdminAnnouncements(options = {}) {
   return request(`/admin/announcements?${pageParams(options)}`);
 }

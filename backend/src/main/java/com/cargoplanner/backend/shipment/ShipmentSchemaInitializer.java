@@ -34,8 +34,89 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         ON DUPLICATE KEY UPDATE lock_name = VALUES(lock_name)
         """
     );
+    if (mySql) upgradeCustomerHandoverSchemaForMySql();
     if (mySql) upgradeCustomerFileSchemaForMySql();
     if (mySql) upgradeAdminAuditSchemaForMySql();
+  }
+
+  /**
+   * Keeps handover reads compatible with databases that briefly ran an earlier draft of the
+   * handover tables. CREATE TABLE IF NOT EXISTS cannot add columns to those installations.
+   */
+  private void upgradeCustomerHandoverSchemaForMySql() {
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "shipment_count",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN shipment_count INT NOT NULL DEFAULT 0 AFTER customer_count"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "request_ip",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN request_ip VARCHAR(64) NULL AFTER shipment_count"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "reviewed_by",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN reviewed_by BIGINT NULL AFTER request_ip"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "review_comment",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN review_comment VARCHAR(500) NULL AFTER reviewed_by"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "review_ip",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN review_ip VARCHAR(64) NULL AFTER review_comment"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "approved_batch_id",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN approved_batch_id CHAR(36) NULL AFTER review_ip"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "updated_at",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) "
+            + "ON UPDATE CURRENT_TIMESTAMP(6) AFTER created_at"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_requests",
+        "reviewed_at",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD COLUMN reviewed_at DATETIME(6) NULL AFTER updated_at"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_request_items",
+        "shipment_count",
+        "ALTER TABLE cp_customer_handover_request_items "
+            + "ADD COLUMN shipment_count INT NOT NULL DEFAULT 0 AFTER source_agent_id"
+    );
+    addColumnIfMissing(
+        "cp_customer_handover_request_items",
+        "transferred_at",
+        "ALTER TABLE cp_customer_handover_request_items "
+            + "ADD COLUMN transferred_at DATETIME(6) NULL AFTER shipment_count"
+    );
+    addIndexIfMissing(
+        "cp_customer_handover_requests",
+        "idx_cp_customer_handover_status_time",
+        "ALTER TABLE cp_customer_handover_requests "
+            + "ADD INDEX idx_cp_customer_handover_status_time (status, created_at)"
+    );
+    addIndexIfMissing(
+        "cp_customer_handover_request_items",
+        "idx_cp_customer_handover_item_customer",
+        "ALTER TABLE cp_customer_handover_request_items "
+            + "ADD INDEX idx_cp_customer_handover_item_customer (customer_id, request_id)"
+    );
   }
 
   private void upgradeAdminAuditSchemaForMySql() {

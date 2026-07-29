@@ -418,11 +418,10 @@ async function submitPasswordChange() {
     passwordError.value = t("portal.passwordMismatch");
     return;
   }
-  const strong = passwordForm.newPassword.length >= 12
-    && /[A-Z]/.test(passwordForm.newPassword)
-    && /[a-z]/.test(passwordForm.newPassword)
-    && /\d/.test(passwordForm.newPassword)
-    && /[^A-Za-z0-9]/.test(passwordForm.newPassword);
+  const strong = passwordForm.newPassword.length >= 8
+    && passwordForm.newPassword.length <= 128
+    && /[A-Za-z]/.test(passwordForm.newPassword)
+    && /\d/.test(passwordForm.newPassword);
   if (!strong) {
     passwordError.value = t("portal.passwordRule");
     return;

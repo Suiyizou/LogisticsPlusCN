@@ -134,7 +134,7 @@ export function validateCustomerImportRows(sourceRows) {
     if (password) {
       if (password.length < 8 || password.length > 128) {
         errors.push(issue("PASSWORD_LENGTH", { field: "password" }));
-      } else if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+      } else if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
         errors.push(issue("PASSWORD_COMPLEXITY", { field: "password" }));
       }
     } else {
