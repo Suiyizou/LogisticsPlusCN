@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,7 @@ public class AdminService {
         """
         SELECT id, username, display_name, role, party_role, status, created_at, updated_at, last_login_at
         FROM cp_users
+        WHERE status <> 'DELETED'
         ORDER BY role = 'ADMIN' DESC, id ASC
         """,
         this::mapUserRow
@@ -60,6 +62,7 @@ public class AdminService {
         """
         SELECT id, username, display_name, role, party_role, status, created_at, updated_at, last_login_at
         FROM cp_users
+        WHERE status <> 'DELETED'
         ORDER BY role = 'ADMIN' DESC, id ASC
         LIMIT ? OFFSET ?
         """,
@@ -67,7 +70,12 @@ public class AdminService {
         safeSize,
         pageOffset(safePage, safeSize)
     );
-    return pageResult(items, safePage, safeSize, count("SELECT COUNT(*) FROM cp_users"));
+    return pageResult(
+        items,
+        safePage,
+        safeSize,
+        count("SELECT COUNT(*) FROM cp_users WHERE status <> 'DELETED'")
+    );
   }
 
   @Transactional
@@ -99,6 +107,9 @@ public class AdminService {
       throw new ApiException(HttpStatus.CONFLICT, "Username already exists");
     }
     Long userId = jdbcTemplate.queryForObject("SELECT id FROM cp_users WHERE username = ?", Long.class, request.username().trim());
+    if ("BUSINESS".equals(role)) {
+      reassignDeletedBusinessScope(userId);
+    }
     audit(admin.id(), "CREATE_USER", "USER", userId, "Created user " + request.username().trim(), ip);
     return findUser(userId);
   }
@@ -218,19 +229,38 @@ public class AdminService {
         admin,
         existing,
         (String) existing.get("role"),
-        "DISABLED"
+        "DELETED"
     );
+    PasswordHasher.PasswordHash deletedPassword = passwordHasher.hash(UUID.randomUUID().toString());
     jdbcTemplate.update(
-        "UPDATE cp_users SET status = 'DISABLED' WHERE id = ?",
+        """
+        UPDATE cp_users
+        SET username = ?, status = 'DELETED',
+            password_salt = ?, password_hash = ?, password_iterations = ?,
+            last_login_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = ? AND status <> 'DELETED'
+        """,
+        deletedUsername("user", userId),
+        deletedPassword.salt(),
+        deletedPassword.hash(),
+        deletedPassword.iterations(),
         userId
     );
+    jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
     jdbcTemplate.update(
-        "UPDATE cp_login_devices SET online = 0, session_token_hash = NULL, revoked_at = ? WHERE user_id = ?",
-        Timestamp.from(Instant.now()),
+        "DELETE FROM cp_customer_employee_assignments WHERE employee_user_id = ?",
         userId
     );
-    audit(admin.id(), "DELETE_USER", "USER", userId, "Disabled user " + existing.get("username"), ip);
-    return findUser(userId);
+    jdbcTemplate.update("DELETE FROM cp_shipment_participants WHERE user_id = ?", userId);
+    audit(admin.id(), "DELETE_USER", "USER", userId, "Deleted user " + existing.get("username"), ip);
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("id", userId);
+    response.put("username", existing.get("username"));
+    response.put("displayName", existing.get("displayName"));
+    response.put("status", "DELETED");
+    response.put("deleted", true);
+    return response;
   }
 
   private void preserveActiveAdministrator(
@@ -331,8 +361,11 @@ public class AdminService {
   public Map<String, Object> monitoring() {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("serverTime", Instant.now().toString());
-    result.put("userCount", count("SELECT COUNT(*) FROM cp_users"));
-    result.put("adminCount", count("SELECT COUNT(*) FROM cp_users WHERE role = 'ADMIN'"));
+    result.put("userCount", count("SELECT COUNT(*) FROM cp_users WHERE status <> 'DELETED'"));
+    result.put(
+        "adminCount",
+        count("SELECT COUNT(*) FROM cp_users WHERE role = 'ADMIN' AND status <> 'DELETED'")
+    );
     result.put("onlineDeviceCount", count("SELECT COUNT(*) FROM cp_login_devices WHERE online = 1 AND revoked_at IS NULL"));
     result.put("loginSuccessToday", count("SELECT COUNT(*) FROM cp_login_events WHERE event_type = 'LOGIN_SUCCESS' AND created_at >= CURDATE()"));
     result.put("loginFailToday", count("SELECT COUNT(*) FROM cp_login_events WHERE event_type IN ('LOGIN_FAIL', 'DEVICE_LIMIT') AND created_at >= CURDATE()"));
@@ -350,8 +383,8 @@ public class AdminService {
     Timestamp trendStartTimestamp = Timestamp.valueOf(trendStart.atStartOfDay());
     Timestamp todayTimestamp = Timestamp.valueOf(today.atStartOfDay());
 
-    long internalUserCount = count("SELECT COUNT(*) FROM cp_users");
-    long customerCount = count("SELECT COUNT(*) FROM cp_customers");
+    long internalUserCount = count("SELECT COUNT(*) FROM cp_users WHERE status <> 'DELETED'");
+    long customerCount = count("SELECT COUNT(*) FROM cp_customers WHERE status <> 'DELETED'");
     long activeInternalUsers = count("SELECT COUNT(*) FROM cp_users WHERE status = 'ACTIVE'");
     long activeCustomers = count("SELECT COUNT(*) FROM cp_customers WHERE status = 'ACTIVE'");
 
@@ -402,6 +435,7 @@ public class AdminService {
         """
         SELECT role AS item_code, COUNT(*) AS item_count
         FROM cp_users
+        WHERE status <> 'DELETED'
         GROUP BY role
         ORDER BY item_count DESC, item_code ASC
         """,
@@ -649,7 +683,7 @@ public class AdminService {
         """
         SELECT id, username, display_name, role, party_role, status, created_at, updated_at, last_login_at
         FROM cp_users
-        WHERE id = ?
+        WHERE id = ? AND status <> 'DELETED'
         """,
         this::mapUserRow,
         userId
@@ -759,11 +793,11 @@ public class AdminService {
     if (!"BUSINESS".equals(role)) return;
     Long count = excludedUserId == null
         ? jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS'",
+            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS' AND status <> 'DELETED'",
             Long.class
         )
         : jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS' AND id <> ?",
+            "SELECT COUNT(*) FROM cp_users WHERE role = 'BUSINESS' AND status <> 'DELETED' AND id <> ?",
             Long.class,
             excludedUserId
         );
@@ -789,6 +823,39 @@ public class AdminService {
 
   private String valueOrExisting(String value, String fallback) {
     return value == null || value.isBlank() ? fallback : ClientInfo.trim(value, 80);
+  }
+
+  private String deletedUsername(String accountType, long id) {
+    String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    return "deleted_" + accountType + "_" + id + "_" + suffix;
+  }
+
+  private void reassignDeletedBusinessScope(long newBusinessUserId) {
+    List<Long> deletedBusinessIds = jdbcTemplate.query(
+        "SELECT id FROM cp_users WHERE role = 'BUSINESS' AND status = 'DELETED' AND id <> ?",
+        (rs, rowNumber) -> rs.getLong(1),
+        newBusinessUserId
+    );
+    for (Long deletedBusinessId : deletedBusinessIds) {
+      jdbcTemplate.update(
+          """
+          UPDATE cp_customers
+          SET responsible_agent_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+          WHERE responsible_agent_id = ? AND status <> 'DELETED'
+          """,
+          newBusinessUserId,
+          deletedBusinessId
+      );
+      jdbcTemplate.update(
+          """
+          UPDATE cp_shipments
+          SET responsible_agent_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+          WHERE responsible_agent_id = ?
+          """,
+          newBusinessUserId,
+          deletedBusinessId
+      );
+    }
   }
 
   private Map<String, Object> mapUserRow(ResultSet rs, int rowNum) throws SQLException {

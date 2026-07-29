@@ -62,14 +62,16 @@ class AdminServiceOverviewTest {
         INSERT INTO cp_users (id, role, status) VALUES
           (1, 'ADMIN', 'ACTIVE'),
           (2, 'BUSINESS', 'ACTIVE'),
-          (3, 'OVERSEA_AGENT', 'DISABLED')
+          (3, 'OVERSEA_AGENT', 'DISABLED'),
+          (4, 'OVERSEA_AGENT', 'DELETED')
         """
     );
     jdbcTemplate.update(
         """
         INSERT INTO cp_customers (id, status) VALUES
           (10, 'ACTIVE'),
-          (11, 'DISABLED')
+          (11, 'DISABLED'),
+          (12, 'DELETED')
         """
     );
     jdbcTemplate.update(

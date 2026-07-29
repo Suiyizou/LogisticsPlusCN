@@ -131,7 +131,7 @@ public class BusinessCustomerService {
                   AND linked_customer.status = 'ACTIVE'
                   AND linked_customer.party_role IN ('SHIPPER', 'CONSIGNEE')) AS linked_customer_count
         FROM cp_users u
-        WHERE u.role = 'OVERSEA_AGENT' AND u.status = 'ACTIVE'
+        WHERE u.role = 'OVERSEA_AGENT' AND u.status <> 'DELETED'
         ORDER BY u.display_name, u.username, u.id
         """,
         (rs, rowNumber) -> {
@@ -335,26 +335,51 @@ public class BusinessCustomerService {
   }
 
   @Transactional
-  public Map<String, Object> disableOverseaAgent(
+  public Map<String, Object> deleteOverseaAgent(
       long userId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
     requireManager(actor);
     Map<String, Object> existing = requireOverseaAgent(userId);
+    PasswordHash deletedPassword = passwordHasher.hash(UUID.randomUUID().toString());
     jdbcTemplate.update(
-        "UPDATE cp_users SET status = 'DISABLED', updated_at = CURRENT_TIMESTAMP(6) WHERE id = ? AND role = 'OVERSEA_AGENT'",
+        """
+        UPDATE cp_users
+        SET username = ?, status = 'DELETED',
+            password_salt = ?, password_hash = ?, password_iterations = ?,
+            last_login_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = ? AND role = 'OVERSEA_AGENT' AND status <> 'DELETED'
+        """,
+        deletedUsername("agent", userId),
+        deletedPassword.salt(),
+        deletedPassword.hash(),
+        deletedPassword.iterations(),
         userId
     );
     jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
-    audit(actor, "DISABLE_OVERSEA_AGENT", userId,
-        "Archived overseas agent " + existing.get("username"), ipAddress);
-    return Map.of("id", String.valueOf(userId), "archived", true);
+    jdbcTemplate.update(
+        "DELETE FROM cp_customer_employee_assignments WHERE employee_user_id = ?",
+        userId
+    );
+    jdbcTemplate.update("DELETE FROM cp_shipment_participants WHERE user_id = ?", userId);
+    audit(actor, "DELETE_OVERSEA_AGENT", userId,
+        "Deleted overseas agent " + existing.get("username"), ipAddress);
+    return Map.of(
+        "id", String.valueOf(userId),
+        "username", existing.get("username"),
+        "status", "DELETED",
+        "deleted", true
+    );
   }
 
   private Map<String, Object> requireOverseaAgent(long userId) {
     List<Map<String, Object>> rows = jdbcTemplate.query(
-        "SELECT id, username, display_name, status FROM cp_users WHERE id = ? AND role = 'OVERSEA_AGENT'",
+        """
+        SELECT id, username, display_name, status
+        FROM cp_users
+        WHERE id = ? AND role = 'OVERSEA_AGENT' AND status <> 'DELETED'
+        """,
         (rs, rowNumber) -> {
           Map<String, Object> value = new LinkedHashMap<>();
           value.put("id", String.valueOf(rs.getLong("id")));
@@ -1313,10 +1338,50 @@ public class BusinessCustomerService {
       String ipAddress
   ) {
     CustomerRecord customer = requireManaged(customerPublicId, actor);
-    jdbcTemplate.update("UPDATE cp_customers SET status = 'DISABLED' WHERE id = ?", customer.id());
+    jdbcTemplate.update(
+        "UPDATE cp_customers SET status = 'DISABLED', updated_at = CURRENT_TIMESTAMP(6) WHERE id = ?",
+        customer.id()
+    );
     revokeSessions(customer.id());
     audit(actor, "DISABLE_CUSTOMER", customer.id(), "Disabled customer " + customer.username(), ipAddress);
-    return Map.of("deleted", true, "archived", true, "id", customer.publicId());
+    return Map.of("disabled", true, "id", customer.publicId(), "status", "DISABLED");
+  }
+
+  @Transactional
+  public Map<String, Object> delete(
+      String customerPublicId,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord customer = requireManaged(customerPublicId, actor);
+    PasswordHash deletedPassword = passwordHasher.hash(UUID.randomUUID().toString());
+    GeneratedCustomerCode deletedCode = tokenCodec.newCustomerCode();
+    jdbcTemplate.update(
+        """
+        UPDATE cp_customers
+        SET username = ?, client_code = NULL, status = 'DELETED',
+            password_salt = ?, password_hash = ?, password_iterations = ?,
+            customer_code_hash = ?, customer_code_prefix = ?,
+            customer_code_mode = 'RANDOM', updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = ? AND status <> 'DELETED'
+        """,
+        deletedUsername("customer", customer.id()),
+        deletedPassword.salt(),
+        deletedPassword.hash(),
+        deletedPassword.iterations(),
+        deletedCode.hash(),
+        deletedCode.prefix(),
+        customer.id()
+    );
+    revokeSessions(customer.id());
+    if ("OVERSEA_AGENT".equals(customer.partyRole())) {
+      jdbcTemplate.update(
+          "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
+          customer.id()
+      );
+    }
+    audit(actor, "DELETE_CUSTOMER", customer.id(), "Deleted customer " + customer.username(), ipAddress);
+    return Map.of("deleted", true, "id", customer.publicId(), "username", customer.username());
   }
 
   @Transactional
@@ -3676,9 +3741,15 @@ public class BusinessCustomerService {
   private CustomerRecord requireManaged(String publicId, AuthenticatedUser actor) {
     requireManager(actor);
     List<CustomerRecord> records = actor.isAdmin()
-        ? jdbcTemplate.query(baseCustomerSelect() + " WHERE c.public_id = ?", this::mapCustomer, publicId)
+        ? jdbcTemplate.query(
+            baseCustomerSelect() + " WHERE c.public_id = ? AND c.status <> 'DELETED'",
+            this::mapCustomer,
+            publicId
+        )
         : jdbcTemplate.query(
-            baseCustomerSelect() + " WHERE c.public_id = ? AND c.responsible_agent_id = ?",
+            baseCustomerSelect()
+                + " WHERE c.public_id = ? AND c.responsible_agent_id = ?"
+                + " AND c.status <> 'DELETED'",
             this::mapCustomer,
             publicId,
             actor.id()
@@ -3692,13 +3763,15 @@ public class BusinessCustomerService {
     List<CustomerRecord> records;
     if (actor.isAdmin()) {
       records = jdbcTemplate.query(
-          baseCustomerSelect() + " WHERE c.public_id = ?",
+          baseCustomerSelect() + " WHERE c.public_id = ? AND c.status <> 'DELETED'",
           this::mapCustomer,
           publicId
       );
     } else if (actor.isBusiness()) {
       records = jdbcTemplate.query(
-          baseCustomerSelect() + " WHERE c.public_id = ? AND c.responsible_agent_id = ?",
+          baseCustomerSelect()
+              + " WHERE c.public_id = ? AND c.responsible_agent_id = ?"
+              + " AND c.status <> 'DELETED'",
           this::mapCustomer,
           publicId,
           actor.id()
@@ -3707,6 +3780,7 @@ public class BusinessCustomerService {
       records = jdbcTemplate.query(
           baseCustomerSelect() + """
                WHERE c.public_id = ?
+                 AND c.status <> 'DELETED'
                  AND EXISTS (
                    SELECT 1 FROM cp_customer_employee_assignments employee_assignment
                    WHERE employee_assignment.customer_id = c.id
@@ -4715,6 +4789,11 @@ public class BusinessCustomerService {
       value.setCharAt(other, swap);
     }
     return value.toString();
+  }
+
+  private String deletedUsername(String accountType, long id) {
+    String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    return "deleted_" + accountType + "_" + id + "_" + suffix;
   }
 
   private String normalizeStatus(String value, String fallback) {

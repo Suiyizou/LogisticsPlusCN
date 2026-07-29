@@ -597,15 +597,18 @@
               <el-table-column prop="linkedCustomerCount" :label="t('customers.linkedCustomerCount')" width="130" align="center" />
               <el-table-column :label="t('customers.status')" width="120">
                 <template #default="{ row }">
-                  <el-tag type="success">{{ statusLabel(row.status) }}</el-tag>
+                  <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('customers.actions')" width="330" fixed="right">
+              <el-table-column :label="t('customers.actions')" width="400" fixed="right">
                 <template #default="{ row }">
                   <div class="table-action-buttons table-action-buttons--single-line">
                     <el-button size="small" type="primary" plain @click="editAgentDisplayName(row)">{{ t("customers.edit") }}</el-button>
                     <el-button size="small" type="warning" plain @click="resetAgentPassword(row)">{{ t("customers.resetPassword") }}</el-button>
-                    <el-button size="small" type="danger" plain @click="toggleAgentStatus(row)">{{ t("customers.disable") }}</el-button>
+                    <el-button size="small" plain @click="toggleAgentStatus(row)">
+                      {{ row.status === "ACTIVE" ? t("customers.disable") : t("customers.enable") }}
+                    </el-button>
+                    <el-button size="small" type="danger" plain @click="deleteAgent(row)">{{ t("customers.delete") }}</el-button>
                   </div>
                 </template>
               </el-table-column>
@@ -4693,12 +4696,24 @@ async function toggleAgentStatus(agent) {
   const status = agent.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
   if (!window.confirm(t("customers.confirmAgentStatusChange", { name: agent.displayName || agent.username }))) return;
   try {
-    if (status === "DISABLED") await deleteOverseaAgent(agent.id);
-    else await updateOverseaAgent(agent.id, { status });
+    await updateOverseaAgent(agent.id, { status });
     await loadTransferAgents();
     showSuccess("customers.saved");
   } catch (error) {
     showError(error, "customers.saveFailed");
+  }
+}
+
+async function deleteAgent(agent) {
+  if (!window.confirm(t("customers.confirmDeleteAgent", {
+    name: agent.displayName || agent.username
+  }))) return;
+  try {
+    await deleteOverseaAgent(agent.id);
+    await loadTransferAgents();
+    showSuccess("customers.agentDeleted");
+  } catch (error) {
+    showError(error, "customers.deleteAgentFailed");
   }
 }
 
@@ -5549,8 +5564,8 @@ async function deactivateCustomer() {
   if (!window.confirm(t("customers.deactivateConfirm"))) return;
   mutatingCustomer.value = true;
   try {
-    await deleteBusinessCustomer(selectedCustomer.value.id);
-    replaceCustomer({ ...selectedCustomer.value, status: "DISABLED" });
+    const response = await updateBusinessCustomer(selectedCustomer.value.id, { status: "DISABLED" });
+    replaceCustomer(normalizeCustomer(response));
     showSuccess("customers.deactivated");
   } catch (error) {
     showError(error, "customers.deactivateFailed");

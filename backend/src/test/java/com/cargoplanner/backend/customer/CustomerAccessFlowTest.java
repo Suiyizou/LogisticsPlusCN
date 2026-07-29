@@ -403,6 +403,73 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void deletingCustomerIsDistinctFromDisablingAndReleasesIdentityForReuse() {
+    Map<String, Object> created = customerService.create(
+        new CreateCustomerRequest(
+            "delete-me", "SecurePass!23", "Delete Me", "SHIPPER", "DELETE-01"
+        ),
+        business,
+        "127.0.0.1"
+    );
+
+    Map<String, Object> deleted = customerService.delete(
+        (String) created.get("id"),
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(deleted).containsEntry("deleted", true);
+    assertThat(jdbcTemplate.queryForMap(
+        "SELECT username, client_code, status FROM cp_customers WHERE public_id = ?",
+        created.get("id")
+    )).satisfies(row -> {
+      assertThat(row.get("STATUS")).isEqualTo("DELETED");
+      assertThat(row.get("CLIENT_CODE")).isNull();
+      assertThat(row.get("USERNAME").toString()).startsWith("deleted_customer_");
+    });
+    assertThat(customerService.list(business).get("items").toString()).doesNotContain("delete-me");
+
+    Map<String, Object> recreated = customerService.create(
+        new CreateCustomerRequest(
+            "delete-me", "SecurePass!23", "Replacement", "SHIPPER", "DELETE-01"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(recreated).containsEntry("username", "delete-me");
+  }
+
+  @Test
+  void deletingOverseaAgentRemovesItWhileDisableRemainsReversible() {
+    customerService.updateOverseaAgent(
+        3L,
+        new UpdateOverseaAgentRequest(null, "DISABLED", null),
+        business,
+        "127.0.0.1"
+    );
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT status FROM cp_users WHERE id = 3",
+        String.class
+    )).isEqualTo("DISABLED");
+
+    Map<String, Object> deleted = customerService.deleteOverseaAgent(
+        3L,
+        business,
+        "127.0.0.1"
+    );
+
+    assertThat(deleted).containsEntry("deleted", true);
+    assertThat(jdbcTemplate.queryForMap(
+        "SELECT username, status FROM cp_users WHERE id = 3"
+    )).satisfies(row -> {
+      assertThat(row.get("STATUS")).isEqualTo("DELETED");
+      assertThat(row.get("USERNAME").toString()).startsWith("deleted_agent_");
+    });
+    assertThat(customerService.listTransferAgents(business).get("items").toString())
+        .doesNotContain("deleted_agent_");
+  }
+
+  @Test
   void customerCodeLoginAndExplicitShipmentBindingEnforceOwnership() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest("acme-shipper", "SecurePass!23", "ACME Shipper", "SHIPPER"),
@@ -1932,7 +1999,15 @@ class CustomerAccessFlowTest {
           password_salt VARCHAR(128),
           password_hash VARCHAR(256),
           password_iterations INT,
-          created_by BIGINT
+          created_by BIGINT,
+          last_login_at TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_login_devices (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          user_id BIGINT NOT NULL
         )
         """);
     jdbcTemplate.execute("""

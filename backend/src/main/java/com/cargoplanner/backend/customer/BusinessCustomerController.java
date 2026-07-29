@@ -129,7 +129,7 @@ public class BusinessCustomerController {
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
       HttpServletRequest httpRequest
   ) {
-    return service.disableOverseaAgent(userId, actor, ClientInfo.ip(httpRequest));
+    return service.deleteOverseaAgent(userId, actor, ClientInfo.ip(httpRequest));
   }
 
   @PostMapping("/transfer")
@@ -285,12 +285,12 @@ public class BusinessCustomerController {
   }
 
   @DeleteMapping("/{customerId}")
-  public Map<String, Object> disable(
+  public Map<String, Object> delete(
       @PathVariable String customerId,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
       HttpServletRequest httpRequest
   ) {
-    return service.disable(customerId, actor, ClientInfo.ip(httpRequest));
+    return service.delete(customerId, actor, ClientInfo.ip(httpRequest));
   }
 
   @PostMapping("/{customerId}/reset-code")

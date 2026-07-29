@@ -180,6 +180,19 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           "ALTER TABLE cp_users MODIFY role ENUM('ADMIN','BUSINESS','OVERSEA_AGENT') NOT NULL DEFAULT 'OVERSEA_AGENT'"
       );
     }
+    List<String> statusColumnTypes = jdbcTemplate.query(
+        """
+        SELECT COLUMN_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cp_users' AND COLUMN_NAME = 'status'
+        """,
+        (rs, rowNumber) -> rs.getString("COLUMN_TYPE")
+    );
+    if (!statusColumnTypes.isEmpty() && !statusColumnTypes.get(0).contains("'DELETED'")) {
+      jdbcTemplate.execute(
+          "ALTER TABLE cp_users MODIFY status ENUM('ACTIVE','DISABLED','DELETED') NOT NULL DEFAULT 'ACTIVE'"
+      );
+    }
     addColumnIfMissing(
         "cp_users",
         "party_role",

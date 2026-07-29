@@ -2934,3 +2934,15 @@ Object.assign(messages["en-US"].customers, {
   batchTrackChecking: "Checking existing shipments...",
   batchTrackExistingConfirm: "{count} booking number(s) already exist: {references}{more}. Continuing updates the existing shipments once and will not create duplicate business records. Continue?"
 });
+
+Object.assign(messages["zh-CN"].customers, {
+  confirmDeleteAgent: "\u786e\u8ba4\u5220\u9664\u6d77\u5916\u4ee3\u7406\u201c{name}\u201d\u5417\uff1f\u5220\u9664\u540e\u5c06\u64a4\u9500\u767b\u5f55\u6743\u9650\u4e14\u65e0\u6cd5\u6062\u590d\uff0c\u5386\u53f2\u4e1a\u52a1\u8bb0\u5f55\u4f1a\u4fdd\u7559\u3002",
+  agentDeleted: "\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u5df2\u5220\u9664\u3002",
+  deleteAgentFailed: "\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u5220\u9664\u5931\u8d25\u3002"
+});
+
+Object.assign(messages["en-US"].customers, {
+  confirmDeleteAgent: "Delete overseas agent \u201c{name}\u201d? Sign-in access will be revoked, the account cannot be restored, and historical business records will be retained.",
+  agentDeleted: "Overseas-agent account deleted.",
+  deleteAgentFailed: "Could not delete the overseas-agent account."
+});

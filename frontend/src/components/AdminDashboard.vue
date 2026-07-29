@@ -1788,7 +1788,7 @@ const OVERVIEW_COPY = {
       CREATE_USER: "\u65b0\u589e\u7528\u6237",
       UPDATE_USER: "\u4fee\u6539\u7528\u6237",
       RESET_PASSWORD: "\u91cd\u7f6e\u5bc6\u7801",
-      DELETE_USER: "\u505c\u7528\u7528\u6237",
+      DELETE_USER: "\u5220\u9664\u7528\u6237",
       KICK_DEVICE: "\u8bbe\u5907\u4e0b\u7ebf",
       DELETE_DEVICE: "\u5220\u9664\u8bbe\u5907",
       CREATE_ANNOUNCEMENT: "\u65b0\u589e\u516c\u544a",
@@ -1832,7 +1832,7 @@ const OVERVIEW_COPY = {
       CREATE_USER: "Create user",
       UPDATE_USER: "Update user",
       RESET_PASSWORD: "Reset password",
-      DELETE_USER: "Disable user",
+      DELETE_USER: "Delete user",
       KICK_DEVICE: "Sign out device",
       DELETE_DEVICE: "Delete device",
       CREATE_ANNOUNCEMENT: "Create announcement",
@@ -3450,12 +3450,30 @@ async function toggleEmployee(user) {
 }
 
 async function handleDeleteEmployee(user) {
-  if (!window.confirm(`确认删除/禁用账号「${user.username}」吗？`)) return;
+  const english = currentLocale.value === "en-US";
+  const prompt = english
+    ? `Delete account “${user.username}”? Sign-in access will be revoked and the account cannot be restored. Historical business records will be retained.`
+    : `\u786e\u8ba4\u5220\u9664\u8d26\u53f7\u300c${user.username}\u300d\u5417\uff1f\u5220\u9664\u540e\u5c06\u64a4\u9500\u767b\u5f55\u6743\u9650\u4e14\u65e0\u6cd5\u6062\u590d\uff0c\u5386\u53f2\u4e1a\u52a1\u8bb0\u5f55\u4f1a\u4fdd\u7559\u3002`;
+  try {
+    await ElMessageBox.confirm(prompt, english ? "Delete account" : "\u5220\u9664\u8d26\u53f7", {
+      type: "warning",
+      confirmButtonText: english ? "Delete" : "\u5220\u9664",
+      cancelButtonText: english ? "Cancel" : "\u53d6\u6d88",
+      customClass: "admin-destructive-message-box",
+      confirmButtonClass: "admin-destructive-message-box__confirm",
+      closeOnClickModal: false
+    });
+  } catch {
+    return;
+  }
   await withLoading(async () => {
     await deleteEmployee(user.id);
+    if (employees.value.length === 1 && employeePage.value > 1) {
+      employeePage.value -= 1;
+    }
     await loadDashboard(false);
-    showMessage("员工已删除并下线");
-  });
+    showMessage(english ? "Account deleted; historical business records were retained." : "\u8d26\u53f7\u5df2\u5220\u9664\uff0c\u5386\u53f2\u4e1a\u52a1\u8bb0\u5f55\u5df2\u4fdd\u7559");
+  }, { popupError: true });
 }
 
 async function handleKickDevice(device) {
