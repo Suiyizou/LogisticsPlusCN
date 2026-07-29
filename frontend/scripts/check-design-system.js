@@ -5,12 +5,24 @@ const read = (relativePath) =>
   readFileSync(new URL(relativePath, import.meta.url), "utf8");
 
 const mainSource = read("../src/main.js");
+const adminDashboardSource = read("../src/components/AdminDashboard.vue");
 const frontendStyles = read("../src/design-system.css");
+const legacyFrontendStyles = read("../src/styles.css");
 const trackingIndex = read("../../tracking-service/public/index.html");
 const trackingStyles = read("../../tracking-service/public/design-system.css");
 const master = read("../../design-system/drewes-logistics-operations/MASTER.md");
 
 assert.match(mainSource, /await import\("\.\/design-system\.css"\)/);
+assert.match(
+  adminDashboardSource,
+  /import "element-plus\/es\/components\/message-box\/style\/css";/
+);
+assert.match(adminDashboardSource, /customClass:\s*"admin-destructive-message-box"/);
+assert.match(legacyFrontendStyles, /\.admin-destructive-message-box\s*\{/);
+assert.match(
+  legacyFrontendStyles,
+  /\.admin-destructive-message-box__confirm/
+);
 assert.ok(
   trackingIndex.indexOf("./design-system.css") > trackingIndex.indexOf("./styles.css"),
   "tracking design-system.css must load after the legacy stylesheet"

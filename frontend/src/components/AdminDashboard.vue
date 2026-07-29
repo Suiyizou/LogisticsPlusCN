@@ -1549,6 +1549,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
+import "element-plus/es/components/message-box/style/css";
 import { init as initEChart, use as useECharts } from "echarts/core";
 import { BarChart, LineChart, PieChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
@@ -2651,7 +2652,9 @@ async function handleDeletePlatformCustomer(row) {
       type: "warning",
       confirmButtonText: platformActionCopy.value.delete,
       cancelButtonText: platformActionCopy.value.cancel,
-      customClass: "admin-error-message-box"
+      customClass: "admin-destructive-message-box",
+      confirmButtonClass: "admin-destructive-message-box__confirm",
+      closeOnClickModal: false
     });
   } catch {
     return;
@@ -2900,7 +2903,9 @@ async function handleDeleteAnnouncement(record) {
       type: "warning",
       confirmButtonText: announcementCopy.value.delete,
       cancelButtonText: announcementCopy.value.cancel,
-      customClass: "admin-error-message-box"
+      customClass: "admin-destructive-message-box",
+      confirmButtonClass: "admin-destructive-message-box__confirm",
+      closeOnClickModal: false
     });
   } catch {
     return;

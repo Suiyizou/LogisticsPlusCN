@@ -4684,6 +4684,59 @@ select {
   color: #c43c52;
 }
 
+.admin-destructive-message-box {
+  width: min(440px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid #d9e3ec;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(24, 43, 65, 0.22);
+}
+
+.admin-destructive-message-box .el-message-box__header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e6edf3;
+}
+
+.admin-destructive-message-box .el-message-box__title {
+  color: #172f47;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.admin-destructive-message-box .el-message-box__content {
+  padding: 18px 0 6px;
+  color: #405870;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.admin-destructive-message-box .el-message-box__status.el-icon {
+  color: #dc2626;
+}
+
+.admin-destructive-message-box .el-message-box__btns {
+  gap: 10px;
+  padding-top: 18px;
+}
+
+.admin-destructive-message-box .el-message-box__btns .el-button {
+  min-width: 76px;
+}
+
+.admin-destructive-message-box .admin-destructive-message-box__confirm {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.admin-destructive-message-box .admin-destructive-message-box__confirm:hover,
+.admin-destructive-message-box .admin-destructive-message-box__confirm:focus-visible {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .business-select .el-select__wrapper,
   .business-select .el-select__caret,
