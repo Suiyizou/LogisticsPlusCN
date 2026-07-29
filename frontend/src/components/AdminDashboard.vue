@@ -208,7 +208,7 @@
         <article class="admin-panel admin-audit-panel">
           <div class="admin-panel-head">
             <div>
-              <p>API Audit Trail</p>
+              <p>System Operation Trail</p>
               <h2>{{ ui('admin.audit.apiTitle') }}</h2>
             </div>
             <div class="admin-inline-actions">
@@ -231,29 +231,31 @@
               <el-table-column :label="ui('admin.audit.userRole')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row }">
                   <b>{{ row.username || '-' }}</b>
-                  <small>{{ row.role || '-' }} · ID {{ row.userId || '-' }}</small>
+                  <small>{{ auditRoleText(row.role) }} · ID {{ row.userId || '-' }}</small>
                 </template>
               </el-table-column>
               <el-table-column :label="ui('admin.audit.endpoint')" min-width="250" show-overflow-tooltip>
                 <template #default="{ row }">
-                  <b>{{ row.method }} {{ row.path }}</b>
-                  <small>{{ row.requestId || '-' }}</small>
+                  <b>{{ operationActionLabel(row.action) }}</b>
+                  <small>{{ row.detail || row.action || '-' }}</small>
                 </template>
               </el-table-column>
               <el-table-column :label="ui('admin.audit.result')" width="96">
                 <template #default="{ row }">
-                  <el-tag :type="Number(row.status) < 400 ? 'success' : 'danger'">
-                    {{ row.status || '-' }}
+                  <el-tag :type="row.category === 'BUSINESS' ? 'success' : 'warning'">
+                    {{ operationCategoryLabel(row.category) }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="ui('admin.audit.duration')" width="92">
-                <template #default="{ row }">{{ row.durationMs ?? 0 }} ms</template>
+              <el-table-column :label="ui('admin.audit.duration')" min-width="138" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <b>{{ operationTargetLabel(row.targetType) }}</b>
+                  <small>{{ row.targetId ? `#${row.targetId}` : '-' }}</small>
+                </template>
               </el-table-column>
-              <el-table-column :label="ui('admin.audit.ipDevice')" min-width="180" show-overflow-tooltip>
+              <el-table-column :label="ui('admin.audit.ipDevice')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row }">
                   <b>{{ row.ipAddress || '-' }}</b>
-                  <small>{{ row.userAgent || '-' }}</small>
                 </template>
               </el-table-column>
               <template #empty>{{ ui('admin.audit.empty') }}</template>
@@ -1606,7 +1608,7 @@ const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
 
 const rawAdminPages = [
   { key: "overview", no: "01", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u540e\u53f0\u6982\u89c8", description: "\u7cfb\u7edf\u7528\u6237\u4e0e\u64cd\u4f5c\u8d8b\u52bf", eyebrow: "Executive Overview", title: "\u4f01\u4e1a\u7cfb\u7edf\u603b\u89c8", subtitle: "\u4ece\u4f01\u4e1a\u7ba1\u7406\u89c6\u89d2\u67e5\u770b\u8d26\u53f7\u89c4\u6a21\u3001\u7cfb\u7edf\u6d3b\u8dc3\u5ea6\u548c\u7ba1\u7406\u64cd\u4f5c\u8d8b\u52bf\u3002" },
-  { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u72ec\u7acb\u67e5\u770b\u7cfb\u7edf\u63a5\u53e3\u8bbf\u95ee\u3001\u6267\u884c\u7ed3\u679c\u3001\u8017\u65f6\u4e0e\u8bbe\u5907\u6765\u6e90\u3002" },
+  { key: "audit", no: "02", group: "overview", groupLabel: "\u4f01\u4e1a\u603b\u89c8", label: "\u64cd\u4f5c\u5ba1\u8ba1", description: "\u4e1a\u52a1\u4e0e\u7ba1\u7406\u64cd\u4f5c\u8ffd\u6eaf", eyebrow: "Operation Audit", title: "\u64cd\u4f5c\u5ba1\u8ba1", subtitle: "\u6309\u64cd\u4f5c\u4eba\u3001\u4e1a\u52a1\u52a8\u4f5c\u548c\u5f71\u54cd\u5bf9\u8c61\u8ffd\u6eaf\u7cfb\u7edf\u53d8\u66f4\u3002" },
   { key: "employees", no: "01", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5458\u5de5\u7ba1\u7406", description: "\u4e09\u7c7b\u5185\u90e8\u8d26\u53f7", eyebrow: "Employee Management", title: "\u5458\u5de5\u7ba1\u7406", subtitle: "\u7ef4\u62a4\u7ba1\u7406\u5458\u3001\u4e1a\u52a1\u5458\u4e0e\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u3002" },
   { key: "platform", no: "02", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u5ba2\u6237\u7ba1\u7406", description: "\u5ba2\u6237\u8d26\u53f7\u4e0e\u8d1f\u8d23\u5173\u7cfb", eyebrow: "Customer Management", title: "\u5ba2\u6237\u7ba1\u7406", subtitle: "\u5168\u5c40\u67e5\u770b\u5ba2\u6237\u8d26\u53f7\u3001\u8d1f\u8d23\u4e1a\u52a1\u5458\u3001\u6d77\u5916\u4ee3\u7406\u548c\u5df2\u7ed1\u5b9a\u7968\u5355\u3002" },
   { key: "handovers", no: "03", group: "tracking", groupLabel: "\u8d27\u8e2a\u5e73\u53f0", label: "\u4e1a\u52a1\u4ea4\u63a5\u8bb0\u5f55", description: "\u5ba2\u6237\u5f52\u5c5e\u53d8\u66f4\u8bb0\u5f55", eyebrow: "Business Handover Records", title: "\u4e1a\u52a1\u4ea4\u63a5\u8bb0\u5f55", subtitle: "\u67e5\u770b\u4e1a\u52a1\u5458\u4e4b\u95f4\u5df2\u5b8c\u6210\u7684\u5ba2\u6237\u4ea4\u63a5\u3001\u63a5\u6536\u4eba\u3001\u5f71\u54cd\u8303\u56f4\u548c\u4ea4\u63a5\u539f\u56e0\uff0c\u4ec5\u4f5c\u5ba1\u8ba1\u7559\u75d5\u3002" },
@@ -1766,15 +1768,28 @@ const OVERVIEW_COPY = {
     management30d: "\u8fd1 30 \u65e5\u7ba1\u7406\u64cd\u4f5c",
     management30dHint: "\u7528\u6237\u3001\u516c\u544a\u3001\u8bbe\u5907\u4e0e\u914d\u7f6e\u53d8\u66f4",
     todayActivity: "\u4eca\u65e5\u7cfb\u7edf\u6d3b\u52a8",
-    todayActivityHint: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u7ba1\u7406\u64cd\u4f5c",
+    todayActivityHint: "\u4e1a\u52a1\u64cd\u4f5c\u4e0e\u7ba1\u7406\u64cd\u4f5c",
     activityTrend: "\u8fd1 7 \u65e5\u7cfb\u7edf\u6d3b\u52a8\u8d8b\u52bf",
-    activityTrendHint: "\u63a5\u53e3\u8bbf\u95ee\u4e0e\u7ba1\u7406\u64cd\u4f5c\u6309\u65e5\u5bf9\u6bd4",
+    activityTrendHint: "\u4e1a\u52a1\u64cd\u4f5c\u4e0e\u7ba1\u7406\u64cd\u4f5c\u72ec\u7acb\u523b\u5ea6\u5bf9\u6bd4",
     userComposition: "\u7cfb\u7edf\u7528\u6237\u6784\u6210",
     accountStatus: "\u8d26\u53f7\u72b6\u6001",
     operationTypes: "\u8fd1 30 \u65e5\u7ba1\u7406\u64cd\u4f5c\u5206\u5e03",
     operationTypesHint: "\u4e0d\u542b\u666e\u901a\u63a5\u53e3\u8bbf\u95ee",
-    apiRequests: "\u63a5\u53e3\u8bbf\u95ee",
+    businessActions: "\u4e1a\u52a1\u64cd\u4f5c",
     managementActions: "\u7ba1\u7406\u64cd\u4f5c",
+    businessCategory: "\u4e1a\u52a1\u64cd\u4f5c",
+    managementCategory: "\u7ba1\u7406\u64cd\u4f5c",
+    targets: {
+      USER: "\u7528\u6237\u8d26\u53f7",
+      CUSTOMER: "\u5ba2\u6237",
+      CUSTOMER_HANDOVER: "\u5ba2\u6237\u4ea4\u63a5",
+      SHIPMENT: "\u7968\u5355",
+      DEVICE: "\u767b\u5f55\u8bbe\u5907",
+      ANNOUNCEMENT: "\u516c\u544a",
+      ANNOUNCEMENT_IMAGE: "\u516c\u544a\u56fe\u7247",
+      SYSTEM: "\u7cfb\u7edf\u914d\u7f6e",
+      TRACKING_CREDENTIAL: "\u8ddf\u8e2a\u51ed\u8bc1"
+    },
     active: "\u6b63\u5e38",
     disabled: "\u5df2\u505c\u7528",
     noOperations: "\u6682\u65e0\u7ba1\u7406\u64cd\u4f5c",
@@ -1785,6 +1800,8 @@ const OVERVIEW_COPY = {
       CUSTOMER: "\u5ba2\u6237"
     },
     actions: {
+      BOOTSTRAP_ADMIN: "\u521d\u59cb\u5316\u7ba1\u7406\u5458",
+      MIGRATE_LEGACY_ADMIN_PASSWORD: "\u8fc1\u79fb\u65e7\u7ba1\u7406\u5458\u5bc6\u7801",
       CREATE_USER: "\u65b0\u589e\u7528\u6237",
       UPDATE_USER: "\u4fee\u6539\u7528\u6237",
       RESET_PASSWORD: "\u91cd\u7f6e\u5bc6\u7801",
@@ -1797,7 +1814,41 @@ const OVERVIEW_COPY = {
       DISABLE_ANNOUNCEMENT: "\u505c\u7528\u516c\u544a",
       DELETE_ANNOUNCEMENT: "\u5220\u9664\u516c\u544a",
       UPLOAD_ANNOUNCEMENT_IMAGE: "\u4e0a\u4f20\u516c\u544a\u56fe\u7247",
-      UPDATE_LLM_SETTINGS: "\u4fee\u6539\u6a21\u578b\u914d\u7f6e"
+      UPDATE_LLM_SETTINGS: "\u4fee\u6539\u6a21\u578b\u914d\u7f6e",
+      CREATE_OVERSEA_AGENT: "\u65b0\u589e\u6d77\u5916\u4ee3\u7406",
+      UPDATE_OVERSEA_AGENT: "\u4fee\u6539\u6d77\u5916\u4ee3\u7406",
+      RESET_OVERSEA_AGENT_PASSWORD: "\u91cd\u7f6e\u6d77\u5916\u4ee3\u7406\u5bc6\u7801",
+      DELETE_OVERSEA_AGENT: "\u5220\u9664\u6d77\u5916\u4ee3\u7406",
+      UPDATE_OWN_PROFILE: "\u4fee\u6539\u4e2a\u4eba\u8d44\u6599",
+      UPDATE_CMA_TRACKING_SESSION: "\u66f4\u65b0 CMA \u8ddf\u8e2a\u4f1a\u8bdd",
+      CLEAR_CMA_TRACKING_SESSION: "\u6e05\u9664 CMA \u8ddf\u8e2a\u4f1a\u8bdd",
+      CREATE_CUSTOMER: "\u65b0\u589e\u5ba2\u6237",
+      UPDATE_CUSTOMER: "\u4fee\u6539\u5ba2\u6237",
+      DISABLE_CUSTOMER: "\u505c\u7528\u5ba2\u6237",
+      DELETE_CUSTOMER: "\u5220\u9664\u5ba2\u6237",
+      RESET_CUSTOMER_CODE: "\u91cd\u7f6e\u5ba2\u6237\u7801",
+      RESET_CUSTOMER_PASSWORD: "\u91cd\u7f6e\u5ba2\u6237\u5bc6\u7801",
+      ASSIGN_CUSTOMER_TO_OVERSEA_AGENT: "\u5206\u914d\u5ba2\u6237\u7ed9\u6d77\u5916\u4ee3\u7406",
+      UPDATE_OVERSEA_AGENT_CUSTOMERS: "\u66f4\u65b0\u6d77\u5916\u4ee3\u7406\u5ba2\u6237",
+      DIRECT_CUSTOMER_HANDOVER: "\u76f4\u63a5\u4ea4\u63a5\u5ba2\u6237",
+      COMPLETE_DIRECT_CUSTOMER_HANDOVER: "\u5b8c\u6210\u5ba2\u6237\u4ea4\u63a5",
+      APPROVE_CUSTOMER_HANDOVER: "\u6279\u51c6\u5ba2\u6237\u4ea4\u63a5",
+      APPROVE_CUSTOMER_HANDOVER_REQUEST: "\u6279\u51c6\u5ba2\u6237\u4ea4\u63a5\u7533\u8bf7",
+      REJECT_CUSTOMER_HANDOVER_REQUEST: "\u9a73\u56de\u5ba2\u6237\u4ea4\u63a5\u7533\u8bf7",
+      RESOLVE_CLIENT_CODE_MATCH: "\u5904\u7406\u5ba2\u6237\u5339\u914d",
+      CREATE_BUSINESS_SHIPMENT: "\u65b0\u589e\u7968\u5355",
+      UPDATE_BUSINESS_SHIPMENT: "\u4fee\u6539\u7968\u5355",
+      UPDATE_MANUAL_SHIPMENT_SNAPSHOT: "\u66f4\u65b0\u624b\u5de5\u8ddf\u8e2a\u6570\u636e",
+      BATCH_UPDATE_SHIPMENT_BUSINESS_FIELDS: "\u6279\u91cf\u66f4\u65b0\u7968\u5355",
+      DELETE_BUSINESS_SHIPMENT: "\u5220\u9664\u7968\u5355",
+      BATCH_DELETE_BUSINESS_SHIPMENT: "\u6279\u91cf\u5220\u9664\u7968\u5355",
+      UPDATE_SHIPMENT_NOTE: "\u66f4\u65b0\u7968\u5355\u5907\u6ce8",
+      BIND_CUSTOMER_SHIPMENT: "\u7ed1\u5b9a\u5ba2\u6237\u7968\u5355",
+      BATCH_BIND_CUSTOMER_SHIPMENTS: "\u6279\u91cf\u7ed1\u5b9a\u5ba2\u6237\u7968\u5355",
+      UNBIND_CUSTOMER_SHIPMENT: "\u89e3\u9664\u5ba2\u6237\u7968\u5355\u7ed1\u5b9a",
+      PUBLISH_CUSTOMER_SHIPMENT: "\u53d1\u5e03\u5ba2\u6237\u7968\u5355",
+      WITHDRAW_CUSTOMER_SHIPMENT: "\u64a4\u56de\u5ba2\u6237\u7968\u5355",
+      INVALIDATE_TRACKING_SNAPSHOT: "\u4f5c\u5e9f\u8ddf\u8e2a\u5feb\u7167"
     }
   },
   "en-US": {
@@ -1810,15 +1861,28 @@ const OVERVIEW_COPY = {
     management30d: "30-day admin actions",
     management30dHint: "User, announcement, device, and settings changes",
     todayActivity: "Activity today",
-    todayActivityHint: "API visits and management actions",
+    todayActivityHint: "Business and management actions",
     activityTrend: "7-day system activity",
-    activityTrendHint: "Daily API visits versus management actions",
+    activityTrendHint: "Business and management actions on separate scales",
     userComposition: "System user composition",
     accountStatus: "Account status",
     operationTypes: "30-day management actions",
     operationTypesHint: "Excludes routine API access",
-    apiRequests: "API visits",
+    businessActions: "Business actions",
     managementActions: "Management actions",
+    businessCategory: "Business",
+    managementCategory: "Management",
+    targets: {
+      USER: "User account",
+      CUSTOMER: "Customer",
+      CUSTOMER_HANDOVER: "Customer handover",
+      SHIPMENT: "Shipment",
+      DEVICE: "Login device",
+      ANNOUNCEMENT: "Announcement",
+      ANNOUNCEMENT_IMAGE: "Announcement image",
+      SYSTEM: "System settings",
+      TRACKING_CREDENTIAL: "Tracking credential"
+    },
     active: "Active",
     disabled: "Disabled",
     noOperations: "No management actions",
@@ -1829,6 +1893,8 @@ const OVERVIEW_COPY = {
       CUSTOMER: "Customers"
     },
     actions: {
+      BOOTSTRAP_ADMIN: "Initialize administrator",
+      MIGRATE_LEGACY_ADMIN_PASSWORD: "Migrate legacy administrator password",
       CREATE_USER: "Create user",
       UPDATE_USER: "Update user",
       RESET_PASSWORD: "Reset password",
@@ -1841,7 +1907,41 @@ const OVERVIEW_COPY = {
       DISABLE_ANNOUNCEMENT: "Disable announcement",
       DELETE_ANNOUNCEMENT: "Delete announcement",
       UPLOAD_ANNOUNCEMENT_IMAGE: "Upload announcement image",
-      UPDATE_LLM_SETTINGS: "Update model settings"
+      UPDATE_LLM_SETTINGS: "Update model settings",
+      CREATE_OVERSEA_AGENT: "Create overseas agent",
+      UPDATE_OVERSEA_AGENT: "Update overseas agent",
+      RESET_OVERSEA_AGENT_PASSWORD: "Reset overseas-agent password",
+      DELETE_OVERSEA_AGENT: "Delete overseas agent",
+      UPDATE_OWN_PROFILE: "Update own profile",
+      UPDATE_CMA_TRACKING_SESSION: "Update CMA tracking session",
+      CLEAR_CMA_TRACKING_SESSION: "Clear CMA tracking session",
+      CREATE_CUSTOMER: "Create customer",
+      UPDATE_CUSTOMER: "Update customer",
+      DISABLE_CUSTOMER: "Disable customer",
+      DELETE_CUSTOMER: "Delete customer",
+      RESET_CUSTOMER_CODE: "Reset customer code",
+      RESET_CUSTOMER_PASSWORD: "Reset customer password",
+      ASSIGN_CUSTOMER_TO_OVERSEA_AGENT: "Assign customer to overseas agent",
+      UPDATE_OVERSEA_AGENT_CUSTOMERS: "Update overseas-agent customers",
+      DIRECT_CUSTOMER_HANDOVER: "Hand over customer directly",
+      COMPLETE_DIRECT_CUSTOMER_HANDOVER: "Complete customer handover",
+      APPROVE_CUSTOMER_HANDOVER: "Approve customer handover",
+      APPROVE_CUSTOMER_HANDOVER_REQUEST: "Approve handover request",
+      REJECT_CUSTOMER_HANDOVER_REQUEST: "Reject handover request",
+      RESOLVE_CLIENT_CODE_MATCH: "Resolve customer match",
+      CREATE_BUSINESS_SHIPMENT: "Create shipment",
+      UPDATE_BUSINESS_SHIPMENT: "Update shipment",
+      UPDATE_MANUAL_SHIPMENT_SNAPSHOT: "Update manual tracking data",
+      BATCH_UPDATE_SHIPMENT_BUSINESS_FIELDS: "Batch update shipments",
+      DELETE_BUSINESS_SHIPMENT: "Delete shipment",
+      BATCH_DELETE_BUSINESS_SHIPMENT: "Batch delete shipments",
+      UPDATE_SHIPMENT_NOTE: "Update shipment note",
+      BIND_CUSTOMER_SHIPMENT: "Bind customer shipment",
+      BATCH_BIND_CUSTOMER_SHIPMENTS: "Batch bind customer shipments",
+      UNBIND_CUSTOMER_SHIPMENT: "Unbind customer shipment",
+      PUBLISH_CUSTOMER_SHIPMENT: "Publish customer shipment",
+      WITHDRAW_CUSTOMER_SHIPMENT: "Withdraw customer shipment",
+      INVALIDATE_TRACKING_SNAPSHOT: "Invalidate tracking snapshot"
     }
   }
 };
@@ -2354,7 +2454,7 @@ function renderOverviewCharts() {
       itemWidth: 18,
       textStyle: { color: "#61758b", fontSize: 11 }
     },
-    grid: { left: 45, right: 22, top: 22, bottom: 48 },
+    grid: { left: 58, right: 58, top: 36, bottom: 48 },
     xAxis: {
       type: "category",
       boundaryGap: false,
@@ -2362,27 +2462,45 @@ function renderOverviewCharts() {
       axisLine: { lineStyle: { color: "#ccd8e5" } },
       axisLabel: { color: "#6c8197" }
     },
-    yAxis: {
-      type: "value",
-      minInterval: 1,
-      splitLine: { lineStyle: { color: "#edf2f7" } },
-      axisLabel: { color: "#8495a7" }
-    },
+    yAxis: [
+      {
+        type: "value",
+        name: overviewCopy.value.businessActions,
+        position: "left",
+        minInterval: 1,
+        nameTextStyle: { color: "#2f80d1", fontSize: 10, padding: [0, 0, 0, 8] },
+        axisLine: { show: true, lineStyle: { color: "#9fc4e9" } },
+        axisLabel: { color: "#6c8197" },
+        splitLine: { lineStyle: { color: "#edf2f7" } }
+      },
+      {
+        type: "value",
+        name: overviewCopy.value.managementActions,
+        position: "right",
+        minInterval: 1,
+        nameTextStyle: { color: "#e49a32", fontSize: 10, padding: [0, 8, 0, 0] },
+        axisLine: { show: true, lineStyle: { color: "#efc98f" } },
+        axisLabel: { color: "#8c7654" },
+        splitLine: { show: false }
+      }
+    ],
     series: [
       {
-        name: overviewCopy.value.apiRequests,
+        name: overviewCopy.value.businessActions,
         type: "line",
         smooth: true,
         symbolSize: 7,
+        yAxisIndex: 0,
         areaStyle: { color: "rgba(47, 128, 209, .10)" },
-        data: trend.map((item) => Number(item.apiRequests || 0))
+        data: trend.map((item) => Number(item.businessActions || 0))
       },
       {
         name: overviewCopy.value.managementActions,
         type: "line",
         smooth: true,
         symbolSize: 7,
-        areaStyle: { color: "rgba(228, 154, 50, .08)" },
+        yAxisIndex: 1,
+        lineStyle: { width: 2, type: "dashed" },
         data: trend.map((item) => Number(item.managementActions || 0))
       }
     ]
@@ -2486,6 +2604,20 @@ function operationActionLabel(code) {
   if (code === "EMPTY") return overviewCopy.value.noOperations;
   return overviewCopy.value.actions[code]
     || String(code || "-").toLowerCase().replaceAll("_", " ");
+}
+
+function operationCategoryLabel(category) {
+  return category === "BUSINESS"
+    ? overviewCopy.value.businessCategory
+    : overviewCopy.value.managementCategory;
+}
+
+function operationTargetLabel(targetType) {
+  return overviewCopy.value.targets[targetType] || String(targetType || "-");
+}
+
+function auditRoleText(role) {
+  return role ? roleText(role) : "-";
 }
 
 function formatOverviewDate(value) {
@@ -2664,7 +2796,14 @@ async function handleDeletePlatformCustomer(row) {
     if (platformCustomers.value.length === 1 && platformPage.value > 1) {
       platformPage.value -= 1;
     }
-    await loadPlatformPage();
+    const [overviewData, auditData] = await Promise.all([
+      fetchAdminOverview(),
+      fetchAuditLog({ page: apiAuditPage.value - 1, size: apiAuditPageSize.value }),
+      loadPlatformPage()
+    ]);
+    systemOverview.value = overviewData;
+    apiAuditRows.value = Array.isArray(auditData?.items) ? auditData.items : [];
+    apiAuditTotal.value = Number(auditData?.total || 0);
     showMessage(platformActionCopy.value.success);
   }, { popupError: true });
 }

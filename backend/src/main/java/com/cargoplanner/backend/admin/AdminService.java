@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.DataAccessException;
@@ -26,6 +27,36 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AdminService {
+  private static final Set<String> MANAGEMENT_ACTIONS = Set.of(
+      "BOOTSTRAP_ADMIN",
+      "MIGRATE_LEGACY_ADMIN_PASSWORD",
+      "CREATE_USER",
+      "UPDATE_USER",
+      "RESET_PASSWORD",
+      "DELETE_USER",
+      "CREATE_OVERSEA_AGENT",
+      "UPDATE_OVERSEA_AGENT",
+      "RESET_OVERSEA_AGENT_PASSWORD",
+      "DELETE_OVERSEA_AGENT",
+      "UPDATE_OWN_PROFILE",
+      "KICK_DEVICE",
+      "DELETE_DEVICE",
+      "CREATE_ANNOUNCEMENT",
+      "UPDATE_ANNOUNCEMENT",
+      "PUBLISH_ANNOUNCEMENT",
+      "DISABLE_ANNOUNCEMENT",
+      "DELETE_ANNOUNCEMENT",
+      "UPLOAD_ANNOUNCEMENT_IMAGE",
+      "UPDATE_LLM_SETTINGS",
+      "UPDATE_CMA_TRACKING_SESSION",
+      "CLEAR_CMA_TRACKING_SESSION"
+  );
+  private static final Set<String> BUSINESS_TARGET_TYPES = Set.of(
+      "CUSTOMER",
+      "CUSTOMER_HANDOVER",
+      "SHIPMENT"
+  );
+
   private final JdbcTemplate jdbcTemplate;
   private final PasswordHasher passwordHasher;
   private final RequestStats requestStats;
@@ -384,9 +415,10 @@ public class AdminService {
     Timestamp todayTimestamp = Timestamp.valueOf(today.atStartOfDay());
 
     long internalUserCount = count("SELECT COUNT(*) FROM cp_users WHERE status <> 'DELETED'");
-    long customerCount = count("SELECT COUNT(*) FROM cp_customers WHERE status <> 'DELETED'");
+    // Disabled/deleted customer accounts are historical records, not current platform users.
+    long customerCount = count("SELECT COUNT(*) FROM cp_customers WHERE status = 'ACTIVE'");
     long activeInternalUsers = count("SELECT COUNT(*) FROM cp_users WHERE status = 'ACTIVE'");
-    long activeCustomers = count("SELECT COUNT(*) FROM cp_customers WHERE status = 'ACTIVE'");
+    long activeCustomers = customerCount;
 
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("totalUsers", internalUserCount + customerCount);
@@ -399,18 +431,18 @@ public class AdminService {
     );
     result.put(
         "managementActions30d",
-        count(
-            """
-            SELECT COUNT(*) FROM cp_admin_audit_log
-            WHERE action <> 'API_REQUEST' AND created_at >= ?
-            """,
-            Timestamp.valueOf(today.minusDays(29).atStartOfDay())
+        categorizedActionCount(
+            Timestamp.valueOf(today.minusDays(29).atStartOfDay()),
+            true
         )
     );
     result.put(
         "operationsToday",
         count(
-            "SELECT COUNT(*) FROM cp_admin_audit_log WHERE created_at >= ?",
+            """
+            SELECT COUNT(*) FROM cp_admin_audit_log
+            WHERE action <> 'API_REQUEST' AND created_at >= ?
+            """,
             todayTimestamp
         )
     );
@@ -456,20 +488,23 @@ public class AdminService {
     jdbcTemplate.query(
         """
         SELECT DATE(created_at) AS activity_day,
-               SUM(CASE WHEN action = 'API_REQUEST' THEN 1 ELSE 0 END) AS api_count,
-               SUM(CASE WHEN action <> 'API_REQUEST' THEN 1 ELSE 0 END) AS management_count
+               action,
+               target_type,
+               COUNT(*) AS action_count
         FROM cp_admin_audit_log
-        WHERE created_at >= ?
-        GROUP BY DATE(created_at)
-        ORDER BY activity_day ASC
+        WHERE action <> 'API_REQUEST' AND created_at >= ?
+        GROUP BY DATE(created_at), action, target_type
+        ORDER BY activity_day ASC, action ASC
         """,
         rs -> {
           LocalDate day = rs.getDate("activity_day").toLocalDate();
           if (dailyCounts.containsKey(day)) {
-            dailyCounts.put(
-                day,
-                new long[] { rs.getLong("api_count"), rs.getLong("management_count") }
-            );
+            long[] counts = dailyCounts.get(day);
+            int categoryIndex = isManagementAction(
+                rs.getString("action"),
+                rs.getString("target_type")
+            ) ? 1 : 0;
+            counts[categoryIndex] += rs.getLong("action_count");
           }
         },
         trendStartTimestamp
@@ -477,25 +512,62 @@ public class AdminService {
     return dailyCounts.entrySet().stream().map(entry -> {
       Map<String, Object> item = new LinkedHashMap<>();
       item.put("date", entry.getKey().toString());
-      item.put("apiRequests", entry.getValue()[0]);
+      item.put("businessActions", entry.getValue()[0]);
       item.put("managementActions", entry.getValue()[1]);
       return item;
     }).toList();
   }
 
   private List<Map<String, Object>> operationTypes(LocalDate startDate) {
-    return jdbcTemplate.query(
+    Map<String, Long> managementCounts = new LinkedHashMap<>();
+    jdbcTemplate.query(
         """
-        SELECT action AS item_code, COUNT(*) AS item_count
+        SELECT action, target_type, COUNT(*) AS item_count
         FROM cp_admin_audit_log
         WHERE action <> 'API_REQUEST' AND created_at >= ?
-        GROUP BY action
-        ORDER BY item_count DESC, item_code ASC
-        LIMIT 8
+        GROUP BY action, target_type
         """,
-        (rs, rowNum) -> metricItem(rs.getString("item_code"), rs.getLong("item_count")),
+        rs -> {
+          String action = rs.getString("action");
+          if (isManagementAction(action, rs.getString("target_type"))) {
+            managementCounts.merge(action, rs.getLong("item_count"), Long::sum);
+          }
+        },
         Timestamp.valueOf(startDate.atStartOfDay())
     );
+    return managementCounts.entrySet().stream()
+        .sorted(
+            Map.Entry.<String, Long>comparingByValue().reversed()
+                .thenComparing(Map.Entry.comparingByKey())
+        )
+        .limit(8)
+        .map(entry -> metricItem(entry.getKey(), entry.getValue()))
+        .toList();
+  }
+
+  private long categorizedActionCount(Timestamp start, boolean management) {
+    long[] total = new long[] { 0L };
+    jdbcTemplate.query(
+        """
+        SELECT action, target_type, COUNT(*) AS item_count
+        FROM cp_admin_audit_log
+        WHERE action <> 'API_REQUEST' AND created_at >= ?
+        GROUP BY action, target_type
+        """,
+        rs -> {
+          if (isManagementAction(rs.getString("action"), rs.getString("target_type"))
+              == management) {
+            total[0] += rs.getLong("item_count");
+          }
+        },
+        start
+    );
+    return total[0];
+  }
+
+  private boolean isManagementAction(String action, String targetType) {
+    if (MANAGEMENT_ACTIONS.contains(action)) return true;
+    return targetType == null || !BUSINESS_TARGET_TYPES.contains(targetType);
   }
 
   private Map<String, Object> metricItem(String code, long value) {
@@ -635,6 +707,35 @@ public class AdminService {
     return pageResult(items, safePage, safeSize, total);
   }
 
+  public Map<String, Object> operationAuditPage(int page, int size) {
+    int safePage = safePage(page);
+    int safeSize = safeSize(size);
+    long total = count("SELECT COUNT(*) FROM cp_admin_audit_log WHERE action <> 'API_REQUEST'");
+    List<Map<String, Object>> items = jdbcTemplate.query(
+        """
+        SELECT audit.id,
+               audit.admin_user_id,
+               COALESCE(audit.username_snapshot, actor.username) AS actor_username,
+               COALESCE(audit.role_snapshot, actor.role) AS actor_role,
+               audit.action,
+               audit.target_type,
+               audit.target_id,
+               audit.detail,
+               audit.ip_address,
+               audit.created_at
+        FROM cp_admin_audit_log audit
+        LEFT JOIN cp_users actor ON actor.id = audit.admin_user_id
+        WHERE audit.action <> 'API_REQUEST'
+        ORDER BY audit.created_at DESC, audit.id DESC
+        LIMIT ? OFFSET ?
+        """,
+        this::mapOperationAuditRow,
+        safeSize,
+        pageOffset(safePage, safeSize)
+    );
+    return pageResult(items, safePage, safeSize, total);
+  }
+
   private List<Map<String, Object>> recentApiAudit() {
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> items = (List<Map<String, Object>>) apiAuditPage(0, 20).get("items");
@@ -655,6 +756,24 @@ public class AdminService {
     row.put("requestId", rs.getString("request_id"));
     row.put("ipAddress", rs.getString("ip_address"));
     row.put("userAgent", rs.getString("user_agent"));
+    row.put("createdAt", stringTimestamp(rs, "created_at"));
+    return row;
+  }
+
+  private Map<String, Object> mapOperationAuditRow(ResultSet rs, int rowNum) throws SQLException {
+    Map<String, Object> row = new LinkedHashMap<>();
+    String action = rs.getString("action");
+    String targetType = rs.getString("target_type");
+    row.put("id", rs.getLong("id"));
+    row.put("userId", nullableLong(rs, "admin_user_id"));
+    row.put("username", rs.getString("actor_username"));
+    row.put("role", rs.getString("actor_role"));
+    row.put("action", action);
+    row.put("category", isManagementAction(action, targetType) ? "MANAGEMENT" : "BUSINESS");
+    row.put("targetType", targetType);
+    row.put("targetId", nullableLong(rs, "target_id"));
+    row.put("detail", rs.getString("detail"));
+    row.put("ipAddress", rs.getString("ip_address"));
     row.put("createdAt", stringTimestamp(rs, "created_at"));
     return row;
   }
