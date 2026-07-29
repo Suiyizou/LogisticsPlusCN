@@ -726,7 +726,74 @@
               </section>
             </template>
 
-            <section class="handover-section">
+            <section v-if="isOverseaAgent" class="handover-section">
+                <header class="handover-section-header">
+                  <div>
+                    <h3>{{ t("customers.chooseHandoverReceiver") }}</h3>
+                    <p>{{ t("customers.chooseHandoverReceiverHint") }}</p>
+                  </div>
+                </header>
+                <el-form class="handover-agent-transfer-form" label-position="top">
+                  <el-form-item :label="t('customers.handoverCustomers')">
+                    <el-select
+                      v-model="overseaTransferCustomerIds"
+                      multiple
+                      filterable
+                      class="business-select"
+                      popper-class="business-select-popper"
+                      :placeholder="t('customers.handoverCustomersPlaceholder')"
+                    >
+                      <el-option
+                        v-for="customer in handoverEligibleCustomers"
+                        :key="customer.id"
+                        :value="customer.id"
+                        :label="customerFilterOptionLabel(customer)"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-form>
+                <el-table
+                  :data="transferAgents"
+                  v-loading="loadingTransferAgents"
+                  class="standard-information-table business-handover-table"
+                >
+                  <el-table-column type="index" :label="t('customers.index')" width="70" />
+                  <el-table-column :label="t('customers.targetAgent')" min-width="240">
+                    <template #default="{ row }">
+                      <div class="handover-agent-cell">
+                        <span class="handover-agent-avatar">{{ (row.displayName || row.username || '?').slice(0, 1).toUpperCase() }}</span>
+                        <span>
+                          <b>{{ row.displayName || row.username }}</b>
+                          <small>@{{ row.username }}</small>
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="linkedCustomerCount" :label="t('customers.ownedCustomerCount')" width="160" align="center" />
+                  <el-table-column :label="t('customers.status')" width="120">
+                    <template #default="{ row }">
+                      <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'" effect="light">
+                        {{ statusLabel(row.status) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('customers.actions')" width="180" fixed="right">
+                    <template #default="{ row }">
+                      <el-button
+                        type="primary"
+                        :loading="transferringCustomers && transferForm.targetAgentId === String(row.id)"
+                        :disabled="row.status !== 'ACTIVE' || !overseaTransferCustomerIds.length || transferringCustomers"
+                        @click="submitOverseaAgentTransfer(row)"
+                      >{{ t("customers.confirmTransfer") }}</el-button>
+                    </template>
+                  </el-table-column>
+                  <template #empty>
+                    <el-empty :description="t('customers.noTransferAgents')" />
+                  </template>
+                </el-table>
+            </section>
+
+            <section v-else class="handover-section">
                 <header class="handover-section-header">
                   <div>
                     <h3>{{ t("customers.chooseHandoverReceiver") }}</h3>
@@ -2744,6 +2811,7 @@ const transferDialogOpen = ref(false);
 const transferAgents = ref([]);
 const loadingTransferAgents = ref(false);
 const transferringCustomers = ref(false);
+const overseaTransferCustomerIds = ref([]);
 const clientCodeDialogOpen = ref(false);
 const clientCodeSupplement = ref("");
 const resetPasswordDialogOpen = ref(false);
@@ -3477,6 +3545,11 @@ watch(transferAgents, (items) => {
   agentPage.value = boundedPage(agentPage.value, items.length, agentPageSize.value);
 });
 
+watch(handoverEligibleCustomers, (items) => {
+  const ids = new Set(items.map((item) => item.id));
+  overseaTransferCustomerIds.value = overseaTransferCustomerIds.value.filter((id) => ids.has(id));
+});
+
 watch(menuItem, (item) => {
   if (item === "overview") {
     void initializeOverviewCharts();
@@ -3598,9 +3671,15 @@ async function loadMenuData(item, preferredCustomerId = "") {
   }
   if (item === "handover") {
     const jobs = [];
-    if (!handoverAgentsLoaded.value) jobs.push(loadBusinessHandoverAgents());
+    if (isOverseaAgent.value) {
+      if (!transferAgentsLoaded.value) jobs.push(loadTransferAgents());
+    } else if (!handoverAgentsLoaded.value) {
+      jobs.push(loadBusinessHandoverAgents());
+    }
     if (canRequestBusinessHandover.value) jobs.push(loadBusinessHandoverRequests());
     if (isManager.value && !customersLoaded.value) {
+      jobs.push(loadCustomers("", { selectFirst: false }));
+    } else if (isOverseaAgent.value && !customersLoaded.value) {
       jobs.push(loadCustomers("", { selectFirst: false }));
     }
     await Promise.all(jobs);
@@ -4232,8 +4311,9 @@ async function loadBusinessHandoverRequests() {
 }
 
 async function refreshBusinessHandoverData() {
-  const jobs = [loadBusinessHandoverAgents()];
+  const jobs = isOverseaAgent.value ? [loadTransferAgents()] : [loadBusinessHandoverAgents()];
   if (canRequestBusinessHandover.value) jobs.push(loadBusinessHandoverRequests());
+  if (isOverseaAgent.value) jobs.push(loadCustomers("", { selectFirst: false }));
   await Promise.all(jobs);
 }
 
@@ -4661,6 +4741,35 @@ async function submitCustomerTransfer() {
   } catch (error) {
     showError(error, "customers.transferFailed");
   } finally {
+    transferringCustomers.value = false;
+  }
+}
+
+async function submitOverseaAgentTransfer(agent) {
+  const targetAgentId = String(agent?.id || "");
+  if (!targetAgentId || !overseaTransferCustomerIds.value.length || transferringCustomers.value) return;
+  transferringCustomers.value = true;
+  transferForm.targetAgentId = targetAgentId;
+  try {
+    const response = await transferBusinessCustomers({
+      customerIds: overseaTransferCustomerIds.value,
+      targetAgentId
+    });
+    overseaTransferCustomerIds.value = [];
+    await Promise.all([
+      loadCustomers("", { selectFirst: false }),
+      loadTransferAgents(),
+      loadAvailableShipments()
+    ]);
+    showSuccess("customers.transferSuccess", {
+      count: response?.transferred || 0,
+      agent: response?.targetAgentName || "-",
+      shipments: response?.relatedShipments || 0
+    });
+  } catch (error) {
+    showError(error, "customers.transferFailed");
+  } finally {
+    transferForm.targetAgentId = null;
     transferringCustomers.value = false;
   }
 }

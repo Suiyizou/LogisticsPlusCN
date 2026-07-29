@@ -79,6 +79,20 @@ const CONTAINER_COLUMNS = [
   column("latestEventTime", "\u6700\u65b0\u52a8\u6001\u65f6\u95f4", "LATEST EVENT TIME")
 ];
 
+const LEGACY_TRACKING_COLUMNS = [
+  column("forwarderJobNumber", "JOB NUMBER", "JOB NUMBER"),
+  column("vesselVoyage", "VESSEL / VOY", "VESSEL VOYAGE"),
+  column("referenceNo", "BOOKING NO.", "BOOKING NUMBER"),
+  column("billOfLading", "MB/L NO.", "MASTER BILL"),
+  column("portOfLoading", "POL", "PORT OF LOADING"),
+  column("portOfDischarge", "POD", "PORT OF DISCHARGE"),
+  column("clientPoNumber", "PO NO.", "CLIENT PO NUMBER"),
+  column("estimatedDeparture", "ETD", "ESTIMATED DEPARTURE"),
+  column("estimatedArrival", "ETA", "ESTIMATED ARRIVAL"),
+  column("volume", "VOLUME", "CONTAINER VOLUME"),
+  column("clientNameCode", "CLIENT CODE", "CLIENT NAME CODE")
+];
+
 export function buildManualShipmentImportTemplate(xlsx) {
   const workbook = xlsx.utils.book_new();
   appendTemplateSheet(xlsx, workbook, "\u586b\u5199\u8bf4\u660e", [
@@ -141,6 +155,8 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
   }
   const mainRows = readSheet(workbook, mainSheetName, MAIN_COLUMNS, xlsx);
   if (!mainRows.length) {
+    const legacyImport = parseLegacyTrackingWorkbook(workbook, sheets, xlsx);
+    if (legacyImport) return legacyImport;
     return emptyImportResult(["\u7968\u5355\u4e3b\u8868\u6ca1\u6709\u6570\u636e\u3002"]);
   }
   if (mainRows.length > MAX_IMPORT_ROWS) {
@@ -328,6 +344,223 @@ export function parseManualShipmentImportWorkbook(workbook, xlsx) {
     invalid: rows.filter((row) => row.errors.length > 0).length,
     warningCount: rows.reduce((count, row) => count + row.warnings.length, 0)
   };
+}
+
+function parseLegacyTrackingWorkbook(workbook, sheetNames, xlsx) {
+  const rows = [];
+  for (const sheetName of sheetNames) {
+    const worksheet = workbook?.Sheets?.[sheetName];
+    if (!worksheet) continue;
+    const sourceRows = xlsx.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+      dateNF: "yyyy-mm-dd"
+    });
+    const parsed = readLegacyTrackingSheet(sourceRows);
+    rows.push(...parsed.map((row) => ({ ...row, __sheetName: sheetName })));
+  }
+  if (!rows.length) return null;
+
+  const seenReferences = new Set();
+  const mappedRows = rows.map((source) => {
+    const errors = [];
+    const warnings = ["Legacy tracking sheet detected; route and container summaries were inferred from POL/POD/VOLUME."];
+    const rawReference = text(source.referenceNo) || text(source.billOfLading);
+    const referenceNo = normalizeLegacyReference(rawReference);
+    const billOfLading = text(source.billOfLading) || rawReference;
+    const carrier = inferLegacyCarrier(rawReference || billOfLading);
+    const importKey = text(source.forwarderJobNumber) || referenceNo || `${source.__sheetName}-${source.__rowNumber}`;
+    const pol = text(source.portOfLoading);
+    const pod = text(source.portOfDischarge);
+    const volume = normalizeLegacyVolume(source.volume);
+    const containerTypes = parseLegacyContainerTypes(volume);
+
+    if (!referenceNo) errors.push("Missing importable booking or bill of lading number");
+    if (!pol) errors.push("POL is required");
+    if (!pod) errors.push("POD is required");
+    if (volume && !containerTypes.length) warnings.push(`Could not parse container quantity from VOLUME: ${volume}`);
+    if (!volume) warnings.push("VOLUME is empty; no container summary will be generated.");
+
+    const identity = `${carrier}|BOOKING|${normalizeKey(referenceNo)}`;
+    if (referenceNo) {
+      if (seenReferences.has(identity)) errors.push(`Duplicate carrier, reference type, and reference number: ${rawReference}`);
+      seenReferences.add(identity);
+    }
+
+    const routeNodes = buildLegacyRouteNodes(source, pol, pod);
+    const routingLegs = [compactObject({
+      mode: "SEA",
+      vesselName: text(source.vesselVoyage),
+      loadPort: pol,
+      dischargePort: pod,
+      estimatedDeparture: text(source.estimatedDeparture),
+      estimatedArrival: text(source.estimatedArrival),
+      masterBill: billOfLading
+    })].filter((item) => Object.values(item).some(Boolean));
+    const status = "Imported from spreadsheet";
+    const payload = {
+      carrier,
+      referenceType: "BOOKING",
+      referenceNo,
+      trackingStatus: status,
+      latestEventName: status,
+      estimatedDeparture: text(source.estimatedDeparture),
+      estimatedArrival: text(source.estimatedArrival),
+      currentLocation: pol,
+      forwarderJobNumber: text(source.forwarderJobNumber),
+      clientNameCode: text(source.clientNameCode),
+      clientPoNumber: text(source.clientPoNumber),
+      bookingNumber: referenceNo,
+      billOfLading,
+      vesselVoyage: text(source.vesselVoyage),
+      serviceScopes: ["OCEAN"],
+      portOfLoading: pol,
+      portOfDischarge: pod,
+      volume,
+      routeNodes,
+      routingLegs,
+      containerTypes: containerTypes.length ? containerTypes : null,
+      containers: []
+    };
+    return {
+      importKey,
+      rowNumber: source.__rowNumber,
+      referenceNo,
+      carrier,
+      referenceType: "BOOKING",
+      errors: unique(errors),
+      warnings: unique(warnings),
+      payload
+    };
+  });
+
+  return {
+    rows: mappedRows,
+    items: mappedRows.filter((row) => row.errors.length === 0),
+    globalErrors: [],
+    total: mappedRows.length,
+    valid: mappedRows.filter((row) => row.errors.length === 0).length,
+    invalid: mappedRows.filter((row) => row.errors.length > 0).length,
+    warningCount: mappedRows.reduce((count, row) => count + row.warnings.length, 0)
+  };
+}
+
+function readLegacyTrackingSheet(sourceRows) {
+  const firstRow = findLegacyHeaderRow(sourceRows);
+  if (firstRow < 0) return [];
+  const headers = sourceRows[firstRow].map(normalizeHeader);
+  const indexes = Object.fromEntries(LEGACY_TRACKING_COLUMNS.map((definition) => [
+    definition.field,
+    findColumnIndex(headers, definition.aliases)
+  ]));
+  if (indexes.volume < 0) {
+    indexes.volume = headers.findIndex((header, index) =>
+      !header && normalizeHeader(sourceRows[firstRow + 1]?.[index]) === "VOLUME"
+    );
+  }
+  if (indexes.volume < 0) {
+    indexes.volume = headers.findIndex((header, index) =>
+      !header && sourceRows
+        .slice(firstRow + 1, firstRow + 12)
+        .some((row) => parseLegacyContainerTypes(row?.[index]).length > 0)
+    );
+  }
+  if (indexes.referenceNo < 0) indexes.referenceNo = indexes.billOfLading;
+  return sourceRows
+    .slice(firstRow + 1)
+    .map((row, index) => {
+      const value = { __rowNumber: firstRow + index + 2 };
+      for (const definition of LEGACY_TRACKING_COLUMNS) {
+        const columnIndex = indexes[definition.field];
+        value[definition.field] = columnIndex >= 0 ? text(row?.[columnIndex]) : "";
+      }
+      if (!value.referenceNo && indexes.referenceNo >= 0) {
+        value.referenceNo = text(row?.[indexes.referenceNo]);
+      }
+      return value;
+    })
+    .filter((row) => ["referenceNo", "billOfLading", "forwarderJobNumber", "vesselVoyage"].some((field) => text(row[field])));
+}
+
+function findLegacyHeaderRow(sourceRows) {
+  let bestIndex = -1;
+  let bestScore = 0;
+  for (let index = 0; index < Math.min(sourceRows.length, 12); index += 1) {
+    const headers = (sourceRows[index] || []).map(normalizeHeader);
+    const score = LEGACY_TRACKING_COLUMNS.reduce((sum, definition) =>
+      sum + (findColumnIndex(headers, definition.aliases) >= 0 ? 1 : 0), 0
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestScore >= 4 ? bestIndex : -1;
+}
+
+function normalizeLegacyReference(value) {
+  const normalized = text(value).replace(/\s+/g, "").toUpperCase();
+  if (/^COSU[0-9]{6,20}$/.test(normalized)) return normalized.slice(4);
+  const token = normalized.match(/[A-Z0-9-]{4,35}/)?.[0] || "";
+  return token.replace(/^COSU(?=[0-9]{6,20}$)/, "");
+}
+
+function inferLegacyCarrier(value) {
+  const normalized = normalizeHeader(value);
+  if (normalized.includes("CMA")) return "CMA";
+  return "COSCO";
+}
+
+function normalizeLegacyVolume(value) {
+  const raw = text(value);
+  return normalizeHeader(raw) === "VOLUME" ? "" : raw;
+}
+
+function parseLegacyContainerTypes(value) {
+  const textValue = text(value).toUpperCase();
+  const items = [];
+  const pattern = /(\d+)\s*[*X×]\s*([0-9]{2,3}\s*(?:HC|HQ|GP|DC|RF|RH|OT|FR|NOR|FQ)?)/g;
+  let match;
+  while ((match = pattern.exec(textValue)) !== null) {
+    const quantity = Number(match[1]);
+    const type = match[2].replace(/\s+/g, "");
+    if (Number.isInteger(quantity) && quantity > 0 && type) {
+      items.push({ type, quantity });
+    }
+  }
+  return items;
+}
+
+function buildLegacyRouteNodes(source, pol, pod) {
+  const etd = text(source.estimatedDeparture);
+  const eta = text(source.estimatedArrival);
+  return [
+    {
+      locationType: "POR",
+      city: pol,
+      event: "Place of receipt",
+      estimatedTime: etd
+    },
+    {
+      locationType: "FPOL",
+      city: pol,
+      event: "Estimated departure",
+      estimatedTime: etd
+    },
+    {
+      locationType: "LPOD",
+      city: pod,
+      event: "Estimated arrival",
+      estimatedTime: eta
+    },
+    {
+      locationType: "FND",
+      city: pod,
+      event: "Final destination",
+      estimatedTime: eta
+    }
+  ];
 }
 
 export function buildManualShipmentImportResultWorkbook(results, xlsx) {

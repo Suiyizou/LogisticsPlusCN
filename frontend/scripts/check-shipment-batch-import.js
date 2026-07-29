@@ -69,6 +69,23 @@ assert.equal(cosuCompleteImport.items[0].referenceType, "BOOKING");
 assert.equal(cosuCompleteImport.items[0].referenceNo, "6508205930");
 assert.equal(cosuCompleteImport.items[0].payload.bookingNumber, "6508205930");
 
+const legacyTrackingWorkbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(
+  legacyTrackingWorkbook,
+  XLSX.utils.aoa_to_sheet([
+    ["JOB NUMBER", "VESSEL /VOY", "MB/L NO.", "POL", "POD", "PO NO.", "ETD", "ETA", "", "Client Code"],
+    ["LJSH26060011", "OOCL BRUSSELS 070E", "COSU6503686790", "SHANGHAI", "LONG BEACH", "HW202600063", "2026-06-22", "2026-07-06", "2*40FQ", "Hayden US"]
+  ]),
+  "HAYDEN"
+);
+const legacyTrackingImport = parseManualShipmentImportWorkbook(legacyTrackingWorkbook, XLSX);
+assert.equal(legacyTrackingImport.total, 1);
+assert.equal(legacyTrackingImport.valid, 1);
+assert.equal(legacyTrackingImport.items[0].referenceNo, "6503686790");
+assert.equal(legacyTrackingImport.items[0].payload.billOfLading, "COSU6503686790");
+assert.deepEqual(legacyTrackingImport.items[0].payload.containerTypes, [{ type: "40FQ", quantity: 2 }]);
+assert.equal(legacyTrackingImport.items[0].payload.routeNodes.length, 4);
+
 const invalidTemplate = buildManualShipmentImportTemplate(XLSX);
 invalidTemplate.Sheets["箱型数量"] = XLSX.utils.aoa_to_sheet([
   ["导入编号*", "箱型*", "数量*"]

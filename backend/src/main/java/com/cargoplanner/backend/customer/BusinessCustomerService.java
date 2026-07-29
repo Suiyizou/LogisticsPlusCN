@@ -121,7 +121,7 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listTransferAgents(AuthenticatedUser actor) {
-    requireManager(actor);
+    requireTransferManager(actor);
     List<Map<String, Object>> agents = jdbcTemplate.query(
         """
         SELECT u.id, u.username, u.display_name, u.status,
@@ -148,7 +148,9 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listBusinessHandoverAgents(AuthenticatedUser actor) {
-    requireOperationsReader(actor);
+    if (actor == null || (!actor.isBusiness() && !actor.isAdmin())) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Business or administrator permission is required");
+    }
     List<Map<String, Object>> agents = jdbcTemplate.query(
         """
         SELECT u.id, u.username, u.display_name, u.status,
@@ -664,7 +666,7 @@ public class BusinessCustomerService {
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
+    requireTransferManager(actor);
     List<String> requestedIds = request == null || request.customerIds() == null
         ? List.of()
         : request.customerIds();
@@ -687,7 +689,7 @@ public class BusinessCustomerService {
     List<CustomerTransferTarget> targets = new ArrayList<>();
     for (String customerId : customerIds.stream().sorted().toList()) {
       lockCustomer(customerId);
-      CustomerRecord customer = requireManaged(customerId, actor);
+      CustomerRecord customer = requireTransferCustomer(customerId, actor);
       if (!UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
         throw new ApiException(
             HttpStatus.BAD_REQUEST,
@@ -1574,16 +1576,17 @@ public class BusinessCustomerService {
   public Map<String, Object> listShipmentSnapshots(AuthenticatedUser actor) {
     requireOperationsReader(actor);
     String baseSql = snapshotShipmentSelect();
+    String orderBy = shipmentSnapshotOrderBy();
     List<Map<String, Object>> items = actor.isAdmin()
         ? jdbcTemplate.query(
-            baseSql + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
+            baseSql + orderBy,
             this::mapSnapshotShipment
         )
         : jdbcTemplate.query(
             baseSql + " WHERE (s.responsible_agent_id = ? OR EXISTS ("
                 + "SELECT 1 FROM cp_shipment_participants p "
                 + "WHERE p.shipment_id = s.id AND p.user_id = ?)) "
-                + "ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
+                + orderBy,
             this::mapSnapshotShipment,
             actor.id(),
             actor.id()
@@ -1670,7 +1673,7 @@ public class BusinessCustomerService {
     queryParameters.add(offset);
     List<Map<String, Object>> items = jdbcTemplate.query(
         snapshotShipmentSelect() + where
-            + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC LIMIT ? OFFSET ?",
+            + shipmentSnapshotOrderBy() + " LIMIT ? OFFSET ?",
         this::mapSnapshotShipment,
         queryParameters.toArray()
     );
@@ -2081,6 +2084,37 @@ public class BusinessCustomerService {
                    r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         """;
+  }
+
+  private String shipmentSnapshotOrderBy() {
+    if (!isMySql()) {
+      return " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC";
+    }
+    String etaRaw = """
+        COALESCE(
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.keyTimes.estimatedFinalArrival.time')), 'null'),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.keyTimes.estimatedArrival.time')), 'null'),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.routingLegs[0].estimatedArrival')), 'null'),
+          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.summary.estimatedArrival')), 'null')
+        )
+        """;
+    String etaTime = "COALESCE("
+        + "STR_TO_DATE(REPLACE(LEFT(" + etaRaw + ", 19), 'T', ' '), '%Y-%m-%d %H:%i:%s'), "
+        + "STR_TO_DATE(LEFT(" + etaRaw + ", 10), '%Y-%m-%d')"
+        + ")";
+    return " ORDER BY CASE WHEN " + etaTime + " IS NULL THEN 1 ELSE 0 END, "
+        + etaTime + " ASC, COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC";
+  }
+
+  private boolean isMySql() {
+    try {
+      return jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>) connection -> {
+        String product = connection.getMetaData().getDatabaseProductName();
+        return product != null && product.toLowerCase(Locale.ROOT).contains("mysql");
+      });
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private Map<String, Object> mapSnapshotShipment(ResultSet rs, int rowNumber) throws SQLException {
@@ -3758,6 +3792,28 @@ public class BusinessCustomerService {
     return records.get(0);
   }
 
+  private CustomerRecord requireTransferCustomer(String publicId, AuthenticatedUser actor) {
+    requireTransferManager(actor);
+    if (actor.isAdmin() || actor.isBusiness()) return requireManaged(publicId, actor);
+    List<CustomerRecord> records = jdbcTemplate.query(
+        baseCustomerSelect() + """
+             WHERE c.public_id = ?
+               AND c.status <> 'DELETED'
+               AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
+               AND EXISTS (
+                 SELECT 1 FROM cp_customer_employee_assignments employee_assignment
+                 WHERE employee_assignment.customer_id = c.id
+                   AND employee_assignment.employee_user_id = ?
+               )
+            """,
+        this::mapCustomer,
+        publicId,
+        actor.id()
+    );
+    if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
+    return records.get(0);
+  }
+
   private CustomerRecord requireAccessibleCustomer(String publicId, AuthenticatedUser actor) {
     requireOperationsReader(actor);
     List<CustomerRecord> records;
@@ -4541,6 +4597,16 @@ public class BusinessCustomerService {
   private void requireManager(AuthenticatedUser actor) {
     if (actor == null || (!actor.isBusiness() && !actor.isAdmin())) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Business or administrator permission is required");
+    }
+  }
+
+  private void requireTransferManager(AuthenticatedUser actor) {
+    if (actor == null
+        || (!actor.isBusiness() && !actor.isAdmin() && !actor.isOverseaAgent())) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Business, administrator, or overseas agent permission is required"
+      );
     }
   }
 
