@@ -1,13 +1,17 @@
 <template>
-  <main class="app-login-shell" data-i18n-ignore>
-    <div class="app-login-atmosphere" aria-hidden="true">
-      <span class="app-login-glow app-login-glow-one"></span>
-      <span class="app-login-glow app-login-glow-two"></span>
-      <span class="app-login-grid"></span>
+  <main
+    class="app-login-shell"
+    :class="{ 'is-customer-mode': loginMode === 'customer' }"
+    data-i18n-ignore
+  >
+    <div class="app-login-backdrop" aria-hidden="true">
+      <span class="app-login-backdrop-grid"></span>
+      <span class="app-login-backdrop-orb app-login-backdrop-orb--one"></span>
+      <span class="app-login-backdrop-orb app-login-backdrop-orb--two"></span>
     </div>
 
-    <section class="app-login-brand-panel" :aria-label="t('login.brandPanelLabel')">
-      <header class="app-login-brand-header">
+    <header class="app-login-page-header">
+      <div class="app-login-brand">
         <div class="app-login-logo" aria-hidden="true">
           <svg viewBox="0 0 44 44" role="presentation">
             <path d="M8 13.5 22 6l14 7.5v17L22 38 8 30.5z" />
@@ -16,85 +20,13 @@
           </svg>
         </div>
         <div class="app-login-brand-lockup">
-          <strong>CP<span>OS</span></strong>
-          <small>{{ t("login.productLine") }}</small>
-        </div>
-      </header>
-
-      <div class="app-login-brand-content">
-        <div class="app-login-kicker">
-          <i aria-hidden="true"></i>
-          <span>{{ t("login.kicker") }}</span>
-        </div>
-        <h1>
-          {{ t("login.heroTitle") }}
-          <em>{{ t("login.heroAccent") }}</em>
-        </h1>
-        <p class="app-login-hero-copy">{{ t("login.heroDescription") }}</p>
-
-        <div class="app-login-capabilities" aria-label="Core capabilities">
-          <span>
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m3 6 7-3 7 3-7 3zM3 6v8l7 3 7-3V6M10 9v8" /></svg>
-            {{ t("login.capabilityPacking") }}
-          </span>
-          <span>
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15.5h14M5 13V8m5 5V4m5 9V7" /></svg>
-            {{ t("login.capabilityBalance") }}
-          </span>
-          <span>
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 16 5v4.3c0 3.7-2.5 6.6-6 8.2-3.5-1.6-6-4.5-6-8.2V5zM7.2 10l1.8 1.8 3.9-4" /></svg>
-            {{ t("login.capabilityRules") }}
-          </span>
-        </div>
-
-        <div class="app-login-visual" aria-hidden="true">
-          <div class="app-login-visual-head">
-            <div>
-              <small>{{ t("login.visualEyebrow") }}</small>
-              <strong>{{ t("login.visualTitle") }}</strong>
-            </div>
-            <span><i></i>{{ t("login.visualStatus") }}</span>
-          </div>
-          <div class="app-login-route-overview">
-            <div class="app-login-stage-meta app-login-stage-origin">
-              <span>{{ t("login.routeOrigin") }}</span>
-              <strong>SHA</strong>
-            </div>
-            <div class="app-login-route-line">
-              <i></i>
-              <span></span>
-              <svg viewBox="0 0 24 24" role="presentation">
-                <path d="M5 12h14m-5-5 5 5-5 5" />
-              </svg>
-              <span></span>
-              <i></i>
-            </div>
-            <div class="app-login-stage-meta app-login-stage-destination">
-              <span>{{ t("login.routeDestination") }}</span>
-              <strong>RTM</strong>
-            </div>
-          </div>
-          <div class="app-login-visual-metrics">
-            <span><b>01</b>{{ t("login.metricSpace") }}</span>
-            <span><b>02</b>{{ t("login.metricBalance") }}</span>
-            <span><b>03</b>{{ t("login.metricConstraint") }}</span>
-          </div>
+          <strong>Drewes<span>Logistics</span></strong>
         </div>
       </div>
+    </header>
 
-      <footer class="app-login-brand-footer">
-        <span><i aria-hidden="true"></i>{{ t("login.engineOnline") }}</span>
-        <small>{{ t("login.releaseLabel") }}</small>
-      </footer>
-    </section>
-
-    <section class="app-login-access-panel">
-      <div class="app-login-access-topline">
-        <span>{{ t("login.secureAccess") }}</span>
-        <small>{{ t("login.releaseLabel") }}</small>
-      </div>
-
-      <form class="app-login-card" @submit.prevent="submit">
+    <section class="app-login-content">
+      <form class="app-login-form" @submit.prevent="submit">
         <div class="app-login-route-switch" :aria-label="t('login.routeLabel')">
           <button
             type="button"
@@ -103,7 +35,6 @@
             @click="selectMode('employee')"
           >
             <span>{{ t("login.employeeRoute") }}</span>
-            <small>{{ t("login.employeeRouteHint") }}</small>
           </button>
           <button
             type="button"
@@ -112,18 +43,12 @@
             @click="selectMode('customer')"
           >
             <span>{{ t("login.customerRoute") }}</span>
-            <small>{{ t("login.customerRouteHint") }}</small>
           </button>
         </div>
 
-        <div class="app-login-heading">
-          <div class="app-login-card-mark" aria-hidden="true">
-            <svg v-if="loginMode === 'employee'" viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.3-2.9 7.7-7 9.6C7.9 18.7 5 15.3 5 11V6zM9.2 12l1.8 1.8 4-4.2" /></svg>
-            <svg v-else viewBox="0 0 24 24"><path d="M4 7.5h16v9H4zM7 11h5m-5 3h8M17 10.5v3" /></svg>
-          </div>
+        <div class="app-login-form-intro">
           <div class="app-login-title">
-            <span>{{ t(loginMode === "employee" ? "login.formEyebrow" : "login.customerEyebrow") }}</span>
-            <h2>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h2>
+            <h1>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h1>
             <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
           </div>
         </div>
@@ -131,7 +56,9 @@
         <label v-if="loginMode === 'employee'" class="app-login-field">
           <span>{{ t("login.employeeNumberLabel") }}</span>
           <div class="app-login-input-wrap">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" />
+            </svg>
             <input
               v-model.trim="form.username"
               autocomplete="username"
@@ -147,7 +74,9 @@
         <label v-if="loginMode === 'employee'" class="app-login-field">
           <span>{{ t("login.passwordLabel") }}</span>
           <div class="app-login-input-wrap">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6zM12 14v2" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6zM12 14v2" />
+            </svg>
             <input
               v-model="form.password"
               autocomplete="current-password"
@@ -165,8 +94,12 @@
               :disabled="loading"
               @click="showPassword = !showPassword"
             >
-              <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
-              <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" /></svg>
+              <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" />
+              </svg>
             </button>
           </div>
         </label>
@@ -174,7 +107,9 @@
         <label v-if="loginMode === 'customer'" class="app-login-field">
           <span>{{ t("login.customerUsernameLabel") }}</span>
           <div class="app-login-input-wrap">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" />
+            </svg>
             <input
               v-model.trim="customerForm.username"
               autocomplete="username"
@@ -189,7 +124,9 @@
         <label v-if="loginMode === 'customer'" class="app-login-field">
           <span>{{ t("login.passwordLabel") }}</span>
           <div class="app-login-input-wrap">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6zM12 14v2" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6zM12 14v2" />
+            </svg>
             <input
               v-model="customerForm.password"
               autocomplete="current-password"
@@ -207,8 +144,12 @@
               :disabled="loading"
               @click="showPassword = !showPassword"
             >
-              <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
-              <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" /></svg>
+              <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" />
+              </svg>
             </button>
           </div>
         </label>
@@ -216,7 +157,9 @@
         <label v-if="loginMode === 'customer'" class="app-login-field">
           <span>{{ t("login.customerCodeLabel") }}</span>
           <div class="app-login-input-wrap app-login-input-wrap--code">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h16v9H4zM7 11h5m-5 3h8M17 10.5v3" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7.5h16v9H4zM7 11h5m-5 3h8M17 10.5v3" />
+            </svg>
             <input
               v-model.trim="customerForm.customerCode"
               autocomplete="off"
@@ -229,33 +172,26 @@
           </div>
         </label>
 
-        <div class="app-login-form-meta">
-          <span><i aria-hidden="true"></i>{{ t(loginMode === "employee" ? "login.sessionNotice" : "login.customerSessionNotice") }}</span>
-          <small>{{ t(loginMode === "employee" ? "login.accountNotice" : "login.customerAccountNotice") }}</small>
-        </div>
-
         <p v-if="message" class="app-login-message" :class="{ 'is-success': success }" role="alert">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 18 17H2zM10 7v4m0 3v.1" /></svg>
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 2.5 18 17H2zM10 7v4m0 3v.1" />
+          </svg>
           <span>{{ message }}</span>
         </p>
 
         <button class="app-login-submit" type="submit" :disabled="loading">
           <span v-if="loading" class="app-login-submit-loader" aria-hidden="true"></span>
           <span>{{ submitText }}</span>
-          <svg v-if="!loading" viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
+          <svg v-if="!loading" viewBox="0 0 22 22" aria-hidden="true">
+            <path d="M4 11h13m-5-5 5 5-5 5" />
+          </svg>
         </button>
-
-        <div class="app-login-trust-line">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 16 5v4.3c0 3.7-2.5 6.6-6 8.2-3.5-1.6-6-4.5-6-8.2V5z" /></svg>
-          <span>{{ t("login.securityNotice") }}</span>
-        </div>
       </form>
-
-      <footer class="app-login-access-footer">
-        <span>© 2026 {{ t("login.platformName") }}</span>
-        <span>{{ t("login.footerTagline") }}</span>
-      </footer>
     </section>
+
+    <footer class="app-login-page-footer">
+      <span>© 2026 DrewesLogistics</span>
+    </footer>
   </main>
 </template>
 
@@ -278,7 +214,9 @@ const form = reactive({ username: "", password: "" });
 const customerForm = reactive({ username: "", password: "", customerCode: "" });
 const configuredTrackingWorkbenchUrl = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
 const submitText = computed(() => {
-  if (loading.value) return t(loginMode.value === "employee" ? "login.signingIn" : "login.customerSigningIn");
+  if (loading.value) {
+    return t(loginMode.value === "employee" ? "login.signingIn" : "login.customerSigningIn");
+  }
   return t(loginMode.value === "employee" ? "login.signIn" : "login.customerSignIn");
 });
 

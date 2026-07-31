@@ -1,107 +1,150 @@
-/* Commercial operations login.
- * Loaded after the shared design system so this surface keeps a restrained
- * enterprise identity without leaking page-specific rules elsewhere.
- */
+/* Borderless light-blue enterprise login. */
 .app-login-shell {
-  --login-navy-950: #071526;
-  --login-navy-900: #0b1f35;
-  --login-blue-700: #0369a1;
-  --login-blue-600: #0878b9;
-  --login-slate-950: #0f172a;
-  --login-slate-700: #334155;
-  --login-slate-500: #64748b;
-  --login-slate-400: #94a3b8;
-  --login-slate-200: #e2e8f0;
-  --login-slate-100: #f1f5f9;
-  --login-surface: #ffffff;
+  --login-blue-900: #18466c;
+  --login-blue-800: #205f8d;
+  --login-blue-700: #2d78a8;
+  --login-blue-600: #4b95c2;
+  --login-blue-500: #69add4;
+  --login-blue-300: #acd3ea;
+  --login-blue-200: #d3e8f5;
+  --login-blue-100: #e9f4fb;
+  --login-blue-50: #f5fafe;
+  --login-ink: #18344f;
+  --login-slate-700: #405e78;
+  --login-slate-500: #6e879d;
+  --login-slate-400: #91a7b9;
   position: relative;
   isolation: isolate;
-  display: grid;
-  grid-template-columns: minmax(520px, 1.08fr) minmax(440px, 0.92fr);
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
-  overflow: hidden;
-  color: var(--login-slate-950);
-  background: #f8fafc;
+  overflow-x: hidden;
+  color: var(--login-ink);
+  background:
+    linear-gradient(180deg, #eef8fe 0%, #f8fcff 38%, #ffffff 78%);
   font-family:
     "Fira Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
 
-.app-login-atmosphere {
-  display: none;
-}
-
-.app-login-brand-panel {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  min-width: 0;
-  padding:
-    clamp(32px, 4vw, 64px)
-    clamp(42px, 5.4vw, 88px)
-    clamp(28px, 3.5vw, 48px);
-  overflow: hidden;
-  color: #fff;
-  background: var(--login-navy-900);
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.app-login-brand-panel::before,
-.app-login-brand-panel::after {
+.app-login-backdrop,
+.app-login-backdrop-grid,
+.app-login-backdrop-orb {
   position: absolute;
-  content: "";
   pointer-events: none;
 }
 
-.app-login-brand-panel::before {
+.app-login-backdrop {
+  z-index: -1;
   inset: 0;
-  opacity: 0.16;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(135deg, #000 0%, transparent 68%);
+  overflow: hidden;
 }
 
-.app-login-brand-panel::after {
-  width: min(58vw, 760px);
-  aspect-ratio: 1;
-  right: min(-28vw, -280px);
-  bottom: min(-38vw, -420px);
-  border: 1px solid rgba(85, 183, 232, 0.12);
-  border-radius: 50%;
-  box-shadow: 0 0 0 96px rgba(85, 183, 232, 0.025);
+.app-login-backdrop::before,
+.app-login-backdrop::after {
+  position: absolute;
+  inset: 0;
+  content: "";
 }
 
-.app-login-brand-header,
-.app-login-brand-content,
-.app-login-brand-footer {
-  position: relative;
+.app-login-backdrop::before {
+  z-index: 0;
+  inset: -3%;
+  background:
+    url("./assets/login-port-background.jpg") center bottom / cover no-repeat;
+  filter: saturate(0.78) contrast(0.92);
+  opacity: 0.6;
+  transform: scale(1.035);
+  animation: app-login-background-drift 20s ease-in-out infinite alternate;
+}
+
+.app-login-backdrop::after {
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(244, 251, 255, 0.14) 0%,
+      rgba(248, 252, 255, 0.72) 30%,
+      rgba(248, 252, 255, 0.78) 70%,
+      rgba(244, 251, 255, 0.16) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(239, 248, 254, 0.16) 0%,
+      rgba(250, 253, 255, 0.42) 58%,
+      rgba(255, 255, 255, 0.72) 100%
+    );
+}
+
+.app-login-backdrop-grid {
   z-index: 2;
+  inset: 0;
+  opacity: 0.15;
+  background-image:
+    linear-gradient(rgba(83, 151, 194, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 151, 194, 0.06) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 66%);
 }
 
-.app-login-brand-header {
+.app-login-backdrop-orb {
+  z-index: 2;
+  border-radius: 50%;
+  filter: blur(1px);
+}
+
+.app-login-backdrop-orb--one {
+  width: 620px;
+  height: 620px;
+  top: -500px;
+  left: calc(50% - 310px);
+  background: rgba(128, 195, 231, 0.12);
+}
+
+.app-login-backdrop-orb--two {
+  width: 420px;
+  height: 420px;
+  right: -300px;
+  top: 30%;
+  border: 1px solid rgba(127, 190, 226, 0.1);
+  box-shadow: 0 0 0 96px rgba(150, 207, 237, 0.025);
+}
+
+.app-login-page-header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: flex-start;
+  gap: 24px;
+  width: min(calc(100% - 72px), 1200px);
+  min-height: 76px;
+  margin: 0 auto;
+  padding-right: 106px;
+}
+
+.app-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
 }
 
 .app-login-logo {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(125, 211, 252, 0.28);
-  border-radius: 12px;
-  color: #7dd3fc;
-  background: rgba(14, 116, 172, 0.18);
+  width: 36px;
+  height: 40px;
+  border: 0;
+  border-radius: 0;
+  color: var(--login-blue-700);
+  background: transparent;
   box-shadow: none;
+  backdrop-filter: none;
 }
 
 .app-login-logo svg {
-  width: 31px;
-  height: 31px;
+  width: 34px;
+  height: 34px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.45;
@@ -110,393 +153,280 @@
 }
 
 .app-login-brand-lockup {
-  display: grid;
-  gap: 4px;
+  display: block;
 }
 
 .app-login-brand-lockup strong {
-  color: #f8fafc;
-  font-size: 22px;
-  font-weight: 760;
-  letter-spacing: 0.08em;
+  color: var(--login-blue-900);
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
   line-height: 1;
 }
 
 .app-login-brand-lockup strong span {
-  color: #38bdf8;
+  color: var(--login-blue-500);
+  font-weight: 620;
 }
 
 .app-login-brand-lockup small {
-  color: #8fa9c1;
-  font-size: 10px;
-  font-weight: 650;
+  color: var(--login-slate-500);
+  font-size: 9px;
+  font-weight: 680;
   letter-spacing: 0.17em;
   text-transform: uppercase;
 }
 
-.app-login-brand-content {
-  align-self: center;
-  width: min(100%, 720px);
-  padding: clamp(40px, 6vh, 76px) 0 clamp(28px, 4vh, 52px);
+.app-login-secure-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  color: var(--login-blue-800);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.app-login-secure-badge::after {
+  width: 36px;
+  height: 1px;
+  margin-left: 4px;
+  background: var(--login-blue-300);
+  content: "";
+}
+
+.app-login-secure-badge svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--login-blue-600);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-login-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  padding: 12px 24px 30px;
+}
+
+.app-login-hero {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 780px);
+  text-align: center;
+  animation: app-login-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .app-login-kicker {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  color: #7dd3fc;
-  font-size: 11px;
-  font-weight: 680;
+  justify-content: center;
+  gap: 11px;
+  margin-bottom: 9px;
+  color: var(--login-blue-700);
+  font-size: 10px;
+  font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
 }
 
 .app-login-kicker i {
-  width: 32px;
+  width: 26px;
   height: 1px;
-  background: #38bdf8;
-  box-shadow: none;
+  background: var(--login-blue-300);
 }
 
-.app-login-brand-content h1 {
+.app-login-hero h1 {
   display: grid;
-  gap: 5px;
-  max-width: 690px;
+  gap: 1px;
   margin: 0;
-  color: #f8fafc;
-  font-size: clamp(38px, 3.45vw, 58px);
+  color: var(--login-blue-900);
+  font-size: clamp(34px, 3.1vw, 45px);
   font-weight: 680;
-  letter-spacing: -0.038em;
+  letter-spacing: -0.04em;
   line-height: 1.14;
 }
 
-.app-login-brand-content h1 em {
-  color: #67c7f2;
+.app-login-hero h1 em {
+  color: var(--login-blue-600);
   font-style: normal;
-  background: none;
-  -webkit-text-fill-color: currentColor;
 }
 
-.app-login-hero-copy {
+.app-login-hero > p {
   max-width: 620px;
-  margin: 20px 0 0;
-  color: #adc0d2;
-  font-size: clamp(14px, 1vw, 16px);
-  line-height: 1.8;
+  margin: 11px 0 0;
+  color: var(--login-slate-500);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
-.app-login-capabilities {
+.app-login-flow {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  max-width: 660px;
-  margin-top: 30px;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.app-login-capabilities span {
-  display: flex;
+  grid-template-columns: 40px minmax(180px, 280px) 40px;
   align-items: center;
   gap: 10px;
-  min-width: 0;
-  min-height: 56px;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: 0;
-  color: #cbd8e4;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 560;
-  backdrop-filter: none;
+  margin-top: 15px;
 }
 
-.app-login-capabilities span:first-child {
-  padding-left: 0;
-}
-
-.app-login-capabilities span + span {
-  border-left: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.app-login-capabilities svg {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: #67c7f2;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.app-login-visual {
-  max-width: 660px;
-  margin-top: clamp(30px, 4.2vh, 48px);
-  overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 14px;
-  background: rgba(7, 21, 38, 0.28);
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.app-login-visual-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  min-height: 58px;
-  padding: 11px 18px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.app-login-visual-head > div {
+.app-login-flow-point {
   display: grid;
-  gap: 3px;
-}
-
-.app-login-visual-head small {
-  color: #6f8aa3;
-  font-size: 9px;
-  font-weight: 680;
-  letter-spacing: 0.14em;
-}
-
-.app-login-visual-head strong {
-  color: #dce8f2;
-  font-size: 13px;
-  font-weight: 620;
-}
-
-.app-login-visual-head > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #8ed7bc;
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.app-login-visual-head > span i,
-.app-login-brand-footer > span i,
-.app-login-form-meta > span i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.1);
-}
-
-.app-login-route-overview {
-  display: grid;
-  grid-template-columns: auto minmax(100px, 1fr) auto;
-  align-items: center;
-  gap: 20px;
-  min-height: 104px;
-  padding: 20px 22px;
-}
-
-.app-login-stage-meta {
-  position: static;
-  display: grid;
+  justify-items: start;
   gap: 4px;
 }
 
-.app-login-stage-meta span {
-  color: #718ba3;
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.app-login-flow-point--end {
+  justify-items: end;
 }
 
-.app-login-stage-meta strong {
-  color: #d8e8f4;
-  font-size: 15px;
-  font-weight: 680;
-  letter-spacing: 0.1em;
-}
-
-.app-login-stage-destination {
-  text-align: right;
-}
-
-.app-login-route-line {
-  display: grid;
-  grid-template-columns: 7px 1fr 28px 1fr 7px;
-  align-items: center;
-  min-width: 0;
-  color: #67c7f2;
-}
-
-.app-login-route-line i {
-  width: 7px;
-  height: 7px;
-  border: 2px solid #67c7f2;
+.app-login-flow-point i {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--login-blue-500);
   border-radius: 50%;
-  background: var(--login-navy-900);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(105, 173, 212, 0.09);
 }
 
-.app-login-route-line span {
-  height: 1px;
-  background: rgba(103, 199, 242, 0.4);
+.app-login-flow-point small {
+  color: var(--login-slate-400);
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
 }
 
-.app-login-route-line svg {
-  width: 20px;
+.app-login-flow-track {
+  position: relative;
   height: 20px;
-  margin: auto;
+  overflow: hidden;
+}
+
+.app-login-flow-track::before {
+  position: absolute;
+  top: 9px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      var(--login-blue-300) 0 7px,
+      transparent 7px 12px
+    );
+  content: "";
+}
+
+.app-login-flow-runner {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  transform: translateX(-100%);
+  animation: app-login-route-run 4.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+.app-login-flow-runner svg {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 23px;
+  height: 18px;
+  padding: 3px;
+  color: var(--login-blue-600);
+  background: var(--login-blue-50);
+  filter: drop-shadow(0 2px 3px rgba(50, 120, 165, 0.12));
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.app-login-visual-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.app-login-visual-metrics span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 42px;
-  color: #8fa7bc;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-}
-
-.app-login-visual-metrics span + span {
-  border-left: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.app-login-visual-metrics b {
-  color: #67c7f2;
-  font-family: "Fira Code", Consolas, monospace;
-  font-size: 9px;
-  font-weight: 600;
-}
-
-.app-login-brand-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  color: #6f8aa3;
-}
-
-.app-login-brand-footer > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  color: #8ba5bc;
-  font-size: 11px;
-  font-weight: 560;
-}
-
-.app-login-brand-footer small {
-  font-size: 10px;
-  letter-spacing: 0.07em;
-}
-
-.app-login-access-panel {
+.app-login-form {
   position: relative;
-  z-index: 1;
   display: grid;
-  place-items: center;
-  min-width: 0;
-  padding: 92px clamp(32px, 4.4vw, 72px) 76px;
-  background: #f8fafc;
-}
-
-.app-login-access-panel::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 100% 0, rgba(3, 105, 161, 0.055), transparent 36%),
-    linear-gradient(90deg, rgba(226, 232, 240, 0.42) 1px, transparent 1px);
-  background-size: auto, 120px 100%;
-  mask-image: linear-gradient(to right, transparent 20%, #000 100%);
-}
-
-.app-login-access-topline {
-  position: absolute;
-  z-index: 2;
-  top: 34px;
-  left: clamp(32px, 4.4vw, 72px);
-  right: 116px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--login-slate-500);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.app-login-access-topline small {
-  color: var(--login-slate-400);
-  font-family: "Fira Code", Consolas, monospace;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-
-.app-login-card {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  gap: 18px;
-  width: min(100%, 440px);
+  gap: 14px;
+  width: min(100%, 460px);
   margin: 0;
-  padding: clamp(30px, 3vw, 42px);
-  border: 1px solid #dbe4ee;
-  border-radius: 18px;
-  background: var(--login-surface);
-  box-shadow:
-    0 22px 50px rgba(15, 23, 42, 0.08),
-    0 3px 10px rgba(15, 23, 42, 0.035);
-  backdrop-filter: none;
-  animation: app-login-enter 0.32s ease-out both;
+  padding: 16px 18px 10px;
+  background: transparent;
+  animation: app-login-reveal 0.55s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.app-login-form::before,
+.app-login-form::after {
+  display: none;
+}
+
+.app-login-form::before {
+  top: 0;
+}
+
+.app-login-form::after {
+  bottom: 0;
+  left: auto;
+  right: 18px;
 }
 
 .app-login-route-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 0 4px;
-  padding: 4px;
-  border: 1px solid var(--login-slate-200);
-  border-radius: 11px;
-  background: var(--login-slate-100);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--login-blue-200);
+  border-radius: 0;
+  background: transparent;
 }
 
 .app-login-route-switch button {
-  display: grid;
-  gap: 2px;
-  min-height: 52px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
   color: var(--login-slate-500);
   background: transparent;
-  text-align: left;
+  box-shadow: none;
+  text-align: center;
   cursor: pointer;
-  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.app-login-route-switch button::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: var(--login-blue-500);
+  content: "";
+  opacity: 0;
+  transform: scaleX(0.2);
+  transform-origin: left;
+  transition:
+    opacity 0.2s ease,
+    transform 0.24s ease;
 }
 
 .app-login-route-switch button:hover:not(:disabled) {
-  color: var(--login-slate-700);
+  color: var(--login-blue-800);
+  background: rgba(232, 244, 251, 0.46);
 }
 
 .app-login-route-switch button span {
@@ -509,80 +439,84 @@
   color: inherit;
   font-size: 10px;
   font-weight: 500;
-  opacity: 0.78;
+  opacity: 0.76;
 }
 
 .app-login-route-switch button.is-active {
-  border-color: #d4e2ed;
+  border: 0;
   color: var(--login-blue-700);
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-}
-
-.app-login-heading {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: start;
-  gap: 14px;
-  margin: 2px 0 5px;
-}
-
-.app-login-card-mark {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin: 0;
-  border: 1px solid #cfe0eb;
-  border-radius: 11px;
-  color: var(--login-blue-700);
-  background: #f3f8fb;
+  background: transparent;
   box-shadow: none;
 }
 
-.app-login-card-mark svg {
-  width: 23px;
-  height: 23px;
+.app-login-route-switch button.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.app-login-route-switch button.is-active span,
+.app-login-route-switch button.is-active small {
+  color: inherit;
+}
+
+.app-login-form-intro {
+  display: block;
+  margin: 10px 0 6px;
+  text-align: center;
+}
+
+.app-login-form-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--login-blue-600);
+}
+
+.app-login-form-mark svg {
+  width: 26px;
+  height: 26px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.45;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .app-login-title {
   display: grid;
+  justify-items: center;
   gap: 5px;
   min-width: 0;
-  margin: 0;
 }
 
 .app-login-title > span {
   color: var(--login-blue-700);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 720;
   letter-spacing: 0.14em;
 }
 
-.app-login-title h2 {
+.app-login-title h1 {
   margin: 0;
-  color: var(--login-slate-950);
-  font-size: clamp(25px, 2vw, 30px);
-  font-weight: 680;
+  color: var(--login-ink);
+  font-size: clamp(24px, 2vw, 28px);
+  font-weight: 670;
   letter-spacing: -0.025em;
   line-height: 1.2;
 }
 
 .app-login-title p {
+  max-width: 430px;
   margin: 0;
   color: var(--login-slate-500);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .app-login-field {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   color: var(--login-slate-700);
   font-size: 12px;
   font-weight: 650;
@@ -597,40 +531,45 @@
 .app-login-input-wrap > svg {
   position: absolute;
   z-index: 1;
-  left: 15px;
-  width: 19px;
-  height: 19px;
+  left: 8px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: var(--login-slate-400);
-  stroke-width: 1.55;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
-  transition: stroke 0.18s ease;
+  transition: stroke 0.2s ease;
 }
 
 .app-login-input-wrap input:not(.el-input__inner) {
   width: 100%;
-  min-height: 52px;
-  padding: 11px 48px 11px 45px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  min-height: 47px;
+  padding: 9px 46px 9px 38px;
+  border: 0;
+  border-bottom: 1px solid #bdd7e8;
+  border-radius: 0;
   outline: 0;
-  color: var(--login-slate-950);
-  background: #fff;
-  box-shadow: none;
+  color: var(--login-ink);
+  background:
+    linear-gradient(90deg, rgba(235, 246, 252, 0.62), rgba(255, 255, 255, 0.12));
+  box-shadow: inset 0 -1px 0 transparent;
   font-size: 15px;
   font-weight: 520;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .app-login-input-wrap input::placeholder {
-  color: var(--login-slate-400);
+  color: #91a8ba;
   font-weight: 400;
 }
 
 .app-login-input-wrap--code input:not(.el-input__inner) {
-  padding-right: 16px;
+  padding-right: 12px;
   font-family: "Fira Code", Consolas, monospace;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -642,48 +581,51 @@
 
 .app-login-input-wrap input:not(.el-input__inner):focus {
   border-color: var(--login-blue-600);
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.12);
+  background:
+    linear-gradient(90deg, rgba(227, 243, 252, 0.9), rgba(255, 255, 255, 0.28));
+  box-shadow: inset 0 -1px 0 var(--login-blue-600);
 }
 
 .app-login-input-wrap input:disabled {
   cursor: wait;
   color: var(--login-slate-500);
-  background: var(--login-slate-100);
-  opacity: 0.8;
+  background: #f2f7fa;
+  opacity: 0.74;
 }
 
 .app-login-password-toggle:not(.el-button) {
   position: absolute;
   z-index: 2;
-  right: 7px;
+  right: 0;
   display: grid;
   place-items: center;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
-  min-height: 38px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--login-slate-500);
   background: transparent;
   box-shadow: none;
   cursor: pointer;
-  transition: color 0.18s ease, background-color 0.18s ease;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .app-login-password-toggle:not(.el-button):hover:not(:disabled) {
   color: var(--login-blue-700);
-  background: #eef6fa;
+  background: rgba(220, 239, 249, 0.52);
 }
 
 .app-login-password-toggle svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.55;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -692,8 +634,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: -2px;
+  gap: 12px;
+  margin: 0;
   color: var(--login-slate-500);
   font-size: 10px;
 }
@@ -705,9 +647,13 @@
   font-weight: 600;
 }
 
-.app-login-form-meta > span i {
+.app-login-form-meta > span i,
+.app-login-engine-status i {
   width: 5px;
   height: 5px;
+  border-radius: 50%;
+  background: #56bba1;
+  box-shadow: 0 0 0 3px rgba(86, 187, 161, 0.1);
 }
 
 .app-login-form-meta small {
@@ -720,12 +666,12 @@
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin: -2px 0 0;
-  padding: 10px 12px;
-  border: 1px solid #fecdd3;
-  border-radius: 9px;
+  margin: 0;
+  padding: 9px 0;
+  border-top: 1px solid #fecdd3;
+  border-bottom: 1px solid #fecdd3;
   color: #9f1239;
-  background: #fff1f2;
+  background: transparent;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -743,47 +689,74 @@
 }
 
 .app-login-message.is-success {
-  border-color: #bbf7d0;
-  color: #166534;
-  background: #f0fdf4;
+  border-color: #b7e4d1;
+  color: #17684f;
 }
 
 .app-login-submit:not(.el-button) {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   width: 100%;
-  min-height: 52px;
-  margin-top: 2px;
-  padding: 11px 18px;
-  border: 1px solid #075985;
-  border-radius: 10px;
-  color: #fff;
-  background: var(--login-blue-700);
-  box-shadow: 0 8px 18px rgba(3, 105, 161, 0.18);
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 18px;
+  overflow: hidden;
+  border: 1px solid #b7d9ed;
+  border-radius: 2px;
+  color: #155f8e;
+  background: #e3f2fb;
+  box-shadow: none;
   font-size: 14px;
-  font-weight: 680;
+  font-weight: 690;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.app-login-submit:not(.el-button)::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.58) 50%, transparent 80%);
+  content: "";
+  opacity: 0;
+  transform: translateX(-70%);
+  transition:
+    opacity 0.2s ease,
+    transform 0.45s ease;
 }
 
 .app-login-submit:not(.el-button):hover:not(:disabled) {
+  color: #0f557f;
+  border-color: #8fc5e3;
+  background: #d7ecf8;
   transform: none;
-  background: #075985;
-  filter: none;
-  box-shadow: 0 10px 22px rgba(3, 105, 161, 0.24);
+}
+
+.app-login-submit:not(.el-button):hover:not(:disabled)::before {
+  opacity: 1;
+  transform: translateX(70%);
 }
 
 .app-login-submit:not(.el-button):active:not(:disabled) {
-  transform: none;
-  background: #0c4a6e;
+  background: #cde6f5;
 }
 
 .app-login-submit:not(.el-button):disabled {
   cursor: wait;
-  opacity: 0.68;
+  opacity: 0.62;
+}
+
+.app-login-submit > span,
+.app-login-submit > svg {
+  position: relative;
+  z-index: 1;
 }
 
 .app-login-submit svg {
@@ -791,16 +764,21 @@
   height: 19px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 1.65;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.app-login-submit:hover:not(:disabled) svg {
+  transform: translateX(3px);
 }
 
 .app-login-submit-loader {
   width: 17px;
   height: 17px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border: 2px solid rgba(45, 120, 168, 0.22);
+  border-top-color: var(--login-blue-700);
   border-radius: 50%;
   animation: app-login-spin 0.75s linear infinite;
 }
@@ -825,42 +803,96 @@
   stroke-linejoin: round;
 }
 
-.app-login-access-footer {
-  position: absolute;
+.app-login-page-footer {
+  position: relative;
   z-index: 2;
-  right: clamp(32px, 4.4vw, 72px);
-  bottom: 28px;
-  left: clamp(32px, 4.4vw, 72px);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  justify-content: center;
+  gap: 20px;
+  width: min(calc(100% - 72px), 1200px);
+  min-height: 36px;
+  margin: 0 auto 16px;
   color: var(--login-slate-400);
   font-size: 9px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
+.app-login-engine-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--login-slate-500);
+  font-weight: 600;
+}
+
 body:has(.app-login-shell) .global-language-switcher {
-  top: 24px;
-  right: 28px;
+  top: 18px;
+  right: max(28px, calc((100vw - 1200px) / 2));
   bottom: auto;
-  min-height: 42px;
-  border-color: #d4dee8;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 5px 16px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(10px);
+  gap: 4px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+body:has(.app-login-shell) .global-language-switcher button:not(.el-button) {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--login-slate-500);
+  background: transparent;
+  box-shadow: none;
+  transition: color 0.2s ease;
+}
+
+body:has(.app-login-shell) .global-language-switcher button:not(.el-button)::after {
+  position: absolute;
+  right: 9px;
+  bottom: 5px;
+  left: 9px;
+  height: 1px;
+  background: var(--login-blue-500);
+  content: "";
+  opacity: 0;
+  transform: scaleX(0.25);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+body:has(.app-login-shell) .global-language-switcher button:not(.el-button):hover {
+  color: var(--login-blue-800);
+  background: rgba(235, 246, 252, 0.46);
+}
+
+body:has(.app-login-shell) .global-language-switcher button:not(.el-button).active {
+  color: var(--login-blue-800);
+  background: transparent;
+}
+
+body:has(.app-login-shell) .global-language-switcher button:not(.el-button).active::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .app-login-shell :where(button, input):focus-visible {
-  outline: 2px solid #38bdf8;
+  outline: 2px solid #65acd4;
   outline-offset: 2px;
 }
 
-@keyframes app-login-enter {
+@keyframes app-login-reveal {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -868,253 +900,250 @@ body:has(.app-login-shell) .global-language-switcher {
   }
 }
 
-@media (max-width: 1180px) {
-  .app-login-shell {
-    grid-template-columns: minmax(460px, 0.98fr) minmax(440px, 1.02fr);
+@keyframes app-login-background-drift {
+  from {
+    transform: scale(1.035) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.07) translate3d(0, -0.8%, 0);
+  }
+}
+
+@keyframes app-login-route-run {
+  0%,
+  10% {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  20% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes app-login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .app-login-backdrop::before {
+    background-position: 18% bottom;
+    opacity: 0.5;
   }
 
-  .app-login-brand-panel {
-    padding-right: 48px;
-    padding-left: 48px;
+  .app-login-page-header {
+    width: calc(100% - 32px);
+    min-height: 68px;
+    padding-right: 94px;
   }
 
-  .app-login-brand-content h1 {
-    font-size: clamp(36px, 4vw, 48px);
+  .app-login-secure-badge {
+    display: none;
   }
 
-  .app-login-capabilities span {
+  .app-login-content {
+    justify-content: flex-start;
+    gap: 16px;
+    padding: 16px 14px 28px;
+  }
+
+  .app-login-hero h1 {
+    font-size: clamp(28px, 8vw, 35px);
+  }
+
+  .app-login-hero > p {
+    max-width: 520px;
+    font-size: 12px;
+  }
+
+  .app-login-flow {
+    grid-template-columns: 34px minmax(160px, 240px) 34px;
+    gap: 8px;
+  }
+
+  .app-login-form {
     padding-right: 10px;
     padding-left: 10px;
-    font-size: 11px;
-  }
-}
-
-@media (max-width: 900px) {
-  .app-login-shell {
-    display: block;
-    min-height: 100dvh;
-    overflow: auto;
   }
 
-  .app-login-brand-panel {
-    display: block;
-    min-height: 330px;
-    padding: 26px 32px 38px;
-    border-right: 0;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  .app-login-form::before {
+    left: 10px;
   }
 
-  .app-login-brand-header {
-    margin-bottom: 48px;
-  }
-
-  .app-login-brand-content {
-    width: 100%;
-    padding: 0;
-  }
-
-  .app-login-brand-content h1 {
-    max-width: 660px;
-    font-size: clamp(32px, 6vw, 46px);
-  }
-
-  .app-login-hero-copy {
-    max-width: 620px;
-    margin-top: 14px;
-  }
-
-  .app-login-kicker {
-    margin-bottom: 14px;
-  }
-
-  .app-login-capabilities,
-  .app-login-visual,
-  .app-login-brand-footer {
-    display: none;
-  }
-
-  .app-login-access-panel {
-    min-height: 650px;
-    padding: 88px 24px 78px;
-  }
-
-  .app-login-access-topline {
-    left: 24px;
-  }
-
-  .app-login-card {
-    width: min(100%, 480px);
-  }
-
-  .app-login-access-footer {
-    right: 24px;
-    left: 24px;
-  }
-}
-
-@media (max-width: 560px) {
-  .app-login-brand-panel {
-    min-height: 250px;
-    padding: 20px 20px 28px;
-  }
-
-  .app-login-brand-header {
-    margin-bottom: 34px;
-  }
-
-  .app-login-logo {
-    width: 44px;
-    height: 44px;
-  }
-
-  .app-login-logo svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  .app-login-brand-content h1 {
-    font-size: clamp(28px, 8.7vw, 36px);
-  }
-
-  .app-login-kicker {
-    font-size: 9px;
-    letter-spacing: 0.1em;
-  }
-
-  .app-login-hero-copy {
-    display: none;
-  }
-
-  .app-login-access-panel {
-    min-height: 640px;
-    padding: 76px 14px 72px;
-  }
-
-  .app-login-access-topline {
-    top: 26px;
-    left: 18px;
-    right: 104px;
-  }
-
-  .app-login-access-topline small {
-    display: none;
-  }
-
-  .app-login-card {
-    gap: 16px;
-    padding: 24px 20px;
-    border-radius: 15px;
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
-  }
-
-  .app-login-heading {
-    grid-template-columns: 40px minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .app-login-card-mark {
-    width: 40px;
-    height: 40px;
-  }
-
-  .app-login-title h2 {
-    font-size: 24px;
-  }
-
-  .app-login-input-wrap input:not(.el-input__inner),
-  .app-login-submit:not(.el-button) {
-    min-height: 50px;
+  .app-login-form::after {
+    right: 10px;
   }
 
   .app-login-input-wrap input:not(.el-input__inner) {
+    min-height: 50px;
     font-size: 16px;
   }
 
-  .app-login-password-toggle:not(.el-button) {
-    right: 3px;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    min-height: 44px;
+  .app-login-page-footer {
+    width: calc(100% - 32px);
+    margin-bottom: 14px;
+  }
+
+  body:has(.app-login-shell) .global-language-switcher {
+    top: 14px;
+    right: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-login-logo {
+    width: 30px;
+    height: 36px;
+  }
+
+  .app-login-logo svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .app-login-brand-lockup strong {
+    font-size: 19px;
+  }
+
+  .app-login-brand-lockup small {
+    font-size: 8px;
+  }
+
+  .app-login-content {
+    padding-top: 10px;
+  }
+
+  .app-login-kicker {
+    margin-bottom: 7px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
+  .app-login-kicker i {
+    width: 17px;
+  }
+
+  .app-login-hero h1 {
+    font-size: clamp(27px, 8vw, 31px);
+  }
+
+  .app-login-hero > p {
+    display: none;
+  }
+
+  .app-login-flow {
+    grid-template-columns: 30px minmax(140px, 210px) 30px;
+    margin-top: 12px;
+  }
+
+  .app-login-form {
+    gap: 13px;
+    padding: 14px 4px 9px;
+  }
+
+  .app-login-form::before {
+    left: 4px;
+  }
+
+  .app-login-form::after {
+    right: 4px;
+  }
+
+  .app-login-route-switch button {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .app-login-form-intro {
+    display: block;
+    margin-top: 8px;
+  }
+
+  .app-login-form-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  .app-login-title h1 {
+    font-size: 22px;
+  }
+
+  .app-login-title p {
+    font-size: 10px;
   }
 
   .app-login-form-meta {
     align-items: flex-start;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
   .app-login-form-meta small {
     text-align: left;
   }
 
-  .app-login-access-footer {
-    right: 18px;
-    bottom: 22px;
-    left: 18px;
+  .app-login-page-footer {
+    justify-content: center;
+    margin-top: 4px;
   }
 
-  .app-login-access-footer span:last-child {
+  .app-login-engine-status {
     display: none;
-  }
-
-  body:has(.app-login-shell) .global-language-switcher {
-    top: 18px;
-    right: 16px;
   }
 }
 
-@media (max-height: 820px) and (min-width: 901px) {
-  .app-login-brand-panel {
-    padding-top: 26px;
-    padding-bottom: 24px;
+@media (max-height: 820px) and (min-width: 721px) {
+  .app-login-page-header {
+    min-height: 62px;
   }
 
-  .app-login-access-panel {
-    padding-top: 70px;
-    padding-bottom: 50px;
+  .app-login-content {
+    gap: 11px;
+    padding-top: 3px;
+    padding-bottom: 14px;
   }
 
-  .app-login-access-topline {
-    top: 24px;
-  }
-
-  .app-login-access-footer {
-    bottom: 18px;
-  }
-
-  .app-login-brand-content {
-    padding-top: 28px;
-    padding-bottom: 20px;
-  }
-
-  .app-login-hero-copy {
-    margin-top: 12px;
-    line-height: 1.6;
-  }
-
-  .app-login-capabilities {
-    margin-top: 18px;
-  }
-
-  .app-login-visual {
+  .app-login-kicker,
+  .app-login-hero > p,
+  .app-login-flow {
     display: none;
   }
 
-  .app-login-card {
-    gap: 14px;
-    padding-top: 28px;
-    padding-bottom: 28px;
+  .app-login-hero h1 {
+    font-size: 30px;
   }
 
-  .app-login-input-wrap input:not(.el-input__inner),
-  .app-login-submit:not(.el-button) {
-    min-height: 49px;
+  .app-login-form {
+    gap: 11px;
+    padding-top: 13px;
+  }
+
+  .app-login-page-footer {
+    min-height: 26px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-height: 590px) and (min-width: 721px) {
+  .app-login-hero {
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-login-card,
+  .app-login-hero,
+  .app-login-form,
+  .app-login-backdrop::before,
+  .app-login-flow-runner,
   .app-login-submit-loader {
     animation: none;
   }
