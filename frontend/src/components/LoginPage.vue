@@ -55,38 +55,19 @@
             </div>
             <span><i></i>{{ t("login.visualStatus") }}</span>
           </div>
-          <div class="app-login-container-stage">
-            <svg class="app-login-container-wireframe" viewBox="0 0 560 196" role="presentation">
-              <defs>
-                <linearGradient id="loginContainerFill" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#1b8fff" stop-opacity=".22" />
-                  <stop offset="1" stop-color="#0fd5ff" stop-opacity=".04" />
-                </linearGradient>
-                <filter id="loginWireGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="1.7" result="blur" />
-                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
-              </defs>
-              <g class="login-wire-cargo">
-                <path d="M117 86 165 69l39 16-48 18zM117 86v40l39 18v-41m48-18v40l-48 19" />
-                <path d="M210 65 258 48l39 16-48 18zM210 65v59l39 18V82m48-18v59l-48 19" />
-                <path d="M306 91 354 74l39 16-48 18zM306 91v34l39 18v-35m48-18v34l-48 19" />
-                <path d="M401 72 445 57l36 15-44 16zM401 72v54l36 16V88m44-16v53l-44 17" />
-              </g>
-              <g class="login-wire-container" filter="url(#loginWireGlow)">
-                <path fill="url(#loginContainerFill)" d="m48 58 109-35 355 50-101 47-1 52-360-57z" />
-                <path d="m48 58 109-35 355 50-101 47-361-5zM48 58l2 57 360 57 1-52m101-47-1 52-101 47" />
-                <path d="M157 23v45M92 44l356 50m-354 28 1-56m45 63 1-56m45 63 1-57m45 64 1-58m45 65 1-59m45 66 1-60m45 67 1-61" opacity=".42" />
-              </g>
-              <g class="login-wire-route">
-                <path d="M58 172h442" />
-                <circle cx="58" cy="172" r="4" />
-                <circle cx="500" cy="172" r="4" />
-              </g>
-            </svg>
+          <div class="app-login-route-overview">
             <div class="app-login-stage-meta app-login-stage-origin">
               <span>{{ t("login.routeOrigin") }}</span>
               <strong>SHA</strong>
+            </div>
+            <div class="app-login-route-line">
+              <i></i>
+              <span></span>
+              <svg viewBox="0 0 24 24" role="presentation">
+                <path d="M5 12h14m-5-5 5 5-5 5" />
+              </svg>
+              <span></span>
+              <i></i>
             </div>
             <div class="app-login-stage-meta app-login-stage-destination">
               <span>{{ t("login.routeDestination") }}</span>
@@ -110,7 +91,7 @@
     <section class="app-login-access-panel">
       <div class="app-login-access-topline">
         <span>{{ t("login.secureAccess") }}</span>
-        <small>CP / AUTH NODE 01</small>
+        <small>{{ t("login.releaseLabel") }}</small>
       </div>
 
       <form class="app-login-card" @submit.prevent="submit">
@@ -135,14 +116,16 @@
           </button>
         </div>
 
-        <div class="app-login-card-mark" aria-hidden="true">
-          <svg v-if="loginMode === 'employee'" viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.3-2.9 7.7-7 9.6C7.9 18.7 5 15.3 5 11V6zM9.2 12l1.8 1.8 4-4.2" /></svg>
-          <svg v-else viewBox="0 0 24 24"><path d="M4 7.5h16v9H4zM7 11h5m-5 3h8M17 10.5v3" /></svg>
-        </div>
-        <div class="app-login-title">
-          <span>{{ t(loginMode === "employee" ? "login.formEyebrow" : "login.customerEyebrow") }}</span>
-          <h2>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h2>
-          <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
+        <div class="app-login-heading">
+          <div class="app-login-card-mark" aria-hidden="true">
+            <svg v-if="loginMode === 'employee'" viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.3-2.9 7.7-7 9.6C7.9 18.7 5 15.3 5 11V6zM9.2 12l1.8 1.8 4-4.2" /></svg>
+            <svg v-else viewBox="0 0 24 24"><path d="M4 7.5h16v9H4zM7 11h5m-5 3h8M17 10.5v3" /></svg>
+          </div>
+          <div class="app-login-title">
+            <span>{{ t(loginMode === "employee" ? "login.formEyebrow" : "login.customerEyebrow") }}</span>
+            <h2>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h2>
+            <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
+          </div>
         </div>
 
         <label v-if="loginMode === 'employee'" class="app-login-field">
