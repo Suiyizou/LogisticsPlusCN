@@ -2356,9 +2356,11 @@
                   ? 'is-created'
                   : result.status === 'UPDATED'
                     ? 'is-updated'
-                    : result.status === 'FAILED'
-                      ? 'is-failed'
-                      : 'is-pending'"
+                    : result.status === 'SKIPPED'
+                      ? 'is-skipped'
+                      : result.status === 'FAILED'
+                        ? 'is-failed'
+                        : 'is-pending'"
               >
                 <b>{{ result.referenceNo || result.importKey }}</b>
                 <small>{{ result.message }}</small>
@@ -2613,6 +2615,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessageBox } from "element-plus";
+import "element-plus/es/components/message-box/style/css";
 import { init as initEChart, use as useECharts } from "echarts/core";
 import { BarChart, LineChart, PieChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from "echarts/components";
@@ -2830,7 +2834,7 @@ const shipmentExcelImportParsing = ref(false);
 const shipmentExcelImporting = ref(false);
 const shipmentExcelImportPreview = ref(emptyShipmentExcelImportPreview());
 const shipmentExcelImportResults = ref([]);
-const shipmentExcelImportProgress = ref({ total: 0, done: 0, succeeded: 0, failed: 0 });
+const shipmentExcelImportProgress = ref({ total: 0, done: 0, succeeded: 0, failed: 0, skipped: 0 });
 const detailShipmentSnapshot = ref(null);
 const loadingShipmentDetail = ref(false);
 const savingShipment = ref(false);
@@ -5873,7 +5877,7 @@ function closeShipmentExcelImport() {
   shipmentExcelImportDropzoneActive.value = false;
   shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview();
   shipmentExcelImportResults.value = [];
-  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0 };
+  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0, skipped: 0 };
   if (shipmentExcelImportFileInput.value) shipmentExcelImportFileInput.value.value = "";
 }
 
@@ -5906,7 +5910,7 @@ async function parseShipmentExcelImportFile(file) {
   shipmentExcelImportFileName.value = "";
   shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview();
   shipmentExcelImportResults.value = [];
-  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0 };
+  shipmentExcelImportProgress.value = { total: 0, done: 0, succeeded: 0, failed: 0, skipped: 0 };
   if (!file) return;
   if (!/\.(xlsx|xls)$/i.test(file.name || "")) {
     shipmentExcelImportPreview.value = emptyShipmentExcelImportPreview([
@@ -5941,12 +5945,13 @@ async function parseShipmentExcelImportFile(file) {
 
 async function startShipmentExcelImport() {
   if (!canStartShipmentExcelImport.value) return;
-  const items = shipmentExcelImportPreview.value.items;
+  const allItems = shipmentExcelImportPreview.value.items;
   shipmentExcelImporting.value = true;
   let overwriteReview;
   try {
     overwriteReview = await prepareShipmentOverwriteReview(
-      items.map((item) => item.payload)
+      allItems.map((item) => item.payload),
+      { allowSkipExisting: true }
     );
   } catch (error) {
     showError(error, "customers.shipmentExcelImportConflictCheckFailed");
@@ -5957,46 +5962,71 @@ async function startShipmentExcelImport() {
     shipmentExcelImporting.value = false;
     return;
   }
+  const workItems = allItems
+    .map((item, resultIndex) => ({
+      item,
+      resultIndex,
+      existing: overwriteReview.existingIdentities.has(
+        shipmentImportIdentity(item.payload)
+      )
+    }))
+    .filter(({ existing }) =>
+      overwriteReview.action === "OVERWRITE_EXISTING" || !existing
+    );
+  const skipped = allItems.length - workItems.length;
   shipmentExcelImportProgress.value = {
-    total: items.length,
+    total: workItems.length,
     done: 0,
     succeeded: 0,
-    failed: 0
+    failed: 0,
+    skipped
   };
-  shipmentExcelImportResults.value = items.map((item) => ({
-    importKey: item.importKey,
-    carrier: item.carrier,
-    referenceType: item.referenceType,
-    referenceNo: item.referenceNo,
-    status: "PENDING",
-    message: t("customers.importPending")
-  }));
+  shipmentExcelImportResults.value = allItems.map((item) => {
+    const existing = overwriteReview.existingIdentities.has(
+      shipmentImportIdentity(item.payload)
+    );
+    const wasSkipped =
+      overwriteReview.action === "SKIP_EXISTING" && existing;
+    return {
+      importKey: item.importKey,
+      carrier: item.carrier,
+      referenceType: item.referenceType,
+      referenceNo: item.referenceNo,
+      status: wasSkipped ? "SKIPPED" : "PENDING",
+      message: t(wasSkipped
+        ? "customers.importSkippedExisting"
+        : "customers.importPending")
+    };
+  });
+  if (!workItems.length) {
+    showSuccess("customers.shipmentExcelNoNewShipments", { count: skipped });
+    shipmentExcelImporting.value = false;
+    return;
+  }
   let cursor = 0;
   const worker = async () => {
-    while (cursor < items.length) {
-      const index = cursor;
+    while (cursor < workItems.length) {
+      const workItem = workItems[cursor];
       cursor += 1;
-      const item = items[index];
+      const { item, resultIndex, existing } = workItem;
       try {
         const response = await createBusinessShipment(
           item.payload,
           shipmentExcelCustomerId.value,
           shipmentExcelPublishToCustomer.value,
-          overwriteReview.existingIdentities.has(
-            shipmentImportIdentity(item.payload)
-          )
+          overwriteReview.action === "OVERWRITE_EXISTING" && existing
         );
         const overwritten = response?.overwritten === true;
-        shipmentExcelImportResults.value[index] = {
-          ...shipmentExcelImportResults.value[index],
+        shipmentExcelImportResults.value[resultIndex] = {
+          ...shipmentExcelImportResults.value[resultIndex],
           status: overwritten ? "UPDATED" : "CREATED",
           message: t(overwritten ? "customers.importUpdated" : "customers.importCreated")
         };
         shipmentExcelImportProgress.value.succeeded += 1;
       } catch (error) {
         markApiErrorHandled(error);
-        shipmentExcelImportResults.value[index] = {
-          ...shipmentExcelImportResults.value[index],
+        shipmentExcelImportResults.value[resultIndex] = {
+          ...shipmentExcelImportResults.value[resultIndex],
           status: "FAILED",
           message: error?.message || t("customers.shipmentExcelImportItemFailed")
         };
@@ -6007,13 +6037,16 @@ async function startShipmentExcelImport() {
     }
   };
   try {
-    const concurrency = Math.min(4, items.length);
+    const concurrency = Math.min(4, workItems.length);
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
     shipmentPage.value = 1;
     await loadAvailableShipments();
-    showSuccess("customers.shipmentExcelImportFinished", {
+    showSuccess(skipped
+      ? "customers.shipmentExcelImportFinishedWithSkipped"
+      : "customers.shipmentExcelImportFinished", {
       succeeded: shipmentExcelImportProgress.value.succeeded,
-      failed: shipmentExcelImportProgress.value.failed
+      failed: shipmentExcelImportProgress.value.failed,
+      skipped
     });
   } finally {
     shipmentExcelImporting.value = false;
@@ -6263,28 +6296,91 @@ function shipmentImportIdentity(shipment) {
   return `${carrier}|${referenceType}|${referenceNo}`;
 }
 
-async function prepareShipmentOverwriteReview(shipments) {
+async function prepareShipmentOverwriteReview(shipments, options = {}) {
   const response = await inspectBusinessShipmentImportConflicts(shipments);
   const conflicts = Array.isArray(response?.conflicts) ? response.conflicts : [];
+  const existingIdentities = new Set(conflicts.map(shipmentImportIdentity));
   const snapshotConflicts = conflicts.filter((item) => item?.hasCurrentSnapshot);
+  if (options.allowSkipExisting && conflicts.length) {
+    const total = Number(response?.checked) || shipments.length;
+    const newCount = Math.max(0, total - conflicts.length);
+    try {
+      await ElMessageBox.confirm(
+        t("customers.shipmentExcelConflictSummary", {
+          total,
+          existing: conflicts.length,
+          snapshots: snapshotConflicts.length,
+          newCount
+        }),
+        t("customers.shipmentExcelConflictTitle"),
+        {
+          type: "warning",
+          distinguishCancelAndClose: true,
+          closeOnClickModal: false,
+          confirmButtonText: newCount
+            ? t("customers.importNewOnly", { count: newCount })
+            : t("customers.keepExistingSnapshots"),
+          cancelButtonText: t("customers.importAllAndUpdateExisting", {
+            count: conflicts.length
+          }),
+          cancelButtonClass: "shipment-overwrite-danger-button"
+        }
+      );
+      return {
+        approved: newCount > 0,
+        action: "SKIP_EXISTING",
+        existingIdentities
+      };
+    } catch (action) {
+      if (action === "cancel") {
+        return {
+          approved: true,
+          action: "OVERWRITE_EXISTING",
+          existingIdentities
+        };
+      }
+      return {
+        approved: false,
+        action: "ABORT",
+        existingIdentities
+      };
+    }
+  }
   if (snapshotConflicts.length) {
     const references = snapshotConflicts
       .slice(0, 5)
       .map((item) => item.referenceNo)
       .filter(Boolean)
       .join("、");
-    const confirmed = window.confirm(t("customers.confirmOverwriteSnapshots", {
-      count: snapshotConflicts.length,
-      references,
-      more: snapshotConflicts.length > 5
-        ? t("customers.moreOverwriteSnapshots", { count: snapshotConflicts.length - 5 })
-        : ""
-    }));
-    if (!confirmed) return { approved: false, existingIdentities: new Set() };
+    try {
+      await ElMessageBox.confirm(
+        t("customers.confirmOverwriteSnapshots", {
+          count: snapshotConflicts.length,
+          references,
+          more: snapshotConflicts.length > 5
+            ? t("customers.moreOverwriteSnapshots", { count: snapshotConflicts.length - 5 })
+            : ""
+        }),
+        t("customers.shipmentExcelConflictTitle"),
+        {
+          type: "warning",
+          closeOnClickModal: false,
+          confirmButtonText: t("customers.confirmOverwrite"),
+          cancelButtonText: t("customers.cancel")
+        }
+      );
+    } catch {
+      return {
+        approved: false,
+        action: "ABORT",
+        existingIdentities: new Set()
+      };
+    }
   }
   return {
     approved: true,
-    existingIdentities: new Set(conflicts.map(shipmentImportIdentity))
+    action: conflicts.length ? "OVERWRITE_EXISTING" : "CREATE_ONLY",
+    existingIdentities
   };
 }
 
@@ -9795,9 +9891,27 @@ function showError(error, fallbackKey) {
   background: #f5faff;
 }
 
+.shipment-excel-import-result-list .is-skipped {
+  border-color: #d8e0e8;
+  background: #f8fafc;
+}
+
 .shipment-excel-import-result-list .is-failed {
   border-color: #f0c9cd;
   background: #fff8f8;
+}
+
+:global(.shipment-overwrite-danger-button) {
+  color: var(--el-color-danger);
+  border-color: var(--el-color-danger-light-5);
+  background: var(--el-color-danger-light-9);
+}
+
+:global(.shipment-overwrite-danger-button:hover),
+:global(.shipment-overwrite-danger-button:focus-visible) {
+  color: #fff;
+  border-color: var(--el-color-danger);
+  background: var(--el-color-danger);
 }
 
 .shipment-excel-import-result-list b,
@@ -11317,9 +11431,9 @@ button:disabled {
   overflow: visible;
 }
 .batch-track-task-dialog-body .batch-track-actions {
-  margin: 0 -24px;
-  padding: 14px 24px 18px;
-  box-shadow: 0 -8px 18px rgba(15, 23, 42, .05);
+  margin: 0;
+  padding: 14px 0 0;
+  box-shadow: none;
 }
 .customer-directory-table :deep(th.el-table__cell .cell),
 .customer-directory-table :deep(td.el-table__cell .cell) {

@@ -237,10 +237,15 @@ assert.match(businessCustomerPage, /downloadShipmentExcelTemplate/);
 assert.match(businessCustomerPage, /parseManualShipmentImportWorkbook/);
 assert.match(
   businessCustomerPage,
-  /prepareShipmentOverwriteReview\([\s\S]*?items\.map\(\(item\) => item\.payload\)[\s\S]*?const response = await createBusinessShipment\([\s\S]*?overwriteReview\.existingIdentities\.has/
+  /prepareShipmentOverwriteReview\([\s\S]*?allItems\.map\(\(item\) => item\.payload\)[\s\S]*?const workItems = allItems[\s\S]*?const response = await createBusinessShipment\([\s\S]*?overwriteReview\.action === "OVERWRITE_EXISTING"/
 );
 assert.match(businessCustomerPage, /response\?\.overwritten === true/);
 assert.match(businessCustomerPage, /status: overwritten \? "UPDATED" : "CREATED"/);
+assert.match(businessCustomerPage, /allowSkipExisting: true/);
+assert.match(businessCustomerPage, /action: "SKIP_EXISTING"/);
+assert.match(businessCustomerPage, /action: "OVERWRITE_EXISTING"/);
+assert.match(businessCustomerPage, /status: wasSkipped \? "SKIPPED" : "PENDING"/);
+assert.match(businessCustomerPage, /importSkippedExisting/);
 assert.match(businessCustomerPage, /shipmentExcelImportResults/);
 const shipmentTableSource = businessCustomerPage.slice(
   businessCustomerPage.indexOf('ref="shipmentTableRef"'),

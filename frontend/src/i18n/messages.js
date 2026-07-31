@@ -2243,7 +2243,7 @@ Object.assign(messages["en-US"].customers, {
 Object.assign(messages["zh-CN"].customers, {
   shipmentExcelImport: "Excel 批量导入票单",
   dialogKickerShipmentExcelImport: "完整票单批量录入",
-  shipmentExcelImportDescription: "通过多工作表 Excel 一次导入多张完整票单；票单统一以承运人和订舱号建立，同一订舱号再次导入时会覆盖更新原票单，提单号只作为附属信息。",
+  shipmentExcelImportDescription: "通过多工作表 Excel 一次导入多张完整票单；遇到已有订舱号时，可仅导入新增票单并保留原快照，也可明确选择更新已有票单。",
   downloadShipmentExcelTemplate: "下载完整导入模板",
   chooseShipmentExcel: "选择或拖入票单 Excel",
   shipmentExcelSheetsHint: "支持 .xlsx/.xls；请优先使用系统模板中的票单主表、中转港、分段运输、箱型数量和箱级详情工作表。",
@@ -2260,7 +2260,14 @@ Object.assign(messages["zh-CN"].customers, {
   importReady: "可导入",
   importPending: "等待导入",
   importUpdated: "已覆盖更新",
-  shipmentExcelImportProgress: "导入进度 {done}/{total}（成功 {succeeded}，失败 {failed}）",
+  importSkippedExisting: "已保留原快照，本次跳过",
+  shipmentExcelImportProgress: "导入进度 {done}/{total}（成功 {succeeded}，失败 {failed}，保留已有 {skipped}）",
+  shipmentExcelConflictTitle: "发现已有票单",
+  shipmentExcelConflictSummary: "Excel 共 {total} 张：新增 {newCount} 张，系统已有 {existing} 张（其中 {snapshots} 张有当前快照）。请选择本次导入方式。",
+  importNewOnly: "仅导入 {count} 张新增（推荐）",
+  importAllAndUpdateExisting: "全部导入并更新 {count} 张已有",
+  keepExistingSnapshots: "保留已有快照，不导入",
+  confirmOverwrite: "确认覆盖更新",
   downloadImportResults: "下载导入结果",
   importValidShipments: "导入 {count} 张票单",
   shipmentExcelTemplateFailed: "完整票单 Excel 模板生成失败。",
@@ -2269,13 +2276,15 @@ Object.assign(messages["zh-CN"].customers, {
   shipmentExcelImportConflictCheckFailed: "无法检查重复票单，请稍后重试；本次尚未写入任何票单。",
   shipmentExcelImportItemFailed: "该票单创建失败。",
   shipmentExcelImportFinished: "批量导入完成：成功 {succeeded} 张，失败 {failed} 张。",
+  shipmentExcelImportFinishedWithSkipped: "批量导入完成：成功 {succeeded} 张，失败 {failed} 张，保留并跳过已有票单 {skipped} 张。",
+  shipmentExcelNoNewShipments: "没有新增票单可导入；已保留现有 {count} 张票单及其快照。",
   shipmentExcelResultsFailed: "导入结果 Excel 生成失败。"
 });
 
 Object.assign(messages["en-US"].customers, {
   shipmentExcelImport: "Import shipments from Excel",
   dialogKickerShipmentExcelImport: "COMPLETE SHIPMENT BATCH ENTRY",
-  shipmentExcelImportDescription: "Import complete shipment records from a multi-sheet workbook. Shipments are created by carrier and booking number; re-importing the same booking updates the existing shipment, while the bill of lading remains supplementary data.",
+  shipmentExcelImportDescription: "Import complete shipment records from a multi-sheet workbook. When booking numbers already exist, you can import only new shipments and preserve current snapshots, or explicitly update existing shipments.",
   downloadShipmentExcelTemplate: "Download complete template",
   chooseShipmentExcel: "Choose or drop a shipment workbook",
   shipmentExcelSheetsHint: "Supports .xlsx/.xls. Use the supplied Shipments, Transshipments, Routing Legs, Container Types, and Containers sheets.",
@@ -2292,7 +2301,14 @@ Object.assign(messages["en-US"].customers, {
   importReady: "Ready",
   importPending: "Waiting",
   importUpdated: "Updated existing shipment",
-  shipmentExcelImportProgress: "Progress {done}/{total} ({succeeded} succeeded, {failed} failed)",
+  importSkippedExisting: "Kept the current snapshot and skipped",
+  shipmentExcelImportProgress: "Progress {done}/{total} ({succeeded} succeeded, {failed} failed, {skipped} existing preserved)",
+  shipmentExcelConflictTitle: "Existing shipments found",
+  shipmentExcelConflictSummary: "The workbook contains {total} shipments: {newCount} new and {existing} already in the system ({snapshots} with a current snapshot). Choose how to continue.",
+  importNewOnly: "Import {count} new only (recommended)",
+  importAllAndUpdateExisting: "Import all and update {count} existing",
+  keepExistingSnapshots: "Keep existing snapshots; import nothing",
+  confirmOverwrite: "Confirm update",
   downloadImportResults: "Download results",
   importValidShipments: "Import {count} shipments",
   shipmentExcelTemplateFailed: "Could not generate the complete shipment Excel template.",
@@ -2301,6 +2317,8 @@ Object.assign(messages["en-US"].customers, {
   shipmentExcelImportConflictCheckFailed: "Could not check for duplicate shipments. Nothing has been imported; try again.",
   shipmentExcelImportItemFailed: "This shipment could not be created.",
   shipmentExcelImportFinished: "Batch import finished: {succeeded} succeeded and {failed} failed.",
+  shipmentExcelImportFinishedWithSkipped: "Batch import finished: {succeeded} succeeded, {failed} failed, and {skipped} existing shipments were preserved.",
+  shipmentExcelNoNewShipments: "There are no new shipments to import; {count} existing shipments and their snapshots were preserved.",
   shipmentExcelResultsFailed: "Could not generate the import-results workbook."
 });
 
