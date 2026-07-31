@@ -381,7 +381,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
-  margin: 0;
+  margin: 0 0 4px;
   padding: 0;
   border: 0;
   border-bottom: 1px solid var(--login-blue-200);
@@ -461,7 +461,7 @@
 
 .app-login-form-intro {
   display: block;
-  margin: 10px 0 6px;
+  margin: 0 0 8px;
   text-align: center;
 }
 
@@ -1065,7 +1065,7 @@ body:has(.app-login-shell) .global-language-switcher button:not(.el-button).acti
 
   .app-login-form-intro {
     display: block;
-    margin-top: 8px;
+    margin: 0 0 6px;
   }
 
   .app-login-form-mark {

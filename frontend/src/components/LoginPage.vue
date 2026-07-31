@@ -27,6 +27,13 @@
 
     <section class="app-login-content">
       <form class="app-login-form" @submit.prevent="submit">
+        <div class="app-login-form-intro">
+          <div class="app-login-title">
+            <h1>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h1>
+            <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
+          </div>
+        </div>
+
         <div class="app-login-route-switch" :aria-label="t('login.routeLabel')">
           <button
             type="button"
@@ -44,13 +51,6 @@
           >
             <span>{{ t("login.customerRoute") }}</span>
           </button>
-        </div>
-
-        <div class="app-login-form-intro">
-          <div class="app-login-title">
-            <h1>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h1>
-            <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
-          </div>
         </div>
 
         <label v-if="loginMode === 'employee'" class="app-login-field">
