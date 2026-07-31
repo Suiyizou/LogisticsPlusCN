@@ -1918,7 +1918,7 @@ public class BusinessCustomerService {
         FROM cp_shipments s
         JOIN cp_users u ON u.id = s.responsible_agent_id
         WHERE s.public_id IN (
-        """ + placeholders + ") ORDER BY s.id";
+        """ + placeholders + ") AND u.status <> 'DELETED' ORDER BY s.id";
     jdbcTemplate.query(
         responsibleAgentSql,
         (rs, rowNum) -> {
@@ -1934,7 +1934,7 @@ public class BusinessCustomerService {
         JOIN cp_shipments s ON s.id = p.shipment_id
         JOIN cp_users u ON u.id = p.user_id
         WHERE s.public_id IN (
-        """ + placeholders + ") ORDER BY s.id, p.user_id";
+        """ + placeholders + ") AND u.status <> 'DELETED' ORDER BY s.id, p.user_id";
     jdbcTemplate.query(
         participantSql,
         (rs, rowNum) -> {

@@ -1188,6 +1188,30 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void deletedInternalUsersAreExcludedFromShipmentBindings() {
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipment_participants "
+            + "(shipment_id, user_id, participant_role) VALUES (13, 3, 'OVERSEA_AGENT')"
+    );
+    jdbcTemplate.update("UPDATE cp_users SET status = 'DELETED' WHERE id IN (2, 3)");
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> items =
+        (List<Map<String, Object>>) customerService.listShipmentSnapshots(admin).get("items");
+    Map<String, Object> shipment = items.stream()
+        .filter(item -> "participant-shipment".equals(item.get("shipmentId")))
+        .findFirst()
+        .orElseThrow();
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> boundUsers =
+        (List<Map<String, Object>>) shipment.get("boundUsers");
+    assertThat(boundUsers).extracting(user -> user.get("username"))
+        .containsExactly("sales-1")
+        .doesNotContain("sales-2", "employee");
+  }
+
+  @Test
   void prefersTheBookingReferenceWhenBillAndBookingAreBothAvailable() {
     jdbcTemplate.update(
         """
