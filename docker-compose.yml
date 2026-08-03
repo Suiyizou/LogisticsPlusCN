@@ -2,6 +2,7 @@ services:
   mysql:
     image: mysql:8.4
     container_name: cargo-planner-mysql
+    command: --mysql-native-password=ON --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cargo_root_pwd}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-cargo_planner}
@@ -155,4 +156,3 @@ networks:
     name: cargo-planner-app
   data:
     name: cargo-planner-data
-    internal: true
