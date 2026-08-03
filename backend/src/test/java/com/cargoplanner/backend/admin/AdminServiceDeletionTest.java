@@ -1,22 +1,29 @@
 package com.cargoplanner.backend.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.cargoplanner.backend.auth.AuthService;
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.auth.LoginRequest;
+import com.cargoplanner.backend.auth.LoginResponse;
 import com.cargoplanner.backend.auth.PasswordHasher;
+import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.RequestStats;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 class AdminServiceDeletionTest {
   private JdbcTemplate jdbcTemplate;
   private AdminService service;
+  private AuthService authService;
   private AuthenticatedUser administrator;
 
   @BeforeEach
@@ -47,7 +54,38 @@ class AdminServiceDeletionTest {
         """
     );
     jdbcTemplate.execute(
-        "CREATE TABLE cp_login_devices (id BIGINT PRIMARY KEY, user_id BIGINT NOT NULL)"
+        """
+        CREATE TABLE cp_login_devices (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          user_id BIGINT NOT NULL,
+          device_id VARCHAR(128) NOT NULL,
+          device_name VARCHAR(128),
+          mac_address VARCHAR(64),
+          ip_address VARCHAR(64),
+          user_agent VARCHAR(512),
+          session_token_hash CHAR(64),
+          online BOOLEAN NOT NULL DEFAULT FALSE,
+          logged_in_at TIMESTAMP,
+          last_seen_at TIMESTAMP,
+          revoked_at TIMESTAMP,
+          UNIQUE (user_id, device_id)
+        )
+        """
+    );
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE cp_login_events (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          user_id BIGINT,
+          username VARCHAR(64),
+          event_type VARCHAR(40) NOT NULL,
+          device_id VARCHAR(128),
+          ip_address VARCHAR(64),
+          user_agent VARCHAR(512),
+          message VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
     );
     jdbcTemplate.execute(
         """
@@ -114,7 +152,6 @@ class AdminServiceDeletionTest {
         password.salt(), password.hash(), password.iterations(),
         password.salt(), password.hash(), password.iterations()
     );
-    jdbcTemplate.update("INSERT INTO cp_login_devices (id, user_id) VALUES (10, 2)");
     jdbcTemplate.update(
         "INSERT INTO cp_customer_employee_assignments (customer_id, employee_user_id) VALUES (20, 2)"
     );
@@ -127,11 +164,12 @@ class AdminServiceDeletionTest {
     jdbcTemplate.update(
         "INSERT INTO cp_shipments (id, responsible_agent_id) VALUES (50, 2)"
     );
+    authService = new AuthService(jdbcTemplate, hasher, 5, 6);
     service = new AdminService(
         jdbcTemplate,
         hasher,
         mock(RequestStats.class),
-        mock(AuthService.class)
+        authService
     );
     administrator = new AuthenticatedUser(
         1L,
@@ -144,6 +182,14 @@ class AdminServiceDeletionTest {
 
   @Test
   void deletionRemovesAccountFromManagementWithoutTurningItIntoDisabledAccount() {
+    MockHttpServletRequest loginRequest = new MockHttpServletRequest();
+    loginRequest.setRemoteAddr("127.0.0.1");
+    loginRequest.addHeader("User-Agent", "Deletion integration test");
+    LoginResponse activeLogin = authService.login(
+        new LoginRequest("sales", "SecurePass123", "sales-device", "Sales laptop", null),
+        loginRequest
+    );
+
     Map<String, Object> response = service.deleteEmployee(
         2L,
         administrator,
@@ -179,6 +225,16 @@ class AdminServiceDeletionTest {
         "SELECT action FROM cp_admin_audit_log WHERE target_id = 2",
         String.class
     )).isEqualTo("DELETE_USER");
+    assertThatThrownBy(() -> authService.authenticate(activeLogin.token(), loginRequest))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
+        );
+    assertThatThrownBy(() -> authService.login(
+        new LoginRequest("sales", "SecurePass123", "new-device", "New device", null),
+        loginRequest
+    )).isInstanceOfSatisfying(ApiException.class, error ->
+        assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
+    );
 
     Map<String, Object> replacement = service.createEmployee(
         new CreateEmployeeRequest(

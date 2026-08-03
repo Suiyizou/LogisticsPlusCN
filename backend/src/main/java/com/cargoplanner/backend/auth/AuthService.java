@@ -48,7 +48,10 @@ public class AuthService {
     String ip = ClientInfo.ip(httpRequest);
     String userAgent = ClientInfo.userAgent(httpRequest);
     expireOldSessions(Instant.now());
-    UserAccount account = findAccount(username);
+    // Lock the account row before checking credentials and issuing a token. This makes
+    // login mutually exclusive with an administrator disabling or deleting the account,
+    // so a stale ACTIVE snapshot can never be used to create a new session.
+    UserAccount account = findActiveAccountForLogin(username);
 
     if (account == null || !"ACTIVE".equals(account.status())) {
       recordEvent(null, username, "LOGIN_FAIL", request.deviceId(), ip, userAgent, "User not found or disabled");
@@ -67,9 +70,8 @@ public class AuthService {
     }
 
     String deviceId = normalizeDeviceId(request.deviceId(), ip, userAgent);
-    // Serialize admission for all devices of the same account. Without this row lock,
-    // parallel logins with different device ids can all observe a stale count below the cap.
-    lockUserForDeviceAdmission(account.id());
+    // The account row is already locked by findActiveAccountForLogin. Besides closing the
+    // account-deletion race, that lock serializes device admission for this account.
     int activeOtherDevices = countActiveOtherDevices(account.id(), deviceId);
     if (activeOtherDevices >= deviceLimit) {
       recordEvent(account.id(), username, "DEVICE_LIMIT", deviceId, ip, userAgent, "Device limit reached");
@@ -288,21 +290,15 @@ public class AuthService {
     );
   }
 
-  private void lockUserForDeviceAdmission(long userId) {
-    jdbcTemplate.queryForObject(
-        "SELECT id FROM cp_users WHERE id = ? FOR UPDATE",
-        Long.class,
-        userId
-    );
-  }
-
-  private UserAccount findAccount(String username) {
+  private UserAccount findActiveAccountForLogin(String username) {
     List<UserAccount> users = jdbcTemplate.query(
         """
         SELECT id, username, display_name, role, status, party_role,
                password_salt, password_hash, password_iterations
         FROM cp_users
         WHERE username = ?
+          AND status = 'ACTIVE'
+        FOR UPDATE
         """,
         this::mapUserAccount,
         username

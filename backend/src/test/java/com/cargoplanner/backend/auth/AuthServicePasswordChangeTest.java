@@ -132,4 +132,43 @@ class AuthServicePasswordChangeTest {
         Integer.class
     )).isEqualTo(1);
   }
+
+  @Test
+  void rejectsLoginsForLogicallyDeletedAndDisabledAccounts() {
+    for (String status : new String[] {"DELETED", "DISABLED"}) {
+      jdbcTemplate.update("UPDATE cp_users SET status = ? WHERE username = 'operator'", status);
+
+      assertThatThrownBy(() -> authService.login(
+          new LoginRequest("operator", "OldSecure!234", "device-" + status, status, null),
+          request
+      )).isInstanceOfSatisfying(ApiException.class, error ->
+          assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
+      );
+
+      jdbcTemplate.update("UPDATE cp_users SET status = 'ACTIVE' WHERE username = 'operator'");
+    }
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_login_devices",
+        Integer.class
+    )).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_login_events WHERE event_type = 'LOGIN_FAIL'",
+        Integer.class
+    )).isEqualTo(2);
+  }
+
+  @Test
+  void rejectsExistingTokenAsSoonAsAccountIsLogicallyDeleted() {
+    LoginResponse login = authService.login(
+        new LoginRequest("operator", "OldSecure!234", "device-a", "Primary", null),
+        request
+    );
+    jdbcTemplate.update("UPDATE cp_users SET status = 'DELETED' WHERE username = 'operator'");
+
+    assertThatThrownBy(() -> authService.authenticate(login.token(), request))
+        .isInstanceOfSatisfying(ApiException.class, error ->
+            assertThat(error.status()).isEqualTo(HttpStatus.UNAUTHORIZED)
+        );
+  }
 }

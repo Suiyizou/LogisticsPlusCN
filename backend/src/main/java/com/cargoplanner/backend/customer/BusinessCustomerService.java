@@ -2087,34 +2087,10 @@ public class BusinessCustomerService {
   }
 
   private String shipmentSnapshotOrderBy() {
-    if (!isMySql()) {
-      return " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC";
-    }
-    String etaRaw = """
-        COALESCE(
-          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.keyTimes.estimatedFinalArrival.time')), 'null'),
-          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.keyTimes.estimatedArrival.time')), 'null'),
-          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.routingLegs[0].estimatedArrival')), 'null'),
-          NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.snapshot_json, '$.summary.estimatedArrival')), 'null')
-        )
-        """;
-    String etaTime = "COALESCE("
-        + "STR_TO_DATE(REPLACE(LEFT(" + etaRaw + ", 19), 'T', ' '), '%Y-%m-%d %H:%i:%s'), "
-        + "STR_TO_DATE(LEFT(" + etaRaw + ", 10), '%Y-%m-%d')"
-        + ")";
-    return " ORDER BY CASE WHEN " + etaTime + " IS NULL THEN 1 ELSE 0 END, "
-        + etaTime + " ASC, COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC";
-  }
-
-  private boolean isMySql() {
-    try {
-      return jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>) connection -> {
-        String product = connection.getMetaData().getDatabaseProductName();
-        return product != null && product.toLowerCase(Locale.ROOT).contains("mysql");
-      });
-    } catch (Exception ignored) {
-      return false;
-    }
+    // This is also the timestamp rendered by the overview tables. Keep the ordering in
+    // SQL so LIMIT/OFFSET is applied only after the complete result set is sorted.
+    return " ORDER BY COALESCE(s.last_tracked_at, s.updated_at, t.fetched_at, s.created_at) DESC, "
+        + "s.id DESC";
   }
 
   private Map<String, Object> mapSnapshotShipment(ResultSet rs, int rowNumber) throws SQLException {

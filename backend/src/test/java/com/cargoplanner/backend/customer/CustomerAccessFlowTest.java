@@ -11,6 +11,7 @@ import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -757,16 +758,26 @@ class CustomerAccessFlowTest {
   }
 
   @Test
-  void paginatesBusinessShipmentQueries() {
-    for (long id = 20; id <= 23; id++) {
+  void paginatesBusinessShipmentsAfterApplyingGlobalDescendingTimeOrder() {
+    Timestamp oldTimestamp = Timestamp.from(Instant.parse("2026-01-01T00:00:00Z"));
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id IN (10, 13, 14)",
+        oldTimestamp
+    );
+    jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET fetched_at = ? WHERE shipment_id IN (10, 13)",
+        oldTimestamp
+    );
+    for (long id = 20; id <= 26; id++) {
+      Timestamp timestamp = Timestamp.from(Instant.parse("2026-07-" + id + "T12:00:00Z"));
       jdbcTemplate.update(
           """
           INSERT INTO cp_shipments (
             id, public_id, carrier_code, tracking_status, created_by, responsible_agent_id,
             created_at, updated_at
-          ) VALUES (?, ?, 'COSCO', 'Tracked', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES (?, ?, 'COSCO', 'Tracked', 1, 1, ?, ?)
           """,
-          id, "paged-shipment-" + id
+          id, "paged-shipment-" + id, timestamp, timestamp
       );
     }
 
@@ -777,9 +788,27 @@ class CustomerAccessFlowTest {
         business, 2, 5, null, false
     );
 
-    assertThat(firstPage).containsEntry("total", 7L).containsEntry("totalPages", 2);
+    assertThat(firstPage).containsEntry("total", 10L).containsEntry("totalPages", 2);
     assertThat((List<?>) firstPage.get("items")).hasSize(5);
-    assertThat((List<?>) secondPage.get("items")).hasSize(2);
+    assertThat((List<?>) secondPage.get("items")).hasSize(5);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> firstPageItems =
+        (List<Map<String, Object>>) firstPage.get("items");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> secondPageItems =
+        (List<Map<String, Object>>) secondPage.get("items");
+    assertThat(firstPageItems)
+        .extracting(item -> item.get("shipmentId"))
+        .containsExactly(
+            "paged-shipment-26",
+            "paged-shipment-25",
+            "paged-shipment-24",
+            "paged-shipment-23",
+            "paged-shipment-22"
+        );
+    assertThat(secondPageItems)
+        .extracting(item -> item.get("shipmentId"))
+        .startsWith("paged-shipment-21", "paged-shipment-20");
   }
 
   @Test
