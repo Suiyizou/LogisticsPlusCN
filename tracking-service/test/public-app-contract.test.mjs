@@ -413,11 +413,11 @@ test("overseas agents manually update only their assigned shipment list", () => 
   );
   assert.match(
     appSource,
-    /followingOnly:[\s\S]*?etaSort: historyEtaSort/
+    /followingOnly:[\s\S]*?etaSort: historyEtaSort,[\s\S]*?unfinishedOnly: String\(historyBusinessScope === "unfinished"\)/
   );
   assert.match(
     appSource,
-    /historyEtaSortSelect\?\.addEventListener\("change", async[\s\S]*?historyPage = 1;[\s\S]*?loadCustomerAssignedHistory\(\)/
+    /historyEtaSortSelect\?\.addEventListener\("change", async[\s\S]*?historyPage = 1;[\s\S]*?loadCurrentHistoryPage\(\)/
   );
 });
 
@@ -584,8 +584,36 @@ test("customer tracking is database-backed, assigned-only, and never falls back 
     appSource,
     /async function loadCustomerAssignedHistory\(\)[\s\S]*?fetch\(`\/api\/customer\/shipments\?\$\{query\}`[\s\S]*?item\?\.dataAvailable && item\?\.snapshot/
   );
-  assert.match(indexSource, /id="history-pagination"[\s\S]*?id="history-page-size"/);
+  assert.match(
+    indexSource,
+    /id="history-pagination"[\s\S]*?id="history-page-previous"[\s\S]*?id="history-page-info"[\s\S]*?id="history-page-next"[\s\S]*?id="history-page-size"/
+  );
+  assert.match(
+    indexSource,
+    /id="history-business-scope"[\s\S]*?value="unfinished" selected[\s\S]*?value="all"/
+  );
   assert.match(appSource, /page: String\(historyPage\)[\s\S]*?pageSize: String\(historyPageSize\)/);
+  assert.match(appSource, /let historyPageSize = 50;/);
+  assert.match(appSource, /let historyEtaSort = "desc";/);
+  assert.match(appSource, /unfinishedOnly: String\(historyBusinessScope === "unfinished"\)/);
+  assert.match(
+    appSource,
+    /const history = searchedHistory;[\s\S]*?historyPagination\.hidden = historyLoadingState \|\| !accountBound \|\| historyTotal === 0/
+  );
+  assert.match(
+    appSource,
+    /historyPageSizeSelect\?\.addEventListener\("change"[\s\S]*?historyPageSize = Number\(historyPageSizeSelect\.value \|\| 50\);[\s\S]*?historyPage = 1;[\s\S]*?loadCurrentHistoryPage\(\)/
+  );
+  assert.match(
+    appSource,
+    /historyBusinessScopeSelect\?\.addEventListener\("change", async[\s\S]*?historyPage = 1;[\s\S]*?loadCurrentHistoryPage\(\)/
+  );
+  assert.match(
+    appSource,
+    /const canFilterCustomers = session\.kind === "INTERNAL" \|\| overseaAgent;[\s\S]*?hidden: !canFilterCustomers/
+  );
+  assert.doesNotMatch(appSource, /shipment-chevron/);
+  assert.doesNotMatch(stylesSource, /\.shipment-chevron/);
   assert.match(
     appSource,
     /function readHistory\(\)[\s\S]*?readFileSession\(\)\.kind === "CUSTOMER"\)[\s\S]*?uniqueHistoryEntries\(customerAssignedHistory\)/

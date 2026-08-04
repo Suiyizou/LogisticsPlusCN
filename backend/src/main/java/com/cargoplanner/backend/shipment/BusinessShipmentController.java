@@ -36,10 +36,13 @@ public class BusinessShipmentController {
       @RequestParam(required = false) String customerId,
       @RequestParam(defaultValue = "false") boolean refreshIssuesOnly,
       @RequestParam(required = false) String businessFilter,
+      @RequestParam(required = false) String etaSort,
+      @RequestParam(defaultValue = "false") boolean unfinishedOnly,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
     return shipmentService.listShipmentSnapshots(
-        actor, page, pageSize, customerId, refreshIssuesOnly, businessFilter
+        actor, page, pageSize, customerId, refreshIssuesOnly, businessFilter,
+        etaSort, unfinishedOnly
     );
   }
 

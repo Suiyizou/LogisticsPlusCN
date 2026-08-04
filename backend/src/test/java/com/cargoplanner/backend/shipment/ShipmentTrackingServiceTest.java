@@ -701,6 +701,18 @@ class ShipmentTrackingServiceTest {
     assertThat(firstPage.path("items").size()).isEqualTo(5);
     assertThat(secondPage.path("items").size()).isEqualTo(2);
 
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET tracking_status = 'EMPTY_RETURNED' WHERE id = 500"
+    );
+    ObjectNode unfinishedPage = service.listAssignedSnapshots(
+        customer, 1, 5, false, null, "desc", true
+    );
+    assertThat(unfinishedPage.path("allTotal").asLong()).isEqualTo(7L);
+    assertThat(unfinishedPage.path("unfinishedTotal").asLong()).isEqualTo(6L);
+    assertThat(unfinishedPage.path("total").asLong()).isEqualTo(6L);
+    assertThat(unfinishedPage.path("totalPages").asInt()).isEqualTo(2);
+    assertThat(unfinishedPage.path("unfinishedOnly").asBoolean()).isTrue();
+
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest(
             "COSCO",

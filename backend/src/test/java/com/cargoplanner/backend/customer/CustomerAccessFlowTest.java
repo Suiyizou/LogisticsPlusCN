@@ -809,6 +809,26 @@ class CustomerAccessFlowTest {
     assertThat(secondPageItems)
         .extracting(item -> item.get("shipmentId"))
         .startsWith("paged-shipment-21", "paged-shipment-20");
+
+    jdbcTemplate.update(
+        "UPDATE cp_shipments SET tracking_status = 'EMPTY_RETURNED' WHERE id = 20"
+    );
+    Map<String, Object> unfinishedPage = customerService.listShipmentSnapshots(
+        business, 1, 5, null, false, null, "desc", true
+    );
+    assertThat(unfinishedPage)
+        .containsEntry("allTotal", 10L)
+        .containsEntry("unfinishedTotal", 9L)
+        .containsEntry("total", 9L)
+        .containsEntry("totalPages", 2)
+        .containsEntry("etaSort", "desc")
+        .containsEntry("unfinishedOnly", true);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> unfinishedItems =
+        (List<Map<String, Object>>) unfinishedPage.get("items");
+    assertThat(unfinishedItems)
+        .extracting(item -> item.get("shipmentId"))
+        .doesNotContain("paged-shipment-20");
   }
 
   @Test

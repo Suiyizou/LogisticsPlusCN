@@ -570,6 +570,21 @@ public class ShipmentTrackingService {
       String requestedCustomerPublicId,
       String requestedEtaSort
   ) {
+    return listAssignedSnapshots(
+        customer, requestedPage, requestedPageSize, requestedFollowingOnly,
+        requestedCustomerPublicId, requestedEtaSort, false
+    );
+  }
+
+  public ObjectNode listAssignedSnapshots(
+      CustomerPrincipal customer,
+      int requestedPage,
+      int requestedPageSize,
+      boolean requestedFollowingOnly,
+      String requestedCustomerPublicId,
+      String requestedEtaSort,
+      boolean requestedUnfinishedOnly
+  ) {
     if (customer == null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
@@ -591,10 +606,15 @@ public class ShipmentTrackingService {
     List<Object> totalParameters = new ArrayList<>(accessQuery.parameters());
     totalParameters.add(followingOnly);
     totalParameters.add(followAgentId);
-    Long totalValue = jdbcTemplate.queryForObject(
+    AssignedShipmentCounts shipmentCounts = jdbcTemplate.queryForObject(
         ("""
-        SELECT COUNT(DISTINCT a.shipment_id)
+        SELECT COUNT(DISTINCT a.shipment_id) AS all_count,
+               COUNT(DISTINCT CASE
+                 WHEN NOT (%s) THEN a.shipment_id
+                 ELSE NULL
+               END) AS unfinished_count
         FROM cp_customer_shipment_access a
+        JOIN cp_shipments s ON s.id = a.shipment_id
         WHERE %s
           %s
           AND (? = FALSE OR EXISTS (
@@ -602,11 +622,18 @@ public class ShipmentTrackingService {
             WHERE follow.oversea_agent_customer_id = ?
               AND follow.shipment_id = a.shipment_id
           ))
-        """).formatted(accessQuery.predicate(), publicationFilter),
-        Long.class,
+        """).formatted(
+            terminalShipmentSql("s"), accessQuery.predicate(), publicationFilter
+        ),
+        (rs, rowNumber) -> new AssignedShipmentCounts(
+            rs.getLong("all_count"),
+            rs.getLong("unfinished_count")
+        ),
         totalParameters.toArray()
     );
-    long total = totalValue == null ? 0 : totalValue;
+    long allTotal = shipmentCounts == null ? 0 : shipmentCounts.all();
+    long unfinishedTotal = shipmentCounts == null ? 0 : shipmentCounts.unfinished();
+    long total = requestedUnfinishedOnly ? unfinishedTotal : allTotal;
     int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
     if (totalPages == 0) page = 1;
     else if (page > totalPages) page = totalPages;
@@ -617,6 +644,7 @@ public class ShipmentTrackingService {
     listParameters.addAll(accessQuery.parameters());
     listParameters.add(followingOnly);
     listParameters.add(followAgentId);
+    listParameters.add(requestedUnfinishedOnly);
     if (etaSort == null) {
       listParameters.add(pageSize);
       listParameters.add(offset);
@@ -661,8 +689,11 @@ public class ShipmentTrackingService {
                    r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
         LEFT JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
+        WHERE (? = FALSE OR NOT (%s))
         ORDER BY assigned.assigned_at DESC, s.updated_at DESC
-        """.formatted(accessQuery.predicate(), publicationFilter);
+        """.formatted(
+            accessQuery.predicate(), publicationFilter, terminalShipmentSql("s")
+        );
     if (etaSort == null) listSql += " LIMIT ? OFFSET ?";
     List<CustomerAssignedShipment> records = jdbcTemplate.query(
         listSql,
@@ -748,12 +779,15 @@ public class ShipmentTrackingService {
       }
     }
     response.put("total", total);
+    response.put("allTotal", allTotal);
+    response.put("unfinishedTotal", unfinishedTotal);
     response.put("page", page);
     response.put("pageSize", pageSize);
     response.put("totalPages", totalPages);
     response.put("customerReadOnly", true);
     response.put("followingOnly", followingOnly);
     response.put("etaSort", etaSort == null ? "" : etaSort);
+    response.put("unfinishedOnly", requestedUnfinishedOnly);
     response.put("overseaAgentManagement", overseaAgent);
     if (overseaAgent) {
       List<AssignedCustomer> agentCustomers = overseaAgentCustomers(customer);
@@ -790,6 +824,24 @@ public class ShipmentTrackingService {
     if (requestedEtaSort == null || requestedEtaSort.isBlank()) return null;
     String normalized = requestedEtaSort.trim().toLowerCase(Locale.ROOT);
     return "asc".equals(normalized) || "desc".equals(normalized) ? normalized : null;
+  }
+
+  private String terminalShipmentSql(String shipmentAlias) {
+    String status = "UPPER(REPLACE(REPLACE(COALESCE(" + shipmentAlias
+        + ".tracking_status, ''), '_', ' '), '-', ' '))";
+    String emptyEquipment = "(" + status + " LIKE '%EMPTY%' OR "
+        + status + " LIKE '%MTY%')";
+    return "(" + status + " IN ('EMPTY RETURN', 'MTY RETURN')"
+        + " OR " + status + " LIKE '%RETURN OF EMPTY%'"
+        + " OR " + status + " LIKE '%EMPTY DROP OFF%'"
+        + " OR (" + emptyEquipment + " AND ("
+        + status + " LIKE '%RETURNED%'"
+        + " OR " + status + " LIKE '%RETURN COMPLETE%'"
+        + " OR " + status + " LIKE '%RETURN CONFIRMED%'"
+        + " OR " + status + " LIKE '%RECEIVED AT DEPOT%'"
+        + " OR " + status + " LIKE '%RECEIVED IN DEPOT%'"
+        + " OR " + status + " LIKE '%IN DEPOT%'"
+        + " OR " + status + " LIKE '%AT DEPOT%')))";
   }
 
   private void sortAssignedShipmentsByArrival(
@@ -2948,6 +3000,8 @@ public class ShipmentTrackingService {
   private record ShipmentIdentity(long id, String publicId) {}
 
   private record CustomerAccessQuery(String predicate, List<Object> parameters) {}
+
+  private record AssignedShipmentCounts(long all, long unfinished) {}
 
   private record ShipmentReference(
       String carrier,

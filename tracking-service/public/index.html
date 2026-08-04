@@ -188,16 +188,36 @@
                   <b>↗</b>
                 </button>
               </div>
-              <div class="hero-art hero-ocean-map" aria-hidden="true">
-                <span class="map-land map-land-asia"></span>
-                <span class="map-land map-land-america"></span>
-                <span class="map-land map-land-island"></span>
-                <span class="map-route"><i></i></span>
-                <span class="map-port map-port-origin"><i></i><b>SHA</b></span>
-                <span class="map-port map-port-destination"><i></i><b>SAV</b></span>
-                <span class="map-ship"><i></i><b></b></span>
-                <small>Shanghai <b>→</b> Savannah · Ocean route</small>
-              </div>
+              <aside class="hero-operations-summary" data-i18n-aria-label="overview.summaryLabel" aria-label="Shipment overview summary">
+                <header>
+                  <span>
+                    <small data-i18n="overview.summaryKicker">ACCOUNT VISIBILITY</small>
+                    <strong data-i18n="overview.summaryTitle">Current shipment scope</strong>
+                  </span>
+                  <b class="hero-summary-status">
+                    <i aria-hidden="true"></i>
+                    <span data-i18n="overview.summaryReady">LIVE</span>
+                  </b>
+                </header>
+                <dl>
+                  <div>
+                    <dt data-i18n="overview.totalShipments">All shipments</dt>
+                    <dd id="overview-total-count">0</dd>
+                  </div>
+                  <div>
+                    <dt data-i18n="overview.activeShipments">Unfinished</dt>
+                    <dd id="overview-active-count">0</dd>
+                  </div>
+                  <div>
+                    <dt data-i18n="overview.visibleShipments">Displayed</dt>
+                    <dd id="overview-visible-count">0</dd>
+                  </div>
+                </dl>
+                <p>
+                  <span data-i18n="overview.defaultView">Default view</span>
+                  <strong data-i18n="overview.defaultViewValue">Unfinished business · ETA descending</strong>
+                </p>
+              </aside>
             </section>
 
             <section class="panel history-panel shipment-dashboard-panel">
@@ -220,6 +240,13 @@
                     <span aria-hidden="true">★</span>
                     <b data-i18n="agent.followingOnly">Following only</b>
                   </button>
+                  <label class="history-customer-filter history-business-scope" id="history-business-scope-wrap">
+                    <span data-i18n="history.businessScope">Business scope</span>
+                    <select id="history-business-scope" data-i18n-aria-label="history.businessScopeLabel" aria-label="Filter shipments by business status">
+                      <option value="unfinished" selected data-i18n="history.unfinishedOnly">Unfinished business only</option>
+                      <option value="all" data-i18n="history.allBusiness">Show all business</option>
+                    </select>
+                  </label>
                   <label class="history-customer-filter" id="history-customer-filter-wrap" hidden>
                     <span data-i18n="history.customerFilter">Customer</span>
                     <select id="history-customer-filter" data-i18n-aria-label="history.customerFilterLabel" aria-label="Filter shipments by customer">
@@ -230,7 +257,7 @@
                     <span data-i18n="history.etaSort">ETA order</span>
                     <select id="history-eta-sort" data-i18n-aria-label="history.etaSortLabel" aria-label="Sort shipments by ETA">
                       <option value="asc" data-i18n="history.etaAscending">ETA ascending</option>
-                      <option value="desc" data-i18n="history.etaDescending">ETA descending</option>
+                      <option value="desc" selected data-i18n="history.etaDescending">ETA descending</option>
                     </select>
                   </label>
                   <div class="history-search">
@@ -272,16 +299,22 @@
               <div class="shipment-list-wrap" id="history-table-wrap" hidden>
                 <div class="shipment-list" id="history-table-body" aria-live="polite"></div>
               </div>
-              <nav class="history-pagination" id="history-pagination" aria-label="Shipment pages" hidden>
+              <nav
+                class="history-pagination"
+                id="history-pagination"
+                data-i18n-aria-label="history.paginationLabel"
+                aria-label="Shipment pages"
+                hidden
+              >
                 <button id="history-page-previous" type="button" data-i18n="history.previousPage">Previous</button>
                 <span id="history-page-info"></span>
                 <button id="history-page-next" type="button" data-i18n="history.nextPage">Next</button>
                 <label>
                   <span data-i18n="history.pageSize">Per page</span>
-                  <select id="history-page-size">
+                  <select id="history-page-size" data-i18n-aria-label="history.pageSize" aria-label="Shipments per page">
                     <option value="10">10</option>
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
+                    <option value="20">20</option>
+                    <option value="50" selected>50</option>
                     <option value="100">100</option>
                   </select>
                 </label>

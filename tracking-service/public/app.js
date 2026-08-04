@@ -28,18 +28,22 @@ const historySearchInput = document.querySelector("#history-search-input");
 const historySearchClear = document.querySelector("#history-search-clear");
 const historyCustomerFilterWrap = document.querySelector("#history-customer-filter-wrap");
 const historyCustomerFilterSelect = document.querySelector("#history-customer-filter");
+const historyBusinessScopeSelect = document.querySelector("#history-business-scope");
 const historyEtaSortSelect = document.querySelector("#history-eta-sort");
 const historyFollowingFilter = document.querySelector("#history-following-filter");
-const historyTitle = document.querySelector("#history-title");
-const historySubtitle = document.querySelector("#history-subtitle");
-const historyEmptyTitle = document.querySelector("#history-empty-title");
-const historyEmptyDescription = document.querySelector("#history-empty-description");
-const historyLoading = document.querySelector("#history-loading");
 const historyPagination = document.querySelector("#history-pagination");
 const historyPagePrevious = document.querySelector("#history-page-previous");
 const historyPageNext = document.querySelector("#history-page-next");
 const historyPageInfo = document.querySelector("#history-page-info");
 const historyPageSizeSelect = document.querySelector("#history-page-size");
+const historyTitle = document.querySelector("#history-title");
+const historySubtitle = document.querySelector("#history-subtitle");
+const historyEmptyTitle = document.querySelector("#history-empty-title");
+const historyEmptyDescription = document.querySelector("#history-empty-description");
+const historyLoading = document.querySelector("#history-loading");
+const overviewTotalCount = document.querySelector("#overview-total-count");
+const overviewActiveCount = document.querySelector("#overview-active-count");
+const overviewVisibleCount = document.querySelector("#overview-visible-count");
 const agentShipmentTableHead = document.querySelector("#agent-shipment-table-head");
 const agentShipmentsNavItem = document.querySelector("#agent-shipments-nav-item");
 const agentManagementFollowingFilter = document.querySelector("#agent-management-following-filter");
@@ -416,6 +420,7 @@ const MESSAGES = {
     "history.searchClear": "Clear shipment search",
     "history.previousPage": "Previous",
     "history.nextPage": "Next",
+    "history.paginationLabel": "Shipment pages",
     "history.pageSize": "Per page",
     "history.pageInfo": "Page {page} of {pages} · {total} shipments",
     "history.searchEmptyTitle": "No matching shipments",
@@ -963,6 +968,7 @@ const MESSAGES = {
     "history.accountEmptyDescription": "绑定到当前账户的票单会显示在这里。",
     "history.previousPage": "上一页",
     "history.nextPage": "下一页",
+    "history.paginationLabel": "票单分页",
     "history.pageSize": "每页",
     "history.pageInfo": "第 {page} / {pages} 页 · 共 {total} 张票单",
     "history.searchPlaceholder": "搜索单号、Job、港口或状态",
@@ -1437,12 +1443,42 @@ const MESSAGES = {
 };
 
 Object.assign(MESSAGES.en, {
+  "overview.summaryLabel": "Shipment overview summary",
+  "overview.summaryKicker": "ACCOUNT VISIBILITY",
+  "overview.summaryTitle": "Current shipment scope",
+  "overview.summaryReady": "LIVE",
+  "overview.totalShipments": "All shipments",
+  "overview.activeShipments": "Unfinished",
+  "overview.visibleShipments": "Displayed",
+  "overview.defaultView": "Default view",
+  "overview.defaultViewValue": "Unfinished business · ETA descending",
+  "history.businessScope": "Business scope",
+  "history.businessScopeLabel": "Filter shipments by business status",
+  "history.unfinishedOnly": "Unfinished business only",
+  "history.allBusiness": "Show all business",
+  "history.unfinishedEmptyTitle": "No unfinished shipments",
+  "history.unfinishedEmptyDescription": "All shipments in this account are complete. Switch to Show all business to review history.",
   "diagnostic.RATE_LIMITED": "Carrier rate limit / risk control",
   "diagnostic.UPSTREAM_EMPTY": "Carrier returned no operational data",
   "diagnostic.INVALID_REFERENCE": "Invalid number or reference type",
   "diagnostic.ADAPTER_FAILURE": "Carrier adapter failure"
 });
 Object.assign(MESSAGES.zh, {
+  "overview.summaryLabel": "货运总览摘要",
+  "overview.summaryKicker": "账户业务视图",
+  "overview.summaryTitle": "当前货运范围",
+  "overview.summaryReady": "实时",
+  "overview.totalShipments": "全部业务",
+  "overview.activeShipments": "未结束业务",
+  "overview.visibleShipments": "当前展示",
+  "overview.defaultView": "默认视图",
+  "overview.defaultViewValue": "仅展示未结束业务 · ETA 倒序",
+  "history.businessScope": "业务范围",
+  "history.businessScopeLabel": "按业务状态筛选票单",
+  "history.unfinishedOnly": "仅展示未结束业务",
+  "history.allBusiness": "展示全部业务",
+  "history.unfinishedEmptyTitle": "暂无未结束业务",
+  "history.unfinishedEmptyDescription": "当前账号的业务均已结束，可切换“展示全部业务”查看历史票单。",
   "diagnostic.RATE_LIMITED": "船司限流 / 风控拦截",
   "diagnostic.UPSTREAM_EMPTY": "船司返回空数据或暂无有效运输节点",
   "diagnostic.INVALID_REFERENCE": "单号格式或号型错误",
@@ -1555,13 +1591,16 @@ let batchPreviewSheets = [];
 let lastBatchRequestAt = 0;
 let historySearchTerm = "";
 let historyCustomerFilter = "";
-let historyEtaSort = "asc";
+let historyBusinessScope = "unfinished";
+let historyEtaSort = "desc";
 let historyFollowingOnly = false;
 let historyLoadingState = false;
 let historyPage = 1;
-let historyPageSize = 20;
+let historyPageSize = 50;
 let historyTotal = 0;
 let historyTotalPages = 0;
+let historyAllTotal = 0;
+let historyUnfinishedTotal = 0;
 let historyScopeCustomer = null;
 let historyAvailableCustomers = [];
 let agentShipmentDetailOpen = false;
@@ -1615,6 +1654,8 @@ function resetHistoryPagination() {
   historyPage = 1;
   historyTotal = 0;
   historyTotalPages = 0;
+  historyAllTotal = 0;
+  historyUnfinishedTotal = 0;
   historyScopeCustomer = null;
 }
 
@@ -4618,6 +4659,7 @@ async function loadCustomerAssignedHistory() {
     historyLoadFailed = false;
     historyScopeCustomer = null;
     historyAvailableCustomers = [];
+    resetHistoryPagination();
     return;
   }
   historyLoadFailed = false;
@@ -4628,7 +4670,8 @@ async function loadCustomerAssignedHistory() {
       page: String(historyPage),
       pageSize: String(historyPageSize),
       followingOnly: String(historyFollowingOnly && isOverseaAgentSession(session)),
-      etaSort: historyEtaSort
+      etaSort: historyEtaSort,
+      unfinishedOnly: String(historyBusinessScope === "unfinished")
     });
     if (isOverseaAgentSession(session) && historyCustomerFilter) {
       query.set("customerId", historyCustomerFilter);
@@ -4650,6 +4693,8 @@ async function loadCustomerAssignedHistory() {
     historyPageSize = Number(payload?.pageSize || historyPageSize);
     historyTotal = Number(payload?.total || 0);
     historyTotalPages = Number(payload?.totalPages || 0);
+    historyAllTotal = Number(payload?.allTotal ?? historyTotal);
+    historyUnfinishedTotal = Number(payload?.unfinishedTotal ?? historyTotal);
     const agentManagement = payload?.overseaAgentManagement === true;
     historyScopeCustomer = agentManagement
       ? normalizeHistoryBoundCustomers([payload?.scopeCustomer])[0] || null
@@ -4752,6 +4797,7 @@ async function loadInternalTrackedHistory() {
   if (session.kind !== "INTERNAL" || !session.token) {
     internalTrackedHistory = [];
     historyLoadFailed = false;
+    resetHistoryPagination();
     return;
   }
   historyLoadFailed = false;
@@ -4760,8 +4806,11 @@ async function loadInternalTrackedHistory() {
   try {
     const query = new URLSearchParams({
       page: String(historyPage),
-      pageSize: String(historyPageSize)
+      pageSize: String(historyPageSize),
+      etaSort: historyEtaSort,
+      unfinishedOnly: String(historyBusinessScope === "unfinished")
     });
+    if (historyCustomerFilter) query.set("customerId", historyCustomerFilter);
     const response = await fetch(`/api/business/shipments?${query}`, {
       headers: { "X-Auth-Token": session.token }
     });
@@ -4779,6 +4828,8 @@ async function loadInternalTrackedHistory() {
     historyPageSize = Number(payload?.pageSize || historyPageSize);
     historyTotal = Number(payload?.total || 0);
     historyTotalPages = Number(payload?.totalPages || 0);
+    historyAllTotal = Number(payload?.allTotal ?? historyTotal);
+    historyUnfinishedTotal = Number(payload?.unfinishedTotal ?? historyTotal);
     internalTrackedHistory = items
       .filter((item) => item?.referenceNo || item?.shipmentId)
       .map((item) => {
@@ -4843,6 +4894,7 @@ async function loadInternalTrackedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           shipmentId: item.shipmentId,
+          trackingStatus: pendingStatus,
           boundShipment: true,
           boundCustomers: normalizeHistoryBoundCustomers(item.boundCustomers)
         };
@@ -6815,6 +6867,8 @@ function historyCustomerLabel(customer) {
 
 function renderHistoryCustomerFilter(entries, session) {
   const overseaAgent = isOverseaAgentSession(session);
+  const canFilterCustomers = session.kind === "INTERNAL" || overseaAgent;
+  if (!canFilterCustomers) historyCustomerFilter = "";
   const customers = new Map();
   if (overseaAgent) {
     for (const customer of historyAvailableCustomers) {
@@ -6858,7 +6912,7 @@ function renderHistoryCustomerFilter(entries, session) {
   };
 
   renderFilter(historyCustomerFilterWrap, historyCustomerFilterSelect, {
-    hidden: !["INTERNAL", "CUSTOMER"].includes(session.kind) || options.length === 0
+    hidden: !canFilterCustomers || options.length === 0
   });
   renderFilter(agentManagementCustomerFilterWrap, agentManagementCustomerFilterSelect, {
     hidden: !overseaAgent,
@@ -6909,6 +6963,17 @@ function historyMatchesSearch(entry, searchTerm) {
   if (tokens.length === 0) return true;
   const searchText = historySearchText(entry);
   return tokens.every((token) => searchText.includes(token));
+}
+
+function isHistoryFinished(entry) {
+  const terminalStatus = [
+    entry?.trackingStatus,
+    entry?.snapshot?.tracking?.status,
+    entry?.snapshot?.summary?.latestEvent?.name
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toUpperCase().replace(/[^A-Z0-9]+/g, "_"));
+  return terminalStatus.some((status) => status.includes("EMPTY_RETURN"));
 }
 
 async function setOverseaAgentShipmentFollowing(entry, following) {
@@ -7285,12 +7350,7 @@ function isRefreshableOverseaAgentShipment(item) {
   const referenceType = String(item.referenceType || "").toUpperCase();
   if (!["COSCO", "CMA"].includes(carrier)) return false;
   if (referenceType !== "BOOKING") return false;
-  const status = [
-    item.trackingStatus,
-    item.snapshot?.tracking?.status,
-    item.snapshot?.summary?.latestEvent?.name
-  ].filter(Boolean).join(" ").toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-  return !status.includes("EMPTY_RETURNED");
+  return !isHistoryFinished(item);
 }
 
 async function loadAllRefreshableOverseaAgentShipments() {
@@ -7617,12 +7677,23 @@ function renderHistory() {
     ? followedHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
     : followedHistory;
   const normalizedSearch = normalizeHistorySearch(historySearchTerm);
-  const filteredHistory = normalizedSearch
+  const searchedHistory = normalizedSearch
     ? customerHistory.filter((entry) => historyMatchesSearch(entry, normalizedSearch))
     : customerHistory;
-  const history = sortHistoryByEta(filteredHistory);
+  // Authenticated overview responses are filtered, globally ETA-sorted, and paginated
+  // by the server. Preserve that order here so page boundaries cannot change the sort.
+  const history = searchedHistory;
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
   const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
+  const unfinishedHasNoResults = Boolean(
+    !normalizedSearch
+    && historyBusinessScope === "unfinished"
+    && historyTotal === 0
+  );
+
+  if (overviewTotalCount) overviewTotalCount.textContent = String(historyAllTotal);
+  if (overviewActiveCount) overviewActiveCount.textContent = String(historyUnfinishedTotal);
+  if (overviewVisibleCount) overviewVisibleCount.textContent = String(history.length);
 
   historyTitle.textContent = t(
     agentManagement
@@ -7654,6 +7725,8 @@ function renderHistory() {
       ? "history.loadFailedTitle"
       : searchHasNoResults
         ? "history.searchEmptyTitle"
+        : unfinishedHasNoResults
+          ? "history.unfinishedEmptyTitle"
         : agentManagement
           ? "agent.emptyTitle"
         : accountBound
@@ -7665,6 +7738,8 @@ function renderHistory() {
       ? "history.loadFailedDescription"
       : searchHasNoResults
         ? "history.searchEmptyDescription"
+        : unfinishedHasNoResults
+          ? "history.unfinishedEmptyDescription"
         : agentManagement
           ? "agent.emptyDescription"
         : accountBound
@@ -7674,16 +7749,8 @@ function renderHistory() {
   historyLoading.hidden = !historyLoadingState;
   historyEmpty.hidden = historyLoadingState || history.length > 0;
   historyTableWrap.hidden = historyLoadingState || history.length === 0;
-  if (historySearchInput) {
-    historySearchInput.disabled = historyLoadingState || allHistory.length === 0;
-    if (historySearchInput.value !== historySearchTerm) {
-      historySearchInput.value = historySearchTerm;
-    }
-  }
-  if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
-  if (historyEtaSortSelect) historyEtaSortSelect.value = historyEtaSort;
   if (historyPagination) {
-    historyPagination.hidden = historyLoadingState || !accountBound || historyTotalPages <= 1;
+    historyPagination.hidden = historyLoadingState || !accountBound || historyTotal === 0;
     historyPagePrevious.disabled = historyLoadingState || historyPage <= 1;
     historyPageNext.disabled = historyLoadingState || historyPage >= historyTotalPages;
     historyPageInfo.textContent = t("history.pageInfo", {
@@ -7692,17 +7759,27 @@ function renderHistory() {
       total: historyTotal
     });
     historyPageSizeSelect.value = String(historyPageSize);
+    historyPageSizeSelect.disabled = historyLoadingState;
   }
+  if (historySearchInput) {
+    historySearchInput.disabled = historyLoadingState || allHistory.length === 0;
+    if (historySearchInput.value !== historySearchTerm) {
+      historySearchInput.value = historySearchTerm;
+    }
+  }
+  if (historySearchClear) historySearchClear.hidden = !normalizedSearch;
+  if (historyBusinessScopeSelect) historyBusinessScopeSelect.value = historyBusinessScope;
+  if (historyEtaSortSelect) historyEtaSortSelect.value = historyEtaSort;
   historyTableBody.replaceChildren();
   historyTableWrap.classList.remove("is-agent-management");
   historyTableBody.classList.remove("agent-shipment-table");
-  renderAgentShipmentManagementView(filteredHistory, session);
+  renderAgentShipmentManagementView(searchedHistory, session);
 
   let rowIndex = 0;
   for (const entry of history) {
     const item = document.createElement("article");
     item.className = "shipment-history-item";
-    item.style.setProperty("--row-index", rowIndex);
+    item.style.setProperty("--row-index", Math.min(rowIndex, 5));
     rowIndex += 1;
     const snapshot = entry.snapshot;
     const summary = snapshot.summary;
@@ -7791,18 +7868,13 @@ function renderHistory() {
     currentTime.textContent = formatLocalDateTime(summary.latestEvent?.occurredAt);
     current.append(currentLabel, currentName, currentTime);
 
-    const chevron = document.createElement("span");
-    chevron.className = "shipment-chevron";
-    chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "⌄";
     toggle.append(
       transportIcon,
       identity,
       createHistoryPort(origin, "origin"),
       journey,
       createHistoryPort(destination, "destination"),
-      current,
-      chevron
+      current
     );
 
     const details = document.createElement("div");
@@ -8988,21 +9060,22 @@ historyCustomerFilterSelect?.addEventListener("change", async () => {
   agentManagementSelectedKeys.clear();
   agentBulkUpdateResult = null;
   historyPage = 1;
-  if (isOverseaAgentSession()) {
-    await loadCustomerAssignedHistory();
-  } else {
-    renderHistory();
-  }
+  if (["INTERNAL", "CUSTOMER"].includes(readFileSession().kind)) {
+    await loadCurrentHistoryPage();
+  } else renderHistory();
+});
+
+historyBusinessScopeSelect?.addEventListener("change", async () => {
+  historyBusinessScope = historyBusinessScopeSelect.value === "all" ? "all" : "unfinished";
+  historyPage = 1;
+  expandedHistoryKeys.clear();
+  await loadCurrentHistoryPage();
 });
 
 historyEtaSortSelect?.addEventListener("change", async () => {
   historyEtaSort = historyEtaSortSelect.value === "desc" ? "desc" : "asc";
   historyPage = 1;
-  if (readFileSession().kind === "CUSTOMER") {
-    await loadCustomerAssignedHistory();
-  } else {
-    renderHistory();
-  }
+  await loadCurrentHistoryPage();
 });
 
 historyFollowingFilter?.addEventListener("click", async () => {
@@ -9021,22 +9094,23 @@ async function loadCurrentHistoryPage() {
 
 historyPagePrevious?.addEventListener("click", () => {
   if (historyLoadingState || historyPage <= 1) return;
-  agentManagementSelectedKeys.clear();
   historyPage -= 1;
+  expandedHistoryKeys.clear();
   void loadCurrentHistoryPage();
 });
 
 historyPageNext?.addEventListener("click", () => {
   if (historyLoadingState || historyPage >= historyTotalPages) return;
-  agentManagementSelectedKeys.clear();
   historyPage += 1;
+  expandedHistoryKeys.clear();
   void loadCurrentHistoryPage();
 });
 
 historyPageSizeSelect?.addEventListener("change", () => {
-  agentManagementSelectedKeys.clear();
-  historyPageSize = Number(historyPageSizeSelect.value || 20);
+  if (historyLoadingState) return;
+  historyPageSize = Number(historyPageSizeSelect.value || 50);
   historyPage = 1;
+  expandedHistoryKeys.clear();
   void loadCurrentHistoryPage();
 });
 
@@ -9125,7 +9199,7 @@ agentManagementPageNext?.addEventListener("click", () => {
 agentManagementPageSizeSelect?.addEventListener("change", () => {
   if (agentBulkUpdating) return;
   agentManagementSelectedKeys.clear();
-  historyPageSize = Number(agentManagementPageSizeSelect.value || 20);
+  historyPageSize = Number(agentManagementPageSizeSelect.value || 50);
   historyPage = 1;
   void loadCurrentHistoryPage();
 });

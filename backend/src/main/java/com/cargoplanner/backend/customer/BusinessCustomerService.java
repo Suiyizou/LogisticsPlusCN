@@ -22,6 +22,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1616,6 +1620,22 @@ public class BusinessCustomerService {
       boolean refreshIssuesOnly,
       String businessFilter
   ) {
+    return listShipmentSnapshots(
+        actor, requestedPage, requestedPageSize, customerPublicId, refreshIssuesOnly,
+        businessFilter, null, false
+    );
+  }
+
+  public Map<String, Object> listShipmentSnapshots(
+      AuthenticatedUser actor,
+      int requestedPage,
+      int requestedPageSize,
+      String customerPublicId,
+      boolean refreshIssuesOnly,
+      String businessFilter,
+      String requestedEtaSort,
+      boolean requestedUnfinishedOnly
+  ) {
     requireOperationsReader(actor);
     int page = Math.max(1, requestedPage);
     int pageSize = Math.max(5, Math.min(100, requestedPageSize));
@@ -1656,36 +1676,57 @@ public class BusinessCustomerService {
       }
     }
     String baseWhere = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
-    ShipmentCounts shipmentCounts = shipmentCounts(baseWhere, parameters);
-    long refreshIssueTotal = shipmentCounts.refreshIssues();
+    ShipmentCounts baseCounts = shipmentCounts(baseWhere, parameters);
+    if (requestedUnfinishedOnly) {
+      filters.add("NOT (" + terminalShipmentSql("s") + ")");
+    }
+    String scopeWhere = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
+    ShipmentCounts scopeCounts = requestedUnfinishedOnly
+        ? shipmentCounts(scopeWhere, parameters)
+        : baseCounts;
+    long refreshIssueTotal = scopeCounts.refreshIssues();
     if (refreshIssuesOnly) {
       filters.add("UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')");
     }
     String where = filters.isEmpty() ? "" : " WHERE " + String.join(" AND ", filters);
-    long total = refreshIssuesOnly ? refreshIssueTotal : shipmentCounts.total();
+    long total = refreshIssuesOnly ? refreshIssueTotal : scopeCounts.total();
     int totalPages = total == 0 ? 0 : (int) ((total + pageSize - 1) / pageSize);
     if (totalPages == 0) page = 1;
     else if (page > totalPages) page = totalPages;
     int offset = (page - 1) * pageSize;
 
+    String etaSort = normalizeEtaSort(requestedEtaSort);
     List<Object> queryParameters = new ArrayList<>(parameters);
-    queryParameters.add(pageSize);
-    queryParameters.add(offset);
+    if (etaSort == null) {
+      queryParameters.add(pageSize);
+      queryParameters.add(offset);
+    }
+    String listSql = snapshotShipmentSelect() + where + shipmentSnapshotOrderBy();
+    if (etaSort == null) listSql += " LIMIT ? OFFSET ?";
     List<Map<String, Object>> items = jdbcTemplate.query(
-        snapshotShipmentSelect() + where
-            + shipmentSnapshotOrderBy() + " LIMIT ? OFFSET ?",
+        listSql,
         this::mapSnapshotShipment,
         queryParameters.toArray()
     );
+    if (etaSort != null) {
+      sortShipmentSnapshotsByArrival(items, etaSort);
+      int fromIndex = Math.min(offset, items.size());
+      int toIndex = Math.min(fromIndex + pageSize, items.size());
+      items = new ArrayList<>(items.subList(fromIndex, toIndex));
+    }
     enrichShipmentRelations(items);
 
     Map<String, Object> response = new LinkedHashMap<>();
     response.put("items", items);
     response.put("total", total);
+    response.put("allTotal", baseCounts.total());
+    response.put("unfinishedTotal", baseCounts.unfinished());
     response.put("page", page);
     response.put("pageSize", pageSize);
     response.put("totalPages", totalPages);
     response.put("refreshIssueTotal", refreshIssueTotal);
+    response.put("etaSort", etaSort == null ? "" : etaSort);
+    response.put("unfinishedOnly", requestedUnfinishedOnly);
     return response;
   }
 
@@ -1694,6 +1735,9 @@ public class BusinessCustomerService {
         """
         SELECT COUNT(*) AS total_count,
                COALESCE(SUM(
+                 CASE WHEN NOT (%s) THEN 1 ELSE 0 END
+               ), 0) AS unfinished_count,
+               COALESCE(SUM(
                  CASE WHEN UPPER(COALESCE(s.last_refresh_result, ''))
                            IN ('FAILED', 'PARTIAL')
                       THEN 1 ELSE 0 END
@@ -1701,9 +1745,10 @@ public class BusinessCustomerService {
         FROM cp_shipments s
         LEFT JOIN cp_tracking_snapshots t
           ON t.id = s.current_snapshot_id AND t.invalidated_at IS NULL
-        """ + where,
+        """.formatted(terminalShipmentSql("s")) + where,
         (rs, rowNumber) -> new ShipmentCounts(
             rs.getLong("total_count"),
+            rs.getLong("unfinished_count"),
             rs.getLong("refresh_issue_count")
         ),
         parameters.toArray()
@@ -1711,8 +1756,7 @@ public class BusinessCustomerService {
   }
 
   private String businessStateSql(String state) {
-    String completed =
-        "UPPER(COALESCE(s.tracking_status, '')) LIKE '%EMPTY RETURNED%'";
+    String completed = terminalShipmentSql("s");
     String failed =
         "UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')";
     String manualRequired =
@@ -1729,6 +1773,107 @@ public class BusinessCustomerService {
           + "AND NOT (" + manualRequired + ") AND s.last_tracked_at < CURRENT_DATE)";
       default -> "1 = 1";
     };
+  }
+
+  private String terminalShipmentSql(String shipmentAlias) {
+    String status = "UPPER(REPLACE(REPLACE(COALESCE(" + shipmentAlias
+        + ".tracking_status, ''), '_', ' '), '-', ' '))";
+    String emptyEquipment = "(" + status + " LIKE '%EMPTY%' OR "
+        + status + " LIKE '%MTY%')";
+    return "(" + status + " IN ('EMPTY RETURN', 'MTY RETURN')"
+        + " OR " + status + " LIKE '%RETURN OF EMPTY%'"
+        + " OR " + status + " LIKE '%EMPTY DROP OFF%'"
+        + " OR (" + emptyEquipment + " AND ("
+        + status + " LIKE '%RETURNED%'"
+        + " OR " + status + " LIKE '%RETURN COMPLETE%'"
+        + " OR " + status + " LIKE '%RETURN CONFIRMED%'"
+        + " OR " + status + " LIKE '%RECEIVED AT DEPOT%'"
+        + " OR " + status + " LIKE '%RECEIVED IN DEPOT%'"
+        + " OR " + status + " LIKE '%IN DEPOT%'"
+        + " OR " + status + " LIKE '%AT DEPOT%')))";
+  }
+
+  private String normalizeEtaSort(String requestedEtaSort) {
+    if (requestedEtaSort == null || requestedEtaSort.isBlank()) return null;
+    String normalized = requestedEtaSort.trim().toLowerCase(Locale.ROOT);
+    return "asc".equals(normalized) || "desc".equals(normalized) ? normalized : null;
+  }
+
+  private void sortShipmentSnapshotsByArrival(
+      List<Map<String, Object>> items,
+      String direction
+  ) {
+    int multiplier = "desc".equals(direction) ? -1 : 1;
+    items.sort((left, right) -> {
+      Long leftTime = shipmentArrivalTimestamp(left);
+      Long rightTime = shipmentArrivalTimestamp(right);
+      if (leftTime == null && rightTime == null) {
+        return String.valueOf(left.get("referenceNo"))
+            .compareToIgnoreCase(String.valueOf(right.get("referenceNo")));
+      }
+      if (leftTime == null) return 1;
+      if (rightTime == null) return -1;
+      int timeComparison = Long.compare(leftTime, rightTime);
+      if (timeComparison != 0) return timeComparison * multiplier;
+      return String.valueOf(left.get("referenceNo"))
+          .compareToIgnoreCase(String.valueOf(right.get("referenceNo")));
+    });
+  }
+
+  private Long shipmentArrivalTimestamp(Map<String, Object> item) {
+    if (!(item.get("snapshot") instanceof JsonNode snapshot)) return null;
+    JsonNode keyTimes = snapshot.path("keyTimes");
+    JsonNode lastLeg = null;
+    JsonNode lastOceanLeg = null;
+    JsonNode legs = snapshot.path("routingLegs");
+    if (legs.isArray()) {
+      for (JsonNode leg : legs) {
+        lastLeg = leg;
+        if ("SEA".equalsIgnoreCase(leg.path("mode").asText())) lastOceanLeg = leg;
+      }
+    }
+    JsonNode arrivalLeg = lastOceanLeg == null ? lastLeg : lastOceanLeg;
+    String displayedArrival = firstNonBlankText(
+        arrivalLeg == null ? null : arrivalLeg.path("actualArrival").asText(null),
+        keyTimes.path("actualArrival").path("time").asText(null),
+        keyTimes.path("estimatedDelivery").path("actualTime").asText(null),
+        arrivalLeg == null ? null : arrivalLeg.path("estimatedArrival").asText(null),
+        keyTimes.path("estimatedFinalArrival").path("time").asText(null),
+        keyTimes.path("estimatedArrival").path("time").asText(null),
+        keyTimes.path("estimatedDelivery").path("time").asText(null)
+    );
+    return parseShipmentTimestamp(displayedArrival);
+  }
+
+  private String firstNonBlankText(String... values) {
+    for (String value : values) {
+      if (value != null && !value.isBlank()) return value.trim();
+    }
+    return null;
+  }
+
+  private Long parseShipmentTimestamp(String value) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return Instant.parse(value).toEpochMilli();
+    } catch (RuntimeException ignored) {
+      // Try the date formats used by imported/manual tracking snapshots.
+    }
+    try {
+      return OffsetDateTime.parse(value).toInstant().toEpochMilli();
+    } catch (RuntimeException ignored) {
+      // Continue with local date-time and date-only values.
+    }
+    try {
+      return LocalDateTime.parse(value).toInstant(ZoneOffset.UTC).toEpochMilli();
+    } catch (RuntimeException ignored) {
+      // Continue with date-only values.
+    }
+    try {
+      return LocalDate.parse(value).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+    } catch (RuntimeException ignored) {
+      return null;
+    }
   }
 
   /**
@@ -2057,7 +2202,7 @@ public class BusinessCustomerService {
                s.last_refresh_at, s.last_tracked_at,
                s.created_at AS shipment_created_at, s.updated_at,
                CASE
-                 WHEN UPPER(COALESCE(s.tracking_status, '')) LIKE '%EMPTY RETURNED%'
+                 WHEN %s
                    THEN 'COMPLETED'
                  WHEN UPPER(COALESCE(s.last_refresh_result, '')) IN ('FAILED', 'PARTIAL')
                    THEN 'UPDATE_FAILED'
@@ -2083,7 +2228,7 @@ public class BusinessCustomerService {
           ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
                    r2.primary_reference DESC, r2.id ASC LIMIT 1
         )
-        """;
+        """.formatted(terminalShipmentSql("s"));
   }
 
   private String shipmentSnapshotOrderBy() {
@@ -5046,7 +5191,7 @@ public class BusinessCustomerService {
   ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
-  private record ShipmentCounts(long total, long refreshIssues) {}
+  private record ShipmentCounts(long total, long unfinished, long refreshIssues) {}
 
   private record BusinessHandoverAgent(long id, String username, String displayName) {}
   private record CustomerHandoverApplicationTarget(

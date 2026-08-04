@@ -30,9 +30,9 @@
     "Microsoft YaHei", system-ui, sans-serif;
   --font-data: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
-  --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-dialog: 16px;
+  --radius-control: 4px;
+  --radius-card: 4px;
+  --radius-dialog: 8px;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-card: 0 8px 24px rgba(15, 23, 42, 0.065);
   --shadow-card-hover: 0 12px 30px rgba(15, 23, 42, 0.09);
@@ -395,5 +395,366 @@ tbody tr:hover {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Overview: compact, data-first and deliberately square. */
+#overview-view {
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#overview-view .overview-hero {
+  display: grid;
+  min-height: 0;
+  gap: 36px;
+  padding: 28px 32px;
+  border: 1px solid #cbd8e6;
+  border-top: 3px solid var(--color-accent);
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055);
+  grid-template-columns: minmax(0, 1.18fr) minmax(390px, 0.82fr);
+  grid-template-rows: auto;
+  align-items: stretch;
+}
+
+#overview-view .overview-hero::before {
+  display: none;
+}
+
+#overview-view .overview-hero .hero-copy {
+  display: flex;
+  min-width: 0;
+  max-width: 720px;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#overview-view .overview-hero .kicker,
+#overview-view .overview-hero .welcome-message,
+#overview-view .overview-hero .hero-copy h1,
+#overview-view .overview-hero .hero-copy > p:last-of-type,
+#overview-view .overview-hero .primary-action.el-button {
+  max-width: none;
+  grid-column: auto;
+  grid-row: auto;
+}
+
+#overview-view .overview-hero .kicker {
+  margin: 0 0 9px;
+  color: var(--color-accent-hover);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+#overview-view .overview-hero .welcome-message {
+  width: fit-content;
+  margin: 0 0 8px;
+  color: #526477;
+  font-size: 12px;
+}
+
+#overview-view .overview-hero .welcome-message strong {
+  color: #173b5f;
+}
+
+#overview-view .overview-hero .hero-copy h1 {
+  width: min(100%, 680px);
+  margin: 0;
+  color: #10233d;
+  font-size: clamp(30px, 3vw, 43px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+#overview-view .overview-hero .hero-copy > p:last-of-type {
+  width: min(100%, 660px);
+  margin: 13px 0 0;
+  color: #586b80;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+#overview-view .overview-hero .primary-action.el-button {
+  align-self: flex-start;
+  justify-self: auto;
+  min-height: 40px;
+  margin: 20px 0 0;
+  border-radius: 3px;
+  box-shadow: 0 5px 12px rgba(3, 105, 161, 0.16);
+}
+
+.hero-operations-summary {
+  display: grid;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #183e5f;
+  border-radius: 3px;
+  color: #ffffff;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #102c48;
+  background-size: 28px 28px;
+  box-shadow: none;
+  align-content: space-between;
+}
+
+.hero-operations-summary > header {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.hero-operations-summary > header > span {
+  display: grid;
+  gap: 4px;
+}
+
+.hero-operations-summary > header small {
+  color: #8eb8db;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.hero-operations-summary > header strong {
+  color: #ffffff;
+  font-size: 16px;
+}
+
+.hero-summary-status {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px 7px;
+  border: 1px solid rgba(116, 213, 171, 0.38);
+  border-radius: 2px;
+  color: #9ce2c4;
+  background: rgba(18, 112, 78, 0.18);
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.hero-summary-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #55d59e;
+  box-shadow: 0 0 0 3px rgba(85, 213, 158, 0.12);
+}
+
+.hero-operations-summary dl {
+  display: grid;
+  gap: 0;
+  margin: 24px 0 20px;
+  border-block: 1px solid rgba(201, 224, 242, 0.16);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hero-operations-summary dl > div {
+  min-width: 0;
+  padding: 15px 12px;
+}
+
+.hero-operations-summary dl > div + div {
+  border-left: 1px solid rgba(201, 224, 242, 0.16);
+}
+
+.hero-operations-summary dt {
+  color: #93aec5;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.hero-operations-summary dd {
+  margin: 4px 0 0;
+  color: #ffffff;
+  font-family: var(--font-data);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.hero-operations-summary > p {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  color: #8faac1;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.hero-operations-summary > p strong {
+  color: #dbeafa;
+  font-size: 11px;
+  text-align: right;
+}
+
+#overview-view .shipment-dashboard-panel,
+#overview-view .shipment-history-item,
+#overview-view .shipment-transport-icon,
+#overview-view .panel-icon,
+#overview-view .history-customer-filter select,
+#overview-view .history-search,
+#overview-view .history-search button,
+#overview-view .history-pagination button,
+#overview-view .history-pagination select {
+  border-radius: 4px;
+}
+
+#overview-view .shipment-dashboard-panel {
+  overflow: hidden;
+  border-color: #cbd8e6;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+#overview-view .shipment-dashboard-panel .panel-header.history-heading {
+  width: 100%;
+  min-height: 82px;
+  height: auto;
+  gap: 18px;
+  padding: 10px 16px;
+  align-items: center;
+}
+
+#overview-view .history-heading-actions {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+#overview-view .history-customer-filter {
+  min-width: 230px;
+  gap: 5px;
+  line-height: 1.2;
+}
+
+#overview-view .history-business-scope {
+  min-width: 180px;
+}
+
+#overview-view .history-eta-sort {
+  min-width: 150px;
+}
+
+#overview-view .history-customer-filter select,
+#overview-view .history-search {
+  min-height: 44px;
+}
+
+#overview-view .history-search input {
+  height: 40px;
+}
+
+#overview-view .shipment-list-wrap {
+  padding: 10px;
+  background: #eef2f6;
+}
+
+#overview-view .shipment-list {
+  gap: 8px;
+}
+
+#overview-view .history-pagination {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-top-color: #cbd8e6;
+  background: #eef2f6;
+}
+
+#overview-view .history-pagination span {
+  min-width: 170px;
+  color: #526d89;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+#overview-view .history-pagination button,
+#overview-view .history-pagination select {
+  min-height: 44px;
+}
+
+#overview-view .shipment-history-item {
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.045);
+}
+
+#overview-view .shipment-history-item:hover {
+  transform: none;
+}
+
+@media (max-width: 1500px) {
+  body.is-internal-session #overview-view .shipment-dashboard-panel .panel-header.history-heading,
+  body.is-oversea-agent-session #overview-view .shipment-dashboard-panel .panel-header.history-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body.is-internal-session #overview-view .history-heading-actions,
+  body.is-oversea-agent-session #overview-view .history-heading-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 1220px) {
+  #overview-view .overview-hero {
+    gap: 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.8fr);
+  }
+
+  #overview-view .shipment-dashboard-panel .panel-header.history-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #overview-view .history-heading-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  #overview-view .history-search {
+    width: min(360px, 100%);
+    flex: 1 1 260px;
+  }
+}
+
+@media (max-width: 900px) {
+  #overview-view .overview-hero {
+    min-height: 0;
+    padding: 24px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #overview-view .hero-operations-summary {
+    display: grid;
+    min-height: 220px;
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  #overview-view .overview-hero {
+    padding: 20px;
+  }
+
+  #overview-view .history-customer-filter,
+  #overview-view .history-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .hero-operations-summary dl > div {
+    padding-inline: 8px;
+  }
+
+  .hero-operations-summary dd {
+    font-size: 20px;
   }
 }

@@ -50,10 +50,11 @@ public class CustomerShipmentFileController {
       @RequestParam(defaultValue = "false") boolean followingOnly,
       @RequestParam(required = false) String customerId,
       @RequestParam(required = false) String etaSort,
+      @RequestParam(defaultValue = "false") boolean unfinishedOnly,
       @RequestAttribute(CustomerAuthInterceptor.CURRENT_CUSTOMER_ATTRIBUTE) CustomerPrincipal customer
   ) {
     return trackingService.listAssignedSnapshots(
-        customer, page, pageSize, followingOnly, customerId, etaSort
+        customer, page, pageSize, followingOnly, customerId, etaSort, unfinishedOnly
     );
   }
 
