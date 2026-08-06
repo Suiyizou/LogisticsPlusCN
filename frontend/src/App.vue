@@ -829,9 +829,10 @@
           </section>
         </div>
         <footer class="timeout-modal-footer">
-          <el-button @click="packingTimeoutDialogOpen = false">{{ t("packingTimeout.close") }}</el-button>
+          <el-button @click="packingTimeoutDialogOpen = false">{{ t(packingTimeoutHasPartial ? "packingTimeout.usePartial" : "packingTimeout.close") }}</el-button>
           <el-button @click="goPlannerStep('config'); packingTimeoutDialogOpen = false">{{ t("packingTimeout.adjust") }}</el-button>
-          <el-button type="primary" @click="packingTimeoutDialogOpen = false; recalculate(true)">{{ t("packingTimeout.retry") }}</el-button>
+          <el-button v-if="packingTimeoutCanResume" type="primary" @click="continuePackingCalculation">{{ t("packingTimeout.continueRemaining") }}</el-button>
+          <el-button v-else type="primary" @click="packingTimeoutDialogOpen = false; recalculate(true)">{{ t("packingTimeout.retry") }}</el-button>
         </footer>
       </div>
     </div>
@@ -1150,16 +1151,24 @@ const packingTimeoutDetailRows = computed(() => {
   ];
 });
 const packingTimeoutReason = computed(() => {
+  const timeoutKind = packingTimeoutInfo.value?.timeoutKind === "idle" ? "idle" : "hard";
   const workload = packingTimeoutInfo.value?.workload || packingWorkloadHint.value;
   const base = [
+    t(`packingTimeout.${timeoutKind}Reason`),
     tr(workload.detail || ""),
     tr(workload.advice || "")
   ].filter(Boolean).join(" ");
   return base || t("packingTimeout.reasonFallback");
 });
+const packingTimeoutHasPartial = computed(() =>
+  Boolean(packingTimeoutInfo.value?.resumeEvaluations?.length)
+);
+const packingTimeoutCanResume = computed(() =>
+  packingTimeoutHasPartial.value && Boolean(packingTimeoutInfo.value?.pendingContainerIds?.length)
+);
 const packingTimeoutSuggestions = computed(() => [
   t("packingTimeout.suggestionReduceContainers"),
-  t("packingTimeout.suggestionSplitCargo"),
+  t(packingTimeoutCanResume.value ? "packingTimeout.suggestionContinue" : "packingTimeout.suggestionSplitCargo"),
   t("packingTimeout.suggestionUsePartial")
 ]);
 const containerSourceRows = computed(() =>
@@ -1621,12 +1630,18 @@ function sumPlacementQuantity(placements = []) {
   return placements.reduce((sum, item) => sum + Number(item?.quantity || 1), 0);
 }
 
-async function recalculate(force = false) {
+async function recalculate(force = false, resumeEvaluations = []) {
   const activeContainers = calculationContainers.value;
   if (!cargos.value.length || !activeContainers.length) return;
   const seq = ++calcSeq;
-  const payload = buildPackingPayload(activeContainers);
-  const cacheKey = packingCacheKey(payload);
+  const basePayload = buildPackingPayload(activeContainers);
+  const resumableEvaluations = Array.isArray(resumeEvaluations)
+    ? resumeEvaluations.filter((evaluation) => evaluation?.container?.id && evaluation.container.id !== "mixed-plan")
+    : [];
+  const payload = resumableEvaluations.length
+    ? { ...basePayload, resumeEvaluations: resumableEvaluations }
+    : basePayload;
+  const cacheKey = packingCacheKey(basePayload);
   const cachedResult = force ? null : restorePackingResult(cacheKey);
   if (cachedResult) {
     result.value = cachedResult;
@@ -1641,6 +1656,7 @@ async function recalculate(force = false) {
 
   const startedAt = Date.now();
   const workload = estimatePackingWorkload(payload);
+  let partialResultForRun = null;
   loading.value = true;
   startPackingElapsedTimer(startedAt);
   decisionLogs.value = [];
@@ -1662,6 +1678,7 @@ async function recalculate(force = false) {
       },
       onPartialResult(partialResult) {
         if (seq !== calcSeq || !partialResult) return;
+        partialResultForRun = partialResult;
         result.value = normalizeResult(partialResult);
         apiStatus.value = t("packingStatus.partialReady");
         selectedContainerId.value = result.value.bestContainerId || result.value.evaluations[0]?.container.id || selectedContainerId.value;
@@ -1680,9 +1697,11 @@ async function recalculate(force = false) {
     apiStatus.value = "计算异常";
     if (error?.code === "PACKING_TIMEOUT") {
       apiStatus.value = t("packingTimeout.status");
-      openPackingTimeoutDialog(error, workload, startedAt);
-    } else {
+      openPackingTimeoutDialog(error, workload, startedAt, error?.partialResult || partialResultForRun);
+    } else if (error?.code !== "PACKING_CANCELLED") {
       showToast(error.message || "本机计算失败，请检查货物参数。");
+    } else {
+      apiStatus.value = "本机计算";
     }
   } finally {
     if (seq === calcSeq) {
@@ -2095,21 +2114,44 @@ function decisionCustomerDetail(text) {
   return detail.replace(/\s+/g, " ") || t("decisionFlow.customerDetailFallback");
 }
 
-function openPackingTimeoutDialog(error, workload, startedAt) {
+function openPackingTimeoutDialog(error, workload, startedAt, partialResult = null) {
   const elapsedMs = Number(error?.elapsedMs || 0) || Math.max(0, Date.now() - startedAt);
   const timeoutMs = Number(error?.timeoutMs || 0) || elapsedMs;
   const lastDecision = decisionFlowCurrent.value;
+  const normalizedPartial = partialResult?.evaluations?.length ? normalizeResult(partialResult) : null;
+  if (normalizedPartial) result.value = normalizedPartial;
+  const resumeEvaluations = (normalizedPartial?.evaluations || [])
+    .filter((evaluation) => evaluation?.container?.id && evaluation.container.id !== "mixed-plan");
+  const completedContainerIds = new Set(
+    (normalizedPartial?.completedContainerIds || resumeEvaluations.map((evaluation) => evaluation.container.id))
+      .map((id) => String(id))
+  );
+  const pendingContainerIds = (normalizedPartial?.pendingContainerIds || calculationContainers.value
+    .map((container: any) => String(container.id))
+    .filter((id) => !completedContainerIds.has(id)))
+    .map((id) => String(id));
   packingTimeoutInfo.value = {
     message: error?.message || t("packingTimeout.title"),
     workload: error?.workload || workload,
     elapsedSeconds: Math.ceil(elapsedMs / 1000),
     timeoutSeconds: Math.ceil(timeoutMs / 1000),
+    timeoutKind: error?.timeoutKind || "hard",
     decisionCount: decisionLogTotal.value,
     lastDecision,
-    statusKey: result.value?.partial ? "packingTimeout.partialStatus" : "packingTimeout.noFinalStatus"
+    resumeEvaluations,
+    completedContainerIds: [...completedContainerIds],
+    pendingContainerIds,
+    statusKey: resumeEvaluations.length ? "packingTimeout.partialStatus" : "packingTimeout.noFinalStatus"
   };
   toast.value = "";
   packingTimeoutDialogOpen.value = true;
+}
+
+function continuePackingCalculation() {
+  const resumeEvaluations = packingTimeoutInfo.value?.resumeEvaluations || [];
+  if (!resumeEvaluations.length || !packingTimeoutInfo.value?.pendingContainerIds?.length) return;
+  packingTimeoutDialogOpen.value = false;
+  recalculate(true, resumeEvaluations);
 }
 
 function durationText(seconds) {

@@ -16,6 +16,7 @@
     "test:irregular-pallet-import": "node scripts/check-irregular-pallet-import.js",
     "test:packing-single-layer-row-fill": "node scripts/check-packing-single-layer-row-fill.js",
     "test:packing-pallet-gap": "node scripts/check-packing-pallet-gap.js",
+    "test:packing-large-workload": "node scripts/check-packing-large-workload.js",
     "test:container-reference-data": "node scripts/check-container-reference-data.js",
     "test:customer-batch-import": "node scripts/check-customer-batch-import.js",
     "test:shipment-batch-import": "node scripts/check-shipment-batch-import.js",

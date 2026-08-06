@@ -521,13 +521,18 @@ export const messages = {
       noFinalStatus: "未完成全部方案搜索",
       reasonTitle: "可能原因",
       reasonFallback: "本次货物或箱型组合较复杂，Worker 未能在前端等待时间内完成所有箱型和策略搜索。",
+      idleReason: "连续 3 分钟没有收到新的计算进度，系统已停止可能卡住的任务。",
+      hardReason: "任务已达到本次计算的最长安全运行上限。",
       lastDecisionTitle: "最后执行到",
       suggestionTitle: "建议处理",
       suggestionReduceContainers: "先减少参与计算的箱型数量，优先保留实际订舱候选箱型。",
       suggestionSplitCargo: "将大票货物按项目、目的港或装箱批次拆分后分别计算。",
+      suggestionContinue: "已完成的箱型结果会保留，可直接续算剩余箱型，不需要从头开始。",
       suggestionUsePartial: "如果页面已有常用箱型阶段结果，可先查看部分方案，再决定是否继续补算特殊箱型。",
       close: "关闭",
+      usePartial: "使用当前方案",
       adjust: "返回调整",
+      continueRemaining: "继续计算剩余箱型",
       retry: "重新计算"
     }
   },
@@ -1050,13 +1055,18 @@ export const messages = {
       noFinalStatus: "Full plan search not completed",
       reasonTitle: "Likely Reason",
       reasonFallback: "This cargo/container combination is complex, and the Worker did not finish all container and strategy searches within the frontend wait limit.",
+      idleReason: "No new calculation progress was received for 3 minutes, so the app stopped a potentially stalled task.",
+      hardReason: "The task reached its maximum safe runtime for this calculation.",
       lastDecisionTitle: "Last Reached Step",
       suggestionTitle: "Suggested Next Steps",
       suggestionReduceContainers: "Reduce the container types included in the calculation and keep only realistic booking candidates first.",
       suggestionSplitCargo: "Split large shipments by project, destination, or loading batch before recalculating.",
+      suggestionContinue: "Completed container results are retained, so you can continue only the remaining container types instead of restarting.",
       suggestionUsePartial: "If common-container stage results are already visible, review the partial plan before deciding whether to continue special-container calculation.",
       close: "Close",
+      usePartial: "Use Current Plan",
       adjust: "Adjust Setup",
+      continueRemaining: "Continue Remaining Types",
       retry: "Recalculate"
     }
   }

@@ -1,5 +1,18 @@
-let currentWorker = null;
+let currentJob = null;
 let currentJobId = 0;
+
+const PACKING_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const PACKING_HARD_TIMEOUT_MAX_MS = 30 * 60 * 1000;
+const EXPECTED_BUDGET_MS = {
+  light: 5 * 60 * 1000,
+  medium: 12 * 60 * 1000,
+  heavy: 25 * 60 * 1000
+};
+const HARD_BUDGET_MS = {
+  light: 10 * 60 * 1000,
+  medium: 20 * 60 * 1000,
+  heavy: 30 * 60 * 1000
+};
 
 class PackingTimeoutError extends Error {
   constructor(message, details = {}) {
@@ -11,58 +24,104 @@ class PackingTimeoutError extends Error {
 }
 
 export function calculatePacking(payload, options = {}) {
-  if (currentWorker) {
-    currentWorker.terminate();
-    currentWorker = null;
-  }
+  currentJob?.cancel();
 
   const jobId = ++currentJobId;
-  currentWorker = new Worker(new URL("../workers/packingWorker.js", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("../workers/packingWorker.js", import.meta.url), { type: "module" });
   const workload = estimatePackingWorkload(payload);
-  const timeoutMs = packingTimeoutMsFromEstimate(workload);
+  const timeoutPolicy = packingTimeoutPolicyFromEstimate(workload);
   const startedAt = Date.now();
   const onDecision = typeof options.onDecision === "function" ? options.onDecision : null;
   const onPartialResult = typeof options.onPartialResult === "function" ? options.onPartialResult : null;
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
 
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => {
+    let idleTimer = 0;
+    let hardTimer = 0;
+    let settled = false;
+    let lastActivityAt = startedAt;
+    let lastProgress = null;
+    let lastPartialResult = null;
+
+    const cleanup = () => {
+      window.clearTimeout(idleTimer);
+      window.clearTimeout(hardTimer);
+      worker.terminate();
+      if (currentJob?.id === jobId) currentJob = null;
+    };
+
+    const settle = (callback) => {
+      if (settled) return;
+      settled = true;
       cleanup();
-      reject(new PackingTimeoutError("PACKING_TIMEOUT", {
+      callback();
+    };
+
+    const rejectTimeout = (timeoutKind) => {
+      const timeoutMs = timeoutKind === "idle"
+        ? timeoutPolicy.idleTimeoutMs
+        : timeoutPolicy.hardTimeoutMs;
+      settle(() => reject(new PackingTimeoutError("PACKING_TIMEOUT", {
         elapsedMs: Date.now() - startedAt,
         timeoutMs,
+        timeoutKind,
+        idleTimeoutMs: timeoutPolicy.idleTimeoutMs,
+        expectedMs: timeoutPolicy.expectedMs,
+        hardTimeoutMs: timeoutPolicy.hardTimeoutMs,
+        lastActivityAt,
+        lastProgress,
+        partialResult: lastPartialResult,
         workload
-      }));
-    }, timeoutMs);
+      })));
+    };
 
-    currentWorker.onmessage = (event) => {
+    const markActivity = () => {
+      lastActivityAt = Date.now();
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => rejectTimeout("idle"), timeoutPolicy.idleTimeoutMs);
+    };
+
+    currentJob = {
+      id: jobId,
+      cancel() {
+        settle(() => {
+          const error = new Error("PACKING_CANCELLED");
+          error.code = "PACKING_CANCELLED";
+          reject(error);
+        });
+      }
+    };
+
+    markActivity();
+    hardTimer = window.setTimeout(() => rejectTimeout("hard"), timeoutPolicy.hardTimeoutMs);
+
+    worker.onmessage = (event) => {
       const { id, type, result, message, decisions, progress } = event.data || {};
       if (id !== jobId) return;
+      markActivity();
       if (type === "decision") {
         onDecision?.(Array.isArray(decisions) ? decisions : []);
         return;
       }
       if (type === "progress") {
+        lastProgress = progress || null;
         onProgress?.(progress || null);
         return;
       }
       if (type === "partial") {
+        lastPartialResult = result || null;
         onPartialResult?.(result);
         return;
       }
-      window.clearTimeout(timer);
-      cleanup();
-      if (type === "result") resolve(result);
-      else reject(new Error(message || "本机计算失败"));
+      if (type === "result") settle(() => resolve(result));
+      else settle(() => reject(new Error(message || "本机计算失败")));
     };
 
-    currentWorker.onerror = (error) => {
-      window.clearTimeout(timer);
-      cleanup();
-      reject(new Error(error.message || "本机计算失败"));
+    worker.onerror = (error) => {
+      settle(() => reject(new Error(error.message || "本机计算失败")));
     };
 
-    currentWorker.postMessage({
+    worker.postMessage({
       id: jobId,
       payload: {
         ...toWorkerPayload(payload),
@@ -80,34 +139,41 @@ export function calculatePacking(payload, options = {}) {
   });
 }
 
-function cleanup() {
-  if (currentWorker) {
-    currentWorker.terminate();
-    currentWorker = null;
-  }
-}
-
 function toWorkerPayload(payload) {
   return JSON.parse(JSON.stringify(payload));
 }
 
-function packingTimeoutMsFromEstimate(estimate) {
+export function packingTimeoutPolicyFromEstimate(estimate = {}) {
   const estimatedMs = Math.max(0, Number(estimate.seconds || 0)) * 1000;
-  const baseMs = estimate.level === "heavy" ? 420000 : estimate.level === "medium" ? 240000 : 120000;
-  const minMs = estimate.level === "heavy" ? 420000 : estimate.level === "medium" ? 300000 : 120000;
+  const level = ["light", "medium", "heavy"].includes(estimate.level) ? estimate.level : "light";
   const specialMs = Math.max(0, Number(estimate.specialContainerCount || 0)) * 45000;
-  return Math.min(900000, Math.max(minMs, estimatedMs + baseMs + specialMs));
+  const hardTimeoutMs = Math.min(
+    PACKING_HARD_TIMEOUT_MAX_MS,
+    Math.max(HARD_BUDGET_MS[level], estimatedMs * 4 + specialMs)
+  );
+  return {
+    level,
+    expectedMs: EXPECTED_BUDGET_MS[level],
+    idleTimeoutMs: PACKING_IDLE_TIMEOUT_MS,
+    hardTimeoutMs
+  };
 }
 
 export function estimatePackingWorkload(payload = {}) {
   const cargos = payload.cargos || [];
-  const containers = payload.containers || [];
+  const completedContainerIds = new Set(
+    (payload.resumeEvaluations || [])
+      .map((evaluation) => String(evaluation?.container?.id || ""))
+      .filter((id) => id && id !== "mixed-plan")
+  );
+  const containers = (payload.containers || []).filter((container) => !completedContainerIds.has(String(container?.id || "")));
   const rawUnitCount = cargos.reduce((sum, cargo) => sum + Math.max(0, Math.floor(Number(cargo.quantity || 0))), 0);
   const typeCount = cargos.length;
-  const groupingEnabled = rawUnitCount >= 120;
+  const groupingEnabled = rawUnitCount >= 80;
+  const groupSize = rawUnitCount >= 240 ? 8 : rawUnitCount >= 160 ? 6 : 4;
   const solverUnitCount = cargos.reduce((sum, cargo) => {
     const quantity = Math.max(0, Math.floor(Number(cargo.quantity || 0)));
-    if (groupingEnabled && quantity >= 24) return sum + Math.ceil(quantity / 4);
+    if (groupingEnabled && quantity >= 12) return sum + Math.ceil(quantity / groupSize);
     return sum + quantity;
   }, 0);
   const typeFactor = Math.max(1, Math.log2(typeCount + 1));
@@ -141,6 +207,7 @@ export function estimatePackingWorkload(payload = {}) {
     typeCount,
     containerCount,
     specialContainerCount,
+    completedContainerCount: completedContainerIds.size,
     hasGrouping
   };
 }

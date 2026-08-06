@@ -13,9 +13,9 @@ const DEFAULT_SUPPORT_RATIO = 0.8;
 const DEFAULT_NONSTACK_SUPPORT_RATIO = 0.985;
 const MAX_DETAILED_BOXES = 24;
 const LOCAL_SEARCH_PASSES = 5;
-const GROUPING_MIN_TOTAL_UNITS = 120;
-const GROUPING_MIN_CARGO_QUANTITY = 24;
-const GROUPING_MAX_BLOCK_QUANTITY = 4;
+const GROUPING_MIN_TOTAL_UNITS = 80;
+const GROUPING_MIN_CARGO_QUANTITY = 12;
+const GROUPING_MAX_BLOCK_QUANTITY = 8;
 const NON_STACK_TOP_LAYER_CANDIDATES = 16;
 const LOWER_GAP_SWAP_MAX_EDGE_MOVERS = 24;
 const LOWER_GAP_SWAP_MAX_LATE_MOVERS = 3;
@@ -222,9 +222,10 @@ export function calculate(request = {}, options = {}) {
   const utilization = safeUtilizationPercent(request.utilizationPercent);
   const balanceSettings = normalizeBalanceSettings(request.balanceSettings);
   const supportSettings = normalizeSupportSettings(request);
-  const evaluations = [];
-  const orderedContainers = orderContainersForCalculation((request.containers || []).map(normalizeContainerHeightFields));
-  const primaryCount = orderedContainers.filter(isPrimaryCalculationContainer).length;
+  const allOrderedContainers = orderContainersForCalculation((request.containers || []).map(normalizeContainerHeightFields));
+  const evaluations = resumeBaseEvaluations(request.resumeEvaluations, allOrderedContainers);
+  const completedContainerIds = new Set(evaluations.map((evaluation) => String(evaluation.container.id)));
+  const orderedContainers = allOrderedContainers.filter((container) => !completedContainerIds.has(String(container.id)));
   traceProgress({
     phase: "start",
     totalContainers: orderedContainers.length,
@@ -235,7 +236,7 @@ export function calculate(request = {}, options = {}) {
   traceDecision({
     phase: "start",
     level: "summary",
-    text: `开始本机装箱：${cargos.length} 类货物 / ${total.totalQuantity} 件，${(request.containers || []).length} 个箱型参与计算；单箱总重不超过 ${round(balanceSettings.skipBelowWeightKg / 1000)}t 时跳过偏载拦截。`
+    text: `开始本机装箱：${cargos.length} 类货物 / ${total.totalQuantity} 件，${allOrderedContainers.length} 个箱型参与计算${evaluations.length ? `，续算时复用 ${evaluations.length} 个已完成箱型` : ""}；单箱总重不超过 ${round(balanceSettings.skipBelowWeightKg / 1000)}t 时跳过偏载拦截。`
   });
 
   for (let i = 0; i < orderedContainers.length; i += 1) {
@@ -269,12 +270,13 @@ export function calculate(request = {}, options = {}) {
       phase: "prepare",
       level: "summary",
       text: units.length < total.totalQuantity
-        ? `${container.name} · 启用同规格块化：原始 ${total.totalQuantity} 件压缩为 ${units.length} 个搜索单元，最大组合块 ${GROUPING_MAX_BLOCK_QUANTITY} 件。`
+        ? `${container.name} · 启用同规格块化：原始 ${total.totalQuantity} 件压缩为 ${units.length} 个搜索单元，最大组合块 ${groupingMaxBlockQuantity(total.totalQuantity)} 件。`
         : `${container.name} · 保持单件搜索：共 ${units.length} 个搜索单元。`
     });
     const evaluation = evaluateContainer(runtimeContainer, units, total, utilization, globalGapCm);
     evaluation.container = { ...container };
     evaluations.push(evaluation);
+    completedContainerIds.add(String(container.id));
     traceProgress({
       phase: "recommendation",
       totalContainers: orderedContainers.length,
@@ -286,18 +288,26 @@ export function calculate(request = {}, options = {}) {
       force: true
     });
     if (typeof options.onStageResult === "function") {
+      const pendingContainerIds = allOrderedContainers
+        .map((candidate) => String(candidate.id))
+        .filter((id) => !completedContainerIds.has(id));
+      const primaryComplete = allOrderedContainers
+        .filter(isPrimaryCalculationContainer)
+        .every((candidate) => completedContainerIds.has(String(candidate.id)));
       options.onStageResult(buildCalculationResult(evaluations, {
         partial: true,
-        stage: i + 1 >= primaryCount ? "primary" : "container",
-        completedContainers: i + 1,
-        pendingContainers: orderedContainers.length - (i + 1),
+        stage: primaryComplete ? "primary" : "container",
+        completedContainers: completedContainerIds.size,
+        completedContainerIds: [...completedContainerIds],
+        pendingContainers: pendingContainerIds.length,
+        pendingContainerIds,
         latestContainerId: container.id,
         latestContainerName: container.name
       }));
       traceDecision({
         phase: "recommendation",
         level: "summary",
-        text: `${container.name} stage result is ready; ${orderedContainers.length - (i + 1)} container types are still running in the background.`
+        text: `${container.name} stage result is ready; ${pendingContainerIds.length} container types are still running in the background.`
       });
     }
     traceDecision({
@@ -307,8 +317,8 @@ export function calculate(request = {}, options = {}) {
     });
   }
 
-  const mixedEvaluation = shouldBuildMixedContainerEvaluation(orderedContainers, total)
-    ? safeBuildMixedContainerEvaluation(orderedContainers, cargos, total, utilization, globalGapCm, balanceSettings, supportSettings, evaluations)
+  const mixedEvaluation = shouldBuildMixedContainerEvaluation(allOrderedContainers, total)
+    ? safeBuildMixedContainerEvaluation(allOrderedContainers, cargos, total, utilization, globalGapCm, balanceSettings, supportSettings, evaluations)
     : null;
   if (mixedEvaluation) {
     evaluations.push(mixedEvaluation);
@@ -331,10 +341,25 @@ export function calculate(request = {}, options = {}) {
         ? "当前参与计算的箱型仅生成估算候选，尚未完成全部逐箱验证。"
         : "当前参与计算的箱型未生成可行方案。"
   });
-  return {
-    bestContainerId: bestEvaluation?.container.id || null,
-    evaluations
-  };
+  return buildCalculationResult(evaluations, {
+    partial: false,
+    completedContainers: completedContainerIds.size,
+    completedContainerIds: [...completedContainerIds],
+    pendingContainers: 0,
+    pendingContainerIds: []
+  });
+}
+
+function resumeBaseEvaluations(resumeEvaluations, containers) {
+  if (!Array.isArray(resumeEvaluations) || !resumeEvaluations.length) return [];
+  const validContainerIds = new Set(containers.map((container) => String(container.id)));
+  const unique = new Map();
+  for (const evaluation of resumeEvaluations) {
+    const containerId = String(evaluation?.container?.id || "");
+    if (!containerId || containerId === "mixed-plan" || !validContainerIds.has(containerId)) continue;
+    unique.set(containerId, evaluation);
+  }
+  return [...unique.values()];
 }
 
 function buildCalculationResult(evaluations, extra = {}) {
@@ -969,13 +994,14 @@ function buildUnits(cargos, globalGapCm, container = null, total = null) {
   const units = [];
   const totalQuantity = total?.totalQuantity ?? cargos.reduce((sum, cargo) => sum + Math.max(0, Math.floor(Number(cargo.quantity || 0))), 0);
   const canGroup = Boolean(container) && totalQuantity >= GROUPING_MIN_TOTAL_UNITS;
+  const maxBlockQuantity = groupingMaxBlockQuantity(totalQuantity);
   cargos.forEach((cargo, cargoIndex) => {
     const rule = cargoPackingRule(cargo);
     const gap = globalGapCm + rule.extraGapCm;
     const cargoId = cargo.id || `cargo-${cargoIndex}`;
     const quantity = Math.max(0, Math.floor(Number(cargo.quantity || 0)));
     if (canGroup && quantity >= GROUPING_MIN_CARGO_QUANTITY) {
-      units.push(...buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity));
+      units.push(...buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity, maxBlockQuantity));
       return;
     }
 
@@ -985,6 +1011,12 @@ function buildUnits(cargos, globalGapCm, container = null, total = null) {
   });
   markHeavyUnits(units);
   return orderUnits(units, "support");
+}
+
+function groupingMaxBlockQuantity(totalQuantity) {
+  if (totalQuantity >= 240) return GROUPING_MAX_BLOCK_QUANTITY;
+  if (totalQuantity >= 160) return Math.min(6, GROUPING_MAX_BLOCK_QUANTITY);
+  return Math.min(4, GROUPING_MAX_BLOCK_QUANTITY);
 }
 
 function cargoPackingRule(cargo = {}) {
@@ -1027,13 +1059,13 @@ function markHeavyUnits(units) {
   return units;
 }
 
-function buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity) {
+function buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity, maxBlockQuantity) {
   const units = [];
   let remaining = quantity;
   let serial = 0;
   while (remaining > 0) {
     const layout = remaining > 1
-      ? bestGroupLayout(cargo, rule, gap, container, Math.min(GROUPING_MAX_BLOCK_QUANTITY, remaining))
+      ? bestGroupLayout(cargo, rule, gap, container, Math.min(maxBlockQuantity, remaining))
       : null;
     if (layout?.count > 1) {
       units.push(makeCargoUnit(cargo, cargoIndex, cargoId, serial, layout.count, rule, gap, globalGapCm, layout));
@@ -1462,6 +1494,7 @@ function packFlatRackDeckFirst(container, units, strategy) {
   const placed = [];
   const pending = [];
   let deckPlacedCount = 0;
+  let processedCount = 0;
   const ordered = orderUnits(units.map(stripPlacement), strategy.unitOrder);
 
   for (const unit of ordered) {
@@ -1471,6 +1504,14 @@ function packFlatRackDeckFirst(container, units, strategy) {
       deckPlacedCount += unitQuantity(unit);
     } else {
       pending.push(unit);
+    }
+    processedCount += 1;
+    if (processedCount % 8 === 0) {
+      traceProgress({
+        phase: "placement",
+        placedUnits: sumUnitQuantity(placed),
+        remainingUnits: sumUnitQuantity(ordered.slice(processedCount))
+      });
     }
   }
 
@@ -1559,6 +1600,15 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
         placed.push(applyPlacement(unit, placement));
         layerTop = Math.max(layerTop, placement.z + placement.heightCm);
         layerPlacedQuantity += unitQuantity(unit);
+        if (placed.length % 8 === 0) {
+          traceProgress({
+            phase: "placement",
+            layerNo,
+            placedUnits: sumUnitQuantity(placed),
+            remainingUnits: sumUnitQuantity(active),
+            stageFraction: Math.min(0.72, 0.48 + layerNo * 0.035)
+          });
+        }
         traceDecision({
           phase: "placement",
           level: "detail",
@@ -2089,11 +2139,14 @@ function backfillSingleUnits(container, attempt, strategy) {
 
 function packExtremePoint(container, placed, unit, strategy, options = {}) {
   let best = null;
+  let checkedPointCount = 0;
   const orientations = generateOrientations(unit, { preferVertical: strategy.blueVertical });
   const supportRatio = supportRatioForUnit(container, unit, strategy, options);
   for (const dims of orientations) {
     if (!fitsContainerDims(container, dims)) continue;
     for (const point of extremePoints(container, placed, dims, options)) {
+      checkedPointCount += 1;
+      if (checkedPointCount % 64 === 0) traceProgress({ phase: "placement" });
       const placement = { ...point, ...dims, floorOnly: Boolean(options.floorOnly) };
       const validation = validatePlacement(container, placed, unit, placement, supportRatio);
       if (!validation.valid) continue;
@@ -2108,8 +2161,17 @@ function packExtremePoint(container, placed, unit, strategy, options = {}) {
 function repairWithLocalSearch(container, attempt, originalUnits, strategy) {
   let best = cloneAttempt(attempt);
   const movableWindows = [4, 6, 9, 12, 16];
+  const solverUnitCount = best.placed.length + best.unplaced.length;
+  const passLimit = solverUnitCount >= 90 ? 2 : solverUnitCount >= 60 ? 3 : LOCAL_SEARCH_PASSES;
 
-  for (let pass = 0; pass < LOCAL_SEARCH_PASSES && best.unplaced.length; pass += 1) {
+  for (let pass = 0; pass < passLimit && best.unplaced.length; pass += 1) {
+    traceProgress({
+      phase: "repair",
+      strategyId: strategy.id,
+      placedUnits: sumUnitQuantity(best.placed),
+      remainingUnits: sumUnitQuantity(best.unplaced),
+      stageFraction: Math.min(0.9, 0.82 + pass / Math.max(1, passLimit) * 0.08)
+    });
     const windowSize = movableWindows[pass] || movableWindows[movableWindows.length - 1];
     const removed = chooseRemovalSet(best.placed, best.unplaced, windowSize, pass);
     const kept = best.placed.filter((unit) => !removed.has(unit.unitKey)).map(copyUnit);
