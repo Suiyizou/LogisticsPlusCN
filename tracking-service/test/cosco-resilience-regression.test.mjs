@@ -6,11 +6,14 @@ import {
   createCoscoQueryGate
 } from "../lib/cosco-request-guard.mjs";
 import {
+  decorateProxySuccess,
   enrichCoscoShipmentContainers,
+  isIndependentCoscoPlaywrightProxy,
   normalizeCoscoSnapshot,
   normalizeTrackingRequest,
   parseRetryAfter,
   proxyPoolExhaustedError,
+  safeSupplementalWarnings,
   shouldFallbackCoscoAutoToProxy,
   shouldRotateCoscoProxy
 } from "../server.mjs";
@@ -26,7 +29,47 @@ test("proxy exhaustion reports safe node names, attempt count, and root cause", 
   assert.match(error.message, /香港S01.*香港S02.*日本S01/);
   assert.match(error.message, /COSCO_PROXY_UNAVAILABLE/);
   assert.deepEqual(error.details.triedNodes, ["🇭🇰 香港S01", "🇭🇰 香港S02", "🇯🇵 日本S01"]);
+  assert.equal(error.details.proxyNode, "🇯🇵 日本S01");
+  assert.equal(error.details.proxyAttempts, 3);
   assert.doesNotMatch(error.message, /socks5:\/\//i);
+});
+
+test("successful proxy results expose only safe structured route diagnostics", () => {
+  const result = decorateProxySuccess({
+    snapshot: { tracking: { number: "6505740970" } },
+    strategy: { requested: "AUTO", fallbackUsed: true }
+  }, {
+    proxyNode: "socks5://operator:private-password@proxy.example:1080",
+    proxyAttempts: 2,
+    triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
+  });
+
+  assert.equal(result.strategy.requested, "AUTO");
+  assert.equal(result.strategy.used, "PROXY");
+  assert.equal(result.strategy.proxyAttempts, 2);
+  assert.deepEqual(result.strategy.triedNodes, ["HK-S01", result.strategy.proxyNode]);
+  assert.match(result.strategy.proxyNode, /^proxy-[a-f0-9]{10}$/);
+  assert.doesNotMatch(JSON.stringify(result.strategy), /operator|private-password|proxy\.example/i);
+});
+
+test("supplemental warning diagnostics retain source context without leaking proxy credentials", () => {
+  const warnings = safeSupplementalWarnings([{
+    source: "bookingInfo",
+    code: "COSCO_UPSTREAM_BLOCKED",
+    message: "blocked",
+    route: "PROXY",
+    proxyNode: "socks5://operator:private-password@proxy.example:1080",
+    attempts: 2,
+    triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
+  }]);
+
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].source, "bookingInfo");
+  assert.equal(warnings[0].code, "COSCO_UPSTREAM_BLOCKED");
+  assert.equal(warnings[0].attempts, 2);
+  assert.match(warnings[0].proxyNode, /^proxy-[a-f0-9]{10}$/);
+  assert.deepEqual(warnings[0].triedNodes, ["HK-S01", warnings[0].proxyNode]);
+  assert.doesNotMatch(JSON.stringify(warnings), /operator|private-password|proxy\.example/i);
 });
 
 class VirtualTimers {
@@ -267,21 +310,69 @@ test("optional enrichment propagates 403 and 429 protection errors", async () =>
   );
 });
 
-test("AUTO strategy does not enter Playwright fallback for protection failures", async () => {
+test("AUTO primary strategy never jumps from the direct API to direct Playwright", async () => {
   const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
   const autoStrategy = source.slice(
     source.indexOf("async function fetchCoscoTracking(request, queryChannel"),
-    source.indexOf("function runCoscoTrackingRequest", source.indexOf("async function fetchCoscoTracking"))
-  );
-  const protectionGuard = autoStrategy.indexOf(
-    "if (isCoscoProtectionError(networkError) || options.signal?.aborted) throw networkError;"
-  );
-  const playwrightFallback = autoStrategy.indexOf(
-    "fetchCoscoTrackingWithPlaywright(request, options)"
+    source.indexOf("export function shouldRotateCoscoProxy")
   );
 
-  assert.ok(protectionGuard >= 0, "AUTO must rethrow 403/429 before fallback");
-  assert.ok(playwrightFallback > protectionGuard, "Playwright fallback must follow the protection guard");
+  assert.match(autoStrategy, /if \(queryChannel\.code === "AUTO"\)[\s\S]*?fetchCoscoTrackingViaNetwork/);
+  assert.doesNotMatch(
+    autoStrategy.match(/if \(queryChannel\.code === "AUTO"\)[\s\S]*?\n  \}/)?.[0] ?? "",
+    /fetchCoscoTrackingWithPlaywright/
+  );
+});
+
+test("AUTO uses direct API, then proxy API pool, then one dedicated-proxy Playwright attempt", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const routing = source.slice(
+    source.indexOf("async function runCoscoWithAutomaticProxyFallback"),
+    source.indexOf("function runCoscoTrackingRequest")
+  );
+  const direct = routing.indexOf("runCoscoWithProxyRotation(\n      queryChannel");
+  const proxy = routing.indexOf("runCoscoWithProxyRotation(\n          COSCO_QUERY_CHANNELS.PROXY");
+  const playwright = routing.indexOf("operation(COSCO_QUERY_CHANNELS.PLAYWRIGHT");
+  const configuredGuard = routing.indexOf("!COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED");
+
+  assert.ok(direct >= 0, "AUTO must start with the requested direct route");
+  assert.ok(proxy > direct, "proxy API pool must follow the direct API");
+  assert.ok(playwright > proxy, "dedicated-proxy Playwright must be the last fallback");
+  assert.ok(configuredGuard > proxy && configuredGuard < playwright);
+  assert.equal((routing.match(/operation\(COSCO_QUERY_CHANNELS\.PLAYWRIGHT/g) ?? []).length, 1);
+  assert.match(routing, /playwrightProxy: COSCO_PLAYWRIGHT_PROXY_CONFIG/);
+  const fallbackError = source.slice(
+    source.indexOf("function automaticPlaywrightFallbackError"),
+    source.indexOf("async function runCoscoWithAutomaticProxyFallback")
+  );
+  assert.match(fallbackError, /safeSupplementalWarnings\([\s\S]*?playwrightDetails\.warnings/);
+});
+
+test("main-query enrichment warnings preserve route and proxy diagnostics", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const network = source.slice(
+    source.indexOf("async function fetchCoscoTrackingViaNetwork"),
+    source.indexOf("async function fetchCoscoTrackingWithPlaywright")
+  );
+
+  assert.match(network, /enrichmentWarning = \{[\s\S]*?proxyNode: safeProxyNodeAlias/);
+  assert.match(network, /attempts:[\s\S]*?triedNodes:[\s\S]*?retryAfterMs:/);
+});
+
+test("AUTO Playwright fallback requires an exit independent from the API proxy", () => {
+  assert.equal(isIndependentCoscoPlaywrightProxy(null, null), false);
+  assert.equal(isIndependentCoscoPlaywrightProxy(
+    { server: "socks5://browser-proxy:1080" },
+    null
+  ), true);
+  assert.equal(isIndependentCoscoPlaywrightProxy(
+    { server: "socks5://mihomo:7891" },
+    { server: "socks5://mihomo:7891" }
+  ), false);
+  assert.equal(isIndependentCoscoPlaywrightProxy(
+    { server: "socks5://provider:1080", username: "browser-route" },
+    { server: "socks5://provider:1080", username: "api-route" }
+  ), true);
 });
 
 test("AUTO falls back to the proxy pool for block, timeout, and gateway failures", () => {
@@ -309,6 +400,24 @@ test("supplemental proxy failures escape warning handling and enter node rotatio
     (handler.match(/if \(shouldRotateCoscoProxy\(error\)\) throw error;/g) ?? []).length,
     2
   );
+});
+
+test("delayed supplemental retry queries only failed sources before one proxy-browser fallback", async () => {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const handler = source.slice(
+    source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
+    source.indexOf("async function handleTrackRequest")
+  );
+
+  assert.match(handler, /const requestedSources = new Set/);
+  assert.match(handler, /const allowPlaywrightFallback = input\.allowPlaywrightFallback === true/);
+  assert.match(handler, /allowPlaywrightFallback,/);
+  assert.match(handler, /activeChannel\.code === "PLAYWRIGHT"/);
+  assert.match(handler, /await fetchCoscoTracking\(/);
+  assert.match(handler, /requestedSources\.has\("bookingInfo"\)/);
+  assert.match(handler, /requestedSources\.has\("containerInfo"\)/);
+  assert.match(handler, /allowPlaywrightFallback && warnings\.length > 0/);
+  assert.match(handler, /route: "PLAYWRIGHT_PROXY"/);
 });
 
 test("business-code 403 opens protection before the generic adapter failure path", async () => {

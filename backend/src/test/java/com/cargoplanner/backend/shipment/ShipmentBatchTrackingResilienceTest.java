@@ -319,7 +319,7 @@ class ShipmentBatchTrackingResilienceTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void persistentProtectionPausesWithoutFailuresAndReleasesTheUserTaskSlot()
+  void persistentProtectionPausesWithCurrentItemFailedAndReleasesTheUserTaskSlot()
       throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     when(trackingService.track(any(), any())).thenThrow(new ApiException(
@@ -335,10 +335,11 @@ class ShipmentBatchTrackingResilienceTest {
     List<Map<String, Object>> items = (List<Map<String, Object>>) paused.get("items");
 
     assertEquals("PAUSED", paused.get("status"));
-    assertEquals(0, paused.get("processed"));
-    assertEquals(0, paused.get("failed"));
-    assertEquals(1, paused.get("pending"));
-    assertEquals("RETRY_WAIT", items.get(0).get("status"));
+    assertEquals(1, paused.get("processed"));
+    assertEquals(1, paused.get("failed"));
+    assertEquals(0, paused.get("pending"));
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("FAILED", items.get(0).get("mainStatus"));
     assertEquals(3, items.get(0).get("attempts"));
     verify(trackingService, times(3)).track(any(), any());
 

@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -79,7 +80,13 @@ public class TrackingAdapterClient {
         default -> HttpStatus.BAD_GATEWAY;
       };
       AdapterFailure failure = adapterFailure(error);
-      throw new ApiException(status, failure.code(), failure.message(), failure.retryAfterMs());
+      throw new ApiException(
+          status,
+          failure.code(),
+          failure.message(),
+          failure.retryAfterMs(),
+          failure.details()
+      );
     } catch (ResourceAccessException error) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
     }
@@ -127,17 +134,34 @@ public class TrackingAdapterClient {
         default -> HttpStatus.BAD_GATEWAY;
       };
       AdapterFailure failure = adapterFailure(error);
-      throw new ApiException(status, failure.code(), failure.message(), failure.retryAfterMs());
+      throw new ApiException(
+          status,
+          failure.code(),
+          failure.message(),
+          failure.retryAfterMs(),
+          failure.details()
+      );
     } catch (ResourceAccessException error) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
     }
   }
 
   public JsonNode loadSupplementalDetails(NormalizedTrackRequest request) {
+    return loadSupplementalDetails(request, List.of(), false);
+  }
+
+  public JsonNode loadSupplementalDetails(
+      NormalizedTrackRequest request,
+      List<String> sources,
+      boolean allowPlaywrightFallback
+  ) {
     try {
+      Map<String, Object> body = requestBody(request);
+      if (sources != null && !sources.isEmpty()) body.put("sources", sources);
+      if (allowPlaywrightFallback) body.put("allowPlaywrightFallback", true);
       JsonNode response = restClient.post()
           .uri("/api/track/cosco/supplemental-details")
-          .body(requestBody(request))
+          .body(body)
           .retrieve()
           .body(JsonNode.class);
       if (response == null || !response.path("containers").isArray()
@@ -159,7 +183,13 @@ public class TrackingAdapterClient {
         default -> HttpStatus.BAD_GATEWAY;
       };
       AdapterFailure failure = adapterFailure(error);
-      throw new ApiException(status, failure.code(), failure.message(), failure.retryAfterMs());
+      throw new ApiException(
+          status,
+          failure.code(),
+          failure.message(),
+          failure.retryAfterMs(),
+          failure.details()
+      );
     } catch (ResourceAccessException error) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter is unavailable");
     }
@@ -187,6 +217,7 @@ public class TrackingAdapterClient {
     String message = adapterMessage(error);
     String code = null;
     Long retryAfterMs = retryAfterMillis(error);
+    Map<String, Object> diagnosticDetails = new LinkedHashMap<>();
     String response = error.getResponseBodyAsString();
     if (response != null && !response.isBlank()) {
       try {
@@ -196,6 +227,22 @@ public class TrackingAdapterClient {
         String upstreamMessage = errorNode.path("message").asText(null);
         if (upstreamMessage != null && !upstreamMessage.isBlank()) message = upstreamMessage;
         code = details.path("code").asText(body.path("code").asText(null));
+        copyDiagnosticText(details, diagnosticDetails, "causeCode");
+        copyDiagnosticText(details, diagnosticDetails, "route");
+        copyDiagnosticText(details, diagnosticDetails, "proxyNode");
+        copyDiagnosticText(details, diagnosticDetails, "apiProxyNode");
+        copyDiagnosticText(details, diagnosticDetails, "playwrightProxyNode");
+        copyDiagnosticText(details, diagnosticDetails, "directError");
+        copyDiagnosticText(details, diagnosticDetails, "proxyError");
+        copyDiagnosticText(details, diagnosticDetails, "playwrightError");
+        copyDiagnosticInteger(details, diagnosticDetails, "attempts");
+        copyDiagnosticInteger(details, diagnosticDetails, "proxyAttempts");
+        copyDiagnosticInteger(details, diagnosticDetails, "apiProxyAttempts");
+        copyDiagnosticInteger(details, diagnosticDetails, "playwrightAttempts");
+        copyDiagnosticInteger(details, diagnosticDetails, "upstreamStatus");
+        copyDiagnosticNodes(details, diagnosticDetails, "triedNodes");
+        copyDiagnosticNodes(details, diagnosticDetails, "apiTriedNodes");
+        copyDiagnosticWarnings(details, diagnosticDetails);
         if (details.path("retryAfterMs").canConvertToLong()) {
           retryAfterMs = Math.max(
               retryAfterMs == null ? 0L : retryAfterMs,
@@ -206,7 +253,75 @@ public class TrackingAdapterClient {
         // Preserve the status, header and bounded adapter message for non-JSON responses.
       }
     }
-    return new AdapterFailure(message, code, retryAfterMs);
+    if (code != null && !code.isBlank()) diagnosticDetails.put("code", code);
+    if (retryAfterMs != null) diagnosticDetails.put("retryAfterMs", retryAfterMs);
+    return new AdapterFailure(message, code, retryAfterMs, diagnosticDetails);
+  }
+
+  private void copyDiagnosticText(
+      JsonNode source,
+      Map<String, Object> target,
+      String field
+  ) {
+    String value = source.path(field).asText("")
+        .replaceAll("[\\p{Cntrl}]", " ")
+        .trim();
+    if (!value.isBlank()) {
+      target.put(field, value.length() <= 1_000 ? value : value.substring(0, 1_000));
+    }
+  }
+
+  private void copyDiagnosticInteger(
+      JsonNode source,
+      Map<String, Object> target,
+      String field
+  ) {
+    if (source.path(field).canConvertToInt()) {
+      target.put(field, source.path(field).asInt());
+    }
+  }
+
+  private void copyDiagnosticNodes(
+      JsonNode source,
+      Map<String, Object> target,
+      String field
+  ) {
+    if (!source.path(field).isArray()) return;
+    List<String> nodes = new java.util.ArrayList<>();
+    source.path(field).forEach(node -> {
+      String value = node.asText("").trim();
+      if (!value.isBlank() && value.length() <= 128 && !nodes.contains(value)) {
+        nodes.add(value);
+      }
+    });
+    if (!nodes.isEmpty()) target.put(field, List.copyOf(nodes));
+  }
+
+  private void copyDiagnosticWarnings(
+      JsonNode source,
+      Map<String, Object> target
+  ) {
+    JsonNode warnings = source.path("warnings");
+    if (!warnings.isArray()) return;
+    List<Map<String, Object>> copied = new java.util.ArrayList<>();
+    for (JsonNode warning : warnings) {
+      if (!warning.isObject() || copied.size() >= 10) continue;
+      Map<String, Object> value = new LinkedHashMap<>();
+      copyDiagnosticText(warning, value, "source");
+      copyDiagnosticText(warning, value, "code");
+      copyDiagnosticText(warning, value, "message");
+      copyDiagnosticText(warning, value, "causeCode");
+      copyDiagnosticText(warning, value, "route");
+      copyDiagnosticText(warning, value, "proxyNode");
+      copyDiagnosticInteger(warning, value, "attempts");
+      copyDiagnosticInteger(warning, value, "proxyAttempts");
+      copyDiagnosticNodes(warning, value, "triedNodes");
+      if (warning.path("retryAfterMs").canConvertToLong()) {
+        value.put("retryAfterMs", Math.max(0L, warning.path("retryAfterMs").asLong()));
+      }
+      if (!value.isEmpty()) copied.add(Map.copyOf(value));
+    }
+    if (!copied.isEmpty()) target.put("warnings", List.copyOf(copied));
   }
 
   private Long retryAfterMillis(RestClientResponseException error) {
@@ -252,5 +367,10 @@ public class TrackingAdapterClient {
     }
   }
 
-  private record AdapterFailure(String message, String code, Long retryAfterMs) {}
+  private record AdapterFailure(
+      String message,
+      String code,
+      Long retryAfterMs,
+      Map<String, Object> details
+  ) {}
 }

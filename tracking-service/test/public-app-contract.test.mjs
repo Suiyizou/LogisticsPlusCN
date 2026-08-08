@@ -805,6 +805,10 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
   assert.match(indexSource, /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/);
   assert.match(indexSource, /id="supplemental-details-status"/);
   assert.match(appSource, /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/);
+  assert.match(appSource, /snapshot\.supplementalDetails\?\.carriedForward[\s\S]*?snapshot\.supplementalDetails\?\.pendingRefresh/);
+  assert.match(appSource, /setSupplementalDetailsStatus\("stale",[\s\S]*?sourceFetchedAt/);
+  assert.match(appSource, /"supplemental\.stale": "主路线已更新；箱动态与订舱参考信息沿用 \{time\} 的旧数据/);
+  assert.match(stylesSource, /supplemental-details-status\[data-state="stale"\]/);
   assert.match(appSource, /if \(containers\.length === 0\) \{[\s\S]*?cell\.colSpan = 8;[\s\S]*?t\("containers\.empty"\)/);
   assert.match(appSource, /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = false;[\s\S]*?renderContainers\(containers\)/);
   assert.doesNotMatch(appSource, /elements\["container-panel"\]\.hidden = containers\.length === 0/);

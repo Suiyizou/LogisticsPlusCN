@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -1295,6 +1296,650 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void batchMainRefreshCarriesForwardOlderSupplementalDataAsStalePending()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    NormalizedTrackRequest supplementalRequest = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.loadSupplementalDetails(supplementalRequest)).thenReturn(
+        objectMapper.readTree("""
+            {
+              "fetchedAt": "2026-07-16T10:02:00Z",
+              "partial": false,
+              "containers": [{
+                "number": "FBIU4832780",
+                "latestEvent": "Discharged at Last POD",
+                "latestEventTime": "2026-08-01T15:38:00Z"
+              }],
+              "references": {
+                "external": ["REF-OLD"],
+                "business": {"clientPoNumber": "PO-OLD"},
+                "information": [{"name": "POD", "value": "Long Beach", "sequence": 1}]
+              }
+            }
+            """
+        )
+    );
+    service.loadSupplementalDetails(
+        shipmentId,
+        new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+        business
+    );
+
+    String taskId = "batch_1234567890abcdef";
+    NormalizedTrackRequest batchRequest = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001", taskId
+    );
+    when(adapterClient.track(batchRequest, true)).thenReturn(objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-08-08T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "BK-10001"},
+            "summary": {
+              "bookingNumbers": ["BK-10001"],
+              "latestEvent": {"name": "Empty returned"}
+            },
+            "route": [{"sequence": 1, "city": "Long Beach", "actualTime": "2026-08-07T20:24:00Z"}],
+            "containers": [],
+            "references": {"external": [], "business": {}, "information": []}
+          },
+          "strategy": {"requested": "AUTO", "used": "NETWORK"}
+        }
+        """));
+
+    ObjectNode refreshed = service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BOOKING", "BK-10001", true, null, taskId
+        ),
+        business
+    );
+
+    JsonNode snapshot = refreshed.path("snapshot");
+    assertThat(snapshot.path("summary").path("latestEvent").path("name").asText())
+        .isEqualTo("Empty returned");
+    assertThat(snapshot.path("containers").findValuesAsText("number"))
+        .contains("FBIU4832780");
+    assertThat(snapshot.path("references").path("external").get(0).asText())
+        .isEqualTo("REF-OLD");
+    assertThat(snapshot.path("supplementalDetails").path("carriedForward").asBoolean())
+        .isTrue();
+    assertThat(snapshot.path("supplementalDetails").path("pendingRefresh").asBoolean())
+        .isTrue();
+    assertThat(snapshot.path("supplementalDetails").path("partial").asBoolean())
+        .isTrue();
+  }
+
+  @Test
+  void automaticMainRefreshPreservesOlderSupplementalDataWhenEnrichmentIsPartial()
+      throws Exception {
+    ObjectNode initial = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = initial.path("shipmentId").asText();
+    NormalizedTrackRequest supplementalRequest = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.loadSupplementalDetails(supplementalRequest)).thenReturn(
+        objectMapper.readTree("""
+            {
+              "partial": false,
+              "containers": [{
+                "number":"CSNU1234567",
+                "latestEvent":"Discharged at Last POD",
+                "latestEventTime":"2026-08-01T15:38:00Z"
+              }],
+              "references": {"external":[],"business":{},"information":[]}
+            }
+            """
+        )
+    );
+    service.loadSupplementalDetails(
+        shipmentId,
+        new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+        business
+    );
+    NormalizedTrackRequest request = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001"
+    );
+    ObjectNode firstPartial = (ObjectNode) objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-08-08T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "BK-10001"},
+            "summary": {
+              "bookingNumbers": ["BK-10001"],
+              "latestEvent": {"name": "Discharged"}
+            },
+            "route": [{"sequence": 1, "city": "Long Beach"}],
+            "containers": [{"number":"CSNU1234567","transportMode":"Vessel"}]
+          },
+          "enrichment": {
+            "partial": true,
+            "warning": {
+              "code": "COSCO_UPSTREAM_BLOCKED",
+              "message": "COSCO temporarily rejected this outbound IP"
+            }
+          },
+          "strategy": {"requested": "AUTO", "used": "NETWORK"}
+        }
+        """);
+    ObjectNode secondPartial = firstPartial.deepCopy();
+    ((ObjectNode) secondPartial.path("snapshot")).put("fetchedAt", "2026-08-09T10:00:00Z");
+    when(adapterClient.track(request, true)).thenReturn(firstPartial, secondPartial);
+
+    ObjectNode refreshed = service.refreshAutomatically("COSCO", "BOOKING", "BK-10001");
+    ObjectNode refreshedAgain = service.refreshAutomatically("COSCO", "BOOKING", "BK-10001");
+
+    assertThat(refreshed.path("snapshot").path("summary").path("latestEvent")
+        .path("name").asText()).isEqualTo("Discharged");
+    assertThat(refreshed.path("snapshot").path("containers").findValuesAsText("number"))
+        .contains("CSNU1234567");
+    assertThat(refreshed.path("snapshot").path("containers").get(0)
+        .path("transportMode").asText()).isEqualTo("Vessel");
+    assertThat(refreshed.path("snapshot").path("containers").get(0)
+        .path("latestEvent").asText()).isEqualTo("Discharged at Last POD");
+    assertThat(refreshed.path("snapshot").path("supplementalDetails")
+        .path("carriedForward").asBoolean()).isTrue();
+    assertThat(refreshed.path("snapshot").path("supplementalDetails")
+        .path("pendingRefresh").asBoolean()).isTrue();
+    assertThat(refreshed.path("snapshot").path("supplementalDetails")
+        .path("sourceFetchedAt").asText()).isEqualTo("2026-07-16T10:01:00Z");
+    assertThat(refreshedAgain.path("snapshot").path("supplementalDetails")
+        .path("sourceFetchedAt").asText()).isEqualTo("2026-07-16T10:01:00Z");
+  }
+
+  @Test
+  void concurrentSupplementalMergesAcrossServiceInstancesPreserveBothResults()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    TrackingAdapterClient competingAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties.setCacheTtl(Duration.ofMinutes(15));
+    ShipmentTrackingService competingService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        competingAdapter,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
+    );
+    NormalizedTrackRequest firstRequest = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    NormalizedTrackRequest secondRequest = new NormalizedTrackRequest(
+        "COSCO", "PROXY", "BOOKING", "BK-10001"
+    );
+    JsonNode firstDetails = objectMapper.readTree("""
+        {
+          "partial": false,
+          "containers": [{"number":"AAAA1234567","latestEvent":"Loaded"}],
+          "references": {"external":["REF-A"],"business":{},"information":[]}
+        }
+        """);
+    JsonNode secondDetails = objectMapper.readTree("""
+        {
+          "partial": false,
+          "containers": [{"number":"BBBB1234567","latestEvent":"Discharged"}],
+          "references": {"external":["REF-B"],"business":{},"information":[]}
+        }
+        """);
+    CountDownLatch adaptersReady = new CountDownLatch(2);
+    CountDownLatch releaseAdapters = new CountDownLatch(1);
+    when(adapterClient.loadSupplementalDetails(firstRequest)).thenAnswer(invocation -> {
+      adaptersReady.countDown();
+      releaseAdapters.await(2, TimeUnit.SECONDS);
+      return firstDetails;
+    });
+    when(competingAdapter.loadSupplementalDetails(secondRequest)).thenAnswer(invocation -> {
+      adaptersReady.countDown();
+      releaseAdapters.await(2, TimeUnit.SECONDS);
+      return secondDetails;
+    });
+
+    ExecutorService workers = Executors.newFixedThreadPool(2);
+    try {
+      var first = workers.submit(() -> service.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+          business
+      ));
+      var second = workers.submit(() -> competingService.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "BK-10001", false),
+          business
+      ));
+      assertThat(adaptersReady.await(2, TimeUnit.SECONDS)).isTrue();
+      releaseAdapters.countDown();
+      first.get(5, TimeUnit.SECONDS);
+      second.get(5, TimeUnit.SECONDS);
+    } finally {
+      workers.shutdownNow();
+    }
+
+    JsonNode stored = objectMapper.readTree(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots "
+            + "WHERE id = (SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?)",
+        String.class,
+        shipmentId
+    ));
+    assertThat(stored.path("containers").findValuesAsText("number"))
+        .contains("AAAA1234567", "BBBB1234567");
+    List<String> externalReferences = new java.util.ArrayList<>();
+    stored.path("references").path("external")
+        .forEach(value -> externalReferences.add(value.asText()));
+    assertThat(externalReferences).contains("REF-A", "REF-B");
+    String storedJson = stored.toString();
+    String storedHash = jdbcTemplate.queryForObject(
+        "SELECT payload_sha256 FROM cp_tracking_snapshots "
+            + "WHERE id = (SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?)",
+        String.class,
+        shipmentId
+    );
+    String expectedHash = java.util.HexFormat.of().formatHex(
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(storedJson.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+    );
+    assertThat(storedHash).isEqualTo(expectedHash);
+  }
+
+  @Test
+  void olderSupplementalResponseCannotOverwriteANewerCommittedResponse()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    TrackingAdapterClient newerAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties.setCacheTtl(Duration.ofMinutes(15));
+    ShipmentTrackingService newerService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        newerAdapter,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:02:00Z"), ZoneOffset.UTC)
+    );
+    NormalizedTrackRequest olderRequest = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    NormalizedTrackRequest newerRequest = new NormalizedTrackRequest(
+        "COSCO", "PROXY", "BOOKING", "BK-10001"
+    );
+    JsonNode olderDetails = objectMapper.readTree("""
+        {
+          "fetchedAt":"2026-07-16T10:01:30Z",
+          "partial":false,
+          "containers":[{"number":"AAAA1234567","latestEvent":"Loaded"}],
+          "references":{"external":[],"business":{},"information":[]}
+        }
+        """);
+    JsonNode newerDetails = objectMapper.readTree("""
+        {
+          "fetchedAt":"2026-07-16T10:02:30Z",
+          "partial":false,
+          "containers":[{"number":"AAAA1234567","latestEvent":"Discharged"}],
+          "references":{"external":[],"business":{},"information":[]}
+        }
+        """);
+    CountDownLatch olderRequestStarted = new CountDownLatch(1);
+    CountDownLatch releaseOlderResponse = new CountDownLatch(1);
+    when(adapterClient.loadSupplementalDetails(olderRequest)).thenAnswer(invocation -> {
+      olderRequestStarted.countDown();
+      releaseOlderResponse.await(5, TimeUnit.SECONDS);
+      return olderDetails;
+    });
+    when(newerAdapter.loadSupplementalDetails(newerRequest)).thenReturn(newerDetails);
+
+    ExecutorService worker = Executors.newSingleThreadExecutor();
+    try {
+      var olderResult = worker.submit(() -> service.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+          business
+      ));
+      assertThat(olderRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
+      ObjectNode newerResult = newerService.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "BK-10001", false),
+          business
+      );
+      assertThat(newerResult.path("databaseStored").asBoolean()).isTrue();
+      releaseOlderResponse.countDown();
+      ObjectNode supersededResult = olderResult.get(5, TimeUnit.SECONDS);
+      assertThat(supersededResult.path("superseded").asBoolean()).isTrue();
+      assertThat(supersededResult.path("databaseStored").asBoolean()).isFalse();
+    } finally {
+      releaseOlderResponse.countDown();
+      worker.shutdownNow();
+    }
+
+    JsonNode stored = objectMapper.readTree(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots "
+            + "WHERE id = (SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?)",
+        String.class,
+        shipmentId
+    ));
+    JsonNode container = stored.path("containers").findValue("latestEvent");
+    assertThat(container.asText()).isEqualTo("Discharged");
+    assertThat(stored.path("supplementalDetails").path("lastSuccessfulAt").asText())
+        .isEqualTo("2026-07-16T10:02:30Z");
+    assertThat(stored.path("supplementalDetails").path("lastAppliedRequestStartedAt").asText())
+        .isEqualTo("2026-07-16T10:02:00Z");
+  }
+
+  @Test
+  void mainCarryForwardKeepsTheBarrierAgainstAnOlderSupplementalResponse()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties.setCacheTtl(Duration.ofMinutes(15));
+    TrackingAdapterClient mainAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingService mainService = new ShipmentTrackingService(
+        jdbcTemplate, objectMapper, mainAdapter, cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate), properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:02:00Z"), ZoneOffset.UTC)
+    );
+    TrackingAdapterClient olderAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingService olderService = new ShipmentTrackingService(
+        jdbcTemplate, objectMapper, olderAdapter, cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate), properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:03:00Z"), ZoneOffset.UTC)
+    );
+    TrackingAdapterClient newerAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingService newerService = new ShipmentTrackingService(
+        jdbcTemplate, objectMapper, newerAdapter, cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate), properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:04:00Z"), ZoneOffset.UTC)
+    );
+    NormalizedTrackRequest olderRequest = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    NormalizedTrackRequest newerRequest = new NormalizedTrackRequest(
+        "COSCO", "PROXY", "BOOKING", "BK-10001"
+    );
+    NormalizedTrackRequest mainRequest = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001"
+    );
+    JsonNode olderDetails = objectMapper.readTree("""
+        {
+          "fetchedAt":"2026-07-16T10:03:30Z",
+          "partial":false,
+          "containers":[{"number":"AAAA1234567","latestEvent":"Loaded"}],
+          "references":{"external":[],"business":{},"information":[]}
+        }
+        """);
+    JsonNode newerDetails = objectMapper.readTree("""
+        {
+          "fetchedAt":"2026-07-16T10:04:30Z",
+          "partial":false,
+          "containers":[{"number":"AAAA1234567","latestEvent":"Discharged"}],
+          "references":{"external":["REF-NEW"],"business":{},"information":[]}
+        }
+        """);
+    JsonNode mainResponse = objectMapper.readTree("""
+        {
+          "snapshot":{
+            "channel":"NETWORK",
+            "fetchedAt":"2026-07-16T10:02:30Z",
+            "tracking":{"type":"BOOKING","number":"BK-10001"},
+            "summary":{"bookingNumbers":["BK-10001"],"latestEvent":{"name":"In transit"}},
+            "route":[{"sequence":1,"city":"Long Beach"}],
+            "containers":[{"number":"AAAA1234567","latestEvent":"Discharged"}],
+            "references":{"external":["REF-NEW"],"business":{},"information":[]}
+          },
+          "enrichment":{
+            "partial":true,
+            "warning":{"code":"COSCO_UPSTREAM_BLOCKED","message":"supplement delayed"}
+          },
+          "strategy":{"requested":"AUTO","used":"NETWORK"}
+        }
+        """);
+    CountDownLatch mainRequestStarted = new CountDownLatch(1);
+    CountDownLatch releaseMainResponse = new CountDownLatch(1);
+    CountDownLatch olderRequestStarted = new CountDownLatch(1);
+    CountDownLatch releaseOlderResponse = new CountDownLatch(1);
+    when(mainAdapter.track(mainRequest, true)).thenAnswer(invocation -> {
+      mainRequestStarted.countDown();
+      releaseMainResponse.await(5, TimeUnit.SECONDS);
+      return mainResponse;
+    });
+    when(olderAdapter.loadSupplementalDetails(olderRequest)).thenAnswer(invocation -> {
+      olderRequestStarted.countDown();
+      releaseOlderResponse.await(5, TimeUnit.SECONDS);
+      return olderDetails;
+    });
+    when(newerAdapter.loadSupplementalDetails(newerRequest)).thenReturn(newerDetails);
+
+    ExecutorService workers = Executors.newFixedThreadPool(2);
+    try {
+      var mainResult = workers.submit(
+          () -> mainService.refreshAutomatically("COSCO", "BOOKING", "BK-10001")
+      );
+      assertThat(mainRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
+      var olderResult = workers.submit(() -> olderService.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+          business
+      ));
+      assertThat(olderRequestStarted.await(2, TimeUnit.SECONDS)).isTrue();
+      newerService.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "BK-10001", false),
+          business
+      );
+      releaseMainResponse.countDown();
+      ObjectNode refreshed = mainResult.get(5, TimeUnit.SECONDS);
+      assertThat(refreshed.path("snapshot").path("containers").findValuesAsText("number"))
+          .contains("AAAA1234567");
+      releaseOlderResponse.countDown();
+      assertThat(olderResult.get(5, TimeUnit.SECONDS).path("superseded").asBoolean()).isTrue();
+    } finally {
+      releaseMainResponse.countDown();
+      releaseOlderResponse.countDown();
+      workers.shutdownNow();
+    }
+
+    JsonNode stored = objectMapper.readTree(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots "
+            + "WHERE id = (SELECT current_snapshot_id FROM cp_shipments WHERE public_id = ?)",
+        String.class,
+        shipmentId
+    ));
+    assertThat(stored.path("containers").findValue("latestEvent").asText())
+        .isEqualTo("Discharged");
+    assertThat(stored.path("supplementalDetails").path("lastAppliedRequestStartedAt").asText())
+        .isEqualTo("2026-07-16T10:04:00Z");
+  }
+
+  @Test
+  void supplementalMergeRollsBackSnapshotAndShipmentWhenEventPublicationFails()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    Map<String, Object> before = jdbcTemplate.queryForMap(
+        """
+        SELECT t.snapshot_json, t.payload_sha256, s.updated_at
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ?
+        """,
+        shipmentId
+    );
+    TrackingAdapterClient failingAdapter = mock(TrackingAdapterClient.class);
+    NormalizedTrackRequest request = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    when(failingAdapter.loadSupplementalDetails(request)).thenReturn(objectMapper.readTree("""
+        {
+          "partial":false,
+          "containers":[{"number":"ROLL1234567","latestEvent":"Loaded"}],
+          "references":{"external":["REF-ROLLBACK"],"business":{},"information":[]}
+        }
+        """));
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingService failingService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        failingAdapter,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new DataSourceTransactionManager(jdbcTemplate.getDataSource()),
+        event -> {
+          throw new IllegalStateException("event publication failed");
+        }
+    );
+
+    assertThatThrownBy(() -> failingService.loadSupplementalDetails(
+        shipmentId,
+        new ShipmentTrackRequest("COSCO", "NETWORK", "BOOKING", "BK-10001", false),
+        business
+    )).isInstanceOf(IllegalStateException.class)
+        .hasMessage("event publication failed");
+
+    Map<String, Object> after = jdbcTemplate.queryForMap(
+        """
+        SELECT t.snapshot_json, t.payload_sha256, s.updated_at
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.public_id = ?
+        """,
+        shipmentId
+    );
+    assertThat(after).isEqualTo(before);
+  }
+
+  @Test
+  void mainRefreshCarriesForwardSupplementalDataCommittedWhileCarrierCallWasInFlight()
+      throws Exception {
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    TrackingAdapterClient competingAdapter = mock(TrackingAdapterClient.class);
+    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties.setCacheTtl(Duration.ofMinutes(15));
+    ShipmentTrackingService competingService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        competingAdapter,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:01:00Z"), ZoneOffset.UTC)
+    );
+    NormalizedTrackRequest forceRequest = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001"
+    );
+    JsonNode mainResponse = objectMapper.readTree("""
+        {
+          "snapshot": {
+            "channel": "NETWORK",
+            "fetchedAt": "2026-08-08T10:00:00Z",
+            "tracking": {"type": "BOOKING", "number": "BK-10001"},
+            "summary": {
+              "bookingNumbers": ["BK-10001"],
+              "latestEvent": {"name": "Discharged"}
+            },
+            "route": [{"sequence":1,"city":"Long Beach"}],
+            "containers": [],
+            "references": {"external":[],"business":{},"information":[]}
+          },
+          "enrichment": {
+            "partial": true,
+            "warning": {"code":"COSCO_UPSTREAM_BLOCKED","message":"supplement delayed"}
+          },
+          "strategy": {"requested":"AUTO","used":"NETWORK"}
+        }
+        """);
+    CountDownLatch mainCarrierCallStarted = new CountDownLatch(1);
+    CountDownLatch releaseMainCarrierCall = new CountDownLatch(1);
+    when(adapterClient.track(forceRequest, true)).thenAnswer(invocation -> {
+      mainCarrierCallStarted.countDown();
+      releaseMainCarrierCall.await(5, TimeUnit.SECONDS);
+      return mainResponse;
+    });
+    NormalizedTrackRequest supplementalRequest = new NormalizedTrackRequest(
+        "COSCO", "PROXY", "BOOKING", "BK-10001"
+    );
+    when(competingAdapter.loadSupplementalDetails(supplementalRequest)).thenReturn(
+        objectMapper.readTree("""
+            {
+              "partial": false,
+              "containers": [{
+                "number":"NEWS1234567",
+                "latestEvent":"Discharged at Last POD",
+                "latestEventTime":"2026-08-08T09:30:00Z"
+              }],
+              "references": {
+                "external":["REF-LATEST"],
+                "business":{},
+                "information":[{"name":"POD","value":"Long Beach","sequence":1}]
+              }
+            }
+            """
+        )
+    );
+
+    ExecutorService worker = Executors.newSingleThreadExecutor();
+    try {
+      var mainRefresh = worker.submit(
+          () -> service.refreshAutomatically("COSCO", "BOOKING", "BK-10001")
+      );
+      assertThat(mainCarrierCallStarted.await(2, TimeUnit.SECONDS)).isTrue();
+      competingService.loadSupplementalDetails(
+          shipmentId,
+          new ShipmentTrackRequest("COSCO", "PROXY", "BOOKING", "BK-10001", false),
+          business
+      );
+      releaseMainCarrierCall.countDown();
+      ObjectNode refreshed = mainRefresh.get(5, TimeUnit.SECONDS);
+
+      assertThat(refreshed.path("snapshot").path("containers").findValuesAsText("number"))
+          .contains("NEWS1234567");
+      List<String> externalReferences = new java.util.ArrayList<>();
+      refreshed.path("snapshot").path("references").path("external")
+          .forEach(value -> externalReferences.add(value.asText()));
+      assertThat(externalReferences).contains("REF-LATEST");
+      assertThat(refreshed.path("snapshot").path("supplementalDetails")
+          .path("carriedForward").asBoolean()).isTrue();
+    } finally {
+      releaseMainCarrierCall.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  @Test
   void keepsTheLastValidSnapshotWhenAForcedRefreshReturnsEmpty() throws Exception {
     ObjectNode first = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
@@ -1327,6 +1972,40 @@ class ShipmentTrackingServiceTest {
         .isEqualTo("Loaded on board");
     assertThat(refreshed.path("warning").asText()).contains("last valid snapshot");
     assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isEqualTo(1);
+    verify(adapterClient).track(normalized, true);
+  }
+
+  @Test
+  void batchForceRefreshNeverReturnsAStaleSnapshotAsSuccess() throws Exception {
+    ObjectNode first = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
+        employee
+    );
+    String taskId = "batch_1234567890abcdef";
+    NormalizedTrackRequest normalized = new NormalizedTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001", taskId
+    );
+    when(adapterClient.track(normalized, true)).thenThrow(new ApiException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "COSCO_UPSTREAM_BLOCKED",
+        "COSCO temporarily rejected this outbound IP",
+        900_000L,
+        Map.of("route", "DIRECT", "upstreamStatus", 403)
+    ));
+
+    assertThatThrownBy(() -> service.track(
+        new ShipmentTrackRequest(
+            "COSCO", "AUTO", "BOOKING", "BK-10001", true, null, taskId
+        ),
+        business
+    )).isInstanceOfSatisfying(ApiException.class, error -> {
+      assertThat(error.code()).isEqualTo("COSCO_UPSTREAM_BLOCKED");
+      assertThat(error.details()).containsEntry("fallbackSource", "MYSQL_STALE");
+      assertThat(error.details()).containsEntry("stale", true);
+      assertThat(error.details()).containsEntry(
+          "snapshotFetchedAt", first.path("fetchedAt").asText()
+      );
+    });
     verify(adapterClient).track(normalized, true);
   }
 

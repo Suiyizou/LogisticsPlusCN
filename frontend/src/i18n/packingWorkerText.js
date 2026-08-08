@@ -1,7 +1,7 @@
 export const PACKING_WORKER_TEXT = {
   nonStackFoundationStrategyName: "LAFF 不可重压基础优先",
   coordinateReuseStrategyName: "复用完整箱坐标",
-  strategyPipeline: "每个箱型独立运行固定高度带 LAFF 搜索，分别尝试大底面积、同层行填充、高度、承重、不可重压基础优先和不可重压最后策略",
+  strategyPipeline: "每个箱型先保留含不可重压基础回填的高利用率基线，再尝试跨柜后放方案；后放方案只有在不增加货柜数时才采用",
   layerPipeline: "每个 LAFF 层固定目标层顶，按 P0 扩展层底、P1 补齐目标顶面、P2 层内补高的硬顺序穷尽 Extreme Point 候选后才开启下一层"
 };
 

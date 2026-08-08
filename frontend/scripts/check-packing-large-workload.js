@@ -208,4 +208,42 @@ assert.deepEqual(
   "serialized resume must retain the boundary-fit 40HQ + 40GP partition"
 );
 
-console.log("Packing large-workload timeout, grouping, serialized mixed-plan, and resume regression passed.");
+const furnitureEvaluation = calculate({
+  cargos: [
+    { id: "furniture-table", name: "FT-1200", lengthCm: 120, widthCm: 80, heightCm: 40, quantity: 25, weightKg: 25, type: "normal" },
+    { id: "furniture-rack", name: "SR-4L", lengthCm: 75, widthCm: 35, heightCm: 60, quantity: 60, weightKg: 6, type: "normal" },
+    { id: "furniture-chair", name: "OC-668", lengthCm: 65, widthCm: 65, heightCm: 85, quantity: 20, weightKg: 12, type: "normal" },
+    { id: "furniture-mattress", name: "VM-150", lengthCm: 140, widthCm: 70, heightCm: 25, quantity: 30, weightKg: 18, type: "normal" },
+    { id: "furniture-sofa", name: "SF-2S", lengthCm: 150, widthCm: 80, heightCm: 60, quantity: 10, weightKg: 35, type: "nonstack" },
+    { id: "furniture-bookcase", name: "BK-95", lengthCm: 95, widthCm: 40, heightCm: 35, quantity: 40, weightKg: 10, type: "pallet" }
+  ],
+  containers: [{
+    id: "furniture-20gp",
+    name: "Furniture 20GP",
+    lengthCm: 590,
+    widthCm: 235.2,
+    heightCm: 239.5,
+    heightLimitCm: 239.5,
+    payloadKg: 21800,
+    usagePriority: "common",
+    visualKind: "dry",
+    equipmentClass: "GP"
+  }],
+  utilizationPercent: 90,
+  globalGapCm: 2,
+  supportRatioPercent: 80,
+  nonStackSupportRatioPercent: 90
+}).evaluations[0];
+
+assert.equal(furnitureEvaluation.fitStatus, "fit");
+assert.equal(furnitureEvaluation.boxes, 3, "late non-stack preference must preserve the three-container baseline");
+assert.equal(physicalPlacements(furnitureEvaluation).length, 185);
+assert.equal(new Set(physicalPlacements(furnitureEvaluation).map((placement) => placement.unitKey)).size, 185);
+const furnitureNonStackCounts = furnitureEvaluation.packedBoxes.map((box) =>
+  box.placed.filter((placement) => placement.nonStack).length
+);
+assert.deepEqual(furnitureEvaluation.packedBoxes.map((box) => box.placed.length), [68, 44, 73]);
+assert.deepEqual(furnitureNonStackCounts, [0, 4, 6], "fragile sofas should be concentrated into the latest feasible containers");
+assert.ok(furnitureEvaluation.packedBoxes.every((box) => box.strategySummary.nonStackFallbackRequired === 1));
+
+console.log("Packing large-workload timeout, grouping, non-stack load order, serialized mixed-plan, and resume regression passed.");

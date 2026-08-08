@@ -102,7 +102,7 @@
               <el-button v-if="hiddenSkuKeys.size" link type="primary" @click="showAllSku">{{ tr("全部显示") }}</el-button>
             </div>
           </template>
-          <el-scrollbar max-height="300">
+          <el-scrollbar class="legend-scrollbar" max-height="220">
             <button
               v-for="item in sceneData.legend"
               :key="item.key"
@@ -214,6 +214,9 @@
               total: planBoxCount,
               value: planAverageFillPercent.toFixed(1)
             }) }}
+          </p>
+          <p v-if="nonStackFallbackVisible" class="nonstack-fallback-hint">
+            {{ t("metrics.nonStackFallbackHint") }}
           </p>
           <el-alert
             v-if="sceneData.stats.performanceMode"
@@ -357,6 +360,10 @@ const planAverageFillPercent = computed(() => {
 const currentBoxUtilizationLabel = computed(() => sceneData.value.stats.utilizationLabel === "metrics.deckUtilization"
   ? "metrics.currentBoxDeckUtilization"
   : "metrics.currentBoxSpaceUtilization");
+const nonStackFallbackVisible = computed(() =>
+  Number(props.selectedBox?.strategySummary?.nonStackFallbackRequired || 0) > 0
+  && (props.placements as any[]).some((placement) => Boolean(placement?.nonStack))
+);
 const balanceState = computed(() => resolveBalanceState({
   container: props.container as any,
   placements: props.placements as any[],

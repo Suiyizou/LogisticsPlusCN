@@ -560,6 +560,39 @@ function canReuseOneBox(reusable, container, total) {
 }
 
 function packMultiple(container, allUnits) {
+  const baseline = packMultipleCore(container, allUnits);
+  const hasStackable = allUnits.some((unit) => !unit.nonStack);
+  const hasNonStack = allUnits.some((unit) => unit.nonStack);
+  if (!hasStackable || !hasNonStack || baseline.boxes <= 0 || baseline.estimated || baseline.fatalOversize) {
+    return orderPackedBoxesForNonStackLoading(container, baseline, "baseline");
+  }
+
+  const deferred = packMultipleCore(container, allUnits, {
+    deferNonStackAcrossBoxes: true,
+    maxDetailedBoxes: Math.min(MAX_DETAILED_BOXES, baseline.boxes),
+    allowEstimate: false
+  });
+  const deferredComplete = deferred.boxes > 0
+    && !deferred.estimated
+    && !deferred.fatalOversize
+    && !deferred.balanceBlocked
+    && deferred.packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0) === sumUnitQuantity(allUnits)
+    && deferred.packedBoxes.every((box) =>
+      validateAllPlacements(container, box.placed)
+      && box.balanceValidation?.severity !== "red"
+      && !box.strategySummary?.complianceBlocked
+    );
+  const baselineComplete = baseline.packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0) === sumUnitQuantity(allUnits);
+  const useDeferred = deferredComplete && (!baselineComplete || deferred.boxes <= baseline.boxes);
+  return orderPackedBoxesForNonStackLoading(
+    container,
+    useDeferred ? deferred : baseline,
+    useDeferred ? "deferred" : "baseline-fallback",
+    { baselineBoxes: baseline.boxes, deferredBoxes: deferred.boxes }
+  );
+}
+
+function packMultipleCore(container, allUnits, options = {}) {
   let remaining = allUnits.map(copyUnit);
   const packedBoxes = [];
   let firstBox = { placed: [], unplaced: remaining, strategyId: "none", strategyName: "无可行摆放", strategySummary: {} };
@@ -568,7 +601,8 @@ function packMultiple(container, allUnits) {
   let balanceBlocked = false;
   let remainingUnitCountAfterDetailed = 0;
 
-  for (let boxIndex = 0; remaining.length && boxIndex < MAX_DETAILED_BOXES; boxIndex += 1) {
+  const maxDetailedBoxes = Math.max(1, Math.min(MAX_DETAILED_BOXES, Number(options.maxDetailedBoxes || MAX_DETAILED_BOXES)));
+  for (let boxIndex = 0; remaining.length && boxIndex < maxDetailedBoxes; boxIndex += 1) {
     traceProgress({
       phase: "box",
       boxIndex: boxIndex + 1,
@@ -580,7 +614,7 @@ function packMultiple(container, allUnits) {
       level: "summary",
       text: `${container.name} · 第 ${boxIndex + 1} 货舱开始：剩余 ${sumUnitQuantity(remaining)} 件 / ${remaining.length} 个搜索单元。`
     });
-    const packed = packContainer(container, remaining);
+    const packed = packContainer(container, remaining, options);
     if (boxIndex === 0) firstBox = packed;
     if (!packed.placed.length) {
       fatalOversize = true;
@@ -599,7 +633,7 @@ function packMultiple(container, allUnits) {
   }
 
   let boxes = packedBoxes.length;
-  if (remaining.length && packedBoxes.length && !fatalOversize) {
+  if (remaining.length && packedBoxes.length && !fatalOversize && options.allowEstimate !== false) {
     remainingUnitCountAfterDetailed = sumUnitQuantity(remaining);
     const averagePlaced = Math.max(1, Math.round(packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0) / packedBoxes.length));
     boxes += Math.ceil(remainingUnitCountAfterDetailed / averagePlaced);
@@ -611,11 +645,79 @@ function packMultiple(container, allUnits) {
     boxes: remaining.length ? -1 : boxes,
     firstBox,
     packedBoxes,
-    detailedBoxLimit: MAX_DETAILED_BOXES,
+    detailedBoxLimit: maxDetailedBoxes,
     remainingUnitCountAfterDetailed,
     estimated,
     fatalOversize: fatalOversize || remaining.length > 0,
     balanceBlocked
+  };
+}
+
+function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = {}) {
+  const source = Array.isArray(plan?.packedBoxes) ? plan.packedBoxes : [];
+  const canRebuild = plan?.boxes > 0 && !plan.estimated && !plan.fatalOversize;
+  if (!canRebuild) {
+    const preserved = source.map((box) => ({
+      ...box,
+      placed: box.placed.map(copyUnit),
+      unplaced: box.unplaced.map(stripPlacement),
+      strategySummary: {
+        ...(box.strategySummary || {}),
+        nonStackPlanMode: mode,
+        nonStackBaselineBoxes: Number(comparison.baselineBoxes || plan.boxes || 0),
+        nonStackDeferredBoxes: Number(comparison.deferredBoxes || 0),
+        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0
+      }
+    }));
+    return {
+      ...plan,
+      firstBox: preserved[0] || plan.firstBox,
+      packedBoxes: preserved
+    };
+  }
+  const hasNonStack = source.some((box) => box.placed.some((unit) => unit.nonStack));
+  const canReorder = source.length > 1 && hasNonStack;
+  const ordered = (canReorder ? source.map((box, index) => ({ box, index })).sort((a, b) => {
+    const nonStackDiff = sumUnitQuantity(a.box.placed.filter((unit) => unit.nonStack))
+      - sumUnitQuantity(b.box.placed.filter((unit) => unit.nonStack));
+    if (nonStackDiff) return nonStackDiff;
+    const placedDiff = sumUnitQuantity(b.box.placed) - sumUnitQuantity(a.box.placed);
+    if (placedDiff) return placedDiff;
+    return a.index - b.index;
+  }).map((entry) => entry.box) : source).map((box) => ({
+    ...box,
+    placed: box.placed.map(copyUnit)
+  }));
+
+  const rebuilt = ordered.map((box, index) => {
+    const unplaced = ordered
+      .slice(index + 1)
+      .flatMap((laterBox) => laterBox.placed.map(stripPlacement));
+    const residual = residualPlanMetrics(container, unplaced);
+    return {
+      ...box,
+      unplaced,
+      strategySummary: {
+        ...(box.strategySummary || {}),
+        unplacedCount: sumUnitQuantity(unplaced),
+        solverUnplacedCount: unplaced.length,
+        remainingBoxLowerBound: residual.remainingBoxLowerBound,
+        remainingNonStackQuantity: residual.nonStackQuantity,
+        remainingNonStackDeckDemandRatio: round(residual.nonStackDeckDemandRatio),
+        isolatedNonStackTail: residual.isolatedNonStackTail,
+        oversizeNonStackQuantity: residual.oversizeNonStackQuantity,
+        nonStackPlanMode: mode,
+        nonStackBaselineBoxes: Number(comparison.baselineBoxes || plan.boxes || 0),
+        nonStackDeferredBoxes: Number(comparison.deferredBoxes || 0),
+        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0
+      }
+    };
+  });
+
+  return {
+    ...plan,
+    firstBox: rebuilt[0] || plan.firstBox,
+    packedBoxes: rebuilt
   };
 }
 
@@ -1407,7 +1509,7 @@ function axisOrientationCode(axis) {
   return "?";
 }
 
-function packContainer(container, units) {
+function packContainer(container, units, options = {}) {
   const { stackable, nonStack } = splitUnitsForFinalNonStackPass(units);
   const stackableContainer = container;
   const baseAttempts = [];
@@ -1415,7 +1517,7 @@ function packContainer(container, units) {
   let rejectedByBalance = 0;
   for (let strategyIndex = 0; strategyIndex < SEARCH_STRATEGIES.length; strategyIndex += 1) {
     const strategy = SEARCH_STRATEGIES[strategyIndex];
-    if (usesNonStackFoundationFirst(strategy) && !nonStack.length) continue;
+    if (usesNonStackFoundationFirst(strategy) && (!nonStack.length || options.deferNonStackAcrossBoxes)) continue;
     traceProgress({
       phase: "strategy",
       strategyIndex: strategyIndex + 1,
@@ -1431,7 +1533,7 @@ function packContainer(container, units) {
     const strategyUnits = usesNonStackFoundationFirst(strategy) ? units.map(stripPlacement) : stackable;
     const ordered = orderUnits(strategyUnits, strategy.unitOrder);
     const stackableAttempt = packLayerLaff(stackableContainer, ordered, strategy);
-    const attempt = finalizeStrategyAttempt(container, stackableAttempt, nonStack, strategy, rejectedByBalance);
+    const attempt = finalizeStrategyAttempt(container, stackableAttempt, nonStack, strategy, rejectedByBalance, options);
     if (attempt.balanceValidation?.severity === "red") rejectedByBalance += 1;
     baseAttempts.push(stackableAttempt);
     attempts.push(attempt);
@@ -1462,7 +1564,7 @@ function packContainer(container, units) {
     gapSwapped = optimizeVerticalTailFills(stackableContainer, gapSwapped, bestStrategy);
     gapSwapped = optimizeSparseTailSupport(stackableContainer, gapSwapped, bestStrategy);
     if (gapSwapped !== baseBest) {
-      const finalGapSwapped = finalizeStrategyAttempt(container, gapSwapped, nonStack, bestStrategy, rejectedByBalance);
+      const finalGapSwapped = finalizeStrategyAttempt(container, gapSwapped, nonStack, bestStrategy, rejectedByBalance, options);
       if (finalGapSwapped.balanceValidation?.severity === "red") rejectedByBalance += 1;
       attempts.push(finalGapSwapped);
       traceDecision({
@@ -1506,7 +1608,7 @@ function packContainer(container, units) {
       refined = optimizeVerticalTailFills(stackableContainer, refined, bestStrategy);
       refined = optimizeSparseTailSupport(stackableContainer, refined, bestStrategy);
     }
-    const finalRefined = finalizeStrategyAttempt(container, refined, nonStack, bestStrategy, rejectedByBalance);
+    const finalRefined = finalizeStrategyAttempt(container, refined, nonStack, bestStrategy, rejectedByBalance, options);
     if (finalRefined.balanceValidation?.severity === "red") rejectedByBalance += 1;
     attempts.push(finalRefined);
     traceDecision({
@@ -1557,22 +1659,23 @@ function usesNonStackFoundationFirst(strategy) {
   return Boolean(strategy?.nonStackFoundationFirst || strategy?.id === NONSTACK_FOUNDATION_STRATEGY_ID);
 }
 
-function finalizeStrategyAttempt(container, attempt, deferredNonStack, strategy, rejectedByBalance = 0) {
+function finalizeStrategyAttempt(container, attempt, deferredNonStack, strategy, rejectedByBalance = 0, options = {}) {
   if (usesNonStackFoundationFirst(strategy)) {
     return finalizeAttempt(container, attempt, strategy, rejectedByBalance);
   }
-  return finalizeWithDeferredNonStack(container, attempt, deferredNonStack, strategy, rejectedByBalance);
+  return finalizeWithDeferredNonStack(container, attempt, deferredNonStack, strategy, rejectedByBalance, options);
 }
 
-function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonStack, strategy, rejectedByBalance = 0) {
+function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonStack, strategy, rejectedByBalance = 0, options = {}) {
   let placed = (stackableAttempt.placed || []).filter((unit) => !unit.nonStack).map(copyUnit);
   const stackableUnplaced = (stackableAttempt.unplaced || []).filter((unit) => !unit.nonStack).map(stripPlacement);
   let nonStackTopPlacedCount = 0;
   let nonStackUnplaced = [];
   let nonStackDisplacementSwapCount = 0;
   let nonStackDisplacementPlacedCount = 0;
+  const deferNonStackToLaterBox = Boolean(options.deferNonStackAcrossBoxes && stackableUnplaced.length > 0);
 
-  if (deferredNonStack.length) {
+  if (deferredNonStack.length && !deferNonStackToLaterBox) {
     const nonStackResult = placeDeferredNonStackOnTop(container, placed, deferredNonStack, strategy);
     nonStackTopPlacedCount = nonStackResult.placedCount;
     nonStackUnplaced = nonStackResult.unplaced.map(stripPlacement);
@@ -1580,6 +1683,13 @@ function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonSt
       phase: "layer",
       level: "summary",
       text: `${container.name} - ${strategy.name} - global non-stack final pass: ${nonStackTopPlacedCount}/${sumUnitQuantity(deferredNonStack)} non-stack pcs placed after all stackable search/refill stages.`
+    });
+  } else if (deferredNonStack.length) {
+    nonStackUnplaced = deferredNonStack.map(stripPlacement);
+    traceDecision({
+      phase: "layer",
+      level: "summary",
+      text: `${container.name} - ${strategy.name} - deferred ${sumUnitQuantity(deferredNonStack)} non-stack pcs to a later box because ${sumUnitQuantity(stackableUnplaced)} stackable pcs are still pending.`
     });
   }
   if (nonStackUnplaced.length && placed.some((unit) => unit.nonStack)) {
@@ -1610,7 +1720,8 @@ function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonSt
     nonStackTopPlacedCount,
     nonStackDisplacementSwapCount,
     nonStackDisplacementPlacedCount,
-    finalNonStackPass: deferredNonStack.length ? 1 : 0,
+    nonStackDeferredToLaterBoxCount: deferNonStackToLaterBox ? sumUnitQuantity(deferredNonStack) : 0,
+    finalNonStackPass: deferredNonStack.length && !deferNonStackToLaterBox ? 1 : 0,
     layerCount: countLayers(valid ? placed : stackableAttempt.placed)
   });
 
@@ -4392,6 +4503,8 @@ function makePackedBox(placed, unplaced, strategy, stats) {
       blockDowngradePlacedCount: Number(stats.blockDowngradePlacedCount || 0),
       singleBackfillPlacedCount: Number(stats.singleBackfillPlacedCount || 0),
       nonStackTopPlacedCount: Number(stats.nonStackTopPlacedCount || 0),
+      nonStackDeferredToLaterBoxCount: Number(stats.nonStackDeferredToLaterBoxCount || 0),
+      finalNonStackPass: Number(stats.finalNonStackPass || 0),
       nonStackDisplacementSwapCount: Number(stats.nonStackDisplacementSwapCount || 0),
       nonStackDisplacementPlacedCount: Number(stats.nonStackDisplacementPlacedCount || 0),
       edgeOrientationRepackCount: Number(stats.edgeOrientationRepackCount || stats.blueSideRowRepackCount || 0),
@@ -5701,6 +5814,9 @@ function buildTrace(container, units, total, multi, metrics) {
       solverUnplacedCount: box.unplaced.length,
       occupiedVolumeM3: round(sumOccupiedVolumeM3(box.placed)),
       maxTopCm: round(maxTop(box.placed)),
+      nonStackPlacedCount: sumUnitQuantity(box.placed.filter((unit) => unit.nonStack)),
+      nonStackPlanMode: box.strategySummary?.nonStackPlanMode || "",
+      nonStackFallbackRequired: Number(box.strategySummary?.nonStackFallbackRequired || 0),
       balanceSeverity: box.balanceValidation?.severity || "",
       balanceScore: round(box.balanceValidation?.score || 0),
       balanceChecks: box.balanceValidation?.checks || {}

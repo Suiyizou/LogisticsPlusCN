@@ -217,6 +217,8 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
 CREATE TABLE IF NOT EXISTS cp_tracking_refresh_jobs (
   shipment_id BIGINT PRIMARY KEY,
   auto_refresh_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  refresh_scope VARCHAR(24) NOT NULL DEFAULT 'FULL',
+  supplemental_sources VARCHAR(128) NULL,
   terminal_status VARCHAR(40) NULL,
   next_attempt_at DATETIME(6) NULL,
   lease_token CHAR(36) NULL,

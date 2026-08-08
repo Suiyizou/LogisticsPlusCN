@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
+
 const DEFAULT_GROUP = "TRACKING-POOL";
 const DEFAULT_TIMEOUT_MS = 3_000;
 const DEFAULT_NODE_COOLDOWN_MS = 30 * 60_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_REQUESTS_PER_NODE = 12;
+const MAX_PUBLIC_NODE_LENGTH = 80;
 const EXCLUDED_NODE_PATTERN = /下载专用|免费|流量|套餐|官网|到期/i;
 
 const REGION_PRIORITY = [
@@ -12,6 +16,8 @@ const REGION_PRIORITY = [
   /新加坡|singapore|\bsg\b/i,
   /美国|united\s*states|洛杉矶|西雅图|圣何塞|\bus\b/i
 ];
+
+const SENSITIVE_NODE_PATTERN = /(?:[a-z][a-z0-9+.-]*:\/\/)|(?:[^\s:@/]+:[^\s@/]+@)|(?:password|passwd|secret|token|api[-_]?key)\s*[:=]/i;
 
 function integer(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -58,8 +64,30 @@ export function readCoscoProxyPoolConfig(environment = process.env) {
       DEFAULT_MAX_ATTEMPTS,
       1,
       6
+    ),
+    maxRequestsPerNode: integer(
+      environment.COSCO_PROXY_POOL_MAX_REQUESTS_PER_NODE
+        ?? environment.COSCO_PROXY_POOL_REQUEST_BUDGET,
+      DEFAULT_MAX_REQUESTS_PER_NODE,
+      1,
+      1_000
     )
   });
+}
+
+function opaqueNodeAlias(value) {
+  const digest = createHash("sha256").update(value, "utf8").digest("hex").slice(0, 10);
+  return `proxy-${digest}`;
+}
+
+export function safeProxyNodeAlias(value) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  if (SENSITIVE_NODE_PATTERN.test(normalized)) return opaqueNodeAlias(normalized);
+  return normalized.slice(0, MAX_PUBLIC_NODE_LENGTH);
 }
 
 function regionRank(name) {
@@ -99,8 +127,12 @@ export async function runWithProxyPoolRetries(options, operation) {
 export function createCoscoProxyPool(config, options = {}) {
   if (!config) return null;
   const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? Date.now;
   const blockedUntil = new Map();
+  const requestsByNode = new Map();
   let rotationPromise = null;
+  let preparationTail = Promise.resolve();
+  let lastKnownCurrent = null;
 
   async function controllerRequest(path, requestOptions = {}) {
     const timeoutSignal = AbortSignal.timeout(config.timeoutMs);
@@ -122,41 +154,110 @@ export function createCoscoProxyPool(config, options = {}) {
 
   async function groupStatus() {
     const value = await controllerRequest(`/proxies/${encodeURIComponent(config.group)}`);
-    return {
+    const status = {
       current: String(value?.now ?? "").trim(),
       candidates: prioritizeProxyNodes(Array.isArray(value?.all) ? value.all : [])
     };
+    lastKnownCurrent = status.current || lastKnownCurrent;
+    return status;
+  }
+
+  function isCoolingDown(name) {
+    const until = blockedUntil.get(name) ?? 0;
+    if (until <= now()) {
+      if (until > 0) {
+        blockedUntil.delete(name);
+        requestsByNode.delete(name);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  function coolDown(name) {
+    if (!name) return;
+    const existing = blockedUntil.get(name) ?? 0;
+    if (existing <= now()) blockedUntil.set(name, now() + config.nodeCooldownMs);
+  }
+
+  function availableCandidates(status) {
+    return status.candidates.filter((name) => {
+      if (name === status.current) return false;
+      return !isCoolingDown(name);
+    });
+  }
+
+  async function selectNode(name) {
+    await controllerRequest(`/proxies/${encodeURIComponent(config.group)}`, {
+      method: "PUT",
+      body: JSON.stringify({ name })
+    });
+    lastKnownCurrent = name;
   }
 
   async function rotateNow(reason = "upstream-protection") {
     const status = await groupStatus();
-    if (status.current) {
-      blockedUntil.set(status.current, Date.now() + config.nodeCooldownMs);
-    }
-    const available = status.candidates.filter((name) => {
-      if (name === status.current) return false;
-      return (blockedUntil.get(name) ?? 0) <= Date.now();
-    });
+    coolDown(status.current);
+    const available = availableCandidates(status);
     const target = available[0];
     if (!target) {
       return Object.freeze({
         rotated: false,
         reason,
-        current: status.current || null,
+        current: safeProxyNodeAlias(status.current),
         candidateCount: status.candidates.length
       });
     }
-    await controllerRequest(`/proxies/${encodeURIComponent(config.group)}`, {
-      method: "PUT",
-      body: JSON.stringify({ name: target })
-    });
+    await selectNode(target);
     return Object.freeze({
       rotated: true,
       reason,
-      previous: status.current || null,
-      current: target,
+      previous: safeProxyNodeAlias(status.current),
+      current: safeProxyNodeAlias(target),
       candidateCount: status.candidates.length
     });
+  }
+
+  async function prepareAttemptNow() {
+    const status = await groupStatus();
+    let current = status.current;
+    let previous = null;
+    let rotated = false;
+    let budgetDeferred = false;
+
+    if (current) isCoolingDown(current);
+    const currentCount = current ? (requestsByNode.get(current) ?? 0) : 0;
+    if (current && currentCount >= config.maxRequestsPerNode) {
+      coolDown(current);
+      const target = availableCandidates(status)[0];
+      if (target) {
+        previous = current;
+        await selectNode(target);
+        current = target;
+        rotated = true;
+      } else {
+        budgetDeferred = true;
+      }
+    }
+
+    const requestCount = current ? (requestsByNode.get(current) ?? 0) + 1 : 0;
+    if (current) requestsByNode.set(current, requestCount);
+    return Object.freeze({
+      rotated,
+      reason: rotated ? "REQUEST_BUDGET" : null,
+      previous: safeProxyNodeAlias(previous),
+      current: safeProxyNodeAlias(current),
+      requestCount,
+      requestBudget: config.maxRequestsPerNode,
+      budgetDeferred,
+      candidateCount: status.candidates.length
+    });
+  }
+
+  function prepareAttempt() {
+    const pending = preparationTail.then(prepareAttemptNow, prepareAttemptNow);
+    preparationTail = pending.catch(() => undefined);
+    return pending;
   }
 
   return Object.freeze({
@@ -165,8 +266,15 @@ export function createCoscoProxyPool(config, options = {}) {
       enabled: true,
       controller: new URL(config.controller).host,
       group: config.group,
-      maxAttemptsPerShipment: config.maxAttemptsPerShipment
+      currentNode: safeProxyNodeAlias(lastKnownCurrent),
+      maxAttemptsPerShipment: config.maxAttemptsPerShipment,
+      maxRequestsPerNode: config.maxRequestsPerNode
     }),
+    prepareAttempt,
+    async currentNode() {
+      const status = await groupStatus();
+      return safeProxyNodeAlias(status.current);
+    },
     async rotate(reason) {
       if (!rotationPromise) {
         rotationPromise = rotateNow(reason).finally(() => {

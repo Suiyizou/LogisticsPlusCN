@@ -106,22 +106,58 @@ assert.ok(fixedBandBox.strategySummary.fixedLayerBandCount >= 2);
 assert.ok(fixedBandBox.strategySummary.sameLayerTopUpPlacedCount >= 1);
 assert.equal(fixedBandBox.strategySummary.maxFixedBandOverflowCm, 0);
 
-const foundationEvaluation = calculateOne({
-  container: makeContainer("foundation-first", 200, 100, 120),
+const nonStackLastEvaluation = calculateOne({
+  container: makeContainer("nonstack-last-across-boxes", 200, 100, 120),
   cargos: [
-    { id: "foundation", name: "foundation", lengthCm: 100, widthCm: 100, heightCm: 40, quantity: 4, weightKg: 30, type: "upright" },
-    { id: "nonstack-top", name: "nonstack-top", lengthCm: 100, widthCm: 100, heightCm: 80, quantity: 2, weightKg: 20, type: "nonstack" }
+    { id: "foundation", name: "foundation", lengthCm: 100, widthCm: 100, heightCm: 60, quantity: 6, weightKg: 30, type: "upright" },
+    { id: "nonstack-top", name: "nonstack-top", lengthCm: 100, widthCm: 100, heightCm: 60, quantity: 2, weightKg: 20, type: "nonstack" }
   ]
 });
 
-assert.equal(foundationEvaluation.fitStatus, "fit");
-assert.equal(foundationEvaluation.boxes, 2);
-const foundationFirstBox = foundationEvaluation.packedBoxes[0];
-assert.equal(foundationFirstBox.strategyId, "nonstack-foundation-first");
-assert.equal(foundationFirstBox.strategySummary.nonStackFoundationPlacedCount, 2);
-assert.equal(foundationFirstBox.placed.filter((placement) => placement.cargoId === "nonstack-top").length, 2);
-assert.equal(foundationEvaluation.packedBoxes[1].placed.filter((placement) => placement.cargoId === "nonstack-top").length, 0);
-assertNothingLoadedAboveNonStack(foundationEvaluation);
+assert.equal(nonStackLastEvaluation.fitStatus, "fit");
+assert.equal(nonStackLastEvaluation.boxes, 2);
+const firstStackableBox = nonStackLastEvaluation.packedBoxes[0];
+const finalStackableBox = nonStackLastEvaluation.packedBoxes[1];
+assert.equal(firstStackableBox.placed.filter((placement) => placement.nonStack).length, 0, "non-stack cargo must wait while stackable cargo remains");
+assert.equal(firstStackableBox.strategySummary.nonStackDeferredToLaterBoxCount, 2);
+assert.equal(finalStackableBox.placed.filter((placement) => placement.cargoId === "nonstack-top").length, 2);
+assert.ok(
+  finalStackableBox.placed
+    .filter((placement) => placement.cargoId === "nonstack-top")
+    .every((placement) => placement.zCm >= 60 - EPSILON),
+  "non-stack cargo should be loaded on the completed support layer in the final stackable box"
+);
+assertNothingLoadedAboveNonStack(nonStackLastEvaluation);
+
+const nonStackCapacityFallback = calculateOne({
+  container: makeContainer("nonstack-capacity-fallback", 200, 100, 120),
+  cargos: [
+    { id: "capacity-base", name: "capacity-base", lengthCm: 100, widthCm: 100, heightCm: 60, quantity: 5, weightKg: 30, type: "upright" },
+    { id: "capacity-fragile", name: "capacity-fragile", lengthCm: 100, widthCm: 100, heightCm: 60, quantity: 3, weightKg: 20, type: "nonstack" }
+  ]
+});
+
+assert.equal(nonStackCapacityFallback.fitStatus, "fit");
+assert.equal(nonStackCapacityFallback.boxes, 2, "deferring fragile cargo must not add a third box");
+const capacityNonStackCounts = nonStackCapacityFallback.packedBoxes.map((box) =>
+  box.placed.filter((placement) => placement.nonStack).length
+);
+assert.equal(capacityNonStackCounts.reduce((sum, count) => sum + count, 0), 3);
+assert.ok(capacityNonStackCounts[0] > 0, "the earlier box must accept fragile cargo when the final box cannot hold all of it");
+assert.ok(capacityNonStackCounts[0] <= capacityNonStackCounts[1], "boxes should be ordered from fewer to more non-stack placements");
+assert.equal(nonStackCapacityFallback.packedBoxes[0].strategySummary.nonStackFallbackRequired, 1);
+assertNothingLoadedAboveNonStack(nonStackCapacityFallback);
+
+const estimatedTailEvaluation = calculateOne({
+  container: makeContainer("estimated-tail-preservation", 100, 100, 100),
+  cargos: [
+    { id: "estimated-unit", name: "estimated-unit", lengthCm: 100, widthCm: 100, heightCm: 100, quantity: 30, weightKg: 1, type: "upright" }
+  ]
+});
+assert.equal(estimatedTailEvaluation.fitStatus, "estimated");
+assert.equal(estimatedTailEvaluation.detailedBoxes, 24);
+assert.equal(estimatedTailEvaluation.packedBoxes[0].unplacedUnitKeys.length, 29);
+assert.equal(estimatedTailEvaluation.packedBoxes[23].unplacedUnitKeys.length, 6, "estimated tail cargo must survive plan-order normalization");
 
 const supportContainer = makeContainer("nonstack-support-ratio", 100, 100, 140);
 const supportCargos = [
@@ -269,4 +305,4 @@ function layoutSignature(evaluation) {
 
 assert.deepEqual(layoutSignature(colorRunA), layoutSignature(colorRunB), "display colors must not influence packing");
 
-console.log("Packing fixed-layer, foundation-first, support-ratio, non-stack safety, duplicate-id, and color-independence regression passed.");
+console.log("Packing fixed-layer, cross-box non-stack-last, support-ratio, non-stack safety, duplicate-id, and color-independence regression passed.");

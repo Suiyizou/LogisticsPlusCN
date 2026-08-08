@@ -824,6 +824,7 @@ const MESSAGES = {
     "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
     "supplemental.loading": "Loading transport details and booking references. This may take about 20 seconds…",
+    "supplemental.stale": "The main route is current. Container and booking details are from {time} and are awaiting refresh.",
     "supplemental.complete": "Transport details and booking references are up to date.",
     "supplemental.partial": "Available transport details were loaded; some carrier fields are temporarily unavailable.",
     "supplemental.failed": "Transport details could not be loaded. Reopen the shipment to retry.",
@@ -1375,6 +1376,7 @@ const MESSAGES = {
     "containers.enriched": "已通过箱号子查询补全",
     "containers.empty": "船司未提供箱级明细。",
     "supplemental.loading": "正在补查运输详情与订舱参考号，预计约需 20 秒…",
+    "supplemental.stale": "主路线已更新；箱动态与订舱参考信息沿用 {time} 的旧数据，正在等待补全。",
     "supplemental.complete": "运输详情与订舱参考号已更新。",
     "supplemental.partial": "已载入可用运输详情，部分船司字段暂不可用。",
     "supplemental.failed": "运输详情暂时无法载入，重新打开该票可重试。",
@@ -6389,18 +6391,25 @@ function shouldLoadSupplementalDetails(payload) {
   if (snapshot.supplementalDetails?.updatedAt && !snapshot.supplementalDetails.partial) {
     return false;
   }
+  if (snapshot.supplementalDetails?.carriedForward
+      || snapshot.supplementalDetails?.pendingRefresh) {
+    return true;
+  }
   const containersMissing = !Array.isArray(snapshot.containers) || snapshot.containers.length === 0;
   const referencesMissing = !Array.isArray(snapshot.references?.information)
     || snapshot.references.information.length === 0;
   return containersMissing || referencesMissing;
 }
 
-function setSupplementalDetailsStatus(state = "idle") {
+function setSupplementalDetailsStatus(state = "idle", variables = {}) {
   window.clearTimeout(supplementalStatusTimer);
   elements["supplemental-details-status"].dataset.state = state;
   elements["supplemental-details-status"].hidden = state === "idle";
   if (state !== "idle") {
-    elements["supplemental-details-message"].textContent = t(`supplemental.${state}`);
+    elements["supplemental-details-message"].textContent = t(
+      `supplemental.${state}`,
+      variables
+    );
   }
   if (["complete", "partial"].includes(state)) {
     supplementalStatusTimer = window.setTimeout(
@@ -6633,6 +6642,16 @@ function renderResult(payload) {
   results.hidden = false;
   results.classList.toggle("is-refreshing", loading);
   restartResultAnimation();
+  if (snapshot.supplementalDetails?.carriedForward
+      || snapshot.supplementalDetails?.pendingRefresh) {
+    setSupplementalDetailsStatus("stale", {
+      time: formatLocalDateTime(
+        snapshot.supplementalDetails.sourceFetchedAt
+          ?? snapshot.supplementalDetails.updatedAt
+          ?? snapshot.fetchedAt
+      )
+    });
+  }
   void loadSupplementalDetails(payload);
 }
 

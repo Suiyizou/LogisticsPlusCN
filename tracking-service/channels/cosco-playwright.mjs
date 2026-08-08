@@ -5,9 +5,10 @@ const COSCO_TRACKING_PAGE =
   "https://elines.coscoshipping.com/scct/public/ct/base?lang=en";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const OPTIONAL_RESPONSE_SETTLE_MS = 1_200;
-const DEFAULT_MAX_CONCURRENCY = 2;
+const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_QUEUE_LIMIT = 8;
 const DEFAULT_QUEUE_TIMEOUT_MS = 15_000;
+const SUPPORTED_PROXY_PROTOCOLS = new Set(["http:", "https:", "socks5:"]);
 
 const TRACKING_LABELS = Object.freeze({
   BILLOFLADING: "B/L No.",
@@ -21,6 +22,37 @@ function configuredInteger(value, fallback, { min, max }) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
+}
+
+export function readCoscoPlaywrightProxyConfig(environment = process.env) {
+  const rawServer = String(environment.COSCO_PLAYWRIGHT_PROXY_SERVER ?? "").trim();
+  if (!rawServer) return null;
+  const serverUrl = new URL(rawServer.includes("://") ? rawServer : `http://${rawServer}`);
+  if (!SUPPORTED_PROXY_PROTOCOLS.has(serverUrl.protocol)) {
+    throw new Error("COSCO Playwright proxy must use http://, https:// or socks5://");
+  }
+  if (serverUrl.username || serverUrl.password) {
+    throw new Error(
+      "Put COSCO Playwright proxy credentials in COSCO_PLAYWRIGHT_PROXY_USERNAME/PASSWORD, not in the URL"
+    );
+  }
+  const username = String(environment.COSCO_PLAYWRIGHT_PROXY_USERNAME ?? "");
+  const password = String(environment.COSCO_PLAYWRIGHT_PROXY_PASSWORD ?? "");
+  return Object.freeze({
+    server: serverUrl.toString(),
+    ...(username ? { username } : {}),
+    ...(password ? { password } : {})
+  });
+}
+
+const configuredPlaywrightProxy = readCoscoPlaywrightProxyConfig();
+
+export function coscoBrowserContextOptions(proxy = configuredPlaywrightProxy) {
+  return {
+    locale: "en-US",
+    timezoneId: "Asia/Shanghai",
+    ...(proxy ? { proxy } : {})
+  };
 }
 
 export class PlaywrightCapacityError extends Error {
@@ -119,9 +151,17 @@ export function createPlaywrightConcurrencyGate(options = {}) {
 }
 
 const sharedPlaywrightGate = createPlaywrightConcurrencyGate({
-  maxConcurrency: process.env.PLAYWRIGHT_MAX_CONCURRENCY,
+  maxConcurrency:
+    process.env.COSCO_PLAYWRIGHT_MAX_CONCURRENCY ?? process.env.PLAYWRIGHT_MAX_CONCURRENCY,
   queueLimit: process.env.PLAYWRIGHT_QUEUE_LIMIT,
   queueTimeoutMs: process.env.PLAYWRIGHT_QUEUE_TIMEOUT_MS
+});
+const dedicatedProxyFallbackGate = createPlaywrightConcurrencyGate({
+  maxConcurrency: 1,
+  queueLimit: process.env.COSCO_PLAYWRIGHT_FALLBACK_QUEUE_LIMIT,
+  queueTimeoutMs:
+    process.env.COSCO_PLAYWRIGHT_FALLBACK_QUEUE_TIMEOUT_MS
+      ?? process.env.PLAYWRIGHT_QUEUE_TIMEOUT_MS
 });
 
 async function launchSharedBrowser() {
@@ -230,10 +270,8 @@ async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
   if (signal) signal.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
-    context = await browser.newContext({
-      locale: "en-US",
-      timezoneId: "Asia/Shanghai"
-    });
+    const proxy = options.proxy === undefined ? configuredPlaywrightProxy : options.proxy;
+    context = await browser.newContext(coscoBrowserContextOptions(proxy));
     const page = await context.newPage();
     const optionalPayloads = new Map();
     const optionalCaptures = new Set();
@@ -326,6 +364,7 @@ async function fetchCoscoTrackingInBrowserContext(request, options = {}) {
 }
 
 export async function fetchCoscoTrackingViaPlaywright(request, options = {}) {
-  const concurrencyGate = options.concurrencyGate ?? sharedPlaywrightGate;
+  const concurrencyGate = options.concurrencyGate
+    ?? (options.dedicatedFallback ? dedicatedProxyFallbackGate : sharedPlaywrightGate);
   return concurrencyGate.run(() => fetchCoscoTrackingInBrowserContext(request, options));
 }

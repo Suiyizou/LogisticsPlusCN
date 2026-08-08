@@ -4,7 +4,8 @@ import {
   createCoscoProxyPool,
   prioritizeProxyNodes,
   readCoscoProxyPoolConfig,
-  runWithProxyPoolRetries
+  runWithProxyPoolRetries,
+  safeProxyNodeAlias
 } from "../lib/cosco-proxy-pool.mjs";
 
 test("orders usable airport nodes with Hong Kong first and excludes download-only nodes", () => {
@@ -71,8 +72,66 @@ test("does not expose credentials in pool status", () => {
     enabled: true,
     controller: "proxy-pool:9090",
     group: "TRACKING-POOL",
-    maxAttemptsPerShipment: 5
+    currentNode: null,
+    maxAttemptsPerShipment: 5,
+    maxRequestsPerNode: 12
   });
+});
+
+test("turns credential-like node names into stable opaque aliases", () => {
+  const sensitive = "socks5://operator:private-password@proxy.example:1080";
+  const alias = safeProxyNodeAlias(sensitive);
+
+  assert.match(alias, /^proxy-[a-f0-9]{10}$/);
+  assert.equal(alias, safeProxyNodeAlias(sensitive));
+  assert.doesNotMatch(alias, /operator|private-password|proxy\.example/i);
+  assert.equal(safeProxyNodeAlias("  HK-S01\u0000  "), "HK-S01");
+});
+
+test("rotates a node before its configured request budget is exceeded", async () => {
+  const calls = [];
+  let current = "HK-S01";
+  const config = readCoscoProxyPoolConfig({
+    COSCO_PROXY_POOL_CONTROLLER: "http://proxy-pool:9090",
+    COSCO_PROXY_POOL_MAX_REQUESTS_PER_NODE: "2",
+    COSCO_PROXY_POOL_NODE_COOLDOWN_MS: "60000"
+  });
+  const pool = createCoscoProxyPool(config, {
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if ((options.method ?? "GET") === "PUT") {
+        current = JSON.parse(options.body).name;
+        return { ok: true, status: 204, json: async () => null };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ now: current, all: ["HK-S01", "HK-S02", "JP-S01"] })
+      };
+    }
+  });
+
+  assert.deepEqual(await pool.prepareAttempt(), {
+    rotated: false,
+    reason: null,
+    previous: null,
+    current: "HK-S01",
+    requestCount: 1,
+    requestBudget: 2,
+    budgetDeferred: false,
+    candidateCount: 3
+  });
+  assert.equal((await pool.prepareAttempt()).requestCount, 2);
+  const rotated = await pool.prepareAttempt();
+
+  assert.equal(rotated.rotated, true);
+  assert.equal(rotated.reason, "REQUEST_BUDGET");
+  assert.equal(rotated.previous, "HK-S01");
+  assert.equal(rotated.current, "HK-S02");
+  assert.equal(rotated.requestCount, 1);
+  assert.equal(current, "HK-S02");
+  assert.equal(calls.filter((call) => (call.options.method ?? "GET") === "PUT").length, 1);
+  assert.equal(pool.status().currentNode, "HK-S02");
 });
 
 test("treats the deprecated rotations variable as a total-attempt cap", () => {

@@ -21,6 +21,7 @@ public class ApiExceptionHandler {
   public ResponseEntity<Map<String, Object>> handleApiException(ApiException error) {
     Map<String, Object> body = body(error.status(), error.getMessage());
     if (error.code() != null && !error.code().isBlank()) body.put("code", error.code());
+    if (!error.details().isEmpty()) body.put("details", error.details());
     ResponseEntity.BodyBuilder response = ResponseEntity.status(error.status());
     if (error.retryAfterMs() != null && error.retryAfterMs() > 0) {
       body.put("retryAfterMs", error.retryAfterMs());

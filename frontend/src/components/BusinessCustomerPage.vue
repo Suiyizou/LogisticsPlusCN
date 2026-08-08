@@ -1211,7 +1211,7 @@
                         v-else-if="batchTrackProgress.status === 'PAUSED'"
                         type="warning"
                         :closable="false"
-                        :title="t('customers.batchTrackPaused', { time: formatDateTime(batchTrackProgress.nextAttemptAt) })"
+                        :title="t('customers.batchTrackPaused')"
                       />
                       <el-alert
                         v-else-if="batchTrackProgress.nextAttemptAt"
@@ -1243,11 +1243,34 @@
                             </el-tag>
                             <el-tag v-if="r.attempts" size="small" effect="plain">{{ t("customers.mainAttempts", { count: r.attempts }) }}</el-tag>
                             <el-tag v-if="r.proxyAttempts" size="small" effect="plain" type="warning">{{ t("customers.proxyAttempts", { count: r.proxyAttempts }) }}</el-tag>
+                            <el-tag v-if="r.mainSource" size="small" effect="plain" :type="r.mainCacheStale ? 'danger' : 'info'">
+                              {{ t("customers.dataSource") }}: {{ r.mainSource }}
+                            </el-tag>
+                            <el-tag v-if="r.mainChannel" size="small" effect="plain" type="info">
+                              {{ t("customers.queryChannelUsed") }}: {{ r.mainChannel }}
+                            </el-tag>
+                            <el-tag v-if="r.proxyNode" size="small" effect="plain" type="warning">
+                              {{ t("customers.proxyNodeUsed") }}: {{ r.proxyNode }}
+                            </el-tag>
                             <el-tag v-if="r.startedAt" size="small" effect="plain" type="info" class="batch-track-timer">
                               {{ t("customers.itemElapsed", { time: batchTrackElapsedText(r) }) }}
                             </el-tag>
                           </span>
                           <small>{{ r.message }}</small>
+                          <small v-if="r.mainFetchedAt" class="batch-track-snapshot-time">
+                            {{ t("customers.snapshotFetchedAt") }}: {{ formatDateTime(r.mainFetchedAt) }}
+                          </small>
+                          <small v-if="r.supplementalRetryPending" class="batch-track-retry-note">
+                            {{ t("customers.supplementalRetryScheduled") }}
+                          </small>
+                          <details
+                            v-if="batchDiagnosticText(r)"
+                            class="batch-track-error-details"
+                            :open="['failed', 'partial'].includes(r.status)"
+                          >
+                            <summary>{{ t("customers.fullErrorDetails") }}</summary>
+                            <pre>{{ batchDiagnosticText(r) }}</pre>
+                          </details>
                           <div v-if="r.subtasks.length" class="batch-track-subtask-list">
                             <span
                               v-for="subtask in r.subtasks"
@@ -1258,6 +1281,7 @@
                               <i aria-hidden="true"></i>
                               <b>{{ t("customers.childQueryStage") }} · {{ batchSubtaskLabel(subtask.type) }}</b>
                               <em>{{ batchStageStatusLabel(subtask.status) }}</em>
+                              <small v-if="subtask.proxyNode">{{ t("customers.proxyNodeUsed") }}: {{ subtask.proxyNode }}</small>
                               <small v-if="subtask.error">{{ subtask.error }}</small>
                             </span>
                           </div>
@@ -3371,6 +3395,10 @@ function batchStageTagType(status) {
 }
 
 function batchMainStageStatus(result) {
+  const explicit = String(result?.mainStatus || "").toUpperCase();
+  if (["PENDING", "RUNNING", "RETRY_WAIT", "SUCCEEDED", "FAILED"].includes(explicit)) {
+    return explicit;
+  }
   const status = String(result?.status || "PENDING").toUpperCase();
   const subtaskStatuses = (result?.subtasks || []).map((subtask) =>
     String(subtask.status || "PENDING").toUpperCase()
@@ -5274,6 +5302,15 @@ function applyBatchTrackTask(task) {
       number: item.displayNumber || item.number,
       carrier: item.carrier,
       manualOnly: Boolean(item.manualOnly),
+      source: item.source || "",
+      mainStatus: String(item.mainStatus || "").toUpperCase(),
+      mainSource: item.mainSource || item.source || "",
+      mainChannel: item.mainChannel || "",
+      mainFetchedAt: item.mainFetchedAt || null,
+      mainCacheStale: Boolean(item.mainCacheStale),
+      mainDataChanged: item.mainDataChanged,
+      mainError: item.mainError || "",
+      mainErrorCode: item.mainErrorCode || "",
       status: stopped ? "stopped" : itemStatus.toLowerCase(),
       message: batchTrackItemMessage(item, status, task.stopReason),
       errorCode: item.errorCode || [...new Set(subtaskErrorCodes)].join(", "),
@@ -5282,6 +5319,10 @@ function applyBatchTrackTask(task) {
         0,
         ...failedSubtasks.map((subtask) => Number(subtask.proxyAttempts || 0))
       )),
+      proxyNode: item.proxyNode || failedSubtasks.find((subtask) => subtask.proxyNode)?.proxyNode || "",
+      triedProxyNodes: item.triedProxyNodes || [],
+      errorDetails: item.errorDetails || {},
+      supplementalRetryPending: Boolean(item.supplementalRetryPending),
       startedAt: item.startedAt || null,
       finishedAt: item.finishedAt || null,
       elapsedMs: Number(item.elapsedMs || 0),
@@ -5302,6 +5343,11 @@ function applyBatchTrackTask(task) {
 
 function batchTrackItemMessage(item, taskStatus = "", stopReason = "") {
   const status = String(item.status || "PENDING").toUpperCase();
+  if (item.mainCacheStale) {
+    return t("customers.trackStaleFallback", {
+      time: item.mainFetchedAt ? formatDateTime(item.mainFetchedAt) : "-"
+    });
+  }
   if (status === "RETRY_WAIT") return t("customers.batchTrackRetryItem");
   if (item.error) return item.error;
   if (String(stopReason || "").toUpperCase() === "CIRCUIT_BREAKER"
@@ -5313,18 +5359,62 @@ function batchTrackItemMessage(item, taskStatus = "", stopReason = "") {
   if (status === "SUCCEEDED" && item.source === "AUTO_PROXY") {
     return t("customers.trackSucceededViaProxy");
   }
+  if (status === "SUCCEEDED" && item.mainDataChanged === false) {
+    return t("customers.trackLiveNoChange");
+  }
   if (status === "SUCCEEDED") return t("customers.trackSucceeded");
   if (status === "PARTIAL") {
     const details = [...new Set((item.subtasks || [])
       .filter((subtask) => String(subtask.status || "").toUpperCase() === "FAILED")
       .map((subtask) => subtask.error)
       .filter(Boolean))];
+    if (item.supplementalRetryPending) return t("customers.trackPartialRetryScheduled");
     return details.join("; ") || t("customers.trackPartial");
   }
   if (status === "MANUAL") return t("customers.trackManualPlaceholder");
   if (status === "FAILED") return t("customers.trackFailed");
   if (status === "RUNNING") return t("customers.trackRunning");
   return t("customers.trackPending");
+}
+
+function batchDiagnosticText(result) {
+  const details = result?.errorDetails && typeof result.errorDetails === "object"
+    ? result.errorDetails
+    : {};
+  const failedSubtasks = (result?.subtasks || [])
+    .filter((subtask) => String(subtask?.status || "").toUpperCase() === "FAILED")
+    .flatMap((subtask) => {
+      const prefix = `[${subtask.type || "SUPPLEMENTAL"}]`;
+      return [
+        subtask.errorCode ? `${prefix} code: ${subtask.errorCode}` : "",
+        subtask.error ? `${prefix} error: ${subtask.error}` : "",
+        subtask.route ? `${prefix} route: ${subtask.route}` : "",
+        subtask.proxyNode ? `${prefix} proxyNode: ${subtask.proxyNode}` : "",
+        subtask.triedProxyNodes?.length
+          ? `${prefix} triedProxyNodes: ${subtask.triedProxyNodes.join(" -> ")}`
+          : ""
+      ];
+    });
+  const serializedDetails = Object.keys(details).length > 0
+    ? `details:\n${JSON.stringify(details, null, 2)}`
+    : "";
+  const lines = [
+    result?.mainErrorCode ? `mainCode: ${result.mainErrorCode}` : "",
+    result?.mainError ? `mainError: ${result.mainError}` : "",
+    result?.errorCode ? `code: ${result.errorCode}` : "",
+    result?.message && result.message !== result.mainError ? `message: ${result.message}` : "",
+    details.causeCode ? `causeCode: ${details.causeCode}` : "",
+    details.route ? `route: ${details.route}` : "",
+    details.upstreamStatus ? `upstreamStatus: ${details.upstreamStatus}` : "",
+    details.retryAfterMs ? `retryAfterMs: ${details.retryAfterMs}` : "",
+    result?.proxyNode ? `proxyNode: ${result.proxyNode}` : "",
+    result?.triedProxyNodes?.length
+      ? `triedProxyNodes: ${result.triedProxyNodes.join(" -> ")}`
+      : "",
+    ...failedSubtasks,
+    serializedDetails
+  ].filter(Boolean);
+  return [...new Set(lines)].join("\n");
 }
 
 function scheduleBatchTrackPoll(taskId, delay = 1500) {
@@ -11315,6 +11405,39 @@ button:disabled {
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+.batch-track-snapshot-time,
+.batch-track-retry-note {
+  color: #475569 !important;
+  font-variant-numeric: tabular-nums;
+}
+.batch-track-retry-note {
+  color: #9a5b00 !important;
+  font-weight: 700;
+}
+.batch-track-error-details {
+  margin-top: 3px;
+  border: 1px solid #fecdd3;
+  border-radius: 6px;
+  background: #fff8f9;
+}
+.batch-track-error-details summary {
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #9f1239;
+  font-size: 11px;
+  font-weight: 700;
+}
+.batch-track-error-details pre {
+  max-height: 180px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-top: 1px solid #fecdd3;
+  color: #7f1d1d;
+  font: 11px/1.55 "SFMono-Regular", "Menlo", "Consolas", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .batch-track-subtask-list {

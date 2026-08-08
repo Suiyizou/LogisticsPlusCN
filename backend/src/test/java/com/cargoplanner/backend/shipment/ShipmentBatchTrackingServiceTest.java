@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -383,6 +385,158 @@ class ShipmentBatchTrackingServiceTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void topLevelPartialWithoutWarningsCannotBeReportedAsSupplementalSuccess()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    supplemental.put("partial", true);
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
+    when(trackingService.scheduleSupplementalRetry(
+        eq("existing-shipment"), eq(List.of("bookingInfo", "containerInfo")),
+        eq("COSCO_SUPPLEMENTAL_PARTIAL"), any()
+    )).thenReturn(true);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        18L, "operator-partial", "Operator Partial", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("PARTIAL", items.get(0).get("status"));
+    assertEquals(true, items.get(0).get("supplementalRetryPending"));
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) items.get(0).get("subtasks");
+    assertEquals(List.of("FAILED", "FAILED"), subtasks.stream()
+        .map(subtask -> String.valueOf(subtask.get("status")))
+        .toList());
+    verify(trackingService).scheduleSupplementalRetry(
+        "existing-shipment", List.of("bookingInfo", "containerInfo"),
+        "COSCO_SUPPLEMENTAL_PARTIAL",
+        "COSCO supplemental response was marked partial without source diagnostics"
+    );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void staleDatabaseFallbackCannotMasqueradeAsAMainRefreshSuccess() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode stale = (ObjectNode) new ObjectMapper().readTree("""
+        {
+          "shipmentId": "existing-shipment",
+          "cacheSource": "MYSQL_STALE",
+          "stale": true,
+          "fetchedAt": "2026-08-01T09:37:00Z",
+          "warning": "Carrier returned no operational tracking data",
+          "diagnostic": {"code": "UPSTREAM_EMPTY", "message": "No live data"},
+          "snapshot": {"fetchedAt": "2026-08-01T09:37:00Z"}
+        }
+        """);
+    when(trackingService.track(any(), any())).thenReturn(stale);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        17L, "operator-stale", "Operator Stale", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("FAILED", items.get(0).get("mainStatus"));
+    assertEquals("MYSQL_STALE", items.get(0).get("mainSource"));
+    assertEquals("2026-08-01T09:37:00Z", items.get(0).get("mainFetchedAt"));
+    assertEquals(true, items.get(0).get("mainCacheStale"));
+    assertEquals("UPSTREAM_EMPTY", items.get(0).get("mainErrorCode"));
+    verify(trackingService, times(3)).track(any(), any());
+    verify(trackingService, never()).loadSupplementalDetails(any(), any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void staleProtectionFailurePausesWithTheCurrentItemExplicitlyFailed() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.track(any(), any())).thenThrow(new ApiException(
+        HttpStatus.BAD_GATEWAY,
+        "COSCO_UPSTREAM_BLOCKED",
+        "COSCO temporarily rejected this outbound IP",
+        0L,
+        Map.of(
+            "route", "DIRECT",
+            "upstreamStatus", 403,
+            "fallbackSource", "MYSQL_STALE",
+            "snapshotFetchedAt", "2026-08-01T09:37:00Z",
+            "stale", true
+        )
+    ));
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        19L, "operator-blocked", "Operator Blocked", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> paused = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) paused.get("items");
+    assertEquals("PAUSED", paused.get("status"));
+    assertEquals(1, paused.get("processed"));
+    assertEquals(1, paused.get("failed"));
+    assertEquals(0, paused.get("pending"));
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("FAILED", items.get(0).get("mainStatus"));
+    assertEquals("MYSQL_STALE", items.get(0).get("mainSource"));
+    assertEquals(true, items.get(0).get("mainCacheStale"));
+    assertEquals("2026-08-01T09:37:00Z", items.get(0).get("mainFetchedAt"));
+    assertEquals(3, items.get(0).get("attempts"));
+    assertEquals("COSCO_UPSTREAM_BLOCKED", items.get(0).get("mainErrorCode"));
+    assertEquals(null, items.get(0).get("nextRetryAt"));
+    verify(trackingService, times(3)).track(any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void retainsDetailedPartialFailureMarkerForARefreshedShipment() throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectNode tracked = new ObjectMapper().createObjectNode();
@@ -394,7 +548,14 @@ class ShipmentBatchTrackingServiceTest {
         new ApiException(
             HttpStatus.BAD_GATEWAY,
             "COSCO_PROXY_POOL_EXHAUSTED",
-            message
+            message,
+            null,
+            Map.of(
+                "route", "PROXY",
+                "proxyNode", "HK-S03",
+                "proxyAttempts", 3,
+                "triedNodes", List.of("HK-S01", "HK-S02", "HK-S03")
+            )
         )
     );
 
@@ -421,6 +582,8 @@ class ShipmentBatchTrackingServiceTest {
     assertEquals("PARTIAL", items.get(0).get("status"));
     assertEquals("COSCO_PROXY_POOL_EXHAUSTED", items.get(0).get("errorCode"));
     assertEquals(3, items.get(0).get("proxyAttempts"));
+    assertEquals("HK-S03", items.get(0).get("proxyNode"));
+    assertEquals(List.of("HK-S01", "HK-S02", "HK-S03"), items.get(0).get("triedProxyNodes"));
     verify(trackingService).recordRefreshOutcome(
         "existing-shipment",
         "PARTIAL",
@@ -429,6 +592,75 @@ class ShipmentBatchTrackingServiceTest {
         1,
         3
     );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void preservesPerSourceWarningsWhenSupplementalAdapterReturnsHttpFailure() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "warning-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
+        new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "COSCO_SUPPLEMENTAL_UNAVAILABLE",
+            "COSCO did not return usable supplemental details",
+            null,
+            Map.of(
+                "route", "PLAYWRIGHT_PROXY",
+                "proxyNode", "browser-proxy-a1b2",
+                "warnings", List.of(
+                    Map.of(
+                        "source", "bookingInfo",
+                        "code", "COSCO_UPSTREAM_BLOCKED",
+                        "message", "Booking endpoint rejected the API proxy",
+                        "route", "PROXY",
+                        "proxyNode", "HK-S02",
+                        "attempts", 2,
+                        "triedNodes", List.of("HK-S01", "HK-S02")
+                    ),
+                    Map.of(
+                        "source", "containerInfo",
+                        "code", "COSCO_SUPPLEMENTAL_EMPTY",
+                        "message", "Browser fallback returned no container details",
+                        "route", "PLAYWRIGHT_PROXY",
+                        "proxyNode", "browser-proxy-a1b2",
+                        "attempts", 1,
+                        "triedNodes", List.of("browser-proxy-a1b2")
+                    )
+                )
+            )
+        )
+    );
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        26L, "operator-warnings", "Operator Warnings", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-warning-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    Map<String, Object> item = ((List<Map<String, Object>>) completed.get("items")).get(0);
+    List<Map<String, Object>> subtasks = (List<Map<String, Object>>) item.get("subtasks");
+    assertEquals("COSCO_UPSTREAM_BLOCKED", subtasks.get(0).get("errorCode"));
+    assertEquals("PROXY", subtasks.get(0).get("route"));
+    assertEquals("HK-S02", subtasks.get(0).get("proxyNode"));
+    assertEquals(List.of("HK-S01", "HK-S02"), subtasks.get(0).get("triedProxyNodes"));
+    assertEquals("COSCO_SUPPLEMENTAL_EMPTY", subtasks.get(1).get("errorCode"));
+    assertEquals("PLAYWRIGHT_PROXY", subtasks.get(1).get("route"));
+    assertEquals("browser-proxy-a1b2", subtasks.get(1).get("proxyNode"));
   }
 
   @Test
@@ -608,7 +840,9 @@ class ShipmentBatchTrackingServiceTest {
     Map<String, Object> status;
     do {
       status = service.status(taskId, user);
-      if (List.of("COMPLETED", "STOPPED").contains(status.get("status"))) return status;
+      if (List.of("COMPLETED", "STOPPED", "PAUSED").contains(status.get("status"))) {
+        return status;
+      }
       Thread.sleep(10);
     } while (System.currentTimeMillis() < deadline);
     return service.status(taskId, user);

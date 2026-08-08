@@ -74,27 +74,34 @@ $env:PLAYWRIGHT_HEADLESS="true"
 npm start
 ```
 
-Playwright work is globally capacity-limited per Node process so different shipment
-queries cannot create unbounded browser contexts. The network channel is not gated.
-The defaults allow two active browser contexts and eight queued requests; a full or
-expired queue returns HTTP `429` with `PLAYWRIGHT_BUSY` details.
+Playwright work is capacity-limited per Node process so different shipment queries
+cannot create unbounded browser contexts. The network channel is not gated. Generic
+browser work defaults to two active contexts. COSCO browser work can be capped
+separately, while the dedicated AUTO fallback has a hard concurrency limit of one and
+is invoked at most once per request. A full or expired queue returns HTTP `429` with
+`PLAYWRIGHT_BUSY` details.
 
 ```powershell
 $env:PLAYWRIGHT_MAX_CONCURRENCY="2"
 $env:PLAYWRIGHT_QUEUE_LIMIT="8"
 $env:PLAYWRIGHT_QUEUE_TIMEOUT_MS="15000"
+$env:COSCO_PLAYWRIGHT_MAX_CONCURRENCY="1"
 npm start
 ```
 
 ## COSCO 代理、限速与 403 冷却
 
-COSCO 的 `PROXY` 通道使用独立的 HTTP(S)/SOCKS5 代理出口，仅允许已登录业务员或管理员选择。`AUTO`、`NETWORK` 和 `PLAYWRIGHT` 仍使用服务器直连出口。代理账号和密码必须使用独立变量，不要嵌入 URL，也不要提交到 Git：
+COSCO 的 `PROXY` 通道使用独立的 HTTP(S)/SOCKS5 代理出口，仅允许已登录业务员或管理员选择。`NETWORK` 使用服务器直连出口。`AUTO` 依次尝试直连 API、代理 API 池；仅当配置了与 API 代理独立的专用浏览器出口时，最后才会尝试一次 Playwright。专用浏览器代理不会回退到已被封的服务器 IP。代理账号和密码必须使用独立变量，不要嵌入 URL，也不要提交到 Git：
 
 ```powershell
 $env:COSCO_PROXY_ENABLED="true"
 $env:COSCO_PROXY_SERVER="socks5://proxy-host:1080"
 $env:COSCO_PROXY_USERNAME="proxy-user"
 $env:COSCO_PROXY_PASSWORD="proxy-password"
+$env:COSCO_PLAYWRIGHT_PROXY_SERVER="socks5://dedicated-browser-proxy:1080"
+$env:COSCO_PLAYWRIGHT_PROXY_USERNAME="browser-proxy-user"
+$env:COSCO_PLAYWRIGHT_PROXY_PASSWORD="browser-proxy-password"
+$env:COSCO_PLAYWRIGHT_MAX_CONCURRENCY="1"
 $env:TRACKING_ADAPTER_KEY="replace-with-a-long-random-internal-secret"
 $env:COSCO_QUERY_MIN_INTERVAL_MS="10000"
 $env:COSCO_QUERY_MAX_INTERVAL_MS="12000"
@@ -104,7 +111,7 @@ $env:COSCO_BLOCK_COOLDOWN_MS="1800000"
 npm start
 ```
 
-直连与代理使用独立熔断器和 Cookie 缓存，因此直连 IP 被封时不会阻止代理通道。`TRACKING_ADAPTER_KEY` 必须在 Spring 后端和 Node 追踪服务中配置为同一个随机长字符串，防止匿名请求直接消耗代理。COSCO 查询仍按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。同一出口确认上游返回 HTTP `403/429` 后会开启该出口自己的冷却。`GET /api/health` 只暴露脱敏后的代理协议、主机、队列和熔断状态。
+直连与代理使用独立熔断器和 Cookie 缓存，因此直连 IP 被封时不会阻止代理通道。`COSCO_PLAYWRIGHT_PROXY_SERVER` 必须与 `COSCO_PROXY_SERVER` 的出口独立；缺少专用代理或出口相同时，AUTO 浏览器兜底会保持禁用。`TRACKING_ADAPTER_KEY` 必须在 Spring 后端和 Node 追踪服务中配置为同一个随机长字符串，防止匿名请求直接消耗代理。COSCO 查询仍按进程串行，并在 10–12 秒的随机窗口内启动下一次请求，避免固定节奏或批量任务瞬时打满上游。同一出口达到主动请求预算或确认上游返回 HTTP `403/429` 后会开启该出口自己的冷却。`GET /api/health` 只暴露脱敏后的代理别名、队列和熔断状态。
 
 机场订阅中的 Shadowsocks/VMess 节点需要由 Mihomo 转换成内部 SOCKS5 出口。仓库提供
 `docker-compose.proxy-pool.yml` 和 `docker/proxy-pool/config.yaml`，但不会保存任何节点凭据。
@@ -116,6 +123,7 @@ Mihomo 控制接口启用后，追踪服务会把节点按香港、台湾、日�
 COSCO_PROXY_POOL_CONTROLLER=http://proxy-pool:9090
 COSCO_PROXY_POOL_GROUP=TRACKING-POOL
 COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT=3
+COSCO_PROXY_POOL_MAX_REQUESTS_PER_NODE=12
 COSCO_PROXY_POOL_NODE_COOLDOWN_MS=1800000
 COSCO_PROXY_CORE_TIMEOUT_MS=15000
 COSCO_PROXY_ENRICHMENT_TIMEOUT_MS=8000

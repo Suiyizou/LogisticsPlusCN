@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  coscoBrowserContextOptions,
   createPlaywrightConcurrencyGate,
-  PlaywrightCapacityError
+  PlaywrightCapacityError,
+  readCoscoPlaywrightProxyConfig
 } from "../channels/cosco-playwright.mjs";
 
 function deferred() {
@@ -115,5 +117,41 @@ test("Playwright browser contexts are closed from a finally block", async () => 
   assert.match(
     source,
     /let context = null;[\s\S]*?context = await browser\.newContext[\s\S]*?finally \{[\s\S]*?if \(context\) await context\.close\(\);[\s\S]*?\}/
+  );
+  assert.match(
+    source,
+    /dedicatedProxyFallbackGate = createPlaywrightConcurrencyGate\(\{[\s\S]*?maxConcurrency: 1/
+  );
+  assert.match(
+    source,
+    /options\.dedicatedFallback \? dedicatedProxyFallbackGate : sharedPlaywrightGate/
+  );
+});
+
+test("COSCO Playwright defaults to one active browser request", () => {
+  const gate = createPlaywrightConcurrencyGate();
+  assert.equal(gate.stats().maxConcurrency, 1);
+});
+
+test("dedicated Playwright proxy credentials stay in context options and out of the URL", () => {
+  const proxy = readCoscoPlaywrightProxyConfig({
+    COSCO_PLAYWRIGHT_PROXY_SERVER: "socks5://browser-proxy:1080",
+    COSCO_PLAYWRIGHT_PROXY_USERNAME: "browser-user",
+    COSCO_PLAYWRIGHT_PROXY_PASSWORD: "browser-password"
+  });
+
+  assert.deepEqual(proxy, {
+    server: "socks5://browser-proxy:1080",
+    username: "browser-user",
+    password: "browser-password"
+  });
+  assert.equal(new URL(proxy.server).username, "");
+  assert.equal(new URL(proxy.server).password, "");
+  assert.deepEqual(coscoBrowserContextOptions(proxy).proxy, proxy);
+  assert.throws(
+    () => readCoscoPlaywrightProxyConfig({
+      COSCO_PLAYWRIGHT_PROXY_SERVER: "http://user:password@browser-proxy:8080"
+    }),
+    /credentials.*USERNAME\/PASSWORD/i
   );
 });

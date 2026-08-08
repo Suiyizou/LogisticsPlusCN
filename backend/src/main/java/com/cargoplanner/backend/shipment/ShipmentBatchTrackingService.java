@@ -313,6 +313,9 @@ public class ShipmentBatchTrackingService {
             synchronized (task) {
               item.status = "MANUAL";
               item.source = "IMPORTED_PLACEHOLDER";
+              item.mainStatus = "SUCCEEDED";
+              item.mainSource = item.source;
+              item.mainChannel = "MANUAL";
               item.shipmentId = response.path("shipmentId").asText(null);
               item.error = null;
               item.errorCode = null;
@@ -326,6 +329,10 @@ public class ShipmentBatchTrackingService {
           }
           assignImportedShipment(task, item);
         } catch (ProtectionPauseException paused) {
+          RuntimeException protectionError = paused.getCause() instanceof RuntimeException cause
+              ? cause
+              : paused;
+          markFinalFailure(task, item, protectionError);
           finalStatus = "PAUSED";
           break;
         } catch (RuntimeException error) {
@@ -391,6 +398,8 @@ public class ShipmentBatchTrackingService {
             ),
             task.owner
         );
+        captureMainQueryDiagnostics(item, response);
+        rejectStaleMainRefresh(task, item, response);
         synchronized (throttleMonitor) {
           CarrierChannelState channelState = carrierState(task.channel);
           channelState.consecutiveFailures = 0;
@@ -401,6 +410,9 @@ public class ShipmentBatchTrackingService {
         }
         synchronized (task) {
           item.shipmentId = response.path("shipmentId").asText(null);
+          item.mainStatus = "SUCCEEDED";
+          item.mainError = null;
+          item.mainErrorCode = null;
         }
         boolean automaticProxyFallback = "AUTO".equals(task.channel)
             && "PROXY".equals(response.path("strategy").path("used").asText());
@@ -432,22 +444,111 @@ public class ShipmentBatchTrackingService {
         Instant retryAt = registerCarrierFailure(task.channel, error, item.attempts);
         synchronized (task) {
           item.status = "RETRY_WAIT";
-          item.source = null;
           item.error = safeMessage(error);
           item.errorCode = errorCode(error);
+          item.mainStatus = "RETRY_WAIT";
+          item.mainError = item.error;
+          item.mainErrorCode = item.errorCode;
+          captureErrorDiagnostics(item, error);
           item.nextRetryAt = retryAt;
           task.nextAttemptAt = retryAt;
           task.updatedAt = clock.instant();
         }
         if (protectionFailure
-            && !isImmediateProtectionFailure(error)
             && (item.attempts >= MAX_TRACK_ATTEMPTS
-                || retryAt.isAfter(clock.instant().plusMillis(MAX_INLINE_COOLDOWN_MS)))) {
+                || (!isImmediateProtectionFailure(error)
+                    && retryAt.isAfter(clock.instant().plusMillis(MAX_INLINE_COOLDOWN_MS))))) {
           throw new ProtectionPauseException(error);
         }
       }
     }
     if (task.cancelRequested.get()) markPendingAfterCancellation(task, item);
+  }
+
+  private void captureMainQueryDiagnostics(BatchItem item, ObjectNode response) {
+    JsonNode strategy = response.path("strategy");
+    JsonNode snapshot = response.path("snapshot");
+    boolean stale = response.path("stale").asBoolean(false)
+        || "MYSQL_STALE".equalsIgnoreCase(response.path("cacheSource").asText(""));
+    synchronized (item) {
+      item.shipmentId = response.path("shipmentId").asText(item.shipmentId);
+      item.source = response.path("cacheSource").asText(stale ? "MYSQL_STALE" : "LIVE");
+      item.mainSource = item.source;
+      item.mainChannel = stale
+          ? "CACHE"
+          : strategy.path("used").asText(snapshot.path("channel").asText(null));
+      item.mainFetchedAt = response.path("fetchedAt")
+          .asText(snapshot.path("fetchedAt").asText(null));
+      item.mainCacheStale = stale;
+      item.dataChanged = response.has("dataChanged")
+          ? response.path("dataChanged").asBoolean()
+          : null;
+      item.proxyNode = cleanDiagnosticText(strategy.path("proxyNode").asText(null), 128);
+      item.proxyAttempts = Math.max(
+          item.proxyAttempts,
+          Math.max(0, strategy.path("proxyAttempts").asInt(0))
+      );
+      List<String> triedNodes = textValues(strategy.path("triedNodes"));
+      if (!triedNodes.isEmpty()) item.triedProxyNodes = triedNodes;
+    }
+  }
+
+  private void rejectStaleMainRefresh(
+      BatchTask task,
+      BatchItem item,
+      ObjectNode response
+  ) {
+    if (!task.forceRefresh || !item.mainCacheStale) return;
+    JsonNode diagnostic = response.path("diagnostic");
+    String upstreamCode = diagnostic.path("code").asText("LIVE_REFRESH_FELL_BACK_TO_CACHE");
+    String upstreamMessage = response.path("warning").asText(
+        diagnostic.path("message").asText("Carrier live refresh failed")
+    );
+    String message = "Carrier live refresh failed; the existing database snapshot was kept"
+        + (item.mainFetchedAt == null ? "" : " (snapshot fetched at " + item.mainFetchedAt + ")")
+        + (upstreamMessage.isBlank() ? "" : ": " + upstreamMessage);
+    long retryAfterMs = Math.max(0L, diagnostic.path("retryAfterMs").asLong(0L));
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("fallbackSource", item.mainSource);
+    details.put("snapshotFetchedAt", item.mainFetchedAt);
+    details.put("stale", true);
+    if (!upstreamCode.isBlank()) details.put("causeCode", upstreamCode);
+    if (retryAfterMs > 0) details.put("retryAfterMs", retryAfterMs);
+    synchronized (task) {
+      item.mainStatus = "FAILED";
+      item.mainError = message;
+      item.mainErrorCode = upstreamCode;
+      item.errorDetails = details;
+    }
+    HttpStatus status = "COSCO_UPSTREAM_RATE_LIMITED".equals(upstreamCode)
+        ? HttpStatus.TOO_MANY_REQUESTS
+        : HttpStatus.BAD_GATEWAY;
+    throw new ApiException(
+        status,
+        upstreamCode.isBlank() ? "LIVE_REFRESH_FELL_BACK_TO_CACHE" : upstreamCode,
+        message,
+        retryAfterMs > 0 ? retryAfterMs : null,
+        details
+    );
+  }
+
+  private List<String> textValues(JsonNode node) {
+    if (node == null || !node.isArray()) return List.of();
+    List<String> values = new ArrayList<>();
+    node.forEach(value -> {
+      String normalized = cleanDiagnosticText(value.asText(null), 128);
+      if (normalized != null && !values.contains(normalized)) values.add(normalized);
+    });
+    return List.copyOf(values);
+  }
+
+  private String cleanDiagnosticText(String value, int maxLength) {
+    if (value == null) return null;
+    String normalized = value.replaceAll("[\\p{Cntrl}]", " ").trim();
+    if (normalized.isBlank()) return null;
+    return normalized.length() <= maxLength
+        ? normalized
+        : normalized.substring(0, maxLength);
   }
 
   private boolean refreshSupplementalDetails(BatchTask task, BatchItem item) {
@@ -478,16 +579,62 @@ public class ShipmentBatchTrackingService {
           ),
           task.owner
       );
+      JsonNode supplementalStrategy = response == null
+          ? null
+          : response.path("strategy");
+      if (supplementalStrategy != null && supplementalStrategy.isObject()) {
+        synchronized (task) {
+          String proxyNode = cleanDiagnosticText(
+              supplementalStrategy.path("proxyNode").asText(null), 128
+          );
+          if (proxyNode != null) item.proxyNode = proxyNode;
+          item.proxyAttempts = Math.max(
+              item.proxyAttempts,
+              Math.max(0, supplementalStrategy.path("proxyAttempts").asInt(0))
+          );
+          List<String> triedNodes = textValues(supplementalStrategy.path("triedNodes"));
+          if (!triedNodes.isEmpty()) item.triedProxyNodes = triedNodes;
+        }
+      }
       Map<String, SupplementalFailure> failures = new LinkedHashMap<>();
+      SupplementalFailure unmappedFailure = null;
       JsonNode warnings = response == null ? null : response.path("warnings");
       if (warnings != null && warnings.isArray()) {
         for (JsonNode warning : warnings) {
           String source = warning.path("source").asText("");
           String message = warning.path("message").asText("Supplemental query failed");
           String code = warning.path("code").asText("COSCO_SUPPLEMENTAL_PARTIAL");
-          int proxyAttempts = Math.max(0, warning.path("attempts").asInt(0));
-          failures.put(source, new SupplementalFailure(message, code, proxyAttempts));
+          int proxyAttempts = Math.max(
+              0,
+              warning.path("proxyAttempts").asInt(warning.path("attempts").asInt(0))
+          );
+          String route = warning.path("route").asText(null);
+          String proxyNode = warning.path("proxyNode").asText(
+              supplementalStrategy == null ? null : supplementalStrategy.path("proxyNode").asText(null)
+          );
+          List<String> triedNodes = textValues(warning.path("triedNodes"));
+          SupplementalFailure failure = new SupplementalFailure(
+              message, code, proxyAttempts, route, proxyNode, triedNodes
+          );
+          if (source.equals("bookingInfo") || source.equals("containerInfo")) {
+            failures.put(source, failure);
+          } else {
+            unmappedFailure = failure;
+          }
         }
+      }
+      boolean responsePartial = response != null && response.path("partial").asBoolean(false);
+      if (unmappedFailure != null) {
+        failures.putIfAbsent("bookingInfo", unmappedFailure);
+        failures.putIfAbsent("containerInfo", unmappedFailure);
+      } else if (responsePartial && failures.isEmpty()) {
+        SupplementalFailure failure = new SupplementalFailure(
+            "COSCO supplemental response was marked partial without source diagnostics",
+            "COSCO_SUPPLEMENTAL_PARTIAL",
+            0
+        );
+        failures.put("bookingInfo", failure);
+        failures.put("containerInfo", failure);
       }
       synchronized (task) {
         item.subtasks.clear();
@@ -501,22 +648,47 @@ public class ShipmentBatchTrackingService {
             failures.containsKey("containerInfo") ? "FAILED" : "SUCCEEDED",
             failures.get("containerInfo")
         ));
-        item.proxyAttempts = failures.values().stream()
-            .mapToInt(SupplementalFailure::proxyAttempts)
-            .max()
-            .orElse(0);
+        item.proxyAttempts = Math.max(
+            item.proxyAttempts,
+            failures.values().stream()
+                .mapToInt(SupplementalFailure::proxyAttempts)
+                .max()
+                .orElse(0)
+        );
+        item.proxyNode = failures.values().stream()
+            .map(SupplementalFailure::proxyNode)
+            .filter(value -> value != null && !value.isBlank())
+            .findFirst()
+            .orElse(item.proxyNode);
+        List<String> failedNodes = failures.values().stream()
+            .flatMap(failure -> failure.triedNodes().stream())
+            .distinct()
+            .toList();
+        if (!failedNodes.isEmpty()) item.triedProxyNodes = failedNodes;
         item.updatedAt = clock.instant();
         task.updatedAt = item.updatedAt;
       }
-      return failures.isEmpty();
+      return failures.isEmpty() && !responsePartial;
     } catch (RuntimeException error) {
-      setFailedSupplementalSubtasks(
-          task,
-          item,
-          safeMessage(error),
-          errorCode(error),
-          proxyAttempts(error)
-      );
+      synchronized (task) {
+        captureErrorDiagnostics(item, error);
+      }
+      if (!setFailedSupplementalSubtasksFromDiagnostics(task, item, error)) {
+        setFailedSupplementalSubtasks(
+            task,
+            item,
+            safeMessage(error),
+            errorCode(error),
+            proxyAttempts(error)
+        );
+      }
+      synchronized (task) {
+        for (Map<String, Object> subtask : item.subtasks) {
+          subtask.putIfAbsent("route", item.errorDetails.get("route"));
+          subtask.putIfAbsent("proxyNode", item.proxyNode);
+          subtask.putIfAbsent("triedProxyNodes", item.triedProxyNodes);
+        }
+      }
       return false;
     }
   }
@@ -559,6 +731,87 @@ public class ShipmentBatchTrackingService {
     }
   }
 
+  private boolean setFailedSupplementalSubtasksFromDiagnostics(
+      BatchTask task,
+      BatchItem item,
+      RuntimeException error
+  ) {
+    if (!(error instanceof ApiException apiError)) return false;
+    Object rawWarnings = apiError.details().get("warnings");
+    if (!(rawWarnings instanceof List<?> warnings) || warnings.isEmpty()) return false;
+    Map<String, SupplementalFailure> failures = new LinkedHashMap<>();
+    for (Object rawWarning : warnings) {
+      if (!(rawWarning instanceof Map<?, ?> warning)) continue;
+      String source = diagnosticString(warning.get("source"));
+      if (!"bookingInfo".equals(source) && !"containerInfo".equals(source)) continue;
+      String message = diagnosticString(warning.get("message"));
+      if (message == null) message = safeMessage(error);
+      String code = diagnosticString(warning.get("code"));
+      if (code == null) code = errorCode(error);
+      int attempts = diagnosticInteger(warning.get("proxyAttempts"));
+      if (attempts == 0) attempts = diagnosticInteger(warning.get("attempts"));
+      String route = diagnosticString(warning.get("route"));
+      String proxyNode = diagnosticString(warning.get("proxyNode"));
+      List<String> triedNodes = diagnosticStrings(warning.get("triedNodes"));
+      failures.put(source, new SupplementalFailure(
+          message, code, attempts, route, proxyNode, triedNodes
+      ));
+    }
+    if (failures.isEmpty()) return false;
+
+    SupplementalFailure fallback = new SupplementalFailure(
+        safeMessage(error),
+        errorCode(error),
+        proxyAttempts(error),
+        diagnosticString(apiError.details().get("route")),
+        diagnosticString(apiError.details().get("proxyNode")),
+        diagnosticStrings(apiError.details().get("triedNodes"))
+    );
+    synchronized (task) {
+      item.subtasks.clear();
+      SupplementalFailure bookingFailure = failures.getOrDefault("bookingInfo", fallback);
+      SupplementalFailure containerFailure = failures.getOrDefault("containerInfo", fallback);
+      item.subtasks.add(subtask("BOOKING_REFERENCE", "FAILED", bookingFailure));
+      item.subtasks.add(subtask("TRANSPORT_DETAILS", "FAILED", containerFailure));
+      item.proxyAttempts = Math.max(
+          item.proxyAttempts,
+          Math.max(bookingFailure.proxyAttempts(), containerFailure.proxyAttempts())
+      );
+      item.proxyNode = failures.values().stream()
+          .map(SupplementalFailure::proxyNode)
+          .filter(value -> value != null && !value.isBlank())
+          .findFirst()
+          .orElse(item.proxyNode);
+      List<String> triedNodes = failures.values().stream()
+          .flatMap(failure -> failure.triedNodes().stream())
+          .distinct()
+          .toList();
+      if (!triedNodes.isEmpty()) item.triedProxyNodes = triedNodes;
+      item.updatedAt = clock.instant();
+      task.updatedAt = item.updatedAt;
+    }
+    return true;
+  }
+
+  private int diagnosticInteger(Object value) {
+    if (value instanceof Number number) return Math.max(0, number.intValue());
+    if (value == null) return 0;
+    try {
+      return Math.max(0, Integer.parseInt(String.valueOf(value)));
+    } catch (NumberFormatException ignored) {
+      return 0;
+    }
+  }
+
+  private List<String> diagnosticStrings(Object value) {
+    if (!(value instanceof List<?> values)) return List.of();
+    return values.stream()
+        .map(this::diagnosticString)
+        .filter(text -> text != null && !text.isBlank())
+        .distinct()
+        .toList();
+  }
+
   private Map<String, Object> subtask(
       String type,
       String status,
@@ -570,6 +823,9 @@ public class ShipmentBatchTrackingService {
     value.put("error", failure == null ? null : failure.message());
     value.put("errorCode", failure == null ? null : failure.code());
     value.put("proxyAttempts", failure == null ? 0 : failure.proxyAttempts());
+    value.put("route", failure == null ? null : failure.route());
+    value.put("proxyNode", failure == null ? null : failure.proxyNode());
+    value.put("triedProxyNodes", failure == null ? List.of() : failure.triedNodes());
     return value;
   }
 
@@ -577,6 +833,7 @@ public class ShipmentBatchTrackingService {
     synchronized (task) {
       task.status = "RUNNING";
       item.status = "RUNNING";
+      item.mainStatus = "RUNNING";
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
@@ -588,6 +845,7 @@ public class ShipmentBatchTrackingService {
     synchronized (task) {
       task.status = "RUNNING";
       item.status = "RUNNING";
+      item.mainStatus = "RUNNING";
       item.attempts++;
       if (item.startedAt == null) item.startedAt = clock.instant();
       item.nextRetryAt = null;
@@ -600,7 +858,15 @@ public class ShipmentBatchTrackingService {
   private void markPendingAfterCancellation(BatchTask task, BatchItem item) {
     synchronized (task) {
       item.status = "PENDING";
+      item.mainStatus = "PENDING";
       item.source = null;
+      item.mainSource = null;
+      item.mainChannel = null;
+      item.mainFetchedAt = null;
+      item.mainCacheStale = false;
+      item.dataChanged = null;
+      item.mainError = null;
+      item.mainErrorCode = null;
       item.error = null;
       item.errorCode = null;
       item.nextRetryAt = null;
@@ -614,10 +880,13 @@ public class ShipmentBatchTrackingService {
   private void markFinalFailure(BatchTask task, BatchItem item, RuntimeException error) {
     synchronized (task) {
       item.status = "FAILED";
-      item.source = null;
       item.error = safeMessage(error);
       item.errorCode = errorCode(error);
       item.proxyAttempts = proxyAttempts(error);
+      item.mainStatus = "FAILED";
+      item.mainError = item.error;
+      item.mainErrorCode = item.errorCode;
+      captureErrorDiagnostics(item, error);
       item.nextRetryAt = null;
       task.nextAttemptAt = null;
       item.updatedAt = clock.instant();
@@ -648,8 +917,37 @@ public class ShipmentBatchTrackingService {
           item.attempts,
           item.proxyAttempts
       );
-    } catch (RuntimeException ignored) {
-      // Tracking data remains authoritative even if the diagnostic marker cannot be persisted.
+    } catch (RuntimeException error) {
+      synchronized (task) {
+        item.errorDetails.put("refreshOutcomePersistenceError", safeMessage(error));
+      }
+    }
+    if (!"PARTIAL".equals(item.status)) return;
+    List<String> failedSources = item.subtasks.stream()
+        .filter(subtask -> "FAILED".equals(subtask.get("status")))
+        .map(subtask -> "BOOKING_REFERENCE".equals(subtask.get("type"))
+            ? "bookingInfo"
+            : "containerInfo")
+        .distinct()
+        .toList();
+    try {
+      boolean scheduled = trackingService.scheduleSupplementalRetry(
+          shipmentId, failedSources, item.errorCode, message
+      );
+      synchronized (task) {
+        item.supplementalRetryPending = scheduled;
+        if (!scheduled) {
+          item.errorDetails.put(
+              "supplementalRetryScheduleError",
+              "The supplemental retry scheduler is disabled or no durable job was created"
+          );
+        }
+      }
+    } catch (RuntimeException error) {
+      synchronized (task) {
+        item.supplementalRetryPending = false;
+        item.errorDetails.put("supplementalRetryScheduleError", safeMessage(error));
+      }
     }
   }
 
@@ -714,6 +1012,20 @@ public class ShipmentBatchTrackingService {
   }
 
   private int proxyAttempts(RuntimeException error) {
+    if (error instanceof ApiException apiError) {
+      Object structured = apiError.details().get("proxyAttempts");
+      if (!(structured instanceof Number)) structured = apiError.details().get("attempts");
+      int attempts = structured instanceof Number number ? Math.max(0, number.intValue()) : 0;
+      Object apiAttempts = apiError.details().get("apiProxyAttempts");
+      if (apiAttempts instanceof Number number) {
+        attempts = Math.max(attempts, Math.max(0, number.intValue()));
+      }
+      Object playwrightAttempts = apiError.details().get("playwrightAttempts");
+      if (playwrightAttempts instanceof Number number) {
+        attempts = Math.max(attempts, Math.max(0, number.intValue()));
+      }
+      if (attempts > 0) return attempts;
+    }
     Matcher matcher = PROXY_ATTEMPTS_PATTERN.matcher(safeMessage(error));
     if (!matcher.find()) return 0;
     try {
@@ -721,6 +1033,40 @@ public class ShipmentBatchTrackingService {
     } catch (NumberFormatException ignored) {
       return 0;
     }
+  }
+
+  private void captureErrorDiagnostics(BatchItem item, RuntimeException error) {
+    if (!(error instanceof ApiException apiError) || apiError.details().isEmpty()) return;
+    item.errorDetails = new LinkedHashMap<>(apiError.details());
+    String fallbackSource = diagnosticString(apiError.details().get("fallbackSource"));
+    if (fallbackSource != null) {
+      item.source = fallbackSource;
+      item.mainSource = fallbackSource;
+      item.mainCacheStale = Boolean.TRUE.equals(apiError.details().get("stale"));
+      if (item.mainCacheStale) item.mainChannel = "CACHE";
+    }
+    String snapshotFetchedAt = diagnosticString(apiError.details().get("snapshotFetchedAt"));
+    if (snapshotFetchedAt != null) item.mainFetchedAt = snapshotFetchedAt;
+    String proxyNode = diagnosticString(apiError.details().get("playwrightProxyNode"));
+    if (proxyNode == null) proxyNode = diagnosticString(apiError.details().get("proxyNode"));
+    if (proxyNode != null) item.proxyNode = proxyNode;
+    List<Object> diagnosticNodes = new ArrayList<>();
+    Object apiNodes = apiError.details().get("apiTriedNodes");
+    if (apiNodes instanceof List<?> list) diagnosticNodes.addAll(list);
+    Object nodes = apiError.details().get("triedNodes");
+    if (nodes instanceof List<?> list) diagnosticNodes.addAll(list);
+    if (proxyNode != null) diagnosticNodes.add(proxyNode);
+    if (!diagnosticNodes.isEmpty()) {
+      item.triedProxyNodes = diagnosticNodes.stream()
+          .map(this::diagnosticString)
+          .filter(value -> value != null && !value.isBlank())
+          .distinct()
+          .toList();
+    }
+  }
+
+  private String diagnosticString(Object value) {
+    return cleanDiagnosticText(value == null ? null : String.valueOf(value), 128);
   }
 
   private void finish(BatchTask task, String status) {
@@ -1061,10 +1407,22 @@ public class ShipmentBatchTrackingService {
         value.put("importedDetails", item.request.importedDetails());
         value.put("status", item.status);
         value.put("source", item.source);
+        value.put("mainStatus", item.mainStatus);
+        value.put("mainSource", item.mainSource);
+        value.put("mainChannel", item.mainChannel);
+        value.put("mainFetchedAt", item.mainFetchedAt);
+        value.put("mainCacheStale", item.mainCacheStale);
+        value.put("mainDataChanged", item.dataChanged);
+        value.put("mainError", item.mainError);
+        value.put("mainErrorCode", item.mainErrorCode);
         value.put("error", item.error);
         value.put("errorCode", item.errorCode);
+        value.put("errorDetails", new LinkedHashMap<>(item.errorDetails));
         value.put("attempts", item.attempts);
         value.put("proxyAttempts", item.proxyAttempts);
+        value.put("proxyNode", item.proxyNode);
+        value.put("triedProxyNodes", List.copyOf(item.triedProxyNodes));
+        value.put("supplementalRetryPending", item.supplementalRetryPending);
         value.put("nextRetryAt", iso(item.nextRetryAt));
         value.put("shipmentId", item.shipmentId);
         value.put("startedAt", iso(item.startedAt));
@@ -1136,7 +1494,7 @@ public class ShipmentBatchTrackingService {
   private String safeMessage(RuntimeException error) {
     String message = error.getMessage();
     if (message == null || message.isBlank()) return "Shipment processing failed";
-    return message.length() <= 500 ? message : message.substring(0, 500);
+    return message.length() <= 4_000 ? message : message.substring(0, 4_000);
   }
 
   private void requireManager(AuthenticatedUser user) {
@@ -1254,10 +1612,22 @@ public class ShipmentBatchTrackingService {
     private final boolean manualOnly;
     private String status = "PENDING";
     private String source;
+    private String mainStatus = "PENDING";
+    private String mainSource;
+    private String mainChannel;
+    private String mainFetchedAt;
+    private boolean mainCacheStale;
+    private Boolean dataChanged;
+    private String mainError;
+    private String mainErrorCode;
     private String error;
     private String errorCode;
+    private Map<String, Object> errorDetails = new LinkedHashMap<>();
     private int attempts;
     private int proxyAttempts;
+    private String proxyNode;
+    private List<String> triedProxyNodes = List.of();
+    private boolean supplementalRetryPending;
     private Instant nextRetryAt;
     private String shipmentId;
     private Instant startedAt;
@@ -1276,7 +1646,18 @@ public class ShipmentBatchTrackingService {
     }
   }
 
-  private record SupplementalFailure(String message, String code, int proxyAttempts) {}
+  private record SupplementalFailure(
+      String message,
+      String code,
+      int proxyAttempts,
+      String route,
+      String proxyNode,
+      List<String> triedNodes
+  ) {
+    private SupplementalFailure(String message, String code, int proxyAttempts) {
+      this(message, code, proxyAttempts, null, null, List.of());
+    }
+  }
 
   private static final class ProtectionPauseException extends RuntimeException {
     private ProtectionPauseException(RuntimeException cause) {

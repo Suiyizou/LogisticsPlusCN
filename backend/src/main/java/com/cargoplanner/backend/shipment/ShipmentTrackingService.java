@@ -302,39 +302,65 @@ public class ShipmentTrackingService {
       Instant now
   ) {
     if (details == null) return false;
-    List<CurrentSnapshot> current = jdbcTemplate.query(
-        """
-        SELECT t.id, t.snapshot_json
-        FROM cp_shipments s
-        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
-        WHERE s.id = ? AND t.invalidated_at IS NULL
-        LIMIT 1
-        """,
-        (rs, rowNumber) -> new CurrentSnapshot(
-            rs.getLong("id"), rs.getString("snapshot_json")
-        ),
-        shipmentId
+    Boolean changed = transactionTemplate.execute(
+        status -> mergeImportedDetailsIntoCurrentSnapshotInTransaction(
+            shipmentId, details, now
+        )
     );
-    if (current.isEmpty()) return false;
+    return Boolean.TRUE.equals(changed);
+  }
+
+  private boolean mergeCachedImportedDetailsAtomically(
+      long shipmentId,
+      ShipmentImportDetails details,
+      Instant now
+  ) {
+    if (details == null) return false;
+    Boolean changed = transactionTemplate.execute(status -> {
+      jdbcTemplate.queryForObject(
+          "SELECT id FROM cp_shipments WHERE id = ? FOR UPDATE",
+          Long.class,
+          shipmentId
+      );
+      boolean businessChanged = persistImportedBusinessFields(shipmentId, details, now);
+      boolean snapshotChanged = mergeImportedDetailsIntoCurrentSnapshotInTransaction(
+          shipmentId, details, now
+      );
+      return businessChanged || snapshotChanged;
+    });
+    return Boolean.TRUE.equals(changed);
+  }
+
+  private boolean mergeImportedDetailsIntoCurrentSnapshotInTransaction(
+      long shipmentId,
+      ShipmentImportDetails details,
+      Instant now
+  ) {
+    MutableSnapshot current = lockCurrentSnapshotByShipmentId(shipmentId, false);
+    if (current == null) return false;
     ObjectNode envelope = objectMapper.createObjectNode();
-    envelope.set("snapshot", readJson(current.get(0).snapshotJson()));
+    envelope.set("snapshot", readJson(current.snapshotJson()));
     JsonNode enriched = ensureRouteFallback(
         enrichWithImportedDetails(envelope, details),
         details
     ).path("snapshot");
     String snapshotJson = writeJson(enriched);
-    if (snapshotJson.equals(current.get(0).snapshotJson())) return false;
-    jdbcTemplate.update(
-        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
+    if (snapshotJson.equals(current.snapshotJson())) return false;
+    int snapshotUpdated = jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? "
+            + "WHERE id = ? AND shipment_id = ? AND invalidated_at IS NULL",
         snapshotJson,
         sha256(snapshotJson),
-        current.get(0).id()
-    );
-    jdbcTemplate.update(
-        "UPDATE cp_shipments SET updated_at = ? WHERE id = ?",
-        timestamp(now),
+        current.snapshotId(),
         shipmentId
     );
+    int shipmentUpdated = jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id = ? AND current_snapshot_id = ?",
+        timestamp(now),
+        shipmentId,
+        current.snapshotId()
+    );
+    requireCurrentSnapshotWrite(snapshotUpdated, shipmentUpdated);
     return true;
   }
 
@@ -1367,12 +1393,9 @@ public class ShipmentTrackingService {
     if (!forceRefresh && cached != null) {
       boolean importedDetailsChanged = false;
       if (importedDetails != null) {
-        importedDetailsChanged = persistImportedBusinessFields(
+        importedDetailsChanged = mergeCachedImportedDetailsAtomically(
             cached.shipmentId(), importedDetails, now
         );
-        importedDetailsChanged = mergeImportedDetailsIntoCurrentSnapshot(
-            cached.shipmentId(), importedDetails, now
-        ) || importedDetailsChanged;
         matchImportedClientCode(
             new PersistedShipment(
                 cached.shipmentId(),
@@ -1416,15 +1439,27 @@ public class ShipmentTrackingService {
       String failureCode = trackingFailureCode(error);
       if (importedDetails == null && cached != null
           && (error.status().is5xxServerError() || error.status() == HttpStatus.TOO_MANY_REQUESTS)) {
+        if (request.batchTaskId() != null) {
+          throw new ApiException(
+              error.status(),
+              failureCode,
+              error.getMessage(),
+              error.retryAfterMs(),
+              staleFallbackDetails(cached, error.details())
+          );
+        }
         ObjectNode response = cachedResponse(cached, user, true);
         response.put("warning", error.getMessage());
         ObjectNode diagnostic = response.putObject("diagnostic");
         diagnostic.put("code", failureCode);
         diagnostic.put("message", error.getMessage());
+        if (error.retryAfterMs() != null) {
+          diagnostic.put("retryAfterMs", error.retryAfterMs());
+        }
         return response;
       }
       throw new ApiException(
-          error.status(), failureCode, error.getMessage(), error.retryAfterMs()
+          error.status(), failureCode, error.getMessage(), error.retryAfterMs(), error.details()
       );
     }
 
@@ -1440,6 +1475,15 @@ public class ShipmentTrackingService {
     snapshot = upstream.path("snapshot");
     if (!hasMeaningfulTrackingData(snapshot)) {
       if (cached != null) {
+        if (request.batchTaskId() != null) {
+          throw new ApiException(
+              HttpStatus.BAD_GATEWAY,
+              "UPSTREAM_EMPTY",
+              "Carrier returned no operational tracking data",
+              null,
+              staleFallbackDetails(cached, Map.of())
+          );
+        }
         ObjectNode response = cachedResponse(cached, user, true);
         response.put("warning", "Live tracking returned no operational data; the last valid snapshot was kept");
         ObjectNode diagnostic = response.putObject("diagnostic");
@@ -1461,6 +1505,28 @@ public class ShipmentTrackingService {
       return transientLiveResponse(upstream);
     }
 
+    boolean supplementalIncomplete = request.batchTaskId() != null
+        || upstream.path("enrichment").path("partial").asBoolean(false);
+    if (supplementalIncomplete && snapshot.isObject()) {
+      ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
+      supplemental.put("partial", true);
+      supplemental.put("pendingRefresh", true);
+      // The carry-forward base is deliberately resolved later, after persist() acquires the
+      // shipment lock. A supplemental request may complete while the main carrier call is in
+      // flight, so the pre-request cache is not a safe merge base.
+      supplemental.remove(List.of("carriedForward", "sourceFetchedAt"));
+    }
+    if ("COSCO".equals(request.carrier()) && "BOOKING".equals(request.type())
+        && snapshot.isObject()) {
+      ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
+      supplemental.put("lastAppliedRequestStartedAt", now.toString());
+      supplemental.put("lastAppliedRequestId", "main-" + UUID.randomUUID());
+    }
+
+    boolean dataChanged = cached == null
+        || !mainTrackingFingerprint(snapshot).equals(
+            mainTrackingFingerprint(readJson(cached.snapshotJson()))
+        );
     PersistedShipment persisted = persistAtomically(
         request, upstream, cached, importedDetails, user, now
     );
@@ -1468,7 +1534,178 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist tracking result");
     }
     matchImportedClientCode(persisted, importedDetails, user, now);
-    return liveResponse(upstream, persisted, user);
+    ObjectNode response = liveResponse(upstream, persisted, user);
+    response.put("dataChanged", dataChanged);
+    return response;
+  }
+
+  private boolean carryForwardSupplementalData(
+      ObjectNode liveSnapshot,
+      JsonNode previousSnapshot,
+      Instant previousFetchedAt
+  ) {
+    if (previousSnapshot == null || !previousSnapshot.isObject()) return false;
+    boolean carriedForward = false;
+    JsonNode liveContainers = liveSnapshot.path("containers");
+    JsonNode previousContainers = previousSnapshot.path("containers");
+    ArrayNode mergedContainers = liveContainers.isArray()
+        ? (ArrayNode) liveContainers
+        : liveSnapshot.putArray("containers");
+    Map<String, ObjectNode> liveByNumber = new LinkedHashMap<>();
+    for (JsonNode liveContainer : mergedContainers) {
+      String number = normalizedContainerNumber(liveContainer);
+      if (number != null && liveContainer.isObject()) {
+        liveByNumber.put(number, (ObjectNode) liveContainer);
+      }
+    }
+    if (previousContainers.isArray()) {
+      for (JsonNode previousContainer : previousContainers) {
+        String number = normalizedContainerNumber(previousContainer);
+        if (number == null || !previousContainer.isObject()) continue;
+        ObjectNode current = liveByNumber.get(number);
+        if (current == null) {
+          ObjectNode copy = ((ObjectNode) previousContainer).deepCopy();
+          mergedContainers.add(copy);
+          liveByNumber.put(number, copy);
+          carriedForward = true;
+        } else if (mergeMissingFields(current, (ObjectNode) previousContainer)) {
+          carriedForward = true;
+        }
+      }
+    }
+
+    ObjectNode liveReferences = childObject(liveSnapshot, "references");
+    JsonNode previousReferences = previousSnapshot.path("references");
+    if (previousReferences.isObject()) {
+      int externalCount = liveReferences.path("external").size();
+      mergeReferenceArray(liveReferences, (ObjectNode) previousReferences, "external");
+      if (liveReferences.path("external").size() > externalCount) {
+        carriedForward = true;
+      }
+      int informationCount = liveReferences.path("information").size();
+      mergeMissingReferenceInformation(liveReferences, previousReferences.path("information"));
+      if (liveReferences.path("information").size() > informationCount) {
+        carriedForward = true;
+      }
+      JsonNode previousBusiness = previousReferences.path("business");
+      if (previousBusiness.isObject()) {
+        ObjectNode liveBusiness = childObject(liveReferences, "business");
+        carriedForward = mergeMissingFields(liveBusiness, (ObjectNode) previousBusiness)
+            || carriedForward;
+      }
+    }
+
+    ObjectNode supplemental = childObject(liveSnapshot, "supplementalDetails");
+    JsonNode previousSupplemental = previousSnapshot.path("supplementalDetails");
+    copyNewerSupplementalRequestBarrier(supplemental, previousSupplemental);
+    if (!carriedForward) return false;
+    String sourceFetchedAt = previousSupplemental.path("lastSuccessfulAt").asText(
+        previousSupplemental.path("sourceFetchedAt").asText(
+            previousSupplemental.path("updatedAt")
+                .asText(previousSnapshot.path("fetchedAt").asText(null))
+        )
+    );
+    if ((sourceFetchedAt == null || sourceFetchedAt.isBlank()) && previousFetchedAt != null) {
+      sourceFetchedAt = previousFetchedAt.toString();
+    }
+    if (sourceFetchedAt != null && !sourceFetchedAt.isBlank()) {
+      supplemental.put("sourceFetchedAt", sourceFetchedAt);
+    }
+    return true;
+  }
+
+  private void copyNewerSupplementalRequestBarrier(
+      ObjectNode target,
+      JsonNode candidate
+  ) {
+    Instant candidateStartedAt = parseInstant(
+        candidate.path("lastAppliedRequestStartedAt").asText(null), null
+    );
+    if (candidateStartedAt == null) return;
+    String candidateId = candidate.path("lastAppliedRequestId").asText("");
+    Instant targetStartedAt = parseInstant(
+        target.path("lastAppliedRequestStartedAt").asText(null), null
+    );
+    String targetId = target.path("lastAppliedRequestId").asText("");
+    boolean candidateIsNewer = targetStartedAt == null
+        || candidateStartedAt.isAfter(targetStartedAt)
+        || (candidateStartedAt.equals(targetStartedAt)
+            && candidateId.compareTo(targetId) > 0);
+    if (candidateIsNewer) {
+      target.put("lastAppliedRequestStartedAt", candidateStartedAt.toString());
+      target.put("lastAppliedRequestId", candidateId);
+    }
+  }
+
+  private boolean mergeMissingFields(ObjectNode target, ObjectNode fallback) {
+    boolean[] changed = {false};
+    fallback.fields().forEachRemaining(entry -> {
+      JsonNode fallbackValue = entry.getValue();
+      if (fallbackValue == null || fallbackValue.isNull() || fallbackValue.isMissingNode()) return;
+      JsonNode current = target.path(entry.getKey());
+      boolean missing = current.isMissingNode()
+          || current.isNull()
+          || (current.isTextual() && current.asText().isBlank())
+          || ((current.isArray() || current.isObject()) && current.isEmpty());
+      if (missing) {
+        target.set(entry.getKey(), fallbackValue.deepCopy());
+        changed[0] = true;
+      } else if (current.isObject() && fallbackValue.isObject()
+          && mergeMissingFields((ObjectNode) current, (ObjectNode) fallbackValue)) {
+        changed[0] = true;
+      }
+    });
+    return changed[0];
+  }
+
+  private void mergeMissingReferenceInformation(ObjectNode references, JsonNode fallback) {
+    Map<String, JsonNode> informationByName = new LinkedHashMap<>();
+    JsonNode current = references.path("information");
+    if (current.isArray()) {
+      for (JsonNode item : current) {
+        String key = referenceInformationKey(item);
+        if (key != null) informationByName.putIfAbsent(key, item.deepCopy());
+      }
+    }
+    if (fallback.isArray()) {
+      for (JsonNode item : fallback) {
+        String key = referenceInformationKey(item);
+        if (key != null) informationByName.putIfAbsent(key, item.deepCopy());
+      }
+    }
+    ArrayNode merged = references.putArray("information");
+    informationByName.values().forEach(merged::add);
+  }
+
+  private String mainTrackingFingerprint(JsonNode snapshot) {
+    ObjectNode stable = objectMapper.createObjectNode();
+    if (snapshot != null && snapshot.isObject()) {
+      for (String field : List.of(
+          "summary",
+          "keyTimes",
+          "route",
+          "routingLegs",
+          "transportStatuses",
+          "sailingSchedule"
+      )) {
+        if (snapshot.has(field)) stable.set(field, snapshot.path(field));
+      }
+    }
+    return writeJson(stable);
+  }
+
+  private Map<String, Object> staleFallbackDetails(
+      CachedShipment cached,
+      Map<String, Object> upstreamDetails
+  ) {
+    Map<String, Object> details = new LinkedHashMap<>();
+    if (upstreamDetails != null) details.putAll(upstreamDetails);
+    details.put("fallbackSource", "MYSQL_STALE");
+    details.put("stale", true);
+    if (cached.fetchedAt() != null) {
+      details.put("snapshotFetchedAt", cached.fetchedAt().toString());
+    }
+    return details;
   }
 
   private void matchImportedClientCode(
@@ -1593,7 +1830,67 @@ public class ShipmentTrackingService {
       ShipmentTrackRequest input,
       AuthenticatedUser user
   ) {
-    requireBatchShipmentAccess(shipmentPublicId, user);
+    return loadSupplementalDetails(shipmentPublicId, input, user, false);
+  }
+
+  ObjectNode refreshSupplementalAutomatically(
+      String shipmentPublicId,
+      String carrier,
+      String type,
+      String number,
+      List<String> sources
+  ) {
+    return loadSupplementalDetails(
+        shipmentPublicId,
+        new ShipmentTrackRequest(carrier, "AUTO", type, number, true),
+        null,
+        true,
+        sources
+    );
+  }
+
+  boolean scheduleSupplementalRetry(
+      String shipmentPublicId,
+      List<String> sources,
+      String errorCode,
+      String errorMessage
+  ) {
+    if (shipmentPublicId == null || shipmentPublicId.isBlank()) return false;
+    List<String> normalizedSources = (sources == null ? List.<String>of() : sources).stream()
+        .map(value -> value == null ? "" : value.trim())
+        .filter(value -> value.equals("bookingInfo") || value.equals("containerInfo"))
+        .distinct()
+        .toList();
+    SupplementalTrackingRetryRequestedEvent event = new SupplementalTrackingRetryRequestedEvent(
+        shipmentPublicId.trim(),
+        normalizedSources,
+        errorCode,
+        errorMessage,
+        clock.instant()
+    );
+    eventPublisher.publishEvent(event);
+    return event.scheduled();
+  }
+
+  private ObjectNode loadSupplementalDetails(
+      String shipmentPublicId,
+      ShipmentTrackRequest input,
+      AuthenticatedUser user,
+      boolean trustedAutomaticRefresh
+  ) {
+    return loadSupplementalDetails(
+        shipmentPublicId, input, user, trustedAutomaticRefresh, List.of()
+    );
+  }
+
+  private ObjectNode loadSupplementalDetails(
+      String shipmentPublicId,
+      ShipmentTrackRequest input,
+      AuthenticatedUser user,
+      boolean trustedAutomaticRefresh,
+      List<String> supplementalSources
+  ) {
+    if (!trustedAutomaticRefresh) requireBatchShipmentAccess(shipmentPublicId, user);
     NormalizedTrackRequest request = normalize(input);
     if (!"COSCO".equals(request.carrier()) || !"BOOKING".equals(request.type())) {
       throw new ApiException(
@@ -1622,18 +1919,37 @@ public class ShipmentTrackingService {
       );
     }
 
-    JsonNode details = adapterClient.loadSupplementalDetails(request);
-    ObjectNode snapshot = mergeSupplementalDetailsIntoCurrentSnapshot(
+    Instant supplementalRequestStartedAt = clock.instant();
+    String supplementalRequestId = "supplemental-" + UUID.randomUUID();
+    JsonNode details = trustedAutomaticRefresh
+        ? adapterClient.loadSupplementalDetails(request, supplementalSources, true)
+        : adapterClient.loadSupplementalDetails(request);
+    SupplementalMergeResult mergeResult = mergeSupplementalDetailsIntoCurrentSnapshot(
         shipmentPublicId,
         details,
-        user
+        user,
+        trustedAutomaticRefresh,
+        supplementalRequestStartedAt,
+        supplementalRequestId
     );
+    ObjectNode snapshot = mergeResult.snapshot();
     ObjectNode response = details.isObject()
         ? ((ObjectNode) details).deepCopy()
         : objectMapper.createObjectNode();
     response.put("shipmentId", shipmentPublicId.trim());
-    response.put("databaseStored", true);
-    response.put("databaseStoredAt", clock.instant().toString());
+    response.put("databaseStored", mergeResult.databaseStored());
+    response.put("superseded", mergeResult.superseded());
+    if (mergeResult.databaseStored()) {
+      response.put("databaseStoredAt", clock.instant().toString());
+    } else {
+      response.putNull("databaseStoredAt");
+    }
+    if (mergeResult.superseded()) {
+      response.put(
+          "partial",
+          snapshot.path("supplementalDetails").path("partial").asBoolean(false)
+      );
+    }
     response.set("snapshot", snapshot);
     return response;
   }
@@ -1664,6 +1980,36 @@ public class ShipmentTrackingService {
         Math.max(0, proxyAttempts),
         timestamp(clock.instant()),
         shipmentPublicId.trim()
+    );
+  }
+
+  void recordSupplementalRetryOutcome(
+      String shipmentPublicId,
+      boolean succeeded,
+      String errorCode,
+      String errorMessage,
+      String expectedLeaseToken
+  ) {
+    if (shipmentPublicId == null || shipmentPublicId.isBlank()) return;
+    String ownershipClause = expectedLeaseToken == null || expectedLeaseToken.isBlank()
+        ? ""
+        : " AND EXISTS (SELECT 1 FROM cp_tracking_refresh_jobs j "
+            + "WHERE j.shipment_id = cp_shipments.id AND j.lease_token = ?)";
+    List<Object> arguments = new ArrayList<>();
+    arguments.add(succeeded ? "SUCCEEDED" : "PARTIAL");
+    arguments.add(succeeded ? null : trim(errorCode, 120));
+    arguments.add(succeeded ? null : trim(errorMessage, 1000));
+    arguments.add(timestamp(clock.instant()));
+    arguments.add(shipmentPublicId.trim());
+    if (!ownershipClause.isEmpty()) arguments.add(expectedLeaseToken);
+    jdbcTemplate.update(
+        """
+        UPDATE cp_shipments
+        SET last_refresh_result = ?, last_refresh_error_code = ?, last_refresh_error = ?,
+            last_refresh_at = ?, updated_at = updated_at
+        WHERE public_id = ?
+        """ + ownershipClause,
+        arguments.toArray()
     );
   }
 
@@ -1728,7 +2074,94 @@ public class ShipmentTrackingService {
     }
   }
 
-  private synchronized void mergeContainersIntoCurrentSnapshot(
+  private MutableSnapshot lockCurrentSnapshotByPublicId(String shipmentPublicId) {
+    List<CurrentSnapshotPointer> shipments = jdbcTemplate.query(
+        """
+        SELECT id, current_snapshot_id
+        FROM cp_shipments
+        WHERE public_id = ?
+        FOR UPDATE
+        """,
+        (rs, rowNumber) -> currentSnapshotPointer(rs),
+        shipmentPublicId.trim()
+    );
+    if (shipments.isEmpty()) {
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+    return lockSnapshotForShipment(shipments.get(0), true);
+  }
+
+  private MutableSnapshot lockCurrentSnapshotByShipmentId(
+      long shipmentId,
+      boolean required
+  ) {
+    List<CurrentSnapshotPointer> shipments = jdbcTemplate.query(
+        """
+        SELECT id, current_snapshot_id
+        FROM cp_shipments
+        WHERE id = ?
+        FOR UPDATE
+        """,
+        (rs, rowNumber) -> currentSnapshotPointer(rs),
+        shipmentId
+    );
+    if (shipments.isEmpty()) {
+      if (!required) return null;
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+    return lockSnapshotForShipment(shipments.get(0), required);
+  }
+
+  private CurrentSnapshotPointer currentSnapshotPointer(ResultSet resultSet) throws SQLException {
+    long snapshotId = resultSet.getLong("current_snapshot_id");
+    boolean snapshotMissing = resultSet.wasNull();
+    long shipmentId = resultSet.getLong("id");
+    return new CurrentSnapshotPointer(
+        shipmentId,
+        snapshotMissing ? null : snapshotId
+    );
+  }
+
+  private MutableSnapshot lockSnapshotForShipment(
+      CurrentSnapshotPointer shipment,
+      boolean required
+  ) {
+    if (shipment.snapshotId() == null) {
+      if (!required) return null;
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+    List<MutableSnapshot> snapshots = jdbcTemplate.query(
+        """
+        SELECT id, shipment_id, snapshot_json
+        FROM cp_tracking_snapshots
+        WHERE id = ? AND shipment_id = ? AND invalidated_at IS NULL
+        FOR UPDATE
+        """,
+        (rs, rowNumber) -> new MutableSnapshot(
+            rs.getLong("shipment_id"),
+            rs.getLong("id"),
+            rs.getString("snapshot_json")
+        ),
+        shipment.snapshotId(),
+        shipment.shipmentId()
+    );
+    if (snapshots.isEmpty()) {
+      if (!required) return null;
+      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    }
+    return snapshots.get(0);
+  }
+
+  private void requireCurrentSnapshotWrite(int snapshotUpdated, int shipmentUpdated) {
+    if (snapshotUpdated != 1 || shipmentUpdated != 1) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Current tracking snapshot changed while supplemental details were being saved"
+      );
+    }
+  }
+
+  private void mergeContainersIntoCurrentSnapshot(
       String shipmentPublicId,
       JsonNode incomingContainers,
       boolean detailed,
@@ -1738,26 +2171,19 @@ public class ShipmentTrackingService {
     if (!incomingContainers.isArray()) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Container enrichment response is invalid");
     }
-    List<MutableSnapshot> matches = jdbcTemplate.query(
-        """
-        SELECT s.id AS shipment_id, t.id AS snapshot_id, t.snapshot_json
-        FROM cp_shipments s
-        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
-        WHERE s.public_id = ? AND t.invalidated_at IS NULL
-        LIMIT 1
-        """,
-        (rs, rowNumber) -> new MutableSnapshot(
-            rs.getLong("shipment_id"),
-            rs.getLong("snapshot_id"),
-            rs.getString("snapshot_json")
-        ),
-        shipmentPublicId.trim()
+    transactionTemplate.executeWithoutResult(
+        status -> mergeContainersIntoCurrentSnapshotInTransaction(
+            shipmentPublicId, incomingContainers, detailed
+        )
     );
-    if (matches.isEmpty()) {
-      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
-    }
+  }
 
-    MutableSnapshot stored = matches.get(0);
+  private void mergeContainersIntoCurrentSnapshotInTransaction(
+      String shipmentPublicId,
+      JsonNode incomingContainers,
+      boolean detailed
+  ) {
+    MutableSnapshot stored = lockCurrentSnapshotByPublicId(shipmentPublicId);
     JsonNode parsed = readJson(stored.snapshotJson());
     if (!parsed.isObject()) {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
@@ -1801,56 +2227,74 @@ public class ShipmentTrackingService {
     enrichment.put("updatedAt", now.toString());
 
     String snapshotJson = writeJson(snapshot);
-    jdbcTemplate.update(
-        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
+    int snapshotUpdated = jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? "
+            + "WHERE id = ? AND shipment_id = ? AND invalidated_at IS NULL",
         snapshotJson,
         sha256(snapshotJson),
-        stored.snapshotId()
-    );
-    jdbcTemplate.update(
-        "UPDATE cp_shipments SET updated_at = ? WHERE id = ?",
-        timestamp(now),
+        stored.snapshotId(),
         stored.shipmentId()
     );
+    int shipmentUpdated = jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id = ? AND current_snapshot_id = ?",
+        timestamp(now),
+        stored.shipmentId(),
+        stored.snapshotId()
+    );
+    requireCurrentSnapshotWrite(snapshotUpdated, shipmentUpdated);
     eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
         stored.shipmentId(), shipmentPublicId, snapshot.deepCopy(), now
     ));
   }
 
-  private synchronized ObjectNode mergeSupplementalDetailsIntoCurrentSnapshot(
+  private SupplementalMergeResult mergeSupplementalDetailsIntoCurrentSnapshot(
       String shipmentPublicId,
       JsonNode details,
-      AuthenticatedUser user
+      AuthenticatedUser user,
+      boolean trustedAutomaticRefresh,
+      Instant requestStartedAt,
+      String requestId
   ) {
-    requireBatchShipmentAccess(shipmentPublicId, user);
+    if (!trustedAutomaticRefresh) requireBatchShipmentAccess(shipmentPublicId, user);
     if (!details.path("containers").isArray() || !details.path("references").isObject()) {
       throw new ApiException(HttpStatus.BAD_GATEWAY, "Supplemental detail response is invalid");
     }
-    List<MutableSnapshot> matches = jdbcTemplate.query(
-        """
-        SELECT s.id AS shipment_id, t.id AS snapshot_id, t.snapshot_json
-        FROM cp_shipments s
-        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
-        WHERE s.public_id = ? AND t.invalidated_at IS NULL
-        LIMIT 1
-        """,
-        (rs, rowNumber) -> new MutableSnapshot(
-            rs.getLong("shipment_id"),
-            rs.getLong("snapshot_id"),
-            rs.getString("snapshot_json")
-        ),
-        shipmentPublicId.trim()
+    SupplementalMergeResult merged = transactionTemplate.execute(
+        status -> mergeSupplementalDetailsIntoCurrentSnapshotInTransaction(
+            shipmentPublicId, details, requestStartedAt, requestId
+        )
     );
-    if (matches.isEmpty()) {
-      throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current tracking snapshot");
+    if (merged == null) {
+      throw new ApiException(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Supplemental detail transaction did not return a snapshot"
+      );
     }
+    return merged;
+  }
 
-    MutableSnapshot stored = matches.get(0);
+  private SupplementalMergeResult mergeSupplementalDetailsIntoCurrentSnapshotInTransaction(
+      String shipmentPublicId,
+      JsonNode details,
+      Instant requestStartedAt,
+      String requestId
+  ) {
+    MutableSnapshot stored = lockCurrentSnapshotByPublicId(shipmentPublicId);
     JsonNode parsed = readJson(stored.snapshotJson());
     if (!parsed.isObject()) {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
     }
     ObjectNode snapshot = (ObjectNode) parsed;
+    ObjectNode enrichment = childObject(snapshot, "supplementalDetails");
+    Instant lastAppliedStartedAt = parseInstant(
+        enrichment.path("lastAppliedRequestStartedAt").asText(null), null
+    );
+    String lastAppliedRequestId = enrichment.path("lastAppliedRequestId").asText("");
+    boolean superseded = lastAppliedStartedAt != null
+        && (requestStartedAt.isBefore(lastAppliedStartedAt)
+            || (requestStartedAt.equals(lastAppliedStartedAt)
+                && requestId.compareTo(lastAppliedRequestId) < 0));
+    String beforeMerge = superseded ? writeJson(snapshot) : null;
 
     Map<String, ObjectNode> containersByNumber = new LinkedHashMap<>();
     JsonNode currentContainers = snapshot.path("containers");
@@ -1869,7 +2313,7 @@ public class ShipmentTrackingService {
           number,
           ignored -> objectMapper.createObjectNode().put("number", number)
       );
-      mergeUsefulContainerFields(target, (ObjectNode) incoming);
+      mergeUsefulContainerFields(target, (ObjectNode) incoming, !superseded);
     }
     ArrayNode mergedContainers = objectMapper.createArrayNode();
     containersByNumber.values().forEach(mergedContainers::add);
@@ -1882,33 +2326,56 @@ public class ShipmentTrackingService {
     if (incomingBusiness.isObject()) {
       mergeUsefulContainerFields(
           childObject(references, "business"),
-          (ObjectNode) incomingBusiness
+          (ObjectNode) incomingBusiness,
+          !superseded
       );
     }
-    mergeReferenceInformation(references, incomingReferences.path("information"));
+    mergeReferenceInformation(
+        references, incomingReferences.path("information"), !superseded
+    );
 
     Instant now = clock.instant();
-    ObjectNode enrichment = childObject(snapshot, "supplementalDetails");
-    enrichment.put("updatedAt", now.toString());
     enrichment.put("containerCount", mergedContainers.size());
-    enrichment.put("partial", details.path("partial").asBoolean(false));
+    if (!superseded) {
+      Instant sourceFetchedAt = parseInstant(details.path("fetchedAt").asText(null), now);
+      enrichment.put("lastAppliedRequestStartedAt", requestStartedAt.toString());
+      enrichment.put("lastAppliedRequestId", requestId);
+      enrichment.put("lastAttemptAt", requestStartedAt.toString());
+      enrichment.put("lastResponseAt", now.toString());
+      boolean partial = details.path("partial").asBoolean(false);
+      enrichment.put("partial", partial);
+      if (partial) {
+        enrichment.put("pendingRefresh", true);
+      } else {
+        enrichment.put("updatedAt", sourceFetchedAt.toString());
+        enrichment.put("lastSuccessfulAt", sourceFetchedAt.toString());
+        enrichment.remove(List.of("pendingRefresh", "carriedForward", "sourceFetchedAt"));
+      }
+    }
 
     String snapshotJson = writeJson(snapshot);
-    jdbcTemplate.update(
-        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? WHERE id = ?",
+    if (superseded && snapshotJson.equals(beforeMerge)) {
+      return new SupplementalMergeResult(snapshot.deepCopy(), false, true);
+    }
+    int snapshotUpdated = jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET snapshot_json = ?, payload_sha256 = ? "
+            + "WHERE id = ? AND shipment_id = ? AND invalidated_at IS NULL",
         snapshotJson,
         sha256(snapshotJson),
-        stored.snapshotId()
-    );
-    jdbcTemplate.update(
-        "UPDATE cp_shipments SET updated_at = ? WHERE id = ?",
-        timestamp(now),
+        stored.snapshotId(),
         stored.shipmentId()
     );
+    int shipmentUpdated = jdbcTemplate.update(
+        "UPDATE cp_shipments SET updated_at = ? WHERE id = ? AND current_snapshot_id = ?",
+        timestamp(now),
+        stored.shipmentId(),
+        stored.snapshotId()
+    );
+    requireCurrentSnapshotWrite(snapshotUpdated, shipmentUpdated);
     eventPublisher.publishEvent(new TrackingSnapshotPersistedEvent(
         stored.shipmentId(), shipmentPublicId, snapshot.deepCopy(), now
     ));
-    return snapshot.deepCopy();
+    return new SupplementalMergeResult(snapshot.deepCopy(), true, superseded);
   }
 
   private void mergeReferenceArray(
@@ -1935,7 +2402,11 @@ public class ShipmentTrackingService {
     values.values().forEach(merged::add);
   }
 
-  private void mergeReferenceInformation(ObjectNode references, JsonNode incoming) {
+  private void mergeReferenceInformation(
+      ObjectNode references,
+      JsonNode incoming,
+      boolean overwriteExisting
+  ) {
     Map<String, JsonNode> informationByName = new LinkedHashMap<>();
     JsonNode current = references.path("information");
     if (current.isArray()) {
@@ -1947,7 +2418,10 @@ public class ShipmentTrackingService {
     if (incoming.isArray()) {
       for (JsonNode item : incoming) {
         String key = referenceInformationKey(item);
-        if (key != null) informationByName.put(key, item.deepCopy());
+        if (key != null) {
+          if (overwriteExisting) informationByName.put(key, item.deepCopy());
+          else informationByName.putIfAbsent(key, item.deepCopy());
+        }
       }
     }
     ArrayNode merged = references.putArray("information");
@@ -1969,11 +2443,23 @@ public class ShipmentTrackingService {
   }
 
   private void mergeUsefulContainerFields(ObjectNode target, ObjectNode incoming) {
+    mergeUsefulContainerFields(target, incoming, true);
+  }
+
+  private void mergeUsefulContainerFields(
+      ObjectNode target,
+      ObjectNode incoming,
+      boolean overwriteExisting
+  ) {
     incoming.fields().forEachRemaining(entry -> {
       JsonNode value = entry.getValue();
       if (value == null || value.isNull() || value.isMissingNode()) return;
       if (value.isTextual() && value.asText().isBlank()) return;
       if ((value.isArray() || value.isObject()) && value.isEmpty()) return;
+      JsonNode existing = target.get(entry.getKey());
+      if (!overwriteExisting && existing != null && !existing.isNull()
+          && !(existing.isTextual() && existing.asText().isBlank())
+          && !((existing.isArray() || existing.isObject()) && existing.isEmpty())) return;
       target.set(entry.getKey(), value.deepCopy());
     });
   }
@@ -2081,6 +2567,21 @@ public class ShipmentTrackingService {
     }
     persistImportedBusinessFields(shipment.id(), importedDetails, now);
     invalidateUnusableCurrentSnapshot(shipment.id(), user, now);
+
+    if (snapshot.path("supplementalDetails").path("pendingRefresh").asBoolean(false)) {
+      MutableSnapshot latest = lockCurrentSnapshotByShipmentId(shipment.id(), false);
+      boolean carriedForward = latest != null && carryForwardSupplementalData(
+          (ObjectNode) snapshot,
+          readJson(latest.snapshotJson()),
+          null
+      );
+      ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
+      if (carriedForward) {
+        supplemental.put("carriedForward", true);
+      } else {
+        supplemental.remove(List.of("carriedForward", "sourceFetchedAt"));
+      }
+    }
 
     String snapshotJson = writeJson(snapshot);
     JsonNode strategy = upstream.path("strategy");
@@ -3064,6 +3565,8 @@ public class ShipmentTrackingService {
 
   private record CurrentSnapshot(long id, String snapshotJson) {}
 
+  private record CurrentSnapshotPointer(long shipmentId, Long snapshotId) {}
+
   private record ImportedBusinessFields(
       String jobNumber,
       String clientPoNumber,
@@ -3072,6 +3575,12 @@ public class ShipmentTrackingService {
   ) {}
 
   private record MutableSnapshot(long shipmentId, long snapshotId, String snapshotJson) {}
+
+  private record SupplementalMergeResult(
+      ObjectNode snapshot,
+      boolean databaseStored,
+      boolean superseded
+  ) {}
 
   private record PersistedShipment(
       long shipmentId,

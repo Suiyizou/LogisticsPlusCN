@@ -10705,6 +10705,12 @@ body.is-customer-session .nav-item.is-active {
   background: #fffaf0;
 }
 
+.supplemental-details-status[data-state="stale"] {
+  border-color: #efd39b;
+  color: #8a5a0d;
+  background: #fffaf0;
+}
+
 .supplemental-details-status[data-state="failed"] {
   border-color: #efc0bd;
   color: #a13d38;

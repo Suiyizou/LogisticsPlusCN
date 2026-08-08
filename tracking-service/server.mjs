@@ -11,7 +11,8 @@ import {
 } from "node:zlib";
 import {
   closeCoscoPlaywrightBrowser,
-  fetchCoscoTrackingViaPlaywright
+  fetchCoscoTrackingViaPlaywright,
+  readCoscoPlaywrightProxyConfig
 } from "./channels/cosco-playwright.mjs";
 import {
   closeCmaPlaywrightBrowser,
@@ -27,7 +28,8 @@ import {
 import {
   createCoscoProxyPool,
   readCoscoProxyPoolConfig,
-  runWithProxyPoolRetries
+  runWithProxyPoolRetries,
+  safeProxyNodeAlias
 } from "./lib/cosco-proxy-pool.mjs";
 import {
   createCoscoCircuitBreaker,
@@ -135,8 +137,8 @@ const COSCO_QUERY_CHANNELS = Object.freeze({
 const COSCO_AUTO_QUERY_STRATEGY = Object.freeze({
   code: "AUTO",
   number: 0,
-  label: "接口优先 · DOM 托底",
-  source: "COSCO_NETWORK_WITH_PLAYWRIGHT_FALLBACK"
+  label: "直连接口 · 代理接口 · 浏览器容灾",
+  source: "COSCO_NETWORK_PROXY_WITH_DEDICATED_PLAYWRIGHT_FALLBACK"
 });
 
 const CARRIER_ADAPTERS = Object.freeze({
@@ -179,6 +181,14 @@ const COSCO_PROXY_CONFIG = readCoscoProxyConfig();
 const coscoProxyClient = createCoscoProxyClient(COSCO_PROXY_CONFIG);
 const COSCO_PROXY_POOL_CONFIG = readCoscoProxyPoolConfig();
 const coscoProxyPool = createCoscoProxyPool(COSCO_PROXY_POOL_CONFIG);
+const COSCO_PLAYWRIGHT_PROXY_CONFIG = readCoscoPlaywrightProxyConfig();
+const COSCO_PLAYWRIGHT_PROXY_ALIAS = safeProxyNodeAlias(
+  COSCO_PLAYWRIGHT_PROXY_CONFIG?.server
+);
+const COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED = isIndependentCoscoPlaywrightProxy(
+  COSCO_PLAYWRIGHT_PROXY_CONFIG,
+  COSCO_PROXY_CONFIG
+);
 const coscoQueryGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_QUERY_MIN_INTERVAL_MS,
   maxIntervalMs: process.env.COSCO_QUERY_MAX_INTERVAL_MS,
@@ -190,6 +200,19 @@ function boundedEnvironmentInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(minimum, Math.min(maximum, parsed));
+}
+
+export function isIndependentCoscoPlaywrightProxy(playwrightProxy, apiProxy) {
+  if (!playwrightProxy?.server) return false;
+  if (!apiProxy?.server) return true;
+  try {
+    const playwrightUrl = new URL(playwrightProxy.server);
+    const apiUrl = new URL(apiProxy.server);
+    return playwrightUrl.host.toLowerCase() !== apiUrl.host.toLowerCase()
+      || String(playwrightProxy.username ?? "") !== String(apiProxy.username ?? "");
+  } catch {
+    return false;
+  }
 }
 
 function coscoCoreTimeoutMs(options = {}) {
@@ -1356,9 +1379,24 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
         });
     } catch (error) {
       if (!isCoscoProtectionError(error)) throw error;
+      const errorDetails = error?.details && typeof error.details === "object"
+        ? error.details
+        : {};
       enrichmentWarning = {
-        code: error?.details?.code ?? error?.code ?? "COSCO_ENRICHMENT_DEFERRED",
-        message: error?.message ?? "Optional COSCO enrichment was deferred"
+        code: errorDetails.code ?? error?.code ?? "COSCO_ENRICHMENT_DEFERRED",
+        message: error?.message ?? "Optional COSCO enrichment was deferred",
+        causeCode: errorDetails.causeCode ?? null,
+        route: errorDetails.route ?? (options.proxyMode ? "PROXY" : "NETWORK"),
+        proxyNode: safeProxyNodeAlias(errorDetails.proxyNode),
+        attempts: Math.max(
+          0,
+          Number(errorDetails.proxyAttempts ?? errorDetails.attempts) || 0
+        ),
+        triedNodes: uniqueSafeProxyNodes(errorDetails.triedNodes),
+        retryAfterMs: Math.max(
+          0,
+          Number(errorDetails.retryAfterMs ?? error?.retryAfterMs) || 0
+        ) || null
       };
     }
   }
@@ -1386,29 +1424,86 @@ async function fetchCoscoTrackingViaNetwork(request, options = {}) {
 
 async function fetchCoscoTrackingWithPlaywright(request, options = {}) {
   let result;
+  const playwrightProxy = options.playwrightProxy === undefined
+    ? COSCO_PLAYWRIGHT_PROXY_CONFIG
+    : options.playwrightProxy;
+  const usesDedicatedProxy = Boolean(playwrightProxy);
 
   try {
     result = await fetchCoscoTrackingViaPlaywright(request, {
       timeoutMs: PLAYWRIGHT_TIMEOUT_MS,
-      signal: options.signal
+      signal: options.signal,
+      proxy: playwrightProxy,
+      dedicatedFallback: options.dedicatedPlaywrightProxy === true
     });
   } catch (error) {
     if (options.signal?.aborted || error?.code === "BATCH_CANCELLED") {
       throw batchCancelledHttpError();
     }
     if (error?.upstreamStatus === 403) {
+      if (usesDedicatedProxy) {
+        throw new HttpError(503, "COSCO rejected the dedicated Playwright proxy", {
+          code: "COSCO_UPSTREAM_BLOCKED",
+          upstreamStatus: 403,
+          route: "PLAYWRIGHT_PROXY",
+          proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+          proxyAttempts: 1,
+          triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : [],
+          playwrightAttempts: 1,
+          retryAfterMs: 15 * 60_000
+        });
+      }
       coscoCircuitBreakerFor(options).trip();
       throw coscoBlockedHttpError(options);
     }
     if (error?.upstreamStatus === 429
         || error?.code === "COSCO_UPSTREAM_RATE_LIMITED") {
+      if (usesDedicatedProxy) {
+        throw new HttpError(429, "COSCO rate-limited the dedicated Playwright proxy", {
+          code: "COSCO_UPSTREAM_RATE_LIMITED",
+          upstreamStatus: 429,
+          route: "PLAYWRIGHT_PROXY",
+          proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+          proxyAttempts: 1,
+          triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : [],
+          playwrightAttempts: 1,
+          retryAfterMs: Math.max(1_000, Number(error?.retryAfterMs) || 60_000)
+        });
+      }
       throw coscoRateLimitedHttpError(error?.retryAfterMs, options);
     }
     const details = error?.code
-      ? { code: error.code, retryAfterMs: error?.retryAfterMs ?? undefined }
+      ? {
+          code: error.code,
+          retryAfterMs: error?.retryAfterMs ?? undefined,
+          route: usesDedicatedProxy ? "PLAYWRIGHT_PROXY" : "PLAYWRIGHT",
+          ...(usesDedicatedProxy ? {
+            proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+            proxyAttempts: 1,
+            triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : []
+          } : {}),
+          playwrightAttempts: 1
+        }
       : error?.upstreamCode
-        ? { upstreamCode: error.upstreamCode }
-        : undefined;
+        ? {
+            upstreamCode: error.upstreamCode,
+            route: usesDedicatedProxy ? "PLAYWRIGHT_PROXY" : "PLAYWRIGHT",
+            ...(usesDedicatedProxy ? {
+              proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+              proxyAttempts: 1,
+              triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : []
+            } : {}),
+            playwrightAttempts: 1
+          }
+        : {
+            route: usesDedicatedProxy ? "PLAYWRIGHT_PROXY" : "PLAYWRIGHT",
+            ...(usesDedicatedProxy ? {
+              proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+              proxyAttempts: 1,
+              triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : []
+            } : {}),
+            playwrightAttempts: 1
+          };
     throw new HttpError(
       error?.httpStatus ?? 502,
       error?.message || "COSCO Playwright 通道查询失败",
@@ -1456,7 +1551,9 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
   const routeOptions = queryChannel.code === "PROXY"
     ? { ...options, proxyMode: true, queryChannel: COSCO_QUERY_CHANNELS.PROXY }
     : options;
-  ensureCoscoCircuitAvailable(routeOptions);
+  if (queryChannel.code !== "PLAYWRIGHT" || !COSCO_PLAYWRIGHT_PROXY_CONFIG) {
+    ensureCoscoCircuitAvailable(routeOptions);
+  }
   if (queryChannel.code === "PROXY") {
     const result = await fetchCoscoTrackingViaNetwork(request, routeOptions);
     return {
@@ -1469,48 +1566,38 @@ async function fetchCoscoTracking(request, queryChannel, options = {}) {
     };
   }
   if (queryChannel.code === "AUTO") {
-    try {
-      const result = await fetchCoscoTrackingViaNetwork(request, options);
-      return {
-        ...result,
-        strategy: {
-          requested: "AUTO",
-          used: "NETWORK",
-          fallbackUsed: false
-        }
-      };
-    } catch (networkError) {
-      if (isCoscoProtectionError(networkError) || options.signal?.aborted) throw networkError;
-      try {
-        const result = await fetchCoscoTrackingWithPlaywright(request, options);
-        coscoCircuitBreakerFor(options).recordSuccess();
-        return {
-          ...result,
-          strategy: {
-            requested: "AUTO",
-            used: "PLAYWRIGHT",
-            fallbackUsed: true,
-            primaryError: networkError?.message ?? "网络接口不可用"
-          }
-        };
-      } catch (playwrightError) {
-        if (isCoscoProtectionError(playwrightError)) throw playwrightError;
-        if (playwrightError instanceof HttpError && playwrightError.status === 429) {
-          throw playwrightError;
-        }
-        const circuit = coscoCircuitBreakerFor(options).recordFailure({ retryAfterMs: 2 * 60_000 });
-        throw new HttpError(503, "Both COSCO tracking channels are temporarily unavailable", {
-          code: "COSCO_CHANNELS_UNAVAILABLE",
-          retryAfterMs: circuit.retryAfterMs || 15_000,
-          network: networkError?.message ?? "Network channel failed",
-          playwright: playwrightError?.message ?? "Playwright channel failed"
-        });
+    const result = await fetchCoscoTrackingViaNetwork(request, options);
+    return {
+      ...result,
+      strategy: {
+        requested: "AUTO",
+        used: "NETWORK",
+        fallbackUsed: false
       }
-    }
+    };
   }
 
   if (queryChannel.code === "PLAYWRIGHT") {
-    return fetchCoscoTrackingWithPlaywright(request, options);
+    const result = await fetchCoscoTrackingWithPlaywright(request, options);
+    const usesDedicatedProxy = Boolean(
+      options.playwrightProxy === undefined
+        ? COSCO_PLAYWRIGHT_PROXY_CONFIG
+        : options.playwrightProxy
+    );
+    return {
+      ...result,
+      strategy: {
+        requested: "PLAYWRIGHT",
+        used: usesDedicatedProxy ? "PLAYWRIGHT_PROXY" : "PLAYWRIGHT",
+        fallbackUsed: false,
+        ...(usesDedicatedProxy ? {
+          proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+          proxyAttempts: 1,
+          triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : []
+        } : {}),
+        playwrightAttempts: 1
+      }
+    };
   }
 
   return fetchCoscoTrackingViaNetwork(request, options);
@@ -1531,12 +1618,104 @@ export function shouldFallbackCoscoAutoToProxy(error) {
     || /timeout|timed out|fetch failed|network|socket|econn|enet|ehost/i.test(message);
 }
 
-export function proxyPoolExhaustedError(error, attempts, triedNodes = []) {
+function uniqueSafeProxyNodes(nodes = []) {
+  return [...new Set((Array.isArray(nodes) ? nodes : []).map(safeProxyNodeAlias).filter(Boolean))];
+}
+
+function safeDiagnosticText(value, maximumLength) {
+  const normalized = String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.slice(0, maximumLength);
+}
+
+export function safeSupplementalWarnings(...warningGroups) {
+  const warnings = [];
+  const seen = new Set();
+  for (const group of warningGroups) {
+    if (!Array.isArray(group)) continue;
+    for (const raw of group) {
+      if (!raw || typeof raw !== "object" || warnings.length >= 10) continue;
+      const source = safeDiagnosticText(raw.source, 40);
+      const code = safeDiagnosticText(raw.code, 120);
+      const message = safeDiagnosticText(raw.message, 500);
+      const route = safeDiagnosticText(raw.route, 80);
+      const proxyNode = safeProxyNodeAlias(raw.proxyNode);
+      const causeCode = safeDiagnosticText(raw.causeCode, 120);
+      const attempts = Math.max(0, Number(raw.proxyAttempts ?? raw.attempts) || 0);
+      const triedNodes = uniqueSafeProxyNodes(raw.triedNodes);
+      const retryAfterMs = Math.max(0, Number(raw.retryAfterMs) || 0) || null;
+      const fingerprint = [source, code, message, route, proxyNode].join("|");
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+      warnings.push({
+        source,
+        code,
+        message,
+        causeCode,
+        route,
+        proxyNode,
+        attempts,
+        triedNodes,
+        retryAfterMs
+      });
+    }
+  }
+  return warnings;
+}
+
+function proxyAttemptDiagnostics(proxyNode, proxyAttempts, triedNodes = []) {
+  const attemptedNodes = uniqueSafeProxyNodes(triedNodes);
+  const safeNode = safeProxyNodeAlias(proxyNode) ?? attemptedNodes.at(-1) ?? null;
+  const nodes = uniqueSafeProxyNodes([...attemptedNodes, safeNode]);
+  return {
+    proxyNode: safeNode,
+    proxyAttempts: Math.max(0, Number(proxyAttempts) || 0),
+    triedNodes: nodes
+  };
+}
+
+export function decorateProxySuccess(result, diagnostics, budget = null) {
+  if (!result || typeof result !== "object") return result;
+  const existingStrategy = result.strategy && typeof result.strategy === "object"
+    ? result.strategy
+    : {};
+  const safeDiagnostics = proxyAttemptDiagnostics(
+    diagnostics?.proxyNode,
+    diagnostics?.proxyAttempts,
+    diagnostics?.triedNodes
+  );
+  return {
+    ...result,
+    strategy: {
+      ...existingStrategy,
+      used: existingStrategy.used ?? "PROXY",
+      ...safeDiagnostics,
+      ...(budget?.budgetDeferred ? { proxyBudgetDeferred: true } : {})
+    }
+  };
+}
+
+function decorateProxyFailure(error, diagnostics) {
+  if (!error || typeof error !== "object") return error;
+  const details = error.details && typeof error.details === "object" ? error.details : {};
+  error.details = { ...details, ...diagnostics };
+  return error;
+}
+
+export function proxyPoolExhaustedError(error, attempts, triedNodes = [], proxyNode = null) {
   const upstreamDetails = error?.details && typeof error.details === "object"
     ? error.details
     : {};
   const causeCode = upstreamDetails.code ?? error?.code ?? `HTTP_${error?.status ?? 503}`;
-  const nodes = [...new Set(triedNodes.map((node) => String(node ?? "").trim()).filter(Boolean))];
+  const diagnostics = proxyAttemptDiagnostics(
+    proxyNode ?? upstreamDetails.proxyNode,
+    attempts,
+    [
+      ...triedNodes,
+      ...(Array.isArray(upstreamDetails.triedNodes) ? upstreamDetails.triedNodes : [])
+    ]
+  );
+  const nodes = diagnostics.triedNodes;
   const nodeSummary = nodes.length > 0 ? `；节点：${nodes.join(" → ")}` : "";
   return new HttpError(
     Number.isInteger(error?.status) ? error.status : 503,
@@ -1546,7 +1725,7 @@ export function proxyPoolExhaustedError(error, attempts, triedNodes = []) {
       code: "COSCO_PROXY_POOL_EXHAUSTED",
       causeCode,
       attempts,
-      triedNodes: nodes
+      ...diagnostics
     }
   );
 }
@@ -1565,18 +1744,21 @@ async function rotateCoscoProxy(error) {
 
 async function runCoscoWithProxyRotation(queryChannel, options, operation) {
   const routeOptions = queryChannel.code === "PROXY" ? { ...options, proxyMode: true } : options;
-  const poolEnabled = queryChannel.code === "PROXY" && coscoProxyPool;
+  const proxyRoute = queryChannel.code === "PROXY";
+  const poolEnabled = proxyRoute && coscoProxyPool;
   const triedNodes = [];
+  let activeProxyNode = null;
+  let latestProxyAttempt = 0;
   return runWithProxyPoolRetries({
     maximumAttempts: poolEnabled ? coscoProxyPool.maxAttemptsPerShipment : 1,
     shouldRetry: (error) => Boolean(poolEnabled && shouldRotateCoscoProxy(error)),
-    rotate: async (error) => {
-      const rotation = await rotateCoscoProxy(error);
-      if (rotation?.previous) triedNodes.push(rotation.previous);
-      if (rotation?.current) triedNodes.push(rotation.current);
-      return rotation;
-    },
-    exhaustedError: (error, attempts) => proxyPoolExhaustedError(error, attempts, triedNodes),
+    rotate: (error) => rotateCoscoProxy(error),
+    exhaustedError: (error, attempts) => proxyPoolExhaustedError(
+      error,
+      attempts,
+      triedNodes,
+      activeProxyNode
+    ),
     onRotated: (rotation, attempt, maximumAttempts) => {
       console.warn(
         `COSCO proxy attempt ${attempt}/${maximumAttempts} failed; rotated ${rotation.previous ?? "unknown"} -> ${rotation.current}`
@@ -1584,11 +1766,41 @@ async function runCoscoWithProxyRotation(queryChannel, options, operation) {
       coscoCircuitBreakerFor(routeOptions).reset();
       coscoPublicCookieStates.delete("PROXY");
     }
-  }, async () => {
-    ensureCoscoCircuitAvailable(routeOptions);
-    const result = await operation(routeOptions);
-    coscoCircuitBreakerFor(routeOptions).recordSuccess();
-    return result;
+  }, async ({ attempt }) => {
+    latestProxyAttempt = proxyRoute ? attempt : 0;
+    let budget = null;
+    if (poolEnabled) {
+      try {
+        budget = await coscoProxyPool.prepareAttempt();
+        activeProxyNode = budget?.current ?? null;
+        if (activeProxyNode) triedNodes.push(activeProxyNode);
+        if (budget?.rotated) {
+          console.info(
+            `COSCO proxy request budget rotated ${budget.previous ?? "unknown"} -> ${budget.current}`
+          );
+          coscoCircuitBreakerFor(routeOptions).reset();
+          coscoPublicCookieStates.delete("PROXY");
+        }
+      } catch (budgetError) {
+        console.warn(
+          "COSCO proxy request budget check failed; continuing with the configured proxy",
+          budgetError?.message ?? budgetError
+        );
+      }
+    }
+    const diagnostics = proxyAttemptDiagnostics(
+      activeProxyNode,
+      latestProxyAttempt,
+      triedNodes
+    );
+    try {
+      ensureCoscoCircuitAvailable(routeOptions);
+      const result = await operation(routeOptions);
+      coscoCircuitBreakerFor(routeOptions).recordSuccess();
+      return proxyRoute ? decorateProxySuccess(result, diagnostics, budget) : result;
+    } catch (error) {
+      throw proxyRoute ? decorateProxyFailure(error, diagnostics) : error;
+    }
   });
 }
 
@@ -1610,6 +1822,76 @@ function decorateAutomaticProxyFallback(result, primaryError) {
   };
 }
 
+function decorateAutomaticPlaywrightFallback(result, directError, proxyError) {
+  if (!result || typeof result !== "object") return result;
+  const existingStrategy = result.strategy && typeof result.strategy === "object"
+    ? result.strategy
+    : {};
+  const proxyDetails = proxyError?.details && typeof proxyError.details === "object"
+    ? proxyError.details
+    : {};
+  return {
+    ...result,
+    proxyFallback: true,
+    playwrightFallback: true,
+    strategy: {
+      ...existingStrategy,
+      requested: "AUTO",
+      used: "PLAYWRIGHT_PROXY",
+      fallbackUsed: true,
+      proxyNode: COSCO_PLAYWRIGHT_PROXY_ALIAS,
+      proxyAttempts: 1,
+      triedNodes: COSCO_PLAYWRIGHT_PROXY_ALIAS ? [COSCO_PLAYWRIGHT_PROXY_ALIAS] : [],
+      apiProxyNode: proxyDetails.proxyNode ?? null,
+      apiProxyAttempts: Math.max(0, Number(proxyDetails.proxyAttempts) || 0),
+      apiTriedNodes: Array.isArray(proxyDetails.triedNodes) ? proxyDetails.triedNodes : [],
+      playwrightAttempts: 1,
+      primaryError: directError?.message ?? "Direct COSCO channel failed",
+      proxyError: proxyError?.message ?? "COSCO proxy API channel failed"
+    }
+  };
+}
+
+function automaticPlaywrightFallbackError(directError, proxyError, playwrightError) {
+  const directDetails = directError?.details && typeof directError.details === "object"
+    ? directError.details
+    : {};
+  const proxyDetails = proxyError?.details && typeof proxyError.details === "object"
+    ? proxyError.details
+    : {};
+  const playwrightDetails = playwrightError?.details && typeof playwrightError.details === "object"
+    ? playwrightError.details
+    : {};
+  const warnings = safeSupplementalWarnings(
+    directDetails.warnings,
+    proxyDetails.warnings,
+    playwrightDetails.warnings
+  );
+  return new HttpError(
+    Number.isInteger(playwrightError?.status) ? playwrightError.status : 503,
+    "Direct API, proxy API pool and dedicated-proxy Playwright all failed",
+    {
+      code: "COSCO_CHANNELS_UNAVAILABLE",
+      causeCode: playwrightDetails.code ?? playwrightError?.code ?? "PLAYWRIGHT_FAILURE",
+      directError: directError?.message ?? "Direct COSCO channel failed",
+      proxyError: proxyError?.message ?? "COSCO proxy API channel failed",
+      playwrightError: playwrightError?.message ?? "Dedicated-proxy Playwright failed",
+      proxyNode: proxyDetails.proxyNode ?? null,
+      proxyAttempts: Math.max(0, Number(proxyDetails.proxyAttempts) || 0),
+      triedNodes: Array.isArray(proxyDetails.triedNodes) ? proxyDetails.triedNodes : [],
+      playwrightProxyNode: playwrightDetails.proxyNode ?? COSCO_PLAYWRIGHT_PROXY_ALIAS,
+      playwrightAttempts: 1,
+      route: "PLAYWRIGHT_PROXY",
+      ...(warnings.length > 0 ? { warnings } : {}),
+      retryAfterMs: Math.max(
+        1_000,
+        Number(playwrightDetails.retryAfterMs) || 0,
+        Number(proxyDetails.retryAfterMs) || 0
+      )
+    }
+  );
+}
+
 async function runCoscoWithAutomaticProxyFallback(queryChannel, options, operation) {
   try {
     return await runCoscoWithProxyRotation(
@@ -1617,28 +1899,65 @@ async function runCoscoWithAutomaticProxyFallback(queryChannel, options, operati
       options,
       (routeOptions) => operation(queryChannel, routeOptions)
     );
-  } catch (error) {
+  } catch (directError) {
     if (
       queryChannel.code !== "AUTO"
-      || !coscoProxyClient
-      || !shouldFallbackCoscoAutoToProxy(error)
+      || !shouldFallbackCoscoAutoToProxy(directError)
       || options.signal?.aborted
     ) {
-      throw error;
+      throw directError;
     }
     try {
       options.authorizeProxyFallback?.();
     } catch {
       // Public AUTO requests are not allowed to consume the private proxy pool. Keep the
       // original upstream failure instead of exposing an authorization-specific response.
-      throw error;
+      throw directError;
     }
-    const result = await runCoscoWithProxyRotation(
-      COSCO_QUERY_CHANNELS.PROXY,
-      options,
-      (routeOptions) => operation(COSCO_QUERY_CHANNELS.PROXY, routeOptions)
-    );
-    return decorateAutomaticProxyFallback(result, error);
+
+    let proxyError = null;
+    if (coscoProxyClient) {
+      try {
+        const result = await runCoscoWithProxyRotation(
+          COSCO_QUERY_CHANNELS.PROXY,
+          options,
+          (routeOptions) => operation(COSCO_QUERY_CHANNELS.PROXY, routeOptions)
+        );
+        return decorateAutomaticProxyFallback(result, directError);
+      } catch (error) {
+        proxyError = error;
+      }
+    } else {
+      proxyError = new HttpError(503, "COSCO proxy API channel is not configured", {
+        code: "COSCO_PROXY_NOT_CONFIGURED",
+        route: "PROXY",
+        proxyAttempts: 0,
+        triedNodes: []
+      });
+    }
+
+    if (
+      !options.allowPlaywrightFallback
+      || !COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED
+      || !shouldFallbackCoscoAutoToProxy(proxyError)
+      || options.signal?.aborted
+    ) {
+      throw proxyError;
+    }
+
+    try {
+      const result = await operation(COSCO_QUERY_CHANNELS.PLAYWRIGHT, {
+        ...options,
+        dedicatedPlaywrightProxy: true,
+        playwrightProxy: COSCO_PLAYWRIGHT_PROXY_CONFIG
+      });
+      return decorateAutomaticPlaywrightFallback(result, directError, proxyError);
+    } catch (playwrightError) {
+      if (options.signal?.aborted || playwrightError?.details?.code === "BATCH_CANCELLED") {
+        throw playwrightError;
+      }
+      throw automaticPlaywrightFallbackError(directError, proxyError, playwrightError);
+    }
   }
 }
 
@@ -1646,7 +1965,7 @@ function runCoscoTrackingRequest(request, queryChannel, options = {}) {
   return coscoQueryGate.run(
     () => runCoscoWithAutomaticProxyFallback(
       queryChannel,
-      options,
+      { ...options, allowPlaywrightFallback: true },
       (activeChannel, routeOptions) => fetchCoscoTracking(request, activeChannel, routeOptions)
     ),
     { signal: options.signal }
@@ -1921,6 +2240,16 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
   const input = await readJsonBody(request);
   const trackingRequest = normalizeTrackingRequest(input);
   const queryChannel = normalizeQueryChannel(input.channel ?? "AUTO");
+  const allowedSources = new Set(["bookingInfo", "containerInfo"]);
+  const requestedSources = new Set(
+    (Array.isArray(input.sources) ? input.sources : [])
+      .map((source) => String(source ?? "").trim())
+      .filter((source) => allowedSources.has(source))
+  );
+  if (requestedSources.size === 0) {
+    allowedSources.forEach((source) => requestedSources.add(source));
+  }
+  const allowPlaywrightFallback = input.allowPlaywrightFallback === true;
   requireProxyAdapterAuthorization(request, queryChannel);
   if (trackingRequest.type === "CONTAINER") {
     throw new HttpError(400, "补充详情查询必须使用提单号或订舱号");
@@ -1928,37 +2257,116 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
 
   const result = await coscoQueryGate.run(
     () => runCoscoWithAutomaticProxyFallback(queryChannel, {
+      allowPlaywrightFallback,
       authorizeProxyFallback: () => requireProxyAdapterAuthorization(
         request, COSCO_QUERY_CHANNELS.PROXY
       )
-    }, async (_activeChannel, routeOptions) => {
+    }, async (activeChannel, routeOptions) => {
+      if (activeChannel.code === "PLAYWRIGHT") {
+        const playwrightResult = await fetchCoscoTracking(
+          trackingRequest,
+          activeChannel,
+          routeOptions
+        );
+        const snapshot = playwrightResult?.snapshot ?? {};
+        const details = {
+          fetchedAt: snapshot.fetchedAt ?? new Date().toISOString(),
+          tracking: {
+            type: trackingRequest.type,
+            number: trackingRequest.number
+          },
+          containers: requestedSources.has("containerInfo")
+            ? (Array.isArray(snapshot.containers) ? snapshot.containers : [])
+            : [],
+          references: requestedSources.has("bookingInfo")
+            ? {
+                external: Array.isArray(snapshot.references?.external)
+                  ? snapshot.references.external
+                  : [],
+                business: snapshot.references?.business ?? {},
+                information: Array.isArray(snapshot.references?.information)
+                  ? snapshot.references.information
+                  : []
+              }
+            : { external: [], business: {}, information: [] },
+          partial: false,
+          warnings: [],
+          strategy: playwrightResult?.strategy ?? null
+        };
+        const hasContainerData = details.containers.length > 0;
+        const hasReferenceData = details.references.external.length > 0
+          || details.references.information.length > 0
+          || Object.values(details.references.business).some(Boolean);
+        if (requestedSources.has("bookingInfo") && !hasReferenceData) {
+          details.warnings.push({
+            source: "bookingInfo",
+            code: "COSCO_SUPPLEMENTAL_EMPTY",
+            message: "COSCO 浏览器兜底未返回订舱参考信息",
+            route: "PLAYWRIGHT_PROXY"
+          });
+        }
+        if (requestedSources.has("containerInfo") && !hasContainerData) {
+          details.warnings.push({
+            source: "containerInfo",
+            code: "COSCO_SUPPLEMENTAL_EMPTY",
+            message: "COSCO 浏览器兜底未返回运输详情",
+            route: "PLAYWRIGHT_PROXY"
+          });
+        }
+        details.partial = details.warnings.length > 0;
+        if (details.warnings.length === requestedSources.size) {
+          throw new HttpError(502, "COSCO 浏览器兜底未返回可用的补充详情", {
+            code: "COSCO_SUPPLEMENTAL_UNAVAILABLE",
+            route: "PLAYWRIGHT_PROXY",
+            warnings: details.warnings
+          });
+        }
+        return details;
+      }
+
       const warnings = [];
       let bookingInfo = {};
       let containerInfo = [];
-      try {
-        bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
-          ...routeOptions,
-          timeoutMs: coscoEnrichmentTimeoutMs(routeOptions)
-        });
-      } catch (error) {
-        if (shouldRotateCoscoProxy(error)) throw error;
-        warnings.push({
-          source: "bookingInfo",
-          message: error?.message ?? "订舱参考信息查询失败",
-          code: error?.details?.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
-          attempts: error?.details?.attempts ?? 0
-        });
+      if (requestedSources.has("bookingInfo")) {
+        try {
+          bookingInfo = await fetchCoscoEndpoint("bookingInfo", trackingRequest, {
+            ...routeOptions,
+            timeoutMs: coscoEnrichmentTimeoutMs(routeOptions)
+          });
+        } catch (error) {
+          if (shouldRotateCoscoProxy(error)) throw error;
+          const errorDetails = error?.details ?? {};
+          warnings.push({
+            source: "bookingInfo",
+            message: error?.message ?? "订舱参考信息查询失败",
+            code: errorDetails.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
+            causeCode: errorDetails.causeCode ?? null,
+            route: errorDetails.route ?? activeChannel.code,
+            proxyNode: errorDetails.proxyNode ?? null,
+            attempts: errorDetails.proxyAttempts ?? errorDetails.attempts ?? 0,
+            triedNodes: Array.isArray(errorDetails.triedNodes) ? errorDetails.triedNodes : [],
+            retryAfterMs: errorDetails.retryAfterMs ?? null
+          });
+        }
       }
-      try {
-        containerInfo = await fetchCoscoShipmentContainers(trackingRequest, routeOptions);
-      } catch (error) {
-        if (shouldRotateCoscoProxy(error)) throw error;
-        warnings.push({
-          source: "containerInfo",
-          message: error?.message ?? "运输详情查询失败",
-          code: error?.details?.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
-          attempts: error?.details?.attempts ?? 0
-        });
+      if (requestedSources.has("containerInfo")) {
+        try {
+          containerInfo = await fetchCoscoShipmentContainers(trackingRequest, routeOptions);
+        } catch (error) {
+          if (shouldRotateCoscoProxy(error)) throw error;
+          const errorDetails = error?.details ?? {};
+          warnings.push({
+            source: "containerInfo",
+            message: error?.message ?? "运输详情查询失败",
+            code: errorDetails.code ?? error?.code ?? `HTTP_${error?.status ?? 502}`,
+            causeCode: errorDetails.causeCode ?? null,
+            route: errorDetails.route ?? activeChannel.code,
+            proxyNode: errorDetails.proxyNode ?? null,
+            attempts: errorDetails.proxyAttempts ?? errorDetails.attempts ?? 0,
+            triedNodes: Array.isArray(errorDetails.triedNodes) ? errorDetails.triedNodes : [],
+            retryAfterMs: errorDetails.retryAfterMs ?? null
+          });
+        }
       }
 
       const details = normalizeCoscoSupplementalDetails(
@@ -1967,17 +2375,27 @@ async function handleCoscoSupplementalDetailsRequest(request, response) {
         trackingRequest,
         new Date().toISOString()
       );
-      if (details.containers.length === 0 && details.references.information.length === 0
-          && warnings.length === 2) {
-        throw new HttpError(502, "COSCO 未返回可用的补充详情", {
+      const allRequestedSourcesFailed = [...requestedSources].every((source) => (
+        warnings.some((warning) => warning.source === source)
+      ));
+      if (allRequestedSourcesFailed || (allowPlaywrightFallback && warnings.length > 0)) {
+        throw new HttpError(502, allRequestedSourcesFailed
+          ? "COSCO 未返回可用的补充详情"
+          : "COSCO 返回的补充详情不完整，继续尝试下一查询通道", {
           code: "COSCO_SUPPLEMENTAL_UNAVAILABLE",
-          warnings
+          warnings,
+          partial: !allRequestedSourcesFailed
         });
       }
       return {
         ...details,
         partial: warnings.length > 0,
-        warnings
+        warnings,
+        strategy: {
+          requested: queryChannel.code,
+          used: activeChannel.code === "AUTO" ? "NETWORK" : activeChannel.code,
+          fallbackUsed: false
+        }
       };
     })
   );
@@ -2002,6 +2420,11 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
       : forcedChannel ?? input.channel ?? carrier.defaultChannel ?? "NETWORK"
   );
   requireProxyAdapterAuthorization(request, queryChannel);
+  if (carrierCode === "COSCO"
+      && queryChannel.code === "PLAYWRIGHT"
+      && COSCO_PLAYWRIGHT_PROXY_CONFIG) {
+    requireProxyAdapterAuthorization(request, COSCO_QUERY_CHANNELS.PROXY);
+  }
   const cmaCredentials = carrierCode === "CMA"
     ? {
         sessionCookie: String(request.headers["x-cma-session-cookie"] ?? "").trim(),
@@ -2157,8 +2580,14 @@ export const server = createServer(async (request, response) => {
             channel: "PLAYWRIGHT",
             channelNumber: 2,
             channelLabel: "Playwright 浏览器",
-            status: "configured",
-            enabled: true
+            status: COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED
+              ? "dedicated-proxy-configured"
+              : COSCO_PLAYWRIGHT_PROXY_CONFIG
+                ? "shared-proxy-auto-disabled"
+                : "direct-only",
+            enabled: true,
+            autoFallbackEnabled: COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED,
+            defaultMaxConcurrency: 1
           },
           PROXY: {
             channel: "PROXY",
