@@ -486,12 +486,41 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
         "queried_by_username",
         "ALTER TABLE cp_tracking_snapshots ADD COLUMN queried_by_username VARCHAR(128) NULL AFTER queried_by"
     );
+    enforceTrackingSnapshotOwnerForMySql();
     migrateLegacyShipmentBusinessFieldsForMySql();
     removeInvalidDiscoveredShipmentReferencesForMySql();
     upgradeSnapshotUserQueryIndexForMySql();
     migrateLegacyOverseaAgentCustomersForMySql();
     migrateOverseaAgentShipmentScopesForMySql();
     migrateLegacyFileVisibilityForMySql();
+  }
+
+  private void enforceTrackingSnapshotOwnerForMySql() {
+    jdbcTemplate.update(
+        """
+        UPDATE cp_tracking_snapshots tracking_snapshot
+        JOIN cp_shipments shipment ON shipment.id = tracking_snapshot.shipment_id
+        SET tracking_snapshot.queried_by = COALESCE(
+          shipment.responsible_agent_id,
+          shipment.created_by
+        )
+        WHERE tracking_snapshot.queried_by IS NULL
+          AND COALESCE(shipment.responsible_agent_id, shipment.created_by) IS NOT NULL
+        """
+    );
+    Integer missingOwnerCount = jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_snapshots WHERE queried_by IS NULL",
+        Integer.class
+    );
+    if (missingOwnerCount != null && missingOwnerCount > 0) {
+      throw new IllegalStateException(
+          "Cannot require cp_tracking_snapshots.queried_by: "
+              + missingOwnerCount + " legacy snapshots have no resolvable owner"
+      );
+    }
+    jdbcTemplate.execute(
+        "ALTER TABLE cp_tracking_snapshots MODIFY queried_by BIGINT NOT NULL"
+    );
   }
 
   private void migrateLegacyOverseaAgentCustomersForMySql() {
@@ -773,7 +802,7 @@ public class ShipmentSchemaInitializer implements ApplicationRunner {
           shipment_id BIGINT NOT NULL,
           query_reference_type VARCHAR(24) NOT NULL,
           query_reference_no VARCHAR(128) NOT NULL,
-          queried_by BIGINT NULL,
+          queried_by BIGINT NOT NULL,
           queried_by_username VARCHAR(128) NULL,
           source_channel VARCHAR(32) NULL,
           snapshot_json LONGTEXT NOT NULL,

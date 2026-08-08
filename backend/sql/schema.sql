@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   shipment_id BIGINT NOT NULL,
   query_reference_type VARCHAR(24) NOT NULL,
   query_reference_no VARCHAR(128) NOT NULL,
-  queried_by BIGINT NULL,
+  queried_by BIGINT NOT NULL,
   queried_by_username VARCHAR(128) NULL,
   source_channel VARCHAR(32) NULL,
   snapshot_json LONGTEXT NOT NULL,
@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS cp_tracking_snapshots (
   INDEX idx_cp_tracking_snapshots_fresh_until (fresh_until),
   INDEX idx_cp_tracking_snapshots_user_query (queried_by, query_reference_type, query_reference_no, invalidated_at),
   CONSTRAINT fk_cp_tracking_snapshots_shipment FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_tracking_refresh_jobs (
+  shipment_id BIGINT PRIMARY KEY,
+  auto_refresh_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  terminal_status VARCHAR(40) NULL,
+  next_attempt_at DATETIME(6) NULL,
+  lease_token CHAR(36) NULL,
+  lease_until DATETIME(6) NULL,
+  failure_count INT NOT NULL DEFAULT 0,
+  last_error VARCHAR(500) NULL,
+  last_attempt_at DATETIME(6) NULL,
+  last_success_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  INDEX idx_cp_tracking_refresh_due (auto_refresh_enabled, next_attempt_at),
+  INDEX idx_cp_tracking_refresh_lease (lease_until),
+  CONSTRAINT fk_cp_tracking_refresh_shipment
+    FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_shipment_participants (
@@ -243,6 +262,7 @@ CREATE TABLE IF NOT EXISTS cp_customers (
   customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
   provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
   status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  remark VARCHAR(500) NULL,
   created_by BIGINT NOT NULL,
   responsible_agent_id BIGINT NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -505,6 +525,25 @@ CREATE TABLE IF NOT EXISTS cp_shipment_files (
   CONSTRAINT fk_cp_shipment_files_deleted_by FOREIGN KEY (deleted_by) REFERENCES cp_users(id) ON DELETE SET NULL,
   CONSTRAINT fk_cp_shipment_files_deleted_customer FOREIGN KEY (deleted_by_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL,
   CONSTRAINT ck_cp_shipment_files_one_uploader CHECK ((uploader_user_id IS NULL) <> (uploader_customer_id IS NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS cp_shipment_file_comments (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  public_id CHAR(36) NOT NULL UNIQUE,
+  shipment_id BIGINT NOT NULL,
+  author_user_id BIGINT NULL,
+  author_customer_id BIGINT NULL,
+  author_display_name_snapshot VARCHAR(120) NOT NULL,
+  author_role_snapshot VARCHAR(24) NOT NULL,
+  body VARCHAR(2000) NOT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  INDEX idx_cp_shipment_file_comments_shipment_time (shipment_id, created_at, id),
+  CONSTRAINT fk_cp_shipment_file_comments_shipment
+    FOREIGN KEY (shipment_id) REFERENCES cp_shipments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_cp_shipment_file_comments_user
+    FOREIGN KEY (author_user_id) REFERENCES cp_users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_cp_shipment_file_comments_customer
+    FOREIGN KEY (author_customer_id) REFERENCES cp_customers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS cp_shipment_file_visibility_roles (
