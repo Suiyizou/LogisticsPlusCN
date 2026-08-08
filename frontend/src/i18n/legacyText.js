@@ -633,6 +633,8 @@ const exactEn = {
   "Worker 对大批量同规格货物先按当前箱型组合成若干块，少量和余数仍保留单件 DTO 字段": "For large same-size cargo, the Worker groups items into blocks for the current container while keeping small quantities and remainders as single DTO items.",
   "每个箱型独立运行多轮 LAFF 搜索，分别尝试大底面积、高度、承重优先、不可重压最后和蓝色/小件竖放策略": "Each container runs multiple LAFF searches independently, trying footprint, height, support-first, non-stackable-last, and small/blue vertical-fill strategies.",
   "每个 LAFF 层内使用 Extreme Point 候选点回填底部、顶部和侧边空隙": "Each LAFF layer uses Extreme Point candidates to backfill bottom, top, and side gaps.",
+  "每个箱型独立运行固定高度带 LAFF 搜索，分别尝试大底面积、同层行填充、高度、承重、不可重压基础优先和不可重压最后策略": "Each container runs fixed-band LAFF searches with footprint, same-layer row-fill, height, support, non-stack foundation-first, and non-stack-last variants.",
+  "每个 LAFF 层固定目标层顶，按 P0 扩展层底、P1 补齐目标顶面、P2 层内补高的硬顺序穷尽 Extreme Point 候选后才开启下一层": "Each LAFF layer keeps a fixed target top and exhausts Extreme Point candidates in the hard order P0 extend the layer floor, P1 complete the target top, and P2 top up within the band before opening the next layer.",
   "候选落位必须满足边界、不相交、底面支撑和不可重压货物不承载上层货物": "Candidate placements must satisfy bounds, no intersections, base support, and the rule that non-stackable cargo cannot support upper cargo.",
   "首轮失败时执行局部搜索，移出一小组已摆货物与剩余货物重排，而不是立刻开启第二箱": "If the first pass fails, local search removes a small set of placed cargo and repacks it with the remaining cargo instead of immediately opening another box.",
   "同一箱型选择已摆数量更多、占用体积更高、承重支撑面更好的方案": "For the same container type, the solver chooses the plan with more placed pieces, higher occupied volume, and better load-bearing support.",
@@ -650,6 +652,7 @@ const exactEn = {
   "冷藏柜属于特殊设备；普通货和冷藏设备类货物优先尝试普柜/高柜，只有温控运输才建议选 RF。": "Reefers are special equipment. General cargo and reefer-equipment cargo should try general/high-cube containers first; choose RF only for temperature-controlled transport.",
   "手动导入": "Manual Import",
   "LAFF 大底面积优先": "LAFF Footprint First",
+  "LAFF 不可重压基础优先": "LAFF Non-stack Foundation First",
   "LAFF 高度优先": "LAFF Height First",
   "普通承重货物优先": "Support First",
   "不可重压货物最后": "Non-stackable Last",
@@ -785,11 +788,13 @@ function translateDecisionTerm(value) {
   return String(value || "")
     .replace(/智能组合方案/g, "Smart Mixed Plan")
     .replace(/LAFF 大底面积优先/g, "LAFF Footprint First")
+    .replace(/LAFF 不可重压基础优先/g, "LAFF Non-stack Foundation First")
     .replace(/LAFF 高度优先/g, "LAFF Height First")
     .replace(/普通承重货物优先/g, "Support First")
     .replace(/不可重压货物最后/g, "Non-stackable Last")
     .replace(/蓝色\/小件竖放支撑/g, "Small/Blue Vertical Fill")
     .replace(/laff-footprint/g, "LAFF footprint")
+    .replace(/nonstack-foundation-first/g, "non-stack foundation first")
     .replace(/laff-height/g, "LAFF height")
     .replace(/support-first/g, "support first")
     .replace(/nonstack-last/g, "non-stackable last")

@@ -799,14 +799,19 @@ function drawFooter(ctx, y) {
 
 function buildCargoCatalog(cargos, placements) {
   const placementColors = new Map();
+  const placementColorsByIndex = new Map();
   placements.forEach((item) => {
     if (item.cargoId && item.color && !placementColors.has(item.cargoId)) placementColors.set(item.cargoId, item.color);
+    const cargoIndex = Number(item.cargoIndex);
+    if (Number.isInteger(cargoIndex) && item.color && !placementColorsByIndex.has(cargoIndex)) {
+      placementColorsByIndex.set(cargoIndex, item.color);
+    }
   });
   return cargos.map((cargo, index) => ({
     ...cargo,
     displayName: cargoLabel(cargo),
     no: index + 1,
-    color: cargo.color || placementColors.get(cargo.id) || REPORT_COLORS[index % REPORT_COLORS.length]
+    color: cargo.color || placementColorsByIndex.get(index) || placementColors.get(cargo.id) || REPORT_COLORS[index % REPORT_COLORS.length]
   }));
 }
 
@@ -815,7 +820,11 @@ function enrichPlacements(placements, catalog) {
   const byName = new Map(catalog.map((cargo) => [cargo.name, cargo]));
   const byDisplayName = new Map(catalog.map((cargo) => [cargo.displayName, cargo]));
   return placements.map((item, index) => {
-    const cargo = byId.get(item.cargoId) || byDisplayName.get(item.name) || byName.get(item.name);
+    const cargoIndex = Number(item.cargoIndex);
+    const cargoByIndex = Number.isInteger(cargoIndex) && cargoIndex >= 0 && cargoIndex < catalog.length
+      ? catalog[cargoIndex]
+      : null;
+    const cargo = cargoByIndex || byId.get(item.cargoId) || byDisplayName.get(item.name) || byName.get(item.name);
     return {
       ...item,
       cargoNo: cargo?.no || index + 1,

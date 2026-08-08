@@ -1,4 +1,13 @@
 import { normalizeContainerHeightFields } from "../services/localData.js";
+import { packingResumeFingerprint } from "../utils/packingResumeFingerprint.js";
+import {
+  PACKING_WORKER_TEXT,
+  fixedLayerCompleteText,
+  fixedLayerFoundationText,
+  fixedLayerPlacementText,
+  fixedLayerSeedText,
+  fixedLayerSkippedText
+} from "../i18n/packingWorkerText.js";
 
 const TYPE_RULES = {
   normal: { rotatable: true, nonStack: false, extraGapCm: 0 },
@@ -30,6 +39,7 @@ const EDGE_ORIENTATION_REPACK_MAX_BAND_ROWS = 6;
 const NON_STACK_DISPLACEMENT_MAX_SWAPS = 2;
 const NON_STACK_DISPLACEMENT_MAX_MOVERS = 2;
 const NON_STACK_DISPLACEMENT_MAX_RECEIVERS = 3;
+const TAIL_REFINEMENT_UNIT_BUDGET = 16;
 const MIXED_PLAN_MAX_SOLVER_UNITS = 120;
 const MIXED_REPLACEMENT_CANDIDATE_LIMIT = 3;
 const MIXED_COMBINATION_BEAM_WIDTH = 8;
@@ -60,14 +70,15 @@ const AXIS_LENGTH = "\u957f";
 const AXIS_WIDTH = "\u5bbd";
 const AXIS_HEIGHT = "\u9ad8";
 const LAYER_ROW_FILL_STRATEGY_ID = "layer-row-fill";
+const NONSTACK_FOUNDATION_STRATEGY_ID = "nonstack-foundation-first";
 
 const SEARCH_STRATEGIES = [
   { id: "laff-footprint", name: "LAFF 大底面积优先", unitOrder: "footprint", pointOrder: "low-wide", blueVertical: false },
+  { id: NONSTACK_FOUNDATION_STRATEGY_ID, name: PACKING_WORKER_TEXT.nonStackFoundationStrategyName, unitOrder: "footprint", pointOrder: "support", blueVertical: false, nonStackFoundationFirst: true },
   { id: LAYER_ROW_FILL_STRATEGY_ID, name: "LAFF Single-Layer Row Fill", unitOrder: "footprint", pointOrder: "low-wide", blueVertical: false },
   { id: "laff-height", name: "LAFF 高度优先", unitOrder: "height", pointOrder: "low-wide", blueVertical: false },
   { id: "support-first", name: "普通承重货物优先", unitOrder: "support", pointOrder: "support", blueVertical: false },
   { id: "nonstack-last", name: "不可重压货物最后", unitOrder: "nonstack-last", pointOrder: "low-wide", blueVertical: false },
-  { id: "blue-vertical", name: "蓝色/小件竖放支撑", unitOrder: "small-vertical", pointOrder: "support", blueVertical: true }
 ];
 
 let activeTrace = null;
@@ -222,8 +233,9 @@ export function calculate(request = {}, options = {}) {
   const utilization = safeUtilizationPercent(request.utilizationPercent);
   const balanceSettings = normalizeBalanceSettings(request.balanceSettings);
   const supportSettings = normalizeSupportSettings(request);
+  const rawContainersById = new Map((request.containers || []).map((container) => [String(container?.id || ""), container]));
   const allOrderedContainers = orderContainersForCalculation((request.containers || []).map(normalizeContainerHeightFields));
-  const evaluations = resumeBaseEvaluations(request.resumeEvaluations, allOrderedContainers);
+  const evaluations = resumeBaseEvaluations(request.resumeEvaluations, allOrderedContainers, request, rawContainersById);
   const completedContainerIds = new Set(evaluations.map((evaluation) => String(evaluation.container.id)));
   const orderedContainers = allOrderedContainers.filter((container) => !completedContainerIds.has(String(container.id)));
   traceProgress({
@@ -275,6 +287,7 @@ export function calculate(request = {}, options = {}) {
     });
     const evaluation = evaluateContainer(runtimeContainer, units, total, utilization, globalGapCm);
     evaluation.container = { ...container };
+    evaluation.resumeFingerprint = packingResumeFingerprint(rawContainersById.get(String(container.id)) || container, request);
     evaluations.push(evaluation);
     completedContainerIds.add(String(container.id));
     traceProgress({
@@ -350,13 +363,16 @@ export function calculate(request = {}, options = {}) {
   });
 }
 
-function resumeBaseEvaluations(resumeEvaluations, containers) {
+function resumeBaseEvaluations(resumeEvaluations, containers, request, rawContainersById) {
   if (!Array.isArray(resumeEvaluations) || !resumeEvaluations.length) return [];
-  const validContainerIds = new Set(containers.map((container) => String(container.id)));
+  const containersById = new Map(containers.map((container) => [String(container.id), container]));
   const unique = new Map();
   for (const evaluation of resumeEvaluations) {
     const containerId = String(evaluation?.container?.id || "");
-    if (!containerId || containerId === "mixed-plan" || !validContainerIds.has(containerId)) continue;
+    const container = containersById.get(containerId);
+    if (!containerId || containerId === "mixed-plan" || !container) continue;
+    const expectedFingerprint = packingResumeFingerprint(rawContainersById.get(containerId) || container, request);
+    if (!evaluation?.resumeFingerprint || evaluation.resumeFingerprint !== expectedFingerprint) continue;
     unique.set(containerId, evaluation);
   }
   return [...unique.values()];
@@ -510,7 +526,15 @@ function buildEvaluation(container, units, total, utilizationPercent, globalGapC
         placed: placedForOutput.map(toPlacementDto),
         unplacedUnitKeys: box.unplaced.map((unit) => unit.unitKey)
       };
-    })
+    }),
+    resumePackedBoxes: multi.packedBoxes.map((box) => ({
+      container: box.container ? { ...box.container } : undefined,
+      strategyId: box.strategyId,
+      strategyName: box.strategyName,
+      strategySummary: box.strategySummary,
+      placed: box.placed.map(toResumePlacementDto),
+      unplacedUnitKeys: box.unplaced.map((unit) => unit.unitKey)
+    }))
   };
   evaluation.recommendation = buildRecommendation(evaluation);
   Object.defineProperty(evaluation, "_sourceFirstBox", { value: multi.firstBox, enumerable: false });
@@ -615,8 +639,17 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
   const priceEligibleContainers = runtimeContainers.filter((container) => equipmentMeta(container).priceAvailable);
   const priceCurrencies = new Set(priceEligibleContainers.map((container) => equipmentMeta(container).referenceCurrency));
   if (!priceEligibleContainers.length || priceCurrencies.size > 1) return null;
-  const upgradedFromSinglePlans = buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEvaluations, total, utilizationPercent, globalGapCm);
+  const allowMixedRepack = Number(total.totalQuantity || 0) <= 60;
+  const upgradedFromSinglePlans = buildMixedContainerEvaluationFromSinglePlans(
+    runtimeContainers,
+    baseEvaluations,
+    total,
+    utilizationPercent,
+    globalGapCm,
+    { allowRepack: allowMixedRepack }
+  );
   const mixedCandidates = upgradedFromSinglePlans ? [upgradedFromSinglePlans] : [];
+  if (!allowMixedRepack) return mixedCandidates.sort(compareEvaluation)[0] || null;
 
   const seedContainer = pickMixedSeedContainer(priceEligibleContainers);
   let remaining = buildUnits(cargos, globalGapCm, seedContainer, total).map(copyUnit);
@@ -722,7 +755,7 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
   return mixedCandidates.sort(compareEvaluation)[0] || null;
 }
 
-function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEvaluations, total, utilizationPercent, globalGapCm) {
+function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEvaluations, total, utilizationPercent, globalGapCm, options = {}) {
   const candidates = [];
   const usableContainers = runtimeContainers
     .filter((container) => (isPrimaryCalculationContainer(container) || container?.usagePriority === "special") && equipmentMeta(container).priceAvailable)
@@ -734,11 +767,12 @@ function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEva
   if (!usableContainers.length) return null;
 
   for (const baseEvaluation of baseEvaluations || []) {
-    if (!canUseEvaluationAsMixedBase(baseEvaluation)) continue;
+    const sourceBoxes = reusableSourcePackedBoxes(baseEvaluation);
+    if (!canUseEvaluationAsMixedBase(baseEvaluation, sourceBoxes)) continue;
     let beam = [{ boxes: [], freight: 0, currency: "" }];
     let failed = false;
-    for (const sourceBox of baseEvaluation._sourcePackedBoxes || []) {
-      const replacements = containerCandidatesForPackedBox(usableContainers, sourceBox, utilizationPercent);
+    for (const sourceBox of sourceBoxes) {
+      const replacements = containerCandidatesForPackedBox(usableContainers, sourceBox, utilizationPercent, options);
       if (!replacements.length) {
         failed = true;
         break;
@@ -800,9 +834,9 @@ function combinationDuplicatesBasePlan(packedBoxes, baseEvaluations) {
     && Math.abs(combinationFreight - baseFreight) <= EPS;
 }
 
-function canUseEvaluationAsMixedBase(evaluation) {
+function canUseEvaluationAsMixedBase(evaluation, reusableBoxes = null) {
   const boxes = Number(evaluation?.boxes || 0);
-  const sourceBoxes = evaluation?._sourcePackedBoxes || [];
+  const sourceBoxes = reusableBoxes || reusableSourcePackedBoxes(evaluation);
   return evaluation
     && !evaluation.isMixedPlan
     && evaluation.fitStatus === FIT_STATUS.FIT
@@ -811,6 +845,41 @@ function canUseEvaluationAsMixedBase(evaluation) {
     && sourceBoxes.length === boxes
     && sourceBoxes.every((box) => box?.placed?.length)
     && !(sourceBoxes[sourceBoxes.length - 1]?.unplaced || []).length;
+}
+
+function reusableSourcePackedBoxes(evaluation) {
+  if (Array.isArray(evaluation?._sourcePackedBoxes) && evaluation._sourcePackedBoxes.length) {
+    return evaluation._sourcePackedBoxes;
+  }
+  const resumeBoxes = Array.isArray(evaluation?.resumePackedBoxes) ? evaluation.resumePackedBoxes : [];
+  return resumeBoxes.map((box, index) => ({
+    container: box?.container ? { ...box.container } : { ...(evaluation?.container || {}) },
+    strategyId: box?.strategyId || "resumed-coordinate-reuse",
+    strategyName: box?.strategyName || PACKING_WORKER_TEXT.coordinateReuseStrategyName,
+    strategySummary: { ...(box?.strategySummary || {}), resumedFromSerializedResult: 1 },
+    placed: (box?.placed || []).map(unitFromResumePlacementDto),
+    unplaced: index === resumeBoxes.length - 1
+      ? []
+      : (box?.unplacedUnitKeys || []).map((unitKey) => ({ unitKey }))
+  }));
+}
+
+function toResumePlacementDto(unit = {}) {
+  const {
+    orientations,
+    score,
+    legacyScore,
+    layerPriorityTier,
+    floorOnly,
+    ...placement
+  } = unit;
+  return placement;
+}
+
+function unitFromResumePlacementDto(placement = {}) {
+  const unit = { ...placement };
+  unit.orientations = generateOrientations(unit);
+  return unit;
 }
 
 function retainMixedCombinationStates(states) {
@@ -824,7 +893,7 @@ function retainMixedCombinationStates(states) {
   return [...unique.values()].slice(0, MIXED_COMBINATION_BEAM_WIDTH);
 }
 
-function containerCandidatesForPackedBox(containers, sourceBox, utilizationPercent) {
+function containerCandidatesForPackedBox(containers, sourceBox, utilizationPercent, options = {}) {
   const sourceUnits = (sourceBox?.placed || []).map(stripPlacement);
   const sourceQuantity = sumUnitQuantity(sourceUnits);
   const candidates = [];
@@ -833,7 +902,20 @@ function containerCandidatesForPackedBox(containers, sourceBox, utilizationPerce
     if (Number(container.payloadKg || 0) > 0 && sourceUnits.reduce((sum, unit) => sum + Number(unit.weightKg || 0), 0) > Number(container.payloadKg || 0) + EPS) {
       continue;
     }
-    const packed = packContainer(container, sourceUnits.map(stripPlacement));
+    const reusablePlaced = fitReusedPlacementsToContainer(container, sourceBox?.placed || []);
+    let packed = null;
+    if (reusablePlaced) {
+      const reused = makePackedBox(reusablePlaced, [], {
+        id: sourceBox.strategyId || "mixed-coordinate-reuse",
+        name: sourceBox.strategyName || PACKING_WORKER_TEXT.coordinateReuseStrategyName
+      }, {
+        ...(sourceBox.strategySummary || {}),
+        mixedCoordinateReuse: 1
+      });
+      packed = finalizeAttempt(container, reused, strategyById(reused.strategyId));
+    } else if (options.allowRepack) {
+      packed = packContainer(container, sourceUnits.map(stripPlacement));
+    }
     if (!packed?.placed?.length || packed.unplaced?.length || sumUnitQuantity(packed.placed) < sourceQuantity) continue;
     if (packed.balanceValidation?.severity === "red" || packed.strategySummary?.complianceBlocked) continue;
     const meta = equipmentMeta(container);
@@ -867,6 +949,24 @@ function containerCandidatesForPackedBox(containers, sourceBox, utilizationPerce
       mixedReplacementFillPercent: round(candidate.fillPercent)
     }
   }));
+}
+
+function fitReusedPlacementsToContainer(container, sourcePlaced) {
+  const placed = (sourcePlaced || []).map(copyUnit);
+  if (!placed.length) return null;
+  if (validateAllPlacements(container, placed)) return placed;
+  const bounds = placementBounds(placed);
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
+  if (spanX > Number(container.lengthCm || 0) + EPS || spanY > Number(container.widthCm || 0) + EPS) return null;
+  const shiftX = (Number(container.lengthCm || 0) - spanX) / 2 - bounds.minX;
+  const shiftY = (Number(container.widthCm || 0) - spanY) / 2 - bounds.minY;
+  const shifted = placed.map((unit) => ({
+    ...unit,
+    x: round3(Number(unit.x || 0) + shiftX),
+    y: round3(Number(unit.y || 0) + shiftY)
+  }));
+  return validateAllPlacements(container, shifted) ? shifted : null;
 }
 
 function buildMixedEvaluationFromPackedBoxes(packedBoxes, total, utilizationPercent, globalGapCm, fatalOversize = false, balanceBlocked = false) {
@@ -995,22 +1095,50 @@ function buildUnits(cargos, globalGapCm, container = null, total = null) {
   const totalQuantity = total?.totalQuantity ?? cargos.reduce((sum, cargo) => sum + Math.max(0, Math.floor(Number(cargo.quantity || 0))), 0);
   const canGroup = Boolean(container) && totalQuantity >= GROUPING_MIN_TOTAL_UNITS;
   const maxBlockQuantity = groupingMaxBlockQuantity(totalQuantity);
+  const resolvedCargoIds = cargos.map((cargo, cargoIndex) => String(cargo.id || `cargo-${cargoIndex}`));
+  const cargoIdCounts = resolvedCargoIds.reduce((counts, cargoId) => {
+    counts.set(cargoId, (counts.get(cargoId) || 0) + 1);
+    return counts;
+  }, new Map());
+  const unitKeyPrefixes = uniqueUnitKeyPrefixes(resolvedCargoIds, cargoIdCounts);
   cargos.forEach((cargo, cargoIndex) => {
     const rule = cargoPackingRule(cargo);
     const gap = globalGapCm + rule.extraGapCm;
-    const cargoId = cargo.id || `cargo-${cargoIndex}`;
+    const cargoId = resolvedCargoIds[cargoIndex];
+    const unitKeyPrefix = unitKeyPrefixes[cargoIndex];
     const quantity = Math.max(0, Math.floor(Number(cargo.quantity || 0)));
     if (canGroup && quantity >= GROUPING_MIN_CARGO_QUANTITY) {
-      units.push(...buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity, maxBlockQuantity));
+      units.push(...buildGroupedCargoUnits(cargo, cargoIndex, cargoId, unitKeyPrefix, rule, gap, globalGapCm, container, quantity, maxBlockQuantity));
       return;
     }
 
     for (let i = 0; i < quantity; i += 1) {
-      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, i, 1, rule, gap, globalGapCm));
+      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, i, 1, rule, gap, globalGapCm, null, unitKeyPrefix));
     }
   });
   markHeavyUnits(units);
   return orderUnits(units, "support");
+}
+
+function uniqueUnitKeyPrefixes(cargoIds, cargoIdCounts) {
+  const prefixes = cargoIds.map((cargoId, cargoIndex) =>
+    cargoIdCounts.get(cargoId) > 1 ? `${cargoId}~row${cargoIndex}` : cargoId
+  );
+  const maxPasses = Math.max(2, cargoIds.length * 2 + 2);
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    const indexesByPrefix = prefixes.reduce((groups, prefix, index) => {
+      const indexes = groups.get(prefix) || [];
+      indexes.push(index);
+      groups.set(prefix, indexes);
+      return groups;
+    }, new Map());
+    const conflicts = [...indexesByPrefix.values()].filter((indexes) => indexes.length > 1);
+    if (!conflicts.length) return prefixes;
+    for (const indexes of conflicts) {
+      for (const index of indexes) prefixes[index] = `@row${index}:${prefixes[index]}`;
+    }
+  }
+  return cargoIds.map((cargoId, cargoIndex) => `@cargo-row:${cargoIndex}:${cargoId}`);
 }
 
 function groupingMaxBlockQuantity(totalQuantity) {
@@ -1059,7 +1187,7 @@ function markHeavyUnits(units) {
   return units;
 }
 
-function buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGapCm, container, quantity, maxBlockQuantity) {
+function buildGroupedCargoUnits(cargo, cargoIndex, cargoId, unitKeyPrefix, rule, gap, globalGapCm, container, quantity, maxBlockQuantity) {
   const units = [];
   let remaining = quantity;
   let serial = 0;
@@ -1068,10 +1196,10 @@ function buildGroupedCargoUnits(cargo, cargoIndex, cargoId, rule, gap, globalGap
       ? bestGroupLayout(cargo, rule, gap, container, Math.min(maxBlockQuantity, remaining))
       : null;
     if (layout?.count > 1) {
-      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, serial, layout.count, rule, gap, globalGapCm, layout));
+      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, serial, layout.count, rule, gap, globalGapCm, layout, unitKeyPrefix));
       remaining -= layout.count;
     } else {
-      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, serial, 1, rule, gap, globalGapCm));
+      units.push(makeCargoUnit(cargo, cargoIndex, cargoId, serial, 1, rule, gap, globalGapCm, null, unitKeyPrefix));
       remaining -= 1;
     }
     serial += 1;
@@ -1110,7 +1238,7 @@ function flatBlockFits(container, lengthCm, widthCm, heightCm, rotatable) {
   return fits || rotatedFits;
 }
 
-function makeCargoUnit(cargo, cargoIndex, cargoId, itemIndex, groupQuantity, rule, gap, globalGapCm, layout = null) {
+function makeCargoUnit(cargo, cargoIndex, cargoId, itemIndex, groupQuantity, rule, gap, globalGapCm, layout = null, unitKeyPrefix = cargoId) {
   const cols = layout?.cols || 1;
   const rows = layout?.rows || 1;
   const baseLengthCm = Number(cargo.lengthCm) * cols;
@@ -1121,7 +1249,7 @@ function makeCargoUnit(cargo, cargoIndex, cargoId, itemIndex, groupQuantity, rul
   const occupiedLengthCm = physicalLengthCm + gap;
   const occupiedWidthCm = physicalWidthCm + gap;
   const unit = {
-    unitKey: groupQuantity > 1 ? `${cargoId}-g${itemIndex}-x${groupQuantity}` : `${cargoId}-${itemIndex}`,
+    unitKey: groupQuantity > 1 ? `${unitKeyPrefix}-g${itemIndex}-x${groupQuantity}` : `${unitKeyPrefix}-${itemIndex}`,
     cargoId,
     cargoIndex,
     itemIndex,
@@ -1287,6 +1415,7 @@ function packContainer(container, units) {
   let rejectedByBalance = 0;
   for (let strategyIndex = 0; strategyIndex < SEARCH_STRATEGIES.length; strategyIndex += 1) {
     const strategy = SEARCH_STRATEGIES[strategyIndex];
+    if (usesNonStackFoundationFirst(strategy) && !nonStack.length) continue;
     traceProgress({
       phase: "strategy",
       strategyIndex: strategyIndex + 1,
@@ -1299,9 +1428,10 @@ function packContainer(container, units) {
       level: "summary",
       text: `${container.name} · base strategy "${strategy.id}" started.`
     });
-    const ordered = orderUnits(stackable, strategy.unitOrder);
+    const strategyUnits = usesNonStackFoundationFirst(strategy) ? units.map(stripPlacement) : stackable;
+    const ordered = orderUnits(strategyUnits, strategy.unitOrder);
     const stackableAttempt = packLayerLaff(stackableContainer, ordered, strategy);
-    const attempt = finalizeWithDeferredNonStack(container, stackableAttempt, nonStack, strategy, rejectedByBalance);
+    const attempt = finalizeStrategyAttempt(container, stackableAttempt, nonStack, strategy, rejectedByBalance);
     if (attempt.balanceValidation?.severity === "red") rejectedByBalance += 1;
     baseAttempts.push(stackableAttempt);
     attempts.push(attempt);
@@ -1317,7 +1447,7 @@ function packContainer(container, units) {
   }
 
   const baseBest = selectBestAttempt(container, baseAttempts);
-  if (baseBest?.placed?.length) {
+  if (baseBest?.placed?.length && isFlatRackUsage(container)) {
     const bestStrategy = strategyById(baseBest.strategyId);
     traceProgress({
       phase: "repair",
@@ -1332,7 +1462,7 @@ function packContainer(container, units) {
     gapSwapped = optimizeVerticalTailFills(stackableContainer, gapSwapped, bestStrategy);
     gapSwapped = optimizeSparseTailSupport(stackableContainer, gapSwapped, bestStrategy);
     if (gapSwapped !== baseBest) {
-      const finalGapSwapped = finalizeWithDeferredNonStack(container, gapSwapped, nonStack, bestStrategy, rejectedByBalance);
+      const finalGapSwapped = finalizeStrategyAttempt(container, gapSwapped, nonStack, bestStrategy, rejectedByBalance);
       if (finalGapSwapped.balanceValidation?.severity === "red") rejectedByBalance += 1;
       attempts.push(finalGapSwapped);
       traceDecision({
@@ -1358,16 +1488,25 @@ function packContainer(container, units) {
     const beforeRefine = sumUnitQuantity(baseBest.unplaced);
     let refined = enhanceWithBlockDowngrade(stackableContainer, baseBest, bestStrategy);
     if (refined.unplaced.length) {
-      refined = repairWithLocalSearch(stackableContainer, refined, orderUnits(refined.unplaced.map(stripPlacement), bestStrategy.unitOrder), bestStrategy);
+      const localCandidate = repairWithLocalSearch(
+        stackableContainer,
+        refined,
+        orderUnits(refined.unplaced.map(stripPlacement), bestStrategy.unitOrder),
+        bestStrategy
+      );
+      const localSearchKeepsHeightPlanes = maxTop(localCandidate.placed) <= maxTop(refined.placed) + EPS
+        && topHeightLevelsAreSubset(topHeightLevels(localCandidate.placed), topHeightLevels(refined.placed));
+      if (localSearchKeepsHeightPlanes && comparePackAttempt(stackableContainer)(localCandidate, refined) < 0) {
+        refined = localCandidate;
+      }
     }
-    refined = optimizeLowerGapSwaps(stackableContainer, refined, bestStrategy);
-    refined = optimizeEdgeOrientationRows(stackableContainer, refined, bestStrategy);
-    refined = optimizeVerticalTailFills(stackableContainer, refined, bestStrategy);
-    refined = optimizeLowerGapSwaps(stackableContainer, refined, bestStrategy);
-    refined = optimizeEdgeOrientationRows(stackableContainer, refined, bestStrategy);
-    refined = optimizeVerticalTailFills(stackableContainer, refined, bestStrategy);
-    refined = optimizeSparseTailSupport(stackableContainer, refined, bestStrategy);
-    const finalRefined = finalizeWithDeferredNonStack(container, refined, nonStack, bestStrategy, rejectedByBalance);
+    if (isFlatRackUsage(container)) {
+      refined = optimizeLowerGapSwaps(stackableContainer, refined, bestStrategy);
+      refined = optimizeEdgeOrientationRows(stackableContainer, refined, bestStrategy);
+      refined = optimizeVerticalTailFills(stackableContainer, refined, bestStrategy);
+      refined = optimizeSparseTailSupport(stackableContainer, refined, bestStrategy);
+    }
+    const finalRefined = finalizeStrategyAttempt(container, refined, nonStack, bestStrategy, rejectedByBalance);
     if (finalRefined.balanceValidation?.severity === "red") rejectedByBalance += 1;
     attempts.push(finalRefined);
     traceDecision({
@@ -1412,6 +1551,17 @@ function splitUnitsForFinalNonStackPass(units) {
     else stackable.push(clean);
   }
   return { stackable, nonStack };
+}
+
+function usesNonStackFoundationFirst(strategy) {
+  return Boolean(strategy?.nonStackFoundationFirst || strategy?.id === NONSTACK_FOUNDATION_STRATEGY_ID);
+}
+
+function finalizeStrategyAttempt(container, attempt, deferredNonStack, strategy, rejectedByBalance = 0) {
+  if (usesNonStackFoundationFirst(strategy)) {
+    return finalizeAttempt(container, attempt, strategy, rejectedByBalance);
+  }
+  return finalizeWithDeferredNonStack(container, attempt, deferredNonStack, strategy, rejectedByBalance);
 }
 
 function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonStack, strategy, rejectedByBalance = 0) {
@@ -1469,6 +1619,15 @@ function finalizeWithDeferredNonStack(container, stackableAttempt, deferredNonSt
 
 function finalizeAttempt(container, attempt, strategy, rejectedByBalance = 0) {
   let next = centerPackedLayout(container, attempt, strategy);
+  const residual = residualPlanMetrics(container, next.unplaced);
+  next.strategySummary = {
+    ...next.strategySummary,
+    remainingBoxLowerBound: residual.remainingBoxLowerBound,
+    remainingNonStackQuantity: residual.nonStackQuantity,
+    remainingNonStackDeckDemandRatio: round(residual.nonStackDeckDemandRatio),
+    isolatedNonStackTail: residual.isolatedNonStackTail,
+    oversizeNonStackQuantity: residual.oversizeNonStackQuantity
+  };
   next = withBalanceValidation(container, next, rejectedByBalance);
   return next;
 }
@@ -1541,7 +1700,7 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
   const placed = fixedPlaced.map(copyUnit);
   const unplaced = [];
   const originalActive = units.map(stripPlacement);
-  const deferredNonStack = [];
+  let deferredNonStack = [];
   const active = [];
   for (const unit of originalActive) {
     const clean = copyUnit(unit);
@@ -1553,6 +1712,13 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
   let layerNo = countLayers(placed);
   let layerTailSpreadCount = 0;
   let layerTailSupportGain = 0;
+  let fixedLayerBandCount = 0;
+  let sameLayerPlateauPlacedCount = 0;
+  let sameLayerFloorPlacedCount = 0;
+  let sameLayerTopUpPlacedCount = 0;
+  let maxFixedBandOverflowCm = 0;
+  let nonStackTopPlacedCount = 0;
+  let nonStackFoundationPlacedCount = 0;
 
   while (active.length) {
     const seedIndex = pickLayerSeedIndex(active, stackableContainer, placed, strategy, { layerBottom: nextLayerBottom });
@@ -1571,8 +1737,9 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
     const placedSeed = applyPlacement(seed, seedPlacement);
     placed.push(placedSeed);
     const layerBottom = placedSeed.z;
-    let layerTop = placedSeed.z + placedSeed.heightCm;
+    const targetLayerTop = round3(placedSeed.z + placedSeed.heightCm);
     layerNo += 1;
+    fixedLayerBandCount += 1;
     let layerPlacedQuantity = unitQuantity(placedSeed);
     traceProgress({
       phase: "layer",
@@ -1584,49 +1751,83 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
     traceDecision({
       phase: "layer",
       level: "summary",
-      text: `${container.name} · ${strategy.name} · 第 ${layerNo} 层选种子：${decisionUnitName(seed)} ${decisionDims(seedPlacement)}，底面积 ${round(seedPlacement.lengthCm * seedPlacement.widthCm)}cm²，放置 ${decisionPoint(seedPlacement)}，层高上限 z=${round(layerTop)}cm。`
+      text: fixedLayerSeedText({
+        containerName: container.name,
+        strategyName: strategy.name,
+        layerNo,
+        unitName: decisionUnitName(seed),
+        dimensions: decisionDims(seedPlacement),
+        areaCm2: round(seedPlacement.lengthCm * seedPlacement.widthCm),
+        point: decisionPoint(seedPlacement),
+        layerBottomCm: round(layerBottom),
+        targetLayerTopCm: round(targetLayerTop)
+      })
     });
 
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const layerCandidates = orderLayerCandidates(active, layerBottom, layerTop, strategy, placedSeed);
-      for (const unit of layerCandidates) {
-        const index = active.findIndex((item) => item.unitKey === unit.unitKey);
-        if (index < 0) continue;
-        const placement = packExtremePoint(stackableContainer, placed, unit, strategy, { layerBottom, baseZOnly: true });
-        if (!placement) continue;
-        active.splice(index, 1);
-        placed.push(applyPlacement(unit, placement));
-        layerTop = Math.max(layerTop, placement.z + placement.heightCm);
-        layerPlacedQuantity += unitQuantity(unit);
-        if (placed.length % 8 === 0) {
-          traceProgress({
-            phase: "placement",
-            layerNo,
-            placedUnits: sumUnitQuantity(placed),
-            remainingUnits: sumUnitQuantity(active),
-            stageFraction: Math.min(0.72, 0.48 + layerNo * 0.035)
-          });
-        }
-        traceDecision({
-          phase: "placement",
-          level: "detail",
-          text: `${container.name} · 第 ${layerNo} 层装入：${decisionUnitName(unit)} ${decisionDims(placement)} → ${decisionPoint(placement)}，不超过当前层高 ${round(layerTop - layerBottom)}cm。`
-        });
-        changed = true;
+    while (active.length) {
+      const choice = bestFixedLayerPlacement(
+        stackableContainer,
+        placed,
+        active,
+        strategy,
+        layerBottom,
+        targetLayerTop,
+        placedSeed
+      );
+      if (!choice) break;
+      active.splice(choice.index, 1);
+      placed.push(applyPlacement(choice.unit, choice.placement));
+      layerPlacedQuantity += unitQuantity(choice.unit);
+      if (Math.abs(choice.placement.z + choice.placement.heightCm - targetLayerTop) < EPS) {
+        sameLayerPlateauPlacedCount += unitQuantity(choice.unit);
       }
+      if (Math.abs(choice.placement.z - layerBottom) < EPS) {
+        sameLayerFloorPlacedCount += unitQuantity(choice.unit);
+      } else {
+        sameLayerTopUpPlacedCount += unitQuantity(choice.unit);
+      }
+      maxFixedBandOverflowCm = Math.max(
+        maxFixedBandOverflowCm,
+        choice.placement.z + choice.placement.heightCm - targetLayerTop
+      );
+      if (placed.length % 8 === 0) {
+        traceProgress({
+          phase: "placement",
+          layerNo,
+          placedUnits: sumUnitQuantity(placed),
+          remainingUnits: sumUnitQuantity(active),
+          stageFraction: Math.min(0.72, 0.48 + layerNo * 0.035)
+        });
+      }
+      traceDecision({
+        phase: "placement",
+        level: "detail",
+        text: fixedLayerPlacementText({
+          containerName: container.name,
+          layerNo,
+          tier: choice.tier,
+          unitName: decisionUnitName(choice.unit),
+          dimensions: decisionDims(choice.placement),
+          point: decisionPoint(choice.placement),
+          targetLayerTopCm: round(targetLayerTop)
+        })
+      });
     }
 
-    const remainingHeight = containerHeightLimit(stackableContainer) - layerBottom;
+    const layerHeight = targetLayerTop - layerBottom;
     const skippedByHeight = active.filter((unit) =>
-      !unit.orientations.some((dims) => dims.heightCm <= remainingHeight + EPS)
+      !generateOrientations(unit).some((dims) => dims.heightCm <= layerHeight + EPS)
     ).length;
     if (skippedByHeight) {
       traceDecision({
         phase: "layer",
         level: "summary",
-        text: `${container.name} · 第 ${layerNo} 层跳过 ${skippedByHeight} 个较高搜索单元：高度超过本层 ${round(layerTop - layerBottom)}cm，保留到下一层继续作为候选。`
+        text: fixedLayerSkippedText({
+          containerName: container.name,
+          layerNo,
+          skippedCount: skippedByHeight,
+          layerHeightCm: round(layerHeight)
+        })
       });
     }
     const layerSpread = optimizeCurrentLayerSparseTailSupport(stackableContainer, placed, strategy, layerBottom);
@@ -1640,18 +1841,48 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
         text: `${container.name} · \u7b2c ${layerNo} \u5c42\u672b\u6392\u652f\u6491\u4f18\u5316\uff1a\u644a\u5f00 ${layerSpread.spreadCount} \u4ef6\u5c3e\u6392\u8d27\u7269\uff0c\u589e\u52a0\u7ea6 ${round(layerSpread.supportGain)}cm2 \u4e0a\u5c42\u843d\u811a\u9762\u3002`
       });
     }
+    if (usesNonStackFoundationFirst(strategy) && deferredNonStack.length) {
+      const foundationResult = placeDeferredNonStackOnLayerTop(
+        stackableContainer,
+        placed,
+        deferredNonStack,
+        strategy,
+        targetLayerTop
+      );
+      deferredNonStack = foundationResult.unplaced.map(stripPlacement);
+      nonStackTopPlacedCount += foundationResult.placedCount;
+      nonStackFoundationPlacedCount += foundationResult.placedCount;
+      if (foundationResult.placedCount > 0) {
+        traceDecision({
+          phase: "layer",
+          level: "summary",
+          text: fixedLayerFoundationText({
+            containerName: container.name,
+            layerNo,
+            targetLayerTopCm: round(targetLayerTop),
+            placedCount: foundationResult.placedCount
+          })
+        });
+      }
+    }
     traceDecision({
       phase: "layer",
       level: "summary",
-      text: `${container.name} · 第 ${layerNo} 层完成：本层装入 ${layerPlacedQuantity} 件，累计 ${sumUnitQuantity(placed)} 件，剩余 ${sumUnitQuantity(active)} 件；下一层从 z=${round(layerTop)}cm 开始。`
+      text: fixedLayerCompleteText({
+        containerName: container.name,
+        layerNo,
+        layerPlacedQuantity,
+        totalPlacedQuantity: sumUnitQuantity(placed),
+        remainingQuantity: sumUnitQuantity(active),
+        targetLayerTopCm: round(targetLayerTop)
+      })
     });
-    nextLayerBottom = Math.max(nextLayerBottom, layerTop);
+    nextLayerBottom = Math.max(nextLayerBottom, targetLayerTop);
   }
 
-  let nonStackTopPlacedCount = 0;
   if (deferredNonStack.length) {
     const nonStackResult = placeDeferredNonStackOnTop(container, placed, deferredNonStack, strategy);
-    nonStackTopPlacedCount = nonStackResult.placedCount;
+    nonStackTopPlacedCount += nonStackResult.placedCount;
     unplaced.push(...nonStackResult.unplaced);
     traceDecision({
       phase: "layer",
@@ -1666,10 +1897,67 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
     repairedCount: 0,
     fixedPlacedCount: fixedPlaced.length,
     layerCount: countLayers(placed),
+    fixedLayerBandCount,
+    sameLayerPlateauPlacedCount,
+    sameLayerFloorPlacedCount,
+    sameLayerTopUpPlacedCount,
+    maxFixedBandOverflowCm,
     nonStackTopPlacedCount,
+    nonStackFoundationPlacedCount,
     sparseTailSpreadCount: layerTailSpreadCount,
     sparseTailSupportGain: layerTailSupportGain
   });
+}
+
+function bestFixedLayerPlacement(container, placed, active, strategy, layerBottom, targetLayerTop, layerSeed) {
+  const layerCandidates = orderLayerCandidates(active, layerBottom, targetLayerTop, strategy, layerSeed);
+  const activeIndex = new Map(active.map((unit, index) => [unit.unitKey, index]));
+  const layerHeight = targetLayerTop - layerBottom;
+  let best = null;
+  for (const unit of layerCandidates) {
+    const index = activeIndex.get(unit.unitKey);
+    if (!Number.isInteger(index)) continue;
+    const orientations = unit.orientations?.length ? unit.orientations : generateOrientations(unit);
+    if (!orientations.some((dims) => dims.heightCm <= layerHeight + EPS)) continue;
+    const placement = packExtremePoint(container, placed, unit, strategy, {
+      layerBottom,
+      layerTop: targetLayerTop,
+      layerPriority: true,
+      denseTop: true
+    });
+    if (!placement) continue;
+    const tier = Number(placement.layerPriorityTier);
+    if (!best
+      || tier < best.tier
+      || (tier === best.tier
+        && (placement.score < best.placement.score - 1e-10
+          || (Math.abs(placement.score - best.placement.score) <= 1e-10
+            && placement.legacyScore < best.placement.legacyScore - EPS)))) {
+      best = { unit, index, placement, tier };
+    }
+  }
+  return best;
+}
+
+function placeDeferredNonStackOnLayerTop(container, placed, units, strategy, layerBottom) {
+  const pending = [];
+  let placedCount = 0;
+  const layerUnits = downgradeUnits(units.map(stripPlacement), 1, container);
+  for (const unit of orderUnits(layerUnits, strategy.unitOrder)) {
+    const placement = packExtremePoint(container, placed, unit, strategy, {
+      layerBottom,
+      baseZOnly: true,
+      denseTop: true,
+      exposedTop: true
+    });
+    if (!placement || Math.abs(placement.z - layerBottom) > EPS) {
+      pending.push(unit);
+      continue;
+    }
+    placed.push(applyPlacement(unit, placement));
+    placedCount += unitQuantity(unit);
+  }
+  return { placedCount, unplaced: pending };
 }
 
 function placeDeferredNonStackOnTop(container, placed, units, strategy) {
@@ -1957,19 +2245,32 @@ function enhanceWithBlockDowngrade(container, attempt, strategy) {
   let singleBackfillPlacedCount = 0;
 
   const runRound = (maxGroupSize, withSingleBackfill = false) => {
-    if (!current.unplaced.length) return;
-    const downgraded = downgradeUnits(current.unplaced, maxGroupSize, container);
+    const placementBudget = TAIL_REFINEMENT_UNIT_BUDGET - downgradePlacedCount;
+    if (!current.unplaced.length || placementBudget <= 0) return;
+    const downgradedResult = downgradeUnitsWithinBudget(current.unplaced, maxGroupSize, container, placementBudget);
+    const downgraded = downgradedResult.units;
     if (!downgraded.length) return;
     const beforePlaced = sumUnitQuantity(current.placed);
+    const beforeMaxTop = maxTop(current.placed);
+    const beforeTopHeightLevels = topHeightLevels(current.placed);
+    const beforeSingleBackfillCount = Number(current.strategySummary?.singleBackfillPlacedCount || 0);
     let candidate = packLayerLaff(container, orderUnits(downgraded, strategy.unitOrder), strategy, current.placed);
-    if (withSingleBackfill) {
-      candidate = backfillSingleUnits(container, candidate, strategy);
+    candidate.unplaced = [...candidate.unplaced.map(stripPlacement), ...downgradedResult.held.map(stripPlacement)];
+    const primaryPlacedGain = Math.max(0, sumUnitQuantity(candidate.placed) - beforePlaced);
+    const remainingBackfillBudget = Math.max(0, placementBudget - primaryPlacedGain);
+    if (withSingleBackfill && remainingBackfillBudget > 0) {
+      candidate = backfillSingleUnits(container, candidate, strategy, remainingBackfillBudget);
     }
     const placedGain = sumUnitQuantity(candidate.placed) - beforePlaced;
     if (placedGain <= 0 || !validateAllPlacements(container, candidate.placed)) return;
+    if (maxTop(candidate.placed) > beforeMaxTop + EPS) return;
+    if (!topHeightLevelsAreSubset(topHeightLevels(candidate.placed), beforeTopHeightLevels)) return;
     downgradePasses += 1;
     downgradePlacedCount += placedGain;
-    singleBackfillPlacedCount += Number(candidate.strategySummary?.singleBackfillPlacedCount || 0);
+    singleBackfillPlacedCount += Math.max(
+      0,
+      Number(candidate.strategySummary?.singleBackfillPlacedCount || 0) - beforeSingleBackfillCount
+    );
     current = candidate;
     if (comparePackAttempt(container)(candidate, best) < 0) {
       best = cloneAttempt(candidate);
@@ -1989,6 +2290,25 @@ function enhanceWithBlockDowngrade(container, attempt, strategy) {
     blockDowngradePlacedCount: downgradePlacedCount,
     singleBackfillPlacedCount
   });
+}
+
+function downgradeUnitsWithinBudget(units, maxGroupSize, container, budget) {
+  const result = [];
+  const held = [];
+  let remainingBudget = Math.max(0, Math.floor(Number(budget || 0)));
+  let consumed = 0;
+  for (const unit of units || []) {
+    const clean = stripPlacement(unit);
+    const quantity = unitQuantity(clean);
+    if (quantity <= remainingBudget) {
+      result.push(...(quantity > maxGroupSize ? downgradeUnits([clean], maxGroupSize, container) : [clean]));
+      remainingBudget -= quantity;
+      consumed += quantity;
+    } else {
+      held.push(clean);
+    }
+  }
+  return { units: result, held, consumed };
 }
 
 function downgradeUnits(units, maxGroupSize, container) {
@@ -2093,20 +2413,26 @@ function bestDerivedGroupLayout(source, count, container) {
   return best;
 }
 
-function backfillSingleUnits(container, attempt, strategy) {
+function backfillSingleUnits(container, attempt, strategy, placementBudget = TAIL_REFINEMENT_UNIT_BUDGET) {
   if (!attempt.unplaced.some((unit) => unitQuantity(unit) <= 1)) return attempt;
   const placed = attempt.placed.map(copyUnit);
   const unplaced = [];
   let placedCount = 0;
+  const allowedTopLevels = topHeightLevels(placed);
+  const layerTop = maxTop(placed);
   const ordered = orderUnits(attempt.unplaced.map(stripPlacement), strategy.unitOrder);
   const stackable = ordered.filter((unit) => !unit.nonStack);
   const nonStack = ordered.filter((unit) => unit.nonStack);
   for (const unit of stackable) {
-    if (unitQuantity(unit) > 1) {
+    if (unitQuantity(unit) > 1 || placedCount >= placementBudget) {
       unplaced.push(unit);
       continue;
     }
-    const placement = packExtremePoint(container, placed, unit, strategy);
+    const placement = packExtremePoint(container, placed, unit, strategy, {
+      layerTop,
+      denseTop: true,
+      allowedTopLevels
+    });
     if (placement) {
       placed.push(applyPlacement(unit, placement));
       placedCount += 1;
@@ -2115,17 +2441,7 @@ function backfillSingleUnits(container, attempt, strategy) {
     }
   }
   for (const unit of nonStack) {
-    if (unitQuantity(unit) > 1) {
-      unplaced.push(unit);
-      continue;
-    }
-    const placement = findTopOnlyPlacement(container, placed, unit, strategy);
-    if (placement) {
-      placed.push(applyPlacement(unit, placement));
-      placedCount += 1;
-    } else {
-      unplaced.push(unit);
-    }
+    unplaced.push(unit);
   }
   if (!placedCount || !validateAllPlacements(container, placed)) return attempt;
   return makePackedBox(placed, unplaced, {
@@ -2148,14 +2464,70 @@ function packExtremePoint(container, placed, unit, strategy, options = {}) {
       checkedPointCount += 1;
       if (checkedPointCount % 64 === 0) traceProgress({ phase: "placement" });
       const placement = { ...point, ...dims, floorOnly: Boolean(options.floorOnly) };
-      const validation = validatePlacement(container, placed, unit, placement, supportRatio);
+      const validationPlacement = { ...unit, ...placement };
+      const validation = validatePlacement(container, placed, unit, validationPlacement, supportRatio);
       if (!validation.valid) continue;
-      if (options.exposedTop && hasAnyBoxInColumnAbove(placement, placed)) continue;
-      const score = placementScore(placement, unit, container, strategy, placed);
-      if (!best || score < best.score) best = { ...placement, score };
+      if (options.exposedTop && hasAnyBoxInColumnAbove(validationPlacement, placed)) continue;
+      if (Array.isArray(options.allowedTopLevels)
+        && options.allowedTopLevels.length
+        && !options.allowedTopLevels.some((level) => Math.abs(level - (placement.z + placement.heightCm)) < EPS)) {
+        continue;
+      }
+      const layerPriorityTier = options.layerPriority
+        ? fixedLayerPlacementTier(placement, options.layerBottom, options.layerTop)
+        : null;
+      const legacyScore = placementScore(placement, unit, container, strategy, placed);
+      const score = options.layerPriority
+        ? fixedLayerPlacementScore(placement, unit, container, strategy, placed, options)
+        : legacyScore;
+      if (!best
+        || (options.layerPriority && layerPriorityTier < best.layerPriorityTier)
+        || ((!options.layerPriority || layerPriorityTier === best.layerPriorityTier)
+          && (score < best.score - 1e-10
+            || (Math.abs(score - best.score) <= 1e-10 && legacyScore < best.legacyScore - EPS)))) {
+        best = { ...placement, score, legacyScore, layerPriorityTier };
+      }
     }
   }
   return best;
+}
+
+function fixedLayerPlacementTier(placement, layerBottom, targetLayerTop) {
+  const top = Number(placement.z || 0) + Number(placement.heightCm || 0);
+  if (Math.abs(Number(placement.z || 0) - Number(layerBottom || 0)) < EPS) return 0;
+  if (Math.abs(top - Number(targetLayerTop || 0)) < EPS) return 1;
+  return 2;
+}
+
+function fixedLayerPlacementScore(placement, unit, container, strategy, placed, options = {}) {
+  const floorArea = Math.max(1, Number(container.lengthCm || 0) * Number(container.widthCm || 0));
+  const containerVolume = Math.max(1, floorArea * containerHeightLimit(container));
+  const physicalArea = Math.max(0, Number(placement.physicalLengthCm || placement.lengthCm || 0))
+    * Math.max(0, Number(placement.physicalWidthCm || placement.widthCm || 0));
+  const physicalVolume = physicalArea * Math.max(0, Number(placement.physicalHeightCm || placement.heightCm || 0));
+  const layerBottom = Number(options.layerBottom || 0);
+  const targetLayerTop = Number(options.layerTop || layerBottom + placement.heightCm);
+  const layerHeight = Math.max(EPS, targetLayerTop - layerBottom);
+  const top = Number(placement.z || 0) + Number(placement.heightCm || 0);
+  const plateauGain = Math.abs(top - targetLayerTop) < EPS ? physicalArea / floorArea : 0;
+  const floorCoverageGain = Math.abs(Number(placement.z || 0) - layerBottom) < EPS ? physicalArea / floorArea : 0;
+  const supportPotential = unit.nonStack ? 0 : physicalArea / floorArea;
+  const volumeGain = physicalVolume / containerVolume;
+  const roughness = Math.max(0, targetLayerTop - top) / layerHeight;
+  const rotationPenalty = placement.orientationKey === "LWH" ? 0 : 1;
+  if (floorCoverageGain > 0) {
+    return -0.70 * floorCoverageGain
+      - 0.15 * supportPotential
+      - 0.10 * volumeGain
+      - 0.03 * plateauGain
+      + 0.01 * roughness
+      + 0.01 * rotationPenalty;
+  }
+  return -0.45 * plateauGain
+    - 0.30 * supportPotential
+    - 0.15 * volumeGain
+    + 0.10 * roughness
+    + 0.02 * rotationPenalty;
 }
 
 function repairWithLocalSearch(container, attempt, originalUnits, strategy) {
@@ -3729,6 +4101,8 @@ function compareLayerSeedScore(a, b, strategy) {
 }
 
 function orderLayerCandidates(units, layerBottom, layerTop, strategy, layerSeed = null) {
+  const baseOrder = orderUnits(units, strategy.unitOrder);
+  const baseRank = new Map(baseOrder.map((unit, index) => [unit.unitKey, index]));
   return [...units].sort((a, b) => {
     if (a.nonStack !== b.nonStack) return a.nonStack ? 1 : -1;
     if (usesLayerRowFill(strategy) && layerSeed) {
@@ -3737,12 +4111,12 @@ function orderLayerCandidates(units, layerBottom, layerTop, strategy, layerSeed 
       if (aMatchesSeed !== bMatchesSeed) return aMatchesSeed ? -1 : 1;
     }
     if (layerTop == null || !Number.isFinite(Number(layerTop))) {
-      return orderUnits([a, b], strategy.unitOrder)[0].unitKey === a.unitKey ? -1 : 1;
+      return Number(baseRank.get(a.unitKey) || 0) - Number(baseRank.get(b.unitKey) || 0);
     }
     const aCanShare = a.orientations.some((dims) => dims.heightCm <= layerTop - layerBottom + EPS);
     const bCanShare = b.orientations.some((dims) => dims.heightCm <= layerTop - layerBottom + EPS);
     if (aCanShare !== bCanShare) return aCanShare ? -1 : 1;
-    return orderUnits([a, b], strategy.unitOrder)[0].unitKey === a.unitKey ? -1 : 1;
+    return Number(baseRank.get(a.unitKey) || 0) - Number(baseRank.get(b.unitKey) || 0);
   });
 }
 
@@ -4011,6 +4385,7 @@ function makePackedBox(placed, unplaced, strategy, stats) {
       solverUnplacedCount: unplaced.length,
       occupiedVolumeM3: round(sumOccupiedVolumeM3(placed)),
       maxTopCm: round(maxTop(placed)),
+      topHeightPlaneCount: topHeightPlaneCount(placed),
       refillPlacedCount: Number(stats.repairedCount || 0),
       refillPasses: Number(stats.localSearchPasses || 0),
       blockDowngradePasses: Number(stats.blockDowngradePasses || 0),
@@ -4031,6 +4406,12 @@ function makePackedBox(placed, unplaced, strategy, stats) {
       sparseTailSupportGain: round(stats.sparseTailSupportGain || 0),
       deckFloorPlacedCount: Number(stats.deckFloorPlacedCount || 0),
       layerCount: Number(stats.layerCount || countLayers(placed)),
+      fixedLayerBandCount: Number(stats.fixedLayerBandCount || 0),
+      sameLayerPlateauPlacedCount: Number(stats.sameLayerPlateauPlacedCount || 0),
+      sameLayerFloorPlacedCount: Number(stats.sameLayerFloorPlacedCount || 0),
+      sameLayerTopUpPlacedCount: Number(stats.sameLayerTopUpPlacedCount || 0),
+      maxFixedBandOverflowCm: round(stats.maxFixedBandOverflowCm || 0),
+      nonStackFoundationPlacedCount: Number(stats.nonStackFoundationPlacedCount || 0),
       balanceSeverity: stats.balanceValidation?.severity || "",
       balanceScore: round(stats.balanceValidation?.score || 0),
       balanceRejectedCount: Number(stats.balanceRejectedCount || 0)
@@ -4097,7 +4478,27 @@ function comparePackAttempt(container) {
       const lengthDiff = lengthUtilizationPercent(container, b.placed) - lengthUtilizationPercent(container, a.placed);
       if (Math.abs(lengthDiff) > EPS) return lengthDiff;
     }
+    const aResidual = residualPlanMetrics(container, a.unplaced);
+    const bResidual = residualPlanMetrics(container, b.unplaced);
+    if (aResidual.oversizeNonStackQuantity !== bResidual.oversizeNonStackQuantity) {
+      return aResidual.oversizeNonStackQuantity - bResidual.oversizeNonStackQuantity;
+    }
+    if (aResidual.remainingBoxLowerBound !== bResidual.remainingBoxLowerBound) {
+      return aResidual.remainingBoxLowerBound - bResidual.remainingBoxLowerBound;
+    }
+    if (aResidual.isolatedNonStackTail !== bResidual.isolatedNonStackTail) {
+      return aResidual.isolatedNonStackTail ? 1 : -1;
+    }
+    const nonStackDeckDiff = aResidual.nonStackDeckDemandRatio - bResidual.nonStackDeckDemandRatio;
+    if (Math.abs(nonStackDeckDiff) > EPS) return nonStackDeckDiff;
+    const largestNonStackDiff = aResidual.largestNonStackFootprintRatio - bResidual.largestNonStackFootprintRatio;
+    if (Math.abs(largestNonStackDiff) > EPS) return largestNonStackDiff;
+    if (aResidual.nonStackQuantity !== bResidual.nonStackQuantity) {
+      return aResidual.nonStackQuantity - bResidual.nonStackQuantity;
+    }
     const occupiedDiff = sumOccupiedVolumeM3(b.placed) - sumOccupiedVolumeM3(a.placed);
+    const materialVolumeDiff = Math.max(EPS, volumeM3(container) * 0.01);
+    if (Math.abs(occupiedDiff) > materialVolumeDiff) return occupiedDiff;
     if (Math.abs(occupiedDiff) > EPS) return occupiedDiff;
     const rawVolumeDiff = sumCargoVolumeM3(b.placed) - sumCargoVolumeM3(a.placed);
     if (Math.abs(rawVolumeDiff) > EPS) return rawVolumeDiff;
@@ -4110,6 +4511,67 @@ function comparePackAttempt(container) {
     if (Math.abs(topDiff) > EPS) return topDiff;
     return a.unplaced.length - b.unplaced.length;
   };
+}
+
+function residualPlanMetrics(container, units = []) {
+  const remaining = units || [];
+  if (!remaining.length) {
+    return {
+      remainingBoxLowerBound: 0,
+      nonStackQuantity: 0,
+      nonStackDeckDemandRatio: 0,
+      largestNonStackFootprintRatio: 0,
+      isolatedNonStackTail: false,
+      oversizeNonStackQuantity: 0
+    };
+  }
+  const containerVolume = Math.max(EPS, volumeM3(container));
+  const floorArea = Math.max(EPS, Number(container.lengthCm || 0) * Number(container.widthCm || 0));
+  const payloadKg = Number(container.payloadKg || 0);
+  const remainingVolume = sumOccupiedVolumeM3(remaining);
+  const remainingWeight = placedWeightKg(remaining);
+  let nonStackQuantity = 0;
+  let nonStackDeckArea = 0;
+  let largestNonStackFootprint = 0;
+  let oversizeNonStackQuantity = 0;
+  for (const unit of remaining) {
+    if (!unit.nonStack) continue;
+    const quantity = unitQuantity(unit);
+    nonStackQuantity += quantity;
+    const feasibleOrientation = generateOrientations(unit).some((dims) => fitsContainerDims(container, dims));
+    if (!feasibleOrientation) oversizeNonStackQuantity += quantity;
+    const footprint = minimumPhysicalFootprintCm2(unit, container);
+    nonStackDeckArea += footprint;
+    largestNonStackFootprint = Math.max(largestNonStackFootprint, footprint / Math.max(1, quantity));
+  }
+  const volumeLowerBound = Math.ceil(remainingVolume / containerVolume - EPS);
+  const weightLowerBound = payloadKg > EPS ? Math.ceil(remainingWeight / payloadKg - EPS) : 0;
+  const nonStackDeckDemandRatio = nonStackDeckArea / floorArea;
+  const deckLowerBound = Math.ceil(nonStackDeckDemandRatio - EPS);
+  return {
+    remainingBoxLowerBound: Math.max(volumeLowerBound, weightLowerBound, deckLowerBound),
+    nonStackQuantity,
+    nonStackDeckDemandRatio,
+    largestNonStackFootprintRatio: largestNonStackFootprint / floorArea,
+    isolatedNonStackTail: nonStackQuantity > 0 && nonStackQuantity === sumUnitQuantity(remaining),
+    oversizeNonStackQuantity
+  };
+}
+
+function minimumPhysicalFootprintCm2(unit, container) {
+  const quantity = unitQuantity(unit);
+  const length = Math.max(EPS, singleRawLengthCm(unit));
+  const width = Math.max(EPS, singleRawWidthCm(unit));
+  const height = Math.max(EPS, singleRawHeightCm(unit));
+  const feasibleAreas = generateOrientations(unit)
+    .filter((dims) => fitsContainerDims(container, dims))
+    .map((dims) => {
+      if (dims.heightAxis === AXIS_LENGTH) return width * height;
+      if (dims.heightAxis === AXIS_WIDTH) return length * height;
+      return length * width;
+    });
+  if (!feasibleAreas.length) return Number(container.lengthCm || 0) * Number(container.widthCm || 0) * quantity;
+  return Math.min(...feasibleAreas) * quantity;
 }
 
 function withBalanceValidation(container, attempt, rejectedByBalance = 0) {
@@ -4700,6 +5162,39 @@ function countLayers(placed) {
   return uniqueSorted(placed.map((unit) => unit.z), Number.NaN).filter((value) => !Number.isNaN(value)).length;
 }
 
+function topHeightLevels(placed) {
+  return uniqueSorted(
+    (placed || [])
+      .filter((unit) => hasExposedTopSurface(unit, placed))
+      .map((unit) => Number(unit.z || 0) + Number(unit.heightCm || 0)),
+    Number.NaN
+  ).filter((value) => Number.isFinite(value));
+}
+
+function topHeightPlaneCount(placed) {
+  return topHeightLevels(placed).length;
+}
+
+function topHeightLevelsAreSubset(candidateLevels, allowedLevels) {
+  return (candidateLevels || []).every((candidate) =>
+    (allowedLevels || []).some((allowed) => Math.abs(Number(candidate) - Number(allowed)) < EPS)
+  );
+}
+
+function hasExposedTopSurface(unit, placed) {
+  const physicalUnit = physicalPlacementBox(unit);
+  const top = physicalUnit.z + physicalUnit.heightCm;
+  const coveringRects = (placed || [])
+    .filter((candidate) => candidate !== unit)
+    .filter((candidate) => Math.abs(physicalPlacementBox(candidate).z - top) < EPS)
+    .flatMap((candidate) => physicalFootprintRects(candidate));
+  if (!coveringRects.length) return true;
+  return physicalFootprintRects(unit).some((target) => {
+    const overlaps = coveringRects.map((cover) => overlapRect(target, cover)).filter(Boolean);
+    return unionArea(overlaps) + EPS < target.lengthCm * target.widthCm;
+  });
+}
+
 function maxFootprint(unit) {
   return Math.max(...generateOrientations(unit).map((dims) => dims.lengthCm * dims.widthCm));
 }
@@ -4709,16 +5204,17 @@ function tallestOrientation(unit) {
 }
 
 function smallItemRank(unit) {
-  const isBlue = String(unit.color || "").toLowerCase() === "#3b82f6" || /蓝|blue/i.test(String(unit.name || ""));
   const volume = unitVolumeCm3(unit);
-  return (isBlue ? 0 : 1000000000) + volume;
+  const longest = Math.max(unit.lengthCm, unit.widthCm, unit.heightCm);
+  const shortest = Math.min(unit.lengthCm, unit.widthCm, unit.heightCm);
+  const elongated = longest / Math.max(1, shortest) >= 1.8;
+  return (elongated ? 0 : 1000000000) + volume;
 }
 
 function shouldPreferVertical(unit) {
-  const isBlue = String(unit.color || "").toLowerCase() === "#3b82f6" || /蓝|blue/i.test(String(unit.name || ""));
   const longest = Math.max(unit.lengthCm, unit.widthCm, unit.heightCm);
   const shortest = Math.min(unit.lengthCm, unit.widthCm, unit.heightCm);
-  return isBlue || longest / Math.max(1, shortest) >= 1.8 || unitVolumeCm3(unit) < 120000;
+  return longest / Math.max(1, shortest) >= 1.8 || unitVolumeCm3(unit) < 120000;
 }
 
 function unitVolumeCm3(unit) {
@@ -5124,8 +5620,8 @@ function buildTrace(container, units, total, multi, metrics) {
     pipeline: [
       "主线程把货物、箱型、计划可用率、货物间隙复制给 Web Worker",
       "Worker 对大批量同规格货物先按当前箱型组合成若干块，少量和余数仍保留单件 DTO 字段",
-      "每个箱型独立运行多轮 LAFF 搜索，分别尝试大底面积、高度、承重优先、不可重压最后和蓝色/小件竖放策略",
-      "每个 LAFF 层内使用 Extreme Point 候选点回填底部、顶部和侧边空隙",
+      PACKING_WORKER_TEXT.strategyPipeline,
+      PACKING_WORKER_TEXT.layerPipeline,
       "候选落位必须满足边界、不相交、底面支撑和不可重压货物不承载上层货物",
       "首轮失败时执行局部搜索，移出一小组已摆货物与剩余货物重排，而不是立刻开启第二箱",
       "同一箱型选择已摆数量更多、占用体积更高、承重支撑面更好的方案",
@@ -5291,6 +5787,7 @@ function toPlacementDto(unit) {
     unitKey: unit.unitKey,
     parentUnitKey: unit.parentUnitKey || "",
     cargoId: unit.cargoId,
+    cargoIndex: Number(unit.cargoIndex),
     name: unit.name,
     baseName: unit.baseName || unit.name,
     model: unit.model || "",
@@ -5426,7 +5923,7 @@ function supportRuleSettings(container = {}) {
 
 function effectiveNonStackSupportRatio(container = {}) {
   const rules = supportRuleSettings(container);
-  return Math.min(rules.nonStackSupportRatio, rules.supportRatio);
+  return rules.nonStackSupportRatio;
 }
 
 function supportRatioForUnit(container = {}, unit = {}, strategy = {}, options = {}) {

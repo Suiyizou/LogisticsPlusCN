@@ -1,17 +1,19 @@
+import { packingResumeFingerprint } from "../utils/packingResumeFingerprint.js";
+
 let currentJob = null;
 let currentJobId = 0;
 
 const PACKING_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
-const PACKING_HARD_TIMEOUT_MAX_MS = 30 * 60 * 1000;
+const PACKING_HARD_TIMEOUT_MAX_MS = 5 * 60 * 1000;
 const EXPECTED_BUDGET_MS = {
-  light: 5 * 60 * 1000,
-  medium: 12 * 60 * 1000,
-  heavy: 25 * 60 * 1000
+  light: 30 * 1000,
+  medium: 90 * 1000,
+  heavy: 3 * 60 * 1000
 };
 const HARD_BUDGET_MS = {
-  light: 10 * 60 * 1000,
-  medium: 20 * 60 * 1000,
-  heavy: 30 * 60 * 1000
+  light: 90 * 1000,
+  medium: 3 * 60 * 1000,
+  heavy: 5 * 60 * 1000
 };
 
 class PackingTimeoutError extends Error {
@@ -161,9 +163,18 @@ export function packingTimeoutPolicyFromEstimate(estimate = {}) {
 
 export function estimatePackingWorkload(payload = {}) {
   const cargos = payload.cargos || [];
+  const containersById = new Map((payload.containers || []).map((container) => [String(container?.id || ""), container]));
   const completedContainerIds = new Set(
     (payload.resumeEvaluations || [])
-      .map((evaluation) => String(evaluation?.container?.id || ""))
+      .filter((evaluation) => {
+        const containerId = String(evaluation?.container?.id || "");
+        const container = containersById.get(containerId);
+        return containerId
+          && containerId !== "mixed-plan"
+          && container
+          && evaluation?.resumeFingerprint === packingResumeFingerprint(container, payload);
+      })
+      .map((evaluation) => String(evaluation.container.id))
       .filter((id) => id && id !== "mixed-plan")
   );
   const containers = (payload.containers || []).filter((container) => !completedContainerIds.has(String(container?.id || "")));
@@ -212,7 +223,7 @@ export function estimatePackingWorkload(payload = {}) {
   };
 }
 
-const LOCAL_SEARCH_PASS_ESTIMATE = 5;
+const LOCAL_SEARCH_PASS_ESTIMATE = 2;
 
 function isSpecialContainerForEstimate(container) {
   const profile = `${container?.usagePriority || ""} ${container?.visualKind || ""} ${container?.equipmentClass || ""} ${container?.id || ""} ${container?.name || ""}`.toLowerCase();
