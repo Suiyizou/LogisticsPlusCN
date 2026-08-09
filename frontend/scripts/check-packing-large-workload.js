@@ -242,8 +242,10 @@ assert.equal(new Set(physicalPlacements(furnitureEvaluation).map((placement) => 
 const furnitureNonStackCounts = furnitureEvaluation.packedBoxes.map((box) =>
   box.placed.filter((placement) => placement.nonStack).length
 );
-assert.deepEqual(furnitureEvaluation.packedBoxes.map((box) => box.placed.length), [68, 44, 73]);
-assert.deepEqual(furnitureNonStackCounts, [0, 4, 6], "fragile sofas should be concentrated into the latest feasible containers");
-assert.ok(furnitureEvaluation.packedBoxes.every((box) => box.strategySummary.nonStackFallbackRequired === 1));
+const furnitureBoxCounts = furnitureEvaluation.packedBoxes.map((box) => box.placed.length);
+assert.equal(furnitureBoxCounts.reduce((sum, count) => sum + count, 0), 185);
+assert.ok(furnitureBoxCounts[0] >= 80, "lower-deck recovery should keep the first furniture box from closing at the old 68-piece split");
+assert.deepEqual(furnitureNonStackCounts, [0, 0, 10], "fragile sofas should be concentrated into the latest feasible container");
+assert.ok(furnitureEvaluation.packedBoxes.some((box) => box.strategySummary.lowerDeckRevisitCount > 0));
 
 console.log("Packing large-workload timeout, grouping, non-stack load order, serialized mixed-plan, and resume regression passed.");

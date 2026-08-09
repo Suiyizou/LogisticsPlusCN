@@ -6,7 +6,8 @@ import {
   fixedLayerFoundationText,
   fixedLayerPlacementText,
   fixedLayerSeedText,
-  fixedLayerSkippedText
+  fixedLayerSkippedText,
+  lowerDeckRevisitText
 } from "../i18n/packingWorkerText.js";
 
 const TYPE_RULES = {
@@ -40,6 +41,8 @@ const NON_STACK_DISPLACEMENT_MAX_SWAPS = 2;
 const NON_STACK_DISPLACEMENT_MAX_MOVERS = 2;
 const NON_STACK_DISPLACEMENT_MAX_RECEIVERS = 3;
 const TAIL_REFINEMENT_UNIT_BUDGET = 16;
+const LOWER_DECK_REVISIT_MAX_PASSES = 1;
+const LOWER_DECK_REVISIT_LEVEL_LIMIT = 16;
 const MIXED_PLAN_MAX_SOLVER_UNITS = 120;
 const MIXED_REPLACEMENT_CANDIDATE_LIMIT = 3;
 const MIXED_COMBINATION_BEAM_WIDTH = 8;
@@ -1830,25 +1833,35 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
   let maxFixedBandOverflowCm = 0;
   let nonStackTopPlacedCount = 0;
   let nonStackFoundationPlacedCount = 0;
+  let verticalLayerContinuationCount = 0;
+  let lowerDeckRevisitCount = 0;
 
   while (active.length) {
-    const seedIndex = pickLayerSeedIndex(active, stackableContainer, placed, strategy, { layerBottom: nextLayerBottom });
-    if (seedIndex < 0) {
-      unplaced.push(...active.splice(0));
-      break;
+    const seedOptions = { layerBottom: nextLayerBottom };
+    let seedIndex = pickLayerSeedIndex(active, stackableContainer, placed, strategy, seedOptions);
+    let seedPlacement = seedIndex >= 0
+      ? packExtremePoint(stackableContainer, placed, active[seedIndex], strategy, seedOptions)
+      : null;
+    if (seedIndex < 0 || !seedPlacement) {
+      const revisit = lowerDeckRevisitCount < LOWER_DECK_REVISIT_MAX_PASSES
+        ? findLowerDeckLayerSeed(stackableContainer, placed, active, strategy, nextLayerBottom)
+        : null;
+      if (!revisit) {
+        unplaced.push(...active.splice(0));
+        break;
+      }
+      seedIndex = revisit.index;
+      seedPlacement = revisit.placement;
+      lowerDeckRevisitCount += 1;
     }
 
     const seed = active.splice(seedIndex, 1)[0];
-    const seedPlacement = packExtremePoint(stackableContainer, placed, seed, strategy, { layerBottom: nextLayerBottom });
-    if (!seedPlacement) {
-      unplaced.push(seed);
-      continue;
-    }
 
     const placedSeed = applyPlacement(seed, seedPlacement);
     placed.push(placedSeed);
     const layerBottom = placedSeed.z;
     const targetLayerTop = round3(placedSeed.z + placedSeed.heightCm);
+    if (placedSeed.z > EPS) verticalLayerContinuationCount += 1;
     layerNo += 1;
     fixedLayerBandCount += 1;
     let layerPlacedQuantity = unitQuantity(placedSeed);
@@ -1988,6 +2001,18 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
         targetLayerTopCm: round(targetLayerTop)
       })
     });
+    if (seedPlacement.z + EPS < nextLayerBottom) {
+      traceDecision({
+        phase: "layer",
+        level: "summary",
+        text: lowerDeckRevisitText({
+          containerName: container.name,
+          layerNo,
+          highWaterCm: round(nextLayerBottom),
+          layerBottomCm: round(seedPlacement.z)
+        })
+      });
+    }
     nextLayerBottom = Math.max(nextLayerBottom, targetLayerTop);
   }
 
@@ -2013,11 +2038,36 @@ function packLayerLaffCore(container, units, strategy, fixedPlaced = []) {
     sameLayerFloorPlacedCount,
     sameLayerTopUpPlacedCount,
     maxFixedBandOverflowCm,
+    verticalLayerContinuationCount,
+    lowerDeckRevisitCount,
     nonStackTopPlacedCount,
     nonStackFoundationPlacedCount,
     sparseTailSpreadCount: layerTailSpreadCount,
     sparseTailSupportGain: layerTailSupportGain
   });
+}
+
+function findLowerDeckLayerSeed(container, placed, active, strategy, highWaterLayerBottom) {
+  const lowerLevels = uniqueSorted(
+    placed.filter((unit) => !unit.nonStack).map((unit) => Number(unit.z || 0) + Number(unit.heightCm || 0)),
+    0
+  )
+    .filter((level) => level + EPS < highWaterLayerBottom)
+    .slice(0, LOWER_DECK_REVISIT_LEVEL_LIMIT);
+
+  for (const layerBottom of lowerLevels) {
+    const options = {
+      layerBottom,
+      baseZOnly: true,
+      denseTop: layerBottom > EPS,
+      exposedTop: layerBottom > EPS
+    };
+    const index = pickLayerSeedIndex(active, container, placed, strategy, options);
+    if (index < 0) continue;
+    const placement = packExtremePoint(container, placed, active[index], strategy, options);
+    if (placement) return { index, placement };
+  }
+  return null;
 }
 
 function bestFixedLayerPlacement(container, placed, active, strategy, layerBottom, targetLayerTop, layerSeed) {
@@ -4524,6 +4574,8 @@ function makePackedBox(placed, unplaced, strategy, stats) {
       sameLayerFloorPlacedCount: Number(stats.sameLayerFloorPlacedCount || 0),
       sameLayerTopUpPlacedCount: Number(stats.sameLayerTopUpPlacedCount || 0),
       maxFixedBandOverflowCm: round(stats.maxFixedBandOverflowCm || 0),
+      verticalLayerContinuationCount: Number(stats.verticalLayerContinuationCount || 0),
+      lowerDeckRevisitCount: Number(stats.lowerDeckRevisitCount || 0),
       nonStackFoundationPlacedCount: Number(stats.nonStackFoundationPlacedCount || 0),
       balanceSeverity: stats.balanceValidation?.severity || "",
       balanceScore: round(stats.balanceValidation?.score || 0),
@@ -4618,6 +4670,9 @@ function comparePackAttempt(container) {
     const aPlacedCount = sumUnitQuantity(a.placed);
     const bPlacedCount = sumUnitQuantity(b.placed);
     if (aPlacedCount !== bPlacedCount) return bPlacedCount - aPlacedCount;
+    const lowerDeckRevisitDiff = Number(a.strategySummary?.lowerDeckRevisitCount || 0)
+      - Number(b.strategySummary?.lowerDeckRevisitCount || 0);
+    if (lowerDeckRevisitDiff) return lowerDeckRevisitDiff;
     const supportDiff = supportSurfaceScore(b.placed, container) - supportSurfaceScore(a.placed, container);
     if (Math.abs(supportDiff) > EPS) return supportDiff;
     const topDiff = maxTop(a.placed) - maxTop(b.placed);

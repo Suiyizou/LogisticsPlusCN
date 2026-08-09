@@ -106,6 +106,28 @@ assert.ok(fixedBandBox.strategySummary.fixedLayerBandCount >= 2);
 assert.ok(fixedBandBox.strategySummary.sameLayerTopUpPlacedCount >= 1);
 assert.equal(fixedBandBox.strategySummary.maxFixedBandOverflowCm, 0);
 
+const lowerDeckRevisitEvaluation = calculateOne({
+  container: makeContainer("lower-deck-revisit", 240, 70, 70),
+  cargos: [
+    { id: "revisit-short", name: "revisit-short", lengthCm: 140, widthCm: 70, heightCm: 25, quantity: 1, weightKg: 10, type: "upright" },
+    { id: "revisit-tall", name: "revisit-tall", lengthCm: 95, widthCm: 40, heightCm: 35, quantity: 2, weightKg: 10, type: "upright" }
+  ]
+});
+
+assert.equal(lowerDeckRevisitEvaluation.fitStatus, "fit");
+assert.equal(lowerDeckRevisitEvaluation.boxes, 1, "a lower free deck must be revisited before opening another box");
+assert.equal(lowerDeckRevisitEvaluation.packedBoxes.length, 1);
+const lowerDeckRevisitBox = lowerDeckRevisitEvaluation.packedBoxes[0];
+assert.equal(lowerDeckRevisitBox.placed.length, 3);
+assert.equal(lowerDeckRevisitBox.unplacedUnitKeys.length, 0);
+const revisitTallPlacements = lowerDeckRevisitBox.placed.filter((placement) => placement.cargoId === "revisit-tall");
+assert.equal(revisitTallPlacements.length, 2);
+assert.ok(revisitTallPlacements.some((placement) => Math.abs(placement.zCm) <= EPSILON));
+assert.ok(revisitTallPlacements.some((placement) => placement.zCm > EPSILON));
+assert.ok(lowerDeckRevisitBox.strategySummary.maxTopCm <= 70 + EPSILON);
+assert.equal(lowerDeckRevisitBox.strategySummary.lowerDeckRevisitCount, 1);
+assert.ok(lowerDeckRevisitBox.strategySummary.verticalLayerContinuationCount >= 1);
+
 const nonStackLastEvaluation = calculateOne({
   container: makeContainer("nonstack-last-across-boxes", 200, 100, 120),
   cargos: [
@@ -204,11 +226,11 @@ const controlledLocalSearchEvaluation = calculateOne({
     { id: "local-c3", name: "local-c3", lengthCm: 60, widthCm: 62, heightCm: 32, quantity: 8, weightKg: 1, type: "normal" }
   ]
 });
-assert.equal(
-  controlledLocalSearchEvaluation.packedBoxes[0].strategySummary.topHeightPlaneCount,
-  5,
-  "local repair must not replace a five-plane fixed-layer base with a fragmented twelve-plane layout"
+assert.ok(
+  controlledLocalSearchEvaluation.packedBoxes[0].strategySummary.topHeightPlaneCount <= 6,
+  "controlled lower-deck recovery may add one plane, but must not restore the fragmented twelve-plane layout"
 );
+assert.ok(controlledLocalSearchEvaluation.packedBoxes[0].strategySummary.lowerDeckRevisitCount <= 1);
 assert.equal(controlledLocalSearchEvaluation.packedBoxes[0].strategySummary.maxFixedBandOverflowCm, 0);
 
 const duplicateIdContainer = makeContainer("duplicate-cargo-id", 1000, 500, 200);

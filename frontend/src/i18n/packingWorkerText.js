@@ -30,3 +30,7 @@ export function fixedLayerFoundationText(values) {
 export function fixedLayerCompleteText(values) {
   return `${values.containerName} · 第 ${values.layerNo} 层完成：本层装入 ${values.layerPlacedQuantity} 件，累计 ${values.totalPlacedQuantity} 件，剩余 ${values.remainingQuantity} 件；P0–P2 已穷尽，下一层从 z=${values.targetLayerTopCm}cm 开始。`;
 }
+
+export function lowerDeckRevisitText(values) {
+  return `${values.containerName} · 第 ${values.layerNo} 层启用低台阶重访：最高带 z=${values.highWaterCm}cm 无可行落位，回到外露承重面 z=${values.layerBottomCm}cm 继续装载。`;
+}
