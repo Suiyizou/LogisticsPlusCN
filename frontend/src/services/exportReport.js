@@ -2,10 +2,14 @@ import { calculateMassBalance } from "../utils/massBalance";
 import { cargoLabel } from "../utils/format";
 import { localizeCanvasContext, translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
+import { analyzeRemainingSpace } from "../utils/remainingSpace";
+import { groupReportBadges, layoutReportBadges } from "../utils/reportLabelLayout";
 
 const REPORT_COLORS = ["#2a9d8f", "#3b82f6", "#8b5cf6", "#f97316", "#e11d48", "#65a30d", "#0891b2", "#c026d3", "#ca8a04", "#475569"];
 const PAGE_WIDTH = 1800;
 const CARD_RADIUS = 18;
+const REMAINING_SPACE_CARD_HEIGHT = 560;
+const FREE_SPACE_COLORS = ["#0ea5e9", "#14b8a6", "#8b5cf6", "#f59e0b", "#6366f1", "#06b6d4", "#84cc16", "#f97316", "#a855f7", "#64748b"];
 
 export async function exportPackingReport(options) {
   if (!options?.container) {
@@ -93,10 +97,13 @@ export function renderReportCanvas(options) {
   const placements = enrichPlacements(options.placements || [], catalog);
   const layers = buildLayers(placements);
   const massBalance = options.showMassBalance === false ? null : calculateMassBalance(container, placements);
+  const remainingSpace = analyzeReportRemainingSpace(container, placements);
   const legendHeight = Math.max(86, 54 + Math.ceil(catalog.length / 4) * 46);
   const balanceHeight = massBalance?.valid ? 360 : 0;
   const layerCardHeight = 600;
-  const height = 150 + 112 + balanceHeight + (balanceHeight ? 24 : 0) + legendHeight + layers.length * (layerCardHeight + 24) + 70;
+  const remainingSpaceHeight = remainingSpace?.conservationOk ? REMAINING_SPACE_CARD_HEIGHT : 0;
+  const height = 150 + 112 + remainingSpaceHeight + (remainingSpaceHeight ? 24 : 0)
+    + balanceHeight + (balanceHeight ? 24 : 0) + legendHeight + layers.length * (layerCardHeight + 24) + 70;
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = height;
@@ -106,24 +113,65 @@ export function renderReportCanvas(options) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   let y = 0;
+  const pageBreaks = [0];
   drawHeader(ctx, options, catalog, layers);
   y += 150;
-  drawSummary(ctx, 48, y, PAGE_WIDTH - 96, 88, options, placements, layers);
+  pageBreaks.push(y);
+  drawSummary(ctx, 48, y, PAGE_WIDTH - 96, 88, options, placements, layers, remainingSpace);
   y += 112;
+  if (remainingSpace?.conservationOk) {
+    pageBreaks.push(y);
+    drawRemainingSpaceAnalysis(ctx, 48, y, PAGE_WIDTH - 96, remainingSpaceHeight, remainingSpace.container || container, remainingSpace);
+    y += remainingSpaceHeight + 24;
+  }
   if (massBalance?.valid) {
+    pageBreaks.push(y);
     drawMassBalance(ctx, 48, y, PAGE_WIDTH - 96, balanceHeight, container, placements, massBalance);
     y += balanceHeight + 24;
   }
+  pageBreaks.push(y);
   drawLegend(ctx, 48, y, PAGE_WIDTH - 96, legendHeight, catalog);
   y += legendHeight + 24;
 
   layers.forEach((layer, index) => {
+    pageBreaks.push(y);
     drawLayerBreakdown(ctx, 48, y, PAGE_WIDTH - 96, layerCardHeight, container, layer, index, layers.length);
     y += layerCardHeight + 24;
   });
 
   drawFooter(ctx, height - 38);
+  pageBreaks.push(height);
+  canvas.__reportPageBreaks = [...new Set(pageBreaks.map((value) => Math.max(0, Math.min(height, Math.round(value)))))]
+    .sort((a, b) => a - b);
+  canvas.__reportLocale = reportLocale(options.locale);
   return canvas;
+}
+
+function analyzeReportRemainingSpace(container, placements) {
+  try {
+    return refineRemainingSpaceVolumes(
+      analyzeRemainingSpace(container, placements, { maxDisplayBlocks: 10 }),
+      placements
+    );
+  } catch (error) {
+    console.warn("Remaining-space analysis was skipped; the packing report will continue without the clearance card.", error);
+    return null;
+  }
+}
+
+function refineRemainingSpaceVolumes(analysis, placements) {
+  const reportedCargoVolumeM3 = reportCargoVolumeM3(placements);
+  if (!(reportedCargoVolumeM3 > 0) || !(analysis?.containerVolumeM3 > 0)) return analysis;
+  const theoryFreeVolumeM3 = Math.max(0, analysis.containerVolumeM3 - reportedCargoVolumeM3);
+  const reservedEnvelopeVolumeM3 = Math.max(0, theoryFreeVolumeM3 - Number(analysis.usableFreeVolumeM3 || 0));
+  return {
+    ...analysis,
+    reportedCargoVolumeM3,
+    theoryFreeVolumeM3,
+    theoryFreeVolumeCm3: theoryFreeVolumeM3 * 1_000_000,
+    reservedEnvelopeVolumeM3,
+    reservedEnvelopeVolumeCm3: reservedEnvelopeVolumeM3 * 1_000_000
+  };
 }
 
 function drawHeader(ctx, options, catalog, layers) {
@@ -159,16 +207,25 @@ function drawHeader(ctx, options, catalog, layers) {
   fillFittedText(ctx, reportText(ctx, "report.cargoLayerCounts", { cargoTypes: catalog.length, layers: layers.length }), rightX, 122, PAGE_WIDTH - rightX - 48, 12);
 }
 
-function drawSummary(ctx, x, y, width, height, options, placements, layers) {
+function drawSummary(ctx, x, y, width, height, options, placements, layers, remainingSpace) {
   drawCard(ctx, x, y, width, height);
   const evaluation = options.evaluation || {};
+  const summaryContainer = remainingSpace?.container || options.container;
+  const currentCargoVolumeM3 = remainingSpace?.reportedCargoVolumeM3 ?? reportCargoVolumeM3(placements);
+  const containerVolumeM3 = remainingSpace?.containerVolumeM3
+    || Math.max(0, Number(summaryContainer?.lengthCm || 0) * Number(summaryContainer?.widthCm || 0) * Number(summaryContainer?.heightCm || 0) / 1_000_000);
+  const theoreticalFreeVolumeM3 = remainingSpace?.theoryFreeVolumeM3
+    ?? (containerVolumeM3 > 0 ? Math.max(0, containerVolumeM3 - currentCargoVolumeM3) : null);
+  const currentFillPercent = containerVolumeM3 > 0
+    ? currentCargoVolumeM3 / containerVolumeM3 * 100
+    : Number(evaluation.firstBoxFillPercent || 0);
   const values = [
-    ["箱型尺寸", `${options.container.lengthCm} × ${options.container.widthCm} × ${options.container.heightCm} cm`],
-    ["预计箱数", `${evaluation.estimatedBoxes ? "约 " : ""}${evaluation.boxes || "-"} 箱`],
-    ["首箱空间占用", `${formatNum(evaluation.firstBoxFillPercent)}%`],
-    ["货物总体积", `${formatNum(evaluation.totalRawVolumeM3, 2)} m³`],
-    ["货物总重量", `${formatNum((evaluation.totalWeightKg || 0) / 1000, 2)} t`],
-    ["当前货舱", `${sumPlacementQuantity(placements)} 件 / ${layers.length} 层`]
+    [reportText(ctx, "report.summaryContainer"), `${summaryContainer.lengthCm} × ${summaryContainer.widthCm} × ${summaryContainer.heightCm} cm`],
+    [reportText(ctx, "report.summaryCurrentHold"), reportText(ctx, "report.summaryPiecesLayers", { pieces: sumPlacementQuantity(placements), layers: layers.length })],
+    [reportText(ctx, "report.summaryCargoVolume"), `${formatNum(currentCargoVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.summaryFill"), `${formatNum(currentFillPercent)}%`],
+    [reportText(ctx, "report.summaryTheoreticalFree"), theoreticalFreeVolumeM3 == null ? reportText(ctx, "report.metricUnavailable") : `${formatNum(theoreticalFreeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.summaryUsableFree"), remainingSpace ? `${formatNum(remainingSpace.usableFreeVolumeM3, 2)} m³` : reportText(ctx, "report.metricUnavailable")]
   ];
   values.forEach((item, index) => {
     const cellWidth = width / values.length;
@@ -180,6 +237,184 @@ function drawSummary(ctx, x, y, width, height, options, placements, layers) {
     ctx.font = "800 23px Microsoft YaHei, Arial";
     fillFittedText(ctx, item[1], cx, y + 62, cellWidth - 36, 13);
   });
+}
+
+function drawRemainingSpaceAnalysis(ctx, x, y, width, height, container, analysis) {
+  drawCard(ctx, x, y, width, height);
+  ctx.fillStyle = "#132033";
+  ctx.font = "800 27px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingSpaceTitle"), x + 24, y + 38, width - 48, 18);
+  ctx.fillStyle = "#64748b";
+  ctx.font = "400 15px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, isFlatRackReportContainer(container)
+    ? "report.remainingSpaceFlatRackText"
+    : "report.remainingSpaceText"), x + 24, y + 66, width - 48, 11);
+
+  const plot = { x: x + 24, y: y + 88, width: 990, height: height - 116 };
+  drawRemainingSpaceIso(ctx, plot, container, analysis);
+
+  const panelX = plot.x + plot.width + 28;
+  const panelWidth = x + width - panelX - 24;
+  const largestBlock = analysis.displayBlocks?.[0] || analysis.blocks?.[0];
+  const largestShare = analysis.usableFreeVolumeM3 > 0
+    ? Number(largestBlock?.volumeM3 || 0) / analysis.usableFreeVolumeM3 * 100
+    : 0;
+  const metrics = [
+    [reportText(ctx, "report.remainingTheoryMetric"), `${formatNum(analysis.theoryFreeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.remainingUsableMetric"), `${formatNum(analysis.usableFreeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.remainingEnvelopeMetric"), `${formatNum(analysis.reservedEnvelopeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.remainingLargestMetric"), `${formatNum(largestShare)}%`]
+  ];
+  metrics.forEach((metric, index) => {
+    const cellWidth = panelWidth / 2;
+    const cellX = panelX + (index % 2) * cellWidth;
+    const cellY = y + 96 + Math.floor(index / 2) * 66;
+    ctx.fillStyle = "#64748b";
+    ctx.font = "400 13px Microsoft YaHei, Arial";
+    fillFittedText(ctx, metric[0], cellX, cellY, cellWidth - 18, 9);
+    ctx.fillStyle = "#132033";
+    ctx.font = "800 21px Microsoft YaHei, Arial";
+    fillFittedText(ctx, metric[1], cellX, cellY + 28, cellWidth - 18, 12);
+  });
+
+  ctx.fillStyle = "#132033";
+  ctx.font = "800 16px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingBlockListTitle"), panelX, y + 246, panelWidth, 11);
+  const rows = (analysis.displayBlocks || analysis.blocks || []).slice(0, 6);
+  rows.forEach((block, index) => {
+    const rowY = y + 270 + index * 42;
+    const color = FREE_SPACE_COLORS[index % FREE_SPACE_COLORS.length];
+    ctx.fillStyle = color;
+    roundRect(ctx, panelX, rowY - 16, 42, 28, 7);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 12px Microsoft YaHei, Arial";
+    centerText(ctx, block.label || `R${index + 1}`, panelX + 21, rowY + 3);
+    ctx.fillStyle = "#132033";
+    ctx.font = "800 14px Microsoft YaHei, Arial";
+    fillFittedText(ctx, `${formatNum(block.lengthCm, 0)} × ${formatNum(block.widthCm, 0)} × ${formatNum(block.heightCm, 0)} cm`, panelX + 52, rowY - 4, panelWidth - 168, 9);
+    ctx.fillStyle = "#174a7f";
+    ctx.font = "800 14px Microsoft YaHei, Arial";
+    const volumeText = `${formatNum(block.volumeM3, 2)} m³`;
+    const volumeWidth = ctx.measureText(volumeText).width;
+    ctx.fillText(volumeText, panelX + panelWidth - volumeWidth, rowY - 4);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "400 11px Microsoft YaHei, Arial";
+    fillFittedText(ctx, reportText(ctx, "report.remainingBlockCoordinates", {
+      x1: formatNum(block.xCm, 0), x2: formatNum(Number(block.xCm || 0) + Number(block.lengthCm || 0), 0),
+      y1: formatNum(block.yCm, 0), y2: formatNum(Number(block.yCm || 0) + Number(block.widthCm || 0), 0),
+      z1: formatNum(block.zCm, 0), z2: formatNum(Number(block.zCm || 0) + Number(block.heightCm || 0), 0)
+    }), panelX + 52, rowY + 14, panelWidth - 52, 8);
+  });
+  if (analysis.fragmentedBlockCount > 0 || analysis.fragmentedVolumeM3 > 0.005) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "400 12px Microsoft YaHei, Arial";
+    fillFittedText(ctx, reportText(ctx, "report.remainingOtherBlocks", {
+      count: analysis.fragmentedBlockCount || Math.max(0, Number(analysis.blocks?.length || 0) - Number(analysis.displayBlocks?.length || 0)),
+      volume: formatNum(analysis.fragmentedVolumeM3, 2)
+    }), panelX, y + height - 22, panelWidth, 9);
+  }
+}
+
+function drawRemainingSpaceIso(ctx, plot, container, analysis) {
+  drawPlotFrame(ctx, plot, reportText(ctx, "report.remainingIsoTitle"), reportText(ctx, "report.remainingIsoText", {
+    count: Math.min(10, Number(analysis.displayBlocks?.length || 0))
+  }));
+  const inner = inset(plot, 56, 78, 44, 48);
+  const project = createContainerIsoProjector(container, inner);
+  const blocks = [...(analysis.displayBlocks || analysis.blocks || [])]
+    .slice(0, 10)
+    .map((block, index) => ({ ...block, label: block.label || `R${index + 1}`, color: FREE_SPACE_COLORS[index % FREE_SPACE_COLORS.length] }))
+    .sort((a, b) => {
+      const az = Number(a.xCm || 0) + Number(a.yCm || 0) + Number(a.zCm || 0) + Number(a.heightCm || 0);
+      const bz = Number(b.xCm || 0) + Number(b.yCm || 0) + Number(b.zCm || 0) + Number(b.heightCm || 0);
+      return az - bz;
+    });
+  const badgeRequests = [];
+  blocks.forEach((block) => {
+    const topPoints = drawIsoCuboid(ctx, project, block, block.color);
+    const topCenter = averagePoint(topPoints);
+    badgeRequests.push({
+      id: block.label,
+      layerKey: "remaining-space",
+      label: block.label,
+      quantity: 1,
+      anchor: topCenter,
+      itemRect: { x: topCenter.x - 2, y: topCenter.y - 2, width: 4, height: 4 },
+      color: block.color
+    });
+  });
+  drawIsoContainerWireframe(ctx, project, container);
+  drawBadgeLayout(ctx, badgeRequests, inner, { maxWidth: 72, fontSize: 12 });
+}
+
+function createContainerIsoProjector(container, inner) {
+  const cos = 0.866;
+  const sin = 0.5;
+  const zScale = 1.05;
+  const raw = (x, y, z) => ({
+    x: (Number(x || 0) - Number(y || 0)) * cos,
+    y: (Number(x || 0) + Number(y || 0)) * sin - Number(z || 0) * zScale
+  });
+  const corners = [];
+  [0, Number(container.lengthCm || 0)].forEach((cx) => {
+    [0, Number(container.widthCm || 0)].forEach((cy) => {
+      [0, Number(container.heightCm || 0)].forEach((cz) => corners.push(raw(cx, cy, cz)));
+    });
+  });
+  const minX = Math.min(...corners.map((point) => point.x));
+  const maxX = Math.max(...corners.map((point) => point.x));
+  const minY = Math.min(...corners.map((point) => point.y));
+  const maxY = Math.max(...corners.map((point) => point.y));
+  const scale = Math.min(inner.width / Math.max(1, maxX - minX), inner.height / Math.max(1, maxY - minY)) * 0.9;
+  const offsetX = inner.x + inner.width / 2 - ((minX + maxX) * scale) / 2;
+  const offsetY = inner.y + inner.height / 2 - ((minY + maxY) * scale) / 2 + 8;
+  return (x, y, z) => {
+    const point = raw(x, y, z);
+    return { x: offsetX + point.x * scale, y: offsetY + point.y * scale };
+  };
+}
+
+function drawIsoCuboid(ctx, project, block, color) {
+  const x = Number(block.xCm || 0);
+  const y = Number(block.yCm || 0);
+  const z = Number(block.zCm || 0);
+  const l = Number(block.lengthCm || 0);
+  const w = Number(block.widthCm || 0);
+  const h = Number(block.heightCm || 0);
+  const p100 = project(x + l, y, z);
+  const p010 = project(x, y + w, z);
+  const p110 = project(x + l, y + w, z);
+  const p001 = project(x, y, z + h);
+  const p101 = project(x + l, y, z + h);
+  const p011 = project(x, y + w, z + h);
+  const p111 = project(x + l, y + w, z + h);
+  ctx.fillStyle = hexToRgba(color, 0.18);
+  fillPolygon(ctx, [p010, p110, p111, p011]);
+  ctx.fillStyle = hexToRgba(color, 0.26);
+  fillPolygon(ctx, [p100, p110, p111, p101]);
+  ctx.fillStyle = hexToRgba(color, 0.34);
+  fillPolygon(ctx, [p001, p101, p111, p011]);
+  ctx.strokeStyle = hexToRgba(color, 0.78);
+  ctx.lineWidth = 1.35;
+  strokePolygon(ctx, [p010, p110, p111, p011]);
+  strokePolygon(ctx, [p100, p110, p111, p101]);
+  strokePolygon(ctx, [p001, p101, p111, p011]);
+  return [p001, p101, p111, p011];
+}
+
+function drawIsoContainerWireframe(ctx, project, container) {
+  const l = Number(container.lengthCm || 0);
+  const w = Number(container.widthCm || 0);
+  const h = Number(container.heightCm || 0);
+  const points = {
+    a: project(0, 0, 0), b: project(l, 0, 0), c: project(l, w, 0), d: project(0, w, 0),
+    e: project(0, 0, h), f: project(l, 0, h), g: project(l, w, h), i: project(0, w, h)
+  };
+  ctx.strokeStyle = "rgba(31,111,190,0.72)";
+  ctx.lineWidth = 1.6;
+  [["a", "b"], ["b", "c"], ["c", "d"], ["d", "a"], ["e", "f"], ["f", "g"], ["g", "i"], ["i", "e"], ["a", "e"], ["b", "f"], ["c", "g"], ["d", "i"]]
+    .forEach(([from, to]) => drawLine(ctx, points[from], points[to]));
 }
 
 function drawMassBalance(ctx, x, y, width, height, container, placements, balance) {
@@ -378,8 +613,8 @@ function drawLegend(ctx, x, y, width, height, catalog) {
 }
 
 function drawLayerBreakdown(ctx, x, y, width, height, container, layer, index, totalLayers) {
-  const title = `第 ${index + 1} 层 / 共 ${totalLayers} 层：z=${formatNum(layer.z)} cm`;
-  const subtitle = `高度范围 ${formatNum(layer.z)}-${formatNum(layer.top)} cm；本层按“魔方切片”单独拉出展示，编号与右侧堆放方式一一对应。`;
+  const title = reportText(ctx, "report.layerTitle", { index: index + 1, total: totalLayers, z: formatNum(layer.z) });
+  const subtitle = reportText(ctx, "report.layerSubtitle", { bottom: formatNum(layer.z), top: formatNum(layer.top) });
   drawSectionCard(ctx, x, y, width, height, title, subtitle);
 
   const gap = 24;
@@ -391,12 +626,12 @@ function drawLayerBreakdown(ctx, x, y, width, height, container, layer, index, t
   const topPlot = { x: x + 24, y: plotY, width: topWidth, height: plotHeight };
   const isoPlot = { x: topPlot.x + topWidth + gap, y: plotY, width: isoWidth, height: plotHeight };
   drawTopProjection(ctx, topPlot, container, layer.items, {
-    title: "本层俯视图：X × Y",
-    note: "从货舱顶部看本层底面位置；#编号对应录入货物"
+    title: reportText(ctx, "report.layerTopTitle"),
+    note: reportText(ctx, "report.layerBadgeNote")
   });
   drawLayerExplodedIso(ctx, isoPlot, container, layer, {
-    title: "本层剖析图：单层斜侧立体",
-    note: "从 X/Y/Z 三轴观察该层；色块按实际位置绘制并标注编号"
+    title: reportText(ctx, "report.layerIsoTitle"),
+    note: reportText(ctx, "report.layerBadgeNote")
   });
   drawLayerStats(ctx, isoPlot.x + isoWidth + gap, plotY, statsWidth, plotHeight, layer, index);
 }
@@ -411,6 +646,7 @@ function drawTopProjection(ctx, plot, container, items, config = {}) {
   const oy = inner.y + (inner.height - h) / 2;
 
   drawGrid(ctx, ox, oy, w, h);
+  const badgeRequests = [];
   [...items]
     .sort((a, b) => a.zCm - b.zCm || a.yCm - b.yCm || a.xCm - b.xCm)
     .forEach((item) => {
@@ -423,8 +659,17 @@ function drawTopProjection(ctx, plot, container, items, config = {}) {
       ctx.strokeStyle = hexToRgba("#12263f", 0.45);
       ctx.lineWidth = 1.4;
       ctx.strokeRect(rx, ry, rw, rh);
-      drawCargoLabel(ctx, item, rx, ry, rw, rh, { compact: rw < 76 || rh < 48 });
+      badgeRequests.push({
+        id: item.unitKey || `${reportCargoLabel(item)}-${item.xCm}-${item.yCm}`,
+        layerKey: `top-${roundLayer(item.zCm)}`,
+        label: reportCargoLabel(item),
+        quantity: placementQuantity(item),
+        anchor: { x: rx + rw / 2, y: ry + rh / 2 },
+        itemRect: { x: rx, y: ry, width: rw, height: rh },
+        color: item.color
+      });
     });
+  drawBadgeLayout(ctx, badgeRequests, { x: ox + 2, y: oy + 2, width: w - 4, height: h - 4 }, { maxWidth: 104, fontSize: 13 });
 
   ctx.strokeStyle = "#1f6fbe";
   ctx.lineWidth = 2;
@@ -482,6 +727,7 @@ function drawLayerExplodedIso(ctx, plot, container, layer, config = {}) {
   drawIsoBase(ctx, project, container);
   drawIsoAxes(ctx, inner);
 
+  const badgeRequests = [];
   [...items]
     .sort((a, b) => {
       const az = Number(a.zCm || 0) + Number(a.heightCm || 0);
@@ -489,7 +735,19 @@ function drawLayerExplodedIso(ctx, plot, container, layer, config = {}) {
       return (Number(a.xCm || 0) + Number(a.yCm || 0) + az)
         - (Number(b.xCm || 0) + Number(b.yCm || 0) + bz);
     })
-    .forEach((item) => drawIsoCargo(ctx, project, item, layer));
+    .forEach((item) => {
+      const topCenter = drawIsoCargo(ctx, project, item, layer);
+      badgeRequests.push({
+        id: item.unitKey || `${reportCargoLabel(item)}-${item.xCm}-${item.yCm}-${item.zCm}`,
+        layerKey: `iso-${roundLayer(layer.z)}`,
+        label: reportCargoLabel(item),
+        quantity: placementQuantity(item),
+        anchor: topCenter,
+        itemRect: { x: topCenter.x - 2, y: topCenter.y - 2, width: 4, height: 4 },
+        color: item.color
+      });
+    });
+  drawBadgeLayout(ctx, badgeRequests, inner, { maxWidth: 104, fontSize: 13 });
 }
 
 function createIsoProjector(container, items, layer, inner) {
@@ -603,51 +861,107 @@ function drawIsoCargo(ctx, project, item, layer) {
   strokePolygon(ctx, [p100, p110, p111, p101]);
   strokePolygon(ctx, [p001, p101, p111, p011]);
 
-  const topCenter = averagePoint([p001, p101, p111, p011]);
-  drawIsoCargoBadge(ctx, item, topCenter);
-}
-
-function drawIsoCargoBadge(ctx, item, point) {
-  const label = reportCargoLabel(item);
-  ctx.font = "800 14px Microsoft YaHei, Arial";
-  const width = Math.max(34, ctx.measureText(label).width + 16);
-  const height = 24;
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
-  roundRect(ctx, point.x - width / 2, point.y - height / 2, width, height, 8);
-  ctx.fill();
-  ctx.strokeStyle = hexToRgba(item.color, 0.7);
-  ctx.lineWidth = 1.1;
-  ctx.stroke();
-  ctx.fillStyle = "#132033";
-  centerText(ctx, label, point.x, point.y + 5);
+  return averagePoint([p001, p101, p111, p011]);
 }
 
 function drawLayerStats(ctx, x, y, width, height, layer, index) {
   drawPlotFrame(ctx, { x, y, width, height }, reportText(ctx, "report.faceStatsTitle"), reportText(ctx, "report.faceStatsNote", { index: index + 1 }));
   const stats = countByCargo(layer.items, ctx);
+  const maximumRows = 6;
+  const hasOverflow = stats.length > maximumRows;
+  const visibleStats = hasOverflow ? stats.slice(0, maximumRows - 1) : stats.slice(0, maximumRows);
+  const overflowHeight = hasOverflow ? 32 : 0;
+  const rowHeight = Math.max(58, Math.floor((height - 88 - overflowHeight) / Math.max(1, visibleStats.length)));
   let rowY = y + 76;
-  stats.forEach((item) => {
-    if (rowY > y + height - 74) return;
+  visibleStats.forEach((item, itemIndex) => {
     ctx.fillStyle = item.color;
-    roundRect(ctx, x + 18, rowY - 22, 42, 30, 8);
+    roundRect(ctx, x + 18, rowY - 20, 42, 28, 8);
     ctx.fill();
     ctx.fillStyle = "#ffffff";
-    ctx.font = "800 13px Microsoft YaHei, Arial";
-    centerText(ctx, item.label, x + 39, rowY - 3);
+    ctx.font = "800 12px Microsoft YaHei, Arial";
+    centerText(ctx, item.label, x + 39, rowY - 2);
 
     ctx.fillStyle = "#132033";
-    ctx.font = "800 16px Microsoft YaHei, Arial";
+    ctx.font = "800 14px Microsoft YaHei, Arial";
     fillFittedText(ctx, `${item.name}`, x + 68, rowY - 8, width - 158, 10);
     ctx.fillStyle = "#52657b";
-    ctx.font = "400 13px Microsoft YaHei, Arial";
+    ctx.font = "400 12px Microsoft YaHei, Arial";
     fillFittedText(ctx, reportText(ctx, "report.itemCount", { count: item.count }), x + width - 74, rowY - 8, 58, 9);
 
-    ctx.font = "700 13px Microsoft YaHei, Arial";
+    ctx.font = "700 11px Microsoft YaHei, Arial";
     ctx.fillStyle = "#1f3148";
-    wrapText(ctx, item.orientationDetails[0] || "-", x + 18, rowY + 22, width - 36, 17, 4);
+    const orientationSummary = item.orientationDetails.length > 1
+      ? `${item.orientationDetails[0]} · ${reportText(ctx, "report.additionalOrientations", { count: item.orientationDetails.length - 1 })}`
+      : (item.orientationDetails[0] || "-");
+    wrapText(ctx, orientationSummary, x + 18, rowY + 18, width - 36, 14, rowHeight >= 78 ? 2 : 1);
 
-    rowY += 118;
+    if (itemIndex < visibleStats.length - 1) {
+      ctx.strokeStyle = "rgba(203,213,225,0.7)";
+      ctx.lineWidth = 1;
+      drawLine(ctx, { x: x + 18, y: rowY + rowHeight - 24 }, { x: x + width - 18, y: rowY + rowHeight - 24 });
+    }
+    rowY += rowHeight;
   });
+  if (hasOverflow) {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "700 12px Microsoft YaHei, Arial";
+    fillFittedText(ctx, reportText(ctx, "report.faceStatsOverflow", { count: stats.length - visibleStats.length }), x + 18, y + height - 20, width - 36, 9);
+  }
+}
+
+function drawBadgeLayout(ctx, requests, bounds, options = {}) {
+  if (!requests.length || bounds.width <= 0 || bounds.height <= 0) return null;
+  const fontSize = Number(options.fontSize || 13);
+  const colorById = new Map(requests.map((request) => [String(request.id), request.color || "#1f6fbe"]));
+  const colorByLabel = new Map(requests.map((request) => [String(request.label), request.color || "#1f6fbe"]));
+  ctx.font = `800 ${fontSize}px Microsoft YaHei, Arial`;
+  const groups = groupReportBadges(requests, {
+    id: "id",
+    layerKey: "layerKey",
+    label: "label",
+    quantity: "quantity",
+    anchor: "anchor",
+    bounds: "itemRect"
+  });
+  const layout = layoutReportBadges(groups, bounds, {
+    collisionPadding: 4,
+    edgePadding: 2,
+    candidateGap: 5,
+    minBadgeWidth: 36,
+    minBadgeHeight: 24,
+    measureText: (text) => ({
+      width: Math.min(Number(options.maxWidth || 108), ctx.measureText(text).width + 16),
+      height: 24
+    })
+  });
+
+  layout.badges.filter((badge) => badge.leader).forEach((badge) => {
+    const color = colorById.get(String(badge.representativeId)) || colorByLabel.get(String(badge.label)) || "#1f6fbe";
+    ctx.strokeStyle = hexToRgba(color, 0.82);
+    ctx.fillStyle = hexToRgba(color, 0.92);
+    ctx.lineWidth = 1.35;
+    drawLine(ctx, badge.leader.from, badge.leader.to);
+    ctx.beginPath();
+    ctx.arc(badge.leader.from.x, badge.leader.from.y, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  layout.badges.forEach((badge) => {
+    const color = colorById.get(String(badge.representativeId)) || colorByLabel.get(String(badge.label)) || "#1f6fbe";
+    const text = badge.count === 1 && /^R\d+$/i.test(badge.label) ? badge.label : badge.text;
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    roundRect(ctx, badge.rect.x, badge.rect.y, badge.rect.width, badge.rect.height, 8);
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba(color, 0.9);
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+    ctx.fillStyle = "#132033";
+    ctx.font = `800 ${fontSize}px Microsoft YaHei, Arial`;
+    ctx.textAlign = "center";
+    fillFittedText(ctx, text, badge.rect.x + badge.rect.width / 2, badge.rect.y + badge.rect.height / 2 + fontSize * 0.36, badge.rect.width - 8, Math.max(8, fontSize - 3));
+    ctx.textAlign = "left";
+  });
+  return layout;
 }
 
 function drawCargoLabel(ctx, item, x, y, width, height, options = {}) {
@@ -825,10 +1139,15 @@ function enrichPlacements(placements, catalog) {
       ? catalog[cargoIndex]
       : null;
     const cargo = cargoByIndex || byId.get(item.cargoId) || byDisplayName.get(item.name) || byName.get(item.name);
+    const sourceDimensions = [cargo?.lengthCm, cargo?.widthCm, cargo?.heightCm].map(Number);
+    const exactCargoVolumeM3 = sourceDimensions.every((value) => Number.isFinite(value) && value > 0)
+      ? sourceDimensions.reduce((product, value) => product * value, 1) * placementQuantity(item) / 1_000_000
+      : Number(item.volumeM3 || 0);
     return {
       ...item,
       cargoNo: cargo?.no || index + 1,
-      color: item.color || cargo?.color || REPORT_COLORS[index % REPORT_COLORS.length]
+      color: item.color || cargo?.color || REPORT_COLORS[index % REPORT_COLORS.length],
+      _reportCargoVolumeM3: exactCargoVolumeM3
     };
   });
 }
@@ -966,6 +1285,20 @@ function placementQuantity(item) {
   return Math.max(1, Math.floor(Number(item?.groupQuantity || 1)));
 }
 
+function reportCargoVolumeM3(placements) {
+  return (placements || []).reduce((sum, item) => {
+    const exact = Number(item?._reportCargoVolumeM3);
+    const fallback = Number(item?.volumeM3);
+    const volume = Number.isFinite(exact) && exact >= 0 ? exact : fallback;
+    return sum + (Number.isFinite(volume) && volume >= 0 ? volume : 0);
+  }, 0);
+}
+
+function isFlatRackReportContainer(container = {}) {
+  const descriptor = `${container.id || ""} ${container.name || ""} ${container.visualKind || ""} ${container.equipmentClass || ""}`.toLowerCase();
+  return Boolean(container.ignoreHeightLimit) || /fr|flat\s*rack|flatrack|flat|\u5e73\u677f/.test(descriptor);
+}
+
 function sumPlacementQuantity(placements) {
   return placements.reduce((sum, item) => sum + placementQuantity(item), 0);
 }
@@ -998,21 +1331,57 @@ async function createPdfFromCanvases(sourceCanvases) {
   const pageHeightPt = 841.89;
   const sourceWidth = sourceCanvases[0]?.width || PAGE_WIDTH;
   const sliceHeight = Math.floor(sourceWidth * (pageHeightPt / pageWidthPt));
+  const contentSliceHeight = sliceHeight - 44;
+  const slices = sourceCanvases.flatMap((sourceCanvas) => reportCanvasSlices(sourceCanvas, contentSliceHeight));
   const pages = [];
-  for (const sourceCanvas of sourceCanvases) {
-    for (let y = 0; y < sourceCanvas.height; y += sliceHeight) {
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = sourceWidth;
-      sliceCanvas.height = sliceHeight;
-      const ctx = sliceCanvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-      const drawHeight = Math.min(sliceHeight, sourceCanvas.height - y);
-      ctx.drawImage(sourceCanvas, 0, y, sourceCanvas.width, drawHeight, 0, 0, sourceWidth, drawHeight);
-      pages.push(base64ToBytes(sliceCanvas.toDataURL("image/jpeg", 0.92).split(",")[1]));
-    }
+  for (let index = 0; index < slices.length; index += 1) {
+    const slice = slices[index];
+    const sliceCanvas = document.createElement("canvas");
+    sliceCanvas.width = sourceWidth;
+    sliceCanvas.height = sliceHeight;
+    const ctx = sliceCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+    ctx.drawImage(slice.sourceCanvas, 0, slice.y, slice.sourceCanvas.width, slice.height, 0, 0, sourceWidth, slice.height);
+    ctx.strokeStyle = "#d3deea";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(48, sliceHeight - 38);
+    ctx.lineTo(sourceWidth - 48, sliceHeight - 38);
+    ctx.stroke();
+    ctx.fillStyle = "#64748b";
+    ctx.font = "400 14px Microsoft YaHei, Arial";
+    ctx.textAlign = "right";
+    ctx.fillText(translateUiText("report.pageNumber", slice.sourceCanvas.__reportLocale || "zh-CN", {
+      current: index + 1,
+      total: slices.length
+    }), sourceWidth - 48, sliceHeight - 16);
+    ctx.textAlign = "left";
+    pages.push(base64ToBytes(sliceCanvas.toDataURL("image/jpeg", 0.92).split(",")[1]));
   }
   return buildPdf(pages, sourceWidth, sliceHeight, pageWidthPt, pageHeightPt);
+}
+
+function reportCanvasSlices(sourceCanvas, contentSliceHeight) {
+  const sourceHeight = Number(sourceCanvas?.height || 0);
+  const breaks = [...new Set((sourceCanvas?.__reportPageBreaks || [])
+    .map((value) => Math.max(0, Math.min(sourceHeight, Number(value || 0)))))]
+    .sort((a, b) => a - b);
+  const slices = [];
+  let y = 0;
+  while (y < sourceHeight - 0.5) {
+    const hardEnd = Math.min(sourceHeight, y + contentSliceHeight);
+    let end = hardEnd;
+    if (hardEnd < sourceHeight - 0.5) {
+      const minimumUsefulEnd = y + contentSliceHeight * 0.42;
+      const safeBreak = breaks.filter((value) => value > minimumUsefulEnd && value <= hardEnd).pop();
+      if (Number.isFinite(safeBreak)) end = safeBreak;
+    }
+    if (!(end > y + 0.5)) end = hardEnd;
+    slices.push({ sourceCanvas, y, height: end - y });
+    y = end;
+  }
+  return slices;
 }
 
 function buildPdf(images, imageWidth, imageHeight, pageWidthPt, pageHeightPt) {

@@ -208,7 +208,34 @@ const uiText = {
   },
   "report.holdNo": { zh: "第 {index} 货舱", en: "Hold {index}" },
   "report.generatedAt": { zh: "生成时间：{value}", en: "Generated At: {value}" },
+  "report.pageNumber": { zh: "第 {current} / {total} 页", en: "Page {current} / {total}" },
   "report.cargoLayerCounts": { zh: "货物类别：{cargoTypes} 类 · 分层数量：{layers} 层", en: "Cargo Types: {cargoTypes} · Layer Count: {layers}" },
+  "report.summaryContainer": { zh: "箱型内尺寸", en: "Container Interior" },
+  "report.summaryCurrentHold": { zh: "当前货舱", en: "Current Hold" },
+  "report.summaryPiecesLayers": { zh: "{pieces} 件 / {layers} 层", en: "{pieces} pcs / {layers} layers" },
+  "report.summaryCargoVolume": { zh: "本舱货物体积", en: "Cargo Volume in Hold" },
+  "report.summaryFill": { zh: "本舱体积占用", en: "Hold Volume Used" },
+  "report.summaryTheoreticalFree": { zh: "理论空余体积", en: "Theoretical Free Volume" },
+  "report.summaryUsableFree": { zh: "几何净空体积", en: "Geometric Clearance" },
+  "report.remainingSpaceTitle": { zh: "剩余空间分块与几何净空", en: "Remaining-space Blocks and Geometric Clearance" },
+  "report.remainingSpaceText": {
+    zh: "理论空余按箱体减去实际货物体积计算；几何净空按含安全间距的占位包络扣除，并拆分为互不重叠的 R1、R2…长方体区块。",
+    en: "Theoretical free volume subtracts physical cargo volume. Geometric clearance subtracts occupied envelopes including safety gaps and is partitioned into non-overlapping cuboids R1, R2, and so on."
+  },
+  "report.remainingSpaceFlatRackText": {
+    zh: "平板架净空按“平台尺寸 × 用户装载高限”的假想棱柱计算，不代表围合空间、OOG/绑扎能力或装卸可达性。",
+    en: "Flat-rack clearance uses a notional platform-by-user-height-limit cuboid; it does not represent an enclosed volume, OOG/lashing capability, or handling access."
+  },
+  "report.metricUnavailable": { zh: "—", en: "—" },
+  "report.remainingTheoryMetric": { zh: "理论空余体积", en: "Theoretical Free" },
+  "report.remainingUsableMetric": { zh: "几何净空体积", en: "Geometric Clearance" },
+  "report.remainingEnvelopeMetric": { zh: "安全间距 / 包络差额", en: "Gap / Envelope Allowance" },
+  "report.remainingLargestMetric": { zh: "最大净空块占比", en: "Largest Block Share" },
+  "report.remainingIsoTitle": { zh: "三维净空分块图", en: "3D Clearance Block Map" },
+  "report.remainingIsoText": { zh: "显示体积最大的 {count} 个净空块；仅为几何分区，不代表最大可装块或装卸可达空间。", en: "Shows the {count} largest clearance blocks. This is a geometric partition, not a maximum loadable cuboid or a guarantee of handling access." },
+  "report.remainingBlockListTitle": { zh: "主要净空区块（长 × 宽 × 高）", en: "Major Clearance Blocks (L × W × H)" },
+  "report.remainingBlockCoordinates": { zh: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm", en: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm" },
+  "report.remainingOtherBlocks": { zh: "另有 {count} 个零散净空块，共 {volume} m³，已计入几何净空总量。", en: "Another {count} fragmented clearance blocks totaling {volume} m³ are included in geometric clearance." },
   "report.massBalanceTitle": { zh: "质量重心与偏载", en: "Center of Mass and Load Balance" },
   "report.massBalanceText": {
     zh: "按每件货物重量和货物中心计算整舱重心；红点为重心，十字为箱体几何中心，四区显示质量占比。",
@@ -231,12 +258,22 @@ const uiText = {
     zh: "第 {index} 层：说明当前底面、X/Y/Z 方向与长宽高对应关系",
     en: "Layer {index}: base face plus X/Y/Z mapping to length, width, and height"
   },
+  "report.faceStatsOverflow": {
+    zh: "另有 {count} 种编号 / 底面方向未在此栏展开；其编号、位置与颜色仍完整保留在视图和图例中。",
+    en: "Another {count} label / base-orientation entries are not expanded here; their labels, positions, and colors remain available in the view and legend."
+  },
+  "report.additionalOrientations": { zh: "另有 {count} 种 X/Y 轴向", en: "{count} additional X/Y orientation(s)" },
   "report.faceNameA": { zh: "长×宽", en: "L × W" },
   "report.faceNameB": { zh: "宽×高", en: "W × H" },
   "report.faceNameC": { zh: "长×高", en: "L × H" },
   "report.faceBottomLine": { zh: "{face}面 = {name}", en: "Face {face} = {name}" },
   "report.faceSizeLine": { zh: "{a}={aValue}cm / {b}={bValue}cm", en: "{a}={aValue}cm / {b}={bValue}cm" },
   "report.faceAxisLine": { zh: "当前 X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm", en: "Current X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm" },
+  "report.layerTitle": { zh: "第 {index} 层 / 共 {total} 层：z={z} cm", en: "Layer {index} of {total}: z={z} cm" },
+  "report.layerSubtitle": { zh: "高度范围 {bottom}–{top} cm；本层单独展开，编号与右侧摆放方向统计一一对应。", en: "Height range {bottom}–{top} cm. This layer is expanded separately; badge codes map directly to the orientation table on the right." },
+  "report.layerTopTitle": { zh: "本层俯视图：X × Y", en: "Layer Top View: X × Y" },
+  "report.layerIsoTitle": { zh: "本层剖析图：单层斜侧立体", en: "Layer Exploded View: Oblique 3D" },
+  "report.layerBadgeNote": { zh: "密集同编号合并为一个避让徽标，×N 为本视图真实件数；右侧提供底面与轴向摘要。", en: "Dense repeated codes are consolidated into a collision-free badge. ×N is the true count in this view; the right-hand panel provides a base-face and axis summary." },
   "report.footerNote": {
     zh: "说明：分层按货物底面 z 坐标分组；A=长×宽底、B=宽×高底、C=长×高底；大批量同规格货物可能以组合块显示，件数按真实数量统计。",
     en: "Note: Layers are grouped by cargo base z-coordinate; A=L x W base, B=W x H base, C=L x H base. Bulk same-size cargo may be shown as grouped blocks while counts remain true quantities."
