@@ -48,10 +48,14 @@ const MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS = 240;
 const MINIMUM_BOX_COLUMN_RESCUE_MAX_GROUPS = 12;
 const MINIMUM_BOX_COLUMN_RESCUE_MAX_BASELINE_BOXES = 3;
 const MINIMUM_BOX_COLUMN_ORIENTATION_BEAM = 24;
+const MINIMUM_BOX_COLUMN_LAFF_ORIENTATION_BEAM = 12;
 const MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP = 3;
 const MINIMUM_BOX_COLUMN_PACKING_BEAM = 64;
 const MINIMUM_BOX_COLUMN_PLACEMENTS_PER_STATE = 10;
 const MINIMUM_BOX_COLUMN_RESCUE_DEADLINE_MS = 8000;
+const MINIMUM_BOX_COLUMN_QUALITY_DEADLINE_MS = 1500;
+const MINIMUM_BOX_COLUMN_QUALITY_CANDIDATES = 6;
+const MINIMUM_BOX_COLUMN_PREFERRED_MAX_DEPTH = 6;
 const MIXED_PLAN_MAX_SOLVER_UNITS = 120;
 const MIXED_REPLACEMENT_CANDIDATE_LIMIT = 3;
 const MIXED_COMBINATION_BEAM_WIDTH = 8;
@@ -715,8 +719,6 @@ function buildMinimumBoxColumnRescue(container, allUnits, baseline) {
 
   const groups = minimumBoxColumnGroups(singleUnits);
   if (!groups.length || groups.length > MINIMUM_BOX_COLUMN_RESCUE_MAX_GROUPS) return null;
-  const orientationPlans = minimumBoxColumnOrientationPlans(container, groups);
-  if (!orientationPlans.length) return null;
   traceDecision({
     phase: "repair",
     level: "summary",
@@ -724,35 +726,127 @@ function buildMinimumBoxColumnRescue(container, allUnits, baseline) {
   });
 
   for (let targetBoxes = hardLowerBound; targetBoxes < baseline.boxes; targetBoxes += 1) {
-    for (let planIndex = 0; planIndex < orientationPlans.length; planIndex += 1) {
-      const orientationPlan = orientationPlans[planIndex];
-      if (Date.now() > deadline) return null;
+    const availableFootprint = Number(container.lengthCm || 0) * Number(container.widthCm || 0) * targetBoxes;
+    const { compactPlans, laffPlans } = minimumBoxColumnOrientationPlans(container, groups, availableFootprint);
+    if (!compactPlans.length) continue;
+    let bestCandidate = null;
+    let bestOrientationSignature = "";
+    let qualityDeadline = deadline;
+    const attemptedOrientationPlans = new Set();
+
+    for (let planIndex = 0; planIndex < compactPlans.length; planIndex += 1) {
+      if (minimumBoxDeadlineExceeded(deadline)) return bestCandidate;
+      const orientationPlan = compactPlans[planIndex];
+      attemptedOrientationPlans.add(minimumBoxOrientationPlanSignature(orientationPlan));
       traceProgress({
         phase: "repair",
         strategyId: "minimum-box-column-rescue",
-        stageFraction: Math.min(0.98, 0.9 + planIndex / Math.max(1, orientationPlans.length) * 0.08)
+        stageFraction: Math.min(0.96, 0.9 + planIndex / Math.max(1, compactPlans.length) * 0.06)
       });
-      const columns = buildMinimumBoxColumns(orientationPlan);
-      if (!columns.length || columns.length > MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS) continue;
-      const totalFootprint = columns.reduce((sum, column) => sum + minimumBoxColumnArea(column), 0);
-      const availableFootprint = Number(container.lengthCm || 0) * Number(container.widthCm || 0) * targetBoxes;
-      if (totalFootprint > availableFootprint + EPS) continue;
+      const candidate = minimumBoxCandidateForOrientationPlan(
+        container,
+        orientationPlan,
+        targetBoxes,
+        totalQuantity,
+        baseline.boxes,
+        deadline,
+        true
+      );
+      if (!candidate) continue;
+      bestCandidate = candidate;
+      bestOrientationSignature = minimumBoxOrientationPlanSignature(orientationPlan);
+      qualityDeadline = Math.min(deadline, Date.now() + MINIMUM_BOX_COLUMN_QUALITY_DEADLINE_MS);
+      break;
+    }
 
-      for (const orderedColumns of minimumBoxColumnOrders(columns)) {
-        for (const mode of ["fill", "spread", "best", "reverse-fill"]) {
-          if (minimumBoxDeadlineExceeded(deadline)) return null;
-          const packed = packMinimumBoxColumns2d(container, orderedColumns, targetBoxes, mode, deadline);
-          if (!packed) continue;
-          const candidate = buildMinimumBoxColumnPlan(container, packed, totalQuantity, baseline.boxes);
-          if (candidate) return candidate;
-        }
-        const beamPacked = packMinimumBoxColumns2dBeam(container, orderedColumns, targetBoxes, deadline);
-        if (beamPacked) {
-          const candidate = buildMinimumBoxColumnPlan(container, beamPacked, totalQuantity, baseline.boxes);
-          if (candidate) return candidate;
-        }
+    if (!bestCandidate) {
+      for (let planIndex = 0; planIndex < laffPlans.length; planIndex += 1) {
+        if (minimumBoxDeadlineExceeded(deadline)) return null;
+        const orientationPlan = laffPlans[planIndex];
+        const signature = minimumBoxOrientationPlanSignature(orientationPlan);
+        if (attemptedOrientationPlans.has(signature)) continue;
+        attemptedOrientationPlans.add(signature);
+        const candidate = minimumBoxCandidateForOrientationPlan(
+          container,
+          orientationPlan,
+          targetBoxes,
+          totalQuantity,
+          baseline.boxes,
+          deadline,
+          true
+        );
+        if (!candidate) continue;
+        bestCandidate = candidate;
+        bestOrientationSignature = signature;
+        qualityDeadline = Math.min(deadline, Date.now() + MINIMUM_BOX_COLUMN_QUALITY_DEADLINE_MS);
+        break;
       }
     }
+
+    if (!bestCandidate) continue;
+
+    let qualityCandidates = 0;
+    for (let planIndex = 0; planIndex < laffPlans.length; planIndex += 1) {
+      if (qualityCandidates >= MINIMUM_BOX_COLUMN_QUALITY_CANDIDATES
+        || minimumBoxDeadlineExceeded(qualityDeadline)) break;
+      const orientationPlan = laffPlans[planIndex];
+      if (minimumBoxOrientationPlanSignature(orientationPlan) === bestOrientationSignature) continue;
+      traceProgress({
+        phase: "repair",
+        strategyId: "minimum-box-column-rescue",
+        stageFraction: Math.min(0.99, 0.96 + planIndex / Math.max(1, laffPlans.length) * 0.03)
+      });
+      const candidate = minimumBoxCandidateForOrientationPlan(
+        container,
+        orientationPlan,
+        targetBoxes,
+        totalQuantity,
+        baseline.boxes,
+        qualityDeadline,
+        false
+      );
+      if (!candidate) continue;
+      qualityCandidates += 1;
+      if (compareMinimumBoxColumnLayouts(container, candidate, bestCandidate) < 0) {
+        bestCandidate = candidate;
+      }
+    }
+    return bestCandidate;
+  }
+  return null;
+}
+
+function minimumBoxCandidateForOrientationPlan(
+  container,
+  orientationPlan,
+  targetBoxes,
+  totalQuantity,
+  baselineBoxes,
+  deadline,
+  allowBeam
+) {
+  const columns = buildMinimumBoxColumns(orientationPlan);
+  if (!columns.length || columns.length > MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS) return null;
+  const availableFootprint = Number(container.lengthCm || 0) * Number(container.widthCm || 0) * targetBoxes;
+  const totalFootprint = columns.reduce((sum, column) => sum + minimumBoxColumnArea(column), 0);
+  if (totalFootprint > availableFootprint + EPS) return null;
+
+  for (const orderedColumns of minimumBoxColumnOrders(columns)) {
+    const modes = allowBeam
+      ? ["fill", "spread", "best", "reverse-fill"]
+      : ["spread", "best", "fill", "reverse-fill"];
+    for (const mode of modes) {
+      if (minimumBoxDeadlineExceeded(deadline)) return null;
+      const packed = packMinimumBoxColumns2d(container, orderedColumns, targetBoxes, mode, deadline);
+      if (!packed) continue;
+      const candidate = buildMinimumBoxColumnPlan(container, packed, totalQuantity, baselineBoxes);
+      if (candidate) return candidate;
+    }
+    if (!allowBeam || minimumBoxDeadlineExceeded(deadline)) continue;
+    const beamPacked = packMinimumBoxColumns2dBeam(container, orderedColumns, targetBoxes, deadline);
+    if (!beamPacked) continue;
+    const candidate = buildMinimumBoxColumnPlan(container, beamPacked, totalQuantity, baselineBoxes);
+    if (candidate) return candidate;
   }
   return null;
 }
@@ -783,22 +877,80 @@ function minimumBoxColumnGroups(units) {
     .sort((a, b) => Number(a.units[0]?.cargoIndex || 0) - Number(b.units[0]?.cargoIndex || 0));
 }
 
-function minimumBoxColumnOrientationPlans(container, groups) {
+function minimumBoxColumnOrientationPlans(container, groups, availableFootprint) {
+  const optionGroups = groups.map((group) => minimumBoxColumnOrientationOptions(container, group));
+  if (optionGroups.some((options) => !options.length)) return { compactPlans: [], laffPlans: [] };
+  const suffixMinimumFootprint = Array(optionGroups.length + 1).fill(0);
+  for (let index = optionGroups.length - 1; index >= 0; index -= 1) {
+    suffixMinimumFootprint[index] = suffixMinimumFootprint[index + 1]
+      + Math.min(...optionGroups[index].map((option) => option.totalFootprint));
+  }
+
   let beam = [{ selections: [], score: 0, columnCount: 0 }];
-  for (const group of groups) {
-    const options = minimumBoxColumnOrientationOptions(container, group);
-    if (!options.length) return [];
-    beam = beam.flatMap((entry) => options.map((option) => ({
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+    const group = groups[groupIndex];
+    const expanded = beam.flatMap((entry) => optionGroups[groupIndex].map((option) => ({
       selections: [...entry.selections, { group, option }],
       score: entry.score + option.totalFootprint,
-      columnCount: entry.columnCount + option.columnCount
-    }))).sort((a, b) => {
-      const scoreDiff = a.score - b.score;
-      if (Math.abs(scoreDiff) > EPS) return scoreDiff;
-      return a.columnCount - b.columnCount;
-    }).slice(0, MINIMUM_BOX_COLUMN_ORIENTATION_BEAM);
+      columnCount: entry.columnCount + option.columnCount,
+      laffPenalty: Number(entry.laffPenalty || 0) + option.laffPenalty,
+      deepColumnPieces: Number(entry.deepColumnPieces || 0) + option.deepColumnPieces,
+      maxColumnHeight: Math.max(Number(entry.maxColumnHeight || 0), option.maxColumnHeight)
+    }))).filter((entry) => (
+      entry.score + suffixMinimumFootprint[groupIndex + 1] <= availableFootprint + EPS
+    ));
+    if (!expanded.length) return { compactPlans: [], laffPlans: [] };
+    beam = minimumBoxDiverseOrientationBeam(expanded);
   }
-  return beam;
+
+  return {
+    compactPlans: [...beam]
+      .sort(compareMinimumBoxCompactOrientationPlans)
+      .slice(0, MINIMUM_BOX_COLUMN_ORIENTATION_BEAM),
+    laffPlans: [...beam]
+      .sort(compareMinimumBoxLaffOrientationPlans)
+      .slice(0, MINIMUM_BOX_COLUMN_LAFF_ORIENTATION_BEAM)
+  };
+}
+
+function minimumBoxDiverseOrientationBeam(entries) {
+  const selected = new Map();
+  const add = (entry) => selected.set(minimumBoxOrientationPlanSignature(entry), entry);
+  [...entries]
+    .sort(compareMinimumBoxCompactOrientationPlans)
+    .slice(0, MINIMUM_BOX_COLUMN_ORIENTATION_BEAM)
+    .forEach(add);
+  [...entries]
+    .sort(compareMinimumBoxLaffOrientationPlans)
+    .slice(0, MINIMUM_BOX_COLUMN_LAFF_ORIENTATION_BEAM)
+    .forEach(add);
+  return [...selected.values()];
+}
+
+function compareMinimumBoxCompactOrientationPlans(a, b) {
+  const scoreDiff = Number(a.score || 0) - Number(b.score || 0);
+  if (Math.abs(scoreDiff) > EPS) return scoreDiff;
+  const columnDiff = Number(a.columnCount || 0) - Number(b.columnCount || 0);
+  if (columnDiff) return columnDiff;
+  const laffDiff = Number(a.laffPenalty || 0) - Number(b.laffPenalty || 0);
+  if (Math.abs(laffDiff) > EPS) return laffDiff;
+  return minimumBoxOrientationPlanSignature(a).localeCompare(minimumBoxOrientationPlanSignature(b));
+}
+
+function compareMinimumBoxLaffOrientationPlans(a, b) {
+  const deepDiff = Number(a.deepColumnPieces || 0) - Number(b.deepColumnPieces || 0);
+  if (deepDiff) return deepDiff;
+  const laffDiff = Number(a.laffPenalty || 0) - Number(b.laffPenalty || 0);
+  if (Math.abs(laffDiff) > EPS) return laffDiff;
+  const heightDiff = Number(a.maxColumnHeight || 0) - Number(b.maxColumnHeight || 0);
+  if (Math.abs(heightDiff) > EPS) return heightDiff;
+  const scoreDiff = Number(a.score || 0) - Number(b.score || 0);
+  if (Math.abs(scoreDiff) > EPS) return scoreDiff;
+  return minimumBoxOrientationPlanSignature(a).localeCompare(minimumBoxOrientationPlanSignature(b));
+}
+
+function minimumBoxOrientationPlanSignature(plan) {
+  return (plan?.selections || []).map(({ option }) => option.orientationSignature).join("|");
 }
 
 function minimumBoxColumnOrientationOptions(container, group) {
@@ -816,28 +968,61 @@ function minimumBoxColumnOrientationOptions(container, group) {
   }
 
   const quantity = group.units.length;
-  return [...families.values()].map((family) => {
+  const familyList = [...families.values()];
+  const maximumPhysicalFootprint = Math.max(EPS, ...familyList.map((family) => (
+    Number(family.variants[0]?.physicalLengthCm || 0) * Number(family.variants[0]?.physicalWidthCm || 0)
+  )));
+  const options = familyList.flatMap((family) => {
     const dims = family.variants[0];
-    const capacity = sample.nonStack
+    const maximumCapacity = Math.min(quantity, sample.nonStack
       ? 1
-      : Math.max(1, Math.floor((heightLimit + EPS) / Math.max(EPS, Number(dims.heightCm || 0))));
-    const columnCount = Math.ceil(quantity / capacity);
-    const totalFootprint = columnCount * Number(dims.lengthCm || 0) * Number(dims.widthCm || 0);
-    return {
-      variants: family.variants,
-      capacity,
-      columnCount,
-      totalFootprint,
-      maxColumnHeight: Math.min(capacity, quantity) * Number(dims.heightCm || 0)
-    };
-  }).filter((option) => option.maxColumnHeight <= heightLimit + EPS)
-    .sort((a, b) => {
+      : Math.max(1, Math.floor((heightLimit + EPS) / Math.max(EPS, Number(dims.heightCm || 0)))));
+    const physicalFootprint = Number(dims.physicalLengthCm || 0) * Number(dims.physicalWidthCm || 0);
+    const capacities = [...new Set([
+      maximumCapacity,
+      Math.min(maximumCapacity, MINIMUM_BOX_COLUMN_PREFERRED_MAX_DEPTH)
+    ])];
+    return capacities.map((capacity) => {
+      const columnCount = Math.ceil(quantity / capacity);
+      const totalFootprint = columnCount * Number(dims.lengthCm || 0) * Number(dims.widthCm || 0);
+      const fullColumns = Math.floor(quantity / capacity);
+      const remainder = quantity % capacity;
+      const deepColumnPieces = capacity > MINIMUM_BOX_COLUMN_PREFERRED_MAX_DEPTH
+        ? fullColumns * capacity + (remainder > MINIMUM_BOX_COLUMN_PREFERRED_MAX_DEPTH ? remainder : 0)
+        : 0;
+      return {
+        variants: family.variants,
+        capacity,
+        columnCount,
+        totalFootprint,
+        physicalFootprint,
+        laffPenalty: quantity * (1 - Math.min(1, physicalFootprint / maximumPhysicalFootprint)),
+        deepColumnPieces,
+        maxColumnHeight: Math.min(capacity, quantity) * Number(dims.heightCm || 0),
+        orientationSignature: `${round3(dims.lengthCm)}/${round3(dims.widthCm)}/${round3(dims.heightCm)}/c${capacity}`
+      };
+    });
+  }).filter((option) => option.maxColumnHeight <= heightLimit + EPS);
+  const selected = new Map();
+  const add = (option) => selected.set(option.orientationSignature, option);
+  [...options].sort((a, b) => {
       const footprintDiff = a.totalFootprint - b.totalFootprint;
       if (Math.abs(footprintDiff) > EPS) return footprintDiff;
       if (a.columnCount !== b.columnCount) return a.columnCount - b.columnCount;
       return a.maxColumnHeight - b.maxColumnHeight;
     })
-    .slice(0, MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP);
+    .slice(0, MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP)
+    .forEach(add);
+  [...options].sort((a, b) => {
+    if (a.deepColumnPieces !== b.deepColumnPieces) return a.deepColumnPieces - b.deepColumnPieces;
+    const laffDiff = a.laffPenalty - b.laffPenalty;
+    if (Math.abs(laffDiff) > EPS) return laffDiff;
+    if (Math.abs(a.maxColumnHeight - b.maxColumnHeight) > EPS) return a.maxColumnHeight - b.maxColumnHeight;
+    return a.totalFootprint - b.totalFootprint;
+  })
+    .slice(0, MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP)
+    .forEach(add);
+  return [...selected.values()];
 }
 
 function buildMinimumBoxColumns(orientationPlan) {
@@ -1257,6 +1442,20 @@ function buildMinimumBoxColumnPlan(container, bins, totalQuantity, baselineBoxes
   const unitKeys = packedBoxes.flatMap((box) => box.placed.map((unit) => unit.unitKey));
   if (placedQuantity !== totalQuantity || new Set(unitKeys).size !== totalQuantity) return null;
 
+  const layoutMetrics = minimumBoxColumnLayoutMetrics(container, { packedBoxes });
+  packedBoxes.forEach((box, index) => {
+    const boxMetrics = layoutMetrics.boxes[index];
+    box.strategySummary = {
+      ...(box.strategySummary || {}),
+      minimumBoxFaceDownRatio: round(boxMetrics.faceDownRatio),
+      minimumBoxFloorPhysicalCoverage: round(boxMetrics.floorCoverage),
+      minimumBoxDeepColumnPieceRatio: round(boxMetrics.deepColumnPieceRatio),
+      minimumBoxSkylineCv: round(boxMetrics.skylineCv),
+      minimumBoxMaxTopRatio: round(boxMetrics.maxTopRatio),
+      minimumBoxMaxColumnDepth: boxMetrics.maxColumnDepth
+    };
+  });
+
   for (let index = 0; index < packedBoxes.length; index += 1) {
     packedBoxes[index].unplaced = packedBoxes
       .slice(index + 1)
@@ -1272,6 +1471,118 @@ function buildMinimumBoxColumnPlan(container, bins, totalQuantity, baselineBoxes
     fatalOversize: false,
     balanceBlocked: false
   };
+}
+
+function compareMinimumBoxColumnLayouts(container, a, b) {
+  const metricsA = minimumBoxColumnLayoutMetrics(container, a);
+  const metricsB = minimumBoxColumnLayoutMetrics(container, b);
+  const tupleA = minimumBoxColumnLayoutTuple(metricsA);
+  const tupleB = minimumBoxColumnLayoutTuple(metricsB);
+  const tupleDiff = compareMinimumBoxScores(tupleA, tupleB);
+  if (tupleDiff) return tupleDiff;
+  return minimumBoxColumnPlanSignature(a).localeCompare(minimumBoxColumnPlanSignature(b));
+}
+
+function minimumBoxColumnLayoutTuple(metrics) {
+  return [
+    metrics.maxBalanceRank,
+    metrics.balanceScore,
+    metrics.maxDeepColumnPieceRatio,
+    -Math.floor((metrics.minFloorCoverage + EPS) / 0.02),
+    metrics.maxTopRatio,
+    metrics.maxSkylineCv,
+    metrics.laffPenalty
+  ];
+}
+
+function minimumBoxColumnLayoutMetrics(container, plan) {
+  const boxes = (plan?.packedBoxes || []).map((box) => minimumBoxColumnBoxMetrics(container, box));
+  const totalPieces = Math.max(1, boxes.reduce((sum, box) => sum + box.pieceCount, 0));
+  const faceDownRatio = boxes.reduce((sum, box) => sum + box.faceDownRatio * box.pieceCount, 0) / totalPieces;
+  return {
+    boxes,
+    maxBalanceRank: boxes.reduce((max, box) => Math.max(max, box.balanceRank), 0),
+    balanceScore: boxes.reduce((sum, box) => sum + box.balanceScore, 0),
+    laffPenalty: 1 - faceDownRatio,
+    minFloorCoverage: boxes.length ? Math.min(...boxes.map((box) => box.floorCoverage)) : 0,
+    maxDeepColumnPieceRatio: boxes.length ? Math.max(...boxes.map((box) => box.deepColumnPieceRatio)) : 1,
+    maxSkylineCv: boxes.length ? Math.max(...boxes.map((box) => box.skylineCv)) : 1,
+    maxTopRatio: boxes.length ? Math.max(...boxes.map((box) => box.maxTopRatio)) : 1
+  };
+}
+
+function minimumBoxColumnBoxMetrics(container, box) {
+  const placed = Array.isArray(box?.placed) ? box.placed : [];
+  const floorArea = Math.max(EPS, Number(container.lengthCm || 0) * Number(container.widthCm || 0));
+  const heightLimit = Math.max(EPS, containerHeightLimit(container));
+  const columns = new Map();
+  let floorPhysicalArea = 0;
+  let faceDownRatioSum = 0;
+
+  for (const unit of placed) {
+    const physicalLength = Math.max(0, Number(unit.physicalLengthCm ?? unit.lengthCm ?? 0));
+    const physicalWidth = Math.max(0, Number(unit.physicalWidthCm ?? unit.widthCm ?? 0));
+    const physicalHeight = Math.max(0, Number(unit.physicalHeightCm ?? unit.heightCm ?? 0));
+    const physicalArea = physicalLength * physicalWidth;
+    if (Number(unit.z || 0) <= EPS) floorPhysicalArea += physicalArea;
+
+    const feasibleOrientations = generateOrientations(unit)
+      .filter((dims) => fitsContainerDims(container, dims));
+    const maximumFaceArea = Math.max(EPS, ...feasibleOrientations.map((dims) => (
+      Number(dims.physicalLengthCm || 0) * Number(dims.physicalWidthCm || 0)
+    )));
+    faceDownRatioSum += Math.min(1, physicalArea / maximumFaceArea);
+
+    const key = [
+      round3(Number(unit.x || 0)),
+      round3(Number(unit.y || 0)),
+      round3(physicalLength),
+      round3(physicalWidth)
+    ].join("/");
+    const column = columns.get(key) || { depth: 0, area: physicalArea, top: 0 };
+    column.depth += 1;
+    column.top = Math.max(column.top, Number(unit.z || 0) + physicalHeight);
+    columns.set(key, column);
+  }
+
+  const columnList = [...columns.values()];
+  const skylineArea = Math.max(EPS, columnList.reduce((sum, column) => sum + column.area, 0));
+  const skylineMean = columnList.reduce((sum, column) => sum + column.top * column.area, 0) / skylineArea;
+  const skylineVariance = columnList.reduce((sum, column) => (
+    sum + Math.pow(column.top - skylineMean, 2) * column.area
+  ), 0) / skylineArea;
+  const deepColumnPieces = columnList
+    .filter((column) => column.depth > MINIMUM_BOX_COLUMN_PREFERRED_MAX_DEPTH)
+    .reduce((sum, column) => sum + column.depth, 0);
+  const severity = String(box?.balanceValidation?.severity || "");
+  const balanceRank = severity === "red" ? 2 : severity === "yellow" ? 1 : 0;
+
+  return {
+    pieceCount: placed.length,
+    faceDownRatio: placed.length ? faceDownRatioSum / placed.length : 0,
+    floorCoverage: Math.min(1, floorPhysicalArea / floorArea),
+    deepColumnPieceRatio: placed.length ? deepColumnPieces / placed.length : 0,
+    skylineCv: skylineMean > EPS ? Math.sqrt(Math.max(0, skylineVariance)) / skylineMean : 0,
+    maxTopRatio: Math.min(1, maxTop(placed) / heightLimit),
+    maxColumnDepth: columnList.length ? Math.max(...columnList.map((column) => column.depth)) : 0,
+    balanceRank,
+    balanceScore: Number(box?.balanceValidation?.score || 0)
+  };
+}
+
+function minimumBoxColumnPlanSignature(plan) {
+  return (plan?.packedBoxes || []).map((box) => (box.placed || [])
+    .map((unit) => [
+      String(unit.unitKey || ""),
+      round3(Number(unit.x || 0)),
+      round3(Number(unit.y || 0)),
+      round3(Number(unit.z || 0)),
+      round3(Number(unit.lengthCm || 0)),
+      round3(Number(unit.widthCm || 0)),
+      round3(Number(unit.heightCm || 0))
+    ].join("/"))
+    .sort()
+    .join(";")).join("||");
 }
 
 function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = {}) {

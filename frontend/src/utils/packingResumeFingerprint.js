@@ -1,4 +1,4 @@
-const PACKING_RESUME_FINGERPRINT_VERSION = 4;
+const PACKING_RESUME_FINGERPRINT_VERSION = 5;
 
 export function packingResumeFingerprint(container = {}, request = {}) {
   const canonical = stableFingerprintValue({

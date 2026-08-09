@@ -268,6 +268,28 @@ const furnitureEvaluation = calculate({
   nonStackSupportRatioPercent: 90
 }).evaluations[0];
 
+const furniture20Hq = defaultContainers.find((container) => String(container.id).toLowerCase() === "20hq");
+const furniture40Gp = defaultContainers.find((container) => String(container.id).toLowerCase() === "40gp");
+assert.ok(furniture20Hq, "the furniture regression needs the production 20HQ profile");
+assert.ok(furniture40Gp, "the furniture regression needs the production 40GP profile");
+
+function calculateFurnitureEvaluation(container) {
+  const run = calculate({
+    cargos: furnitureCargos,
+    containers: [container],
+    utilizationPercent: 98,
+    globalGapCm: 2,
+    supportRatioPercent: 80,
+    nonStackSupportRatioPercent: 90
+  });
+  return run.evaluations.find((evaluation) => evaluation.container.id === container.id);
+}
+
+const furniture20HqEvaluation = calculateFurnitureEvaluation(furniture20Hq);
+const furniture40GpEvaluation = calculateFurnitureEvaluation(furniture40Gp);
+assert.ok(furniture20HqEvaluation, "the production 20HQ profile must be evaluated");
+assert.ok(furniture40GpEvaluation, "the production 40GP profile must be evaluated");
+
 function furniturePhysicalRect(placement) {
   return {
     x: Number(placement.physicalXCm ?? placement.xCm ?? 0),
@@ -302,6 +324,125 @@ function furnitureNonStackBearingViolations(evaluation) {
     }
   }
   return violations;
+}
+
+function furnitureUnionRectArea(rects) {
+  const epsilon = 1e-6;
+  const xs = [...new Set(rects.flatMap((rect) => [rect.x, rect.x + rect.length]))].sort((a, b) => a - b);
+  let area = 0;
+  for (let index = 0; index < xs.length - 1; index += 1) {
+    const x1 = xs[index];
+    const x2 = xs[index + 1];
+    if (x2 - x1 <= epsilon) continue;
+    const spans = rects
+      .filter((rect) => rect.x < x2 - epsilon && rect.x + rect.length > x1 + epsilon)
+      .map((rect) => [rect.y, rect.y + rect.width])
+      .sort((a, b) => a[0] - b[0]);
+    let spanStart = null;
+    let spanEnd = 0;
+    let covered = 0;
+    for (const [start, end] of spans) {
+      if (spanStart === null) {
+        spanStart = start;
+        spanEnd = end;
+      } else if (start <= spanEnd + epsilon) {
+        spanEnd = Math.max(spanEnd, end);
+      } else {
+        covered += spanEnd - spanStart;
+        spanStart = start;
+        spanEnd = end;
+      }
+    }
+    if (spanStart !== null) covered += spanEnd - spanStart;
+    area += (x2 - x1) * covered;
+  }
+  return area;
+}
+
+function furnitureBoxLayoutQuality(container, box, deepColumnDepth = 6) {
+  const epsilon = 1e-6;
+  const rects = (box.placed || []).map(furniturePhysicalRect);
+  const floorRects = rects.filter((rect) => rect.z <= epsilon);
+  const floorArea = Number(container.lengthCm) * Number(container.widthCm);
+  const columns = new Map();
+  for (const rect of rects) {
+    const key = [rect.x, rect.y, rect.length, rect.width]
+      .map((value) => Math.round(value * 1000) / 1000)
+      .join("/");
+    columns.set(key, (columns.get(key) || 0) + 1);
+  }
+  const columnDepths = [...columns.values()];
+  const deepColumnPieces = columnDepths
+    .filter((depth) => depth > deepColumnDepth)
+    .reduce((sum, depth) => sum + depth, 0);
+
+  const xs = [...new Set(rects.flatMap((rect) => [rect.x, rect.x + rect.length]))].sort((a, b) => a - b);
+  const ys = [...new Set(rects.flatMap((rect) => [rect.y, rect.y + rect.width]))].sort((a, b) => a - b);
+  let projectedArea = 0;
+  let heightMoment = 0;
+  let heightSquaredMoment = 0;
+  for (let xIndex = 0; xIndex < xs.length - 1; xIndex += 1) {
+    const x1 = xs[xIndex];
+    const x2 = xs[xIndex + 1];
+    const sampleX = (x1 + x2) / 2;
+    for (let yIndex = 0; yIndex < ys.length - 1; yIndex += 1) {
+      const y1 = ys[yIndex];
+      const y2 = ys[yIndex + 1];
+      const sampleY = (y1 + y2) / 2;
+      const covering = rects.filter((rect) =>
+        sampleX > rect.x - epsilon
+        && sampleX < rect.x + rect.length + epsilon
+        && sampleY > rect.y - epsilon
+        && sampleY < rect.y + rect.width + epsilon
+      );
+      if (!covering.length) continue;
+      const cellArea = (x2 - x1) * (y2 - y1);
+      const top = Math.max(...covering.map((rect) => rect.z + rect.height));
+      projectedArea += cellArea;
+      heightMoment += cellArea * top;
+      heightSquaredMoment += cellArea * top * top;
+    }
+  }
+  const meanHeight = projectedArea > epsilon ? heightMoment / projectedArea : 0;
+  const skylineVariance = projectedArea > epsilon
+    ? Math.max(0, heightSquaredMoment / projectedArea - meanHeight * meanHeight)
+    : 0;
+  const maxTop = rects.length ? Math.max(...rects.map((rect) => rect.z + rect.height)) : 0;
+  const heightLimit = Number(container.heightLimitCm || container.heightCm || 0);
+  return {
+    floorCoverageRatio: floorArea > epsilon ? furnitureUnionRectArea(floorRects) / floorArea : 0,
+    deepColumnPieceRatio: rects.length ? deepColumnPieces / rects.length : 0,
+    maxColumnDepth: columnDepths.length ? Math.max(...columnDepths) : 0,
+    skylineCv: meanHeight > epsilon ? Math.sqrt(skylineVariance) / meanHeight : 0,
+    maxTopRatio: heightLimit > epsilon ? maxTop / heightLimit : 0
+  };
+}
+
+function assertFurnitureSolution(evaluation, expectedBoxes, label) {
+  assert.equal(evaluation.fitStatus, "fit", `${label} must fit all furniture cargo`);
+  assert.equal(evaluation.boxes, expectedBoxes, `${label} must use the minimum known container count`);
+  assert.equal(evaluation.packedBoxes.length, expectedBoxes, `${label} must retain coordinates for every container`);
+  assert.equal(evaluation.estimatedBoxes, false, `${label} must be solved rather than volume-estimated`);
+  const placements = physicalPlacements(evaluation);
+  assert.equal(placements.length, 185, `${label} must retain all 185 physical cargo items`);
+  assert.equal(new Set(placements.map((placement) => placement.unitKey)).size, 185, `${label} unit keys must stay unique`);
+  assert.deepEqual(
+    Object.fromEntries(furnitureCargos.map((cargo) => [
+      cargo.id,
+      placements.filter((placement) => placement.cargoId === cargo.id).length
+    ])),
+    Object.fromEntries(furnitureCargos.map((cargo) => [cargo.id, cargo.quantity])),
+    `${label} must preserve every source cargo quantity`
+  );
+  assert.equal(evaluation.geometryFeasible, true, `${label} geometry must remain feasible`);
+  assert.equal(evaluation.complianceFeasible, true, `${label} placement rules must remain feasible`);
+  assert.equal(evaluation.placementConstraintsBlocked, false, `${label} must not bypass placement rules`);
+  assert.equal(evaluation.balanceBlocked, false, `${label} must not fail balance validation`);
+  assert.ok(
+    evaluation.packedBoxes.every((box) => box.balanceValidation?.severity !== "red"),
+    `${label} must not contain a red balance validation`
+  );
+  assert.deepEqual(furnitureNonStackBearingViolations(evaluation), [], `${label} must not load above an SF-2S sofa`);
 }
 
 assert.equal(furnitureEvaluation.fitStatus, "fit");
@@ -344,4 +485,32 @@ assert.equal(
   "all ten non-stackable SF-2S sofas must be retained"
 );
 
-console.log("Packing large-workload timeout, grouping, two-20GP furniture safety, serialized mixed-plan, and resume regression passed.");
+assertFurnitureSolution(furniture20HqEvaluation, 2, "production 20HQ furniture plan");
+assertFurnitureSolution(furniture40GpEvaluation, 1, "production 40GP furniture plan");
+
+const furniture20HqQuality = furniture20HqEvaluation.packedBoxes
+  .map((box) => furnitureBoxLayoutQuality(furniture20Hq, box));
+assert.equal(furniture20HqQuality.length, 2);
+assert.ok(
+  furniture20HqQuality.every((quality) => quality.floorCoverageRatio >= 0.64),
+  "both 20HQ layouts must keep a useful physical floor deck"
+);
+assert.ok(
+  furniture20HqQuality.every((quality) => quality.maxColumnDepth <= 9),
+  "the two-box 20HQ result must not trade its box-count win for an obvious ten-layer cargo forest"
+);
+assert.ok(
+  Math.max(...furniture20HqQuality.map((quality) => quality.deepColumnPieceRatio)) <= 0.5,
+  "deep exact-footprint columns must not dominate either 20HQ layout"
+);
+
+const furniture40GpQuality = furniture40GpEvaluation.packedBoxes
+  .map((box) => furnitureBoxLayoutQuality(furniture40Gp, box));
+assert.equal(furniture40GpQuality.length, 1);
+assert.ok(furniture40GpQuality[0].floorCoverageRatio >= 0.75, "the one-box 40GP win must retain a broad floor deck");
+assert.ok(furniture40GpQuality[0].maxColumnDepth <= 8, "the one-box 40GP win must not collapse into extreme columns");
+assert.ok(furniture40GpQuality[0].deepColumnPieceRatio <= 0.2, "deep columns must remain exceptional in the 40GP layout");
+assert.ok(furniture40GpQuality[0].skylineCv <= 0.25, "the one-box 40GP skyline must remain reasonably level");
+assert.ok(furniture40GpQuality[0].maxTopRatio <= 1, "the one-box 40GP layout must stay below its height limit");
+
+console.log("Packing large-workload timeout, grouping, minimum-box furniture quality, serialized mixed-plan, and resume regression passed.");

@@ -57,6 +57,156 @@ function physicalRect(placement) {
   };
 }
 
+function unionRectArea(rects) {
+  const xs = [...new Set(rects.flatMap((rect) => [rect.x, rect.x + rect.length]))].sort((a, b) => a - b);
+  let area = 0;
+  for (let index = 0; index < xs.length - 1; index += 1) {
+    const x1 = xs[index];
+    const x2 = xs[index + 1];
+    if (x2 - x1 <= EPSILON) continue;
+    const spans = rects
+      .filter((rect) => rect.x < x2 - EPSILON && rect.x + rect.length > x1 + EPSILON)
+      .map((rect) => [rect.y, rect.y + rect.width])
+      .sort((a, b) => a[0] - b[0]);
+    let start = null;
+    let end = 0;
+    let covered = 0;
+    for (const [spanStart, spanEnd] of spans) {
+      if (start === null) {
+        start = spanStart;
+        end = spanEnd;
+      } else if (spanStart <= end + EPSILON) {
+        end = Math.max(end, spanEnd);
+      } else {
+        covered += end - start;
+        start = spanStart;
+        end = spanEnd;
+      }
+    }
+    if (start !== null) covered += end - start;
+    area += (x2 - x1) * covered;
+  }
+  return area;
+}
+
+function layoutQualityMetrics(container, placements, deepColumnDepth = 6) {
+  const rects = placements.map(physicalRect);
+  const floorArea = Number(container.lengthCm) * Number(container.widthCm);
+  const floorRects = rects.filter((rect) => rect.z <= EPSILON);
+  const columns = new Map();
+  for (const rect of rects) {
+    const key = [rect.x, rect.y, rect.length, rect.width]
+      .map((value) => Math.round(value * 1000) / 1000)
+      .join("/");
+    columns.set(key, (columns.get(key) || 0) + 1);
+  }
+  const columnDepths = [...columns.values()];
+  const deepColumnPieces = columnDepths
+    .filter((depth) => depth > deepColumnDepth)
+    .reduce((sum, depth) => sum + depth, 0);
+
+  const xs = [...new Set(rects.flatMap((rect) => [rect.x, rect.x + rect.length]))].sort((a, b) => a - b);
+  const ys = [...new Set(rects.flatMap((rect) => [rect.y, rect.y + rect.width]))].sort((a, b) => a - b);
+  let projectedArea = 0;
+  let heightMoment = 0;
+  let heightSquaredMoment = 0;
+  for (let xIndex = 0; xIndex < xs.length - 1; xIndex += 1) {
+    const x1 = xs[xIndex];
+    const x2 = xs[xIndex + 1];
+    const sampleX = (x1 + x2) / 2;
+    for (let yIndex = 0; yIndex < ys.length - 1; yIndex += 1) {
+      const y1 = ys[yIndex];
+      const y2 = ys[yIndex + 1];
+      const sampleY = (y1 + y2) / 2;
+      const covering = rects.filter((rect) =>
+        sampleX > rect.x - EPSILON
+        && sampleX < rect.x + rect.length + EPSILON
+        && sampleY > rect.y - EPSILON
+        && sampleY < rect.y + rect.width + EPSILON
+      );
+      if (!covering.length) continue;
+      const cellArea = (x2 - x1) * (y2 - y1);
+      const top = Math.max(...covering.map((rect) => rect.z + rect.height));
+      projectedArea += cellArea;
+      heightMoment += cellArea * top;
+      heightSquaredMoment += cellArea * top * top;
+    }
+  }
+  const meanSkylineHeight = projectedArea > EPSILON ? heightMoment / projectedArea : 0;
+  const skylineVariance = projectedArea > EPSILON
+    ? Math.max(0, heightSquaredMoment / projectedArea - meanSkylineHeight * meanSkylineHeight)
+    : 0;
+  const heightLimit = Number(container.heightLimitCm || container.heightCm || 0);
+  const maxTop = rects.length ? Math.max(...rects.map((rect) => rect.z + rect.height)) : 0;
+  return {
+    floorCoverageRatio: floorArea > EPSILON ? unionRectArea(floorRects) / floorArea : 0,
+    deepColumnPieceRatio: placements.length ? deepColumnPieces / placements.length : 0,
+    maxColumnDepth: columnDepths.length ? Math.max(...columnDepths) : 0,
+    skylineCv: meanSkylineHeight > EPSILON ? Math.sqrt(skylineVariance) / meanSkylineHeight : 0,
+    maxTopRatio: heightLimit > EPSILON ? maxTop / heightLimit : 0
+  };
+}
+
+function layoutQualityTuple(metrics) {
+  const floorCoverageBucket = Math.floor((metrics.floorCoverageRatio + EPSILON) / 0.02);
+  return [
+    metrics.deepColumnPieceRatio,
+    -floorCoverageBucket,
+    metrics.maxTopRatio,
+    metrics.skylineCv,
+    -metrics.floorCoverageRatio
+  ];
+}
+
+function layoutCandidateTuple(boxCount, metrics) {
+  return [Number(boxCount || 0), ...layoutQualityTuple(metrics)];
+}
+
+function compareQualityTuples(a, b) {
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const diff = Number(a[index] || 0) - Number(b[index] || 0);
+    if (Math.abs(diff) > EPSILON) return diff;
+  }
+  return 0;
+}
+
+function syntheticColumnLayout(depths) {
+  return depths.flatMap((depth, index) => {
+    const x = (index % 4) * 50;
+    const y = Math.floor(index / 4) * 50;
+    return Array.from({ length: depth }, (_, level) => ({
+      physicalXCm: x,
+      physicalYCm: y,
+      physicalZCm: level * 10,
+      physicalLengthCm: 50,
+      physicalWidthCm: 50,
+      physicalHeightCm: 10
+    }));
+  });
+}
+
+const qualityFixtureContainer = makeContainer("same-box-layout-quality", 200, 200, 100);
+const flatQualityLayout = syntheticColumnLayout(Array(16).fill(2));
+const forestQualityLayout = syntheticColumnLayout([8, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 8]);
+const flatQualityMetrics = layoutQualityMetrics(qualityFixtureContainer, flatQualityLayout);
+const forestQualityMetrics = layoutQualityMetrics(qualityFixtureContainer, forestQualityLayout);
+assert.equal(flatQualityLayout.length, forestQualityLayout.length, "quality fixture layouts must contain the same cargo quantity");
+assert.equal(flatQualityMetrics.floorCoverageRatio, 1);
+assert.equal(forestQualityMetrics.floorCoverageRatio, 1);
+assert.equal(flatQualityMetrics.maxColumnDepth, 2);
+assert.equal(forestQualityMetrics.maxColumnDepth, 8);
+assert.equal(flatQualityMetrics.deepColumnPieceRatio, 0);
+assert.equal(forestQualityMetrics.deepColumnPieceRatio, 0.5);
+assert.ok(flatQualityMetrics.skylineCv < forestQualityMetrics.skylineCv);
+assert.ok(
+  compareQualityTuples(layoutCandidateTuple(1, flatQualityMetrics), layoutCandidateTuple(1, forestQualityMetrics)) < 0,
+  "equal-box layouts must prefer a flat skyline over a deep-column forest"
+);
+assert.ok(
+  compareQualityTuples(layoutCandidateTuple(1, forestQualityMetrics), layoutCandidateTuple(2, flatQualityMetrics)) < 0,
+  "layout quality must remain a tie-breaker and never override a lower container count"
+);
+
 function overlapsOnDeck(a, b) {
   return Math.min(a.x + a.length, b.x + b.length) - Math.max(a.x, b.x) > EPSILON
     && Math.min(a.y + a.width, b.y + b.width) - Math.max(a.y, b.y) > EPSILON;
