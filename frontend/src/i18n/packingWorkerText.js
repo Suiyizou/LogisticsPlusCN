@@ -1,9 +1,15 @@
 export const PACKING_WORKER_TEXT = {
   nonStackFoundationStrategyName: "LAFF 不可重压基础优先",
   coordinateReuseStrategyName: "复用完整箱坐标",
+  minimumBoxRescueStrategyName: "最少箱数柱式联合救援",
+  recommendationPipeline: "所有最终候选同时通过尺寸、支撑、载重和偏载门槛后，先按箱数最少排序；箱数相同时再比较综合参考运价和利用率。",
   strategyPipeline: "每个箱型先保留含不可重压基础回填的高利用率基线，再尝试跨柜后放方案；后放方案只有在不增加货柜数时才采用",
   layerPipeline: "每个 LAFF 层固定目标层顶，按 P0 扩展层底、P1 补齐目标顶面、P2 层内补高的硬顺序穷尽 Extreme Point 候选后才开启下一层"
 };
+
+export function currentPlanFreightText(freight) {
+  return `当前方案综合参考运价 ${freight}`;
+}
 
 export function fixedLayerTierName(tier) {
   if (tier === 0) return "P0 扩展层底覆盖";

@@ -459,7 +459,7 @@ export const messages = {
       customerSummaryTitle: "货舱结果汇总",
       customerHoldText: "正在汇总 {scope} 的第 {hold} 货舱结果：{detail}",
       customerBoxProgressText: "当前正在进行 {scope} 的第 {hold} 个货舱装箱计算，剩余 {remaining} 个搜索单元。",
-      customerRecommendationText: "正在汇总当前搜索候选；全部约束合规后按综合参考运价排序。",
+      customerRecommendationText: "正在汇总当前搜索候选；全部约束合规后优先按箱数最少排序。",
       customerPrepareTitle: "装箱数据准备",
       customerPrepareText: "正在整理货物、箱型和装箱规则，准备开始本机计算。",
       customerDetailFallback: "持续计算中",
@@ -501,7 +501,7 @@ export const messages = {
         },
         recommendation: {
           label: "方案排序",
-          description: "全部约束合规后，按综合参考运价、箱数和利用率排序"
+          description: "全部约束合规后，先按箱数最少，再按综合参考运价和利用率排序"
         }
       }
     },
@@ -994,7 +994,7 @@ export const messages = {
       customerSummaryTitle: "Hold Result Summary",
       customerHoldText: "Summarizing hold {hold} for {scope}: {detail}",
       customerBoxProgressText: "Calculating hold {hold} for {scope}; {remaining} search units remain.",
-      customerRecommendationText: "Summarizing current search candidates and ranking by composite reference freight after all constraints pass.",
+      customerRecommendationText: "Summarizing current search candidates and ranking fewer containers first after all constraints pass.",
       customerPrepareTitle: "Packing Data Preparation",
       customerPrepareText: "Preparing cargo, container types, and packing rules before local calculation starts.",
       customerDetailFallback: "Calculation is still running",
@@ -1036,7 +1036,7 @@ export const messages = {
         },
         recommendation: {
           label: "Plan Ranking",
-          description: "After all constraints pass, rank by composite reference freight, container count, and utilization"
+          description: "After all constraints pass, rank by fewer containers first, then composite reference freight and utilization"
         }
       }
     },

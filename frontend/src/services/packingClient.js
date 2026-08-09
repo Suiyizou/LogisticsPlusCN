@@ -15,6 +15,9 @@ const HARD_BUDGET_MS = {
   medium: 3 * 60 * 1000,
   heavy: 5 * 60 * 1000
 };
+const MINIMUM_BOX_RESCUE_BUDGET_SECONDS = 8;
+const MINIMUM_BOX_RESCUE_MAX_UNITS = 240;
+const MINIMUM_BOX_RESCUE_MAX_TYPES = 12;
 
 class PackingTimeoutError extends Error {
   constructor(message, details = {}) {
@@ -180,6 +183,7 @@ export function estimatePackingWorkload(payload = {}) {
   const containers = (payload.containers || []).filter((container) => !completedContainerIds.has(String(container?.id || "")));
   const rawUnitCount = cargos.reduce((sum, cargo) => sum + Math.max(0, Math.floor(Number(cargo.quantity || 0))), 0);
   const typeCount = cargos.length;
+  const activeTypeCount = cargos.filter((cargo) => Math.max(0, Math.floor(Number(cargo.quantity || 0))) > 0).length;
   const groupingEnabled = rawUnitCount >= 80;
   const groupSize = rawUnitCount >= 240 ? 8 : rawUnitCount >= 160 ? 6 : 4;
   const solverUnitCount = cargos.reduce((sum, cargo) => {
@@ -195,7 +199,14 @@ export function estimatePackingWorkload(payload = {}) {
   const specialPenalty = 1 + specialContainerCount * 0.38;
   const mixedPlanPenalty = containerCount >= 2 ? 1.22 : 1;
   const score = solverUnitCount * containerCount * typeFactor * diversityPenalty * strategyFactor * specialPenalty * mixedPlanPenalty;
-  const seconds = Math.max(2, Math.ceil(score / 120));
+  const baseSeconds = Math.max(2, Math.ceil(score / 120));
+  const minimumBoxRescueCandidateCount = rawUnitCount > 0
+    && rawUnitCount <= MINIMUM_BOX_RESCUE_MAX_UNITS
+    && activeTypeCount <= MINIMUM_BOX_RESCUE_MAX_TYPES
+    ? containers.filter((container) => !isFlatRackContainerForEstimate(container)).length
+    : 0;
+  const minimumBoxRescueBudgetSeconds = minimumBoxRescueCandidateCount * MINIMUM_BOX_RESCUE_BUDGET_SECONDS;
+  const seconds = baseSeconds + minimumBoxRescueBudgetSeconds;
   const hasGrouping = solverUnitCount < rawUnitCount;
   const level = seconds >= 90 || typeCount >= 80 ? "heavy" : seconds >= 25 || typeCount >= 40 ? "medium" : "light";
   const title = hasGrouping ? "已启用同规格块化" : "预计计算耗时";
@@ -216,14 +227,26 @@ export function estimatePackingWorkload(payload = {}) {
     rawUnitCount,
     solverUnitCount,
     typeCount,
+    activeTypeCount,
     containerCount,
     specialContainerCount,
+    minimumBoxRescueCandidateCount,
+    minimumBoxRescueBudgetSeconds,
     completedContainerCount: completedContainerIds.size,
     hasGrouping
   };
 }
 
 const LOCAL_SEARCH_PASS_ESTIMATE = 2;
+
+function isFlatRackContainerForEstimate(container) {
+  if (container?.ignoreHeightLimit === true) return true;
+  const equipmentClass = String(container?.equipmentClass || "").trim().toUpperCase();
+  if (["GP", "HQ", "45HQ", "RF", "FR", "MIX"].includes(equipmentClass)) return equipmentClass === "FR";
+  const id = String(container?.id || "").toLowerCase();
+  const name = String(container?.name || "").toLowerCase();
+  return /fr|flat/.test(`${id} ${name}`) || /\u5e73\u677f/.test(name);
+}
 
 function isSpecialContainerForEstimate(container) {
   const profile = `${container?.usagePriority || ""} ${container?.visualKind || ""} ${container?.equipmentClass || ""} ${container?.id || ""} ${container?.name || ""}`.toLowerCase();

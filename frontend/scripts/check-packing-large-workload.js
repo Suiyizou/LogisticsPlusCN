@@ -27,6 +27,21 @@ assert.equal(workload.rawUnitCount, 108);
 assert.equal(workload.solverUnitCount, 30, "six repeated cargo types should be grouped before search");
 assert.equal(workload.hasGrouping, true);
 
+const rescueEligibilityWorkload = estimatePackingWorkload({
+  cargos: [
+    ...Array.from({ length: 12 }, (_, index) => ({ id: `active-${index}`, quantity: 1 })),
+    { id: "inactive-row", quantity: 0 }
+  ],
+  containers: [{ ...containers[0], id: "rack-name-but-gp", name: "Rack-name GP", equipmentClass: "GP", ignoreHeightLimit: false }]
+});
+assert.equal(rescueEligibilityWorkload.activeTypeCount, 12);
+assert.equal(rescueEligibilityWorkload.minimumBoxRescueCandidateCount, 1, "zero-quantity rows and a valid GP class must match worker rescue eligibility");
+assert.equal(
+  estimatePackingWorkload({ cargos, containers: [{ ...containers[0], equipmentClass: "FR" }] }).minimumBoxRescueCandidateCount,
+  0,
+  "flat-rack containers must not receive a minimum-box column-rescue budget"
+);
+
 const timeoutPolicy = packingTimeoutPolicyFromEstimate(workload);
 assert.equal(timeoutPolicy.expectedMs, 30 * 1000);
 assert.equal(timeoutPolicy.idleTimeoutMs, 3 * 60 * 1000);
@@ -208,44 +223,125 @@ assert.deepEqual(
   "serialized resume must retain the boundary-fit 40HQ + 40GP partition"
 );
 
-const furnitureEvaluation = calculate({
-  cargos: [
-    { id: "furniture-table", name: "FT-1200", lengthCm: 120, widthCm: 80, heightCm: 40, quantity: 25, weightKg: 25, type: "normal" },
-    { id: "furniture-rack", name: "SR-4L", lengthCm: 75, widthCm: 35, heightCm: 60, quantity: 60, weightKg: 6, type: "normal" },
-    { id: "furniture-chair", name: "OC-668", lengthCm: 65, widthCm: 65, heightCm: 85, quantity: 20, weightKg: 12, type: "normal" },
-    { id: "furniture-mattress", name: "VM-150", lengthCm: 140, widthCm: 70, heightCm: 25, quantity: 30, weightKg: 18, type: "normal" },
-    { id: "furniture-sofa", name: "SF-2S", lengthCm: 150, widthCm: 80, heightCm: 60, quantity: 10, weightKg: 35, type: "nonstack" },
-    { id: "furniture-bookcase", name: "BK-95", lengthCm: 95, widthCm: 40, heightCm: 35, quantity: 40, weightKg: 10, type: "pallet" }
+const furnitureCargos = [
+  { id: "furniture-table", name: "FT-1200", lengthCm: 120, widthCm: 80, heightCm: 40, quantity: 25, weightKg: 25, type: "normal" },
+  { id: "furniture-rack", name: "SR-4L", lengthCm: 75, widthCm: 35, heightCm: 60, quantity: 60, weightKg: 6, type: "normal" },
+  { id: "furniture-chair", name: "OC-668", lengthCm: 65, widthCm: 65, heightCm: 85, quantity: 20, weightKg: 12, type: "normal" },
+  { id: "furniture-mattress", name: "VM-150", lengthCm: 140, widthCm: 70, heightCm: 25, quantity: 30, weightKg: 18, type: "normal" },
+  { id: "furniture-sofa", name: "SF-2S", lengthCm: 150, widthCm: 80, heightCm: 60, quantity: 10, weightKg: 35, type: "nonstack" },
+  { id: "furniture-bookcase", name: "BK-95", lengthCm: 95, widthCm: 40, heightCm: 35, quantity: 40, weightKg: 10, type: "pallet" }
+];
+const furniture20Gp = {
+  id: "furniture-20gp",
+  name: "Furniture 20GP",
+  lengthCm: 590,
+  widthCm: 235.2,
+  heightCm: 239.5,
+  heightLimitCm: 239.5,
+  payloadKg: 21800,
+  usagePriority: "common",
+  visualKind: "dry",
+  equipmentClass: "GP"
+};
+const furnitureWorkload = estimatePackingWorkload({
+  cargos: furnitureCargos,
+  containers: [
+    furniture20Gp,
+    { ...furniture20Gp, id: "furniture-20hq", name: "Furniture 20HQ", heightCm: 269, heightLimitCm: 269, equipmentClass: "HQ" },
+    { ...furniture20Gp, id: "furniture-40gp", name: "Furniture 40GP", lengthCm: 1203 },
+    { ...furniture20Gp, id: "furniture-40hq", name: "Furniture 40HQ", lengthCm: 1203, heightCm: 269, heightLimitCm: 269, equipmentClass: "HQ" }
   ],
-  containers: [{
-    id: "furniture-20gp",
-    name: "Furniture 20GP",
-    lengthCm: 590,
-    widthCm: 235.2,
-    heightCm: 239.5,
-    heightLimitCm: 239.5,
-    payloadKg: 21800,
-    usagePriority: "common",
-    visualKind: "dry",
-    equipmentClass: "GP"
-  }],
-  utilizationPercent: 90,
+  utilizationPercent: 98,
+  globalGapCm: 2
+});
+assert.equal(furnitureWorkload.minimumBoxRescueCandidateCount, 4);
+assert.equal(furnitureWorkload.minimumBoxRescueBudgetSeconds, 32);
+assert.equal(furnitureWorkload.level, "medium", "minimum-box rescue must be included in the client workload tier");
+assert.equal(packingTimeoutPolicyFromEstimate(furnitureWorkload).hardTimeoutMs, 3 * 60 * 1000);
+
+const furnitureEvaluation = calculate({
+  cargos: furnitureCargos,
+  containers: [furniture20Gp],
+  utilizationPercent: 98,
   globalGapCm: 2,
   supportRatioPercent: 80,
   nonStackSupportRatioPercent: 90
 }).evaluations[0];
 
-assert.equal(furnitureEvaluation.fitStatus, "fit");
-assert.equal(furnitureEvaluation.boxes, 3, "late non-stack preference must preserve the three-container baseline");
-assert.equal(physicalPlacements(furnitureEvaluation).length, 185);
-assert.equal(new Set(physicalPlacements(furnitureEvaluation).map((placement) => placement.unitKey)).size, 185);
-const furnitureNonStackCounts = furnitureEvaluation.packedBoxes.map((box) =>
-  box.placed.filter((placement) => placement.nonStack).length
-);
-const furnitureBoxCounts = furnitureEvaluation.packedBoxes.map((box) => box.placed.length);
-assert.equal(furnitureBoxCounts.reduce((sum, count) => sum + count, 0), 185);
-assert.ok(furnitureBoxCounts[0] >= 80, "lower-deck recovery should keep the first furniture box from closing at the old 68-piece split");
-assert.deepEqual(furnitureNonStackCounts, [0, 0, 10], "fragile sofas should be concentrated into the latest feasible container");
-assert.ok(furnitureEvaluation.packedBoxes.some((box) => box.strategySummary.lowerDeckRevisitCount > 0));
+function furniturePhysicalRect(placement) {
+  return {
+    x: Number(placement.physicalXCm ?? placement.xCm ?? 0),
+    y: Number(placement.physicalYCm ?? placement.yCm ?? 0),
+    z: Number(placement.physicalZCm ?? placement.zCm ?? 0),
+    length: Number(placement.physicalLengthCm ?? placement.lengthCm ?? 0),
+    width: Number(placement.physicalWidthCm ?? placement.widthCm ?? 0),
+    height: Number(placement.physicalHeightCm ?? placement.heightCm ?? 0)
+  };
+}
 
-console.log("Packing large-workload timeout, grouping, non-stack load order, serialized mixed-plan, and resume regression passed.");
+function furnitureDecksOverlap(a, b) {
+  const epsilon = 1e-6;
+  return Math.min(a.x + a.length, b.x + b.length) - Math.max(a.x, b.x) > epsilon
+    && Math.min(a.y + a.width, b.y + b.width) - Math.max(a.y, b.y) > epsilon;
+}
+
+function furnitureNonStackBearingViolations(evaluation) {
+  const violations = [];
+  for (const box of evaluation.packedBoxes || []) {
+    for (const nonStack of box.placed.filter((placement) => placement.nonStack)) {
+      const nonStackRect = furniturePhysicalRect(nonStack);
+      const nonStackTop = nonStackRect.z + nonStackRect.height;
+      for (const other of box.placed) {
+        if (other.unitKey === nonStack.unitKey) continue;
+        const otherRect = furniturePhysicalRect(other);
+        if (otherRect.z < nonStackTop - 1e-6) continue;
+        if (furnitureDecksOverlap(nonStackRect, otherRect)) {
+          violations.push(`${nonStack.unitKey}->${other.unitKey}`);
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+assert.equal(furnitureEvaluation.fitStatus, "fit");
+assert.equal(furnitureEvaluation.boxes, 2, "the exact 185-piece fixture must not regress from two 20GP containers");
+assert.equal(furnitureEvaluation.packedBoxes.length, 2, "both 20GP layouts must include fully detailed safe coordinates");
+assert.equal(furnitureEvaluation.estimatedBoxes, false, "the two-container result must be solved rather than volume-estimated");
+
+const furniturePlacements = physicalPlacements(furnitureEvaluation);
+assert.equal(furniturePlacements.length, 185);
+assert.equal(new Set(furniturePlacements.map((placement) => placement.unitKey)).size, 185);
+assert.deepEqual(
+  Object.fromEntries(furnitureCargos.map((cargo) => [
+    cargo.id,
+    furniturePlacements.filter((placement) => placement.cargoId === cargo.id).length
+  ])),
+  Object.fromEntries(furnitureCargos.map((cargo) => [cargo.id, cargo.quantity])),
+  "the two-container rescue must preserve every source cargo quantity"
+);
+
+assert.equal(furnitureEvaluation.geometryFeasible, true);
+assert.equal(furnitureEvaluation.complianceFeasible, true);
+assert.equal(furnitureEvaluation.placementConstraintsBlocked, false);
+assert.equal(furnitureEvaluation.balanceBlocked, false);
+assert.ok(
+  furnitureEvaluation.packedBoxes.every((box) => box.balanceValidation?.severity !== "red"),
+  "neither rescued 20GP layout may have a red balance validation"
+);
+assert.ok(
+  furnitureEvaluation.packedBoxes.every((box) => box.strategySummary?.complianceBlocked !== true),
+  "neither rescued 20GP layout may bypass placement compliance"
+);
+assert.deepEqual(
+  furnitureNonStackBearingViolations(furnitureEvaluation),
+  [],
+  "nothing may be loaded above a non-stackable SF-2S sofa"
+);
+assert.equal(
+  furniturePlacements.filter((placement) => placement.nonStack).length,
+  10,
+  "all ten non-stackable SF-2S sofas must be retained"
+);
+
+console.log("Packing large-workload timeout, grouping, two-20GP furniture safety, serialized mixed-plan, and resume regression passed.");

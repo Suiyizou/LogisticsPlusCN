@@ -1578,9 +1578,10 @@ function buildResultOptimizationRows(evaluations = []) {
     detail: `${evaluationFitText(best)} / ${evaluationFreightText(best)}`
   }];
   const bestComparable = evaluationPriceComparisonEligible(best);
+  const bestBoxes = normalizedEvaluationBoxes(best);
   const baseline = bestComparable
-    ? evaluations.find((item) => item && item !== best && !item.isMixedPlan && !item.container?.mixedPlan && item.fitStatus === "fit" && evaluationPriceComparisonEligible(item))
-      || evaluations.find((item) => item && item !== best && item.fitStatus === "fit" && evaluationPriceComparisonEligible(item))
+    ? evaluations.find((item) => item && item !== best && !item.isMixedPlan && !item.container?.mixedPlan && item.fitStatus === "fit" && normalizedEvaluationBoxes(item) === bestBoxes && evaluationPriceComparisonEligible(item))
+      || evaluations.find((item) => item && item !== best && item.fitStatus === "fit" && normalizedEvaluationBoxes(item) === bestBoxes && evaluationPriceComparisonEligible(item))
     : null;
   if (baseline) {
     const saving = evaluationFreightValue(baseline) - evaluationFreightValue(best);
@@ -2243,6 +2244,8 @@ function normalizeResult(nextResult) {
 function compareEvaluationForUi(a, b) {
   const statusDiff = evaluationStatusRank(a) - evaluationStatusRank(b);
   if (statusDiff) return statusDiff;
+  const boxDiff = normalizedEvaluationBoxes(a) - normalizedEvaluationBoxes(b);
+  if (boxDiff) return boxDiff;
   const comparableDiff = (evaluationPriceComparisonEligible(a) ? 0 : 1) - (evaluationPriceComparisonEligible(b) ? 0 : 1);
   if (comparableDiff) return comparableDiff;
   const priceAvailabilityDiff = (evaluationPriceConfigured(a) ? 0 : 1) - (evaluationPriceConfigured(b) ? 0 : 1);
@@ -2251,8 +2254,6 @@ function compareEvaluationForUi(a, b) {
     const freightDiff = compareFiniteNumbers(evaluationFreightValue(a), evaluationFreightValue(b));
     if (freightDiff) return freightDiff;
   }
-  const boxDiff = normalizedEvaluationBoxes(a) - normalizedEvaluationBoxes(b);
-  if (boxDiff) return boxDiff;
   const fillDiff = evaluationAverageFill(b) - evaluationAverageFill(a);
   if (fillDiff) return fillDiff;
   const scoreA = Number(a?.recommendation?.score);

@@ -327,4 +327,67 @@ function layoutSignature(evaluation) {
 
 assert.deepEqual(layoutSignature(colorRunA), layoutSignature(colorRunB), "display colors must not influence packing");
 
-console.log("Packing fixed-layer, cross-box non-stack-last, support-ratio, non-stack safety, duplicate-id, and color-independence regression passed.");
+const minimumBoxPriorityResult = calculate({
+  cargos: [
+    { id: "box-priority-cargo", name: "box-priority-cargo", lengthCm: 100, widthCm: 100, heightCm: 100, quantity: 2, weightKg: 10, type: "normal" }
+  ],
+  containers: [
+    {
+      ...makeContainer("cheap-two-boxes", 100, 100, 100),
+      referencePrice: 1,
+      referenceCurrency: "USD",
+      equipmentClass: "GP"
+    },
+    {
+      ...makeContainer("expensive-one-box", 200, 100, 100),
+      referencePrice: 1000,
+      referenceCurrency: "USD",
+      equipmentClass: "GP"
+    }
+  ],
+  utilizationPercent: 100,
+  globalGapCm: 0,
+  supportRatioPercent: 80,
+  nonStackSupportRatioPercent: 90
+});
+const oneBoxIndex = minimumBoxPriorityResult.evaluations.findIndex((evaluation) => evaluation.container.id === "expensive-one-box");
+const twoBoxIndex = minimumBoxPriorityResult.evaluations.findIndex((evaluation) => evaluation.container.id === "cheap-two-boxes");
+assert.ok(oneBoxIndex >= 0 && twoBoxIndex >= 0);
+assert.equal(minimumBoxPriorityResult.evaluations[oneBoxIndex].boxes, 1);
+assert.equal(minimumBoxPriorityResult.evaluations[twoBoxIndex].boxes, 2);
+assert.ok(oneBoxIndex < twoBoxIndex, "fewer feasible boxes must rank ahead of a cheaper multi-box plan");
+assert.equal(minimumBoxPriorityResult.bestContainerId, "expensive-one-box");
+
+const equalBoxPriceResult = calculate({
+  cargos: [
+    { id: "equal-box-price-cargo", name: "equal-box-price-cargo", lengthCm: 100, widthCm: 100, heightCm: 100, quantity: 1, weightKg: 10, type: "normal" }
+  ],
+  containers: [
+    { ...makeContainer("higher-price-one-box", 100, 100, 100), referencePrice: 20, referenceCurrency: "USD", equipmentClass: "GP" },
+    { ...makeContainer("lower-price-one-box", 100, 100, 100), referencePrice: 10, referenceCurrency: "USD", equipmentClass: "GP" }
+  ],
+  utilizationPercent: 100,
+  globalGapCm: 0
+});
+assert.equal(equalBoxPriceResult.bestContainerId, "lower-price-one-box", "price must break ties between equal-count feasible plans");
+
+const mixedMinimumBoxPriorityResult = calculate({
+  cargos: [
+    { id: "mixed-small", name: "mixed-small", lengthCm: 100, widthCm: 100, heightCm: 100, quantity: 1, weightKg: 10, type: "normal" },
+    { id: "mixed-long", name: "mixed-long", lengthCm: 200, widthCm: 100, heightCm: 100, quantity: 1, weightKg: 10, type: "normal" }
+  ],
+  containers: [
+    { ...makeContainer("cheap-small", 100, 100, 100), referencePrice: 1, referenceCurrency: "USD", equipmentClass: "GP" },
+    { ...makeContainer("expensive-large", 300, 100, 100), referencePrice: 1000, referenceCurrency: "USD", equipmentClass: "GP" }
+  ],
+  utilizationPercent: 100,
+  globalGapCm: 0
+});
+assert.equal(mixedMinimumBoxPriorityResult.bestContainerId, "expensive-large");
+assert.equal(mixedMinimumBoxPriorityResult.evaluations.find((evaluation) => evaluation.container.id === "expensive-large")?.boxes, 1);
+assert.ok(
+  !mixedMinimumBoxPriorityResult.evaluations.some((evaluation) => evaluation.container.id === "mixed-plan" && evaluation.boxes > 1),
+  "mixed search must not prefer a cheap first box when it increases the projected container count"
+);
+
+console.log("Packing fixed-layer, minimum-box priority, cross-box non-stack-last, support-ratio, non-stack safety, duplicate-id, and color-independence regression passed.");

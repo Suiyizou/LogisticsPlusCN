@@ -7,6 +7,7 @@ import {
   fixedLayerPlacementText,
   fixedLayerSeedText,
   fixedLayerSkippedText,
+  currentPlanFreightText,
   lowerDeckRevisitText
 } from "../i18n/packingWorkerText.js";
 
@@ -43,6 +44,14 @@ const NON_STACK_DISPLACEMENT_MAX_RECEIVERS = 3;
 const TAIL_REFINEMENT_UNIT_BUDGET = 16;
 const LOWER_DECK_REVISIT_MAX_PASSES = 1;
 const LOWER_DECK_REVISIT_LEVEL_LIMIT = 16;
+const MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS = 240;
+const MINIMUM_BOX_COLUMN_RESCUE_MAX_GROUPS = 12;
+const MINIMUM_BOX_COLUMN_RESCUE_MAX_BASELINE_BOXES = 3;
+const MINIMUM_BOX_COLUMN_ORIENTATION_BEAM = 24;
+const MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP = 3;
+const MINIMUM_BOX_COLUMN_PACKING_BEAM = 64;
+const MINIMUM_BOX_COLUMN_PLACEMENTS_PER_STATE = 10;
+const MINIMUM_BOX_COLUMN_RESCUE_DEADLINE_MS = 8000;
 const MIXED_PLAN_MAX_SOLVER_UNITS = 120;
 const MIXED_REPLACEMENT_CANDIDATE_LIMIT = 3;
 const MIXED_COMBINATION_BEAM_WIDTH = 8;
@@ -567,7 +576,7 @@ function packMultiple(container, allUnits) {
   const hasStackable = allUnits.some((unit) => !unit.nonStack);
   const hasNonStack = allUnits.some((unit) => unit.nonStack);
   if (!hasStackable || !hasNonStack || baseline.boxes <= 0 || baseline.estimated || baseline.fatalOversize) {
-    return orderPackedBoxesForNonStackLoading(container, baseline, "baseline");
+    return preferMinimumBoxColumnRescue(container, allUnits, baseline, "baseline");
   }
 
   const deferred = packMultipleCore(container, allUnits, {
@@ -587,11 +596,32 @@ function packMultiple(container, allUnits) {
     );
   const baselineComplete = baseline.packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0) === sumUnitQuantity(allUnits);
   const useDeferred = deferredComplete && (!baselineComplete || deferred.boxes <= baseline.boxes);
-  return orderPackedBoxesForNonStackLoading(
+  return preferMinimumBoxColumnRescue(
     container,
+    allUnits,
     useDeferred ? deferred : baseline,
     useDeferred ? "deferred" : "baseline-fallback",
     { baselineBoxes: baseline.boxes, deferredBoxes: deferred.boxes }
+  );
+}
+
+function preferMinimumBoxColumnRescue(container, allUnits, plan, mode, comparison = {}) {
+  const rescued = buildMinimumBoxColumnRescue(container, allUnits, plan);
+  const useRescue = rescued
+    && rescued.boxes > 0
+    && rescued.boxes < plan.boxes
+    && !rescued.estimated
+    && !rescued.fatalOversize
+    && !rescued.balanceBlocked;
+  return orderPackedBoxesForNonStackLoading(
+    container,
+    useRescue ? rescued : plan,
+    useRescue ? "minimum-box-rescue" : mode,
+    {
+      ...comparison,
+      minimumBoxBaselineBoxes: Number(plan.boxes || 0),
+      minimumBoxRescueBoxes: Number(rescued?.boxes || 0)
+    }
   );
 }
 
@@ -656,6 +686,594 @@ function packMultipleCore(container, allUnits, options = {}) {
   };
 }
 
+function buildMinimumBoxColumnRescue(container, allUnits, baseline) {
+  const deadline = Date.now() + MINIMUM_BOX_COLUMN_RESCUE_DEADLINE_MS;
+  const totalQuantity = sumUnitQuantity(allUnits);
+  if (!baseline
+    || baseline.boxes <= 1
+    || baseline.boxes > MINIMUM_BOX_COLUMN_RESCUE_MAX_BASELINE_BOXES
+    || baseline.estimated
+    || baseline.fatalOversize
+    || isFlatRackUsage(container)
+    || totalQuantity <= 0
+    || totalQuantity > MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS) {
+    return null;
+  }
+
+  const hardLowerBound = Math.max(1, residualPlanMetrics(container, allUnits).remainingBoxLowerBound);
+  if (hardLowerBound >= baseline.boxes) return null;
+
+  const singleUnits = allUnits.flatMap((unit) => (
+    unitQuantity(unit) > 1
+      ? expandGroupedPlacement(stripPlacement(unit)).map(stripPlacement)
+      : [stripPlacement(unit)]
+  ));
+  if (singleUnits.length !== totalQuantity
+    || new Set(singleUnits.map((unit) => unit.unitKey)).size !== totalQuantity) {
+    return null;
+  }
+
+  const groups = minimumBoxColumnGroups(singleUnits);
+  if (!groups.length || groups.length > MINIMUM_BOX_COLUMN_RESCUE_MAX_GROUPS) return null;
+  const orientationPlans = minimumBoxColumnOrientationPlans(container, groups);
+  if (!orientationPlans.length) return null;
+  traceDecision({
+    phase: "repair",
+    level: "summary",
+    text: `${container.name} - minimum-box rescue: testing ${hardLowerBound} to ${baseline.boxes - 1} containers with vertical-column candidates.`
+  });
+
+  for (let targetBoxes = hardLowerBound; targetBoxes < baseline.boxes; targetBoxes += 1) {
+    for (let planIndex = 0; planIndex < orientationPlans.length; planIndex += 1) {
+      const orientationPlan = orientationPlans[planIndex];
+      if (Date.now() > deadline) return null;
+      traceProgress({
+        phase: "repair",
+        strategyId: "minimum-box-column-rescue",
+        stageFraction: Math.min(0.98, 0.9 + planIndex / Math.max(1, orientationPlans.length) * 0.08)
+      });
+      const columns = buildMinimumBoxColumns(orientationPlan);
+      if (!columns.length || columns.length > MINIMUM_BOX_COLUMN_RESCUE_MAX_UNITS) continue;
+      const totalFootprint = columns.reduce((sum, column) => sum + minimumBoxColumnArea(column), 0);
+      const availableFootprint = Number(container.lengthCm || 0) * Number(container.widthCm || 0) * targetBoxes;
+      if (totalFootprint > availableFootprint + EPS) continue;
+
+      for (const orderedColumns of minimumBoxColumnOrders(columns)) {
+        for (const mode of ["fill", "spread", "best", "reverse-fill"]) {
+          if (minimumBoxDeadlineExceeded(deadline)) return null;
+          const packed = packMinimumBoxColumns2d(container, orderedColumns, targetBoxes, mode, deadline);
+          if (!packed) continue;
+          const candidate = buildMinimumBoxColumnPlan(container, packed, totalQuantity, baseline.boxes);
+          if (candidate) return candidate;
+        }
+        const beamPacked = packMinimumBoxColumns2dBeam(container, orderedColumns, targetBoxes, deadline);
+        if (beamPacked) {
+          const candidate = buildMinimumBoxColumnPlan(container, beamPacked, totalQuantity, baseline.boxes);
+          if (candidate) return candidate;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function minimumBoxColumnGroups(units) {
+  const groups = new Map();
+  for (const unit of units) {
+    const key = [
+      Number(unit.cargoIndex),
+      String(unit.cargoId || ""),
+      round3(singleRawLengthCm(unit)),
+      round3(singleRawWidthCm(unit)),
+      round3(singleRawHeightCm(unit)),
+      unit.nonStack ? 1 : 0,
+      unit.keepUpright ? 1 : 0,
+      unit.rotatable ? 1 : 0,
+      round3(Number(unit.gapCm || 0))
+    ].join("/");
+    const group = groups.get(key) || { key, units: [] };
+    group.units.push(unit);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      units: [...group.units].sort((a, b) => String(a.unitKey).localeCompare(String(b.unitKey)))
+    }))
+    .sort((a, b) => Number(a.units[0]?.cargoIndex || 0) - Number(b.units[0]?.cargoIndex || 0));
+}
+
+function minimumBoxColumnOrientationPlans(container, groups) {
+  let beam = [{ selections: [], score: 0, columnCount: 0 }];
+  for (const group of groups) {
+    const options = minimumBoxColumnOrientationOptions(container, group);
+    if (!options.length) return [];
+    beam = beam.flatMap((entry) => options.map((option) => ({
+      selections: [...entry.selections, { group, option }],
+      score: entry.score + option.totalFootprint,
+      columnCount: entry.columnCount + option.columnCount
+    }))).sort((a, b) => {
+      const scoreDiff = a.score - b.score;
+      if (Math.abs(scoreDiff) > EPS) return scoreDiff;
+      return a.columnCount - b.columnCount;
+    }).slice(0, MINIMUM_BOX_COLUMN_ORIENTATION_BEAM);
+  }
+  return beam;
+}
+
+function minimumBoxColumnOrientationOptions(container, group) {
+  const sample = group.units[0];
+  const heightLimit = containerHeightLimit(container);
+  const families = new Map();
+  for (const dims of generateOrientations(sample)) {
+    if (!fitsContainerDims(container, dims) || dims.heightCm <= EPS) continue;
+    const shortSide = Math.min(Number(dims.lengthCm || 0), Number(dims.widthCm || 0));
+    const longSide = Math.max(Number(dims.lengthCm || 0), Number(dims.widthCm || 0));
+    const key = `${round3(shortSide)}/${round3(longSide)}/${round3(dims.heightCm)}`;
+    const family = families.get(key) || { variants: [] };
+    family.variants.push(dims);
+    families.set(key, family);
+  }
+
+  const quantity = group.units.length;
+  return [...families.values()].map((family) => {
+    const dims = family.variants[0];
+    const capacity = sample.nonStack
+      ? 1
+      : Math.max(1, Math.floor((heightLimit + EPS) / Math.max(EPS, Number(dims.heightCm || 0))));
+    const columnCount = Math.ceil(quantity / capacity);
+    const totalFootprint = columnCount * Number(dims.lengthCm || 0) * Number(dims.widthCm || 0);
+    return {
+      variants: family.variants,
+      capacity,
+      columnCount,
+      totalFootprint,
+      maxColumnHeight: Math.min(capacity, quantity) * Number(dims.heightCm || 0)
+    };
+  }).filter((option) => option.maxColumnHeight <= heightLimit + EPS)
+    .sort((a, b) => {
+      const footprintDiff = a.totalFootprint - b.totalFootprint;
+      if (Math.abs(footprintDiff) > EPS) return footprintDiff;
+      if (a.columnCount !== b.columnCount) return a.columnCount - b.columnCount;
+      return a.maxColumnHeight - b.maxColumnHeight;
+    })
+    .slice(0, MINIMUM_BOX_COLUMN_ORIENTATIONS_PER_GROUP);
+}
+
+function buildMinimumBoxColumns(orientationPlan) {
+  const columns = [];
+  for (const { group, option } of orientationPlan.selections) {
+    for (let offset = 0; offset < group.units.length; offset += option.capacity) {
+      const units = group.units.slice(offset, offset + option.capacity);
+      const variants = option.variants;
+      if (!variants.length) return [];
+      columns.push({
+        key: `${group.key}@${offset}`,
+        units,
+        variants,
+        nonStack: Boolean(units[0]?.nonStack),
+        weightKg: units.reduce((sum, unit) => sum + Number(unit.weightKg || 0), 0)
+      });
+    }
+  }
+  return columns;
+}
+
+function minimumBoxColumnArea(column) {
+  const dims = column.variants[0];
+  return Number(dims.lengthCm || 0) * Number(dims.widthCm || 0);
+}
+
+function minimumBoxColumnOrders(columns) {
+  const comparators = [
+    (a, b) => minimumBoxColumnArea(b) - minimumBoxColumnArea(a)
+      || minimumBoxColumnMaxSide(b) - minimumBoxColumnMaxSide(a)
+      || String(a.key).localeCompare(String(b.key)),
+    (a, b) => minimumBoxColumnMaxSide(b) - minimumBoxColumnMaxSide(a)
+      || minimumBoxColumnArea(b) - minimumBoxColumnArea(a)
+      || String(a.key).localeCompare(String(b.key)),
+    (a, b) => minimumBoxColumnMinSide(b) - minimumBoxColumnMinSide(a)
+      || minimumBoxColumnArea(b) - minimumBoxColumnArea(a)
+      || String(a.key).localeCompare(String(b.key)),
+    (a, b) => Number(b.nonStack) - Number(a.nonStack)
+      || minimumBoxColumnArea(b) - minimumBoxColumnArea(a)
+      || String(a.key).localeCompare(String(b.key)),
+    (a, b) => Number(a.nonStack) - Number(b.nonStack)
+      || minimumBoxColumnArea(b) - minimumBoxColumnArea(a)
+      || String(a.key).localeCompare(String(b.key))
+  ];
+  const seen = new Set();
+  const orders = [];
+  for (const comparator of comparators) {
+    const ordered = [...columns].sort(comparator);
+    const signature = ordered.map((column) => column.key).join("|");
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    orders.push(ordered);
+  }
+  return orders;
+}
+
+function minimumBoxColumnMaxSide(column) {
+  const dims = column.variants[0];
+  return Math.max(Number(dims.lengthCm || 0), Number(dims.widthCm || 0));
+}
+
+function minimumBoxColumnMinSide(column) {
+  const dims = column.variants[0];
+  return Math.min(Number(dims.lengthCm || 0), Number(dims.widthCm || 0));
+}
+
+function packMinimumBoxColumns2d(container, columns, boxCount, mode, deadline) {
+  const bins = Array.from({ length: boxCount }, (_, index) => ({
+    index,
+    placements: [],
+    freeRects: [{ x: 0, y: 0, lengthCm: Number(container.lengthCm || 0), widthCm: Number(container.widthCm || 0) }],
+    usedArea: 0,
+    weightKg: 0
+  }));
+  const floorArea = Math.max(EPS, Number(container.lengthCm || 0) * Number(container.widthCm || 0));
+  const payloadKg = Number(container.payloadKg || 0);
+
+  let operations = 0;
+  for (const column of columns) {
+    if (minimumBoxDeadlineExceeded(deadline)) return null;
+    let best = null;
+    for (const bin of bins) {
+      if (payloadKg > EPS && bin.weightKg + column.weightKg > payloadKg + EPS) continue;
+      for (const freeRect of bin.freeRects) {
+        for (const dims of column.variants) {
+          operations += 1;
+          if (operations % 64 === 0 && minimumBoxDeadlineExceeded(deadline)) return null;
+          if (dims.lengthCm > freeRect.lengthCm + EPS || dims.widthCm > freeRect.widthCm + EPS) continue;
+          const remainingLength = freeRect.lengthCm - dims.lengthCm;
+          const remainingWidth = freeRect.widthCm - dims.widthCm;
+          const shortFit = Math.min(remainingLength, remainingWidth);
+          const longFit = Math.max(remainingLength, remainingWidth);
+          const areaWaste = freeRect.lengthCm * freeRect.widthCm - dims.lengthCm * dims.widthCm;
+          const fillRatio = bin.usedArea / floorArea;
+          const binRank = mode === "reverse-fill" ? boxCount - 1 - bin.index : bin.index;
+          const score = mode === "spread"
+            ? [fillRatio, shortFit, longFit, areaWaste, bin.index, freeRect.y, freeRect.x]
+            : mode === "best"
+              ? [shortFit, longFit, areaWaste, bin.index, freeRect.y, freeRect.x]
+              : [binRank, shortFit, longFit, areaWaste, freeRect.y, freeRect.x];
+          if (!best || compareMinimumBoxScores(score, best.score) < 0) {
+            best = {
+              bin,
+              column,
+              dims,
+              x: freeRect.x,
+              y: freeRect.y,
+              score
+            };
+          }
+        }
+      }
+    }
+    if (!best) return null;
+    const used = {
+      x: best.x,
+      y: best.y,
+      lengthCm: Number(best.dims.lengthCm || 0),
+      widthCm: Number(best.dims.widthCm || 0)
+    };
+    best.bin.placements.push({ column, dims: best.dims, x: best.x, y: best.y });
+    best.bin.usedArea += used.lengthCm * used.widthCm;
+    best.bin.weightKg += column.weightKg;
+    best.bin.freeRects = splitMinimumBoxFreeRects(best.bin.freeRects, used, deadline);
+    if (!best.bin.freeRects) return null;
+  }
+
+  if (bins.some((bin) => !bin.placements.length)) return null;
+  return bins;
+}
+
+function packMinimumBoxColumns2dBeam(container, columns, boxCount, deadline) {
+  const floorArea = Math.max(EPS, Number(container.lengthCm || 0) * Number(container.widthCm || 0));
+  let states = [{
+    bins: Array.from({ length: boxCount }, (_, index) => ({
+      index,
+      placements: [],
+      freeRects: [{ x: 0, y: 0, lengthCm: Number(container.lengthCm || 0), widthCm: Number(container.widthCm || 0) }],
+      usedArea: 0,
+      weightKg: 0
+    }))
+  }];
+
+  for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+    if (Date.now() > deadline) return null;
+    if (columnIndex % 8 === 0) {
+      traceProgress({
+        phase: "repair",
+        strategyId: "minimum-box-column-rescue",
+        placedUnits: columns.slice(0, columnIndex).reduce((sum, column) => sum + column.units.length, 0),
+        remainingUnits: columns.slice(columnIndex).reduce((sum, column) => sum + column.units.length, 0)
+      });
+    }
+    const column = columns[columnIndex];
+    const remaining = columns.slice(columnIndex + 1);
+    const nextStates = [];
+    for (const state of states) {
+      if (minimumBoxDeadlineExceeded(deadline)) return null;
+      const candidates = minimumBoxBeamPlacementCandidates(container, state.bins, column, columnIndex === 0, deadline);
+      if (!candidates) return null;
+      for (const candidate of candidates) {
+        if (minimumBoxDeadlineExceeded(deadline)) return null;
+        const bins = minimumBoxApplyBeamPlacement(state.bins, column, candidate, deadline);
+        if (!bins) return null;
+        if (!minimumBoxRemainingColumnsCanFit(container, bins, remaining, floorArea, deadline)) continue;
+        nextStates.push({ bins });
+      }
+    }
+    if (!nextStates.length) return null;
+
+    const deduped = new Map();
+    for (const state of nextStates.sort((a, b) => compareMinimumBoxScores(
+      minimumBoxBeamStateScore(a.bins, floorArea),
+      minimumBoxBeamStateScore(b.bins, floorArea)
+    ))) {
+      const signature = minimumBoxBeamStateSignature(state.bins);
+      if (!deduped.has(signature)) deduped.set(signature, state);
+      if (deduped.size >= MINIMUM_BOX_COLUMN_PACKING_BEAM) break;
+    }
+    states = [...deduped.values()];
+  }
+
+  return states[0]?.bins || null;
+}
+
+function minimumBoxBeamPlacementCandidates(container, bins, column, firstColumn, deadline) {
+  const payloadKg = Number(container.payloadKg || 0);
+  const byBin = [];
+  let operations = 0;
+  for (const bin of bins) {
+    if (firstColumn && bin.index !== 0) continue;
+    if (payloadKg > EPS && bin.weightKg + column.weightKg > payloadKg + EPS) continue;
+    const candidates = [];
+    const seen = new Set();
+    for (const freeRect of bin.freeRects) {
+      for (const dims of column.variants) {
+        operations += 1;
+        if (operations % 64 === 0 && minimumBoxDeadlineExceeded(deadline)) return null;
+        if (dims.lengthCm > freeRect.lengthCm + EPS || dims.widthCm > freeRect.widthCm + EPS) continue;
+        const key = [bin.index, round3(freeRect.x), round3(freeRect.y), round3(dims.lengthCm), round3(dims.widthCm)].join("/");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const remainingLength = freeRect.lengthCm - dims.lengthCm;
+        const remainingWidth = freeRect.widthCm - dims.widthCm;
+        candidates.push({
+          binIndex: bin.index,
+          dims,
+          x: freeRect.x,
+          y: freeRect.y,
+          score: [
+            Math.min(remainingLength, remainingWidth),
+            Math.max(remainingLength, remainingWidth),
+            freeRect.lengthCm * freeRect.widthCm - dims.lengthCm * dims.widthCm,
+            freeRect.y,
+            freeRect.x
+          ]
+        });
+      }
+    }
+    candidates.sort((a, b) => compareMinimumBoxScores(a.score, b.score));
+    byBin.push(...candidates.slice(0, Math.max(2, Math.ceil(MINIMUM_BOX_COLUMN_PLACEMENTS_PER_STATE / bins.length))));
+  }
+  return byBin.sort((a, b) => compareMinimumBoxScores(a.score, b.score))
+    .slice(0, MINIMUM_BOX_COLUMN_PLACEMENTS_PER_STATE);
+}
+
+function minimumBoxApplyBeamPlacement(sourceBins, column, candidate, deadline) {
+  const nextBins = [];
+  for (const source of sourceBins) {
+    if (source.index !== candidate.binIndex) {
+      nextBins.push(source);
+      continue;
+    }
+    const used = {
+      x: candidate.x,
+      y: candidate.y,
+      lengthCm: Number(candidate.dims.lengthCm || 0),
+      widthCm: Number(candidate.dims.widthCm || 0)
+    };
+    const freeRects = splitMinimumBoxFreeRects(source.freeRects, used, deadline);
+    if (!freeRects) return null;
+    nextBins.push({
+      ...source,
+      placements: [...source.placements, { column, dims: candidate.dims, x: candidate.x, y: candidate.y }],
+      freeRects,
+      usedArea: source.usedArea + used.lengthCm * used.widthCm,
+      weightKg: source.weightKg + column.weightKg
+    });
+  }
+  return nextBins;
+}
+
+function minimumBoxRemainingColumnsCanFit(container, bins, remaining, floorArea, deadline) {
+  if (!remaining.length) return true;
+  if (minimumBoxDeadlineExceeded(deadline)) return false;
+  const remainingArea = remaining.reduce((sum, column) => sum + minimumBoxColumnArea(column), 0);
+  const availableArea = bins.reduce((sum, bin) => sum + Math.max(0, floorArea - bin.usedArea), 0);
+  if (remainingArea > availableArea + EPS) return false;
+  const payloadKg = Number(container.payloadKg || 0);
+  const remainingWeight = remaining.reduce((sum, column) => sum + column.weightKg, 0);
+  const availablePayload = payloadKg > EPS
+    ? bins.reduce((sum, bin) => sum + Math.max(0, payloadKg - bin.weightKg), 0)
+    : Number.POSITIVE_INFINITY;
+  if (remainingWeight > availablePayload + EPS) return false;
+  let operations = 0;
+  return remaining.every((column) => bins.some((bin) => {
+    operations += 1;
+    if (operations % 64 === 0 && minimumBoxDeadlineExceeded(deadline)) return false;
+    return (payloadKg <= EPS || bin.weightKg + column.weightKg <= payloadKg + EPS)
+      && bin.freeRects.some((freeRect) => column.variants.some((dims) => (
+        dims.lengthCm <= freeRect.lengthCm + EPS && dims.widthCm <= freeRect.widthCm + EPS
+      )));
+  }));
+}
+
+function minimumBoxBeamStateScore(bins, floorArea) {
+  const largestFreeAreas = bins.map((bin) => bin.freeRects.reduce((max, rect) => (
+    Math.max(max, rect.lengthCm * rect.widthCm)
+  ), 0));
+  const fragmentation = bins.reduce((sum, bin) => sum + bin.freeRects.length, 0);
+  const fillRatios = bins.map((bin) => bin.usedArea / floorArea);
+  const fillSpread = Math.max(...fillRatios) - Math.min(...fillRatios);
+  return [
+    -Math.min(...largestFreeAreas),
+    fragmentation,
+    fillSpread,
+    -largestFreeAreas.reduce((sum, area) => sum + area, 0)
+  ];
+}
+
+function minimumBoxBeamStateSignature(bins) {
+  return bins.map((bin) => {
+    const moments = bin.placements.reduce((acc, placement) => {
+      const weight = Number(placement.column?.weightKg || 0);
+      acc.x += weight * (Number(placement.x || 0) + Number(placement.dims?.lengthCm || 0) / 2);
+      acc.y += weight * (Number(placement.y || 0) + Number(placement.dims?.widthCm || 0) / 2);
+      return acc;
+    }, { x: 0, y: 0 });
+    const freeRectSignature = bin.freeRects
+      .map((rect) => [round3(rect.x), round3(rect.y), round3(rect.lengthCm), round3(rect.widthCm)].join(","))
+      .sort()
+      .join(";");
+    return `${round3(bin.weightKg)}/${round3(moments.x)}/${round3(moments.y)}@${freeRectSignature}`;
+  }).join("||");
+}
+
+function compareMinimumBoxScores(a, b) {
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const diff = Number(a[index] || 0) - Number(b[index] || 0);
+    if (Math.abs(diff) > EPS) return diff;
+  }
+  return 0;
+}
+
+function minimumBoxDeadlineExceeded(deadline) {
+  return Number.isFinite(deadline) && Date.now() > deadline;
+}
+
+function splitMinimumBoxFreeRects(freeRects, used, deadline) {
+  const next = [];
+  for (let index = 0; index < freeRects.length; index += 1) {
+    if (index % 32 === 0 && minimumBoxDeadlineExceeded(deadline)) return null;
+    const freeRect = freeRects[index];
+    if (!minimumBoxRectsOverlap(freeRect, used)) {
+      next.push(freeRect);
+      continue;
+    }
+    const freeRight = freeRect.x + freeRect.lengthCm;
+    const freeTop = freeRect.y + freeRect.widthCm;
+    const usedRight = used.x + used.lengthCm;
+    const usedTop = used.y + used.widthCm;
+    if (used.x > freeRect.x + EPS) {
+      next.push({ x: freeRect.x, y: freeRect.y, lengthCm: used.x - freeRect.x, widthCm: freeRect.widthCm });
+    }
+    if (usedRight < freeRight - EPS) {
+      next.push({ x: usedRight, y: freeRect.y, lengthCm: freeRight - usedRight, widthCm: freeRect.widthCm });
+    }
+    if (used.y > freeRect.y + EPS) {
+      next.push({ x: freeRect.x, y: freeRect.y, lengthCm: freeRect.lengthCm, widthCm: used.y - freeRect.y });
+    }
+    if (usedTop < freeTop - EPS) {
+      next.push({ x: freeRect.x, y: usedTop, lengthCm: freeRect.lengthCm, widthCm: freeTop - usedTop });
+    }
+  }
+  return pruneMinimumBoxFreeRects(next, deadline);
+}
+
+function minimumBoxRectsOverlap(a, b) {
+  return a.x < b.x + b.lengthCm - EPS && a.x + a.lengthCm > b.x + EPS
+    && a.y < b.y + b.widthCm - EPS && a.y + a.widthCm > b.y + EPS;
+}
+
+function pruneMinimumBoxFreeRects(rects, deadline) {
+  const kept = [];
+  let operations = 0;
+  for (let index = 0; index < rects.length; index += 1) {
+    const rect = rects[index];
+    if (rect.lengthCm <= EPS || rect.widthCm <= EPS) continue;
+    let containedByOther = false;
+    for (let otherIndex = 0; otherIndex < rects.length; otherIndex += 1) {
+      operations += 1;
+      if (operations % 64 === 0 && minimumBoxDeadlineExceeded(deadline)) return null;
+      if (otherIndex === index) continue;
+      const other = rects[otherIndex];
+      const contained = rect.x >= other.x - EPS
+        && rect.y >= other.y - EPS
+        && rect.x + rect.lengthCm <= other.x + other.lengthCm + EPS
+        && rect.y + rect.widthCm <= other.y + other.widthCm + EPS;
+      if (!contained) continue;
+      const equal = Math.abs(rect.x - other.x) < EPS
+        && Math.abs(rect.y - other.y) < EPS
+        && Math.abs(rect.lengthCm - other.lengthCm) < EPS
+        && Math.abs(rect.widthCm - other.widthCm) < EPS;
+      if (!equal || otherIndex < index) {
+        containedByOther = true;
+        break;
+      }
+    }
+    if (!containedByOther) kept.push(rect);
+  }
+  return kept;
+}
+
+function buildMinimumBoxColumnPlan(container, bins, totalQuantity, baselineBoxes) {
+  const strategy = { id: "minimum-box-column-rescue", name: PACKING_WORKER_TEXT.minimumBoxRescueStrategyName };
+  const packedBoxes = [];
+  for (const bin of bins) {
+    const placed = [];
+    for (const entry of bin.placements) {
+      let z = 0;
+      for (const unit of entry.column.units) {
+        const placement = {
+          ...entry.dims,
+          x: round3(entry.x),
+          y: round3(entry.y),
+          z: round3(z)
+        };
+        placed.push(applyPlacement(unit, placement));
+        z += Number(entry.dims.heightCm || 0);
+      }
+    }
+    const detailed = validateAllPlacementsDetailed(container, placed);
+    if (!detailed.valid) return null;
+    let packed = makePackedBox(placed, [], strategy, {
+      minimumBoxRescue: 1,
+      minimumBoxBaselineBoxes: baselineBoxes,
+      minimumBoxRescueBoxes: bins.length,
+      minimumBoxColumnCount: bin.placements.length,
+      layerCount: countLayers(placed)
+    });
+    packed = finalizeAttempt(container, packed, strategy);
+    if (!validateAllPlacements(container, packed.placed) || packed.balanceValidation?.severity === "red") return null;
+    packedBoxes.push(packed);
+  }
+
+  const placedQuantity = packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0);
+  const unitKeys = packedBoxes.flatMap((box) => box.placed.map((unit) => unit.unitKey));
+  if (placedQuantity !== totalQuantity || new Set(unitKeys).size !== totalQuantity) return null;
+
+  for (let index = 0; index < packedBoxes.length; index += 1) {
+    packedBoxes[index].unplaced = packedBoxes
+      .slice(index + 1)
+      .flatMap((box) => box.placed.map(stripPlacement));
+  }
+  return {
+    boxes: packedBoxes.length,
+    firstBox: packedBoxes[0],
+    packedBoxes,
+    detailedBoxLimit: packedBoxes.length,
+    remainingUnitCountAfterDetailed: 0,
+    estimated: false,
+    fatalOversize: false,
+    balanceBlocked: false
+  };
+}
+
 function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = {}) {
   const source = Array.isArray(plan?.packedBoxes) ? plan.packedBoxes : [];
   const canRebuild = plan?.boxes > 0 && !plan.estimated && !plan.fatalOversize;
@@ -669,7 +1287,9 @@ function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = 
         nonStackPlanMode: mode,
         nonStackBaselineBoxes: Number(comparison.baselineBoxes || plan.boxes || 0),
         nonStackDeferredBoxes: Number(comparison.deferredBoxes || 0),
-        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0
+        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0,
+        minimumBoxBaselineBoxes: Number(comparison.minimumBoxBaselineBoxes || box.strategySummary?.minimumBoxBaselineBoxes || plan.boxes || 0),
+        minimumBoxRescueBoxes: Number(comparison.minimumBoxRescueBoxes || box.strategySummary?.minimumBoxRescueBoxes || 0)
       }
     }));
     return {
@@ -712,7 +1332,9 @@ function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = 
         nonStackPlanMode: mode,
         nonStackBaselineBoxes: Number(comparison.baselineBoxes || plan.boxes || 0),
         nonStackDeferredBoxes: Number(comparison.deferredBoxes || 0),
-        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0
+        nonStackFallbackRequired: mode === "baseline-fallback" ? 1 : 0,
+        minimumBoxBaselineBoxes: Number(comparison.minimumBoxBaselineBoxes || box.strategySummary?.minimumBoxBaselineBoxes || plan.boxes || 0),
+        minimumBoxRescueBoxes: Number(comparison.minimumBoxRescueBoxes || box.strategySummary?.minimumBoxRescueBoxes || 0)
       }
     };
   });
@@ -779,11 +1401,18 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
           packed,
           placedQuantity,
           fitStatus,
-          score: mixedBoxCandidateScore(container, packed, remaining, utilizationPercent, fitStatus)
+          score: mixedBoxCandidateScore(
+            container,
+            packed,
+            remaining,
+            utilizationPercent,
+            fitStatus,
+            priceEligibleContainers
+          )
         };
       })
       .filter(Boolean)
-      .sort((a, b) => a.score - b.score);
+      .sort((a, b) => compareMinimumBoxScores(a.score, b.score));
 
     const selected = candidates.find((candidate) => candidate.fitStatus === FIT_STATUS.FIT) || candidates[0];
     if (!selected?.packed?.placed?.length) {
@@ -1135,25 +1764,29 @@ function mixedPlanBoxContainer(container) {
   return copy;
 }
 
-function mixedBoxCandidateScore(container, packed, remaining, utilizationPercent, fitStatus) {
+function mixedBoxCandidateScore(container, packed, remaining, utilizationPercent, fitStatus, candidateContainers = [container]) {
   const placedQuantity = sumUnitQuantity(packed.placed);
   const totalQuantity = Math.max(1, sumUnitQuantity(remaining));
-  const placedVolume = sumCargoVolumeM3(packed.placed);
   const usableCapacity = Math.max(EPS, usageCapacity(container, utilizationPercent));
   const fillPercent = usageUsedCapacity(container, packed.placed) / usableCapacity * 100;
   const meta = equipmentMeta(container);
   const priceScore = meta.priceAvailable ? meta.referencePrice / REFERENCE_PRICE_BASE : 1000000;
-  const placedRatio = placedQuantity / totalQuantity;
   const completesAll = placedQuantity >= totalQuantity;
   const underfillPenalty = completesAll ? Math.max(0, 60 - fillPercent) * 0.12 : Math.max(0, 48 - fillPercent) * 0.05;
-  const blockedPenalty = fitStatus === FIT_STATUS.BALANCE_BLOCKED ? 500 : 0;
-  const fillReward = Math.min(fillPercent, 88) / 100 * 1.4;
-  return blockedPenalty
-    + priceScore
-    + underfillPenalty
-    - fillReward
-    - placedRatio * 1.25
-    - placedVolume / Math.max(EPS, priceScore) * 0.02;
+  const unplaced = packed.unplaced || [];
+  const remainingLowerBound = unplaced.length
+    ? Math.min(...candidateContainers.map((candidate) => residualPlanMetrics(candidate, unplaced).remainingBoxLowerBound))
+    : 0;
+  return [
+    fitStatusRank(fitStatus),
+    1 + remainingLowerBound,
+    sumCargoVolumeM3(unplaced),
+    sumUnitQuantity(unplaced),
+    priceScore,
+    underfillPenalty,
+    -fillPercent,
+    volumeM3(container)
+  ];
 }
 
 function mixedPlanCost(packedBoxes) {
@@ -4576,6 +5209,10 @@ function makePackedBox(placed, unplaced, strategy, stats) {
       maxFixedBandOverflowCm: round(stats.maxFixedBandOverflowCm || 0),
       verticalLayerContinuationCount: Number(stats.verticalLayerContinuationCount || 0),
       lowerDeckRevisitCount: Number(stats.lowerDeckRevisitCount || 0),
+      minimumBoxRescue: Number(stats.minimumBoxRescue || 0),
+      minimumBoxBaselineBoxes: Number(stats.minimumBoxBaselineBoxes || 0),
+      minimumBoxRescueBoxes: Number(stats.minimumBoxRescueBoxes || 0),
+      minimumBoxColumnCount: Number(stats.minimumBoxColumnCount || 0),
       nonStackFoundationPlacedCount: Number(stats.nonStackFoundationPlacedCount || 0),
       balanceSeverity: stats.balanceValidation?.severity || "",
       balanceScore: round(stats.balanceValidation?.score || 0),
@@ -5541,6 +6178,8 @@ function cargoDisplayName(cargo) {
 function compareEvaluation(a, b) {
   const statusDiff = fitStatusRank(a.fitStatus) - fitStatusRank(b.fitStatus);
   if (statusDiff) return statusDiff;
+  const boxDiff = normalizedBoxCount(a) - normalizedBoxCount(b);
+  if (boxDiff) return boxDiff;
   const priceStatusA = evaluationPriceStatus(a);
   const priceStatusB = evaluationPriceStatus(b);
   const priceComparableDiff = (priceStatusA.comparable ? 0 : 1) - (priceStatusB.comparable ? 0 : 1);
@@ -5551,8 +6190,6 @@ function compareEvaluation(a, b) {
     const costDiff = estimatedFreightCost(a) - estimatedFreightCost(b);
     if (Math.abs(costDiff) > EPS) return costDiff;
   }
-  const boxDiff = normalizedBoxCount(a) - normalizedBoxCount(b);
-  if (boxDiff) return boxDiff;
   const fillDiff = recommendationFillPercent(b) - recommendationFillPercent(a);
   if (Math.abs(fillDiff) > EPS) return fillDiff;
   const scoreDiff = recommendationScoreValue(a) - recommendationScoreValue(b);
@@ -5709,7 +6346,7 @@ function freightConclusionText(evaluation) {
   if (["mixed-currency", "currency-set-mismatch"].includes(String(recommendation.priceExclusionReason || ""))) {
     return "参与方案币种不一致，未形成最低运价比较结论";
   }
-  return `当前搜索最低综合参考运价 ${formatFreightCost(estimatedFreightCost(evaluation), recommendation.referenceCurrency)}`;
+  return currentPlanFreightText(formatFreightCost(estimatedFreightCost(evaluation), recommendation.referenceCurrency));
 }
 
 function formatFreightCost(value, currency = "USD") {
@@ -5793,7 +6430,7 @@ function buildTrace(container, units, total, multi, metrics) {
       "候选落位必须满足边界、不相交、底面支撑和不可重压货物不承载上层货物",
       "首轮失败时执行局部搜索，移出一小组已摆货物与剩余货物重排，而不是立刻开启第二箱",
       "同一箱型选择已摆数量更多、占用体积更高、承重支撑面更好的方案",
-      "所有最终候选同时通过尺寸、支撑、载重和偏载门槛后，再按综合参考运价、箱数和利用率辅助条件排序；未设置价格的箱型不参与最低运价比较"
+      PACKING_WORKER_TEXT.recommendationPipeline
     ],
     strategies: SEARCH_STRATEGIES.map((strategy) => strategy.name),
     selectedStrategy: firstBox.strategyName || "",
