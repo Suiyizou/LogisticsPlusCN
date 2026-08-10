@@ -1328,9 +1328,8 @@ async function initializeAuth() {
 async function handleLoggedIn(user) {
   currentUser.value = user;
   profileVersion.value += 1;
-  const isAdmin = user?.role === "ADMIN";
-  const target = isAdmin ? "/admin" : user?.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches";
-  loginRedirectText.value = t(isAdmin ? "portal.enteringAdmin" : "portal.entering");
+  const target = user?.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches";
+  loginRedirectText.value = t("portal.entering");
   loginRedirecting.value = true;
   await router.replace(target);
   loginRedirecting.value = false;

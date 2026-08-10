@@ -1,11 +1,5 @@
 <template>
   <main class="workbench-portal" data-i18n-ignore>
-    <div class="portal-atmosphere" aria-hidden="true">
-      <span class="portal-glow portal-glow--one"></span>
-      <span class="portal-glow portal-glow--two"></span>
-      <span class="portal-grid"></span>
-    </div>
-
     <header class="portal-header">
       <RouterLink class="portal-brand" to="/workbenches" :aria-label="t('portal.brandAria')">
         <span class="portal-brand-mark" aria-hidden="true">
@@ -79,67 +73,6 @@
           </div>
           <h1>{{ t("portal.greeting", { name: displayName }) }}</h1>
           <p>{{ t("portal.heroDescription") }}</p>
-          <div class="portal-hero-meta">
-            <span>
-              <b>{{ ['BUSINESS', 'ADMIN'].includes(currentUser?.role) ? '03' : '02' }}</b>
-              {{ t("portal.availableWorkbenches") }}
-            </span>
-            <span>
-              <b>SSO</b>
-              {{ t("portal.sharedIdentity") }}
-            </span>
-            <span>
-              <b>24/7</b>
-              {{ t("portal.operationCoverage") }}
-            </span>
-          </div>
-        </div>
-
-        <div class="portal-route-visual" aria-hidden="true">
-          <div class="portal-route-head">
-            <span>SHA</span>
-            <i></i>
-            <small>GLOBAL CARGO FLOW</small>
-            <i></i>
-            <span>RTM</span>
-          </div>
-          <svg viewBox="0 0 560 240" role="presentation">
-            <defs>
-              <linearGradient id="portalSea" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#8fe8ff" stop-opacity=".22" />
-                <stop offset="1" stop-color="#4f7cff" stop-opacity=".02" />
-              </linearGradient>
-              <linearGradient id="portalRoute" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" stop-color="#63e6be" />
-                <stop offset="1" stop-color="#79c7ff" />
-              </linearGradient>
-            </defs>
-            <path class="portal-sea" d="M22 174c66-32 107-20 160-4s95 28 160 6 111-34 196-3v47H22z" fill="url(#portalSea)" />
-            <path class="portal-route-path" d="M55 161C149 72 220 198 304 111s139-50 202-7" />
-            <path class="portal-route-dash" d="M55 161C149 72 220 198 304 111s139-50 202-7" />
-            <g class="portal-port portal-port--origin">
-              <circle cx="55" cy="161" r="16" />
-              <circle cx="55" cy="161" r="5" />
-            </g>
-            <g class="portal-port portal-port--destination">
-              <circle cx="506" cy="104" r="16" />
-              <circle cx="506" cy="104" r="5" />
-            </g>
-            <g class="portal-ship" transform="translate(275 106)">
-              <path d="m-39 18 12 18h62l17-18z" />
-              <path d="M-25 18V-2h51v20M-16-2v-13h14V-2M5-2v-22h13V-2" />
-              <path d="M-20 8h12M-2 8h12M16 8h7" />
-            </g>
-            <g class="portal-cargo-stack" transform="translate(122 110)">
-              <rect x="0" y="18" width="31" height="23" rx="2" />
-              <rect x="34" y="18" width="31" height="23" rx="2" />
-              <rect x="17" y="-8" width="31" height="23" rx="2" />
-            </g>
-          </svg>
-          <div class="portal-route-caption">
-            <span><i></i>{{ t("portal.routePlanning") }}</span>
-            <span><i></i>{{ t("portal.routeTracking") }}</span>
-          </div>
         </div>
       </div>
 
@@ -188,7 +121,6 @@
           </RouterLink>
 
           <a
-            v-if="!['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
             class="portal-workbench-card portal-workbench-card--tracking"
             :href="trackingWorkbenchUrl"
             target="_blank"
@@ -229,7 +161,7 @@
             to="/customers"
           >
             <div class="portal-card-topline">
-              <span>02 / CUSTOMER OPERATIONS</span>
+              <span>03 / CUSTOMER OPERATIONS</span>
               <small><i></i>{{ t("portal.controlled") }}</small>
             </div>
             <div class="portal-card-body">
@@ -1504,6 +1436,271 @@ async function submitPasswordChange() {
 
   .portal-workbench-card,
   .portal-card-action svg {
+    transition: none;
+  }
+}
+
+/* Compact operations workbench */
+.workbench-portal {
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: #0f2740;
+  background: #f4f7fb;
+}
+
+.portal-header {
+  min-height: 72px;
+  padding: 0 max(24px, calc((100vw - 1180px) / 2));
+  border-bottom: 1px solid #dbe4ee;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 12px rgba(15, 39, 64, 0.04);
+  backdrop-filter: none;
+}
+
+.portal-brand-mark,
+.portal-avatar,
+.portal-admin-link,
+.portal-message-button,
+.portal-account-trigger,
+:global(.portal-account-popper.el-popper),
+:global(.portal-account-popper .el-dropdown-menu__item) {
+  border-radius: 4px;
+}
+
+.portal-brand-mark {
+  width: 40px;
+  height: 40px;
+  border-color: #cbd9e7;
+  background: #eef5fb;
+  box-shadow: none;
+}
+
+.portal-admin-link,
+.portal-message-button,
+.portal-account-trigger {
+  min-height: 40px;
+  color: #35536e;
+  border-color: #d6e0ea;
+  background: #f8fafc;
+}
+
+.portal-admin-link:hover,
+.portal-message-button:hover,
+.portal-account-trigger:hover {
+  color: #0369a1;
+  border-color: #7eb1cf;
+  background: #eef7fc;
+}
+
+.portal-content {
+  width: min(1180px, calc(100% - 48px));
+  padding: 48px 0 24px;
+}
+
+.portal-hero {
+  display: block;
+  padding: 0 0 32px;
+  border-bottom: 1px solid #dbe4ee;
+}
+
+.portal-hero-copy {
+  max-width: 820px;
+}
+
+.portal-kicker {
+  margin-bottom: 14px;
+  color: #0369a1;
+}
+
+.portal-kicker i {
+  background: #a9bfd2;
+}
+
+.portal-hero-copy h1 {
+  max-width: none;
+  color: #102a46;
+  font-size: clamp(30px, 3.1vw, 44px);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+
+.portal-hero-copy > p {
+  max-width: 760px;
+  margin-top: 14px;
+  color: #5b7187;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.portal-workbench-section {
+  margin-top: 30px;
+}
+
+.portal-section-head {
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.portal-section-head h2 {
+  color: #102a46;
+  font-size: 24px;
+}
+
+.portal-section-head p {
+  max-width: 440px;
+  color: #60768b;
+  line-height: 1.55;
+}
+
+.portal-card-grid,
+.portal-card-grid.has-customer-card {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.portal-workbench-card {
+  min-height: 252px;
+  padding: 22px;
+  border: 1px solid #d6e0ea;
+  border-radius: 4px;
+  color: #173653;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(23, 54, 83, 0.055);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.portal-workbench-card::before,
+.portal-workbench-card--tracking::before,
+.portal-workbench-card--customers::before {
+  inset: 0 0 auto;
+  height: 3px;
+  opacity: 1;
+  background: #0369a1;
+}
+
+.portal-workbench-card--tracking::before {
+  background: #2563a5;
+}
+
+.portal-workbench-card--customers::before {
+  background: #334155;
+}
+
+.portal-workbench-card:hover {
+  border-color: #7faeca;
+  background: #fbfdff;
+  box-shadow: 0 12px 30px rgba(23, 54, 83, 0.1);
+  transform: none;
+}
+
+.portal-workbench-card:focus-visible {
+  outline: 3px solid rgba(3, 105, 161, 0.24);
+  outline-offset: 3px;
+}
+
+.portal-card-body {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 16px;
+  margin: 22px 0 16px;
+}
+
+.portal-card-icon,
+.portal-workbench-card--tracking .portal-card-icon,
+.portal-workbench-card--customers .portal-card-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 4px;
+  color: #0369a1;
+  border-color: #bfd5e4;
+  background: #eef7fc;
+}
+
+.portal-workbench-card--tracking .portal-card-icon {
+  color: #2563a5;
+  background: #f0f5fb;
+}
+
+.portal-workbench-card--customers .portal-card-icon {
+  color: #334155;
+  background: #f1f5f9;
+}
+
+.portal-card-icon svg {
+  width: 46px;
+}
+
+.portal-card-copy h3 {
+  margin: 5px 0 7px;
+  color: #102a46;
+  font-size: clamp(20px, 1.7vw, 25px);
+}
+
+.portal-card-copy p {
+  color: #60768b;
+  line-height: 1.55;
+}
+
+.portal-card-features span {
+  padding: 5px 8px;
+  border-radius: 3px;
+  color: #4d657a;
+  border-color: #dbe4ec;
+  background: #f7f9fb;
+}
+
+.portal-card-action {
+  margin-top: 16px;
+  padding-top: 13px;
+  color: #0369a1;
+  border-top-color: #e1e8ef;
+}
+
+.portal-workbench-card:hover .portal-card-action svg {
+  transform: translateX(2px);
+}
+
+.portal-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  color: #708499;
+  border-top-color: #dbe4ee;
+}
+
+@media (max-width: 760px) {
+  .portal-header {
+    min-height: 64px;
+    padding: 0 16px;
+  }
+
+  .portal-content {
+    width: min(100% - 32px, 620px);
+    padding-top: 32px;
+  }
+
+  .portal-hero {
+    padding-bottom: 24px;
+  }
+
+  .portal-workbench-section {
+    margin-top: 24px;
+  }
+
+  .portal-section-head {
+    gap: 10px;
+  }
+
+  .portal-workbench-card {
+    min-height: 232px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-workbench-card,
+  .portal-card-action svg,
+  .portal-admin-link,
+  .portal-message-button,
+  .portal-account-trigger {
     transition: none;
   }
 }

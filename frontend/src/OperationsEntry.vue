@@ -170,17 +170,12 @@ async function initializeAuth() {
 }
 
 async function handleLoggedIn(user) {
-  const isAdmin = user?.role === "ADMIN";
   const isOverseaAgent = user?.role === "OVERSEA_AGENT";
-  const target = isAdmin ? "/admin" : isOverseaAgent ? "/customers" : "/workbenches";
-  loginRedirectText.value = t(isAdmin ? "portal.enteringAdmin" : "portal.entering");
+  const target = isOverseaAgent ? "/customers" : "/workbenches";
+  loginRedirectText.value = t("portal.entering");
   loginRedirecting.value = true;
   try {
-    await (isAdmin
-      ? loadAdminDashboard()
-      : isOverseaAgent
-        ? loadBusinessCustomerPage()
-        : loadWorkbenchPortal());
+    await (isOverseaAgent ? loadBusinessCustomerPage() : loadWorkbenchPortal());
     await router.replace(target);
     currentUser.value = user;
   } finally {

@@ -542,10 +542,9 @@ let navigationTimer = 0;
 let previousBodyOverflow = "";
 let revealObserver: IntersectionObserver | null = null;
 
-const platformEntryPath = computed(() => props.currentUser?.role === "ADMIN" ? "/admin" : "/workbenches");
+const platformEntryPath = computed(() => "/workbenches");
 const platformEntryLabel = computed(() => {
   currentLocale.value;
-  if (props.currentUser?.role === "ADMIN") return t("landing.entry.admin");
   if (props.currentUser) return t("landing.entry.open");
   return t("landing.entry.enter");
 });

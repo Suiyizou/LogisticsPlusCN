@@ -9,6 +9,9 @@ const REPORT_COLORS = ["#2a9d8f", "#3b82f6", "#8b5cf6", "#f97316", "#e11d48", "#
 const PAGE_WIDTH = 1800;
 const CARD_RADIUS = 18;
 const REMAINING_SPACE_CARD_HEIGHT = 560;
+const REMAINING_SPACE_DETAIL_ROWS_PER_CARD = 28;
+const REMAINING_SPACE_DETAIL_ROW_HEIGHT = 38;
+const REMAINING_SPACE_DETAIL_BASE_HEIGHT = 164;
 const FREE_SPACE_COLORS = ["#0ea5e9", "#14b8a6", "#8b5cf6", "#f59e0b", "#6366f1", "#06b6d4", "#84cc16", "#f97316", "#a855f7", "#64748b"];
 
 export async function exportPackingReport(options) {
@@ -102,8 +105,12 @@ export function renderReportCanvas(options) {
   const balanceHeight = massBalance?.valid ? 360 : 0;
   const layerCardHeight = 600;
   const remainingSpaceHeight = remainingSpace?.conservationOk ? REMAINING_SPACE_CARD_HEIGHT : 0;
+  const remainingSpaceDetailSections = buildRemainingSpaceDetailSections(remainingSpace);
+  const remainingSpaceDetailHeight = remainingSpaceDetailSections
+    .reduce((sum, section) => sum + section.height + 24, 0);
   const height = 150 + 112 + remainingSpaceHeight + (remainingSpaceHeight ? 24 : 0)
-    + balanceHeight + (balanceHeight ? 24 : 0) + legendHeight + layers.length * (layerCardHeight + 24) + 70;
+    + remainingSpaceDetailHeight + balanceHeight + (balanceHeight ? 24 : 0)
+    + legendHeight + layers.length * (layerCardHeight + 24) + 70;
   const canvas = document.createElement("canvas");
   canvas.width = PAGE_WIDTH;
   canvas.height = height;
@@ -123,6 +130,11 @@ export function renderReportCanvas(options) {
     pageBreaks.push(y);
     drawRemainingSpaceAnalysis(ctx, 48, y, PAGE_WIDTH - 96, remainingSpaceHeight, remainingSpace.container || container, remainingSpace);
     y += remainingSpaceHeight + 24;
+    remainingSpaceDetailSections.forEach((section) => {
+      pageBreaks.push(y);
+      drawRemainingSpaceDetails(ctx, 48, y, PAGE_WIDTH - 96, section, remainingSpace);
+      y += section.height + 24;
+    });
   }
   if (massBalance?.valid) {
     pageBreaks.push(y);
@@ -157,6 +169,22 @@ function analyzeReportRemainingSpace(container, placements) {
     console.warn("Remaining-space analysis was skipped; the packing report will continue without the clearance card.", error);
     return null;
   }
+}
+
+function buildRemainingSpaceDetailSections(analysis) {
+  if (!analysis?.conservationOk || !Array.isArray(analysis.blocks) || !analysis.blocks.length) return [];
+  const sections = [];
+  for (let offset = 0; offset < analysis.blocks.length; offset += REMAINING_SPACE_DETAIL_ROWS_PER_CARD) {
+    const rows = analysis.blocks.slice(offset, offset + REMAINING_SPACE_DETAIL_ROWS_PER_CARD);
+    sections.push({
+      rows,
+      start: offset + 1,
+      end: offset + rows.length,
+      total: analysis.blocks.length,
+      height: REMAINING_SPACE_DETAIL_BASE_HEIGHT + rows.length * REMAINING_SPACE_DETAIL_ROW_HEIGHT
+    });
+  }
+  return sections;
 }
 
 function refineRemainingSpaceVolumes(analysis, placements) {
@@ -314,6 +342,95 @@ function drawRemainingSpaceAnalysis(ctx, x, y, width, height, container, analysi
       volume: formatNum(analysis.fragmentedVolumeM3, 2)
     }), panelX, y + height - 22, panelWidth, 9);
   }
+}
+
+function drawRemainingSpaceDetails(ctx, x, y, width, section, analysis) {
+  drawCard(ctx, x, y, width, section.height);
+  ctx.fillStyle = "#132033";
+  ctx.font = "800 24px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingDetailTitle"), x + 24, y + 38, width - 48, 16);
+  ctx.fillStyle = "#64748b";
+  ctx.font = "400 14px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingDetailSubtitle", {
+    start: section.start,
+    end: section.end,
+    total: section.total
+  }), x + 24, y + 66, width - 48, 10);
+
+  const tableX = x + 24;
+  const tableWidth = width - 48;
+  const headerY = y + 82;
+  ctx.fillStyle = "#eef3f8";
+  roundRect(ctx, tableX, headerY, tableWidth, 34, 4);
+  ctx.fill();
+
+  const columns = [
+    { key: "report.remainingDetailBlock", x: tableX + 14, width: 82 },
+    { key: "report.remainingDetailDimensions", x: tableX + 104, width: 300 },
+    { key: "report.remainingDetailX", x: tableX + 422, width: 235 },
+    { key: "report.remainingDetailY", x: tableX + 672, width: 235 },
+    { key: "report.remainingDetailZ", x: tableX + 922, width: 235 },
+    { key: "report.remainingDetailVolume", x: tableX + 1182, width: 205 },
+    { key: "report.remainingDetailShare", x: tableX + 1400, width: tableWidth - 1414 }
+  ];
+  ctx.fillStyle = "#42566d";
+  ctx.font = "700 13px Microsoft YaHei, Arial";
+  columns.forEach((column) => {
+    fillFittedText(ctx, reportText(ctx, column.key), column.x, headerY + 22, column.width, 9);
+  });
+
+  section.rows.forEach((block, rowIndex) => {
+    const globalIndex = section.start + rowIndex;
+    const rowTop = headerY + 34 + rowIndex * REMAINING_SPACE_DETAIL_ROW_HEIGHT;
+    const baseline = rowTop + 24;
+    if (rowIndex % 2 === 1) {
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(tableX, rowTop, tableWidth, REMAINING_SPACE_DETAIL_ROW_HEIGHT);
+    }
+    ctx.fillStyle = FREE_SPACE_COLORS[(globalIndex - 1) % FREE_SPACE_COLORS.length];
+    ctx.fillRect(tableX + 14, rowTop + 10, 4, 18);
+    ctx.fillStyle = "#173f63";
+    ctx.font = "800 13px Microsoft YaHei, Arial";
+    fillFittedText(ctx, `R${globalIndex}`, tableX + 26, baseline, 66, 10);
+
+    ctx.fillStyle = "#263b50";
+    ctx.font = "600 13px Microsoft YaHei, Arial";
+    fillFittedText(ctx, `${formatNum(block.lengthCm, 0)} × ${formatNum(block.widthCm, 0)} × ${formatNum(block.heightCm, 0)} cm`, columns[1].x, baseline, columns[1].width, 9);
+    ctx.fillStyle = "#52677d";
+    ctx.font = "400 12px Microsoft YaHei, Arial";
+    fillFittedText(ctx, coordinateRange(block.xCm, block.x2Cm, block.lengthCm), columns[2].x, baseline, columns[2].width, 8);
+    fillFittedText(ctx, coordinateRange(block.yCm, block.y2Cm, block.widthCm), columns[3].x, baseline, columns[3].width, 8);
+    fillFittedText(ctx, coordinateRange(block.zCm, block.z2Cm, block.heightCm), columns[4].x, baseline, columns[4].width, 8);
+    ctx.fillStyle = "#174a7f";
+    ctx.font = "800 13px Microsoft YaHei, Arial";
+    fillFittedText(ctx, `${formatNum(block.volumeM3, 3)} m³`, columns[5].x, baseline, columns[5].width, 9);
+    ctx.fillStyle = "#52677d";
+    ctx.font = "700 12px Microsoft YaHei, Arial";
+    fillFittedText(ctx, `${formatNum(block.percentOfFree, 2)}%`, columns[6].x, baseline, columns[6].width, 8);
+  });
+
+  const sectionVolumeM3 = section.rows.reduce((sum, block) => sum + Number(block.volumeM3 || 0), 0);
+  const sectionShare = Number(analysis.usableFreeVolumeM3 || 0) > 0
+    ? sectionVolumeM3 / Number(analysis.usableFreeVolumeM3) * 100
+    : 0;
+  const footerY = headerY + 34 + section.rows.length * REMAINING_SPACE_DETAIL_ROW_HEIGHT;
+  ctx.strokeStyle = "#dbe4ec";
+  ctx.beginPath();
+  ctx.moveTo(tableX, footerY + 8);
+  ctx.lineTo(tableX + tableWidth, footerY + 8);
+  ctx.stroke();
+  ctx.fillStyle = "#52677d";
+  ctx.font = "600 12px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingDetailTotal", {
+    volume: formatNum(sectionVolumeM3, 3),
+    share: formatNum(sectionShare, 2)
+  }), tableX, footerY + 34, tableWidth, 9);
+}
+
+function coordinateRange(start, end, size) {
+  const from = Number(start || 0);
+  const to = Number.isFinite(Number(end)) ? Number(end) : from + Number(size || 0);
+  return `${formatNum(from, 0)}–${formatNum(to, 0)} cm`;
 }
 
 function drawRemainingSpaceIso(ctx, plot, container, analysis) {
