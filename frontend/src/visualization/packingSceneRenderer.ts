@@ -5,10 +5,24 @@ import type {
   SceneCargo,
   SceneControllerCallbacks,
   SceneData,
+  SceneRemainingBlock,
   SceneRenderOptions,
   SceneViewPreset
 } from "./packingSceneTypes";
 import { translateUiText } from "../i18n/uiText";
+
+const REMAINING_SPACE_COLORS = [
+  "#0284c7",
+  "#0f9f93",
+  "#7c3aed",
+  "#d97706",
+  "#4f46e5",
+  "#0891b2",
+  "#65a30d",
+  "#ea580c",
+  "#9333ea",
+  "#475569"
+];
 
 const DEFAULT_OPTIONS: SceneRenderOptions = {
   showLabels: true,
@@ -21,6 +35,8 @@ const DEFAULT_OPTIONS: SceneRenderOptions = {
   translucentCargo: false,
   showHeatmap: false,
   showRemaining: false,
+  showRemainingLabels: true,
+  remainingBlocks: [],
   showMassBalance: true,
   sliceAxis: "none",
   slicePercent: 100,
@@ -147,7 +163,7 @@ export class PackingSceneRenderer {
       this.callbacks.onHover?.(null);
       return null;
     }
-    const item = hit.object.userData.item as SceneCargo;
+    const item = hit.object.userData.item as SceneCargo | SceneRemainingBlock;
     const payload = { item, clientX: event.clientX - rect.left, clientY: event.clientY - rect.top };
     this.callbacks.onHover?.(payload);
     return payload;
@@ -504,10 +520,34 @@ export class PackingSceneRenderer {
   }
 
   private addRemainingSpaces(container: any) {
-    const spaces = buildRemainingSpaces(container, this.data!.cargos);
-    const material = new THREE.MeshBasicMaterial({ color: "#8bc36d", transparent: true, opacity: 0.1, depthWrite: false });
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: "#4d8f34", transparent: true, opacity: 0.24 });
-    spaces.forEach((space) => {
+    const source = this.options.remainingBlocks?.length
+      ? this.options.remainingBlocks
+      : buildRemainingSpaces(container, this.data!.cargos).map((space, index) => ({
+        ...space,
+        kind: "remaining-space" as const,
+        id: `R${index + 1}`,
+        label: `R${index + 1}`,
+        displayNo: `R${index + 1}`,
+        name: this.t("sceneOptions.remainingBlockName"),
+        color: REMAINING_SPACE_COLORS[index % REMAINING_SPACE_COLORS.length],
+        volumeM3: space.lengthCm * space.widthCm * space.heightCm / 1_000_000,
+        percentOfFree: 0
+      }));
+    const spaces = source.slice(0, 80);
+    spaces.forEach((space, index) => {
+      const color = space.color || REMAINING_SPACE_COLORS[index % REMAINING_SPACE_COLORS.length];
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: index < 12 ? 0.18 : 0.09,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: index < 12 ? 0.72 : 0.3
+      });
       const geometry = new THREE.BoxGeometry(space.lengthCm, space.heightCm, space.widthCm);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(
@@ -515,10 +555,23 @@ export class PackingSceneRenderer {
         space.zCm + space.heightCm / 2,
         space.yCm + space.widthCm / 2 - container.widthCm / 2
       );
+      mesh.userData.item = space;
+      mesh.renderOrder = 12;
       this.root.add(mesh);
+      this.hoverMeshes.push(mesh);
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial);
       edges.position.copy(mesh.position);
+      edges.renderOrder = 13;
       this.root.add(edges);
+      if (this.options.showRemainingLabels && index < 10) {
+        const label = createTextSprite(
+          space.label || space.id || `R${index + 1}`,
+          new THREE.Vector3(mesh.position.x, mesh.position.y + space.heightCm / 2 + 7, mesh.position.z),
+          color,
+          28
+        );
+        this.root.add(label);
+      }
     });
   }
 

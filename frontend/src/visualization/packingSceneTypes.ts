@@ -84,6 +84,28 @@ export interface SceneCargo extends PlacementLike {
   volumeM3: number;
 }
 
+export interface SceneRemainingBlock {
+  kind: "remaining-space";
+  id: string;
+  label: string;
+  name: string;
+  displayNo: string;
+  color: string;
+  xCm: number;
+  yCm: number;
+  zCm: number;
+  x2Cm?: number;
+  y2Cm?: number;
+  z2Cm?: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  volumeM3: number;
+  percentOfFree: number;
+}
+
+export type SceneHoverItem = SceneCargo | SceneRemainingBlock;
+
 export interface SceneLegendItem {
   key: string;
   label: string;
@@ -143,6 +165,8 @@ export interface SceneRenderOptions {
   showClearanceEnvelope: boolean;
   showHeatmap: boolean;
   showRemaining: boolean;
+  showRemainingLabels: boolean;
+  remainingBlocks: SceneRemainingBlock[];
   showMassBalance: boolean;
   sliceAxis: SliceAxis;
   slicePercent: number;
@@ -152,7 +176,7 @@ export interface SceneRenderOptions {
 }
 
 export interface SceneHoverPayload {
-  item: SceneCargo;
+  item: SceneHoverItem;
   clientX: number;
   clientY: number;
 }

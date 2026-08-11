@@ -652,6 +652,7 @@
             @render-state="handleSceneRenderState"
             @export-image="exportCurrentReport('png')"
             @export-pdf="exportCurrentReport('pdf')"
+            @export-remaining-pdf="exportRemainingReport"
             @export-zip="exportAllReportsZip"
             @print="printCurrentPlan"
           >
@@ -2646,11 +2647,44 @@ async function exportCurrentReport(format) {
       locale: currentLocale.value,
       userName: userDisplayName.value,
       username: currentUser.value?.username,
-      taskId: currentExportTaskId()
+      taskId: currentExportTaskId(),
+      includeRemainingSpace: false
     });
     showToast(format === "pdf" ? "PDF 已导出。" : "图片已导出。");
   } catch (error) {
     showToast(error.message || "导出失败，请稍后重试。");
+  } finally {
+    exportingReport.value = false;
+  }
+}
+
+async function exportRemainingReport() {
+  if (!selectedContainer.value || !selectedPlacements.value.length) {
+    showToast(ui("result.remainingReportEmpty"));
+    return;
+  }
+  if (!isEvaluationExportable(selectedEvaluation.value)) {
+    showToast(ui("result.remainingReportBlocked"));
+    return;
+  }
+  exportingReport.value = true;
+  showToast(ui("result.remainingReportGenerating"));
+  try {
+    const { exportRemainingSpaceReport } = await import("./services/exportReport");
+    await exportRemainingSpaceReport({
+      container: selectedContainer.value,
+      evaluation: normalizeEvaluationForExport(selectedEvaluation.value),
+      placements: selectedPlacements.value,
+      cargos: cargos.value,
+      boxIndex: selectedBoxIndex.value,
+      locale: currentLocale.value,
+      userName: userDisplayName.value,
+      username: currentUser.value?.username,
+      taskId: currentExportTaskId()
+    });
+    showToast(ui("result.remainingReportExported"));
+  } catch (error) {
+    showToast(error.message || ui("result.remainingReportFailed"));
   } finally {
     exportingReport.value = false;
   }
@@ -2679,7 +2713,8 @@ async function exportAllReportsZip() {
       locale: currentLocale.value,
       userName: userDisplayName.value,
       username: currentUser.value?.username,
-      taskId: currentExportTaskId()
+      taskId: currentExportTaskId(),
+      includeRemainingSpace: false
     });
     showToast(hasUndetailedBoxes.value ? "已详算货舱报告 ZIP 已导出。" : "整套装箱报告 ZIP 已导出。");
   } catch (error) {

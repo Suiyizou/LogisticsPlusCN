@@ -20,6 +20,7 @@
           <div class="visual-option-grid">
             <el-checkbox v-model="showLabels">{{ tr("货号标签") }}</el-checkbox>
             <el-checkbox v-model="remainingModel">{{ tr("剩余空间") }}</el-checkbox>
+            <el-checkbox v-model="showRemainingLabels" :disabled="!remainingModel">{{ t("sceneOptions.remainingBlockLabels") }}</el-checkbox>
             <el-checkbox v-model="massModel">{{ tr("重心偏载") }}</el-checkbox>
             <el-checkbox v-model="showGrid">{{ tr("底部网格") }}</el-checkbox>
             <el-checkbox v-model="showShell">{{ tr("箱体外壳") }}</el-checkbox>
@@ -36,6 +37,10 @@
                 size="small"
                 :disabled="!showAxes"
               />
+            </div>
+            <div v-if="remainingModel" class="remaining-option-note">
+              <strong>{{ t("sceneOptions.remainingDisplayTitle") }}</strong>
+              <span>{{ t("sceneOptions.remainingDisplayHint") }}</span>
             </div>
           </div>
         </el-popover>
@@ -70,31 +75,104 @@
         <div v-else-if="emptyStateVisible" class="visual-empty-state">
           <el-empty :description="emptyStateText" />
         </div>
-        <div v-if="tooltip.visible" class="scene-tooltip visual-tooltip" :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }">
-          <strong>#{{ tooltip.item.displayNo }} {{ tooltip.item.name }}</strong>
-          <span>{{ t("sceneOptions.physicalOuterSize") }} {{ formatDimension(tooltip.item.physicalLengthCm) }} × {{ formatDimension(tooltip.item.physicalWidthCm) }} × {{ formatDimension(tooltip.item.physicalHeightCm) }} cm</span>
-          <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedEnvelopeSize") }} {{ formatDimension(tooltip.item.lengthCm) }} × {{ formatDimension(tooltip.item.widthCm) }} × {{ formatDimension(tooltip.item.heightCm) }} cm</span>
-          <span v-if="tooltip.item.horizontalGapCm > 0">{{ t("sceneOptions.horizontalGapDetail", { gap: formatDimension(tooltip.item.horizontalGapCm), side: formatDimension(tooltip.item.clearancePerSideCm) }) }}</span>
-          <span>{{ tr("数量") }} {{ tooltip.item.quantity }} {{ tr("件") }} · {{ tr("重量") }} {{ formatWeight(tooltip.item.weightKg) }}</span>
-          <span class="tooltip-constraint-tags">
-            <el-tag
-              size="small"
-              :type="tooltip.item.nonStack ? 'warning' : 'success'"
-              effect="light"
-            >
-              {{ t(tooltip.item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing") }}
-            </el-tag>
-            <el-tag v-if="tooltip.item.keepUpright" size="small" type="primary" effect="plain">
-              {{ t("sceneOptions.keepUpright") }}
-            </el-tag>
-          </span>
-          <span>{{ tr(tooltip.item.orientationLabel || tooltip.item.bottomFaceDetail || "按算法输出坐标摆放") }}</span>
-          <span>{{ t("sceneOptions.physicalCoordinates") }} X{{ formatDimension(tooltip.item.physicalXCm) }} / Y{{ formatDimension(tooltip.item.physicalYCm) }} / Z{{ formatDimension(tooltip.item.physicalZCm) }} cm</span>
-          <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedCoordinates") }} X{{ formatDimension(tooltip.item.xCm) }} / Y{{ formatDimension(tooltip.item.yCm) }} / Z{{ formatDimension(tooltip.item.zCm) }} cm</span>
+        <div
+          v-if="tooltip.visible"
+          class="scene-tooltip visual-tooltip"
+          :class="{ 'remaining-space-tooltip': tooltip.item.kind === 'remaining-space' }"
+          :style="tooltipStyle"
+        >
+          <template v-if="tooltip.item.kind === 'remaining-space'">
+            <div class="tooltip-title-row">
+              <strong>{{ tooltip.item.label }} · {{ t("sceneOptions.remainingBlockName") }}</strong>
+              <el-tag size="small" type="primary" effect="light">{{ t("sceneOptions.geometricClearance") }}</el-tag>
+            </div>
+            <span class="tooltip-primary-metric">{{ formatVolume(tooltip.item.volumeM3) }}</span>
+            <span>{{ t("sceneOptions.blockDimensions") }} {{ formatDimension(tooltip.item.lengthCm) }} × {{ formatDimension(tooltip.item.widthCm) }} × {{ formatDimension(tooltip.item.heightCm) }} cm</span>
+            <span>{{ t("sceneOptions.blockCoordinateRanges", {
+              x1: formatDimension(tooltip.item.xCm),
+              x2: formatDimension(tooltip.item.x2Cm ?? tooltip.item.xCm + tooltip.item.lengthCm),
+              y1: formatDimension(tooltip.item.yCm),
+              y2: formatDimension(tooltip.item.y2Cm ?? tooltip.item.yCm + tooltip.item.widthCm),
+              z1: formatDimension(tooltip.item.zCm),
+              z2: formatDimension(tooltip.item.z2Cm ?? tooltip.item.zCm + tooltip.item.heightCm)
+            }) }}</span>
+            <span>{{ t("sceneOptions.blockFreeShare", { value: formatPercent(tooltip.item.percentOfFree) }) }}</span>
+          </template>
+          <template v-else>
+            <strong>#{{ tooltip.item.displayNo }} {{ tooltip.item.name }}</strong>
+            <span>{{ t("sceneOptions.physicalOuterSize") }} {{ formatDimension(tooltip.item.physicalLengthCm) }} × {{ formatDimension(tooltip.item.physicalWidthCm) }} × {{ formatDimension(tooltip.item.physicalHeightCm) }} cm</span>
+            <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedEnvelopeSize") }} {{ formatDimension(tooltip.item.lengthCm) }} × {{ formatDimension(tooltip.item.widthCm) }} × {{ formatDimension(tooltip.item.heightCm) }} cm</span>
+            <span v-if="tooltip.item.horizontalGapCm > 0">{{ t("sceneOptions.horizontalGapDetail", { gap: formatDimension(tooltip.item.horizontalGapCm), side: formatDimension(tooltip.item.clearancePerSideCm) }) }}</span>
+            <span>{{ tr("数量") }} {{ tooltip.item.quantity }} {{ tr("件") }} · {{ tr("重量") }} {{ formatWeight(tooltip.item.weightKg) }}</span>
+            <span class="tooltip-constraint-tags">
+              <el-tag
+                size="small"
+                :type="tooltip.item.nonStack ? 'warning' : 'success'"
+                effect="light"
+              >
+                {{ t(tooltip.item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing") }}
+              </el-tag>
+              <el-tag v-if="tooltip.item.keepUpright" size="small" type="primary" effect="plain">
+                {{ t("sceneOptions.keepUpright") }}
+              </el-tag>
+            </span>
+            <span>{{ tr(tooltip.item.orientationLabel || tooltip.item.bottomFaceDetail || "按算法输出坐标摆放") }}</span>
+            <span>{{ t("sceneOptions.physicalCoordinates") }} X{{ formatDimension(tooltip.item.physicalXCm) }} / Y{{ formatDimension(tooltip.item.physicalYCm) }} / Z{{ formatDimension(tooltip.item.physicalZCm) }} cm</span>
+            <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedCoordinates") }} X{{ formatDimension(tooltip.item.xCm) }} / Y{{ formatDimension(tooltip.item.yCm) }} / Z{{ formatDimension(tooltip.item.zCm) }} cm</span>
+          </template>
         </div>
       </div>
 
       <aside class="packing-info-panel">
+        <el-card v-if="remainingModel && remainingAnalysis?.conservationOk" class="info-panel-card remaining-analysis-card" shadow="never">
+          <template #header>
+            <div class="info-card-head">
+              <strong>{{ t("sceneOptions.remainingAnalysisTitle") }}</strong>
+              <el-tag type="primary" effect="light">
+                {{ t("sceneOptions.remainingBlockCount", { count: remainingAnalysis.fragmentCount }) }}
+              </el-tag>
+            </div>
+          </template>
+          <div class="remaining-summary-grid">
+            <div>
+              <span>{{ t("sceneOptions.geometricClearanceVolume") }}</span>
+              <b>{{ formatVolume(remainingAnalysis.usableFreeVolumeM3) }}</b>
+            </div>
+            <div>
+              <span>{{ t("sceneOptions.remainingRatio") }}</span>
+              <b>{{ formatPercent(remainingAnalysis.freeRatio * 100) }}%</b>
+            </div>
+            <div>
+              <span>{{ t("sceneOptions.largestBlock") }}</span>
+              <b>{{ formatVolume(remainingTopBlocks[0]?.volumeM3 || 0) }}</b>
+            </div>
+            <div>
+              <span>{{ t("sceneOptions.envelopeAllowance") }}</span>
+              <b>{{ formatVolume(remainingAnalysis.reservedEnvelopeVolumeM3) }}</b>
+            </div>
+          </div>
+          <div class="remaining-view-shortcuts" role="group" :aria-label="t('sceneOptions.remainingViewShortcuts')">
+            <span>{{ t("sceneOptions.remainingViewShortcuts") }}</span>
+            <div class="remaining-view-button-grid">
+              <el-button size="small" :type="activeView === 'iso' ? 'primary' : 'default'" @click="setView('iso')">{{ t("sceneOptions.viewIso") }}</el-button>
+              <el-button size="small" :type="activeView === 'top' ? 'primary' : 'default'" @click="setView('top')">{{ t("sceneOptions.viewTop") }}</el-button>
+              <el-button size="small" :type="activeView === 'front' ? 'primary' : 'default'" @click="setView('front')">{{ t("sceneOptions.viewFront") }}</el-button>
+              <el-button size="small" :type="activeView === 'side' ? 'primary' : 'default'" @click="setView('side')">{{ t("sceneOptions.viewSide") }}</el-button>
+            </div>
+          </div>
+          <div class="remaining-block-list" :aria-label="t('sceneOptions.majorRemainingBlocks')">
+            <div v-for="block in remainingTopBlocks" :key="block.id" class="remaining-block-row">
+              <i :style="{ backgroundColor: block.color }"></i>
+              <span>
+                <strong>{{ block.label }}</strong>
+                <small>{{ formatDimension(block.lengthCm) }} × {{ formatDimension(block.widthCm) }} × {{ formatDimension(block.heightCm) }} cm</small>
+              </span>
+              <b>{{ formatVolume(block.volumeM3) }}</b>
+            </div>
+          </div>
+          <p class="remaining-analysis-note">{{ t("sceneOptions.remainingAnalysisNote") }}</p>
+        </el-card>
+
         <el-card class="info-panel-card legend-card" shadow="never">
           <template #header>
             <div class="info-card-head">
@@ -241,6 +319,7 @@
       <div class="bottom-button-group">
         <el-button :icon="Picture" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-image')">{{ tr("导出可视化截图") }}</el-button>
         <el-button :icon="Document" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-pdf')">{{ tr("导出装箱方案 PDF") }}</el-button>
+        <el-button :icon="DataAnalysis" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-remaining-pdf')">{{ t("sceneOptions.exportRemainingReport") }}</el-button>
         <el-button type="primary" :icon="Download" :disabled="zipDisabled" :loading="exporting" @click="$emit('export-zip')">{{ tr(exportZipLabel) }}</el-button>
         <el-button :icon="Printer" @click="$emit('print')">{{ tr("打印") }}</el-button>
       </div>
@@ -252,6 +331,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import {
   Aim,
+  DataAnalysis,
   Document,
   Download,
   FullScreen,
@@ -263,7 +343,8 @@ import {
 import { buildPackingSceneData, formatDimension, formatSigned, formatWeight } from "../visualization/packingSceneData";
 import { resolveBalanceState } from "../visualization/packingSceneBalance";
 import { PackingSceneRenderer } from "../visualization/packingSceneRenderer";
-import type { SceneCargo, SceneViewMode, SceneViewPreset, SliceAxis } from "../visualization/packingSceneTypes";
+import type { SceneHoverItem, SceneRemainingBlock, SceneViewMode, SceneViewPreset, SliceAxis } from "../visualization/packingSceneTypes";
+import { analyzeRemainingSpace } from "../utils/remainingSpace";
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
@@ -291,6 +372,7 @@ const emit = defineEmits([
   "render-state",
   "export-image",
   "export-pdf",
+  "export-remaining-pdf",
   "export-zip",
   "print"
 ]);
@@ -309,17 +391,18 @@ const showGrid = ref(true);
 const showCenter = ref(true);
 const showShell = ref(true);
 const showClearanceEnvelope = ref(true);
+const showRemainingLabels = ref(true);
 const translucentCargo = ref(false);
 const showHeatmap = ref(false);
 const axisScalePreset = ref<"small" | "normal" | "large">("normal");
 const hiddenSkuKeys = ref<Set<string>>(new Set());
 const isFullscreen = ref(false);
 const internalRendering = ref(false);
-const tooltip = reactive<{ visible: boolean; x: number; y: number; item: SceneCargo }>({
+const tooltip = reactive<{ visible: boolean; x: number; y: number; item: SceneHoverItem }>({
   visible: false,
   x: 0,
   y: 0,
-  item: {} as SceneCargo
+  item: {} as SceneHoverItem
 });
 let renderFrame = 0;
 let renderDoneFrame = 0;
@@ -333,6 +416,18 @@ const axisScaleOptions = computed(() => [
   { label: t("sceneOptions.axisNormal"), value: "normal" },
   { label: t("sceneOptions.axisLarge"), value: "large" }
 ]);
+const remainingBlockColors = [
+  "#0284c7",
+  "#0f9f93",
+  "#7c3aed",
+  "#d97706",
+  "#4f46e5",
+  "#0891b2",
+  "#65a30d",
+  "#ea580c",
+  "#9333ea",
+  "#475569"
+];
 
 function tr(value: unknown) {
   return translateLegacyText(value == null ? "" : String(value), currentLocale.value);
@@ -343,6 +438,30 @@ const sceneData = computed(() => buildPackingSceneData({
   placements: props.placements as any[],
   evaluation: props.evaluation
 }));
+const remainingAnalysis = computed<any | null>(() => {
+  if (!props.container || !(props.placements as any[]).length) return null;
+  try {
+    return analyzeRemainingSpace(props.container, props.placements as any[], {
+      maxDisplayBlocks: 10,
+      strict: false
+    });
+  } catch (error) {
+    console.warn("Remaining-space visualization was skipped.", error);
+    return null;
+  }
+});
+const sceneRemainingBlocks = computed<SceneRemainingBlock[]>(() => (remainingAnalysis.value?.blocks || [])
+  .slice(0, 80)
+  .map((block: any, index: number) => ({
+    ...block,
+    kind: "remaining-space" as const,
+    id: block.id || `R${index + 1}`,
+    label: `R${index + 1}`,
+    displayNo: `R${index + 1}`,
+    name: t("sceneOptions.remainingBlockName"),
+    color: remainingBlockColors[index % remainingBlockColors.length]
+  })));
+const remainingTopBlocks = computed(() => sceneRemainingBlocks.value.slice(0, 6));
 const planBoxCount = computed(() => Math.max(
   Number(props.evaluation?.boxes || 0),
   Array.isArray(props.evaluation?.packedBoxes) ? props.evaluation.packedBoxes.length : 0
@@ -388,6 +507,8 @@ const renderOptions = computed(() => ({
   translucentCargo: translucentCargo.value,
   showHeatmap: showHeatmap.value && !sceneData.value.stats.performanceMode,
   showRemaining: props.showRemaining,
+  showRemainingLabels: showRemainingLabels.value,
+  remainingBlocks: sceneRemainingBlocks.value,
   showMassBalance: props.showMassBalance,
   sliceAxis: sliceEnabled.value ? sliceAxis.value : "none",
   slicePercent: slicePercent.value,
@@ -416,6 +537,19 @@ const sliceLabel = computed(() => {
   if (sliceAxis.value === "z") return `${tr("高度")} ${Math.round(container.heightCm * slicePercent.value / 100)} cm`;
   if (sliceAxis.value === "x") return `${tr("前后")} ${Math.round(container.lengthCm * slicePercent.value / 100)} cm`;
   return `${tr("左右")} ${Math.round(container.widthCm * slicePercent.value / 100)} cm`;
+});
+const tooltipStyle = computed(() => {
+  const hostWidth = canvasHost.value?.clientWidth || 0;
+  const hostHeight = canvasHost.value?.clientHeight || 0;
+  const tooltipWidth = Math.min(360, Math.max(260, hostWidth - 24));
+  const tooltipHeight = tooltip.item?.kind === "remaining-space" ? 178 : 238;
+  const maxLeft = Math.max(12, hostWidth - tooltipWidth - 12);
+  const maxTop = Math.max(12, hostHeight - tooltipHeight - 12);
+  return {
+    left: `${Math.max(12, Math.min(tooltip.x, maxLeft))}px`,
+    top: `${Math.max(12, Math.min(tooltip.y, maxTop))}px`,
+    width: `${tooltipWidth}px`
+  };
 });
 
 onMounted(async () => {
@@ -510,6 +644,17 @@ function axisScaleValue(preset: "small" | "normal" | "large") {
   if (preset === "small") return 0.85;
   if (preset === "large") return 1.55;
   return 1.25;
+}
+
+function formatVolume(value: unknown) {
+  const amount = Number(value || 0);
+  const digits = Math.abs(amount) < 0.01 ? 3 : 2;
+  return `${amount.toFixed(digits).replace(/\.?0+$/, "")} m³`;
+}
+
+function formatPercent(value: unknown) {
+  const amount = Number(value || 0);
+  return amount.toFixed(Math.abs(amount) < 10 ? 2 : 1).replace(/\.?0+$/, "");
 }
 
 function handlePointerMove(event: PointerEvent) {

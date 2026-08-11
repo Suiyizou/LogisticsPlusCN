@@ -94,13 +94,68 @@ export async function exportPackingReportsZip(options) {
   downloadBlob(zipBlob, `${reportFileStem(options, generatedAt)}-Reports.zip`);
 }
 
+export async function exportRemainingSpaceReport(options) {
+  if (!options?.container || !options?.placements?.length) {
+    throw new Error(translateUiText("report.remainingReportNoData", options?.locale || "zh-CN"));
+  }
+  if (document.fonts?.ready) await document.fonts.ready;
+  const generatedAt = new Date();
+  const canvas = renderRemainingSpaceReportCanvas({ ...options, generatedAt });
+  const pdfBlob = await createPdfFromCanvases([canvas]);
+  downloadBlob(pdfBlob, `${remainingSpaceReportFileBase({ ...options, generatedAt })}.pdf`);
+}
+
+export function renderRemainingSpaceReportCanvas(options) {
+  const container = options.container;
+  const catalog = buildCargoCatalog(options.cargos || [], options.placements || []);
+  const placements = enrichPlacements(options.placements || [], catalog);
+  const analysis = analyzeReportRemainingSpace(container, placements);
+  if (!analysis?.conservationOk) {
+    throw new Error(translateUiText("report.remainingReportAnalysisFailed", options?.locale || "zh-CN"));
+  }
+  const detailSections = buildRemainingSpaceDetailSections(analysis);
+  const multiViewHeight = 900;
+  const detailHeight = detailSections.reduce((sum, section) => sum + section.height + 24, 0);
+  const height = 150 + 112 + multiViewHeight + 24 + detailHeight + 70;
+  const canvas = document.createElement("canvas");
+  canvas.width = PAGE_WIDTH;
+  canvas.height = height;
+  const ctx = localizeCanvasContext(canvas.getContext("2d"), options.locale);
+
+  ctx.fillStyle = "#f4f7fb";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let y = 0;
+  const pageBreaks = [0];
+  drawRemainingReportHeader(ctx, options, analysis);
+  y += 150;
+  pageBreaks.push(y);
+  drawRemainingReportSummary(ctx, 48, y, PAGE_WIDTH - 96, 88, container, placements, analysis);
+  y += 112;
+  pageBreaks.push(y);
+  drawRemainingSpaceMultiView(ctx, 48, y, PAGE_WIDTH - 96, multiViewHeight, container, analysis);
+  y += multiViewHeight + 24;
+  detailSections.forEach((section) => {
+    pageBreaks.push(y);
+    drawRemainingSpaceDetails(ctx, 48, y, PAGE_WIDTH - 96, section, analysis);
+    y += section.height + 24;
+  });
+  drawFooter(ctx, height - 38, "report.remainingReportFooterNote");
+  pageBreaks.push(height);
+  canvas.__reportPageBreaks = [...new Set(pageBreaks.map((value) => Math.max(0, Math.min(height, Math.round(value)))))].sort((a, b) => a - b);
+  canvas.__reportLocale = reportLocale(options.locale);
+  return canvas;
+}
+
 export function renderReportCanvas(options) {
   const container = options.container;
   const catalog = buildCargoCatalog(options.cargos || [], options.placements || []);
   const placements = enrichPlacements(options.placements || [], catalog);
   const layers = buildLayers(placements);
   const massBalance = options.showMassBalance === false ? null : calculateMassBalance(container, placements);
-  const remainingSpace = analyzeReportRemainingSpace(container, placements);
+  const remainingSpace = options.includeRemainingSpace === false
+    ? null
+    : analyzeReportRemainingSpace(container, placements);
   const legendHeight = Math.max(86, 54 + Math.ceil(catalog.length / 4) * 46);
   const balanceHeight = massBalance?.valid ? 360 : 0;
   const layerCardHeight = 600;
@@ -202,6 +257,154 @@ function refineRemainingSpaceVolumes(analysis, placements) {
   };
 }
 
+function drawRemainingReportHeader(ctx, options, analysis) {
+  const gradient = ctx.createLinearGradient(0, 0, PAGE_WIDTH, 0);
+  gradient.addColorStop(0, "#ffffff");
+  gradient.addColorStop(1, "#e8f5fb");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, PAGE_WIDTH, 150);
+
+  ctx.fillStyle = "#0369a1";
+  roundRect(ctx, 48, 42, 62, 62, 15);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 23px Microsoft YaHei, Arial";
+  ctx.fillText("RS", 63, 82);
+
+  ctx.fillStyle = "#122033";
+  ctx.font = "800 40px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingReportTitle"), 132, 68, 820, 28);
+  ctx.fillStyle = "#52657b";
+  ctx.font = "400 18px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingReportSubtitle"), 134, 104, 960, 13);
+
+  const rightX = 1230;
+  const holdText = reportText(ctx, "report.holdNo", { index: options.boxIndex || 1 });
+  const containerName = translateLegacyText(options.container?.name || "-", ctx?.__cargoPlannerLocale || "zh-CN");
+  ctx.fillStyle = "#174a7f";
+  ctx.font = "800 22px Microsoft YaHei, Arial";
+  fillFittedText(ctx, `${containerName} · ${holdText}`, rightX, 58, PAGE_WIDTH - rightX - 48, 14);
+  ctx.fillStyle = "#52657b";
+  ctx.font = "400 17px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.generatedAt", { value: (options.generatedAt || new Date()).toLocaleString(reportLocale(options.locale)) }), rightX, 92, PAGE_WIDTH - rightX - 48, 12);
+  fillFittedText(ctx, reportText(ctx, "report.remainingReportBlockMeta", { count: analysis.fragmentCount }), rightX, 122, PAGE_WIDTH - rightX - 48, 12);
+}
+
+function drawRemainingReportSummary(ctx, x, y, width, height, container, placements, analysis) {
+  drawCard(ctx, x, y, width, height);
+  const largest = analysis.blocks?.[0];
+  const values = [
+    [reportText(ctx, "report.summaryContainer"), `${formatNum(container.lengthCm, 0)} × ${formatNum(container.widthCm, 0)} × ${formatNum(analysis.container?.heightCm || container.heightCm, 0)} cm`],
+    [reportText(ctx, "report.remainingUsableMetric"), `${formatNum(analysis.usableFreeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.remainingTheoryMetric"), `${formatNum(analysis.theoryFreeVolumeM3, 2)} m³`],
+    [reportText(ctx, "report.remainingReportBlockCount"), `${analysis.fragmentCount}`],
+    [reportText(ctx, "report.remainingReportLargestBlock"), largest ? `${formatNum(largest.lengthCm, 0)} × ${formatNum(largest.widthCm, 0)} × ${formatNum(largest.heightCm, 0)} cm` : reportText(ctx, "report.metricUnavailable")],
+    [reportText(ctx, "report.remainingEnvelopeMetric"), `${formatNum(analysis.reservedEnvelopeVolumeM3, 2)} m³`]
+  ];
+  values.forEach((item, index) => {
+    const cellWidth = width / values.length;
+    const cx = x + index * cellWidth + 24;
+    ctx.fillStyle = "#64748b";
+    ctx.font = "400 15px Microsoft YaHei, Arial";
+    fillFittedText(ctx, item[0], cx, y + 30, cellWidth - 36, 10);
+    ctx.fillStyle = "#132033";
+    ctx.font = "800 21px Microsoft YaHei, Arial";
+    fillFittedText(ctx, item[1], cx, y + 62, cellWidth - 36, 12);
+  });
+}
+
+function drawRemainingSpaceMultiView(ctx, x, y, width, height, container, analysis) {
+  drawCard(ctx, x, y, width, height);
+  ctx.fillStyle = "#132033";
+  ctx.font = "800 27px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingMultiViewTitle"), x + 24, y + 38, width - 48, 18);
+  ctx.fillStyle = "#64748b";
+  ctx.font = "400 15px Microsoft YaHei, Arial";
+  fillFittedText(ctx, reportText(ctx, "report.remainingMultiViewSubtitle"), x + 24, y + 66, width - 48, 11);
+
+  const gap = 18;
+  const plotWidth = (width - 48 - gap) / 2;
+  const plotHeight = (height - 108 - gap) / 2;
+  const firstX = x + 24;
+  const firstY = y + 84;
+  drawRemainingSpaceIso(ctx, { x: firstX, y: firstY, width: plotWidth, height: plotHeight }, container, analysis);
+  drawRemainingSpaceProjection(ctx, { x: firstX + plotWidth + gap, y: firstY, width: plotWidth, height: plotHeight }, container, analysis, "top");
+  drawRemainingSpaceProjection(ctx, { x: firstX, y: firstY + plotHeight + gap, width: plotWidth, height: plotHeight }, container, analysis, "front");
+  drawRemainingSpaceProjection(ctx, { x: firstX + plotWidth + gap, y: firstY + plotHeight + gap, width: plotWidth, height: plotHeight }, container, analysis, "side");
+}
+
+function drawRemainingSpaceProjection(ctx, plot, container, analysis, view) {
+  const titleKey = view === "top"
+    ? "report.remainingTopViewTitle"
+    : view === "front"
+    ? "report.remainingFrontViewTitle"
+    : "report.remainingSideViewTitle";
+  const noteKey = view === "top"
+    ? "report.remainingTopViewNote"
+    : view === "front"
+    ? "report.remainingFrontViewNote"
+    : "report.remainingSideViewNote";
+  drawPlotFrame(ctx, plot, reportText(ctx, titleKey), reportText(ctx, noteKey));
+  const inner = inset(plot, 44, 72, 34, 42);
+  const containerHeight = Number(analysis.container?.heightCm || container.heightCm || 0);
+  const horizontalMax = view === "side" ? Number(container.widthCm || 0) : Number(container.lengthCm || 0);
+  const verticalMax = view === "top" ? Number(container.widthCm || 0) : containerHeight;
+  const scale = Math.min(inner.width / Math.max(1, horizontalMax), inner.height / Math.max(1, verticalMax));
+  const frameWidth = horizontalMax * scale;
+  const frameHeight = verticalMax * scale;
+  const ox = inner.x + (inner.width - frameWidth) / 2;
+  const oy = inner.y + (inner.height - frameHeight) / 2;
+  drawGrid(ctx, ox, oy, frameWidth, frameHeight);
+
+  const blocks = (analysis.displayBlocks || analysis.blocks || []).slice(0, 10)
+    .map((block, index) => ({
+      ...block,
+      label: `R${index + 1}`,
+      color: FREE_SPACE_COLORS[index % FREE_SPACE_COLORS.length]
+    }));
+  const depthKey = view === "top" ? "zCm" : view === "front" ? "yCm" : "xCm";
+  blocks.sort((first, second) => Number(first[depthKey] || 0) - Number(second[depthKey] || 0));
+  blocks.forEach((block) => {
+    const horizontalStart = view === "side" ? Number(block.yCm || 0) : Number(block.xCm || 0);
+    const horizontalSize = view === "side" ? Number(block.widthCm || 0) : Number(block.lengthCm || 0);
+    const verticalStart = view === "top" ? Number(block.yCm || 0) : Number(block.zCm || 0);
+    const verticalSize = view === "top" ? Number(block.widthCm || 0) : Number(block.heightCm || 0);
+    const rx = ox + horizontalStart * scale;
+    const rw = Math.max(1.5, horizontalSize * scale);
+    const rh = Math.max(1.5, verticalSize * scale);
+    const ry = view === "top"
+      ? oy + verticalStart * scale
+      : oy + frameHeight - (verticalStart + verticalSize) * scale;
+    ctx.fillStyle = hexToRgba(block.color, 0.22);
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeStyle = hexToRgba(block.color, 0.82);
+    ctx.lineWidth = 1.35;
+    ctx.strokeRect(rx, ry, rw, rh);
+    if (rw >= 34 && rh >= 20) {
+      ctx.fillStyle = "#173f63";
+      ctx.font = "800 11px Microsoft YaHei, Arial";
+      centerText(ctx, block.label, rx + rw / 2, ry + rh / 2 + 4);
+    }
+  });
+  ctx.strokeStyle = "#1f6fbe";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(ox, oy, frameWidth, frameHeight);
+  ctx.fillStyle = "#2d5f93";
+  ctx.font = "700 12px Microsoft YaHei, Arial";
+  const horizontalLabel = view === "side"
+    ? reportText(ctx, "report.remainingAxisWidth", { value: formatNum(container.widthCm, 0) })
+    : reportText(ctx, "report.remainingAxisLength", { value: formatNum(container.lengthCm, 0) });
+  const verticalLabel = view === "top"
+    ? reportText(ctx, "report.remainingAxisWidth", { value: formatNum(container.widthCm, 0) })
+    : reportText(ctx, "report.remainingAxisHeight", { value: formatNum(containerHeight, 0) });
+  centerText(ctx, horizontalLabel, ox + frameWidth / 2, oy + frameHeight + 20);
+  ctx.save();
+  ctx.translate(ox - 14, oy + frameHeight / 2);
+  ctx.rotate(-Math.PI / 2);
+  centerText(ctx, verticalLabel, 0, 0);
+  ctx.restore();
+}
+
 function drawHeader(ctx, options, catalog, layers) {
   const gradient = ctx.createLinearGradient(0, 0, PAGE_WIDTH, 0);
   gradient.addColorStop(0, "#ffffff");
@@ -253,7 +456,7 @@ function drawSummary(ctx, x, y, width, height, options, placements, layers, rema
     [reportText(ctx, "report.summaryCargoVolume"), `${formatNum(currentCargoVolumeM3, 2)} m³`],
     [reportText(ctx, "report.summaryFill"), `${formatNum(currentFillPercent)}%`],
     [reportText(ctx, "report.summaryTheoreticalFree"), theoreticalFreeVolumeM3 == null ? reportText(ctx, "report.metricUnavailable") : `${formatNum(theoreticalFreeVolumeM3, 2)} m³`],
-    [reportText(ctx, "report.summaryUsableFree"), remainingSpace ? `${formatNum(remainingSpace.usableFreeVolumeM3, 2)} m³` : reportText(ctx, "report.metricUnavailable")]
+    [remainingSpace ? reportText(ctx, "report.summaryUsableFree") : reportText(ctx, "report.summaryCargoGap"), remainingSpace ? `${formatNum(remainingSpace.usableFreeVolumeM3, 2)} m³` : `${formatNum(options.globalGapCm || 0, 1)} cm`]
   ];
   values.forEach((item, index) => {
     const cellWidth = width / values.length;
@@ -1217,7 +1420,7 @@ function drawSideDimensionLabels(ctx, ox, oy, width, height, container, viewHeig
   ctx.fillText("侧视沿 Y 向观察，Y 向底面边见右侧统计", ox, oy + height + 22);
 }
 
-function drawFooter(ctx, y) {
+function drawFooter(ctx, y, noteKey = "report.footerNote") {
   ctx.strokeStyle = "#d3deea";
   ctx.beginPath();
   ctx.moveTo(48, y - 22);
@@ -1225,7 +1428,7 @@ function drawFooter(ctx, y) {
   ctx.stroke();
   ctx.fillStyle = "#64748b";
   ctx.font = "400 14px Microsoft YaHei, Arial";
-  fillFittedText(ctx, reportText(ctx, "report.footerNote"), 48, y, PAGE_WIDTH - 96, 10);
+  fillFittedText(ctx, reportText(ctx, noteKey), 48, y, PAGE_WIDTH - 96, 10);
 }
 
 function buildCargoCatalog(cargos, placements) {
@@ -1577,6 +1780,10 @@ function reportFileBase(options) {
   const locale = reportLocale(options?.locale);
   const containerName = translateLegacyText(options?.container?.name || "Container", locale);
   return `${reportFileStem(options, generatedAt)}-${safeFileName(containerName)}-Hold-${pad2(options.boxIndex || 1)}`;
+}
+
+function remainingSpaceReportFileBase(options) {
+  return `${reportFileBase(options)}-Remaining-Space`;
 }
 
 function multiReportFileBase(options, generatedAt = new Date()) {
