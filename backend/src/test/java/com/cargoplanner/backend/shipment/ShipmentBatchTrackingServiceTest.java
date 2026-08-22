@@ -1,0 +1,850 @@
+package com.cargoplanner.backend.shipment;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.common.ApiException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.time.Clock;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.http.HttpStatus;
+
+class ShipmentBatchTrackingServiceTest {
+  private ExecutorService executor;
+  private ShipmentBatchTrackingService service;
+
+  @AfterEach
+  void tearDown() {
+    if (service != null) service.shutdown();
+    else if (executor != null) executor.shutdownNow();
+  }
+
+  @Test
+  void springSelectsTheProductionConstructorWhenTestConstructorsAlsoExist() {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+      context.registerBean(ShipmentTrackingService.class, () -> trackingService);
+      context.registerBean(ShipmentBatchTrackingService.class);
+      context.refresh();
+
+      service = context.getBean(ShipmentBatchTrackingService.class);
+      assertTrue(service != null);
+    }
+    service = null;
+  }
+
+  @Test
+  void tracksSupportedBookingRowsAndStoresUnsupportedRowsForManualEntry()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectNode tracked = objectMapper.createObjectNode();
+    tracked.put("shipmentId", "tracked-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode manual = objectMapper.createObjectNode();
+    manual.put("shipmentId", "manual-shipment");
+    manual.put("cacheSource", "IMPORTED_PLACEHOLDER");
+    when(trackingService.recordImportedPlaceholder(any(), any())).thenReturn(manual);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService,
+        executor,
+        0,
+        0,
+        Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        7L, "operator", "Operator", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails cosuDetails = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", "JSH2606003", null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+    ShipmentImportDetails manualDetails = new ShipmentImportDetails(
+        "SMLM", "SMLMSHZY5B667700", "JSH2606018", null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "HAYDEN-TRACKING INFORMATION.xlsx",
+            List.of(
+                new ShipmentBatchItemRequest(
+                    "cosu-row", "COSCO", "BOOKING", "COSU6502406170",
+                    "COSU6502406170", false, cosuDetails
+                ),
+                new ShipmentBatchItemRequest(
+                    "manual-row", null, "BOOKING", "SHZY5B667700",
+                    "SMLMSHZY5B667700", true, manualDetails
+                )
+            )
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals(1, completed.get("succeeded"));
+    assertEquals(1, completed.get("manual"));
+    assertEquals(0, completed.get("failed"));
+
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).track(requestCaptor.capture(), any());
+    assertEquals("6502406170", requestCaptor.getValue().number());
+    assertTrue(requestCaptor.getValue().batchTaskId().startsWith("batch_"));
+    verify(trackingService).recordImportedPlaceholder(any(), any());
+  }
+
+  @Test
+  void deduplicatesTheSameCarrierBookingBeforeStartingWork() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "tracked-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        17L, "operator-duplicate", "Operator", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "duplicates.xlsx",
+            List.of(
+                new ShipmentBatchItemRequest(
+                    "row-1", "COSCO", "BOOKING", "COSU6502406170",
+                    "COSU6502406170", false, null
+                ),
+                new ShipmentBatchItemRequest(
+                    "row-2", "COSCO", "BOOKING", "6502406170",
+                    "6502406170", false, null
+                )
+            )
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals(1, completed.get("total"));
+    assertEquals(1, completed.get("ignoredDuplicateCount"));
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService, times(1)).track(requestCaptor.capture(), any());
+    assertEquals("BOOKING", requestCaptor.getValue().type());
+    assertEquals("6502406170", requestCaptor.getValue().number());
+    assertEquals(Boolean.TRUE, requestCaptor.getValue().forceRefresh());
+  }
+
+  @Test
+  void rejectsBillOfLadingRowsBeforeStartingCarrierWork() {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        9L, "operator-3", "Operator 3", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+
+    assertThrows(
+        com.cargoplanner.backend.common.ApiException.class,
+        () -> service.start(
+            new ShipmentBatchTaskRequest(
+                "conflicting.xlsx",
+                List.of(new ShipmentBatchItemRequest(
+                    "row-1", "COSCO", "BILLOFLADING", "COSU6502406172",
+                    "COSU6502406171", false, details
+                ))
+            ),
+            user
+        )
+    );
+    verify(trackingService, times(0)).track(any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void neverStartsPerContainerSubtasksAfterTheMainShipmentSucceeds()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectNode tracked = (ObjectNode) objectMapper.readTree("""
+        {
+          "shipmentId": "tracked-shipment",
+          "cacheSource": "LIVE",
+          "snapshot": {
+            "summary": {"containers": [{"containerType": "40HQ", "quantity": 2}]},
+            "containers": []
+          }
+        }
+        """);
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    when(trackingService.discoverBatchContainers(any(), any(), any(), any()))
+        .thenReturn((ObjectNode) objectMapper.readTree("""
+            {
+              "containers": [
+                {"number": "CSNU1234567", "needsEnrichment": false},
+                {"number": "OOLU7654321", "needsEnrichment": true}
+              ]
+            }
+            """));
+    when(trackingService.enrichBatchContainer(any(), any(), any(), any()))
+        .thenReturn((ObjectNode) objectMapper.readTree("""
+            {"cacheSource": "LIVE", "snapshot": {"containers": [{"number": "OOLU7654321"}]}}
+            """));
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        11L, "operator-children", "Operator Children", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "containers.xlsx",
+            List.of(new ShipmentBatchItemRequest(
+                "row-containers", "COSCO", "BOOKING", "6502406170",
+                "COSU6502406170", false, details
+            ))
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) items.get(0).get("subtasks");
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("SUCCEEDED", items.get(0).get("status"));
+    assertEquals(List.of(), subtasks);
+    verify(trackingService, times(0)).discoverBatchContainers(any(), any(), any(), any());
+    verify(trackingService, times(0)).enrichBatchContainer(any(), any(), any(), any());
+  }
+
+  @Test
+  void processesEveryMainShipmentWithoutStartingAContainerPass()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectMapper objectMapper = new ObjectMapper();
+    List<String> sequence = new java.util.concurrent.CopyOnWriteArrayList<>();
+    when(trackingService.track(any(), any())).thenAnswer(invocation -> {
+      ShipmentTrackRequest request = invocation.getArgument(0);
+      sequence.add("core:" + request.number());
+      ObjectNode response = objectMapper.createObjectNode();
+      response.put("shipmentId", "shipment-" + request.number());
+      response.put("cacheSource", "LIVE");
+      response.putObject("snapshot").putObject("summary").putArray("containers");
+      return response;
+    });
+    when(trackingService.discoverBatchContainers(any(), any(), any(), any()))
+        .thenAnswer(invocation -> {
+          sequence.add("containers:" + invocation.getArgument(1, String.class));
+          ObjectNode response = objectMapper.createObjectNode();
+          response.putArray("containers");
+          return response;
+        });
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        12L, "operator-order", "Operator Order", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails first = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, null
+    );
+    ShipmentImportDetails second = new ShipmentImportDetails(
+        "COSU", "COSU6502406171", null, null, null, null,
+        null, null, null, null, null
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "order.xlsx",
+            List.of(
+                new ShipmentBatchItemRequest(
+                    "row-1", "COSCO", "BOOKING", "6502406170",
+                    "COSU6502406170", false, first
+                ),
+                new ShipmentBatchItemRequest(
+                    "row-2", "COSCO", "BOOKING", "6502406171",
+                    "COSU6502406171", false, second
+                )
+            )
+        ),
+        user
+    );
+
+    awaitTerminal((String) started.get("taskId"), user);
+    assertEquals(List.of(
+        "core:6502406170",
+        "core:6502406171"
+    ), sequence);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void oneClickRefreshUsesBookingTypeAndForcesLiveRefresh() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        14L, "operator-refresh", "Operator Refresh", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshAll(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing", "COSCO", "BOOKING", "6507943350",
+            "6507943350", false, null
+        )),
+        user,
+        "PROXY"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("REFRESH_ALL", completed.get("mode"));
+    assertEquals("PROXY", completed.get("channel"));
+    List<Map<String, Object>> completedItems =
+        (List<Map<String, Object>>) completed.get("items");
+    assertEquals(2, completedItems.get(0).get("subtaskTotal"));
+    assertEquals(2L, completedItems.get(0).get("subtaskProcessed"));
+    assertTrue(completedItems.get(0).get("startedAt") != null);
+    assertTrue(completedItems.get(0).get("finishedAt") != null);
+    assertTrue(((Number) completedItems.get(0).get("elapsedMs")).longValue() >= 0L);
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) completedItems.get(0).get("subtasks");
+    assertEquals(List.of("SUCCEEDED", "SUCCEEDED"), subtasks.stream()
+        .map(subtask -> String.valueOf(subtask.get("status")))
+        .toList());
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).track(requestCaptor.capture(), any());
+    ShipmentTrackRequest request = requestCaptor.getValue();
+    assertEquals("BOOKING", request.type());
+    assertEquals("6507943350", request.number());
+    assertEquals("PROXY", request.channel());
+    assertEquals(Boolean.TRUE, request.forceRefresh());
+    ArgumentCaptor<ShipmentTrackRequest> supplementalRequestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).loadSupplementalDetails(
+        any(), supplementalRequestCaptor.capture(), any()
+    );
+    assertEquals("PROXY", supplementalRequestCaptor.getValue().channel());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void topLevelPartialWithoutWarningsCannotBeReportedAsSupplementalSuccess()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    supplemental.put("partial", true);
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
+    when(trackingService.scheduleSupplementalRetry(
+        eq("existing-shipment"), eq(List.of("bookingInfo", "containerInfo")),
+        eq("COSCO_SUPPLEMENTAL_PARTIAL"), any()
+    )).thenReturn(true);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        18L, "operator-partial", "Operator Partial", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("PARTIAL", items.get(0).get("status"));
+    assertEquals(true, items.get(0).get("supplementalRetryPending"));
+    List<Map<String, Object>> subtasks =
+        (List<Map<String, Object>>) items.get(0).get("subtasks");
+    assertEquals(List.of("FAILED", "FAILED"), subtasks.stream()
+        .map(subtask -> String.valueOf(subtask.get("status")))
+        .toList());
+    verify(trackingService).scheduleSupplementalRetry(
+        "existing-shipment", List.of("bookingInfo", "containerInfo"),
+        "COSCO_SUPPLEMENTAL_PARTIAL",
+        "COSCO supplemental response was marked partial without source diagnostics"
+    );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void staleDatabaseFallbackCannotMasqueradeAsAMainRefreshSuccess() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode stale = (ObjectNode) new ObjectMapper().readTree("""
+        {
+          "shipmentId": "existing-shipment",
+          "cacheSource": "MYSQL_STALE",
+          "stale": true,
+          "fetchedAt": "2026-08-01T09:37:00Z",
+          "warning": "Carrier returned no operational tracking data",
+          "diagnostic": {"code": "UPSTREAM_EMPTY", "message": "No live data"},
+          "snapshot": {"fetchedAt": "2026-08-01T09:37:00Z"}
+        }
+        """);
+    when(trackingService.track(any(), any())).thenReturn(stale);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        17L, "operator-stale", "Operator Stale", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("FAILED", items.get(0).get("mainStatus"));
+    assertEquals("MYSQL_STALE", items.get(0).get("mainSource"));
+    assertEquals("2026-08-01T09:37:00Z", items.get(0).get("mainFetchedAt"));
+    assertEquals(true, items.get(0).get("mainCacheStale"));
+    assertEquals("UPSTREAM_EMPTY", items.get(0).get("mainErrorCode"));
+    verify(trackingService, times(3)).track(any(), any());
+    verify(trackingService, never()).loadSupplementalDetails(any(), any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void staleProtectionFailurePausesWithTheCurrentItemExplicitlyFailed() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.track(any(), any())).thenThrow(new ApiException(
+        HttpStatus.BAD_GATEWAY,
+        "COSCO_UPSTREAM_BLOCKED",
+        "COSCO temporarily rejected this outbound IP",
+        0L,
+        Map.of(
+            "route", "DIRECT",
+            "upstreamStatus", 403,
+            "fallbackSource", "MYSQL_STALE",
+            "snapshotFetchedAt", "2026-08-01T09:37:00Z",
+            "stale", true
+        )
+    ));
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        19L, "operator-blocked", "Operator Blocked", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> paused = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) paused.get("items");
+    assertEquals("PAUSED", paused.get("status"));
+    assertEquals(1, paused.get("processed"));
+    assertEquals(1, paused.get("failed"));
+    assertEquals(0, paused.get("pending"));
+    assertEquals("FAILED", items.get(0).get("status"));
+    assertEquals("FAILED", items.get(0).get("mainStatus"));
+    assertEquals("MYSQL_STALE", items.get(0).get("mainSource"));
+    assertEquals(true, items.get(0).get("mainCacheStale"));
+    assertEquals("2026-08-01T09:37:00Z", items.get(0).get("mainFetchedAt"));
+    assertEquals(3, items.get(0).get("attempts"));
+    assertEquals("COSCO_UPSTREAM_BLOCKED", items.get(0).get("mainErrorCode"));
+    assertEquals(null, items.get(0).get("nextRetryAt"));
+    verify(trackingService, times(3)).track(any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void retainsDetailedPartialFailureMarkerForARefreshedShipment() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "existing-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    String message = "Configured COSCO proxy is unavailable；代理池已尝试 3 个出口节点";
+    when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
+        new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "COSCO_PROXY_POOL_EXHAUSTED",
+            message,
+            null,
+            Map.of(
+                "route", "PROXY",
+                "proxyNode", "HK-S03",
+                "proxyAttempts", 3,
+                "triedNodes", List.of("HK-S01", "HK-S02", "HK-S03")
+            )
+        )
+    );
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        16L, "operator-marker", "Operator Marker", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-existing-shipment", "COSCO", "BOOKING", "6508245590",
+            "6508245590", false, null
+        )),
+        user,
+        "PROXY"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals(1, completed.get("partial"));
+    assertEquals("PARTIAL", items.get(0).get("status"));
+    assertEquals("COSCO_PROXY_POOL_EXHAUSTED", items.get(0).get("errorCode"));
+    assertEquals(3, items.get(0).get("proxyAttempts"));
+    assertEquals("HK-S03", items.get(0).get("proxyNode"));
+    assertEquals(List.of("HK-S01", "HK-S02", "HK-S03"), items.get(0).get("triedProxyNodes"));
+    verify(trackingService).recordRefreshOutcome(
+        "existing-shipment",
+        "PARTIAL",
+        "COSCO_PROXY_POOL_EXHAUSTED",
+        message,
+        1,
+        3
+    );
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void preservesPerSourceWarningsWhenSupplementalAdapterReturnsHttpFailure() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "warning-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
+        new ApiException(
+            HttpStatus.BAD_GATEWAY,
+            "COSCO_SUPPLEMENTAL_UNAVAILABLE",
+            "COSCO did not return usable supplemental details",
+            null,
+            Map.of(
+                "route", "PLAYWRIGHT_PROXY",
+                "proxyNode", "browser-proxy-a1b2",
+                "warnings", List.of(
+                    Map.of(
+                        "source", "bookingInfo",
+                        "code", "COSCO_UPSTREAM_BLOCKED",
+                        "message", "Booking endpoint rejected the API proxy",
+                        "route", "PROXY",
+                        "proxyNode", "HK-S02",
+                        "attempts", 2,
+                        "triedNodes", List.of("HK-S01", "HK-S02")
+                    ),
+                    Map.of(
+                        "source", "containerInfo",
+                        "code", "COSCO_SUPPLEMENTAL_EMPTY",
+                        "message", "Browser fallback returned no container details",
+                        "route", "PLAYWRIGHT_PROXY",
+                        "proxyNode", "browser-proxy-a1b2",
+                        "attempts", 1,
+                        "triedNodes", List.of("browser-proxy-a1b2")
+                    )
+                )
+            )
+        )
+    );
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        26L, "operator-warnings", "Operator Warnings", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-warning-shipment", "COSCO", "BOOKING", "6505740970",
+            "6505740970", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    Map<String, Object> item = ((List<Map<String, Object>>) completed.get("items")).get(0);
+    List<Map<String, Object>> subtasks = (List<Map<String, Object>>) item.get("subtasks");
+    assertEquals("COSCO_UPSTREAM_BLOCKED", subtasks.get(0).get("errorCode"));
+    assertEquals("PROXY", subtasks.get(0).get("route"));
+    assertEquals("HK-S02", subtasks.get(0).get("proxyNode"));
+    assertEquals(List.of("HK-S01", "HK-S02"), subtasks.get(0).get("triedProxyNodes"));
+    assertEquals("COSCO_SUPPLEMENTAL_EMPTY", subtasks.get(1).get("errorCode"));
+    assertEquals("PLAYWRIGHT_PROXY", subtasks.get(1).get("route"));
+    assertEquals("browser-proxy-a1b2", subtasks.get(1).get("proxyNode"));
+  }
+
+  @Test
+  void selectedRefreshUsesItsOwnModeAndForcesLiveRefresh() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "selected-shipment");
+    tracked.put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    ObjectNode supplemental = new ObjectMapper().createObjectNode();
+    supplemental.putArray("containers");
+    supplemental.putObject("references");
+    supplemental.putArray("warnings");
+    when(trackingService.loadSupplementalDetails(any(), any(), any()))
+        .thenReturn(supplemental);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        15L, "operator-selected", "Operator Selected", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+
+    Map<String, Object> started = service.startRefreshSelected(
+        List.of(new ShipmentBatchItemRequest(
+            "refresh-selected", "COSCO", "BOOKING", "6508205930",
+            "6508205930", false, null
+        )),
+        user,
+        "AUTO"
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("REFRESH_SELECTED", completed.get("mode"));
+    ArgumentCaptor<ShipmentTrackRequest> requestCaptor =
+        ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService).track(requestCaptor.capture(), any());
+    assertEquals(Boolean.TRUE, requestCaptor.getValue().forceRefresh());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void keepsTwentyContainerOverviewWithoutStartingIndividualQueries()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = (ObjectNode) new ObjectMapper().readTree("""
+        {
+          "shipmentId": "tracked-shipment",
+          "cacheSource": "MYSQL",
+          "snapshot": {
+            "summary": {"containers": [{"containerType": "40HQ", "quantity": 20}]}
+          }
+        }
+        """);
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService, executor, 0, 0, Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        13L, "operator-summary", "Operator Summary", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails details = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, null
+    );
+
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "summary-only.xlsx",
+            List.of(new ShipmentBatchItemRequest(
+                "row-summary", "COSCO", "BOOKING", "6502406170",
+                "COSU6502406170", false, details
+            ))
+        ),
+        user
+    );
+
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    List<Map<String, Object>> items = (List<Map<String, Object>>) completed.get("items");
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals("SUCCEEDED", items.get(0).get("status"));
+    assertEquals(List.of(), items.get(0).get("subtasks"));
+    verify(trackingService, times(0)).discoverBatchContainers(any(), any(), any(), any());
+    verify(trackingService, times(0)).enrichBatchContainer(any(), any(), any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void cancellingDuringTheNextQueryWindowLeavesTheUnqueriedRowPending()
+      throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    ObjectNode tracked = new ObjectMapper().createObjectNode();
+    tracked.put("shipmentId", "tracked-shipment");
+    tracked.put("cacheSource", "LIVE");
+    CountDownLatch firstStarted = new CountDownLatch(1);
+    CountDownLatch releaseFirst = new CountDownLatch(1);
+    AtomicInteger calls = new AtomicInteger();
+    when(trackingService.track(any(), any())).thenAnswer(invocation -> {
+      if (calls.incrementAndGet() == 1) {
+        firstStarted.countDown();
+        assertTrue(releaseFirst.await(2, TimeUnit.SECONDS));
+      }
+      return tracked.deepCopy();
+    });
+
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(
+        trackingService,
+        executor,
+        60_000,
+        60_000,
+        Clock.systemUTC()
+    );
+    AuthenticatedUser user = new AuthenticatedUser(
+        8L, "operator-2", "Operator 2", "BUSINESS", "ACTIVE", "OVERSEA_AGENT"
+    );
+    ShipmentImportDetails firstDetails = new ShipmentImportDetails(
+        "COSU", "COSU6502406170", null, null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+    ShipmentImportDetails secondDetails = new ShipmentImportDetails(
+        "COSU", "COSU6502406171", null, null, null, null,
+        null, null, null, null, "Hayden US"
+    );
+    Map<String, Object> started = service.start(
+        new ShipmentBatchTaskRequest(
+            "HAYDEN-TRACKING INFORMATION.xlsx",
+            List.of(
+                new ShipmentBatchItemRequest(
+                    "row-1", "COSCO", "BOOKING", "6502406170",
+                    "COSU6502406170", false, firstDetails
+                ),
+                new ShipmentBatchItemRequest(
+                    "row-2", "COSCO", "BOOKING", "6502406171",
+                    "COSU6502406171", false, secondDetails
+                )
+            )
+        ),
+        user
+    );
+    String taskId = (String) started.get("taskId");
+    assertTrue(firstStarted.await(2, TimeUnit.SECONDS));
+    releaseFirst.countDown();
+
+    long deadline = System.currentTimeMillis() + 2_000;
+    Map<String, Object> running;
+    do {
+      running = service.status(taskId, user);
+      List<Map<String, Object>> items = (List<Map<String, Object>>) running.get("items");
+      if ("RUNNING".equals(items.get(1).get("status"))) break;
+      Thread.sleep(10);
+    } while (System.currentTimeMillis() < deadline);
+    List<Map<String, Object>> runningItems =
+        (List<Map<String, Object>>) running.get("items");
+    assertEquals("RUNNING", runningItems.get(1).get("status"));
+
+    service.cancel(taskId, user);
+    Map<String, Object> stopped = awaitTerminal(taskId, user);
+    List<Map<String, Object>> stoppedItems =
+        (List<Map<String, Object>>) stopped.get("items");
+    assertEquals("STOPPED", stopped.get("status"));
+    assertEquals(1, stopped.get("processed"));
+    assertEquals(1, stopped.get("pending"));
+    assertEquals("SUCCEEDED", stoppedItems.get(0).get("status"));
+    assertEquals("PENDING", stoppedItems.get(1).get("status"));
+    verify(trackingService, times(1)).track(any(), any());
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> awaitTerminal(String taskId, AuthenticatedUser user)
+      throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 2_000;
+    Map<String, Object> status;
+    do {
+      status = service.status(taskId, user);
+      if (List.of("COMPLETED", "STOPPED", "PAUSED").contains(status.get("status"))) {
+        return status;
+      }
+      Thread.sleep(10);
+    } while (System.currentTimeMillis() < deadline);
+    return service.status(taskId, user);
+  }
+}

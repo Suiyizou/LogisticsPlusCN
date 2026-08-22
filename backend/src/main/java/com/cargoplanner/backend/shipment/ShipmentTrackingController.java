@@ -1,0 +1,97 @@
+package com.cargoplanner.backend.shipment;
+
+import com.cargoplanner.backend.auth.AuthService;
+import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.customer.CustomerAuthService;
+import com.cargoplanner.backend.customer.CustomerPrincipal;
+import com.cargoplanner.backend.common.ApiException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+
+@RestController
+@RequestMapping("/api/public/shipments")
+public class ShipmentTrackingController {
+  private final ShipmentTrackingService trackingService;
+  private final AuthService authService;
+  private final CustomerAuthService customerAuthService;
+
+  public ShipmentTrackingController(
+      ShipmentTrackingService trackingService,
+      AuthService authService,
+      CustomerAuthService customerAuthService
+  ) {
+    this.trackingService = trackingService;
+    this.authService = authService;
+    this.customerAuthService = customerAuthService;
+  }
+
+  @PostMapping("/track")
+  public ObjectNode track(
+      @RequestBody ShipmentTrackRequest request,
+      @RequestHeader(value = "X-Auth-Token", required = false) String token,
+      @RequestHeader(value = "X-Customer-Token", required = false) String customerToken,
+      HttpServletRequest httpRequest
+  ) {
+    AuthenticatedUser user = token == null || token.isBlank()
+        ? null
+        : authService.authenticate(token, httpRequest);
+    CustomerPrincipal customer = customerToken == null || customerToken.isBlank()
+        ? null
+        : customerAuthService.authenticate(customerToken, httpRequest);
+    if (customer != null) {
+      return trackingService.readAssignedSnapshot(request, customer);
+    }
+    if (user == null || (!user.isBusiness() && !user.isAdmin())) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Only the business operator or an administrator may query or refresh carrier tracking"
+      );
+    }
+    return trackingService.track(request, user);
+  }
+
+  @PostMapping("/{shipmentId}/supplemental-details")
+  public ObjectNode loadSupplementalDetails(
+      @PathVariable String shipmentId,
+      @RequestBody ShipmentTrackRequest request,
+      @RequestHeader(value = "X-Auth-Token", required = false) String token,
+      HttpServletRequest httpRequest
+  ) {
+    AuthenticatedUser user = token == null || token.isBlank()
+        ? null
+        : authService.authenticate(token, httpRequest);
+    requireTrackingManager(user);
+    return trackingService.loadSupplementalDetails(shipmentId, request, user);
+  }
+
+  @PostMapping("/batch-tasks/{taskId}/cancel")
+  public ResponseEntity<JsonNode> cancelBatchTask(
+      @PathVariable String taskId,
+      @RequestHeader(value = "X-Auth-Token", required = false) String token,
+      HttpServletRequest httpRequest
+  ) {
+    AuthenticatedUser user = token == null || token.isBlank()
+        ? null
+        : authService.authenticate(token, httpRequest);
+    requireTrackingManager(user);
+    return ResponseEntity.accepted().body(trackingService.cancelBatchTask(taskId));
+  }
+
+  private void requireTrackingManager(AuthenticatedUser user) {
+    if (user == null || (!user.isBusiness() && !user.isAdmin())) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Only the business operator or an administrator may query or refresh carrier tracking"
+      );
+    }
+  }
+}

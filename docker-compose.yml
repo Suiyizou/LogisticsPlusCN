@@ -1,0 +1,168 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: cargo-planner-mysql
+    command: --mysql-native-password=ON --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cargo_root_pwd}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cargo_planner}
+      MYSQL_USER: ${MYSQL_USER:-cargo_planner}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cargo_planner_pwd}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - data
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: cargo-planner-backend:0.1.0
+    container_name: cargo-planner-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-cargo_planner}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-cargo_planner}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-cargo_planner_pwd}
+      APP_DEVICE_LIMIT_PER_USER: ${APP_DEVICE_LIMIT_PER_USER:-5}
+      APP_CUSTOMER_SESSION_HOURS: ${APP_CUSTOMER_SESSION_HOURS:-24}
+      APP_BOOTSTRAP_ADMIN_ENABLED: ${APP_BOOTSTRAP_ADMIN_ENABLED:-false}
+      APP_BOOTSTRAP_ADMIN_USERNAME: ${APP_BOOTSTRAP_ADMIN_USERNAME:-}
+      APP_BOOTSTRAP_ADMIN_PASSWORD: ${APP_BOOTSTRAP_ADMIN_PASSWORD:-}
+      APP_BOOTSTRAP_ADMIN_DISPLAY_NAME: ${APP_BOOTSTRAP_ADMIN_DISPLAY_NAME:-System Administrator}
+      SPRING_AI_CHAT_MODEL: ${SPRING_AI_CHAT_MODEL:-none}
+      SPRING_AI_OPENAI_API_KEY: ${SPRING_AI_OPENAI_API_KEY:-}
+      SPRING_AI_OPENAI_BASE_URL: ${SPRING_AI_OPENAI_BASE_URL:-https://api.deepseek.com}
+      SPRING_AI_OPENAI_MODEL: ${SPRING_AI_OPENAI_MODEL:-deepseek-v4-flash}
+      EXCEL_AGENT_BATCH_CONCURRENCY: ${EXCEL_AGENT_BATCH_CONCURRENCY:-3}
+      APP_WORKSPACE_FILE_ROOT: /app/uploads
+      APP_WORKSPACE_FILE_RETENTION: ${APP_WORKSPACE_FILE_RETENTION:-14d}
+      APP_WORKSPACE_FILE_CLEANUP_INTERVAL_MS: ${APP_WORKSPACE_FILE_CLEANUP_INTERVAL_MS:-3600000}
+      APP_WORKSPACE_FILE_MAX_SIZE_BYTES: ${APP_WORKSPACE_FILE_MAX_SIZE_BYTES:-83886080}
+      APP_ANNOUNCEMENT_IMAGE_ROOT: ${APP_ANNOUNCEMENT_IMAGE_ROOT:-/app/uploads/announcement-images}
+      APP_ANNOUNCEMENT_IMAGE_MAX_SIZE_BYTES: ${APP_ANNOUNCEMENT_IMAGE_MAX_SIZE_BYTES:-10485760}
+      APP_TRACKING_ADAPTER_BASE_URL: ${APP_TRACKING_ADAPTER_BASE_URL:-http://tracking:3000}
+      APP_TRACKING_ADAPTER_KEY: ${TRACKING_ADAPTER_KEY:-}
+      APP_TRACKING_CACHE_TTL: ${APP_TRACKING_CACHE_TTL:-15m}
+      APP_TRACKING_CONNECT_TIMEOUT: ${APP_TRACKING_CONNECT_TIMEOUT:-5s}
+      APP_TRACKING_READ_TIMEOUT: ${APP_TRACKING_READ_TIMEOUT:-90s}
+      APP_TRACKING_AUTO_REFRESH_ENABLED: ${APP_TRACKING_AUTO_REFRESH_ENABLED:-false}
+      APP_TRACKING_SUPPLEMENTAL_RETRY_ENABLED: ${APP_TRACKING_SUPPLEMENTAL_RETRY_ENABLED:-true}
+      APP_TRACKING_AUTO_REFRESH_DAILY_TIME: ${APP_TRACKING_AUTO_REFRESH_DAILY_TIME:-00:00}
+      APP_TRACKING_AUTO_REFRESH_TIME_ZONE: ${APP_TRACKING_AUTO_REFRESH_TIME_ZONE:-Asia/Shanghai}
+      APP_TRACKING_AUTO_REFRESH_CLAIM_BATCH_SIZE: ${APP_TRACKING_AUTO_REFRESH_CLAIM_BATCH_SIZE:-10}
+      APP_TRACKING_SUPPLEMENTAL_RETRY_MIN_DELAY: ${APP_TRACKING_SUPPLEMENTAL_RETRY_MIN_DELAY:-15m}
+      APP_TRACKING_SUPPLEMENTAL_RETRY_MAX_DELAY: ${APP_TRACKING_SUPPLEMENTAL_RETRY_MAX_DELAY:-30m}
+      APP_TRACKING_SUPPLEMENTAL_FAILURE_LIMIT_BEFORE_FULL: ${APP_TRACKING_SUPPLEMENTAL_FAILURE_LIMIT_BEFORE_FULL:-3}
+      APP_TRACKING_SECRET_KEY_FILE: /app/secrets/tracking-settings.key
+      APP_SHIPMENT_FILE_ROOT: /app/shipment-files
+      SPRING_SERVLET_MULTIPART_LOCATION: /app/shipment-files/.multipart
+      APP_SHIPMENT_FILE_MAX_SIZE_BYTES: ${APP_SHIPMENT_FILE_MAX_SIZE_BYTES:-83886080}
+      APP_SHIPMENT_FILE_MAX_FILES_PER_SHIPMENT: ${APP_SHIPMENT_FILE_MAX_FILES_PER_SHIPMENT:-200}
+      APP_SHIPMENT_FILE_MAX_BYTES_PER_SHIPMENT: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_SHIPMENT:-2147483648}
+      APP_SHIPMENT_FILE_MAX_BYTES_PER_CUSTOMER: ${APP_SHIPMENT_FILE_MAX_BYTES_PER_CUSTOMER:-5368709120}
+      APP_SHIPMENT_FILE_MIN_FREE_SPACE_BYTES: ${APP_SHIPMENT_FILE_MIN_FREE_SPACE_BYTES:-1073741824}
+      APP_SHIPMENT_FILE_ALLOWED_EXTENSIONS: ${APP_SHIPMENT_FILE_ALLOWED_EXTENSIONS:-pdf,xlsx,xls,csv,doc,docx,jpg,jpeg,png,txt,md,markdown}
+      TZ: Asia/Shanghai
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - workspace-files:/app/uploads
+      - ${SHIPMENT_FILE_HOST_PATH:-./data/shipment-files}:/app/shipment-files
+      - backend-secrets:/app/secrets
+    depends_on:
+      mysql:
+        condition: service_healthy
+      tracking:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app
+      - data
+
+  tracking:
+    build:
+      context: ./tracking-service
+      dockerfile: Dockerfile
+    image: cargo-platform-tracking:0.1.0
+    container_name: cargo-platform-tracking
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      PLAYWRIGHT_HEADLESS: "true"
+      PLAYWRIGHT_BROWSER_CHANNEL: chromium
+      PLAYWRIGHT_MAX_CONCURRENCY: ${PLAYWRIGHT_MAX_CONCURRENCY:-2}
+      PLAYWRIGHT_QUEUE_LIMIT: ${PLAYWRIGHT_QUEUE_LIMIT:-8}
+      PLAYWRIGHT_QUEUE_TIMEOUT_MS: ${PLAYWRIGHT_QUEUE_TIMEOUT_MS:-15000}
+      COSCO_PLAYWRIGHT_MAX_CONCURRENCY: ${COSCO_PLAYWRIGHT_MAX_CONCURRENCY:-1}
+      COSCO_PLAYWRIGHT_FALLBACK_QUEUE_LIMIT: ${COSCO_PLAYWRIGHT_FALLBACK_QUEUE_LIMIT:-8}
+      COSCO_PLAYWRIGHT_FALLBACK_QUEUE_TIMEOUT_MS: ${COSCO_PLAYWRIGHT_FALLBACK_QUEUE_TIMEOUT_MS:-15000}
+      COSCO_PLAYWRIGHT_PROXY_SERVER: ${COSCO_PLAYWRIGHT_PROXY_SERVER:-}
+      COSCO_PLAYWRIGHT_PROXY_USERNAME: ${COSCO_PLAYWRIGHT_PROXY_USERNAME:-}
+      COSCO_PLAYWRIGHT_PROXY_PASSWORD: ${COSCO_PLAYWRIGHT_PROXY_PASSWORD:-}
+      COSCO_PROXY_ENABLED: ${COSCO_PROXY_ENABLED:-false}
+      COSCO_PROXY_SERVER: ${COSCO_PROXY_SERVER:-}
+      COSCO_PROXY_USERNAME: ${COSCO_PROXY_USERNAME:-}
+      COSCO_PROXY_PASSWORD: ${COSCO_PROXY_PASSWORD:-}
+      TRACKING_ADAPTER_KEY: ${TRACKING_ADAPTER_KEY:-}
+      COSCO_QUERY_MIN_INTERVAL_MS: ${COSCO_QUERY_MIN_INTERVAL_MS:-10000}
+      COSCO_QUERY_MAX_INTERVAL_MS: ${COSCO_QUERY_MAX_INTERVAL_MS:-12000}
+      COSCO_QUERY_QUEUE_LIMIT: ${COSCO_QUERY_QUEUE_LIMIT:-50}
+      COSCO_QUERY_QUEUE_TIMEOUT_MS: ${COSCO_QUERY_QUEUE_TIMEOUT_MS:-120000}
+      COSCO_BLOCK_COOLDOWN_MS: ${COSCO_BLOCK_COOLDOWN_MS:-1800000}
+      CHANNEL_C_MONITOR_ENABLED: ${CHANNEL_C_MONITOR_ENABLED:-true}
+      TZ: Asia/Shanghai
+    expose:
+      - "3000"
+    init: true
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_TRACKING_WORKBENCH_URL: ${VITE_TRACKING_WORKBENCH_URL:-/tracking/}
+    image: cargo-planner-frontend:0.1.0
+    container_name: cargo-planner-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_started
+      tracking:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app
+
+volumes:
+  mysql-data:
+    external: true
+    name: mysql-data
+  workspace-files:
+  backend-secrets:
+
+networks:
+  app:
+    name: cargo-planner-app
+  data:
+    name: cargo-planner-data

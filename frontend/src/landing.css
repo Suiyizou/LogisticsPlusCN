@@ -1,0 +1,78 @@
+:root {
+  --app-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+  color: #172235;
+  background: #f7f9fc;
+  font-family: var(--app-font-family);
+  font-size: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html { min-width: 0; }
+
+body {
+  min-width: 0;
+  margin: 0;
+  color: #172235;
+  background: #f7f9fc;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+select { font: inherit; }
+
+button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #c5d3e4;
+  border-radius: 6px;
+  color: #174a7f;
+  background: #fff;
+  cursor: pointer;
+}
+
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #cbd8e8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.language-switcher button {
+  min-width: 34px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #47617c;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.language-switcher button.active {
+  color: #fff;
+  background: #165dff;
+}
+
+.el-icon {
+  width: 1em;
+  height: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.el-icon svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}

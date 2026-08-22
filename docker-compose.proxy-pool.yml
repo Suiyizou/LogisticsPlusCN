@@ -1,0 +1,31 @@
+services:
+  proxy-pool:
+    image: ${MIHOMO_IMAGE:-docker.io/metacubex/mihomo:v1.19.29}
+    container_name: cargo-platform-proxy-pool
+    command: ["-d", "/root/.config/mihomo"]
+    volumes:
+      - ./docker/proxy-pool/config.yaml:/root/.config/mihomo/config.yaml:ro
+      - ${PROXY_PROVIDER_FILE:?Set PROXY_PROVIDER_FILE to the private airport YAML path}:/root/.config/mihomo/providers/airport.yaml:ro
+    expose:
+      - "7890"
+      - "9090"
+    restart: unless-stopped
+    networks:
+      - app
+
+  tracking:
+    environment:
+      COSCO_PROXY_ENABLED: "true"
+      COSCO_PROXY_SERVER: socks5://proxy-pool:7890
+      COSCO_PROXY_USERNAME: ""
+      COSCO_PROXY_PASSWORD: ""
+      COSCO_PROXY_POOL_CONTROLLER: http://proxy-pool:9090
+      COSCO_PROXY_POOL_GROUP: TRACKING-POOL
+      COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT: ${COSCO_PROXY_POOL_MAX_ATTEMPTS_PER_SHIPMENT:-3}
+      COSCO_PROXY_POOL_MAX_REQUESTS_PER_NODE: ${COSCO_PROXY_POOL_MAX_REQUESTS_PER_NODE:-12}
+      COSCO_PROXY_POOL_NODE_COOLDOWN_MS: ${COSCO_PROXY_POOL_NODE_COOLDOWN_MS:-1800000}
+      COSCO_PROXY_CORE_TIMEOUT_MS: ${COSCO_PROXY_CORE_TIMEOUT_MS:-15000}
+      COSCO_PROXY_ENRICHMENT_TIMEOUT_MS: ${COSCO_PROXY_ENRICHMENT_TIMEOUT_MS:-8000}
+    depends_on:
+      proxy-pool:
+        condition: service_started

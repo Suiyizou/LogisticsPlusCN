@@ -1,0 +1,838 @@
+package com.cargoplanner.backend.shipment;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.customer.CustomerPrincipal;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.mock.web.MockMultipartFile;
+
+class ShipmentFileServiceTest {
+  @TempDir
+  Path temporaryDirectory;
+
+  private JdbcTemplate jdbcTemplate;
+  private ShipmentFileService service;
+  private ShipmentFileProperties properties;
+  private ShipmentAccessService accessService;
+  private AuthenticatedUser customer;
+  private AuthenticatedUser business;
+  private AuthenticatedUser outsider;
+  private AuthenticatedUser admin;
+  private CustomerPrincipal portalCustomer;
+  private CustomerPrincipal otherPortalCustomer;
+
+  @BeforeEach
+  void setUp() {
+    DriverManagerDataSource dataSource = new DriverManagerDataSource(
+        "jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "sa",
+        ""
+    );
+    jdbcTemplate = new JdbcTemplate(dataSource);
+    createSchema();
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_users (id, display_name, role) VALUES
+          (1, 'Customer One', 'EMPLOYEE'),
+          (2, 'Business One', 'BUSINESS'),
+          (3, 'Outside User', 'EMPLOYEE'),
+          (4, 'Administrator', 'ADMIN')
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, party_role, customer_code_hash,
+          customer_code_prefix, status, created_by, responsible_agent_id
+        ) VALUES
+          (20, 'customer-public-id', 'portal-customer', 'Portal Customer', 'SHIPPER',
+           'hash-20', 'DL-PORTAL', 'ACTIVE', 2, 2),
+          (21, 'other-customer-id', 'other-customer', 'Other Customer', 'CONSIGNEE',
+           'hash-21', 'DL-OTHER', 'ACTIVE', 2, 2)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customer_shipment_access (
+          customer_id, shipment_id, relationship_role, assigned_by
+        ) VALUES (20, 10, 'SHIPPER', 2)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipments (id, public_id, carrier_code, created_at, updated_at)
+        VALUES (10, 'shipment-public-id', 'COSCO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_references (
+          id, shipment_id, carrier_code, reference_type, reference_no_raw,
+          reference_no_normalized, primary_reference
+        ) VALUES (100, 10, 'COSCO', 'BOOKING', 'BK-10001', 'BK-10001', TRUE)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_shipment_participants (
+          shipment_id, user_id, participant_role, granted_by
+        ) VALUES (10, 1, 'CUSTOMER', 1), (10, 2, 'OPERATOR', 2)
+        """
+    );
+
+    properties = new ShipmentFileProperties();
+    properties.setRoot(temporaryDirectory.toString());
+    properties.setMaxFileSizeBytes(1024 * 1024);
+    properties.setMinFreeSpaceBytes(0);
+    accessService = new ShipmentAccessService(jdbcTemplate);
+    rebuildService();
+    customer = new AuthenticatedUser(1, "customer", "Customer One", "EMPLOYEE", "ACTIVE");
+    business = new AuthenticatedUser(2, "business", "Business One", "BUSINESS", "ACTIVE");
+    outsider = new AuthenticatedUser(3, "outside", "Outside User", "EMPLOYEE", "ACTIVE");
+    admin = new AuthenticatedUser(4, "admin", "Administrator", "ADMIN", "ACTIVE");
+    portalCustomer = new CustomerPrincipal(
+        20, "customer-public-id", "portal-customer", "Portal Customer", "SHIPPER", "ACTIVE"
+    );
+    otherPortalCustomer = new CustomerPrincipal(
+        21, "other-customer-id", "other-customer", "Other Customer", "CONSIGNEE", "ACTIVE"
+    );
+  }
+
+  @Test
+  void repairsMissingStorageLockRowBeforeUpload() {
+    jdbcTemplate.update("DELETE FROM cp_shipment_file_storage_lock WHERE id = 1");
+
+    ShipmentFileService.SavedShipmentFile saved = service.storeCustomer(
+        upload("cargo-details.pdf", "cargo-data"),
+        "shipment-public-id",
+        portalCustomer,
+        "CARGO_DETAIL",
+        "127.0.0.1"
+    );
+
+    assertThat(saved.record().status()).isEqualTo("READY");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_file_storage_lock WHERE id = 1",
+        Integer.class
+    )).isEqualTo(1);
+  }
+
+  @Test
+  void enforcesParticipantVisibilityAndSoftDeleteRules() throws Exception {
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("invoice.pdf", "invoice-data"),
+        "shipment-public-id",
+        business,
+        "INVOICE",
+        "PARTIES",
+        "customer-public-id",
+        "127.0.0.1"
+    );
+
+    assertThat(saved.record().visibility()).isEqualTo("PARTIES");
+    assertThat(saved.record().targetCustomerId()).isEqualTo(20L);
+    assertThat(Files.readString(saved.path())).isEqualTo("invoice-data");
+    assertThatThrownBy(() -> service.list("shipment-public-id", customer))
+        .isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .hasSize(1);
+    assertThatThrownBy(() -> service.list("shipment-public-id", outsider))
+        .isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.FORBIDDEN));
+    assertThatThrownBy(() -> service.updateVisibility(
+        saved.record().publicId(),
+        "INTERNAL",
+        customer,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.NOT_FOUND));
+
+    Map<String, Object> updated = service.updateVisibility(
+        saved.record().publicId(),
+        "INTERNAL",
+        business,
+        "127.0.0.1"
+    );
+    assertThat(updated.get("visibility")).isEqualTo("INTERNAL");
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .isEmpty();
+    assertThat(service.content(saved.record().publicId(), business, "127.0.0.1").path())
+        .isEqualTo(saved.path());
+
+    service.delete(saved.record().publicId(), business, "127.0.0.1");
+
+    assertThat(Files.exists(saved.path())).isFalse();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT status FROM cp_shipment_files WHERE public_id = ?",
+        String.class,
+        saved.record().publicId()
+    )).isEqualTo("DELETED");
+    assertThat(((List<?>) service.list("shipment-public-id", business).get("items"))).isEmpty();
+    assertThat(service.listAll(null, 0, 100, true, admin).get("total")).isEqualTo(1L);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_file_audit",
+        Integer.class
+    )).isEqualTo(4);
+  }
+
+  @Test
+  void customerUploadVisibilityIsFixedAndCustomerCanDeleteOwnUpload() throws Exception {
+    ShipmentFileService.SavedShipmentFile saved = service.storeCustomer(
+        upload("cargo-detail.xlsx", "customer-cargo"),
+        "shipment-public-id",
+        portalCustomer,
+        "CARGO_DETAIL",
+        "127.0.0.1"
+    );
+
+    assertThat(saved.record().uploaderUserId()).isNull();
+    assertThat(saved.record().uploaderCustomerId()).isEqualTo(20L);
+    assertThat(saved.record().targetCustomerId()).isEqualTo(20L);
+    assertThat(saved.record().visibility()).isEqualTo("PARTIES");
+    Map<String, Object> metadata = service.metadataCustomer(saved, portalCustomer);
+    assertThat(metadata.get("uploaderType")).isEqualTo("CUSTOMER");
+    assertThat(metadata.get("canChangeVisibility")).isEqualTo(false);
+    assertThat(metadata.get("visibilityRoles"))
+        .isEqualTo(List.of("OVERSEA_AGENT", "SHIPPER"));
+    Map<String, Object> customerFiles = service.listCustomer(
+        "shipment-public-id", portalCustomer
+    );
+    assertThat(((Map<?, ?>) customerFiles.get("permissions")).get("canChangeVisibility"))
+        .isEqualTo(false);
+    assertThat(((List<?>) customerFiles.get("items")))
+        .hasSize(1);
+    jdbcTemplate.update("UPDATE cp_customers SET party_role = 'SHIPPER' WHERE id = 21");
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (21, 10, 'SHIPPER', 2)"
+    );
+    CustomerPrincipal sameRoleCustomer = new CustomerPrincipal(
+        21, "other-customer-id", "other-customer", "Other Customer", "SHIPPER", "ACTIVE"
+    );
+    assertThat((List<?>) service.listCustomer(
+        "shipment-public-id", sameRoleCustomer
+    ).get("items")).isEmpty();
+    assertThatThrownBy(() -> service.contentCustomer(
+        saved.record().publicId(), sameRoleCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.NOT_FOUND));
+
+    assertThatThrownBy(() -> service.updateVisibilityRolesCustomer(
+        saved.record().publicId(), List.of("CONSIGNEE"), portalCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.FORBIDDEN));
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items")))
+        .hasSize(1);
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), portalCustomer, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
+
+    service.deleteCustomer(saved.record().publicId(), portalCustomer, "127.0.0.1");
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT status FROM cp_shipment_files WHERE public_id = ?",
+        String.class,
+        saved.record().publicId()
+    )).isEqualTo("DELETED");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT deleted_by_customer_id FROM cp_shipment_files WHERE public_id = ?",
+        Long.class,
+        saved.record().publicId()
+    )).isEqualTo(20L);
+    assertThat(Files.exists(saved.path())).isFalse();
+  }
+
+  @Test
+  void isolatesFilesBetweenCustomersAssignedToTheSameShipment() {
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (21, 10, 'CONSIGNEE', 2)"
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, party_role, customer_code_hash,
+          customer_code_prefix, status, created_by, responsible_agent_id
+        ) VALUES (
+          22, 'admin-customer-id', 'admin-customer', 'Admin Customer', 'AGENT',
+          'hash-22', 'DL-ADMIN', 'ACTIVE', 4, 4
+        )
+        """
+    );
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (22, 10, 'AGENT', 4)"
+    );
+    assertThat(((List<?>) service.list("shipment-public-id", business)
+        .get("assignableCustomers")).stream()
+        .map(item -> String.valueOf(((Map<?, ?>) item).get("id"))))
+        .containsExactlyInAnyOrder("customer-public-id", "other-customer-id");
+    assertThat(((List<?>) service.list("shipment-public-id", admin)
+        .get("assignableCustomers")).stream()
+        .map(item -> String.valueOf(((Map<?, ?>) item).get("id"))))
+        .containsExactlyInAnyOrder(
+            "customer-public-id", "other-customer-id", "admin-customer-id"
+        );
+    ShipmentFileService.SavedShipmentFile shipperFile = service.storeCustomer(
+        upload("shipper.pdf", "shipper"),
+        "shipment-public-id",
+        portalCustomer,
+        "RELATED",
+        "127.0.0.1"
+    );
+    ShipmentFileService.SavedShipmentFile consigneeFile = service.storeCustomer(
+        upload("consignee.pdf", "consignee"),
+        "shipment-public-id",
+        otherPortalCustomer,
+        "RELATED",
+        "127.0.0.1"
+    );
+
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .stream().map(item -> String.valueOf(((Map<?, ?>) item).get("id"))).toList())
+        .containsExactly(shipperFile.record().publicId());
+    assertThat(((List<?>) service.listCustomer("shipment-public-id", otherPortalCustomer).get("items"))
+        .stream().map(item -> String.valueOf(((Map<?, ?>) item).get("id"))).toList())
+        .containsExactly(consigneeFile.record().publicId());
+    assertThatThrownBy(() -> service.contentCustomer(
+        consigneeFile.record().publicId(),
+        portalCustomer,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.NOT_FOUND));
+
+    ShipmentFileService.SavedShipmentFile targetedInternalFile = service.store(
+        upload("agent-to-shipper.pdf", "agent"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "PARTIES",
+        "customer-public-id",
+        "127.0.0.1"
+    );
+    assertThat(targetedInternalFile.record().targetCustomerId()).isEqualTo(20L);
+    assertThat(service.metadata(targetedInternalFile, business).get("targetCustomerId"))
+        .isEqualTo("customer-public-id");
+    Map<String, Object> internalOnly = service.updateVisibility(
+        targetedInternalFile.record().publicId(),
+        "INTERNAL_ONLY",
+        null,
+        business,
+        "127.0.0.1"
+    );
+    assertThat(internalOnly.get("visibility")).isEqualTo("INTERNAL");
+    assertThat(internalOnly.get("targetCustomerId")).isNull();
+    assertThatThrownBy(() -> service.updateVisibility(
+        targetedInternalFile.record().publicId(),
+        "PARTIES",
+        null,
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.BAD_REQUEST));
+    assertThatThrownBy(() -> service.updateVisibility(
+        targetedInternalFile.record().publicId(),
+        "PARTIES",
+        "admin-customer-id",
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.NOT_FOUND));
+    Map<String, Object> sharedAgain = service.updateVisibility(
+        targetedInternalFile.record().publicId(),
+        "PARTIES",
+        "customer-public-id",
+        business,
+        "127.0.0.1"
+    );
+    assertThat(sharedAgain.get("visibility")).isEqualTo("PARTIES");
+    assertThat(sharedAgain.get("targetCustomerId")).isEqualTo("customer-public-id");
+    assertThat((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .hasSize(2);
+    assertThat((List<?>) service.listCustomer("shipment-public-id", otherPortalCustomer).get("items"))
+        .hasSize(1);
+
+    assertThatThrownBy(() -> service.store(
+        upload("legacy-unscoped.pdf", "legacy"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "PARTIES",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.BAD_REQUEST));
+    assertThat((List<?>) service.list("shipment-public-id", business).get("items"))
+        .hasSize(3);
+  }
+
+  @Test
+  void customerScopedOverseasAgentListsFilesSharedWithOverseasAgents() {
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_customers (
+          id, public_id, username, display_name, party_role, customer_code_hash,
+          customer_code_prefix, status, created_by, responsible_agent_id
+        ) VALUES (22, 'agent-customer-id', 'oversea-agent', 'Oversea Agent',
+                  'OVERSEA_AGENT', 'hash-22', 'DL-AGENT', 'ACTIVE', 2, 2)
+        """
+    );
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_customers (
+          customer_id, oversea_agent_customer_id, assigned_by
+        ) VALUES (20, 22, 2)
+        """
+    );
+    CustomerPrincipal overseasAgent = new CustomerPrincipal(
+        22,
+        "agent-customer-id",
+        "oversea-agent",
+        "Oversea Agent",
+        "OVERSEA_AGENT",
+        "ACTIVE",
+        20L,
+        "customer-public-id",
+        "Portal Customer",
+        "SHIPPER"
+    );
+    assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isFalse();
+    jdbcTemplate.update(
+        """
+        INSERT INTO cp_oversea_agent_shipment_scopes (
+          shipment_id, oversea_agent_customer_id, represented_customer_id,
+          status, assigned_by
+        ) VALUES (10, 22, 20, 'ACTIVE', 2)
+        """
+    );
+    assertThat(accessService.hasCustomerAccess("shipment-public-id", overseasAgent)).isTrue();
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("agent-shared.pdf", "agent-shared"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        List.of("OVERSEA_AGENT"),
+        "127.0.0.1"
+    );
+
+    assertThat((List<?>) service.listCustomer(
+        "shipment-public-id", overseasAgent
+    ).get("items")).hasSize(1);
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), overseasAgent, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
+  }
+
+  @Test
+  void enforcesMultiRoleVisibilityFromShipmentBindings() {
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (21, 10, 'CONSIGNEE', 2)"
+    );
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("shared.pdf", "shared"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        List.of("OVERSEA_AGENT", "CONSIGNEE"),
+        "127.0.0.1"
+    );
+
+    assertThat(service.metadata(saved, business).get("visibilityRoles"))
+        .isEqualTo(List.of("OVERSEA_AGENT", "CONSIGNEE"));
+    assertThat((List<?>) service.list("shipment-public-id", business).get("items")).hasSize(1);
+    assertThat((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .isEmpty();
+    assertThat((List<?>) service.listCustomer("shipment-public-id", otherPortalCustomer).get("items"))
+        .hasSize(1);
+    assertThatThrownBy(() -> service.contentCustomer(
+        saved.record().publicId(), portalCustomer, "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status()).isEqualTo(HttpStatus.NOT_FOUND));
+    assertThat(service.contentCustomer(
+        saved.record().publicId(), otherPortalCustomer, "127.0.0.1"
+    ).path()).isEqualTo(saved.path());
+
+    Map<String, Object> changed = service.updateVisibilityRoles(
+        saved.record().publicId(), List.of("SHIPPER"), business, "127.0.0.1"
+    );
+    assertThat(changed.get("visibilityRoles")).isEqualTo(List.of("SHIPPER"));
+    assertThat((List<?>) service.list("shipment-public-id", business).get("items")).hasSize(1);
+    assertThat(service.content(saved.record().publicId(), business, "127.0.0.1").path())
+        .isEqualTo(saved.path());
+    assertThat((List<?>) service.listCustomer("shipment-public-id", portalCustomer).get("items"))
+        .hasSize(1);
+  }
+
+  @Test
+  void providesSafeInlineAndTextFallbackPreviews() {
+    ShipmentFileService.SavedShipmentFile pdf = service.store(
+        upload("invoice.pdf", "pdf"), "shipment-public-id", business,
+        "RELATED", "INTERNAL", "127.0.0.1"
+    );
+    ShipmentFileService.ShipmentFilePreview inline = service.preview(
+        pdf.record().publicId(), business, "127.0.0.1"
+    );
+    assertThat(inline.mode()).isEqualTo("PDF");
+    assertThat(inline.path()).isEqualTo(pdf.path());
+    assertThat(inline.contentType()).isEqualTo("application/pdf");
+
+    ShipmentFileService.SavedShipmentFile legacyWord = service.store(
+        upload("legacy.doc", "binary"), "shipment-public-id", business,
+        "RELATED", "INTERNAL", "127.0.0.1"
+    );
+    ShipmentFileService.ShipmentFilePreview fallback = service.preview(
+        legacyWord.record().publicId(), business, "127.0.0.1"
+    );
+    assertThat(fallback.mode()).isEqualTo("WORD");
+    assertThat(fallback.path()).isNull();
+    assertThat(new String(fallback.textContent(), StandardCharsets.UTF_8))
+        .contains("could not be converted");
+  }
+
+  @Test
+  void enforcesShipmentCountAndByteQuotas() {
+    properties.setMaxFilesPerShipment(1);
+    properties.setMaxBytesPerShipment(1024);
+    rebuildService();
+
+    service.store(
+        upload("first.pdf", "first"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    );
+
+    assertThatThrownBy(() -> service.store(
+        upload("second.pdf", "second"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INSUFFICIENT_STORAGE));
+
+    properties.setMaxFilesPerShipment(10);
+    properties.setMaxBytesPerShipment(6);
+    rebuildService();
+    assertThatThrownBy(() -> service.store(
+        upload("too-large-total.pdf", "12"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INSUFFICIENT_STORAGE));
+  }
+
+  @Test
+  void enforcesCustomerQuotaAcrossAssignedShipments() {
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipments (id, public_id, carrier_code, created_at, updated_at) "
+            + "VALUES (11, 'second-shipment-id', 'COSCO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+    );
+    jdbcTemplate.update(
+        "INSERT INTO cp_customer_shipment_access "
+            + "(customer_id, shipment_id, relationship_role, assigned_by) "
+            + "VALUES (20, 11, 'SHIPPER', 2)"
+    );
+    properties.setMaxFilesPerShipment(10);
+    properties.setMaxBytesPerShipment(1024);
+    properties.setMaxBytesPerCustomer(8);
+    rebuildService();
+
+    service.storeCustomer(
+        upload("first.pdf", "12345"),
+        "shipment-public-id",
+        portalCustomer,
+        "RELATED",
+        "127.0.0.1"
+    );
+    assertThatThrownBy(() -> service.storeCustomer(
+        upload("second.pdf", "6789"),
+        "second-shipment-id",
+        portalCustomer,
+        "RELATED",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INSUFFICIENT_STORAGE));
+  }
+
+  @Test
+  void protectsConfiguredDiskFreeSpaceFloor() {
+    properties.setMinFreeSpaceBytes(Long.MAX_VALUE);
+    rebuildService();
+
+    assertThatThrownBy(() -> service.store(
+        upload("invoice.pdf", "content"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INSUFFICIENT_STORAGE));
+  }
+
+  @Test
+  void failedPhysicalDeleteKeepsRecoverableMetadataAndCanBeRetried() throws Exception {
+    ShipmentFileService.SavedShipmentFile saved = service.store(
+        upload("invoice.pdf", "content"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    );
+    Files.delete(saved.path());
+    Files.createDirectory(saved.path());
+    Path blocker = saved.path().resolve("blocker");
+    Files.writeString(blocker, "block");
+
+    assertThatThrownBy(() -> service.delete(
+        saved.record().publicId(),
+        business,
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR));
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT status FROM cp_shipment_files WHERE public_id = ?",
+        String.class,
+        saved.record().publicId()
+    )).isEqualTo("DELETE_FAILED");
+    properties.setMaxFilesPerShipment(1);
+    rebuildService();
+    assertThatThrownBy(() -> service.store(
+        upload("blocked-by-failed-delete.pdf", "other"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    )).isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status())
+            .isEqualTo(HttpStatus.INSUFFICIENT_STORAGE));
+
+    Files.delete(blocker);
+    Files.delete(saved.path());
+    service.delete(saved.record().publicId(), business, "127.0.0.1");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT status FROM cp_shipment_files WHERE public_id = ?",
+        String.class,
+        saved.record().publicId()
+    )).isEqualTo("DELETED");
+    assertThat(service.store(
+        upload("after-cleanup.pdf", "other"),
+        "shipment-public-id",
+        business,
+        "RELATED",
+        "INTERNAL",
+        "127.0.0.1"
+    ).record().status()).isEqualTo("READY");
+  }
+
+  private void rebuildService() {
+    service = new ShipmentFileService(
+        jdbcTemplate,
+        new ObjectMapper(),
+        accessService,
+        properties,
+        Clock.fixed(Instant.parse("2026-07-16T11:00:00Z"), ZoneOffset.UTC)
+    );
+  }
+
+  private MockMultipartFile upload(String name, String content) {
+    return new MockMultipartFile(
+        "file",
+        name,
+        "application/pdf",
+        content.getBytes(StandardCharsets.UTF_8)
+    );
+  }
+
+  private void createSchema() {
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_file_storage_lock (
+          id TINYINT PRIMARY KEY,
+          lock_name VARCHAR(64) NOT NULL UNIQUE
+        )
+        """);
+    jdbcTemplate.update(
+        "INSERT INTO cp_shipment_file_storage_lock (id, lock_name) VALUES (1, 'shipment-file-capacity')"
+    );
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_users (
+          id BIGINT PRIMARY KEY,
+          display_name VARCHAR(80) NOT NULL,
+          role VARCHAR(24) NOT NULL
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipments (
+          id BIGINT PRIMARY KEY,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          carrier_code VARCHAR(32) NOT NULL,
+          created_by BIGINT,
+          responsible_agent_id BIGINT,
+          created_at TIMESTAMP NOT NULL,
+          updated_at TIMESTAMP NOT NULL
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_references (
+          id BIGINT PRIMARY KEY,
+          shipment_id BIGINT NOT NULL,
+          carrier_code VARCHAR(32) NOT NULL,
+          reference_type VARCHAR(24) NOT NULL,
+          reference_no_raw VARCHAR(160) NOT NULL,
+          reference_no_normalized VARCHAR(128) NOT NULL,
+          primary_reference BOOLEAN NOT NULL
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_participants (
+          shipment_id BIGINT NOT NULL,
+          user_id BIGINT NOT NULL,
+          participant_role VARCHAR(24) NOT NULL,
+          granted_by BIGINT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_id, user_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customers (
+          id BIGINT PRIMARY KEY,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          username VARCHAR(64) NOT NULL,
+          display_name VARCHAR(80) NOT NULL,
+          client_code VARCHAR(64),
+          party_role VARCHAR(20) NOT NULL,
+          customer_code_hash CHAR(64) NOT NULL,
+          customer_code_prefix VARCHAR(16) NOT NULL,
+          customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
+          provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+          status VARCHAR(20) NOT NULL,
+          remark VARCHAR(500),
+          created_by BIGINT NOT NULL,
+          responsible_agent_id BIGINT
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_customer_shipment_access (
+          customer_id BIGINT NOT NULL,
+          shipment_id BIGINT NOT NULL,
+          relationship_role VARCHAR(20) NOT NULL,
+          publication_status VARCHAR(20) NOT NULL DEFAULT 'PUBLISHED',
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          published_at TIMESTAMP,
+          published_by BIGINT,
+          PRIMARY KEY (customer_id, shipment_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_files (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          public_id CHAR(36) NOT NULL UNIQUE,
+          shipment_id BIGINT NOT NULL,
+          uploader_user_id BIGINT,
+          uploader_customer_id BIGINT,
+          target_customer_id BIGINT,
+          uploader_role_snapshot VARCHAR(24) NOT NULL,
+          document_category VARCHAR(32) NOT NULL,
+          original_file_name VARCHAR(255) NOT NULL,
+          stored_relative_path VARCHAR(512) NOT NULL UNIQUE,
+          content_type VARCHAR(160) NOT NULL,
+          extension VARCHAR(20) NOT NULL,
+          size_bytes BIGINT NOT NULL,
+          sha256 CHAR(64) NOT NULL,
+          visibility VARCHAR(20) NOT NULL,
+          status VARCHAR(20) NOT NULL,
+          created_at TIMESTAMP NOT NULL,
+          updated_at TIMESTAMP NOT NULL,
+          deleted_at TIMESTAMP,
+          deleted_by BIGINT,
+          deleted_by_customer_id BIGINT
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_file_visibility_roles (
+          shipment_file_id BIGINT NOT NULL,
+          visibility_role VARCHAR(24) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_file_id, visibility_role)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_customers (
+          customer_id BIGINT PRIMARY KEY,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_oversea_agent_shipment_scopes (
+          shipment_id BIGINT NOT NULL,
+          oversea_agent_customer_id BIGINT NOT NULL,
+          represented_customer_id BIGINT NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          assigned_by BIGINT NOT NULL,
+          assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (shipment_id, oversea_agent_customer_id, represented_customer_id)
+        )
+        """);
+    jdbcTemplate.execute("""
+        CREATE TABLE cp_shipment_file_audit (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          shipment_file_id BIGINT NOT NULL,
+          shipment_id BIGINT NOT NULL,
+          actor_user_id BIGINT,
+          actor_customer_id BIGINT,
+          action VARCHAR(32) NOT NULL,
+          before_json CLOB,
+          after_json CLOB,
+          ip_address VARCHAR(64),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """);
+  }
+}
