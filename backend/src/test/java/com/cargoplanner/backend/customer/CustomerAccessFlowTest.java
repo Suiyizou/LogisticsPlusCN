@@ -335,10 +335,21 @@ class CustomerAccessFlowTest {
 
     CustomerTokenCodec tokenCodec = new CustomerTokenCodec();
     PasswordHasher passwordHasher = new PasswordHasher();
-    customerService = new BusinessCustomerService(
-        jdbcTemplate, tokenCodec, passwordHasher, new ObjectMapper(),
-        new CustomerDirectoryService(CustomerDirectoryTestSupport.mapper(dataSource))
-    );
+    CustomerAccessGuard accessGuard = new CustomerAccessGuard();
+    CustomerInputRules inputRules = new CustomerInputRules();
+    CustomerAuditService auditService = new CustomerAuditService(jdbcTemplate);
+    customerService =
+        new BusinessCustomerService(
+            jdbcTemplate,
+            tokenCodec,
+            passwordHasher,
+            new ObjectMapper(),
+            new CustomerDirectoryService(CustomerDirectoryTestSupport.mapper(dataSource)),
+            accessGuard,
+            inputRules,
+            auditService,
+            new OverseaAgentService(
+                jdbcTemplate, passwordHasher, accessGuard, inputRules, auditService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(

@@ -148,20 +148,38 @@ OPTIONS 预检）。后端测试 200 → 207。
 MyBatis 目录查询（单次请求 1 条客户查询）与 Flyway 两条路径；追踪服务 `/api/health` 正常。
 Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行。
 
-## T04/T05 后续拆分方案（已定，待实施）
+## T04/T05 拆分进展与后续方案
 
-`BusinessCustomerService`（5226 行）与 `ShipmentTrackingService`（3591 行）共享大量
-私有 guard、审计、select 与 mapper，直接搬移会造成循环依赖。因此后续按以下顺序拆分，
-每步可独立验证：
+`BusinessCustomerService`（原 5226 行）与 `ShipmentTrackingService`（3591 行）共享大量
+私有 guard、审计、select 与 mapper，直接搬移会造成循环依赖。因此采用“先抽共享支撑层，
+再抽领域服务”的组合式拆分。
 
-1. 抽出 `CustomerAccessGuard`（`requireOperationsReader/Manager/TransferManager/Administrator`）
-   与 `CustomerInputRules`（用户名/显示名/密码校验），`BusinessCustomerService` 保留薄委托。
-2. 抽出 `OverseaAgentService`：代理账号 CRUD、代理分配、代理范围同步
-   （`syncOverseaAgentScope*`、`syncEmployeeAgentParticipant` 等）。
-3. 抽出 `CustomerHandoverService`：交接申请、列表、审核、原子转移。
-4. 抽出 `CustomerShipmentQueryService`：只读快照/追踪查询（`snapshotShipmentSelect`、
+### 已完成：批次 1（HTTP 鉴权/审计/输入规则 + 海外代理领域）
+
+新增（均纳入 Checkstyle 门）：
+
+| 类                     | 职责                                                      |
+| ---------------------- | --------------------------------------------------------- |
+| `CustomerAccessGuard`  | 运营读取 / 业务管理 / 转移管理 / 管理员权限守卫           |
+| `CustomerInputRules`   | 用户名、显示名校验，内部密码校验，删除账号登录名生成      |
+| `CustomerAuditService` | 客户域审计写入（CUSTOMER / SHIPMENT / 自定义 targetType） |
+| `OverseaAgentService`  | 代理账号 CRUD、可用代理列表、代理范围同步（`sync*`）      |
+
+结果：`BusinessCustomerService` 5226 → 4873 行；代理领域逻辑 440 行独立；
+`BusinessCustomerService` 对 guard / 规则 / 审计 / 代理全部改为薄委托，Controller 与
+外部接口签名不变。事务语义保持一致（批量建代理仍在同一 Bean 内整体事务；`sync*` 加入
+调用方事务）。后端 207 项测试全绿，Checkstyle 通过。
+
+### 后续批次（每步可独立验证）
+
+1. `CustomerHandoverService`：交接申请、列表、审核、原子转移（含
+   `grantBusinessHandoverParticipant`、`auditCustomerHandover`）。
+2. `CustomerShipmentBindingService`：票单绑定/解绑/发布/删除，保留事务与权限过滤。
+3. `CustomerShipmentQueryService`：只读快照/追踪查询（`snapshotShipmentSelect`、
    `enrichShipmentRelations`、计数与排序），随后把该模块 SQL 迁到 MyBatis。
+4. `CustomerProfileService`：客户建档/修改/归档/删除与会话吊销。
 5. 同样方式拆 `ShipmentTrackingService`：适配器调用、快照持久化、批量任务、自动刷新分离。
 
-每一步保持 Controller 只处理 HTTP、Service 处理业务与事务、Mapper 管理 SQL、
+每完成一批，把新类加入 `backend/pom.xml` 的 Checkstyle `<includes>`，并把该模块 SQL
+迁到 Mapper（T05）。保持 Controller 只处理 HTTP、Service 处理业务与事务、Mapper 管理 SQL、
 请求/响应使用明确 DTO。

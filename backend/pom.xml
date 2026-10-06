@@ -102,7 +102,11 @@
             **/customer/dto/*.java,
             **/customer/persistence/*.java,
             **/customer/CustomerDirectoryService.java,
-            **/customer/CustomerDirectoryScope.java
+            **/customer/CustomerDirectoryScope.java,
+            **/customer/CustomerAccessGuard.java,
+            **/customer/CustomerInputRules.java,
+            **/customer/CustomerAuditService.java,
+            **/customer/OverseaAgentService.java
           </includes>
         </configuration>
         <executions>

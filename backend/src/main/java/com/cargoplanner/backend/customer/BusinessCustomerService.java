@@ -60,19 +60,31 @@ public class BusinessCustomerService {
   private final PasswordHasher passwordHasher;
   private final ObjectMapper objectMapper;
   private final CustomerDirectoryService directoryService;
+  private final CustomerAccessGuard accessGuard;
+  private final CustomerInputRules inputRules;
+  private final CustomerAuditService auditService;
+  private final OverseaAgentService overseaAgentService;
 
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
       CustomerTokenCodec tokenCodec,
       PasswordHasher passwordHasher,
       ObjectMapper objectMapper,
-      CustomerDirectoryService directoryService
+      CustomerDirectoryService directoryService,
+      CustomerAccessGuard accessGuard,
+      CustomerInputRules inputRules,
+      CustomerAuditService auditService,
+      OverseaAgentService overseaAgentService
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
     this.passwordHasher = passwordHasher;
     this.objectMapper = objectMapper;
     this.directoryService = directoryService;
+    this.accessGuard = accessGuard;
+    this.inputRules = inputRules;
+    this.auditService = auditService;
+    this.overseaAgentService = overseaAgentService;
   }
 
   public CustomerDirectoryResponse list(AuthenticatedUser actor) {
@@ -80,279 +92,52 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listTransferAgents(AuthenticatedUser actor) {
-    requireTransferManager(actor);
-    List<Map<String, Object>> agents = jdbcTemplate.query(
-        """
-        SELECT u.id, u.username, u.display_name, u.status,
-               (SELECT COUNT(*) FROM cp_customer_employee_assignments assignment
-                JOIN cp_customers linked_customer ON linked_customer.id = assignment.customer_id
-                WHERE assignment.employee_user_id = u.id
-                  AND linked_customer.status = 'ACTIVE'
-                  AND linked_customer.party_role IN ('SHIPPER', 'CONSIGNEE')) AS linked_customer_count
-        FROM cp_users u
-        WHERE u.role = 'OVERSEA_AGENT' AND u.status <> 'DELETED'
-        ORDER BY u.display_name, u.username, u.id
-        """,
-        (rs, rowNumber) -> {
-          Map<String, Object> value = new LinkedHashMap<>();
-          value.put("id", String.valueOf(rs.getLong("id")));
-          value.put("username", rs.getString("username"));
-          value.put("displayName", rs.getString("display_name"));
-          value.put("status", rs.getString("status"));
-          value.put("linkedCustomerCount", rs.getLong("linked_customer_count"));
-          return value;
-        }
-    );
-    return Map.of("items", agents, "total", agents.size());
+    return overseaAgentService.listTransferAgents(actor);
   }
 
   public Map<String, Object> listBusinessHandoverAgents(AuthenticatedUser actor) {
-    if (actor == null || (!actor.isBusiness() && !actor.isAdmin())) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "Business or administrator permission is required");
-    }
-    List<Map<String, Object>> agents = jdbcTemplate.query(
-        """
-        SELECT u.id, u.username, u.display_name, u.status,
-               (SELECT COUNT(*) FROM cp_customers customer
-                WHERE customer.responsible_agent_id = u.id
-                  AND customer.status = 'ACTIVE') AS customer_count
-        FROM cp_users u
-        WHERE u.role = 'BUSINESS' AND u.status = 'ACTIVE'
-        ORDER BY u.display_name, u.username, u.id
-        """,
-        (rs, rowNumber) -> {
-          long userId = rs.getLong("id");
-          Map<String, Object> value = new LinkedHashMap<>();
-          value.put("id", userId);
-          value.put("username", rs.getString("username"));
-          value.put("displayName", rs.getString("display_name"));
-          value.put("status", rs.getString("status"));
-          value.put("customerCount", rs.getLong("customer_count"));
-          value.put("current", userId == actor.id());
-          return value;
-        }
-    );
-    return Map.of(
-        "items", agents,
-        "total", agents.size(),
-        "currentUserId", actor.id()
-    );
+    return overseaAgentService.listBusinessHandoverAgents(actor);
   }
 
-  @Transactional
   public Map<String, Object> createOverseaAgentEmployee(
       CreateOverseaAgentEmployeeRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    String username = normalizeUsername(request == null ? null : request.username());
-    String displayName = normalizeDisplayName(request == null ? null : request.displayName());
-    String password = request == null ? null : request.password();
-    validateInternalPassword(password);
-    PasswordHash passwordHash = passwordHasher.hash(password);
-    try {
-      jdbcTemplate.update(
-          """
-          INSERT INTO cp_users (
-            username, display_name, role, party_role, status,
-            password_salt, password_hash, password_iterations, created_by
-          ) VALUES (?, ?, 'OVERSEA_AGENT', 'AGENT', 'ACTIVE', ?, ?, ?, ?)
-          """,
-          username,
-          displayName,
-          passwordHash.salt(),
-          passwordHash.hash(),
-          passwordHash.iterations(),
-          actor.id()
-      );
-    } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Overseas agent username already exists");
-    }
-    Long userId = jdbcTemplate.queryForObject(
-        "SELECT id FROM cp_users WHERE username = ?",
-        Long.class,
-        username
-    );
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_admin_audit_log (
-          admin_user_id, action, target_type, target_id, detail, ip_address
-        ) VALUES (?, 'CREATE_OVERSEA_AGENT', 'USER', ?, ?, ?)
-        """,
-        actor.id(),
-        userId,
-        ClientInfo.trim("Created internal overseas agent " + username, 512),
-        ClientInfo.trim(ipAddress, 64)
-    );
-    Map<String, Object> response = new LinkedHashMap<>();
-    response.put("id", userId);
-    response.put("username", username);
-    response.put("displayName", displayName);
-    response.put("role", "OVERSEA_AGENT");
-    response.put("partyRole", "AGENT");
-    response.put("status", "ACTIVE");
-    return response;
+    return overseaAgentService.createOverseaAgentEmployee(request, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> batchCreateOverseaAgentEmployees(
       OverseaAgentBatchCreateRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    List<CreateOverseaAgentEmployeeRequest> requests =
-        request == null || request.items() == null ? List.of() : request.items();
-    if (requests.isEmpty()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one overseas agent is required");
-    }
-    if (requests.size() > 200) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 200 overseas agents can be created at once");
-    }
-    List<Map<String, Object>> items = new ArrayList<>(requests.size());
-    for (CreateOverseaAgentEmployeeRequest item : requests) {
-      items.add(createOverseaAgentEmployee(item, actor, ipAddress));
-    }
-    Map<String, Object> response = new LinkedHashMap<>();
-    response.put("items", items);
-    response.put("total", items.size());
-    response.put("atomic", true);
-    return response;
+    return overseaAgentService.batchCreateOverseaAgentEmployees(request, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> updateOverseaAgent(
       long userId,
       UpdateOverseaAgentRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    Map<String, Object> existing = requireOverseaAgent(userId);
-    String displayName = request == null || request.displayName() == null
-        ? String.valueOf(existing.get("displayName"))
-        : normalizeDisplayName(request.displayName());
-    String status = request == null || request.status() == null || request.status().isBlank()
-        ? String.valueOf(existing.get("status"))
-        : request.status().trim().toUpperCase(Locale.ROOT);
-    if (!List.of("ACTIVE", "DISABLED").contains(status)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Status must be ACTIVE or DISABLED");
-    }
-    String password = request == null ? null : request.password();
-    if (password != null && !password.isBlank()) {
-      validateInternalPassword(password);
-      PasswordHash hash = passwordHasher.hash(password);
-      jdbcTemplate.update(
-          """
-          UPDATE cp_users
-          SET display_name = ?, status = ?, password_salt = ?, password_hash = ?,
-              password_iterations = ?, updated_at = CURRENT_TIMESTAMP(6)
-          WHERE id = ? AND role = 'OVERSEA_AGENT'
-          """,
-          displayName, status, hash.salt(), hash.hash(), hash.iterations(), userId
-      );
-      jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
-    } else {
-      jdbcTemplate.update(
-          "UPDATE cp_users SET display_name = ?, status = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE id = ? AND role = 'OVERSEA_AGENT'",
-          displayName, status, userId
-      );
-      if ("DISABLED".equals(status)) {
-        jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
-      }
-    }
-    audit(actor, "UPDATE_OVERSEA_AGENT", userId,
-        "Updated overseas agent " + existing.get("username") + " (" + status + ")", ipAddress);
-    return requireOverseaAgent(userId);
+    return overseaAgentService.updateOverseaAgent(userId, request, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> resetOverseaAgentPassword(
       long userId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    Map<String, Object> existing = requireOverseaAgent(userId);
-    String username = String.valueOf(existing.get("username"));
-    String temporaryPassword = username + "!@#2026";
-    PasswordHash hash = passwordHasher.hash(temporaryPassword);
-    jdbcTemplate.update(
-        """
-        UPDATE cp_users
-        SET password_salt = ?, password_hash = ?, password_iterations = ?,
-            updated_at = CURRENT_TIMESTAMP(6)
-        WHERE id = ? AND role = 'OVERSEA_AGENT'
-        """,
-        hash.salt(), hash.hash(), hash.iterations(), userId
-    );
-    jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
-    audit(actor, "RESET_OVERSEA_AGENT_PASSWORD", userId,
-        "Reset password for overseas agent " + username, ipAddress);
-    Map<String, Object> response = new LinkedHashMap<>(requireOverseaAgent(userId));
-    response.put("temporaryPassword", temporaryPassword);
-    return response;
+    return overseaAgentService.resetOverseaAgentPassword(userId, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> deleteOverseaAgent(
       long userId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    Map<String, Object> existing = requireOverseaAgent(userId);
-    PasswordHash deletedPassword = passwordHasher.hash(UUID.randomUUID().toString());
-    jdbcTemplate.update(
-        """
-        UPDATE cp_users
-        SET username = ?, status = 'DELETED',
-            password_salt = ?, password_hash = ?, password_iterations = ?,
-            last_login_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
-        WHERE id = ? AND role = 'OVERSEA_AGENT' AND status <> 'DELETED'
-        """,
-        deletedUsername("agent", userId),
-        deletedPassword.salt(),
-        deletedPassword.hash(),
-        deletedPassword.iterations(),
-        userId
-    );
-    jdbcTemplate.update("DELETE FROM cp_login_devices WHERE user_id = ?", userId);
-    jdbcTemplate.update(
-        "DELETE FROM cp_customer_employee_assignments WHERE employee_user_id = ?",
-        userId
-    );
-    jdbcTemplate.update("DELETE FROM cp_shipment_participants WHERE user_id = ?", userId);
-    audit(actor, "DELETE_OVERSEA_AGENT", userId,
-        "Deleted overseas agent " + existing.get("username"), ipAddress);
-    return Map.of(
-        "id", String.valueOf(userId),
-        "username", existing.get("username"),
-        "status", "DELETED",
-        "deleted", true
-    );
-  }
-
-  private Map<String, Object> requireOverseaAgent(long userId) {
-    List<Map<String, Object>> rows = jdbcTemplate.query(
-        """
-        SELECT id, username, display_name, status
-        FROM cp_users
-        WHERE id = ? AND role = 'OVERSEA_AGENT' AND status <> 'DELETED'
-        """,
-        (rs, rowNumber) -> {
-          Map<String, Object> value = new LinkedHashMap<>();
-          value.put("id", String.valueOf(rs.getLong("id")));
-          value.put("username", rs.getString("username"));
-          value.put("displayName", rs.getString("display_name"));
-          value.put("status", rs.getString("status"));
-          return value;
-        },
-        userId
-    );
-    if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Overseas agent not found");
-    return rows.get(0);
+    return overseaAgentService.deleteOverseaAgent(userId, actor, ipAddress);
   }
 
   public Map<String, Object> get(String customerPublicId, AuthenticatedUser actor) {
@@ -4299,115 +4084,19 @@ public class BusinessCustomerService {
   }
 
   private void syncOverseaAgentScopesForCustomer(long customerId) {
-    jdbcTemplate.update(
-        "DELETE FROM cp_oversea_agent_shipment_scopes WHERE represented_customer_id = ?",
-        customerId
-    );
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_oversea_agent_shipment_scopes (
-          shipment_id, oversea_agent_customer_id, represented_customer_id,
-          status, assigned_by, assigned_at, updated_at
-        )
-        SELECT shipment_access.shipment_id,
-               link.oversea_agent_customer_id, link.customer_id,
-               'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
-        FROM cp_oversea_agent_customers link
-        JOIN cp_customer_shipment_access shipment_access
-          ON shipment_access.customer_id = link.customer_id
-        WHERE link.customer_id = ?
-        """,
-        customerId
-    );
+    overseaAgentService.syncScopesForCustomer(customerId);
   }
 
   private void syncOverseaAgentScopeForShipment(long customerId, long shipmentId) {
-    jdbcTemplate.update(
-        """
-        DELETE FROM cp_oversea_agent_shipment_scopes
-        WHERE represented_customer_id = ? AND shipment_id = ?
-        """,
-        customerId,
-        shipmentId
-    );
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_oversea_agent_shipment_scopes (
-          shipment_id, oversea_agent_customer_id, represented_customer_id,
-          status, assigned_by, assigned_at, updated_at
-        )
-        SELECT shipment_access.shipment_id,
-               link.oversea_agent_customer_id, link.customer_id,
-               'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
-        FROM cp_oversea_agent_customers link
-        JOIN cp_customer_shipment_access shipment_access
-          ON shipment_access.customer_id = link.customer_id
-         AND shipment_access.shipment_id = ?
-        WHERE link.customer_id = ?
-        """,
-        shipmentId,
-        customerId
-    );
+    overseaAgentService.syncScopeForShipment(customerId, shipmentId);
   }
 
   private void syncEmployeeAgentParticipant(long customerId, long shipmentId, long actorId) {
-    List<Long> employeeIds = jdbcTemplate.query(
-        "SELECT employee_user_id FROM cp_customer_employee_assignments WHERE customer_id = ?",
-        (rs, rowNumber) -> rs.getLong(1),
-        customerId
-    );
-    if (employeeIds.isEmpty()) return;
-    long employeeId = employeeIds.get(0);
-    Long bindingCount = jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_customer_shipment_access WHERE customer_id = ? AND shipment_id = ?",
-        Long.class,
-        customerId,
-        shipmentId
-    );
-    if (bindingCount != null && bindingCount > 0) {
-      jdbcTemplate.update(
-          """
-          INSERT INTO cp_shipment_participants (
-            shipment_id, user_id, participant_role, granted_by
-          ) VALUES (?, ?, 'OVERSEA_AGENT', ?)
-          ON DUPLICATE KEY UPDATE
-            participant_role = 'OVERSEA_AGENT',
-            granted_by = VALUES(granted_by),
-            updated_at = CURRENT_TIMESTAMP(6)
-          """,
-          shipmentId,
-          employeeId,
-          actorId
-      );
-    } else {
-      removeUnusedEmployeeAgentParticipant(shipmentId, employeeId);
-    }
+    overseaAgentService.syncEmployeeAgentParticipant(customerId, shipmentId, actorId);
   }
 
   private void removeUnusedEmployeeAgentParticipant(long shipmentId, long employeeId) {
-    Long assignmentCount = jdbcTemplate.queryForObject(
-        """
-        SELECT COUNT(*)
-        FROM cp_customer_shipment_access shipment_access
-        JOIN cp_customer_employee_assignments assignment
-          ON assignment.customer_id = shipment_access.customer_id
-        WHERE shipment_access.shipment_id = ?
-          AND assignment.employee_user_id = ?
-        """,
-        Long.class,
-        shipmentId,
-        employeeId
-    );
-    if (assignmentCount == null || assignmentCount == 0) {
-      jdbcTemplate.update(
-          """
-          DELETE FROM cp_shipment_participants
-          WHERE shipment_id = ? AND user_id = ? AND participant_role = 'OVERSEA_AGENT'
-          """,
-          shipmentId,
-          employeeId
-      );
-    }
+    overseaAgentService.removeUnusedEmployeeAgentParticipant(shipmentId, employeeId);
   }
 
   private void grantBusinessHandoverParticipant(long shipmentId, long userId, long actorId) {
@@ -4637,9 +4326,7 @@ public class BusinessCustomerService {
   }
 
   private void requireAdministrator(AuthenticatedUser actor) {
-    if (actor == null || !actor.isAdmin()) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "Administrator permission is required");
-    }
+    accessGuard.requireAdministrator(actor);
   }
 
   private void auditCustomerHandover(
@@ -4664,40 +4351,19 @@ public class BusinessCustomerService {
   }
 
   private void requireOperationsReader(AuthenticatedUser actor) {
-    if (actor == null
-        || (!actor.isBusiness() && !actor.isAdmin() && !actor.isOverseaAgent())) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "Internal operations permission is required");
-    }
+    accessGuard.requireOperationsReader(actor);
   }
 
   private void requireManager(AuthenticatedUser actor) {
-    if (actor == null || (!actor.isBusiness() && !actor.isAdmin())) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "Business or administrator permission is required");
-    }
+    accessGuard.requireManager(actor);
   }
 
   private void requireTransferManager(AuthenticatedUser actor) {
-    if (actor == null
-        || (!actor.isBusiness() && !actor.isAdmin() && !actor.isOverseaAgent())) {
-      throw new ApiException(
-          HttpStatus.FORBIDDEN,
-          "Business, administrator, or overseas agent permission is required"
-      );
-    }
+    accessGuard.requireTransferManager(actor);
   }
 
   private void audit(AuthenticatedUser actor, String action, long targetId, String detail, String ip) {
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_admin_audit_log (admin_user_id, action, target_type, target_id, detail, ip_address)
-        VALUES (?, ?, 'CUSTOMER', ?, ?, ?)
-        """,
-        actor.id(),
-        action,
-        targetId,
-        ClientInfo.trim(detail, 512),
-        ClientInfo.trim(ip, 64)
-    );
+    auditService.customer(actor, action, targetId, detail, ip);
   }
 
   private void auditShipment(AuthenticatedUser actor, String action, long targetId, String detail, String ip) {
@@ -4861,11 +4527,7 @@ public class BusinessCustomerService {
   }
 
   private String normalizeUsername(String value) {
-    String normalized = value == null ? "" : value.trim();
-    if (!normalized.matches("[\\p{L}\\p{N}._-]{2,64}")) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer name must contain 2-64 letters, numbers, dots, underscores, or hyphens");
-    }
-    return normalized;
+    return inputRules.normalizeUsername(value);
   }
 
   private String normalizePassword(String value) {
@@ -4886,25 +4548,11 @@ public class BusinessCustomerService {
   }
 
   private void validateInternalPassword(String password) {
-    String value = password == null ? "" : password;
-    boolean valid = value.length() >= 8
-        && value.length() <= 128
-        && value.chars().anyMatch(Character::isLetter)
-        && value.chars().anyMatch(Character::isDigit);
-    if (!valid) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Password must be 8-128 characters and include at least one letter and one number"
-      );
-    }
+    inputRules.validateInternalPassword(password);
   }
 
   private String normalizeDisplayName(String value) {
-    String normalized = value == null ? "" : value.trim();
-    if (normalized.length() < 2 || normalized.length() > 80) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer display name must contain 2-80 characters");
-    }
-    return normalized;
+    return inputRules.normalizeDisplayName(value);
   }
 
   private String normalizeOptionalClientCode(String value) {
@@ -4934,8 +4582,7 @@ public class BusinessCustomerService {
   }
 
   private String deletedUsername(String accountType, long id) {
-    String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-    return "deleted_" + accountType + "_" + id + "_" + suffix;
+    return inputRules.deletedUsername(accountType, id);
   }
 
   private String normalizeStatus(String value, String fallback) {
