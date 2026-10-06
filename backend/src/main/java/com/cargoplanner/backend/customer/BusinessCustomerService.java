@@ -6,6 +6,7 @@ import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
+import com.cargoplanner.backend.customer.dto.CustomerDirectoryResponse;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,7 +36,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -59,69 +59,24 @@ public class BusinessCustomerService {
   private final CustomerTokenCodec tokenCodec;
   private final PasswordHasher passwordHasher;
   private final ObjectMapper objectMapper;
+  private final CustomerDirectoryService directoryService;
 
-  @Autowired
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
       CustomerTokenCodec tokenCodec,
       PasswordHasher passwordHasher,
-      ObjectMapper objectMapper
+      ObjectMapper objectMapper,
+      CustomerDirectoryService directoryService
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
     this.passwordHasher = passwordHasher;
     this.objectMapper = objectMapper;
+    this.directoryService = directoryService;
   }
 
-  BusinessCustomerService(
-      JdbcTemplate jdbcTemplate,
-      CustomerTokenCodec tokenCodec,
-      PasswordHasher passwordHasher
-  ) {
-    this(jdbcTemplate, tokenCodec, passwordHasher, new ObjectMapper());
-  }
-
-  public Map<String, Object> list(AuthenticatedUser actor) {
-    requireOperationsReader(actor);
-    List<CustomerRecord> records;
-    if (actor.isAdmin()) {
-      records = jdbcTemplate.query(
-          baseCustomerSelect()
-              + " WHERE c.status = 'ACTIVE'"
-              + " AND c.party_role IN ('SHIPPER', 'CONSIGNEE')"
-              + " ORDER BY c.created_at DESC, c.id DESC",
-          this::mapCustomer
-      );
-    } else if (actor.isBusiness()) {
-      records = jdbcTemplate.query(
-          baseCustomerSelect()
-              + " WHERE c.responsible_agent_id = ?"
-              + " AND c.status = 'ACTIVE'"
-              + " AND c.party_role IN ('SHIPPER', 'CONSIGNEE')"
-              + " ORDER BY c.created_at DESC, c.id DESC",
-          this::mapCustomer,
-          actor.id()
-      );
-    } else {
-      records = jdbcTemplate.query(
-          baseCustomerSelect() + """
-               WHERE c.status = 'ACTIVE'
-                 AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
-                 AND EXISTS (
-                 SELECT 1 FROM cp_customer_employee_assignments employee_assignment
-                 WHERE employee_assignment.customer_id = c.id
-                   AND employee_assignment.employee_user_id = ?
-               )
-               ORDER BY c.created_at DESC, c.id DESC
-              """,
-          this::mapCustomer,
-          actor.id()
-      );
-    }
-    List<Map<String, Object>> items = records.stream()
-        .map(record -> customerMetadataWithEmployee(record))
-        .toList();
-    return Map.of("items", items, "total", records.size());
+  public CustomerDirectoryResponse list(AuthenticatedUser actor) {
+    return directoryService.list(actor);
   }
 
   public Map<String, Object> listTransferAgents(AuthenticatedUser actor) {

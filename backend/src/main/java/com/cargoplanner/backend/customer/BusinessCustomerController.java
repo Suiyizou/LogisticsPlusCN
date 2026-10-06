@@ -3,6 +3,7 @@ package com.cargoplanner.backend.customer;
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ClientInfo;
+import com.cargoplanner.backend.customer.dto.CustomerDirectoryResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -28,7 +29,7 @@ public class BusinessCustomerController {
   }
 
   @GetMapping
-  public Map<String, Object> list(
+  public CustomerDirectoryResponse list(
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
     return service.list(actor);

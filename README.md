@@ -11,11 +11,13 @@
 - 3D 可视化：Three.js
 - 装箱计算：WebWorker 本地计算
 - 桌面打包：Electron
-- 后端：Spring Boot 3 + JDBC
+- 后端：Spring Boot 3 + MyBatis（客户列表）+ JDBC（其余模块逐步迁移）
 - 货物追踪：Node.js + Playwright，源码位于 `tracking-service/`
 - 智能导入：后台可控制 LLM 开关、API Key、Base URL 和模型，未配置 Key 时使用规则兜底
 - 数据库：MySQL 8
 - 部署：单仓库 Docker Compose；Nginx 代理 `/api/` 到 Spring、`/tracking/` 到追踪服务
+
+重构进度、分层约定与统一验证命令见 [重构与验证说明](docs/REFACTORING.md)。
 
 ## 已有能力
 

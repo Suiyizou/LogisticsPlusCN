@@ -18,6 +18,11 @@ import {
   shouldRotateCoscoProxy
 } from "../server.mjs";
 
+async function readServerSource() {
+  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  return source.replace(/\r\n/g, "\n");
+}
+
 test("proxy exhaustion reports safe node names, attempt count, and root cause", () => {
   const error = proxyPoolExhaustedError({
     status: 502,
@@ -311,7 +316,7 @@ test("optional enrichment propagates 403 and 429 protection errors", async () =>
 });
 
 test("AUTO primary strategy never jumps from the direct API to direct Playwright", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const autoStrategy = source.slice(
     source.indexOf("async function fetchCoscoTracking(request, queryChannel"),
     source.indexOf("export function shouldRotateCoscoProxy")
@@ -325,7 +330,7 @@ test("AUTO primary strategy never jumps from the direct API to direct Playwright
 });
 
 test("AUTO uses direct API, then proxy API pool, then one dedicated-proxy Playwright attempt", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const routing = source.slice(
     source.indexOf("async function runCoscoWithAutomaticProxyFallback"),
     source.indexOf("function runCoscoTrackingRequest")
@@ -349,7 +354,7 @@ test("AUTO uses direct API, then proxy API pool, then one dedicated-proxy Playwr
 });
 
 test("main-query enrichment warnings preserve route and proxy diagnostics", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const network = source.slice(
     source.indexOf("async function fetchCoscoTrackingViaNetwork"),
     source.indexOf("async function fetchCoscoTrackingWithPlaywright")
@@ -389,7 +394,7 @@ test("AUTO falls back to the proxy pool for block, timeout, and gateway failures
 });
 
 test("supplemental proxy failures escape warning handling and enter node rotation", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const handler = source.slice(
     source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
     source.indexOf("async function handleTrackRequest")
@@ -403,7 +408,7 @@ test("supplemental proxy failures escape warning handling and enter node rotatio
 });
 
 test("delayed supplemental retry queries only failed sources before one proxy-browser fallback", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const handler = source.slice(
     source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
     source.indexOf("async function handleTrackRequest")
@@ -421,7 +426,7 @@ test("delayed supplemental retry queries only failed sources before one proxy-br
 });
 
 test("business-code 403 opens protection before the generic adapter failure path", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const endpoint = source.slice(
     source.indexOf("async function fetchCoscoEndpointNow"),
     source.indexOf("function extractCoscoPageCookies")
@@ -436,7 +441,7 @@ test("business-code 403 opens protection before the generic adapter failure path
 });
 
 test("shipment queries never start per-container enrichment", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const network = source.slice(
     source.indexOf("async function fetchCoscoTrackingViaNetwork"),
     source.indexOf("async function fetchCoscoTrackingWithPlaywright")
@@ -453,7 +458,7 @@ test("shipment queries never start per-container enrichment", async () => {
 });
 
 test("forced refresh bypasses the Node cache and in-flight reuse", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readServerSource();
   const handler = source.slice(
     source.indexOf("async function handleTrackRequest"),
     source.indexOf("export const server", source.indexOf("async function handleTrackRequest"))

@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.PasswordHasher;
+import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.customer.dto.CustomerDirectoryItem;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest;
@@ -22,6 +24,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class CustomerAccessFlowTest {
   private JdbcTemplate jdbcTemplate;
@@ -33,6 +38,38 @@ class CustomerAccessFlowTest {
   private AuthenticatedUser employee;
   private AuthenticatedUser admin;
   private MockHttpServletRequest httpRequest;
+
+  @Test
+  void customerDirectoryHttpResponseMatchesExistingCustomerMetadata() throws Exception {
+    String firstId = (String) customerService.create(
+        new CreateCustomerRequest("directory-one", "SecurePass!23", "Directory One", "SHIPPER"),
+        business, "127.0.0.1"
+    ).get("id");
+    customerService.create(
+        new CreateCustomerRequest("directory-two", "SecurePass!23", "Directory Two", "CONSIGNEE"),
+        business, "127.0.0.1"
+    );
+    jdbcTemplate.update("""
+        INSERT INTO cp_customer_employee_assignments (customer_id, employee_user_id, assigned_by)
+        SELECT id, 3, 1 FROM cp_customers WHERE public_id = ?
+        """, firstId);
+    MockMvc mvc = MockMvcBuilders.standaloneSetup(new BusinessCustomerController(customerService)).build();
+    var response = mvc.perform(MockMvcRequestBuilders.get("/api/business/customers")
+        .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, business)).andReturn().getResponse();
+    ObjectMapper json = new ObjectMapper();
+    JsonNode body = json.readTree(response.getContentAsString());
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(body.size()).isEqualTo(2);
+    assertThat(body.get("total").asInt()).isEqualTo(2);
+    assertThat(body.get("items").size()).isEqualTo(2);
+    for (JsonNode item : body.get("items")) {
+      JsonNode existing = json.readTree(json.writeValueAsString(
+          customerService.get(item.get("id").asText(), business)));
+      assertThat(item).isEqualTo(existing);
+      assertThat(item.size()).isEqualTo(20);
+    }
+  }
 
   @Test
   void batchCreatesOverseaAgentEmployeesAtomically() {
@@ -115,8 +152,8 @@ class CustomerAccessFlowTest {
         "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = 10 AND user_id = 2",
         Integer.class
     )).isEqualTo(1);
-    assertThat(((List<?>) customerService.list(business).get("items"))).isEmpty();
-    assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).hasSize(1);
+    assertThat(customerService.list(business).items()).isEmpty();
+    assertThat(customerService.list(otherBusiness).items()).hasSize(1);
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> adminRecords =
         (List<Map<String, Object>>) customerService.listCustomerHandoverRequests(
@@ -298,7 +335,10 @@ class CustomerAccessFlowTest {
 
     CustomerTokenCodec tokenCodec = new CustomerTokenCodec();
     PasswordHasher passwordHasher = new PasswordHasher();
-    customerService = new BusinessCustomerService(jdbcTemplate, tokenCodec, passwordHasher);
+    customerService = new BusinessCustomerService(
+        jdbcTemplate, tokenCodec, passwordHasher, new ObjectMapper(),
+        new CustomerDirectoryService(CustomerDirectoryTestSupport.mapper(dataSource))
+    );
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(
@@ -395,12 +435,10 @@ class CustomerAccessFlowTest {
         "127.0.0.1"
     );
 
-    @SuppressWarnings("unchecked")
-    List<Map<String, Object>> directory =
-        (List<Map<String, Object>>) customerService.list(business).get("items");
+    List<CustomerDirectoryItem> directory = customerService.list(business).items();
 
-    assertThat(directory).extracting(item -> item.get("id"))
-        .containsExactly(activeCustomer.get("id"));
+    assertThat(directory).extracting(CustomerDirectoryItem::id)
+        .containsExactly((String) activeCustomer.get("id"));
   }
 
   @Test
@@ -428,7 +466,7 @@ class CustomerAccessFlowTest {
       assertThat(row.get("CLIENT_CODE")).isNull();
       assertThat(row.get("USERNAME").toString()).startsWith("deleted_customer_");
     });
-    assertThat(customerService.list(business).get("items").toString()).doesNotContain("delete-me");
+    assertThat(customerService.list(business).items().toString()).doesNotContain("delete-me");
 
     Map<String, Object> recreated = customerService.create(
         new CreateCustomerRequest(
@@ -487,8 +525,8 @@ class CustomerAccessFlowTest {
         String.class,
         customerId
     )).doesNotContain(code);
-    assertThat(((List<?>) customerService.list(business).get("items"))).hasSize(1);
-    assertThat(((List<?>) customerService.list(otherBusiness).get("items"))).isEmpty();
+    assertThat(customerService.list(business).items()).hasSize(1);
+    assertThat(customerService.list(otherBusiness).items()).isEmpty();
     assertThatThrownBy(() -> customerService.create(
         new CreateCustomerRequest(
             "short-code", "SecurePass!23", "Short Code", "SHIPPER", "ABCDE"
@@ -934,10 +972,8 @@ class CustomerAccessFlowTest {
     )).isEqualTo(jdbcTemplate.queryForObject(
         "SELECT id FROM cp_customers WHERE public_id = ?", Long.class, targetAgent.get("id")
     ));
-    @SuppressWarnings("unchecked")
-    List<Map<String, Object>> directory =
-        (List<Map<String, Object>>) customerService.list(business).get("items");
-    assertThat(directory).extracting(item -> item.get("id")).containsExactly(customerId);
+    List<CustomerDirectoryItem> directory = customerService.list(business).items();
+    assertThat(directory).extracting(CustomerDirectoryItem::id).containsExactly(customerId);
     assertThat(shipmentAccessService.requireAccess("shipment-public-id", business).shipmentId())
         .isEqualTo(10);
     assertThatThrownBy(() -> shipmentAccessService.requireCustomerAccess(
@@ -1029,7 +1065,7 @@ class CustomerAccessFlowTest {
         "SELECT responsible_agent_id FROM cp_shipments WHERE id = 10",
         Long.class
     )).isEqualTo(business.id());
-    assertThat(((List<?>) customerService.list(employee).get("items"))).hasSize(1);
+    assertThat(customerService.list(employee).items()).hasSize(1);
     assertThat(customerService.getShipmentSnapshot(employee, "shipment-public-id"))
         .containsEntry("shipmentId", "shipment-public-id");
     assertThat(shipmentAccessService.requireAccess("shipment-public-id", employee).shipmentId())

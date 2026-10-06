@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cargoplanner.backend.customer.persistence.CustomerDirectoryMapper">
+  <resultMap id="directoryItem" type="com.cargoplanner.backend.customer.dto.CustomerDirectoryItem">
+    <constructor>
+      <idArg column="public_id" javaType="java.lang.String"/>
+      <arg column="username" javaType="java.lang.String"/>
+      <arg column="display_name" javaType="java.lang.String"/>
+      <arg column="client_code" javaType="java.lang.String"/>
+      <arg column="party_role" javaType="java.lang.String"/>
+      <arg column="customer_code_prefix" javaType="java.lang.String"/>
+      <arg column="customer_code_mode" javaType="java.lang.String"/>
+      <arg column="provisioning_source" javaType="java.lang.String"/>
+      <arg column="status" javaType="java.lang.String"/>
+      <arg column="remark" javaType="java.lang.String"/>
+      <arg column="created_by" javaType="java.lang.Long"/>
+      <arg column="created_by_display_name" javaType="java.lang.String"/>
+      <arg column="responsible_agent_id" javaType="_long"/>
+      <arg column="responsible_agent_display_name" javaType="java.lang.String"/>
+      <arg column="created_at" javaType="java.lang.String"
+          typeHandler="com.cargoplanner.backend.customer.persistence.UtcTimestampStringTypeHandler"/>
+      <arg column="updated_at" javaType="java.lang.String"
+          typeHandler="com.cargoplanner.backend.customer.persistence.UtcTimestampStringTypeHandler"/>
+      <arg column="shipment_count" javaType="_long"/>
+      <arg column="employee_user_id" javaType="java.lang.Long"/>
+      <arg column="employee_username" javaType="java.lang.String"/>
+      <arg column="employee_display_name" javaType="java.lang.String"/>
+    </constructor>
+  </resultMap>
+
+  <select id="findVisibleCustomers" resultMap="directoryItem">
+    SELECT c.public_id, c.username, c.display_name, c.client_code,
+           c.party_role, c.customer_code_prefix, c.customer_code_mode,
+           c.provisioning_source, c.status, c.remark, c.created_by,
+           COALESCE(c.responsible_agent_id, 0) AS responsible_agent_id,
+           c.created_at, c.updated_at,
+           creator.display_name AS created_by_display_name,
+           owner.display_name AS responsible_agent_display_name,
+           (SELECT COUNT(*) FROM cp_customer_shipment_access a
+            WHERE a.customer_id = c.id) AS shipment_count,
+           employee.id AS employee_user_id,
+           employee.username AS employee_username,
+           employee.display_name AS employee_display_name
+    FROM cp_customers c
+    LEFT JOIN cp_users creator ON creator.id = c.created_by
+    LEFT JOIN cp_users owner ON owner.id = c.responsible_agent_id
+    <!-- customer_id is the assignment table's primary key: this join cannot duplicate customers. -->
+    LEFT JOIN cp_customer_employee_assignments assignment ON assignment.customer_id = c.id
+    LEFT JOIN cp_users employee
+      ON employee.id = assignment.employee_user_id AND employee.status = 'ACTIVE'
+    WHERE c.status = 'ACTIVE'
+      AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
+    <choose>
+      <when test="scope.access != null and scope.access.name() == 'ALL'">
+        AND 1 = 1
+      </when>
+      <when test="scope.access != null and scope.access.name() == 'OWNED'">
+        AND c.responsible_agent_id = #{scope.userId}
+      </when>
+      <when test="scope.access != null and scope.access.name() == 'ASSIGNED'">
+        AND assignment.employee_user_id = #{scope.userId}
+      </when>
+      <otherwise>
+        AND 1 = 0
+      </otherwise>
+    </choose>
+    ORDER BY c.created_at DESC, c.id DESC
+  </select>
+</mapper>
