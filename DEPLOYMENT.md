@@ -9,12 +9,12 @@
 
 路由关系：
 
-| 外部路径 | 目标 |
-| --- | --- |
-| `/` | Vue 公开品牌主页 |
+| 外部路径                                  | 目标                   |
+| ----------------------------------------- | ---------------------- |
+| `/`                                       | Vue 公开品牌主页       |
 | `/planner/*`、`/admin`、`/workbenches` 等 | Vue 企业登录与权限门禁 |
-| `/api/*` | Spring Boot |
-| `/tracking/*` | Node.js 公开追踪服务 |
+| `/api/*`                                  | Spring Boot            |
+| `/tracking/*`                             | Node.js 公开追踪服务   |
 
 `/tracking/` 页面和查询 API 面向访客公开。CMA 会话维护区会读取同域平台登录 token，但只允许 `BUSINESS`/`ADMIN` 调用 Spring 的受保护维护接口；普通员工、客户和匿名访客不能上传或查看会话。Nginx 代理到 Node 时仍会清空浏览器 `Cookie`，并只对成本较高的追踪查询与通道检查接口按来源 IP 限流；国旗、承运人列表与状态接口不计入该限流。
 
@@ -31,6 +31,15 @@ docker compose up -d --build
 ```text
 backend/sql/schema.sql
 ```
+
+后端同时启用 Flyway 版本化迁移（`backend/src/main/resources/db/migration/`）：
+
+- 新库：Flyway 执行 `V1__baseline.sql` 创建全部表；
+- 已有库：`baseline-on-migrate=true` 先写入 baseline(0)，再幂等执行 `V1`，不覆盖已有数据；
+- 需要在演练/回退时可不改代码，仅用环境变量关闭：`SPRING_FLYWAY_ENABLED=false`。
+
+迁移开关与回退方式已在真实 MySQL 8.0 验证（见 `docs/ACCEPTANCE.md`）。升级生产前仍应先
+导出结构（`mysqldump --no-data`）与实际库比对，再规划后续 `V2+` 迁移。
 
 系统不再内置固定管理员账号或密码。首次部署请先复制 `.env.example` 为 `.env`，设置强数据库密码，并临时启用显式管理员引导：
 
