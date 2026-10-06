@@ -170,6 +170,14 @@ Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行�
 外部接口签名不变。事务语义保持一致（批量建代理仍在同一 Bean 内整体事务；`sync*` 加入
 调用方事务）。后端 207 项测试全绿，Checkstyle 通过。
 
+### 已完成：T05 批次（海外代理模块 SQL 迁移）
+
+`OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
+`OverseaAgentMapper` + `mappers/customer/OverseaAgentMapper.xml`，参数全部 `#{}` 绑定，
+新增 DTO `OverseaAgentListRow` / `BusinessAgentListRow` / `OverseaAgentRow`。
+JSON 输出形状保持不变（如代理列表 `id` 仍为字符串）。H2 全量 207 项通过，
+真库冒烟创建/列表/禁用/删除全部 200，删除后操作返回 404。
+
 ### 后续批次（每步可独立验证）
 
 1. `CustomerHandoverService`：交接申请、列表、审核、原子转移（含

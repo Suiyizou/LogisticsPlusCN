@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cargoplanner.backend.customer.persistence.OverseaAgentMapper">
+
+  <resultMap id="overseaAgentListRow"
+      type="com.cargoplanner.backend.customer.dto.OverseaAgentListRow">
+    <constructor>
+      <idArg column="id" javaType="_long"/>
+      <arg column="username" javaType="java.lang.String"/>
+      <arg column="display_name" javaType="java.lang.String"/>
+      <arg column="status" javaType="java.lang.String"/>
+      <arg column="linked_customer_count" javaType="_long"/>
+    </constructor>
+  </resultMap>
+
+  <resultMap id="businessAgentListRow"
+      type="com.cargoplanner.backend.customer.dto.BusinessAgentListRow">
+    <constructor>
+      <idArg column="id" javaType="_long"/>
+      <arg column="username" javaType="java.lang.String"/>
+      <arg column="display_name" javaType="java.lang.String"/>
+      <arg column="status" javaType="java.lang.String"/>
+      <arg column="customer_count" javaType="_long"/>
+    </constructor>
+  </resultMap>
+
+  <resultMap id="overseaAgentRow"
+      type="com.cargoplanner.backend.customer.dto.OverseaAgentRow">
+    <constructor>
+      <idArg column="id" javaType="java.lang.String"/>
+      <arg column="username" javaType="java.lang.String"/>
+      <arg column="display_name" javaType="java.lang.String"/>
+      <arg column="status" javaType="java.lang.String"/>
+    </constructor>
+  </resultMap>
+
+  <select id="findTransferAgents" resultMap="overseaAgentListRow">
+    SELECT u.id, u.username, u.display_name, u.status,
+           (SELECT COUNT(*) FROM cp_customer_employee_assignments assignment
+            JOIN cp_customers linked_customer ON linked_customer.id = assignment.customer_id
+            WHERE assignment.employee_user_id = u.id
+              AND linked_customer.status = 'ACTIVE'
+              AND linked_customer.party_role IN ('SHIPPER', 'CONSIGNEE')) AS linked_customer_count
+    FROM cp_users u
+    WHERE u.role = 'OVERSEA_AGENT' AND u.status &lt;&gt; 'DELETED'
+    ORDER BY u.display_name, u.username, u.id
+  </select>
+
+  <select id="findBusinessHandoverAgents" resultMap="businessAgentListRow">
+    SELECT u.id, u.username, u.display_name, u.status,
+           (SELECT COUNT(*) FROM cp_customers customer
+            WHERE customer.responsible_agent_id = u.id
+              AND customer.status = 'ACTIVE') AS customer_count
+    FROM cp_users u
+    WHERE u.role = 'BUSINESS' AND u.status = 'ACTIVE'
+    ORDER BY u.display_name, u.username, u.id
+  </select>
+
+  <select id="findAgentById" resultMap="overseaAgentRow">
+    SELECT CAST(id AS CHAR) AS id, username, display_name, status
+    FROM cp_users
+    WHERE id = #{userId} AND role = 'OVERSEA_AGENT' AND status &lt;&gt; 'DELETED'
+  </select>
+
+  <insert id="insertAgent">
+    INSERT INTO cp_users (
+      username, display_name, role, party_role, status,
+      password_salt, password_hash, password_iterations, created_by
+    ) VALUES (
+      #{username}, #{displayName}, 'OVERSEA_AGENT', 'AGENT', 'ACTIVE',
+      #{salt}, #{hash}, #{iterations}, #{createdBy}
+    )
+  </insert>
+
+  <select id="findIdByUsername" resultType="java.lang.Long">
+    SELECT id FROM cp_users WHERE username = #{username}
+  </select>
+
+  <update id="updateAgentWithPassword">
+    UPDATE cp_users
+    SET display_name = #{displayName}, status = #{status},
+        password_salt = #{salt}, password_hash = #{hash},
+        password_iterations = #{iterations}, updated_at = CURRENT_TIMESTAMP(6)
+    WHERE id = #{userId} AND role = 'OVERSEA_AGENT'
+  </update>
+
+  <update id="updateAgentProfile">
+    UPDATE cp_users
+    SET display_name = #{displayName}, status = #{status}, updated_at = CURRENT_TIMESTAMP(6)
+    WHERE id = #{userId} AND role = 'OVERSEA_AGENT'
+  </update>
+
+  <delete id="deleteLoginDevices">
+    DELETE FROM cp_login_devices WHERE user_id = #{userId}
+  </delete>
+
+  <update id="updateAgentPassword">
+    UPDATE cp_users
+    SET password_salt = #{salt}, password_hash = #{hash},
+        password_iterations = #{iterations}, updated_at = CURRENT_TIMESTAMP(6)
+    WHERE id = #{userId} AND role = 'OVERSEA_AGENT'
+  </update>
+
+  <update id="softDeleteAgent">
+    UPDATE cp_users
+    SET username = #{username}, status = 'DELETED',
+        password_salt = #{salt}, password_hash = #{hash},
+        password_iterations = #{iterations},
+        last_login_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
+    WHERE id = #{userId} AND role = 'OVERSEA_AGENT' AND status &lt;&gt; 'DELETED'
+  </update>
+
+  <delete id="deleteEmployeeAssignments">
+    DELETE FROM cp_customer_employee_assignments WHERE employee_user_id = #{userId}
+  </delete>
+
+  <delete id="deleteShipmentParticipants">
+    DELETE FROM cp_shipment_participants WHERE user_id = #{userId}
+  </delete>
+
+  <delete id="deleteScopesForCustomer">
+    DELETE FROM cp_oversea_agent_shipment_scopes WHERE represented_customer_id = #{customerId}
+  </delete>
+
+  <insert id="insertScopesForCustomer">
+    INSERT INTO cp_oversea_agent_shipment_scopes (
+      shipment_id, oversea_agent_customer_id, represented_customer_id,
+      status, assigned_by, assigned_at, updated_at
+    )
+    SELECT shipment_access.shipment_id,
+           link.oversea_agent_customer_id, link.customer_id,
+           'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+    FROM cp_oversea_agent_customers link
+    JOIN cp_customer_shipment_access shipment_access
+      ON shipment_access.customer_id = link.customer_id
+    WHERE link.customer_id = #{customerId}
+  </insert>
+
+  <delete id="deleteScopeForShipment">
+    DELETE FROM cp_oversea_agent_shipment_scopes
+    WHERE represented_customer_id = #{customerId} AND shipment_id = #{shipmentId}
+  </delete>
+
+  <insert id="insertScopeForShipment">
+    INSERT INTO cp_oversea_agent_shipment_scopes (
+      shipment_id, oversea_agent_customer_id, represented_customer_id,
+      status, assigned_by, assigned_at, updated_at
+    )
+    SELECT shipment_access.shipment_id,
+           link.oversea_agent_customer_id, link.customer_id,
+           'ACTIVE', link.assigned_by, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+    FROM cp_oversea_agent_customers link
+    JOIN cp_customer_shipment_access shipment_access
+      ON shipment_access.customer_id = link.customer_id
+     AND shipment_access.shipment_id = #{shipmentId}
+    WHERE link.customer_id = #{customerId}
+  </insert>
+
+  <select id="findEmployeeIds" resultType="java.lang.Long">
+    SELECT employee_user_id FROM cp_customer_employee_assignments WHERE customer_id = #{customerId}
+  </select>
+
+  <select id="countCustomerShipmentBinding" resultType="long">
+    SELECT COUNT(*) FROM cp_customer_shipment_access
+    WHERE customer_id = #{customerId} AND shipment_id = #{shipmentId}
+  </select>
+
+  <insert id="upsertParticipant">
+    INSERT INTO cp_shipment_participants (
+      shipment_id, user_id, participant_role, granted_by
+    ) VALUES (
+      #{shipmentId}, #{employeeId}, 'OVERSEA_AGENT', #{actorId}
+    )
+    ON DUPLICATE KEY UPDATE
+      participant_role = 'OVERSEA_AGENT',
+      granted_by = VALUES(granted_by),
+      updated_at = CURRENT_TIMESTAMP(6)
+  </insert>
+
+  <select id="countAssignmentsForShipmentEmployee" resultType="long">
+    SELECT COUNT(*)
+    FROM cp_customer_shipment_access shipment_access
+    JOIN cp_customer_employee_assignments assignment
+      ON assignment.customer_id = shipment_access.customer_id
+    WHERE shipment_access.shipment_id = #{shipmentId}
+      AND assignment.employee_user_id = #{employeeId}
+  </select>
+
+  <delete id="deleteParticipant">
+    DELETE FROM cp_shipment_participants
+    WHERE shipment_id = #{shipmentId} AND user_id = #{employeeId}
+      AND participant_role = 'OVERSEA_AGENT'
+  </delete>
+</mapper>

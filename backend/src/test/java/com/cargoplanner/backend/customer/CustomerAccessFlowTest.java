@@ -349,7 +349,11 @@ class CustomerAccessFlowTest {
             inputRules,
             auditService,
             new OverseaAgentService(
-                jdbcTemplate, passwordHasher, accessGuard, inputRules, auditService));
+                CustomerDirectoryTestSupport.overseaAgentMapper(dataSource),
+                passwordHasher,
+                accessGuard,
+                inputRules,
+                auditService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(
