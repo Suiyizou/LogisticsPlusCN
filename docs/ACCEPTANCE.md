@@ -37,16 +37,17 @@ mysql --no-defaults -h127.0.0.1 -P3307 -uroot < backend/sql/schema.sql
 
 ### 2.2 真实 MySQL：schema 与 MyBatis 查询
 
-| 步骤                                         | 结果                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `backend/sql/schema.sql` 应用到空库          | 成功，34 张业务表                                                                                              |
-| 后端连接真实 MySQL 启动                      | `/actuator/health` = UP                                                                                        |
-| 未登录访问 `/api/business/customers`         | 401                                                                                                            |
-| 管理员登录 `POST /api/auth/login`            | 200，返回 token                                                                                                |
-| 创建客户 `POST /api/business/customers`      | 200，返回 20 字段元数据                                                                                        |
-| `GET /api/business/customers`（MyBatis）     | 200，含 `createdByDisplayName`、`responsibleAgentDisplayName`、UTC 时间、`shipmentCount` 等原有字段            |
-| 单次目录请求的 SQL 次数（MySQL general log） | **1 条客户查询**（JOIN 取回员工信息），N+1 已消除                                                              |
-| 代理接口（T04 抽取后，真实 MySQL）           | `POST/GET/PATCH/DELETE /api/business/customers/oversea-agents`、`/transfer-agents` 创建/列表/禁用/删除全部 200 |
+| 步骤                                               | 结果                                                                                                           |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `backend/sql/schema.sql` 应用到空库                | 成功，34 张业务表                                                                                              |
+| 后端连接真实 MySQL 启动                            | `/actuator/health` = UP                                                                                        |
+| 未登录访问 `/api/business/customers`               | 401                                                                                                            |
+| 管理员登录 `POST /api/auth/login`                  | 200，返回 token                                                                                                |
+| 创建客户 `POST /api/business/customers`            | 200，返回 20 字段元数据                                                                                        |
+| `GET /api/business/customers`（MyBatis）           | 200，含 `createdByDisplayName`、`responsibleAgentDisplayName`、UTC 时间、`shipmentCount` 等原有字段            |
+| 单次目录请求的 SQL 次数（MySQL general log）       | **1 条客户查询**（JOIN 取回员工信息），N+1 已消除                                                              |
+| 代理接口（T04 抽取后，真实 MySQL）                 | `POST/GET/PATCH/DELETE /api/business/customers/oversea-agents`、`/transfer-agents` 创建/列表/禁用/删除全部 200 |
+| 客户详情/更新（T04 批次2 `CustomerLookupService`） | `GET/PATCH /api/business/customers/{id}`、`/handover-requests` 均 200，字段与原接口一致                        |
 
 ### 2.3 真实 MySQL：Flyway（T06）
 
