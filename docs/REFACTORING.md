@@ -101,3 +101,67 @@ CRLF。没有对历史源码执行整仓库换行归一化，避免给审查混�
 后续按一个业务入口一个变更批次实施；新接口先写 DTO，权限在应用服务校验，SQL 通过
 Mapper 管理。复杂 SQL 仍可以保留手写形式，目标是让职责、类型和事务清晰，而不是
 强制把查询改为无法审查的自动生成逻辑。
+
+---
+
+# 第二批及以后（T02–T12）
+
+详细模块清单、任务状态与阻塞项见 [MODULE_INVENTORY.md](MODULE_INVENTORY.md)。
+
+## T02 工程规范
+
+见 [ENGINEERING.md](ENGINEERING.md)。Prettier + ESLint 变更棘轮、`tsc --noEmit`、
+Checkstyle 新包门，统一入口 `node scripts/verify.mjs`（新增 `quality`、`typecheck`）。
+
+## T03 回归测试
+
+见 [TEST_MATRIX.md](TEST_MATRIX.md)。新增 `HttpAuthorizationRegressionTest`（真实
+`WebConfig` 路径规则 + 真实拦截器，覆盖公开路径豁免、401、三角色 403、双通道 token 隔离、
+OPTIONS 预检）。后端测试 200 → 207。
+
+## T06 数据库迁移（Flyway）
+
+- `backend/src/main/resources/db/migration/V1__baseline.sql`：与 `backend/sql/schema.sql`
+  等价的初始结构（去掉 `CREATE DATABASE` / `USE`）。
+- `application.yml`：`spring.flyway` 开启，`baseline-on-migrate=true`、`baseline-version=0`。
+- 真实 MySQL 8.0.42 验证：
+  - 空库启动 → 应用 V1，业务表 34 张 + `flyway_schema_history`；
+  - 已有 34 张表、无 history 的库启动 → 先写 BASELINE(0) 再幂等执行 V1，数据保留。
+- **未**删除 `SchemaInitializer`；其补列逻辑后续逐条转为 V2+ 迁移，避免盲目 baseline。
+
+## T10 Docker 与部署
+
+- `docker/backend.Dockerfile` 安装 curl 供健康检查；`docker-compose.yml` 增加 backend
+  健康检查，前端 `depends_on` 改为 `service_healthy`。
+- `scripts/backup.sh` / `deploy.sh` / `rollback.sh`：备份数据库、密钥卷与版本；部署后
+  冒烟前端与追踪；失败打印回滚命令（不自动回滚）。
+- `docker compose config` 与脚本 `bash -n` 通过；容器实跑受 Docker 引擎阻塞。
+
+## T11 CI
+
+见 [CI.md](CI.md)。`.workflow/ci.yml` 使用 Gitee Go 实际语法（`build@nodejs` /
+`build@maven` / `build@docker`），执行命令与本地一致。远端触发需要仓库流水线/Runner 权限。
+
+## T12 本地验收
+
+见 [ACCEPTANCE.md](ACCEPTANCE.md)。真实 MySQL 8.0.42（临时实例）完成 schema、后端 API、
+MyBatis 目录查询（单次请求 1 条客户查询）与 Flyway 两条路径；追踪服务 `/api/health` 正常。
+Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行。
+
+## T04/T05 后续拆分方案（已定，待实施）
+
+`BusinessCustomerService`（5226 行）与 `ShipmentTrackingService`（3591 行）共享大量
+私有 guard、审计、select 与 mapper，直接搬移会造成循环依赖。因此后续按以下顺序拆分，
+每步可独立验证：
+
+1. 抽出 `CustomerAccessGuard`（`requireOperationsReader/Manager/TransferManager/Administrator`）
+   与 `CustomerInputRules`（用户名/显示名/密码校验），`BusinessCustomerService` 保留薄委托。
+2. 抽出 `OverseaAgentService`：代理账号 CRUD、代理分配、代理范围同步
+   （`syncOverseaAgentScope*`、`syncEmployeeAgentParticipant` 等）。
+3. 抽出 `CustomerHandoverService`：交接申请、列表、审核、原子转移。
+4. 抽出 `CustomerShipmentQueryService`：只读快照/追踪查询（`snapshotShipmentSelect`、
+   `enrichShipmentRelations`、计数与排序），随后把该模块 SQL 迁到 MyBatis。
+5. 同样方式拆 `ShipmentTrackingService`：适配器调用、快照持久化、批量任务、自动刷新分离。
+
+每一步保持 Controller 只处理 HTTP、Service 处理业务与事务、Mapper 管理 SQL、
+请求/响应使用明确 DTO。
