@@ -106,7 +106,9 @@
             **/customer/CustomerAccessGuard.java,
             **/customer/CustomerInputRules.java,
             **/customer/CustomerAuditService.java,
-            **/customer/OverseaAgentService.java
+            **/customer/OverseaAgentService.java,
+            **/customer/CustomerLookupService.java,
+            **/customer/CustomerRecord.java
           </includes>
         </configuration>
         <executions>

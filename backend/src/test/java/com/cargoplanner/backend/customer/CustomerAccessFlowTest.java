@@ -353,7 +353,8 @@ class CustomerAccessFlowTest {
                 passwordHasher,
                 accessGuard,
                 inputRules,
-                auditService));
+                auditService),
+            new CustomerLookupService(jdbcTemplate, accessGuard));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(

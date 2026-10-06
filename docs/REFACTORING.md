@@ -170,6 +170,19 @@ Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行�
 外部接口签名不变。事务语义保持一致（批量建代理仍在同一 Bean 内整体事务；`sync*` 加入
 调用方事务）。后端 207 项测试全绿，Checkstyle 通过。
 
+### 已完成：批次 2（共享客户查询/访问判定）
+
+新增：
+
+| 类                      | 职责                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `CustomerRecord`        | 客户档案只读投影（由内部 record 提升为包级类型）                                                                  |
+| `CustomerLookupService` | `baseCustomerSelect`、按角色可见的 `requireManaged/TransferCustomer/AccessibleCustomer`、客户元数据投影、会话吊销 |
+
+`BusinessCustomerService` 对这些能力改为薄委托，`CustomerRecord` 成为多个领域服务可共享的类型。
+这是拆分交接、绑定、客户建档的前置：这些域都依赖“按角色取客户”的同一套逻辑。
+`BusinessCustomerService` 4873 → 4707 行，后端 207 项测试全绿。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到

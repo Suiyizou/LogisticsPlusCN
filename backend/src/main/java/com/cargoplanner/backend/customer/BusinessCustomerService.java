@@ -64,6 +64,7 @@ public class BusinessCustomerService {
   private final CustomerInputRules inputRules;
   private final CustomerAuditService auditService;
   private final OverseaAgentService overseaAgentService;
+  private final CustomerLookupService lookupService;
 
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
@@ -74,7 +75,8 @@ public class BusinessCustomerService {
       CustomerAccessGuard accessGuard,
       CustomerInputRules inputRules,
       CustomerAuditService auditService,
-      OverseaAgentService overseaAgentService
+      OverseaAgentService overseaAgentService,
+      CustomerLookupService lookupService
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
@@ -85,6 +87,7 @@ public class BusinessCustomerService {
     this.inputRules = inputRules;
     this.auditService = auditService;
     this.overseaAgentService = overseaAgentService;
+    this.lookupService = lookupService;
   }
 
   public CustomerDirectoryResponse list(AuthenticatedUser actor) {
@@ -3634,83 +3637,15 @@ public class BusinessCustomerService {
   }
 
   private CustomerRecord requireManaged(String publicId, AuthenticatedUser actor) {
-    requireManager(actor);
-    List<CustomerRecord> records = actor.isAdmin()
-        ? jdbcTemplate.query(
-            baseCustomerSelect() + " WHERE c.public_id = ? AND c.status <> 'DELETED'",
-            this::mapCustomer,
-            publicId
-        )
-        : jdbcTemplate.query(
-            baseCustomerSelect()
-                + " WHERE c.public_id = ? AND c.responsible_agent_id = ?"
-                + " AND c.status <> 'DELETED'",
-            this::mapCustomer,
-            publicId,
-            actor.id()
-        );
-    if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
-    return records.get(0);
+    return lookupService.requireManaged(publicId, actor);
   }
 
   private CustomerRecord requireTransferCustomer(String publicId, AuthenticatedUser actor) {
-    requireTransferManager(actor);
-    if (actor.isAdmin() || actor.isBusiness()) return requireManaged(publicId, actor);
-    List<CustomerRecord> records = jdbcTemplate.query(
-        baseCustomerSelect() + """
-             WHERE c.public_id = ?
-               AND c.status <> 'DELETED'
-               AND c.party_role IN ('SHIPPER', 'CONSIGNEE')
-               AND EXISTS (
-                 SELECT 1 FROM cp_customer_employee_assignments employee_assignment
-                 WHERE employee_assignment.customer_id = c.id
-                   AND employee_assignment.employee_user_id = ?
-               )
-            """,
-        this::mapCustomer,
-        publicId,
-        actor.id()
-    );
-    if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
-    return records.get(0);
+    return lookupService.requireTransferCustomer(publicId, actor);
   }
 
   private CustomerRecord requireAccessibleCustomer(String publicId, AuthenticatedUser actor) {
-    requireOperationsReader(actor);
-    List<CustomerRecord> records;
-    if (actor.isAdmin()) {
-      records = jdbcTemplate.query(
-          baseCustomerSelect() + " WHERE c.public_id = ? AND c.status <> 'DELETED'",
-          this::mapCustomer,
-          publicId
-      );
-    } else if (actor.isBusiness()) {
-      records = jdbcTemplate.query(
-          baseCustomerSelect()
-              + " WHERE c.public_id = ? AND c.responsible_agent_id = ?"
-              + " AND c.status <> 'DELETED'",
-          this::mapCustomer,
-          publicId,
-          actor.id()
-      );
-    } else {
-      records = jdbcTemplate.query(
-          baseCustomerSelect() + """
-               WHERE c.public_id = ?
-                 AND c.status <> 'DELETED'
-                 AND EXISTS (
-                   SELECT 1 FROM cp_customer_employee_assignments employee_assignment
-                   WHERE employee_assignment.customer_id = c.id
-                     AND employee_assignment.employee_user_id = ?
-                 )
-              """,
-          this::mapCustomer,
-          publicId,
-          actor.id()
-      );
-    }
-    if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
-    return records.get(0);
+    return lookupService.requireAccessibleCustomer(publicId, actor);
   }
 
   private ShipmentRecord resolveShipment(CustomerShipmentBindingRequest request) {
@@ -3841,19 +3776,7 @@ public class BusinessCustomerService {
   }
 
   private String baseCustomerSelect() {
-    return """
-        SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
-               c.party_role, c.customer_code_prefix, c.customer_code_mode,
-               c.provisioning_source,
-               c.status, c.remark, c.created_by, c.responsible_agent_id,
-               c.created_at, c.updated_at,
-               creator.display_name AS created_by_display_name,
-               owner.display_name AS responsible_agent_display_name,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.customer_id = c.id) AS shipment_count
-        FROM cp_customers c
-        LEFT JOIN cp_users creator ON creator.id = c.created_by
-        LEFT JOIN cp_users owner ON owner.id = c.responsible_agent_id
-        """;
+    return lookupService.baseCustomerSelect();
   }
 
   private String shipmentBindingSelect() {
@@ -3903,26 +3826,7 @@ public class BusinessCustomerService {
 
 
   private CustomerRecord mapCustomer(ResultSet rs, int rowNumber) throws SQLException {
-    return new CustomerRecord(
-        rs.getLong("id"),
-        rs.getString("public_id"),
-        rs.getString("username"),
-        rs.getString("display_name"),
-        rs.getString("client_code"),
-        rs.getString("party_role"),
-        rs.getString("customer_code_prefix"),
-        rs.getString("customer_code_mode"),
-        rs.getString("provisioning_source"),
-        rs.getString("status"),
-        rs.getString("remark"),
-        nullableLong(rs, "created_by"),
-        rs.getString("created_by_display_name"),
-        rs.getLong("responsible_agent_id"),
-        rs.getString("responsible_agent_display_name"),
-        instantString(rs, "created_at"),
-        instantString(rs, "updated_at"),
-        rs.getLong("shipment_count")
-    );
+    return lookupService.mapCustomer(rs, rowNumber);
   }
 
   private ShipmentRecord mapShipment(ResultSet rs, int rowNumber) throws SQLException {
@@ -4023,64 +3927,15 @@ public class BusinessCustomerService {
 
 
   private Map<String, Object> customerMetadata(CustomerRecord record) {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("id", record.publicId());
-    value.put("username", record.username());
-    value.put("displayName", record.displayName());
-    value.put("clientCode", record.clientCode());
-    value.put("partyRole", record.partyRole());
-    value.put("customerCodePrefix", record.codePrefix());
-    value.put("customerCodeMode", record.customerCodeMode());
-    value.put("provisioningSource", record.provisioningSource());
-    value.put("status", record.status());
-    value.put("remark", record.remark());
-    value.put("createdBy", record.createdBy());
-    value.put("createdByDisplayName", record.createdByDisplayName());
-    value.put("responsibleAgentId", record.responsibleAgentId());
-    value.put("responsibleAgentDisplayName", record.responsibleAgentDisplayName());
-    value.put("createdAt", record.createdAt());
-    value.put("updatedAt", record.updatedAt());
-    value.put("shipmentCount", record.shipmentCount());
-    return value;
+    return lookupService.customerMetadata(record);
   }
 
   private Map<String, Object> customerMetadataWithEmployee(CustomerRecord record) {
-    Map<String, Object> value = customerMetadata(record);
-    List<Map<String, Object>> assignments = jdbcTemplate.query(
-        """
-        SELECT u.id, u.username, u.display_name
-        FROM cp_customer_employee_assignments assignment
-        JOIN cp_users u ON u.id = assignment.employee_user_id
-        WHERE assignment.customer_id = ? AND u.status = 'ACTIVE'
-        """,
-        (rs, rowNumber) -> {
-          Map<String, Object> assignment = new LinkedHashMap<>();
-          assignment.put("id", rs.getLong("id"));
-          assignment.put("username", rs.getString("username"));
-          assignment.put("displayName", rs.getString("display_name"));
-          return assignment;
-        },
-        record.id()
-    );
-    Map<String, Object> assignment = assignments.isEmpty() ? null : assignments.get(0);
-    value.put("overseaAgentUserId", assignment == null ? null : assignment.get("id"));
-    value.put("overseaAgentUsername", assignment == null ? null : assignment.get("username"));
-    value.put("overseaAgentDisplayName", assignment == null ? null : assignment.get("displayName"));
-    return value;
+    return lookupService.customerMetadataWithEmployee(record);
   }
 
   private void revokeSessions(long customerId) {
-    jdbcTemplate.update(
-        """
-        UPDATE cp_customer_sessions
-        SET revoked_at = ?
-        WHERE (customer_id = ? OR scope_customer_id = ?)
-          AND revoked_at IS NULL
-        """,
-        Timestamp.from(Instant.now()),
-        customerId,
-        customerId
-    );
+    lookupService.revokeSessions(customerId);
   }
 
   private void syncOverseaAgentScopesForCustomer(long customerId) {
@@ -4770,27 +4625,6 @@ public class BusinessCustomerService {
     Timestamp value = rs.getTimestamp(column);
     return value == null ? null : value.toInstant().toString();
   }
-
-  private record CustomerRecord(
-      long id,
-      String publicId,
-      String username,
-      String displayName,
-      String clientCode,
-      String partyRole,
-      String codePrefix,
-      String customerCodeMode,
-      String provisioningSource,
-      String status,
-      String remark,
-      Long createdBy,
-      String createdByDisplayName,
-      long responsibleAgentId,
-      String responsibleAgentDisplayName,
-      String createdAt,
-      String updatedAt,
-      long shipmentCount
-  ) {}
 
   private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
   private record ShipmentCounts(long total, long unfinished, long refreshIssues) {}
