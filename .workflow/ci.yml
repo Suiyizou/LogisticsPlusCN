@@ -1,0 +1,79 @@
+# Gitee Go 流水线配置。
+#
+# 与本地完全共用同一套命令：`node scripts/verify.mjs`。
+# 也就是说 CI 不是另一套逻辑，本地能跑绿，CI 才可能跑绿。
+#
+# 需要在 Gitee 控制台：
+#   1. 仓库 → 流水线 → 开通 Gitee Go；
+#   2. 选择“自定义流水线”，把本文件作为流水线配置（或新建后替换内容）；
+#   3. 如果要推送镜像，在“变量/凭据”里配置 DOCKER_REGISTRY / DOCKER_USERNAME /
+#      DOCKER_PASSWORD，不要在 YAML 里写明文。
+#
+# 注意：`build@docker` 阶段需要 Runner 具备 Docker 能力。若 Runner 未开通 Docker，
+# 可直接删除 `images` 阶段的 step，不影响校验与测试阶段。
+version: "1.0"
+name: ci
+displayName: CI（校验 + 测试 + 镜像构建）
+
+triggers:
+  push:
+    branches:
+      include:
+        - ".*"
+  pr:
+    branches:
+      include:
+        - ".*"
+
+stages:
+  - stage:
+      name: verify
+      displayName: 质量门与测试
+      steps:
+        # 前端/追踪/脚本：质量门、类型检查、单元测试、生产构建。
+        - step: build@nodejs
+          name: node_checks
+          displayName: Node 质量门 + 类型检查 + 测试 + 前端构建
+          nodeVersion: "20"
+          commands:
+            - npm install --include=dev
+            - npm --prefix frontend install --include=dev --ignore-scripts
+            - npm --prefix tracking-service install
+            - node scripts/quality.mjs
+            - npm --prefix frontend run typecheck
+            - npm --prefix tracking-service test
+            - npm --prefix frontend run test:packing
+            - npm --prefix frontend run build
+
+        # 后端：JUnit 全部测试 + Checkstyle（绑定在 validate 阶段）。
+        - step: build@maven
+          name: backend_tests
+          displayName: 后端测试
+          jdkVersion: "17"
+          commands:
+            - cd backend && mvn -B -q test
+
+  - stage:
+      name: images
+      displayName: 构建镜像
+      steps:
+        - step: build@docker
+          name: build_backend_image
+          displayName: 后端镜像
+          dockerfilePath: ./docker/backend.Dockerfile
+          imageName: cargo-planner-backend
+          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
+
+        - step: build@docker
+          name: build_tracking_image
+          displayName: 追踪服务镜像
+          dockerfilePath: ./tracking-service/Dockerfile
+          imageName: cargo-platform-tracking
+          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
+
+        - step: build@docker
+          name: build_frontend_image
+          displayName: 前端镜像
+          dockerfilePath: ./docker/frontend.Dockerfile
+          imageName: cargo-planner-frontend
+          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
