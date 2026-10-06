@@ -19,3 +19,5 @@ docker/proxy-pool/providers/
 .DS_Store
 .playwright-cli/
 output/playwright/
+.tmp/
+backups/
