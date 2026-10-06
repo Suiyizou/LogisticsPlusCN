@@ -76,6 +76,37 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <!--
+        渐进式规范检查：只检查新拆分/新迁移的包。每批重构时把新类加进 <includes>。
+        失败会使构建返回非零退出码，因此 `mvn test` 与 CI 都会拦截。
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>3.6.0</version>
+        <configuration>
+          <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+          <consoleOutput>true</consoleOutput>
+          <failOnViolation>true</failOnViolation>
+          <violationSeverity>error</violationSeverity>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <includes>
+            **/customer/dto/*.java,
+            **/customer/persistence/*.java,
+            **/customer/CustomerDirectoryService.java,
+            **/customer/CustomerDirectoryScope.java
+          </includes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>checkstyle-new-packages</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

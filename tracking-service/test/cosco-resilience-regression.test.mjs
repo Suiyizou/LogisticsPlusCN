@@ -324,7 +324,7 @@ test("AUTO primary strategy never jumps from the direct API to direct Playwright
 
   assert.match(autoStrategy, /if \(queryChannel\.code === "AUTO"\)[\s\S]*?fetchCoscoTrackingViaNetwork/);
   assert.doesNotMatch(
-    autoStrategy.match(/if \(queryChannel\.code === "AUTO"\)[\s\S]*?\n  \}/)?.[0] ?? "",
+    autoStrategy.match(/if \(queryChannel\.code === "AUTO"\)[\s\S]*?\n {2}\}/)?.[0] ?? "",
     /fetchCoscoTrackingWithPlaywright/
   );
 });

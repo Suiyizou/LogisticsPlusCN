@@ -7,9 +7,20 @@
   },
   "scripts": {
     "verify": "node scripts/verify.mjs",
+    "verify:quality": "node scripts/quality.mjs",
     "verify:backend": "node scripts/verify.mjs backend",
     "verify:tracking": "node scripts/verify.mjs tracking",
     "verify:packing": "node scripts/verify.mjs packing",
-    "verify:frontend": "node scripts/verify.mjs frontend"
+    "verify:frontend": "node scripts/verify.mjs frontend",
+    "verify:typecheck": "node scripts/verify.mjs typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.0"
   }
 }

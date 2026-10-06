@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  渐进式 Java 规范检查。
+
+  检查范围由 backend/pom.xml 中 checkstyle 插件的 <includes> 控制：只覆盖
+  新拆分/新迁移的包（dto、persistence 以及本批新类），历史大文件不会被一次性
+  卷入。后续每批重构时把新类加入 <includes>，即为“新代码受检查约束”的棘轮。
+-->
+<module name="Checker">
+  <property name="charset" value="UTF-8" />
+  <property name="severity" value="error" />
+  <property name="fileExtensions" value="java" />
+
+  <module name="NewlineAtEndOfFile">
+    <property name="lineSeparator" value="lf" />
+  </module>
+  <module name="FileTabCharacter" />
+  <module name="RegexpSingleline">
+    <property name="format" value="\s+$" />
+    <property name="message" value="Trailing whitespace is not allowed." />
+  </module>
+  <module name="RegexpSingleline">
+    <property name="format" value="^import\s+.*\*;" />
+    <property name="message" value="Star imports are not allowed." />
+  </module>
+
+  <module name="TreeWalker">
+    <module name="UnusedImports">
+      <property name="processJavadoc" value="true" />
+    </module>
+    <module name="RedundantImport" />
+    <module name="EqualsHashCode" />
+  </module>
+</module>

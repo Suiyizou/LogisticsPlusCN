@@ -139,7 +139,7 @@ function findHotZones(balance: any) {
     ["rearRight", Number(loads.rearRightKg || 0)]
   ] as const;
   const max = Math.max(...zones.map(([, weight]) => weight), 0);
-  const hot = zones.filter(([, weight]) => max > 0 && weight >= max * 0.96).map(([key]) => key);
+  const hot: string[] = zones.filter(([, weight]) => max > 0 && weight >= max * 0.96).map(([key]) => key);
   if (Number(loads.frontPercent || 0) > Number(loads.rearPercent || 0) + 5) hot.push("front");
   if (Number(loads.rearPercent || 0) > Number(loads.frontPercent || 0) + 5) hot.push("rear");
   if (Number(loads.leftPercent || 0) > Number(loads.rightPercent || 0) + 5) hot.push("left");
