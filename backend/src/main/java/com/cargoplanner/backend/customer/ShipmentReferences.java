@@ -82,7 +82,7 @@ public final class ShipmentReferences {
     return null;
   }
 
-  private static String normalizeCode(String value, String fallback) {
+  public static String normalizeCode(String value, String fallback) {
     return value == null || value.isBlank() ? fallback : value.trim().toUpperCase(Locale.ROOT);
   }
 }

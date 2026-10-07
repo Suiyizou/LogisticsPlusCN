@@ -116,6 +116,9 @@
             **/customer/ShipmentReferences.java
             **/customer/ShipmentRowMappers.java
             **/customer/CustomerTransferService.java
+            **/customer/ShipmentLookupService.java
+            **/customer/ShipmentRecord.java
+            **/customer/CustomerShipmentBindingService.java
           </includes>
         </configuration>
         <executions>

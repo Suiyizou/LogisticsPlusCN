@@ -58,6 +58,8 @@ public class BusinessCustomerService {
   private final CustomerProfileService profileService;
   private final CustomerShipmentQueryService shipmentQueryService;
   private final CustomerTransferService transferService;
+  private final ShipmentLookupService shipmentLookupService;
+  private final CustomerShipmentBindingService bindingService;
 
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
@@ -74,7 +76,9 @@ public class BusinessCustomerService {
       CustomerShipmentAccessPolicy accessPolicy,
       CustomerProfileService profileService,
       CustomerShipmentQueryService shipmentQueryService,
-      CustomerTransferService transferService
+      CustomerTransferService transferService,
+      ShipmentLookupService shipmentLookupService,
+      CustomerShipmentBindingService bindingService
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
@@ -91,6 +95,8 @@ public class BusinessCustomerService {
     this.profileService = profileService;
     this.shipmentQueryService = shipmentQueryService;
     this.transferService = transferService;
+    this.shipmentLookupService = shipmentLookupService;
+    this.bindingService = bindingService;
   }
 
   public CustomerDirectoryResponse list(AuthenticatedUser actor) {
@@ -277,13 +283,22 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> listShipments(String customerPublicId, AuthenticatedUser actor) {
-    CustomerRecord customer = requireAccessibleCustomer(customerPublicId, actor);
-    List<Map<String, Object>> items = jdbcTemplate.query(
-        shipmentBindingSelect() + " WHERE a.customer_id = ? ORDER BY a.assigned_at DESC, s.id DESC",
-        this::mapBinding,
-        customer.id()
-    );
-    return Map.of("items", items, "total", items.size());
+    return bindingService.listShipments(customerPublicId, actor);
+  }
+  public Map<String, Object> bindShipment(String customerPublicId, CustomerShipmentBindingRequest request, AuthenticatedUser actor, String ipAddress) {
+    return bindingService.bindShipment(customerPublicId, request, actor, ipAddress);
+  }
+  public Map<String, Object> bindShipments(String customerPublicId, CustomerShipmentBatchBindingRequest request, AuthenticatedUser actor, String ipAddress) {
+    return bindingService.bindShipments(customerPublicId, request, actor, ipAddress);
+  }
+  public Map<String, Object> deleteShipments(com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest request, AuthenticatedUser actor) {
+    return bindingService.deleteShipments(request, actor);
+  }
+  public Map<String, Object> setShipmentPublication(String customerPublicId, String shipmentPublicId, ShipmentPublicationRequest request, AuthenticatedUser actor, String ipAddress) {
+    return bindingService.setShipmentPublication(customerPublicId, shipmentPublicId, request, actor, ipAddress);
+  }
+  public Map<String, Object> unbindShipment(String customerPublicId, String shipmentPublicId, AuthenticatedUser actor, String ipAddress) {
+    return bindingService.unbindShipment(customerPublicId, shipmentPublicId, actor, ipAddress);
   }
 
   public Map<String, Object> listAvailableShipments(AuthenticatedUser actor) {
@@ -1550,183 +1565,7 @@ public class BusinessCustomerService {
     return value;
   }
 
-  @Transactional
-  public Map<String, Object> bindShipment(
-      String customerPublicId,
-      CustomerShipmentBindingRequest request,
-      AuthenticatedUser actor,
-      String ipAddress
-  ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    ShipmentRecord shipment = resolveShipment(request);
-    requireShipmentAssignmentAuthority(shipment, actor);
-    lockShipment(shipment.id());
-    ensureShipmentRoleAvailable(shipment.id(), customer.id(), customer.partyRole());
-    jdbcTemplate.update(
-        """
-        INSERT INTO cp_customer_shipment_access (
-          customer_id, shipment_id, relationship_role, publication_status, assigned_by
-        ) VALUES (?, ?, ?, 'DRAFT', ?)
-        ON DUPLICATE KEY UPDATE
-          relationship_role = VALUES(relationship_role),
-          publication_status = 'DRAFT',
-          published_at = NULL,
-          published_by = NULL,
-          assigned_by = VALUES(assigned_by),
-          assigned_at = CURRENT_TIMESTAMP(6)
-        """,
-        customer.id(),
-        shipment.id(),
-        customer.partyRole(),
-        actor.id()
-    );
-    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
-    syncEmployeeAgentParticipant(customer.id(), shipment.id(), actor.id());
-    audit(
-        actor,
-        "BIND_CUSTOMER_SHIPMENT",
-        customer.id(),
-        "Bound shipment " + shipment.publicId(),
-        ipAddress
-    );
-    return requireBinding(customer.id(), shipment.publicId());
-  }
 
-  @Transactional
-  public Map<String, Object> bindShipments(
-      String customerPublicId,
-      CustomerShipmentBatchBindingRequest request,
-      AuthenticatedUser actor,
-      String ipAddress
-  ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    List<String> shipmentIds = normalizeShipmentIds(
-        request == null ? null : request.shipmentIds()
-    );
-    int bound = 0;
-    int skipped = 0;
-    List<String> boundShipmentIds = new ArrayList<>();
-    for (String shipmentPublicId : shipmentIds) {
-      ShipmentRecord shipment = requireShipment(shipmentPublicId);
-      requireShipmentAssignmentAuthority(shipment, actor);
-      lockShipment(shipment.id());
-      Integer existing = jdbcTemplate.queryForObject(
-          "SELECT COUNT(*) FROM cp_customer_shipment_access WHERE customer_id = ? AND shipment_id = ?",
-          Integer.class,
-          customer.id(),
-          shipment.id()
-      );
-      if (existing != null && existing > 0) {
-        skipped++;
-        continue;
-      }
-      ensureShipmentRoleAvailable(shipment.id(), customer.id(), customer.partyRole());
-      jdbcTemplate.update(
-          """
-          INSERT INTO cp_customer_shipment_access (
-            customer_id, shipment_id, relationship_role, publication_status, assigned_by
-          ) VALUES (?, ?, ?, 'DRAFT', ?)
-          """,
-          customer.id(), shipment.id(), customer.partyRole(), actor.id()
-      );
-      syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
-      syncEmployeeAgentParticipant(customer.id(), shipment.id(), actor.id());
-      bound++;
-      boundShipmentIds.add(shipment.publicId());
-    }
-    audit(
-        actor,
-        "BATCH_BIND_CUSTOMER_SHIPMENTS",
-        customer.id(),
-        "Bound " + bound + " shipments; skipped " + skipped + " existing bindings",
-        ipAddress
-    );
-    Map<String, Object> response = new LinkedHashMap<>();
-    response.put("customerId", customer.publicId());
-    response.put("requested", shipmentIds.size());
-    response.put("bound", bound);
-    response.put("skipped", skipped);
-    response.put("shipmentIds", boundShipmentIds);
-    return response;
-  }
-
-  @Transactional
-  public Map<String, Object> deleteShipments(
-      com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest request,
-      AuthenticatedUser actor
-  ) {
-    requireManager(actor);
-    List<String> shipmentIds = normalizeShipmentIds(
-        request == null ? null : request.shipmentIds()
-    );
-    List<ShipmentRecord> shipmentsToDelete = new ArrayList<>();
-    for (String shipmentPublicId : shipmentIds) {
-      ShipmentRecord shipment = requireShipment(shipmentPublicId);
-      requireShipmentAssignmentAuthority(shipment, actor);
-      shipmentsToDelete.add(shipment);
-    }
-    for (ShipmentRecord shipment : shipmentsToDelete) {
-      auditShipment(
-          actor,
-          "BATCH_DELETE_BUSINESS_SHIPMENT",
-          shipment.id(),
-          "Deleted shipment " + shipment.publicId(),
-          null
-      );
-      // The audit table predates the cascade constraints used by shipment files.
-      jdbcTemplate.update("DELETE FROM cp_shipment_file_audit WHERE shipment_id = ?", shipment.id());
-      jdbcTemplate.update("DELETE FROM cp_shipments WHERE id = ?", shipment.id());
-    }
-    return Map.of(
-        "deleted", shipmentsToDelete.size(),
-        "shipmentIds", shipmentIds
-    );
-  }
-
-  private List<String> normalizeShipmentIds(List<String> rawShipmentIds) {
-    return ShipmentReferences.normalizeShipmentIds(rawShipmentIds);
-  }
-
-  @Transactional
-  public Map<String, Object> setShipmentPublication(
-      String customerPublicId,
-      String shipmentPublicId,
-      ShipmentPublicationRequest request,
-      AuthenticatedUser actor,
-      String ipAddress
-  ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    ShipmentRecord shipment = requireShipment(shipmentPublicId);
-    requireShipmentAssignmentAuthority(shipment, actor);
-    boolean published = request != null && Boolean.TRUE.equals(request.published());
-    requireBinding(customer.id(), shipment.publicId());
-    if (published) requirePublishableSnapshot(shipment.id());
-    int affected = jdbcTemplate.update(
-        """
-        UPDATE cp_customer_shipment_access
-        SET publication_status = ?, published_at = ?, published_by = ?
-        WHERE customer_id = ? AND shipment_id = ?
-        """,
-        published ? "PUBLISHED" : "DRAFT",
-        published ? Timestamp.from(Instant.now()) : null,
-        published ? actor.id() : null,
-        customer.id(),
-        shipment.id()
-    );
-    if (affected == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
-    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
-    syncEmployeeAgentParticipant(customer.id(), shipment.id(), actor.id());
-    audit(
-        actor,
-        published ? "PUBLISH_CUSTOMER_SHIPMENT" : "WITHDRAW_CUSTOMER_SHIPMENT",
-        customer.id(),
-        (published ? "Published shipment " : "Withdrew shipment ") + shipment.publicId(),
-        ipAddress
-    );
-    return requireBinding(customer.id(), shipment.publicId());
-  }
-
-  @Transactional
   public Map<String, Object> invalidateCurrentSnapshot(
       String shipmentPublicId,
       SnapshotInvalidationRequest request,
@@ -1768,94 +1607,6 @@ public class BusinessCustomerService {
     );
   }
 
-  private void requirePublishableSnapshot(long shipmentId) {
-    List<String> snapshots = jdbcTemplate.query(
-        """
-        SELECT t.snapshot_json
-        FROM cp_shipments s
-        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
-        WHERE s.id = ? AND t.invalidated_at IS NULL
-        """,
-        (rs, rowNumber) -> rs.getString("snapshot_json"),
-        shipmentId
-    );
-    if (snapshots.isEmpty() || !isPublishableSnapshot(snapshots.get(0))) {
-      throw new ApiException(
-          HttpStatus.CONFLICT,
-          "SNAPSHOT_NOT_PUBLISHABLE",
-          "Shipment has no confirmed operational data; complete the manual fields before publishing"
-      );
-    }
-  }
-
-  private boolean isPublishableSnapshot(String rawSnapshot) {
-    if (rawSnapshot == null || rawSnapshot.isBlank()) return false;
-    try {
-      JsonNode snapshot = objectMapper.readTree(rawSnapshot);
-      JsonNode summary = snapshot.path("summary");
-      int meaningful = 0;
-      if (isOperationalText(summary.path("origin").path("name").asText())) meaningful++;
-      if (isOperationalText(summary.path("destination").path("name").asText())) meaningful++;
-      JsonNode latest = summary.path("latestEvent");
-      if (isOperationalText(latest.path("name").asText())) meaningful++;
-      if (isOperationalText(latest.path("location").asText())) meaningful++;
-      if (isOperationalText(latest.path("occurredAt").asText())) meaningful++;
-      if (operationalTextCount(snapshot.path("routingLegs")) >= 2) meaningful += 2;
-      if (operationalTextCount(snapshot.path("containers")) >= 3) meaningful += 2;
-      if (snapshot.path("keyTimes").isObject() && snapshot.path("keyTimes").size() > 0) meaningful++;
-      return meaningful >= 2;
-    } catch (JsonProcessingException error) {
-      return false;
-    }
-  }
-
-  private boolean isOperationalText(String value) {
-    if (value == null || value.isBlank()) return false;
-    String normalized = value.trim().toLowerCase(Locale.ROOT);
-    return !List.of(
-        "-", "—", "–", "n/a", "na", "unknown", "unknown location",
-        "暂无", "暂无动态", "暂不存在", "未知", "未知地点"
-    ).contains(normalized);
-  }
-
-  private int operationalTextCount(JsonNode node) {
-    if (node == null || node.isNull() || node.isMissingNode()) return 0;
-    if (node.isTextual()) return isOperationalText(node.asText()) ? 1 : 0;
-    if (!node.isContainerNode()) return 0;
-    int count = 0;
-    for (JsonNode child : node) {
-      count += operationalTextCount(child);
-      if (count >= 3) return count;
-    }
-    return count;
-  }
-
-  @Transactional
-  public Map<String, Object> unbindShipment(
-      String customerPublicId,
-      String shipmentPublicId,
-      AuthenticatedUser actor,
-      String ipAddress
-  ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    ShipmentRecord shipment = requireShipment(shipmentPublicId);
-    int affected = jdbcTemplate.update(
-        "DELETE FROM cp_customer_shipment_access WHERE customer_id = ? AND shipment_id = ?",
-        customer.id(),
-        shipment.id()
-    );
-    if (affected == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
-    syncOverseaAgentScopeForShipment(customer.id(), shipment.id());
-    syncEmployeeAgentParticipant(customer.id(), shipment.id(), actor.id());
-    audit(
-        actor,
-        "UNBIND_CUSTOMER_SHIPMENT",
-        customer.id(),
-        "Unbound shipment " + shipment.publicId(),
-        ipAddress
-    );
-    return Map.of("unbound", true, "shipmentId", shipment.publicId());
-  }
 
   private CustomerRecord requireManaged(String publicId, AuthenticatedUser actor) {
     return lookupService.requireManaged(publicId, actor);
@@ -1870,257 +1621,45 @@ public class BusinessCustomerService {
   }
 
   private ShipmentRecord resolveShipment(CustomerShipmentBindingRequest request) {
-    if (request == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment binding is required");
-    if (request.shipmentId() != null && !request.shipmentId().isBlank()) {
-      return requireShipment(request.shipmentId());
-    }
-    String carrier = normalizeCode(request.carrier(), "COSCO");
-    String type = normalizeCode(request.referenceType(), "BOOKING");
-    if (!"BOOKING".equals(type)) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Shipment binding must use the booking number"
-      );
-    }
-    String reference = normalizeReference(request.referenceNo());
-    if (reference.isBlank()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment id or reference number is required");
-    }
-    List<ShipmentRecord> shipments = jdbcTemplate.query(
-        """
-        SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
-        FROM cp_shipment_references r
-        JOIN cp_shipments s ON s.id = r.shipment_id
-        WHERE r.carrier_code = ? AND r.reference_type = ? AND r.reference_no_normalized = ?
-        """,
-        this::mapShipment,
-        carrier,
-        type,
-        reference
-    );
-    if (shipments.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Tracked shipment not found");
-    return shipments.get(0);
+    return shipmentLookupService.resolveShipment(request);
   }
-
-  private ShipmentRecord findShipmentByReference(
-      String carrier,
-      String referenceType,
-      String referenceNo
-  ) {
-    String normalized = normalizeReference(referenceNo);
-    boolean sharedCoscoIdentity = isSharedCoscoNumericIdentity(
-        carrier, referenceType, normalized
-    );
-    String canonical = sharedCoscoIdentity && normalized.startsWith("COSU")
-        ? normalized.substring(4)
-        : normalized;
-    String sql = sharedCoscoIdentity
-        ? """
-          SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
-          FROM cp_shipment_references r
-          JOIN cp_shipments s ON s.id = r.shipment_id
-          WHERE r.carrier_code = ?
-            AND r.reference_type IN ('BOOKING', 'BILLOFLADING')
-            AND r.reference_no_normalized IN (?, ?)
-          ORDER BY CASE WHEN r.reference_type = ? THEN 0 ELSE 1 END,
-                   r.primary_reference DESC, r.id ASC
-          LIMIT 1
-          """
-        : """
-          SELECT s.id, s.public_id, s.carrier_code, s.responsible_agent_id
-          FROM cp_shipment_references r
-          JOIN cp_shipments s ON s.id = r.shipment_id
-          WHERE r.carrier_code = ? AND r.reference_type = ?
-            AND r.reference_no_normalized = ?
-          ORDER BY r.primary_reference DESC, r.id ASC
-          LIMIT 1
-          """;
-    List<ShipmentRecord> records = sharedCoscoIdentity
-        ? jdbcTemplate.query(
-            sql,
-            this::mapShipment,
-            carrier,
-            canonical,
-            "COSU" + canonical,
-            referenceType
-        )
-        : jdbcTemplate.query(
-            sql,
-            this::mapShipment,
-            carrier,
-            referenceType,
-            normalized
-        );
-    return records.isEmpty() ? null : records.get(0);
+  private ShipmentRecord findShipmentByReference(String carrier, String referenceType, String referenceNo) {
+    return shipmentLookupService.findShipmentByReference(carrier, referenceType, referenceNo);
   }
-
   private ShipmentRecord requireShipment(String publicId) {
-    List<ShipmentRecord> shipments = jdbcTemplate.query(
-        "SELECT id, public_id, carrier_code, responsible_agent_id FROM cp_shipments WHERE public_id = ?",
-        this::mapShipment,
-        publicId == null ? null : publicId.trim()
-    );
-    if (shipments.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Shipment not found");
-    return shipments.get(0);
+    return shipmentLookupService.requireShipment(publicId);
   }
-
   private Map<String, Object> requireBinding(long customerId, String shipmentPublicId) {
-    List<Map<String, Object>> values = jdbcTemplate.query(
-        shipmentBindingSelect() + " WHERE a.customer_id = ? AND s.public_id = ?",
-        this::mapBinding,
-        customerId,
-        shipmentPublicId
-    );
-    if (values.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer shipment binding not found");
-    return values.get(0);
+    return shipmentLookupService.requireBinding(customerId, shipmentPublicId);
   }
-
-  private Map<String, Object> requireAvailableShipment(
-      String shipmentPublicId,
-      AuthenticatedUser actor
-  ) {
-    String authority = actor.isAdmin()
-        ? " WHERE s.public_id = ?"
-        : " WHERE s.public_id = ? AND (s.responsible_agent_id = ? OR EXISTS ("
-            + "SELECT 1 FROM cp_shipment_participants p WHERE p.shipment_id = s.id AND p.user_id = ?))";
-    List<Map<String, Object>> values = actor.isAdmin()
-        ? jdbcTemplate.query(availableShipmentSelect() + authority, this::mapAvailableShipment, shipmentPublicId)
-        : jdbcTemplate.query(
-            availableShipmentSelect() + authority,
-            this::mapAvailableShipment,
-            shipmentPublicId,
-            actor.id(),
-            actor.id()
-        );
-    if (values.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Shipment not found");
-    return values.get(0);
+  private Map<String, Object> requireAvailableShipment(String shipmentPublicId, AuthenticatedUser actor) {
+    return shipmentLookupService.requireAvailableShipment(shipmentPublicId, actor);
+  }
+  private String shipmentBindingSelect() {
+    return shipmentLookupService.shipmentBindingSelect();
+  }
+  private String availableShipmentSelect() {
+    return shipmentLookupService.availableShipmentSelect();
+  }
+  private ShipmentRecord mapShipment(ResultSet rs, int rowNumber) throws SQLException {
+    return shipmentLookupService.mapShipment(rs, rowNumber);
+  }
+  private void requireShipmentAssignmentAuthority(ShipmentRecord shipment, AuthenticatedUser actor) {
+    shipmentLookupService.requireShipmentAssignmentAuthority(shipment, actor);
+  }
+  private Map<String, Object> mapBinding(ResultSet rs, int rowNumber) throws SQLException {
+    return shipmentLookupService.mapBinding(rs, rowNumber);
+  }
+  private Map<String, Object> mapAvailableShipment(ResultSet rs, int rowNumber) throws SQLException {
+    return shipmentLookupService.mapAvailableShipment(rs, rowNumber);
   }
 
   private String baseCustomerSelect() {
     return lookupService.baseCustomerSelect();
   }
 
-  private String shipmentBindingSelect() {
-    return """
-        SELECT s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note, s.last_refresh_result, s.last_refresh_error_code,
-               s.last_refresh_error, s.last_refresh_attempts,
-               s.last_refresh_proxy_attempts, s.last_refresh_at,
-                s.last_tracked_at, s.fresh_until, s.created_at, s.updated_at,
-               a.relationship_role, a.publication_status, a.published_at, a.published_by,
-               a.assigned_at, a.assigned_by, u.display_name AS assigned_by_display_name,
-               r.reference_type, r.reference_no_raw
-        FROM cp_customer_shipment_access a
-        JOIN cp_shipments s ON s.id = a.shipment_id
-        LEFT JOIN cp_users u ON u.id = a.assigned_by
-        LEFT JOIN cp_shipment_references r ON r.id = (
-          SELECT r2.id FROM cp_shipment_references r2
-          WHERE r2.shipment_id = s.id
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC LIMIT 1
-        )
-        """;
-  }
-  private String availableShipmentSelect() {
-    return """
-        SELECT s.id, s.public_id AS shipment_public_id, s.carrier_code, s.tracking_status,
-               s.business_note, s.last_refresh_result, s.last_refresh_error_code,
-               s.last_refresh_error, s.last_refresh_attempts,
-               s.last_refresh_proxy_attempts, s.last_refresh_at,
-                s.last_tracked_at, s.created_at, s.updated_at,
-               r.reference_type, r.reference_no_raw,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id) AS customer_count,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'SHIPPER') AS shipper_count,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a WHERE a.shipment_id = s.id AND a.relationship_role = 'CONSIGNEE') AS consignee_count,
-               (SELECT COUNT(*) FROM cp_customer_shipment_access a
-                WHERE a.shipment_id = s.id
-                  AND UPPER(a.relationship_role) IN ('AGENT', 'OVERSEA_AGENT')) AS agent_count
-        FROM cp_shipments s
-        LEFT JOIN cp_shipment_references r ON r.id = (
-          SELECT r2.id FROM cp_shipment_references r2
-          WHERE r2.shipment_id = s.id
-          ORDER BY CASE WHEN r2.reference_type = 'BOOKING' THEN 0 ELSE 1 END,
-                   r2.primary_reference DESC, r2.id ASC LIMIT 1
-        )
-        """;
-  }
-
-
   private CustomerRecord mapCustomer(ResultSet rs, int rowNumber) throws SQLException {
     return lookupService.mapCustomer(rs, rowNumber);
-  }
-
-  private ShipmentRecord mapShipment(ResultSet rs, int rowNumber) throws SQLException {
-    return new ShipmentRecord(
-        rs.getLong("id"),
-        rs.getString("public_id"),
-        rs.getString("carrier_code"),
-        nullableLong(rs, "responsible_agent_id")
-    );
-  }
-
-  private void requireShipmentAssignmentAuthority(
-      ShipmentRecord shipment,
-      AuthenticatedUser actor
-  ) {
-    if (actor.isAdmin()) return;
-    if (shipment.responsibleAgentId() != null
-        && shipment.responsibleAgentId() == actor.id()) return;
-    Integer participantCount = jdbcTemplate.queryForObject(
-        "SELECT COUNT(*) FROM cp_shipment_participants WHERE shipment_id = ? AND user_id = ?",
-        Integer.class,
-        shipment.id(),
-        actor.id()
-    );
-    if (participantCount == null || participantCount == 0) {
-      throw new ApiException(
-          HttpStatus.FORBIDDEN,
-          "Shipment assignment requires explicit operator access"
-      );
-    }
-  }
-
-  private Map<String, Object> mapBinding(ResultSet rs, int rowNumber) throws SQLException {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("shipmentId", rs.getString("shipment_public_id"));
-    value.put("carrier", rs.getString("carrier_code"));
-    value.put("referenceType", rs.getString("reference_type"));
-    value.put("referenceNo", rs.getString("reference_no_raw"));
-    value.put("trackingStatus", rs.getString("tracking_status"));
-    value.put("note", rs.getString("business_note"));
-    value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
-    value.put("freshUntil", instantString(rs, "fresh_until"));
-    value.put("createdAt", instantString(rs, "created_at"));
-    value.put("updatedAt", instantString(rs, "updated_at"));
-    value.put("relationshipRole", rs.getString("relationship_role"));
-    value.put("publicationStatus", rs.getString("publication_status"));
-    value.put("publishedAt", instantString(rs, "published_at"));
-    value.put("publishedBy", nullableLong(rs, "published_by"));
-    value.put("assignedAt", instantString(rs, "assigned_at"));
-    value.put("assignedBy", nullableLong(rs, "assigned_by"));
-    value.put("assignedByDisplayName", rs.getString("assigned_by_display_name"));
-    putRefreshOutcome(value, rs);
-    return value;
-  }
-  private Map<String, Object> mapAvailableShipment(ResultSet rs, int rowNumber) throws SQLException {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("shipmentId", rs.getString("shipment_public_id"));
-    value.put("carrier", rs.getString("carrier_code"));
-    value.put("referenceType", rs.getString("reference_type"));
-    value.put("referenceNo", rs.getString("reference_no_raw"));
-    value.put("trackingStatus", rs.getString("tracking_status"));
-    value.put("note", rs.getString("business_note"));
-    value.put("lastTrackedAt", instantString(rs, "last_tracked_at"));
-    value.put("createdAt", instantString(rs, "created_at"));
-    value.put("updatedAt", instantString(rs, "updated_at"));
-    putRefreshOutcome(value, rs);
-    value.put("customerCount", rs.getLong("customer_count"));
-    List<String> boundRoles = new java.util.ArrayList<>();
-    if (rs.getLong("shipper_count") > 0) boundRoles.add("SHIPPER");
-    if (rs.getLong("consignee_count") > 0) boundRoles.add("CONSIGNEE");
-    if (rs.getLong("agent_count") > 0) boundRoles.add("OVERSEA_AGENT");
-    value.put("boundRoles", boundRoles);
-    return value;
   }
 
   private void putRefreshOutcome(Map<String, Object> value, ResultSet rs) throws SQLException {
@@ -2387,7 +1926,6 @@ public class BusinessCustomerService {
     return ShipmentRowMappers.instantString(rs, column);
   }
 
-  private record ShipmentRecord(long id, String publicId, String carrier, Long responsibleAgentId) {}
 
   private record ShipmentBusinessFieldsTarget(
       ShipmentRecord shipment,

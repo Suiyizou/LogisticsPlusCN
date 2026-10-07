@@ -229,6 +229,12 @@ H2 全量 208 项通过，Checkstyle 通过。
 新增 `CustomerTransferService`（239 行）：批量把客户分配给内部海外代理账号或遗留代理客户，
 保留票单绑定与历史，同步代理范围与票单参与人。`BusinessCustomerService` 2588 → 2406 行。
 
+### 已完成：批次 8/9（共享运单查询 + 票单绑定域）
+
+新增 `ShipmentLookupService`（281 行，共享运单解析/行锁/绑定读取）与顶层 `ShipmentRecord`；
+新增 `CustomerShipmentBindingService`（332 行）：单个/批量绑定、删除票单、发布状态、解绑、
+客户侧票单列表。`BusinessCustomerService` 2406 → 1944 行（较初始 5226 减少约 63%）。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
