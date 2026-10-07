@@ -384,6 +384,16 @@ class CustomerAccessFlowTest {
             inputRules,
             auditService,
             lookupService);
+    CustomerShipmentBindingService bindingService =
+        new CustomerShipmentBindingService(
+            jdbcTemplate,
+            accessGuard,
+            lookupService,
+            shipmentLookupService,
+            accessPolicy,
+            overseaAgentService,
+            auditService,
+            new ObjectMapper());
     customerService =
         new BusinessCustomerService(
             jdbcTemplate,
@@ -412,15 +422,26 @@ class CustomerAccessFlowTest {
             new CustomerTransferService(
                 jdbcTemplate, accessGuard, lookupService, overseaAgentService, auditService),
             shipmentLookupService,
-            new CustomerShipmentBindingService(
+            bindingService,
+            new CustomerShipmentMutationService(
                 jdbcTemplate,
+                new ObjectMapper(),
                 accessGuard,
                 lookupService,
                 shipmentLookupService,
                 accessPolicy,
                 overseaAgentService,
                 auditService,
-                new ObjectMapper()));
+                inputRules,
+                bindingService),
+            new CustomerClientMatchService(
+                jdbcTemplate,
+                accessGuard,
+                shipmentLookupService,
+                accessPolicy,
+                overseaAgentService,
+                auditService,
+                lookupService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(

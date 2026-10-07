@@ -235,6 +235,25 @@ H2 全量 208 项通过，Checkstyle 通过。
 新增 `CustomerShipmentBindingService`（332 行）：单个/批量绑定、删除票单、发布状态、解绑、
 客户侧票单列表。`BusinessCustomerService` 2406 → 1944 行（较初始 5226 减少约 63%）。
 
+### 已完成：批次 10/11（票单写域 + 客户端匹配）——T04 收尾
+
+新增 `CustomerShipmentMutationService`（创建/导入冲突/指定客户创建/手工快照/更新/删除/备注/发布校验）
+与 `CustomerClientMatchService`（导入客户端匹配队列）。
+
+**`BusinessCustomerService` 从 5226 行降到约 600 行（减少约 88%）**，现在只保留 HTTP 入口委托、
+共享 guard/lookup 委托与少量元数据投影，成为薄门面。完整分层：
+
+```text
+Controller -> BusinessCustomerService（门面）
+  -> CustomerProfileService / CustomerTransferService / CustomerHandoverService
+  -> OverseaAgentService / CustomerShipmentQueryService / CustomerShipmentBindingService
+  -> CustomerShipmentMutationService / CustomerClientMatchService
+共享: CustomerAccessGuard / CustomerInputRules / CustomerAuditService / CustomerLookupService
+      ShipmentLookupService / CustomerShipmentAccessPolicy / ShipmentReferences / ShipmentRowMappers
+```
+
+H2 全量 208 项通过，Checkstyle 覆盖全部新类。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到

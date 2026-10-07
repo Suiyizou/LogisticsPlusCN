@@ -119,6 +119,8 @@
             **/customer/ShipmentLookupService.java
             **/customer/ShipmentRecord.java
             **/customer/CustomerShipmentBindingService.java
+            **/customer/CustomerShipmentMutationService.java
+            **/customer/CustomerClientMatchService.java
           </includes>
         </configuration>
         <executions>
