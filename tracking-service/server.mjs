@@ -1,4 +1,13 @@
 import { createServer } from "node:http";
+import {
+  CARRIER_ADAPTERS,
+  COSCO_QUERY_CHANNELS,
+  listCarrierAdapters,
+  listCoscoQueryChannels,
+  normalizeCarrierCode,
+  normalizeQueryChannel,
+  normalizeTrackingRequest
+} from "./lib/carrier-adapters.mjs";
 import { createTrackingCache } from "./lib/tracking-cache.mjs";
 import {
   MIME_TYPES,
@@ -47,6 +56,15 @@ import {
 
 export { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
 export { normalizeCmaSnapshot, parseCmaLocalDateTime } from "./lib/cma-tracking.mjs";
+
+
+export {
+  listCarrierAdapters,
+  listCoscoQueryChannels,
+  normalizeCarrierCode,
+  normalizeQueryChannel,
+  normalizeTrackingRequest
+};
 
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT_DIR, "public");
@@ -101,70 +119,6 @@ const CHANNEL_C_MONITOR_ENABLED =
 const CHANNEL_C_MONITOR_REQUEST = Object.freeze({
   type: process.env.CHANNEL_C_MONITOR_TYPE ?? "BOOKING",
   number: process.env.CHANNEL_C_MONITOR_NUMBER ?? "6502077380"
-});
-
-const TRACKING_TYPES = Object.freeze({
-  BILLOFLADING: {
-    label: "提单号",
-    businessNumberType: "blNumber"
-  },
-  BOOKING: {
-    label: "订舱号",
-    businessNumberType: "bookingNumber"
-  },
-  CONTAINER: {
-    label: "箱号",
-    businessNumberType: "containerNumber"
-  }
-});
-
-const COSCO_QUERY_CHANNELS = Object.freeze({
-  NETWORK: {
-    code: "NETWORK",
-    number: 1,
-    label: "网络接口",
-    source: "COSCO_INTERNAL_WEB_API"
-  },
-  PLAYWRIGHT: {
-    code: "PLAYWRIGHT",
-    number: 2,
-    label: "Playwright 浏览器",
-    source: "COSCO_WEB_UI_PLAYWRIGHT"
-  },
-  PROXY: {
-    code: "PROXY",
-    number: 3,
-    label: "SOCKS5 proxy",
-    source: "COSCO_INTERNAL_WEB_API_PROXY"
-  }
-});
-
-const COSCO_AUTO_QUERY_STRATEGY = Object.freeze({
-  code: "AUTO",
-  number: 0,
-  label: "直连接口 · 代理接口 · 浏览器容灾",
-  source: "COSCO_NETWORK_PROXY_WITH_DEDICATED_PLAYWRIGHT_FALLBACK"
-});
-
-const CARRIER_ADAPTERS = Object.freeze({
-  COSCO: {
-    code: "COSCO",
-    name: "COSCO SHIPPING Lines",
-    channel: "AUTO",
-    channels: ["NETWORK", "PLAYWRIGHT", "PROXY"],
-    defaultChannel: "AUTO",
-    enabled: true,
-    source: "COSCO_INTERNAL_WEB_API"
-  },
-  CMA: {
-    code: "CMA",
-    name: "CMA CGM",
-    channel: "PLAYWRIGHT",
-    channels: ["PLAYWRIGHT"],
-    defaultChannel: "PLAYWRIGHT",
-    enabled: true,
-    source: "CMA_SERVER_RENDERED_HTML"
-  }
 });
 
 
@@ -374,62 +328,6 @@ function requireProxyAdapterAuthorization(request, queryChannel) {
   }
 }
 
-
-export function normalizeTrackingRequest(input) {
-  const requestedType = String(input?.type ?? "BOOKING").toUpperCase();
-  const type = requestedType === "BILLOFLADING" ? "BOOKING" : requestedType;
-  const typeConfig = TRACKING_TYPES[type];
-
-  if (!typeConfig) {
-    throw new HttpError(400, "不支持的查询类型");
-  }
-
-  const normalizedNumber = String(input?.number ?? "")
-    .trim()
-    .replace(/\s+/g, "")
-    .toUpperCase();
-  const number = type === "BOOKING" && /^COSU[0-9]{6,20}$/.test(normalizedNumber)
-    ? normalizedNumber.slice(4)
-    : normalizedNumber;
-
-  if (!/^[A-Z0-9-]{4,35}$/.test(number)) {
-    throw new HttpError(400, `${typeConfig.label}格式不正确`);
-  }
-
-  return { type, number, ...typeConfig };
-}
-
-export function normalizeCarrierCode(value = "COSCO") {
-  const code = String(value).trim().toUpperCase();
-
-  if (!CARRIER_ADAPTERS[code]) {
-    throw new HttpError(400, "不支持的船司");
-  }
-
-  return code;
-}
-
-export function listCarrierAdapters() {
-  return Object.values(CARRIER_ADAPTERS).map((carrier) => ({ ...carrier }));
-}
-
-export function normalizeQueryChannel(value = "NETWORK") {
-  const code = String(value).trim().toUpperCase();
-  if (code === COSCO_AUTO_QUERY_STRATEGY.code) {
-    return COSCO_AUTO_QUERY_STRATEGY;
-  }
-  const channel = COSCO_QUERY_CHANNELS[code];
-
-  if (!channel) {
-    throw new HttpError(400, "不支持的查询通道");
-  }
-
-  return channel;
-}
-
-export function listCoscoQueryChannels() {
-  return Object.values(COSCO_QUERY_CHANNELS).map((channel) => ({ ...channel }));
-}
 
 function normalizeContainerNumber(container) {
   return (
