@@ -15,3 +15,7 @@ tracking-service/test/cosco-resilience-regression.test.mjs
 frontend/src/visualization/packingSceneBalance.ts
 frontend/src/visualization/packingSceneData.ts
 frontend/src/visualization/packingSceneRenderer.ts
+
+# T07 进行中：server.mjs 有基于精确空白的源码断言，重构完成后再格式化
+# （与 cosco-resilience 回归测试、装箱可视化文件同样的棘轮处理）
+tracking-service/server.mjs

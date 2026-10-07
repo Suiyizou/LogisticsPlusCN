@@ -1,15 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import {
-  createCoscoProxyClient,
-  proxyStatus,
-  readCoscoProxyConfig
-} from "../lib/cosco-proxy.mjs";
-import {
-  createCoscoCircuitBreaker,
-  createCoscoQueryGate
-} from "../lib/cosco-request-guard.mjs";
+import { createCoscoProxyClient, proxyStatus, readCoscoProxyConfig } from "../lib/cosco-proxy.mjs";
+import { createCoscoCircuitBreaker, createCoscoQueryGate } from "../lib/cosco-request-guard.mjs";
 import { createBatchTaskRegistry } from "../lib/batch-task-registry.mjs";
 
 test("loads an authenticated SOCKS5 proxy without exposing credentials", async () => {
@@ -29,21 +22,24 @@ test("loads an authenticated SOCKS5 proxy without exposing credentials", async (
   assert.equal(client.protocol, "socks5:");
   await client.close();
   assert.throws(
-    () => readCoscoProxyConfig({
-      COSCO_PROXY_ENABLED: "true",
-      COSCO_PROXY_SERVER: "socks5://proxy-user:proxy-secret@proxy.example:443"
-    }),
+    () =>
+      readCoscoProxyConfig({
+        COSCO_PROXY_ENABLED: "true",
+        COSCO_PROXY_SERVER: "socks5://proxy-user:proxy-secret@proxy.example:443"
+      }),
     /credentials in COSCO_PROXY_USERNAME\/PASSWORD/
   );
 });
 
 test("protects the proxy channel with a timing-safe internal adapter key", async () => {
   const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const httpUtils = await readFile(new URL("../lib/http-utils.mjs", import.meta.url), "utf8");
   assert.match(
     source,
     /function requireProxyAdapterAuthorization[\s\S]*?TRACKING_ADAPTER_KEY[\s\S]*?x-tracking-adapter-key[\s\S]*?secureTextEquals/
   );
-  assert.match(source, /timingSafeEqual\(leftBuffer, rightBuffer\)/);
+  // 常量时间比较已下沉到 lib/http-utils.mjs，行为不变。
+  assert.match(httpUtils, /timingSafeEqual\(leftBuffer, rightBuffer\)/);
   assert.match(source, /requireProxyAdapterAuthorization\(request, queryChannel\)/);
 });
 
@@ -58,7 +54,10 @@ test("cancels an active batch request and rejects further work for the cancelled
     activeRequestCancelled: true
   });
   assert.equal(lease.signal.aborted, true);
-  assert.throws(() => registry.begin(taskId), (error) => error.code === "BATCH_CANCELLED");
+  assert.throws(
+    () => registry.begin(taskId),
+    (error) => error.code === "BATCH_CANCELLED"
+  );
 });
 
 test("spaces requests in one batch task by a random interval between ten and twelve seconds", async () => {
@@ -112,11 +111,21 @@ test("cancels a batch request while it is waiting for its query window", async (
 test("removes an aborted queued query without running it", async () => {
   const gate = createCoscoQueryGate({ minIntervalMs: 0, queueLimit: 3, queueTimeoutMs: 2_000 });
   let releaseFirst;
-  const first = gate.run(() => new Promise((resolve) => { releaseFirst = resolve; }));
+  const first = gate.run(
+    () =>
+      new Promise((resolve) => {
+        releaseFirst = resolve;
+      })
+  );
   while (typeof releaseFirst !== "function") await new Promise((resolve) => setTimeout(resolve, 1));
   const controller = new AbortController();
   let ran = false;
-  const queued = gate.run(async () => { ran = true; }, { signal: controller.signal });
+  const queued = gate.run(
+    async () => {
+      ran = true;
+    },
+    { signal: controller.signal }
+  );
   controller.abort();
   await assert.rejects(queued, (error) => error.code === "BATCH_CANCELLED");
   assert.equal(ran, false);

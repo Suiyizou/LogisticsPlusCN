@@ -1,5 +1,12 @@
 import { createServer } from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  HttpError,
+  readJsonBody,
+  secureTextEquals,
+  sendJson,
+  setCommonHeaders
+} from "./lib/http-utils.mjs";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { promisify } from "node:util";
@@ -265,14 +272,6 @@ const channelCHealth = {
 let channelCMonitorTimer = null;
 let channelCMonitorPromise = null;
 
-class HttpError extends Error {
-  constructor(status, message, details) {
-    super(message);
-    this.name = "HttpError";
-    this.status = status;
-    this.details = details;
-  }
-}
 
 function batchCancelledHttpError() {
   return new HttpError(409, "Batch tracking task was cancelled", {
@@ -375,13 +374,6 @@ function coscoPublicCookieState(options = {}) {
   return coscoPublicCookieStates.get(key);
 }
 
-function secureTextEquals(left, right) {
-  const leftBuffer = Buffer.from(String(left ?? ""), "utf8");
-  const rightBuffer = Buffer.from(String(right ?? ""), "utf8");
-  return leftBuffer.length === rightBuffer.length
-    && leftBuffer.length > 0
-    && timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 function requireProxyAdapterAuthorization(request, queryChannel) {
   if (queryChannel.code !== "PROXY") return;
@@ -399,15 +391,6 @@ function requireProxyAdapterAuthorization(request, queryChannel) {
   }
 }
 
-function setCommonHeaders(response) {
-  response.setHeader("X-Content-Type-Options", "nosniff");
-  response.setHeader("Referrer-Policy", "no-referrer");
-  response.setHeader("X-Frame-Options", "DENY");
-  response.setHeader(
-    "Content-Security-Policy",
-    "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'"
-  );
-}
 
 function staticCacheControl(pathname) {
   if (pathname.endsWith(".html") || pathname === "/") {
@@ -421,7 +404,7 @@ function staticCacheControl(pathname) {
 
 function staticEtag(content) {
   const digest = createHash("sha256").update(content).digest("base64url").slice(0, 16);
-  return `W/\"${content.length.toString(16)}-${digest}\"`;
+  return `W/"${content.length.toString(16)}-${digest}"`;
 }
 
 function acceptsEncoding(request, encoding) {
@@ -511,33 +494,6 @@ async function sendStaticContent(request, response, content, options) {
   response.end(request.method === "HEAD" ? undefined : representation.content);
 }
 
-function sendJson(response, status, payload) {
-  setCommonHeaders(response);
-  response.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store"
-  });
-  response.end(JSON.stringify(payload));
-}
-
-async function readJsonBody(request) {
-  const chunks = [];
-  let size = 0;
-
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > 16_384) {
-      throw new HttpError(413, "请求内容过大");
-    }
-    chunks.push(chunk);
-  }
-
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-  } catch {
-    throw new HttpError(400, "请求内容不是有效的 JSON");
-  }
-}
 
 export function normalizeTrackingRequest(input) {
   const requestedType = String(input?.type ?? "BOOKING").toUpperCase();
@@ -1623,6 +1579,8 @@ function uniqueSafeProxyNodes(nodes = []) {
 }
 
 function safeDiagnosticText(value, maximumLength) {
+  // 有意匹配控制字符：诊断文本需要把它们替换为空格。
+  // eslint-disable-next-line no-control-regex
   const normalized = String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
   if (!normalized) return null;
   return normalized.slice(0, maximumLength);
