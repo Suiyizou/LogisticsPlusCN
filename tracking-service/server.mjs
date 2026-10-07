@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createTrackingCache } from "./lib/tracking-cache.mjs";
 import {
   MIME_TYPES,
   staticCacheControl,
@@ -236,8 +237,7 @@ const batchTaskRegistry = createBatchTaskRegistry({
   maxIntervalMs: process.env.BATCH_QUERY_MAX_INTERVAL_MS
 });
 
-const cache = new Map();
-const inFlightTrackingRequests = new Map();
+const trackingCache = createTrackingCache({ ttlMs: CACHE_TTL_MS });
 const coscoPublicCookieStates = new Map();
 const channelCHealth = {
   status: CHANNEL_C_MONITOR_ENABLED ? "unknown" : "disabled",
@@ -2273,7 +2273,7 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
 
   try {
   const cacheKey = `${carrierCode}:${queryChannel.code}:${trackingRequest.type}:${trackingRequest.number}`;
-  const cached = cache.get(cacheKey);
+  const cached = trackingCache.peek(cacheKey);
 
   if (
     !forceRefresh &&
@@ -2285,13 +2285,13 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
     return;
   }
 
-  if (cached) cache.delete(cacheKey);
+  if (cached) trackingCache.invalidate(cacheKey);
 
   await batchLease?.waitForTurn();
 
   let requestPromise = batchTaskId || forceRefresh
     ? null
-    : inFlightTrackingRequests.get(cacheKey);
+    : trackingCache.getInFlight(cacheKey);
   if (!requestPromise) {
     requestPromise = carrierCode === "CMA"
       ? fetchCmaTracking(trackingRequest, cmaCredentials, { signal: batchLease?.signal })
@@ -2302,22 +2302,18 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
             request, COSCO_QUERY_CHANNELS.PROXY
           )
         });
-    if (!batchTaskId && !forceRefresh) inFlightTrackingRequests.set(cacheKey, requestPromise);
+    if (!batchTaskId && !forceRefresh) trackingCache.setInFlight(cacheKey, requestPromise);
   }
 
   let value;
   try {
     value = await requestPromise;
   } finally {
-    if (!batchTaskId && !forceRefresh
-        && inFlightTrackingRequests.get(cacheKey) === requestPromise) {
-      inFlightTrackingRequests.delete(cacheKey);
+    if (!batchTaskId && !forceRefresh) {
+      trackingCache.clearInFlight(cacheKey, requestPromise);
     }
   }
-  cache.set(cacheKey, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS
-  });
+  trackingCache.store(cacheKey, value);
 
   sendJson(response, 200, { ...value, cached: false });
   } catch (error) {
