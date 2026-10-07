@@ -389,7 +389,8 @@ class CustomerAccessFlowTest {
                 passwordHasher,
                 accessGuard,
                 inputRules,
-                auditService),
+                auditService,
+                lookupService),
             lookupService,
             new CustomerHandoverService(jdbcTemplate, accessGuard, auditService, lookupService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);

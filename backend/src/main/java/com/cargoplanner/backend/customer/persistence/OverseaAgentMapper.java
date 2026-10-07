@@ -1,6 +1,7 @@
 package com.cargoplanner.backend.customer.persistence;
 
 import com.cargoplanner.backend.customer.dto.BusinessAgentListRow;
+import com.cargoplanner.backend.customer.dto.LinkedCustomerRow;
 import com.cargoplanner.backend.customer.dto.OverseaAgentListRow;
 import com.cargoplanner.backend.customer.dto.OverseaAgentRow;
 import java.util.List;
@@ -104,5 +105,17 @@ public interface OverseaAgentMapper {
   int deleteParticipant(
       @Param("shipmentId") long shipmentId,
       @Param("employeeId") long employeeId
+  );
+
+  List<LinkedCustomerRow> findLinkedCustomers(@Param("agentId") long agentId);
+
+  List<Long> findLinkedCustomerIds(@Param("agentId") long agentId);
+
+  int deleteAgentCustomers(@Param("agentId") long agentId);
+
+  int upsertAgentCustomer(
+      @Param("customerId") long customerId,
+      @Param("agentId") long agentId,
+      @Param("actorId") long actorId
   );
 }

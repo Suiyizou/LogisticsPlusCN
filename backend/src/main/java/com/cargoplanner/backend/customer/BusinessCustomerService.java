@@ -694,120 +694,17 @@ public class BusinessCustomerService {
       String overseaAgentPublicId,
       AuthenticatedUser actor
   ) {
-    CustomerRecord agent = requireManaged(overseaAgentPublicId, actor);
-    requireOverseaAgent(agent);
-    List<Map<String, Object>> items = jdbcTemplate.query(
-        """
-        SELECT c.public_id, c.username, c.display_name, c.client_code, c.party_role,
-               c.status, link.assigned_at
-        FROM cp_oversea_agent_customers link
-        JOIN cp_customers c ON c.id = link.customer_id
-        WHERE link.oversea_agent_customer_id = ?
-        ORDER BY c.display_name, c.id
-        """,
-        (rs, rowNumber) -> {
-          Map<String, Object> item = new LinkedHashMap<>();
-          item.put("id", rs.getString("public_id"));
-          item.put("username", rs.getString("username"));
-          item.put("displayName", rs.getString("display_name"));
-          item.put("clientCode", rs.getString("client_code"));
-          item.put("partyRole", rs.getString("party_role"));
-          item.put("status", rs.getString("status"));
-          item.put("assignedAt", instantString(rs, "assigned_at"));
-          return item;
-        },
-        agent.id()
-    );
-    return Map.of("items", items, "total", items.size());
+    return overseaAgentService.listOverseaAgentCustomers(overseaAgentPublicId, actor);
   }
 
-  @Transactional
   public Map<String, Object> updateOverseaAgentCustomers(
       String overseaAgentPublicId,
       OverseaAgentCustomerLinksRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord agent = requireManaged(overseaAgentPublicId, actor);
-    requireOverseaAgent(agent);
-    List<String> requestedIds = request == null || request.customerIds() == null
-        ? List.of()
-        : request.customerIds().stream()
-            .map(value -> value == null ? "" : value.trim())
-            .filter(value -> !value.isBlank())
-            .distinct()
-            .toList();
-    if (requestedIds.size() > 500) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 500 customers can be linked at once");
-    }
-
-    List<CustomerRecord> linkedCustomers = new ArrayList<>();
-    for (String customerId : requestedIds) {
-      CustomerRecord customer = requireManaged(customerId, actor);
-      if (customer.id() == agent.id()) {
-        throw new ApiException(HttpStatus.BAD_REQUEST, "An overseas agent cannot link itself");
-      }
-      if (!CustomerLookupService.UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
-        throw new ApiException(
-            HttpStatus.BAD_REQUEST,
-            "Only shipper or consignee customers can be linked to an overseas agent"
-        );
-      }
-      linkedCustomers.add(customer);
-    }
-
-    LinkedHashSet<Long> affectedCustomerIds = new LinkedHashSet<>(
-        jdbcTemplate.query(
-            """
-            SELECT customer_id
-            FROM cp_oversea_agent_customers
-            WHERE oversea_agent_customer_id = ?
-            """,
-            (rs, rowNumber) -> rs.getLong(1),
-            agent.id()
-        )
-    );
-    linkedCustomers.forEach(customer -> affectedCustomerIds.add(customer.id()));
-    jdbcTemplate.update(
-        "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
-        agent.id()
-    );
-    for (CustomerRecord customer : linkedCustomers) {
-      jdbcTemplate.update(
-          """
-          INSERT INTO cp_oversea_agent_customers (
-            customer_id, oversea_agent_customer_id, assigned_by, assigned_at
-          ) VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
-          ON DUPLICATE KEY UPDATE
-            oversea_agent_customer_id = VALUES(oversea_agent_customer_id),
-            assigned_by = VALUES(assigned_by),
-            assigned_at = CURRENT_TIMESTAMP(6)
-          """,
-          customer.id(), agent.id(), actor.id()
-      );
-    }
-    for (Long customerId : affectedCustomerIds) {
-      syncOverseaAgentScopesForCustomer(customerId);
-      revokeSessions(customerId);
-    }
-    revokeSessions(agent.id());
-    audit(
-        actor,
-        "UPDATE_OVERSEA_AGENT_CUSTOMERS",
-        agent.id(),
-        "Linked " + linkedCustomers.size() + " customers",
-        ipAddress
-    );
-    return listOverseaAgentCustomers(overseaAgentPublicId, actor);
-  }
-
-  private void requireOverseaAgent(CustomerRecord customer) {
-    if (!"OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Linked customers can only be managed for an OVERSEA_AGENT customer"
-      );
-    }
+    return overseaAgentService.updateOverseaAgentCustomers(
+        overseaAgentPublicId, request, actor, ipAddress);
   }
 
   public Map<String, Object> listShipments(String customerPublicId, AuthenticatedUser actor) {

@@ -8,6 +8,7 @@ import com.cargoplanner.backend.customer.dto.OverseaAgentRow;
 import com.cargoplanner.backend.customer.persistence.OverseaAgentMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,19 +39,22 @@ public class OverseaAgentService {
   private final CustomerAccessGuard accessGuard;
   private final CustomerInputRules inputRules;
   private final CustomerAuditService auditService;
+  private final CustomerLookupService lookupService;
 
   public OverseaAgentService(
       OverseaAgentMapper mapper,
       PasswordHasher passwordHasher,
       CustomerAccessGuard accessGuard,
       CustomerInputRules inputRules,
-      CustomerAuditService auditService
+      CustomerAuditService auditService,
+      CustomerLookupService lookupService
   ) {
     this.mapper = mapper;
     this.passwordHasher = passwordHasher;
     this.accessGuard = accessGuard;
     this.inputRules = inputRules;
     this.auditService = auditService;
+    this.lookupService = lookupService;
   }
 
   public Map<String, Object> listTransferAgents(AuthenticatedUser actor) {
@@ -287,6 +291,93 @@ public class OverseaAgentService {
   public void removeUnusedEmployeeAgentParticipant(long shipmentId, long employeeId) {
     if (mapper.countAssignmentsForShipmentEmployee(shipmentId, employeeId) == 0) {
       mapper.deleteParticipant(shipmentId, employeeId);
+    }
+  }
+
+  public Map<String, Object> listOverseaAgentCustomers(
+      String overseaAgentPublicId,
+      AuthenticatedUser actor
+  ) {
+    CustomerRecord agent = lookupService.requireManaged(overseaAgentPublicId, actor);
+    requireOverseaAgent(agent);
+    List<Map<String, Object>> items = new ArrayList<>();
+    for (var row : mapper.findLinkedCustomers(agent.id())) {
+      Map<String, Object> item = new LinkedHashMap<>();
+      item.put("id", row.id());
+      item.put("username", row.username());
+      item.put("displayName", row.displayName());
+      item.put("clientCode", row.clientCode());
+      item.put("partyRole", row.partyRole());
+      item.put("status", row.status());
+      item.put("assignedAt", row.assignedAt());
+      items.add(item);
+    }
+    return Map.of("items", items, "total", items.size());
+  }
+
+  @Transactional
+  public Map<String, Object> updateOverseaAgentCustomers(
+      String overseaAgentPublicId,
+      OverseaAgentCustomerLinksRequest request,
+      AuthenticatedUser actor,
+      String ipAddress
+  ) {
+    CustomerRecord agent = lookupService.requireManaged(overseaAgentPublicId, actor);
+    requireOverseaAgent(agent);
+    List<String> requestedIds = request == null || request.customerIds() == null
+        ? List.of()
+        : request.customerIds().stream()
+            .map(value -> value == null ? "" : value.trim())
+            .filter(value -> !value.isBlank())
+            .distinct()
+            .toList();
+    if (requestedIds.size() > 500) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "At most 500 customers can be linked at once");
+    }
+
+    List<CustomerRecord> linkedCustomers = new ArrayList<>();
+    for (String customerId : requestedIds) {
+      CustomerRecord customer = lookupService.requireManaged(customerId, actor);
+      if (customer.id() == agent.id()) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "An overseas agent cannot link itself");
+      }
+      if (!CustomerLookupService.UNIQUE_PARTY_ROLES.contains(customer.partyRole())) {
+        throw new ApiException(
+            HttpStatus.BAD_REQUEST,
+            "Only shipper or consignee customers can be linked to an overseas agent"
+        );
+      }
+      linkedCustomers.add(customer);
+    }
+
+    LinkedHashSet<Long> affectedCustomerIds =
+        new LinkedHashSet<>(mapper.findLinkedCustomerIds(agent.id()));
+    linkedCustomers.forEach(customer -> affectedCustomerIds.add(customer.id()));
+    mapper.deleteAgentCustomers(agent.id());
+    for (CustomerRecord customer : linkedCustomers) {
+      mapper.upsertAgentCustomer(customer.id(), agent.id(), actor.id());
+    }
+    for (Long customerId : affectedCustomerIds) {
+      syncScopesForCustomer(customerId);
+      lookupService.revokeSessions(customerId);
+    }
+    lookupService.revokeSessions(agent.id());
+    auditService.customer(
+        actor,
+        "UPDATE_OVERSEA_AGENT_CUSTOMERS",
+        agent.id(),
+        "Linked " + linkedCustomers.size() + " customers",
+        ipAddress
+    );
+    return listOverseaAgentCustomers(overseaAgentPublicId, actor);
+  }
+
+  private void requireOverseaAgent(CustomerRecord customer) {
+    if (!"OVERSEA_AGENT".equalsIgnoreCase(customer.partyRole())) {
+      throw new ApiException(
+          HttpStatus.BAD_REQUEST,
+          "Linked customers can only be managed for an OVERSEA_AGENT customer"
+      );
     }
   }
 }

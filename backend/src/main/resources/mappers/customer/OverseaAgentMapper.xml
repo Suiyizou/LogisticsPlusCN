@@ -35,6 +35,20 @@
     </constructor>
   </resultMap>
 
+  <resultMap id="linkedCustomerRow"
+      type="com.cargoplanner.backend.customer.dto.LinkedCustomerRow">
+    <constructor>
+      <idArg column="public_id" javaType="java.lang.String"/>
+      <arg column="username" javaType="java.lang.String"/>
+      <arg column="display_name" javaType="java.lang.String"/>
+      <arg column="client_code" javaType="java.lang.String"/>
+      <arg column="party_role" javaType="java.lang.String"/>
+      <arg column="status" javaType="java.lang.String"/>
+      <arg column="assigned_at" javaType="java.lang.String"
+          typeHandler="com.cargoplanner.backend.customer.persistence.UtcTimestampStringTypeHandler"/>
+    </constructor>
+  </resultMap>
+
   <select id="findTransferAgents" resultMap="overseaAgentListRow">
     SELECT u.id, u.username, u.display_name, u.status,
            (SELECT COUNT(*) FROM cp_customer_employee_assignments assignment
@@ -192,4 +206,35 @@
     WHERE shipment_id = #{shipmentId} AND user_id = #{employeeId}
       AND participant_role = 'OVERSEA_AGENT'
   </delete>
+
+  <select id="findLinkedCustomers" resultMap="linkedCustomerRow">
+    SELECT c.public_id, c.username, c.display_name, c.client_code, c.party_role,
+           c.status, link.assigned_at
+    FROM cp_oversea_agent_customers link
+    JOIN cp_customers c ON c.id = link.customer_id
+    WHERE link.oversea_agent_customer_id = #{agentId}
+    ORDER BY c.display_name, c.id
+  </select>
+
+  <select id="findLinkedCustomerIds" resultType="java.lang.Long">
+    SELECT customer_id
+    FROM cp_oversea_agent_customers
+    WHERE oversea_agent_customer_id = #{agentId}
+  </select>
+
+  <delete id="deleteAgentCustomers">
+    DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = #{agentId}
+  </delete>
+
+  <insert id="upsertAgentCustomer">
+    INSERT INTO cp_oversea_agent_customers (
+      customer_id, oversea_agent_customer_id, assigned_by, assigned_at
+    ) VALUES (
+      #{customerId}, #{agentId}, #{actorId}, CURRENT_TIMESTAMP(6)
+    )
+    ON DUPLICATE KEY UPDATE
+      oversea_agent_customer_id = VALUES(oversea_agent_customer_id),
+      assigned_by = VALUES(assigned_by),
+      assigned_at = CURRENT_TIMESTAMP(6)
+  </insert>
 </mapper>

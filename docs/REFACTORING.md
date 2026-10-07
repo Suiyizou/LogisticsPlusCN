@@ -194,6 +194,17 @@ lockCustomer` 与 `UNIQUE_PARTY_ROLES` 共享，避免跨服务复制行锁逻�
 薄委托，Controller 与接口签名、`@Transactional` 边界均不变。H2 全量 208 项通过，
 交接的三个既有用例（直接交接、不可重复审核、校验失败回滚）继续通过，Checkstyle 通过。
 
+### 已完成：批次 4（代理-客户关联归入代理域）
+
+把 `listOverseaAgentCustomers` / `updateOverseaAgentCustomers` 与
+`requireOverseaAgent(CustomerRecord)` 从 `BusinessCustomerService` 移入 `OverseaAgentService`，
+使“代理账号 + 代理分配”在同一领域服务内。同步把这 4 条 SQL 迁到 `OverseaAgentMapper`
+（`findLinkedCustomers` / `findLinkedCustomerIds` / `deleteAgentCustomers` / `upsertAgentCustomer`），
+新增 `LinkedCustomerRow` DTO，`assigned_at` 用 `UtcTimestampStringTypeHandler` 保持 UTC 字符串输出。
+
+`BusinessCustomerService` 3899 → 3796 行；代理公开方法改为薄委托，接口与事务边界不变。
+H2 全量 208 项通过，Checkstyle 通过。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
