@@ -407,7 +407,9 @@ class CustomerAccessFlowTest {
                 accessPolicy,
                 auditService,
                 overseaAgentService),
-            new CustomerShipmentQueryService(jdbcTemplate, new ObjectMapper(), accessGuard));
+            new CustomerShipmentQueryService(jdbcTemplate, new ObjectMapper(), accessGuard),
+            new CustomerTransferService(
+                jdbcTemplate, accessGuard, lookupService, overseaAgentService, auditService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(

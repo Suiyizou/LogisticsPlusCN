@@ -224,6 +224,11 @@ H2 全量 208 项通过，Checkstyle 通过。
 `BusinessCustomerService` 3397 → 2588 行（较初始 5226 行减少 2638 行，约 50%）；
 公开查询方法改为薄委托，接口与事务边界不变。H2 全量 208 项通过，Checkstyle 通过。
 
+### 已完成：批次 7（客户转移/代理分配）
+
+新增 `CustomerTransferService`（239 行）：批量把客户分配给内部海外代理账号或遗留代理客户，
+保留票单绑定与历史，同步代理范围与票单参与人。`BusinessCustomerService` 2588 → 2406 行。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
