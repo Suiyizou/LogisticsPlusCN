@@ -163,21 +163,21 @@
 
 状态：`[ ]` 未开始 / `[~]` 进行中 / `[x]` 已完成（以本地可验证为准）。
 
-| 编号 | 任务                                                     | 状态 | 备注                                                                                                                                                                          |
-| ---- | -------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T01  | 接手并确认基线                                           | [x]  | 第一批已保存 `8368f97`；本文即模块/流程/任务记录；线上访问信息仍在第 7 节列出                                                                                                 |
-| T02  | 工程规范（格式/Lint/类型/统一命令）                      | [x]  | 见 `docs/ENGINEERING.md`：Prettier+ESLint 变更棘轮、`tsc --noEmit`、Checkstyle 新包门、`verify.mjs` 增 quality/typecheck                                                      |
-| T03  | 回归测试（登录/权限/客户/交接/票单/快照/附件/追踪/装箱） | [~]  | 见 `docs/TEST_MATRIX.md`；新增 HTTP 角色鉴权矩阵（7 项，后端 208 项）；附件/快照/回滚沿用既有用例；前端页面级仍待 T08                                                         |
-| T04  | 拆 Java 大 Service（客户、交接、代理、票单、快照、附件） | [~]  | 批次1 共享支撑+代理域；批次2 共享客户查询/访问判定；批次3 交接域；批次4 代理-客户关联归入代理域；`BusinessCustomerService` 5226→3796 行，208 项全绿；绑定/快照/客户建档待继续 |
-| T05  | JdbcTemplate → MyBatis 逐模块迁移                        | [~]  | 已迁：客户目录、海外代理（含代理-客户关联，共 22 条语句，`OverseaAgentMapper`，真库冒烟通过）；其余模块待迁                                                                   |
-| T06  | 数据库迁移（Flyway 等）                                  | [~]  | 已引入 Flyway + `V1__baseline.sql`，新库初始化/现有库 baseline 均在真实 MySQL 8.0.42 验证通过（见 `docs/ACCEPTANCE.md`）；SchemaInitializer 逐条转 V2+ 待后续                 |
-| T07  | 拆 Node `server.mjs`                                     | [ ]  | 2730 行；保留查询/代理/限流/冷却/取消/重试行为                                                                                                                                |
-| T08  | 拆前端大页面与 `public/app.js`                           | [ ]  | `BusinessCustomerPage.vue` 11612 行、`AdminDashboard.vue` 5592 行、`App.vue` 3227 行、`app.js` 9450 行                                                                        |
-| T09  | 拆装箱 `packingWorker.js`                                | [ ]  | 7180 行；保持结果/超时/取消/恢复/3D/报告兼容                                                                                                                                  |
-| T10  | Docker 与部署整理                                        | [~]  | 已加 backend 健康检查、前端依赖 backend 健康、镜像内 curl；新增 `scripts/backup.sh                                                                                            | deploy.sh | rollback.sh`；`docker compose config` 通过；容器实跑待 Docker 引擎 |
-| T11  | 接通 CI                                                  | [~]  | 已交付 `.workflow/ci.yml`（Gitee Go 实际语法）+ 本地同源命令；远端触发需仓库流水线/Runner 权限（见 `docs/CI.md`）                                                             |
-| T12  | 本地验收（真实 MySQL + Docker + 浏览器）                 | [~]  | 见 `docs/ACCEPTANCE.md`：真实 MySQL 8.0.42 + 后端 API + MyBatis + Flyway + 追踪服务已验证；Docker/浏览器/回滚演练待引擎                                                       |
-| T13  | 更新线上                                                 | [ ]  | 需服务器/发布权限与备份条件（见第 7 节）                                                                                                                                      |
+| 编号 | 任务                                                     | 状态 | 备注                                                                                                                                                                                                             |
+| ---- | -------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T01  | 接手并确认基线                                           | [x]  | 第一批已保存 `8368f97`；本文即模块/流程/任务记录；线上访问信息仍在第 7 节列出                                                                                                                                    |
+| T02  | 工程规范（格式/Lint/类型/统一命令）                      | [x]  | 见 `docs/ENGINEERING.md`：Prettier+ESLint 变更棘轮、`tsc --noEmit`、Checkstyle 新包门、`verify.mjs` 增 quality/typecheck                                                                                         |
+| T03  | 回归测试（登录/权限/客户/交接/票单/快照/附件/追踪/装箱） | [~]  | 见 `docs/TEST_MATRIX.md`；新增 HTTP 角色鉴权矩阵（7 项，后端 208 项）；附件/快照/回滚沿用既有用例；前端页面级仍待 T08                                                                                            |
+| T04  | 拆 Java 大 Service（客户、交接、代理、票单、快照、附件） | [~]  | 批次1 共享支撑+代理域；批次2 共享客户查询/访问判定；批次3 交接域；批次4 代理-客户关联；批次5 客户建档/生命周期 `CustomerProfileService`；`BusinessCustomerService` 5226→3397 行，208 项全绿；票单绑定/快照待继续 |
+| T05  | JdbcTemplate → MyBatis 逐模块迁移                        | [~]  | 已迁：客户目录、海外代理（含代理-客户关联，共 22 条语句，`OverseaAgentMapper`，真库冒烟通过）；其余模块待迁                                                                                                      |
+| T06  | 数据库迁移（Flyway 等）                                  | [~]  | 已引入 Flyway + `V1__baseline.sql`，新库初始化/现有库 baseline 均在真实 MySQL 8.0.42 验证通过（见 `docs/ACCEPTANCE.md`）；SchemaInitializer 逐条转 V2+ 待后续                                                    |
+| T07  | 拆 Node `server.mjs`                                     | [ ]  | 2730 行；保留查询/代理/限流/冷却/取消/重试行为                                                                                                                                                                   |
+| T08  | 拆前端大页面与 `public/app.js`                           | [ ]  | `BusinessCustomerPage.vue` 11612 行、`AdminDashboard.vue` 5592 行、`App.vue` 3227 行、`app.js` 9450 行                                                                                                           |
+| T09  | 拆装箱 `packingWorker.js`                                | [ ]  | 7180 行；保持结果/超时/取消/恢复/3D/报告兼容                                                                                                                                                                     |
+| T10  | Docker 与部署整理                                        | [~]  | 已加 backend 健康检查、前端依赖 backend 健康、镜像内 curl；新增 `scripts/backup.sh                                                                                                                               | deploy.sh | rollback.sh`；`docker compose config` 通过；容器实跑待 Docker 引擎 |
+| T11  | 接通 CI                                                  | [~]  | 已交付 `.workflow/ci.yml`（Gitee Go 实际语法）+ 本地同源命令；远端触发需仓库流水线/Runner 权限（见 `docs/CI.md`）                                                                                                |
+| T12  | 本地验收（真实 MySQL + Docker + 浏览器）                 | [~]  | 见 `docs/ACCEPTANCE.md`：真实 MySQL 8.0.42 + 后端 API + MyBatis + Flyway + 追踪服务已验证；Docker/浏览器/回滚演练待引擎                                                                                          |
+| T13  | 更新线上                                                 | [ ]  | 需服务器/发布权限与备份条件（见第 7 节）                                                                                                                                                                         |
 
 ## 7. 缺少的条件（阻塞项）
 

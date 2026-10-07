@@ -110,6 +110,8 @@
             **/customer/CustomerLookupService.java,
             **/customer/CustomerRecord.java
             **/customer/CustomerHandoverService.java
+            **/customer/CustomerProfileService.java
+            **/customer/CustomerShipmentAccessPolicy.java
           </includes>
         </configuration>
         <executions>

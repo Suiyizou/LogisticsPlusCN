@@ -56,6 +56,11 @@ public class CustomerInputRules {
     }
   }
 
+  /** 大写代码类字段的通用规范化（承运人、参考类型、状态、身份等）。 */
+  public String normalizeCode(String value, String fallback) {
+    return value == null || value.isBlank() ? fallback : value.trim().toUpperCase(java.util.Locale.ROOT);
+  }
+
   /** 删除账号时为登录名生成不可复用后缀，调用方已保证幂等由 SQL 条件负责。 */
   public String deletedUsername(String accountType, long id) {
     String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);

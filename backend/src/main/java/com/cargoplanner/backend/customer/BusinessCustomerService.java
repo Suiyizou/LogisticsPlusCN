@@ -2,10 +2,8 @@ package com.cargoplanner.backend.customer;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.PasswordHasher;
-import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
-import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
 import com.cargoplanner.backend.customer.dto.CustomerDirectoryResponse;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -16,7 +14,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -50,9 +47,6 @@ public class BusinessCustomerService {
   // Container numbers are reusable across voyages and therefore cannot be an authority key.
   private static final List<String> REFERENCE_TYPES = List.of("BOOKING", "BILLOFLADING");
   private static final List<String> CARRIERS = List.of("COSCO", "CMA");
-  private static final SecureRandom CREDENTIAL_RANDOM = new SecureRandom();
-  private static final String PASSWORD_ALPHABET =
-      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
 
   private final JdbcTemplate jdbcTemplate;
   private final CustomerTokenCodec tokenCodec;
@@ -65,6 +59,8 @@ public class BusinessCustomerService {
   private final OverseaAgentService overseaAgentService;
   private final CustomerLookupService lookupService;
   private final CustomerHandoverService handoverService;
+  private final CustomerShipmentAccessPolicy accessPolicy;
+  private final CustomerProfileService profileService;
 
   public BusinessCustomerService(
       JdbcTemplate jdbcTemplate,
@@ -77,7 +73,9 @@ public class BusinessCustomerService {
       CustomerAuditService auditService,
       OverseaAgentService overseaAgentService,
       CustomerLookupService lookupService,
-      CustomerHandoverService handoverService
+      CustomerHandoverService handoverService,
+      CustomerShipmentAccessPolicy accessPolicy,
+      CustomerProfileService profileService
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
@@ -90,6 +88,8 @@ public class BusinessCustomerService {
     this.overseaAgentService = overseaAgentService;
     this.lookupService = lookupService;
     this.handoverService = handoverService;
+    this.accessPolicy = accessPolicy;
+    this.profileService = profileService;
   }
 
   public CustomerDirectoryResponse list(AuthenticatedUser actor) {
@@ -146,89 +146,15 @@ public class BusinessCustomerService {
   }
 
   public Map<String, Object> get(String customerPublicId, AuthenticatedUser actor) {
-    return customerMetadataWithEmployee(requireAccessibleCustomer(customerPublicId, actor));
+    return profileService.get(customerPublicId, actor);
   }
 
-  @Transactional
   public Map<String, Object> create(
       CreateCustomerRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    String username = normalizeUsername(request == null ? null : request.username());
-    String password = normalizePassword(request == null ? null : request.password());
-    String displayName = normalizeDisplayName(
-        request == null || request.displayName() == null || request.displayName().isBlank()
-            ? username
-            : request.displayName()
-    );
-    String clientCodeRaw = normalizeOptionalClientCode(request == null ? null : request.clientCode());
-    final String clientCode;
-    final String customerCodeHash;
-    final String customerCodePrefix;
-    final String customerCodeMode;
-    if (clientCodeRaw != null && !clientCodeRaw.isBlank()) {
-      clientCode = clientCodeRaw;
-      customerCodeHash = tokenCodec.hash(clientCode);
-      customerCodePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
-      customerCodeMode = "MANUAL";
-    } else {
-      GeneratedCustomerCode generated = tokenCodec.newCustomerCode();
-      clientCode = generated.plainText();
-      customerCodeHash = generated.hash();
-      customerCodePrefix = generated.prefix();
-      customerCodeMode = "RANDOM";
-    }
-    String partyRole = normalizePartyRole(
-        request == null ? null : request.partyRole(), "CONSIGNEE"
-    );
-    String remarkRaw = request == null || request.remark() == null || request.remark().isBlank()
-        ? null
-        : request.remark().trim();
-    final String remark = remarkRaw != null && remarkRaw.length() > 500
-        ? remarkRaw.substring(0, 500)
-        : remarkRaw;
-    PasswordHash passwordHash = passwordHasher.hash(password);
-    String publicId = UUID.randomUUID().toString();
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    try {
-      jdbcTemplate.update(connection -> {
-        PreparedStatement statement = connection.prepareStatement(
-            """
-            INSERT INTO cp_customers (
-              public_id, username, display_name, client_code, party_role,
-              password_salt, password_hash, password_iterations,
-              customer_code_hash, customer_code_prefix, customer_code_mode,
-              provisioning_source, status, remark, created_by, responsible_agent_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'ACTIVE', ?, ?, ?)
-            """,
-            Statement.RETURN_GENERATED_KEYS
-        );
-        statement.setString(1, publicId);
-        statement.setString(2, username);
-        statement.setString(3, displayName);
-        statement.setString(4, clientCode);
-        statement.setString(5, partyRole);
-        statement.setString(6, passwordHash.salt());
-        statement.setString(7, passwordHash.hash());
-        statement.setInt(8, passwordHash.iterations());
-        statement.setString(9, customerCodeHash);
-        statement.setString(10, customerCodePrefix);
-        statement.setString(11, customerCodeMode);
-        statement.setString(12, remark);
-        statement.setLong(13, actor.id());
-        statement.setLong(14, actor.id());
-        return statement;
-      }, keyHolder);
-    } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
-    }
-    CustomerRecord customer = requireManaged(publicId, actor);
-    audit(actor, "CREATE_CUSTOMER", customer.id(), "Created customer " + username, ipAddress);
-    Map<String, Object> response = new LinkedHashMap<>(customerMetadata(customer));
-    response.put("customerCode", clientCode);
-    return response;
+    return profileService.create(request, actor, ipAddress);
   }
 
   public Map<String, Object> batchCreate(
@@ -236,177 +162,16 @@ public class BusinessCustomerService {
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    requireManager(actor);
-    List<CustomerBatchImportItem> items = request == null || request.items() == null
-        ? List.of()
-        : request.items();
-    if (items.isEmpty()) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "At least one customer row is required");
-    }
-    if (items.size() > 500) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "A customer import cannot exceed 500 rows");
-    }
-    List<Map<String, Object>> results = new ArrayList<>();
-    int createdCount = 0;
-    for (int index = 0; index < items.size(); index++) {
-      CustomerBatchImportItem item = items.get(index);
-      int rowNumber = item != null && item.rowNumber() != null
-          ? item.rowNumber()
-          : index + 2;
-      String suppliedPassword = item == null ? null : item.password();
-      String password = suppliedPassword == null || suppliedPassword.isBlank()
-          ? generatePassword()
-          : suppliedPassword;
-      String username = item == null ? null : item.username();
-      String displayName = item == null || item.displayName() == null || item.displayName().isBlank()
-          ? username
-          : item.displayName();
-      String clientCode = item == null ? null : item.clientCode();
-      String partyRole = item == null || item.partyRole() == null || item.partyRole().isBlank()
-          ? "CONSIGNEE"
-          : item.partyRole();
-      String remark = item == null ? null : item.remark();
-      Map<String, Object> row = new LinkedHashMap<>();
-      row.put("rowNumber", rowNumber);
-      row.put("username", username == null ? "" : username.trim());
-      row.put("displayName", displayName == null ? "" : displayName.trim());
-      row.put("clientCode", clientCode == null ? "" : clientCode.trim().toUpperCase(Locale.ROOT));
-      row.put("partyRole", partyRole);
-      try {
-        Map<String, Object> created = create(
-            new CreateCustomerRequest(
-                username,
-                password,
-                displayName,
-                partyRole,
-                clientCode,
-                remark
-            ),
-            actor,
-            ipAddress
-        );
-        row.put("status", "CREATED");
-        row.put("customer", created);
-        row.put("password", password);
-        row.put("customerCode", created.get("customerCode"));
-        createdCount++;
-      } catch (ApiException error) {
-        row.put("status", "FAILED");
-        row.put("message", error.getMessage());
-      }
-      results.add(row);
-    }
-    Map<String, Object> response = new LinkedHashMap<>();
-    response.put("items", results);
-    response.put("total", results.size());
-    response.put("created", createdCount);
-    response.put("failed", results.size() - createdCount);
-    response.put("sourceFileName", ClientInfo.trim(
-        request == null ? null : request.sourceFileName(), 255
-    ));
-    return response;
+    return profileService.batchCreate(request, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> update(
       String customerPublicId,
       UpdateCustomerRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord existing = requireManaged(customerPublicId, actor);
-    String username = request == null || request.username() == null || request.username().isBlank()
-        ? existing.username()
-        : normalizeUsername(request.username());
-    String displayName = request == null || request.displayName() == null || request.displayName().isBlank()
-        ? existing.displayName()
-        : normalizeDisplayName(request.displayName());
-    String requestedClientCode = request == null ? null : request.clientCode();
-    String clientCode = requestedClientCode == null
-        ? existing.clientCode()
-        : requestedClientCode.trim().equalsIgnoreCase(existing.clientCode())
-            ? existing.clientCode()
-            : normalizeOptionalClientCode(requestedClientCode);
-    String partyRole = normalizePartyRole(
-        request == null ? null : request.partyRole(), existing.partyRole()
-    );
-    String status = normalizeStatus(request == null ? null : request.status(), existing.status());
-    String newRemark = request == null || request.remark() == null
-        ? existing.remark()
-        : (request.remark().isBlank() ? null : request.remark().trim());
-    if (newRemark != null && newRemark.length() > 500) {
-      newRemark = newRemark.substring(0, 500);
-    }
-    try {
-      boolean codeChanged = clientCode != null && !clientCode.equals(existing.clientCode());
-      if (codeChanged) {
-        String codeHash = tokenCodec.hash(clientCode);
-        String codePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
-        jdbcTemplate.update(
-            """
-            UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ?,
-              customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'MANUAL'
-            WHERE id = ?
-            """,
-            username,
-            displayName,
-            clientCode,
-            partyRole,
-            status,
-            newRemark,
-            codeHash,
-            codePrefix,
-            existing.id()
-        );
-      } else {
-        jdbcTemplate.update(
-            "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ? WHERE id = ?",
-            username,
-            displayName,
-            clientCode,
-            partyRole,
-            status,
-            newRemark,
-            existing.id()
-        );
-      }
-      // The logistics role is a customer identity attribute in this model. Keep all existing
-      // shipment relationships consistent when the business user changes that identity.
-      if (!partyRole.equals(existing.partyRole())) {
-        ensureRoleAvailableForExistingBindings(existing.id(), partyRole);
-        jdbcTemplate.update(
-            "UPDATE cp_customer_shipment_access SET relationship_role = ? WHERE customer_id = ?",
-            partyRole,
-            existing.id()
-        );
-        jdbcTemplate.update(
-            """
-            DELETE FROM cp_oversea_agent_shipment_scopes
-            WHERE oversea_agent_customer_id = ? OR represented_customer_id = ?
-            """,
-            existing.id(),
-            existing.id()
-        );
-        if ("OVERSEA_AGENT".equals(partyRole)) {
-          jdbcTemplate.update(
-              "DELETE FROM cp_oversea_agent_customers WHERE customer_id = ?",
-              existing.id()
-          );
-        } else {
-          jdbcTemplate.update(
-              "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
-              existing.id()
-          );
-        }
-        syncOverseaAgentScopesForCustomer(existing.id());
-      }
-      if (codeChanged) revokeSessions(existing.id());
-    } catch (DuplicateKeyException error) {
-      throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
-    }
-    if (!"ACTIVE".equals(status)) revokeSessions(existing.id());
-    audit(actor, "UPDATE_CUSTOMER", existing.id(), "Updated customer " + username, ipAddress);
-    return customerMetadata(requireManaged(customerPublicId, actor));
+    return profileService.update(customerPublicId, request, actor, ipAddress);
   }
 
   @Transactional
@@ -588,108 +353,38 @@ public class BusinessCustomerService {
     return handoverService.rejectCustomerHandover(requestPublicId, decision, admin, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> disable(
       String customerPublicId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    jdbcTemplate.update(
-        "UPDATE cp_customers SET status = 'DISABLED', updated_at = CURRENT_TIMESTAMP(6) WHERE id = ?",
-        customer.id()
-    );
-    revokeSessions(customer.id());
-    audit(actor, "DISABLE_CUSTOMER", customer.id(), "Disabled customer " + customer.username(), ipAddress);
-    return Map.of("disabled", true, "id", customer.publicId(), "status", "DISABLED");
+    return profileService.disable(customerPublicId, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> delete(
       String customerPublicId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    PasswordHash deletedPassword = passwordHasher.hash(UUID.randomUUID().toString());
-    GeneratedCustomerCode deletedCode = tokenCodec.newCustomerCode();
-    jdbcTemplate.update(
-        """
-        UPDATE cp_customers
-        SET username = ?, client_code = NULL, status = 'DELETED',
-            password_salt = ?, password_hash = ?, password_iterations = ?,
-            customer_code_hash = ?, customer_code_prefix = ?,
-            customer_code_mode = 'RANDOM', updated_at = CURRENT_TIMESTAMP(6)
-        WHERE id = ? AND status <> 'DELETED'
-        """,
-        deletedUsername("customer", customer.id()),
-        deletedPassword.salt(),
-        deletedPassword.hash(),
-        deletedPassword.iterations(),
-        deletedCode.hash(),
-        deletedCode.prefix(),
-        customer.id()
-    );
-    revokeSessions(customer.id());
-    if ("OVERSEA_AGENT".equals(customer.partyRole())) {
-      jdbcTemplate.update(
-          "DELETE FROM cp_oversea_agent_customers WHERE oversea_agent_customer_id = ?",
-          customer.id()
-      );
-    }
-    audit(actor, "DELETE_CUSTOMER", customer.id(), "Deleted customer " + customer.username(), ipAddress);
-    return Map.of("deleted", true, "id", customer.publicId(), "username", customer.username());
+    return profileService.delete(customerPublicId, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> resetCode(
       String customerPublicId,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    GeneratedCustomerCode code = tokenCodec.newCustomerCode();
-    jdbcTemplate.update(
-        "UPDATE cp_customers SET customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'RANDOM' WHERE id = ?",
-        code.hash(),
-        code.prefix(),
-        customer.id()
-    );
-    revokeSessions(customer.id());
-    audit(actor, "RESET_CUSTOMER_CODE", customer.id(), "Reset customer code", ipAddress);
-    Map<String, Object> response = new LinkedHashMap<>(
-        customerMetadata(requireManaged(customerPublicId, actor))
-    );
-    response.put("customerCode", code.plainText());
-    return response;
+    return profileService.resetCode(customerPublicId, actor, ipAddress);
   }
 
-  @Transactional
   public Map<String, Object> resetPassword(
       String customerPublicId,
       UpdateCustomerPasswordRequest request,
       AuthenticatedUser actor,
       String ipAddress
   ) {
-    CustomerRecord customer = requireManaged(customerPublicId, actor);
-    String password = normalizePassword(request == null ? null : request.password());
-    PasswordHash passwordHash = passwordHasher.hash(password);
-    jdbcTemplate.update(
-        """
-        UPDATE cp_customers
-        SET password_salt = ?, password_hash = ?, password_iterations = ?
-        WHERE id = ?
-        """,
-        passwordHash.salt(),
-        passwordHash.hash(),
-        passwordHash.iterations(),
-        customer.id()
-    );
-    revokeSessions(customer.id());
-    audit(actor, "RESET_CUSTOMER_PASSWORD", customer.id(), "Reset customer password", ipAddress);
-    return Map.of("passwordReset", true, "id", customer.publicId());
+    return profileService.resetPassword(customerPublicId, request, actor, ipAddress);
   }
-
   public Map<String, Object> listOverseaAgentCustomers(
       String overseaAgentPublicId,
       AuthenticatedUser actor
@@ -3448,42 +3143,9 @@ public class BusinessCustomerService {
 
 
   private void ensureShipmentRoleAvailable(long shipmentId, long customerId, String role) {
-    if (!CustomerLookupService.UNIQUE_PARTY_ROLES.contains(role)) return;
-    Integer conflictCount = jdbcTemplate.queryForObject(
-        """
-        SELECT COUNT(*) FROM cp_customer_shipment_access
-        WHERE shipment_id = ? AND relationship_role = ? AND customer_id <> ?
-        """,
-        Integer.class,
-        shipmentId,
-        role,
-        customerId
-    );
-    if (conflictCount != null && conflictCount > 0) {
-      throw new ApiException(HttpStatus.CONFLICT, "Shipment already has a " + role + " customer");
-    }
+    accessPolicy.ensureShipmentRoleAvailable(shipmentId, customerId, role);
   }
 
-  private void ensureRoleAvailableForExistingBindings(long customerId, String role) {
-    if (!CustomerLookupService.UNIQUE_PARTY_ROLES.contains(role)) return;
-    Integer conflictCount = jdbcTemplate.queryForObject(
-        """
-        SELECT COUNT(*)
-        FROM cp_customer_shipment_access own_access
-        JOIN cp_customer_shipment_access other_access
-          ON other_access.shipment_id = own_access.shipment_id
-         AND other_access.customer_id <> own_access.customer_id
-         AND other_access.relationship_role = ?
-        WHERE own_access.customer_id = ?
-        """,
-        Integer.class,
-        role,
-        customerId
-    );
-    if (conflictCount != null && conflictCount > 0) {
-      throw new ApiException(HttpStatus.CONFLICT, "One or more shipments already have a " + role + " customer");
-    }
-  }
 
   private BusinessShipmentRecord requireBusinessShipment(long shipmentId) {
     List<BusinessShipmentRecord> records = jdbcTemplate.query(
@@ -3516,22 +3178,6 @@ public class BusinessCustomerService {
     return inputRules.normalizeUsername(value);
   }
 
-  private String normalizePassword(String value) {
-    if (value == null || value.length() < 8 || value.length() > 128) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Customer password must contain 8-128 characters"
-      );
-    }
-    if (!value.chars().anyMatch(Character::isLetter)
-        || !value.chars().anyMatch(Character::isDigit)) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Customer password must contain at least one letter and one number"
-      );
-    }
-    return value;
-  }
 
   private void validateInternalPassword(String password) {
     inputRules.validateInternalPassword(password);
@@ -3541,58 +3187,13 @@ public class BusinessCustomerService {
     return inputRules.normalizeDisplayName(value);
   }
 
-  private String normalizeOptionalClientCode(String value) {
-    if (value == null || value.isBlank()) return null;
-    String normalized = value.trim().toUpperCase(Locale.ROOT);
-    if (!normalized.matches("[A-Z0-9._-]{6,10}")) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Client Code must contain 6-10 letters, numbers, dots, underscores, or hyphens"
-      );
-    }
-    return normalized;
-  }
 
-  private String generatePassword() {
-    StringBuilder value = new StringBuilder("Aa1!");
-    while (value.length() < 18) {
-      value.append(PASSWORD_ALPHABET.charAt(CREDENTIAL_RANDOM.nextInt(PASSWORD_ALPHABET.length())));
-    }
-    for (int index = value.length() - 1; index > 0; index--) {
-      int other = CREDENTIAL_RANDOM.nextInt(index + 1);
-      char swap = value.charAt(index);
-      value.setCharAt(index, value.charAt(other));
-      value.setCharAt(other, swap);
-    }
-    return value.toString();
-  }
 
   private String deletedUsername(String accountType, long id) {
     return inputRules.deletedUsername(accountType, id);
   }
 
-  private String normalizeStatus(String value, String fallback) {
-    String normalized = normalizeCode(value, fallback);
-    if (!"ACTIVE".equals(normalized) && !"DISABLED".equals(normalized)) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Customer status must be ACTIVE or DISABLED");
-    }
-    return normalized;
-  }
 
-  private String normalizePartyRole(String value, String fallback) {
-    String normalized = normalizeCode(value, fallback);
-    if ("AGENT".equals(normalized)) normalized = "OVERSEA_AGENT";
-    if (normalized == null
-        || (!"OVERSEA_AGENT".equals(normalized)
-        && !"SHIPPER".equals(normalized)
-        && !"CONSIGNEE".equals(normalized))) {
-      throw new ApiException(
-          HttpStatus.BAD_REQUEST,
-          "Customer party role must be SHIPPER or CONSIGNEE; OVERSEA_AGENT is accepted only for legacy records"
-      );
-    }
-    return normalized;
-  }
 
   private String normalizeCarrier(String value) {
     String normalized = normalizeCode(value, "COSCO");
@@ -3740,7 +3341,7 @@ public class BusinessCustomerService {
   }
 
   private String normalizeCode(String value, String fallback) {
-    return value == null || value.isBlank() ? fallback : value.trim().toUpperCase(Locale.ROOT);
+    return inputRules.normalizeCode(value, fallback);
   }
 
   private String normalizeReference(String value) {

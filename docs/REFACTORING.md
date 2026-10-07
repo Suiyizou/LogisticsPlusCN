@@ -205,6 +205,15 @@ lockCustomer` 与 `UNIQUE_PARTY_ROLES` 共享，避免跨服务复制行锁逻�
 `BusinessCustomerService` 3899 → 3796 行；代理公开方法改为薄委托，接口与事务边界不变。
 H2 全量 208 项通过，Checkstyle 通过。
 
+### 已完成：批次 5（客户建档/生命周期域）
+
+新增 `CustomerProfileService`（508 行）：客户详情、单个/批量创建、编辑、启用/停用、删除/归档、
+重置客户码与密码，以及客户输入规则（状态/身份/客户码/密码）与口令生成。新增共享
+`CustomerShipmentAccessPolicy`（同票单角色唯一性校验）与 `CustomerInputRules.normalizeCode`。
+
+`BusinessCustomerService` 3796 → 3397 行（较初始 5226 减少 1829 行）；公开方法改为薄委托，
+接口与 `@Transactional` 边界不变。H2 全量 208 项通过，Checkstyle 通过。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到

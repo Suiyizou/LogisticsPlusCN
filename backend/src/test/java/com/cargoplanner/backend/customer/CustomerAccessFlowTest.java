@@ -374,6 +374,15 @@ class CustomerAccessFlowTest {
     CustomerInputRules inputRules = new CustomerInputRules();
     CustomerAuditService auditService = new CustomerAuditService(jdbcTemplate);
     CustomerLookupService lookupService = new CustomerLookupService(jdbcTemplate, accessGuard);
+    CustomerShipmentAccessPolicy accessPolicy = new CustomerShipmentAccessPolicy(jdbcTemplate);
+    OverseaAgentService overseaAgentService =
+        new OverseaAgentService(
+            CustomerDirectoryTestSupport.overseaAgentMapper(dataSource),
+            passwordHasher,
+            accessGuard,
+            inputRules,
+            auditService,
+            lookupService);
     customerService =
         new BusinessCustomerService(
             jdbcTemplate,
@@ -384,15 +393,20 @@ class CustomerAccessFlowTest {
             accessGuard,
             inputRules,
             auditService,
-            new OverseaAgentService(
-                CustomerDirectoryTestSupport.overseaAgentMapper(dataSource),
+            overseaAgentService,
+            lookupService,
+            new CustomerHandoverService(jdbcTemplate, accessGuard, auditService, lookupService),
+            accessPolicy,
+            new CustomerProfileService(
+                jdbcTemplate,
+                tokenCodec,
                 passwordHasher,
                 accessGuard,
                 inputRules,
+                lookupService,
+                accessPolicy,
                 auditService,
-                lookupService),
-            lookupService,
-            new CustomerHandoverService(jdbcTemplate, accessGuard, auditService, lookupService));
+                overseaAgentService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(
