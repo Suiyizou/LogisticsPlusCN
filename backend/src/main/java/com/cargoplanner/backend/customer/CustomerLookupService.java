@@ -22,6 +22,9 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CustomerLookupService {
+  /** 可绑定票单的客户身份（验证、路由共用）。 */
+  public static final List<String> UNIQUE_PARTY_ROLES = List.of("SHIPPER", "CONSIGNEE");
+
   private final JdbcTemplate jdbcTemplate;
   private final CustomerAccessGuard accessGuard;
 
@@ -194,6 +197,22 @@ public class CustomerLookupService {
     value.put("overseaAgentUsername", assignment == null ? null : assignment.get("username"));
     value.put("overseaAgentDisplayName", assignment == null ? null : assignment.get("displayName"));
     return value;
+  }
+
+  /** 行锁：冲突检测期间锁定票单。 */
+  public void lockShipment(long shipmentId) {
+    jdbcTemplate.queryForObject(
+        "SELECT id FROM cp_shipments WHERE id = ? FOR UPDATE", Long.class, shipmentId);
+  }
+
+  /** 行锁：按客户 public_id 锁定客户，不存在则 404。 */
+  public void lockCustomer(String customerPublicId) {
+    List<Long> ids =
+        jdbcTemplate.query(
+            "SELECT id FROM cp_customers WHERE public_id = ? FOR UPDATE",
+            (rs, rowNumber) -> rs.getLong(1),
+            customerPublicId);
+    if (ids.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "Customer not found");
   }
 
   public void revokeSessions(long customerId) {

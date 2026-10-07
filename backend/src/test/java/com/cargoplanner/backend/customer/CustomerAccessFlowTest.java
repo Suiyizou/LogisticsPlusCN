@@ -373,6 +373,7 @@ class CustomerAccessFlowTest {
     CustomerAccessGuard accessGuard = new CustomerAccessGuard();
     CustomerInputRules inputRules = new CustomerInputRules();
     CustomerAuditService auditService = new CustomerAuditService(jdbcTemplate);
+    CustomerLookupService lookupService = new CustomerLookupService(jdbcTemplate, accessGuard);
     customerService =
         new BusinessCustomerService(
             jdbcTemplate,
@@ -389,7 +390,8 @@ class CustomerAccessFlowTest {
                 accessGuard,
                 inputRules,
                 auditService),
-            new CustomerLookupService(jdbcTemplate, accessGuard));
+            lookupService,
+            new CustomerHandoverService(jdbcTemplate, accessGuard, auditService, lookupService));
     authService = new CustomerAuthService(jdbcTemplate, tokenCodec, passwordHasher, 24);
     shipmentAccessService = new ShipmentAccessService(jdbcTemplate);
     business = new AuthenticatedUser(

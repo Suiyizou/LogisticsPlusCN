@@ -109,6 +109,7 @@
             **/customer/OverseaAgentService.java,
             **/customer/CustomerLookupService.java,
             **/customer/CustomerRecord.java
+            **/customer/CustomerHandoverService.java
           </includes>
         </configuration>
         <executions>

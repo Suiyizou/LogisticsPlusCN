@@ -183,6 +183,17 @@ Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行�
 这是拆分交接、绑定、客户建档的前置：这些域都依赖“按角色取客户”的同一套逻辑。
 `BusinessCustomerService` 4873 → 4707 行，后端 208 项测试全绿。
 
+### 已完成：批次 3（客户交接域）
+
+新增 `CustomerHandoverService`（907 行）：直接交接 `handoverCustomers`、交接列表/详情、
+审核批准/驳回，以及交接请求查询/校验/审计。共享能力通过 `CustomerAccessGuard`、
+`CustomerAuditService`、`CustomerLookupService` 组合注入；新增 `CustomerLookupService.lockShipment/
+lockCustomer` 与 `UNIQUE_PARTY_ROLES` 共享，避免跨服务复制行锁逻辑。
+
+`BusinessCustomerService` 4707 → 3899 行（较初始 5226 行减少 1327 行），交接公开方法改为
+薄委托，Controller 与接口签名、`@Transactional` 边界均不变。H2 全量 208 项通过，
+交接的三个既有用例（直接交接、不可重复审核、校验失败回滚）继续通过，Checkstyle 通过。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
