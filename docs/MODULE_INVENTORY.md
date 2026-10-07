@@ -20,7 +20,7 @@
 
 | 检查                            | 命令                               | 结果                                                                                                                              |
 | ------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 后端 JUnit                      | `mvn -q test`（backend）           | 26 个测试类、207 项通过，0 失败 0 错误 0 跳过                                                                                     |
+| 后端 JUnit                      | `mvn -q test`（backend）           | 26 个测试类、208 项通过，0 失败 0 错误 0 跳过                                                                                     |
 | Node 追踪                       | `npm test`（tracking-service）     | 103 项通过，0 失败                                                                                                                |
 | 装箱回归                        | `npm run test:packing`（frontend） | 4 组脚本                                                                                                                          |
 | 前端                            | `npm run build`（frontend）        | i18n 扫描 + Vite 生产构建                                                                                                         |
@@ -167,8 +167,8 @@
 | ---- | -------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | T01  | 接手并确认基线                                           | [x]  | 第一批已保存 `8368f97`；本文即模块/流程/任务记录；线上访问信息仍在第 7 节列出                                                                                                  |
 | T02  | 工程规范（格式/Lint/类型/统一命令）                      | [x]  | 见 `docs/ENGINEERING.md`：Prettier+ESLint 变更棘轮、`tsc --noEmit`、Checkstyle 新包门、`verify.mjs` 增 quality/typecheck                                                       |
-| T03  | 回归测试（登录/权限/客户/交接/票单/快照/附件/追踪/装箱） | [~]  | 见 `docs/TEST_MATRIX.md`；新增 HTTP 角色鉴权矩阵（7 项，后端 207 项）；附件/快照/回滚沿用既有用例；前端页面级仍待 T08                                                          |
-| T04  | 拆 Java 大 Service（客户、交接、代理、票单、快照、附件） | [~]  | 批次1 共享支撑+代理域；批次2 共享客户查询/访问判定 `CustomerLookupService`+`CustomerRecord`；`BusinessCustomerService` 5226→4707 行，207 项全绿；交接/绑定/快照/客户建构待继续 |
+| T03  | 回归测试（登录/权限/客户/交接/票单/快照/附件/追踪/装箱） | [~]  | 见 `docs/TEST_MATRIX.md`；新增 HTTP 角色鉴权矩阵（7 项，后端 208 项）；附件/快照/回滚沿用既有用例；前端页面级仍待 T08                                                          |
+| T04  | 拆 Java 大 Service（客户、交接、代理、票单、快照、附件） | [~]  | 批次1 共享支撑+代理域；批次2 共享客户查询/访问判定 `CustomerLookupService`+`CustomerRecord`；`BusinessCustomerService` 5226→4707 行，208 项全绿；交接/绑定/快照/客户建构待继续 |
 | T05  | JdbcTemplate → MyBatis 逐模块迁移                        | [~]  | 已迁：客户目录、海外代理（读+写 18 条语句，`OverseaAgentMapper`，真库冒烟通过）；其余模块待迁                                                                                  |
 | T06  | 数据库迁移（Flyway 等）                                  | [~]  | 已引入 Flyway + `V1__baseline.sql`，新库初始化/现有库 baseline 均在真实 MySQL 8.0.42 验证通过（见 `docs/ACCEPTANCE.md`）；SchemaInitializer 逐条转 V2+ 待后续                  |
 | T07  | 拆 Node `server.mjs`                                     | [ ]  | 2730 行；保留查询/代理/限流/冷却/取消/重试行为                                                                                                                                 |
@@ -200,3 +200,26 @@
 - 不提交密码、Token、Cookie、代理账号、加密密钥。
 - 测试不得连接生产数据库或修改线上业务数据。
 - 批次开始时更新本表的“状态”，批结束时在 `docs/REFACTORING.md` 追加验证记录。
+
+## 9. 复查问题修复记录（R01–R09）
+
+针对 `daily/output/shipment-refactor-review-20261007.md` 的 9 个阻断项：
+
+| 编号 | 问题                                   | 修复                                                                                                    | 验证                                                                            |
+| ---- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| R01  | 后端镜像缺 Checkstyle 配置导致构建失败 | `docker/backend.Dockerfile` 复制 `backend/config`                                                       | 复现 Docker 输入：无 config 失败、有 config 成功出 jar                          |
+| R02  | 部署失败回滚指向新版本                 | `deploy.sh` 先记录 `CURRENT_REF` 并在切换代码前备份                                                     | 代码顺序审查 + 脚本语法/模拟                                                    |
+| R03  | 回滚不恢复旧镜像                       | 不可变 `IMAGE_TAG`；回滚停写、恢复数据后用备份记录的镜像标签或重建旧代码                                | `docker compose config` + 脚本审查；实跑待 Docker                               |
+| R04  | 把 `.env` 当脚本执行                   | `scripts/lib/common.sh:dotenv_value` 只按键取读，禁止 source                                            | 含空格/`#`/`$`/引号的探针通过                                                   |
+| R05  | 备份遗漏附件/工作区/公告图片           | 备份补齐 `shipment-files.tgz`、`workspace-files.tgz`、`checksums.sha256`；回滚增加恢复                  | 脚本实现；实跑待 Docker                                                         |
+| R06  | 质量门在 main 上漏检                   | `quality.mjs` 跳过=HEAD 基线、CI 回退 HEAD~1、取不到基线即失败；CI 传 `QUALITY_BASE_REF`、改用 `npm ci` | 三种场景复现：显式不可解析=2、CI 且基线=HEAD=2、origin/main=HEAD 时检查真实变更 |
+| R07  | Flyway 开关未传入容器                  | compose 增加 `SPRING_FLYWAY_ENABLED`，`.env.example` 补条目                                             | `docker compose config` 默认 true、宿主 false 时透传 false                      |
+| R08  | 脚本无可执行位                         | `git update-index --chmod=+x` 四个脚本 → `100755`                                                       | `git ls-files -s` 确认                                                          |
+| R09  | 代理重置口令可预测                     | `CustomerInputRules.generateTemporaryPassword()` 安全随机 16 位                                         | 后端测试全绿；旧格式无测试依赖                                                  |
+
+遗留（未在本批完成，需后续或权限/环境）：
+
+- Vue 组件未被类型检查覆盖；ESLint 仅 JS/MJS/CJS。
+- 真实 Spring 事务失败回滚测试、真实 MySQL 权限/并发用例。
+- MySQL 8.4 与 Docker 全栈、浏览器关键流程、备份/回滚真实演练。
+- Flyway 仅 V1，`SchemaInitializer` 结构变更尚未转为 V2+。

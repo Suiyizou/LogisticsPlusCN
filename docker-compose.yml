@@ -27,12 +27,14 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
-    image: cargo-planner-backend:0.1.0
+    image: cargo-planner-backend:${IMAGE_TAG:-0.1.0}
     container_name: cargo-planner-backend
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-cargo_planner}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-cargo_planner}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-cargo_planner_pwd}
+      # Flyway 开关必须显式传入容器；设置为 false 可跳过版本化迁移（演练/回退用）。
+      SPRING_FLYWAY_ENABLED: ${SPRING_FLYWAY_ENABLED:-true}
       APP_DEVICE_LIMIT_PER_USER: ${APP_DEVICE_LIMIT_PER_USER:-5}
       APP_CUSTOMER_SESSION_HOURS: ${APP_CUSTOMER_SESSION_HOURS:-24}
       APP_BOOTSTRAP_ADMIN_ENABLED: ${APP_BOOTSTRAP_ADMIN_ENABLED:-false}
@@ -99,7 +101,7 @@ services:
     build:
       context: ./tracking-service
       dockerfile: Dockerfile
-    image: cargo-platform-tracking:0.1.0
+    image: cargo-platform-tracking:${IMAGE_TAG:-0.1.0}
     container_name: cargo-platform-tracking
     environment:
       HOST: 0.0.0.0
@@ -153,7 +155,7 @@ services:
       dockerfile: docker/frontend.Dockerfile
       args:
         VITE_TRACKING_WORKBENCH_URL: ${VITE_TRACKING_WORKBENCH_URL:-/tracking/}
-    image: cargo-planner-frontend:0.1.0
+    image: cargo-planner-frontend:${IMAGE_TAG:-0.1.0}
     container_name: cargo-planner-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"

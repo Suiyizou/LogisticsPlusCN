@@ -96,6 +96,41 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void overseaAgentPasswordResetIsUnpredictableAndRevokesDevices() {
+    Map<String, Object> agent = customerService.createOverseaAgentEmployee(
+        new CreateOverseaAgentEmployeeRequest(
+            "agent.reset", "Agent Reset", "Strong!Pass2026"
+        ),
+        business,
+        "127.0.0.1"
+    );
+    long userId = ((Number) agent.get("id")).longValue();
+    jdbcTemplate.update(
+        "INSERT INTO cp_login_devices (user_id) VALUES (?)",
+        userId
+    );
+
+    String first = (String) customerService.resetOverseaAgentPassword(
+        userId, business, "127.0.0.1"
+    ).get("temporaryPassword");
+    String second = (String) customerService.resetOverseaAgentPassword(
+        userId, business, "127.0.0.1"
+    ).get("temporaryPassword");
+
+    assertThat(first)
+        .hasSizeBetween(12, 128)
+        .matches(".*[A-Za-z].*")
+        .matches(".*[0-9].*")
+        .isNotEqualTo("agent.reset!@#2026");
+    assertThat(second).isNotEqualTo(first);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_login_devices WHERE user_id = ?",
+        Integer.class,
+        userId
+    )).isZero();
+  }
+
+  @Test
   void customerHandoverCompletesDirectlyAndRetainsShipmentHistory() {
     Map<String, Object> created = customerService.create(
         new CreateCustomerRequest(

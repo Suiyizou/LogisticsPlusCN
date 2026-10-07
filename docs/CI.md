@@ -21,7 +21,34 @@ Gitee 控制台的“变量/凭据”。
      这些名称只作为占位；`ci.yml` 当前只构建镜像、不推送，因此可以暂不配置。
 5. 提交一次 `push` 或发起 PR，确认流水线被真实触发并跑绿。
 
-## 4. 必须缺少的信息 / 当前阻塞
+## 4. 质量门基线（修复复查 R06）
+
+旧实现只在 `origin/main...HEAD` 有差异时检查，当 CI 在 main 的新提交上运行时
+`origin/main` 就等于 `HEAD`，差集为空，质量门会静默退回只检查 `scripts/`，
+从而漏掉新增错误并返回成功。现已修正：
+
+- 优先使用 `QUALITY_BASE_REF`（CI 传入 push 的前一 SHA / PR 目标基线）；
+- 任何等于 `HEAD` 的候选基线都会被跳过；
+- CI 下退回 `HEAD~1`；仍取不到可信基线则直接失败（退出码 2），不回退到固定目录；
+- 显式 `QUALITY_BASE_REF` 无法解析时直接失败，不静默降级。
+
+本地对照（验证修复）：
+
+```sh
+QUALITY_BASE_REF=does-not-exist node scripts/quality.mjs   # 退出码 2
+CI=1 QUALITY_BASE_REF=HEAD node scripts/quality.mjs         # 退出码 2
+CI=1 node scripts/quality.mjs                               # 退回 HEAD~1，检查真实变更
+```
+
+Runner 必须能访问足够历史（非浅克隆），否则质量门会失败；也可显式传入正确基线。
+PR 建议传入目标分支的 merge-base。
+
+## 5. 依赖锁文件
+
+根目录已提交 `package-lock.json`，流水线使用 `npm ci --include=dev`；前端与追踪服务
+同样使用 `npm ci`。本地与 CI 的 Node / Java / MySQL 版本应保持一致。
+
+## 6. 必须缺少的信息 / 当前阻塞
 
 - 本机没有 Gitee 仓库的“流水线/变量/Runner”管理权限，**无法在此环境触发远端流水线**。
 - 需要仓库管理员提供：
@@ -32,13 +59,13 @@ Gitee 控制台的“变量/凭据”。
 在拿到上述权限前，本地等价的检查已可运行并通过：
 
 ```sh
-npm install --include=dev
+npm ci --include=dev
 node scripts/verify.mjs            # quality + typecheck + backend + tracking + packing + frontend
 ```
 
 `images` 阶段在 Runner 无 Docker 时可删除，不影响测试阶段。
 
-## 5. 与“只交付 YAML”的区别
+## 8. 与“只交付 YAML”的区别
 
 - CI 命令就是本地验证通过的同一套命令（见 `docs/ENGINEERING.md`）。
 - 流水线文件基于 Gitee Go 实际语法编写（`build@nodejs` / `build@maven` / `build@docker`），

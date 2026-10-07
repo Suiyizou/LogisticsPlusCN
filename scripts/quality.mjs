@@ -3,12 +3,18 @@
  * 渐进式质量门（format + lint）。
  *
  * 策略是“棘轮”：只检查相对基线发生变更的源码文件，避免把历史遗留的
- * 格式与规范问题一次性引爆。基线按以下优先级解析：
- *   1. 环境变量 QUALITY_BASE_REF
- *   2. origin/main
- *   3. 工作区当前变更（未提交）
- * 如果无法解析到任何 git 基线（例如没有 .git 的构建产物目录），则退回到
- * 本文件下方的 FALLBACK_TARGETS 目录清单。
+ * 格式与规范问题一次性引爆。
+ *
+ * 基线解析（按优先级）：
+ *   1. 环境变量 QUALITY_BASE_REF（CI 必须显式传入 push 的前一 SHA / PR 目标基线）
+ *   2. 环境变量 QUALITY_BASE_BRANCH
+ *   3. origin/main（且不能等于 HEAD）
+ *   4. CI 环境下退回 HEAD~1
+ * 规则：
+ *   - 显式传入的 QUALITY_BASE_REF 无法解析时直接失败（退出码 2），不做静默降级；
+ *   - 任何等于 HEAD 的候选基线都会被跳过，避免“基线=HEAD → 差集为空 → 漏检”；
+ *   - CI 下解析不到可信基线时失败，绝不缩小到固定目录或零文件；
+ *   - 仅本地非 CI 且完全取不到 git 基线时，才退回 FALLBACK_TARGETS。
  *
  * 失败返回非零退出码；Windows / Linux / macOS 行为一致。
  */
@@ -36,25 +42,75 @@ const PRETTIER_EXTENSIONS = new Set([
   ".md"
 ]);
 const ESLINT_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+const ZERO_SHA = /^0+$/;
+
+const CI =
+  Boolean(process.env.CI) ||
+  Boolean(process.env.GITHUB_ACTIONS) ||
+  Object.keys(process.env).some((key) => key.startsWith("GITEE") || key.startsWith("GITLAB"));
 
 function runGit(args) {
   return spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
 }
 
-function changedFilesFromGit() {
+function commitOf(ref) {
+  if (!ref || ZERO_SHA.test(ref)) return null;
+  const result = runGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function headCommit() {
+  return commitOf("HEAD");
+}
+
+function resolveBase() {
+  const head = headCommit();
+  if (!head) return { base: null, reason: "not-a-git-repository" };
+
+  const explicit = process.env.QUALITY_BASE_REF;
+  if (explicit && !ZERO_SHA.test(explicit)) {
+    const commit = commitOf(explicit);
+    if (!commit) {
+      console.error(
+        `[quality] QUALITY_BASE_REF='${explicit}' 无法解析为提交；拒绝静默降级，退出。`
+      );
+      process.exit(2);
+    }
+    if (commit === head) {
+      if (CI) {
+        console.error("[quality] QUALITY_BASE_REF 等于 HEAD，无法计算变更集；CI 下拒绝继续。");
+        process.exit(2);
+      }
+      console.warn("[quality] QUALITY_BASE_REF 等于 HEAD，本地忽略该基线。");
+    } else {
+      return { base: { ref: explicit, commit }, reason: "explicit" };
+    }
+  }
+
+  for (const ref of [process.env.QUALITY_BASE_BRANCH, "origin/main"].filter(Boolean)) {
+    const commit = commitOf(ref);
+    if (commit && commit !== head) return { base: { ref, commit }, reason: "branch" };
+  }
+
+  if (CI) {
+    const previous = commitOf("HEAD~1");
+    if (previous && previous !== head)
+      return { base: { ref: "HEAD~1", commit: previous }, reason: "ci-previous" };
+    return { base: null, reason: "ci-no-base" };
+  }
+
+  return { base: null, reason: "local-no-base" };
+}
+
+function changedFilesFromGit(baseCommit) {
   const files = new Set();
-  const bases = [process.env.QUALITY_BASE_REF, "origin/main"].filter(Boolean);
-  let resolvedBase = false;
-  for (const base of bases) {
-    const probe = runGit(["rev-parse", "--verify", "--quiet", `${base}^{commit}`]);
-    if (probe.status !== 0) continue;
-    const diff = runGit(["diff", "--name-only", "--diff-filter=ACMR", `${base}...HEAD`]);
-    if (diff.status !== 0) continue;
-    resolvedBase = true;
-    diff.stdout
-      .split("\n")
-      .filter(Boolean)
-      .forEach((file) => files.add(file));
+  if (baseCommit) {
+    const diff = runGit(["diff", "--name-only", "--diff-filter=ACMR", `${baseCommit}...HEAD`]);
+    if (diff.status === 0)
+      diff.stdout
+        .split("\n")
+        .filter(Boolean)
+        .forEach((file) => files.add(file));
   }
   for (const args of [
     ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"],
@@ -68,14 +124,13 @@ function changedFilesFromGit() {
       .filter(Boolean)
       .forEach((file) => files.add(file));
   }
-  return { files: [...files], resolvedBase };
+  return [...files];
 }
 
 function listFallbackFiles() {
   const collected = [];
   for (const target of FALLBACK_TARGETS) {
-    const absolute = resolve(root, target);
-    if (!existsSync(absolute)) continue;
+    if (!existsSync(resolve(root, target))) continue;
     const result = runGit(["ls-files", "--", target]);
     if (result.status === 0) {
       result.stdout
@@ -88,12 +143,22 @@ function listFallbackFiles() {
 }
 
 function selectTargets() {
-  const { files, resolvedBase } = changedFilesFromGit();
-  const repositoryFiles = files.filter((file) => existsSync(resolve(root, file)));
-  if (repositoryFiles.length > 0) {
-    return { mode: resolvedBase ? "changed-vs-base" : "working-tree", files: repositoryFiles };
+  const { base, reason } = resolveBase();
+  if (!base) {
+    if (CI) {
+      console.error(
+        `[quality] CI 下无法解析可信变更基线（${reason}）：需要 QUALITY_BASE_REF 或包含完整历史的 origin/main。`
+      );
+      console.error("[quality] 拒绝回退到固定目录或零文件，构建失败。");
+      process.exit(2);
+    }
+    console.warn(`[quality] 本地未解析到 git 基线（${reason}），退回固定目录检查。`);
+    return { mode: "fallback-targets", files: listFallbackFiles() };
   }
-  return { mode: "fallback-targets", files: listFallbackFiles() };
+  const repositoryFiles = changedFilesFromGit(base.commit).filter((file) =>
+    existsSync(resolve(root, file))
+  );
+  return { mode: `changed-vs-${base.ref}`, files: repositoryFiles };
 }
 
 function extensionOf(file) {
@@ -120,8 +185,7 @@ async function checkFormat(files) {
 async function checkLint(files) {
   const eslint = new ESLint({ cwd: root });
   const results = await eslint.lintFiles(files);
-  const errors = ESLint.getErrorResults(results);
-  return errors;
+  return ESLint.getErrorResults(results);
 }
 
 const targets = selectTargets();
@@ -152,9 +216,8 @@ if (lintTargets.length > 0) {
   if (errors.length > 0) {
     failed = true;
     const formatter = await new ESLint({ cwd: root }).loadFormatter("stylish");
-    const output = await formatter.format(errors);
     console.error("[quality] eslint errors:");
-    console.error(output);
+    console.error(await formatter.format(errors));
   } else {
     console.log(`[quality] eslint: ok (${lintTargets.length} file(s))`);
   }

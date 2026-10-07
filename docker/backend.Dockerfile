@@ -3,6 +3,8 @@ WORKDIR /app
 COPY backend/pom.xml ./pom.xml
 RUN mvn -q -DskipTests dependency:go-offline
 COPY backend/src ./src
+# Checkstyle 配置参与 validate 阶段（mvn package 会执行），构建阶段必须一并复制。
+COPY backend/config ./config
 RUN mvn -q -DskipTests package
 
 FROM eclipse-temurin:17-jre

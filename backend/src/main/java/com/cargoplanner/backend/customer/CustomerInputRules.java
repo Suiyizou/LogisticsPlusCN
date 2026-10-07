@@ -1,6 +1,7 @@
 package com.cargoplanner.backend.customer;
 
 import com.cargoplanner.backend.common.ApiException;
+import java.security.SecureRandom;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CustomerInputRules {
+
+  private static final SecureRandom TEMP_PASSWORD_RANDOM = new SecureRandom();
+  private static final String TEMP_PASSWORD_ALPHABET =
+      "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
 
   public String normalizeUsername(String value) {
     String normalized = value == null ? "" : value.trim();
@@ -55,5 +60,25 @@ public class CustomerInputRules {
   public String deletedUsername(String accountType, long id) {
     String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     return "deleted_" + accountType + "_" + id + "_" + suffix;
+  }
+
+  /**
+   * 生成不可预测的一次性内部账号口令（重置代理密码用）。
+   *
+   * <p>旧实现使用固定的 {@code username + "!@#2026"}，知晓用户名即可推导口令。
+   * 生成结果只返回给发起重置的管理员，不写入日志或审计描述。
+   */
+  public String generateTemporaryPassword() {
+    StringBuilder value = new StringBuilder("#Aa1");
+    while (value.length() < 16) {
+      value.append(TEMP_PASSWORD_ALPHABET.charAt(TEMP_PASSWORD_RANDOM.nextInt(TEMP_PASSWORD_ALPHABET.length())));
+    }
+    for (int index = value.length() - 1; index > 0; index--) {
+      int other = TEMP_PASSWORD_RANDOM.nextInt(index + 1);
+      char swap = value.charAt(index);
+      value.setCharAt(index, value.charAt(other));
+      value.setCharAt(other, swap);
+    }
+    return value.toString();
   }
 }

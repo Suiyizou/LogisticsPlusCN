@@ -7,7 +7,7 @@
 
 | 套件       | 命令                      | 基线数量                                         |
 | ---------- | ------------------------- | ------------------------------------------------ |
-| 后端 JUnit | `npm run verify:backend`  | 25 个测试类、200 项（本批新增后 26 类 / 207 项） |
+| 后端 JUnit | `npm run verify:backend`  | 25 个测试类、200 项（本批新增后 26 类 / 208 项） |
 | Node 追踪  | `npm run verify:tracking` | 8 个文件、103 项                                 |
 | 装箱       | `npm run verify:packing`  | 4 组回归脚本                                     |
 | 前端       | `npm run verify:frontend` | i18n 扫描 + Vite 生产构建                        |

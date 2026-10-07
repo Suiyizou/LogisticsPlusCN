@@ -204,7 +204,8 @@ public class OverseaAgentService {
     accessGuard.requireManager(actor);
     Map<String, Object> existing = requireOverseaAgent(userId);
     String username = String.valueOf(existing.get("username"));
-    String temporaryPassword = username + "!@#2026";
+    // 一次性随机口令，不再使用可预测的 username + 固定后缀；旧设备会话已在下文清空。
+    String temporaryPassword = inputRules.generateTemporaryPassword();
     PasswordHash hash = passwordHasher.hash(temporaryPassword);
     mapper.updateAgentPassword(userId, hash.salt(), hash.hash(), hash.iterations());
     mapper.deleteLoginDevices(userId);

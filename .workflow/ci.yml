@@ -9,8 +9,12 @@
 #   3. 如果要推送镜像，在“变量/凭据”里配置 DOCKER_REGISTRY / DOCKER_USERNAME /
 #      DOCKER_PASSWORD，不要在 YAML 里写明文。
 #
-# 注意：`build@docker` 阶段需要 Runner 具备 Docker 能力。若 Runner 未开通 Docker，
-# 可直接删除 `images` 阶段的 step，不影响校验与测试阶段。
+# 注意：
+#   - `build@docker` 阶段需要 Runner 具备 Docker 能力。若 Runner 未开通 Docker，
+#     可直接删除 `images` 阶段的 step，不影响校验与测试阶段。
+#   - 质量门必须拿到可信变更基线：优先用 Gitee 提供的前一提交 SHA；若该变量不可用，
+#     quality.mjs 会在 CI 下退回 HEAD~1。因此 Runner 必须能访问足够历史（非浅克隆）。
+#     若拿不到基线，质量门会直接失败（不会静默只检查 scripts）。
 version: "1.0"
 name: ci
 displayName: CI（校验 + 测试 + 镜像构建）
@@ -36,10 +40,10 @@ stages:
           displayName: Node 质量门 + 类型检查 + 测试 + 前端构建
           nodeVersion: "20"
           commands:
-            - npm install --include=dev
-            - npm --prefix frontend install --include=dev --ignore-scripts
-            - npm --prefix tracking-service install
-            - node scripts/quality.mjs
+            - npm ci --include=dev
+            - npm --prefix frontend ci --include=dev --ignore-scripts
+            - npm --prefix tracking-service ci
+            - QUALITY_BASE_REF="${GITEE_PIPELINE_BEFORE_SHA:-}" node scripts/quality.mjs
             - npm --prefix frontend run typecheck
             - npm --prefix tracking-service test
             - npm --prefix frontend run test:packing

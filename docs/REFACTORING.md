@@ -117,7 +117,7 @@ Checkstyle 新包门，统一入口 `node scripts/verify.mjs`（新增 `quality`
 
 见 [TEST_MATRIX.md](TEST_MATRIX.md)。新增 `HttpAuthorizationRegressionTest`（真实
 `WebConfig` 路径规则 + 真实拦截器，覆盖公开路径豁免、401、三角色 403、双通道 token 隔离、
-OPTIONS 预检）。后端测试 200 → 207。
+OPTIONS 预检）。后端测试 200 → 208（含代理一次性口令回归）。
 
 ## T06 数据库迁移（Flyway）
 
@@ -168,7 +168,7 @@ Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行�
 结果：`BusinessCustomerService` 5226 → 4873 行；代理领域逻辑 440 行独立；
 `BusinessCustomerService` 对 guard / 规则 / 审计 / 代理全部改为薄委托，Controller 与
 外部接口签名不变。事务语义保持一致（批量建代理仍在同一 Bean 内整体事务；`sync*` 加入
-调用方事务）。后端 207 项测试全绿，Checkstyle 通过。
+调用方事务）。后端 208 项测试全绿，Checkstyle 通过。
 
 ### 已完成：批次 2（共享客户查询/访问判定）
 
@@ -181,14 +181,14 @@ Docker 引擎未启动，容器编排、浏览器全栈与回滚演练未执行�
 
 `BusinessCustomerService` 对这些能力改为薄委托，`CustomerRecord` 成为多个领域服务可共享的类型。
 这是拆分交接、绑定、客户建档的前置：这些域都依赖“按角色取客户”的同一套逻辑。
-`BusinessCustomerService` 4873 → 4707 行，后端 207 项测试全绿。
+`BusinessCustomerService` 4873 → 4707 行，后端 208 项测试全绿。
 
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
 `OverseaAgentMapper` + `mappers/customer/OverseaAgentMapper.xml`，参数全部 `#{}` 绑定，
 新增 DTO `OverseaAgentListRow` / `BusinessAgentListRow` / `OverseaAgentRow`。
-JSON 输出形状保持不变（如代理列表 `id` 仍为字符串）。H2 全量 207 项通过，
+JSON 输出形状保持不变（如代理列表 `id` 仍为字符串）。H2 全量 208 项通过，
 真库冒烟创建/列表/禁用/删除全部 200，删除后操作返回 404。
 
 ### 后续批次（每步可独立验证）

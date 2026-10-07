@@ -30,7 +30,7 @@ mysql --no-defaults -h127.0.0.1 -P3307 -uroot < backend/sql/schema.sql
 | -------------------------------- | ------------------------------------- | ------------------------------------ |
 | 质量门（Prettier + ESLint 棘轮） | `node scripts/quality.mjs`            | 通过                                 |
 | 前端类型检查                     | `npm --prefix frontend run typecheck` | 通过                                 |
-| 后端测试 + Checkstyle            | `npm run verify:backend`              | 26 类 / 207 项通过，0 失败           |
+| 后端测试 + Checkstyle            | `npm run verify:backend`              | 26 类 / 208 项通过，0 失败           |
 | 追踪服务测试                     | `npm run verify:tracking`             | 103 项通过                           |
 | 装箱回归                         | `npm run verify:packing`              | 4 组脚本（见 `docs/TEST_MATRIX.md`） |
 | 前端生产构建                     | `npm run verify:frontend`             | i18n 扫描 + Vite 构建通过            |

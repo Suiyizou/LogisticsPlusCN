@@ -82,3 +82,12 @@ Windows 脚本（`*.ps1 *.cmd *.bat`）CRLF。本次**未**对历史源码做整
 | `npm --prefix frontend run typecheck` | 通过（含上述类型缺陷修复）                                      |
 | `mvn -q checkstyle:check`（backend）  | 通过，覆盖新包                                                  |
 | `mvn -q validate`                     | 通过（Checkstyle 绑定生效）                                     |
+
+## 6. 当前检查的边界（避免误解）
+
+- `tsc --noEmit` 目前只覆盖 `frontend/src/**/*.ts`（可视化模块与新增 TS）。Vue 单文件
+  组件的模板/脚本**未**被类型检查；ESLint 也只处理 `.js/.mjs/.cjs`，不解析 `.vue`。
+  因此“typecheck 通过”不等于主要 Vue 页面已受类型保护。后续按 T08 拆分时把新组件
+  迁移到 TS 或引入 `vue-tsc` 后再扩大范围。
+- 质量门是变更棘轮，历史大文件只有在被本次改动触及时才需要满足规范。
+- Java Checkstyle 只覆盖 `backend/pom.xml` 中 `<includes>` 列出的新包，历史包逐步纳入。
