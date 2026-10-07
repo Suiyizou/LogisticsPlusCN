@@ -112,6 +112,9 @@
             **/customer/CustomerHandoverService.java
             **/customer/CustomerProfileService.java
             **/customer/CustomerShipmentAccessPolicy.java
+            **/customer/CustomerShipmentQueryService.java
+            **/customer/ShipmentReferences.java
+            **/customer/ShipmentRowMappers.java
           </includes>
         </configuration>
         <executions>

@@ -214,6 +214,16 @@ H2 全量 208 项通过，Checkstyle 通过。
 `BusinessCustomerService` 3796 → 3397 行（较初始 5226 减少 1829 行）；公开方法改为薄委托，
 接口与 `@Transactional` 边界不变。H2 全量 208 项通过，Checkstyle 通过。
 
+### 已完成：批次 6（票单快照/追踪只读查询）
+
+新增 `CustomerShipmentQueryService`（906 行，纯只读）：业务端票单快照列表（4 个重载）、
+批量追踪候选、单票快照查询，以及计数/业务状态 SQL/ETA 排序/JSON 映射。
+同时抽出共享工具：`ShipmentReferences`（参考号与批量 ID 规范化、COSCO 数字身份、JSON 文本）
+与 `ShipmentRowMappers`（时间格式化、刷新结果字段），供查询与绑定两域共用。
+
+`BusinessCustomerService` 3397 → 2588 行（较初始 5226 行减少 2638 行，约 50%）；
+公开查询方法改为薄委托，接口与事务边界不变。H2 全量 208 项通过，Checkstyle 通过。
+
 ### 已完成：T05 批次（海外代理模块 SQL 迁移）
 
 `OverseaAgentService` 中全部 JdbcTemplate 语句（3 条读 + 15 条写/同步）迁到
