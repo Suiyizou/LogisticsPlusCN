@@ -183,8 +183,10 @@
 
 以下信息/权限当前不可用，相关线上动作不会执行，也不会宣称已上线：
 
-1. **Docker 引擎**：本机 Docker Desktop 服务未启动（`com.docker.service` Stopped，
-   启动需管理员权限），无法做容器联调、回滚演练与浏览器全栈验收。
+1. **Docker 网络出站**：Docker 引擎现已启动，本机另有一个来自不同目录
+   (`Documents/ThirtyPartyShippmentTracking`) 的运行栈（前端 :8088、后端 :8080），不属本仓库，未触碰。
+   但 `docker.io` 出站被阻断（拉取 maven/eclipse-temurin 基础镜像超时），本仓库镜像无法真正构建，
+   R01 仅能用等价的 Maven 输入复现验证；容器联调、回滚演练、浏览器全栈与 MySQL 8.4 验证仍缺基础镜像/外网。
 2. **真实 MySQL**：已用独立临时实例（端口 3307，仓库外数据目录）完成 schema/MyBatis/Flyway
    验证；本机原有 `MySQL80`（3308）仍无凭据，不用于验收。
 3. **CI**：缺少 Gitee 仓库的 Runner/流水线配置权限，无法触发远端流水线（见 `docs/CI.md`）。
