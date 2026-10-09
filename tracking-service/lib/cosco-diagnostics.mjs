@@ -8,9 +8,9 @@ export function uniqueSafeProxyNodes(nodes = []) {
 }
 
 function safeDiagnosticText(value, maximumLength) {
-  // 有意匹配控制字符：诊断文本需要把它们替换为空格。
-  // eslint-disable-next-line no-control-regex
   const normalized = String(value ?? "")
+    // 有意匹配控制字符：诊断文本需要把它们替换为空格。
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .trim();
   if (!normalized) return null;
