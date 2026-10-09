@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createStaticRouter } from "./lib/static-routes.mjs";
 import { isCoscoProtectionError } from "./lib/cosco-errors.mjs";
 import {
   normalizeCoscoContainerList,
@@ -17,18 +18,12 @@ import {
 } from "./lib/carrier-adapters.mjs";
 import { createTrackingCache } from "./lib/tracking-cache.mjs";
 import {
-  MIME_TYPES,
-  staticCacheControl,
-  sendStaticContent
-} from "./lib/static-assets.mjs";
-import {
   HttpError,
   readJsonBody,
   secureTextEquals,
   sendJson
 } from "./lib/http-utils.mjs";
-import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   closeCoscoPlaywrightBrowser,
@@ -83,6 +78,7 @@ export {
   normalizeCoscoSupplementalDetails
 } from "./lib/cosco-normalize.mjs";
 
+
 const ROOT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT_DIR, "public");
 const ELEMENT_PLUS_CSS = join(
@@ -94,6 +90,8 @@ const ELEMENT_PLUS_CSS = join(
 );
 const XLSX_MODULE = join(ROOT_DIR, "node_modules", "xlsx", "xlsx.mjs");
 const FLAG_ICONS_DIR = join(ROOT_DIR, "node_modules", "flag-icons", "flags");
+
+const staticRouter = createStaticRouter({ publicDir: PUBLIC_DIR, elementPlusCss: ELEMENT_PLUS_CSS, xlsxModule: XLSX_MODULE, flagIconsDir: FLAG_ICONS_DIR });
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
 const HOST = process.env.HOST ?? "127.0.0.1";
 
@@ -1727,72 +1725,6 @@ async function handleTrackRequest(request, response, forcedCarrier, forcedChanne
   }
 }
 
-async function serveFlag(request, response, ratio, countryCode) {
-  try {
-    const content = await readFile(join(FLAG_ICONS_DIR, ratio, `${countryCode}.svg`));
-    await sendStaticContent(request, response, content, {
-      extension: ".svg",
-      contentType: MIME_TYPES[".svg"],
-      cacheControl: "public, max-age=604800"
-    });
-  } catch (error) {
-    if (error?.code === "ENOENT") throw new HttpError(404, "国旗资源不存在");
-    throw error;
-  }
-}
-
-async function serveStatic(request, response) {
-  const url = new URL(request.url, "http://localhost");
-  if (url.pathname === "/vendor/element-plus.css") {
-    const content = await readFile(ELEMENT_PLUS_CSS);
-    await sendStaticContent(request, response, content, {
-      extension: ".css",
-      contentType: MIME_TYPES[".css"],
-      cacheControl: "no-cache, must-revalidate"
-    });
-    return;
-  }
-
-  if (url.pathname === "/vendor/xlsx.mjs") {
-    const content = await readFile(XLSX_MODULE);
-    await sendStaticContent(request, response, content, {
-      extension: ".mjs",
-      contentType: MIME_TYPES[".mjs"],
-      cacheControl: "public, max-age=604800"
-    });
-    return;
-  }
-
-  const flagMatch = url.pathname.match(/^\/vendor\/flags\/(1x1|4x3)\/([a-z]{2})\.svg$/);
-  if (flagMatch) {
-    const [, ratio, countryCode] = flagMatch;
-    await serveFlag(request, response, ratio, countryCode);
-    return;
-  }
-
-  const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
-  const safePath = normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
-  const filePath = join(PUBLIC_DIR, safePath);
-
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    throw new HttpError(404, "页面不存在");
-  }
-
-  try {
-    const content = await readFile(filePath);
-    const extension = extname(filePath);
-    await sendStaticContent(request, response, content, {
-      extension,
-      contentType: MIME_TYPES[extension] ?? "application/octet-stream",
-      cacheControl: staticCacheControl(url.pathname)
-    });
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      throw new HttpError(404, "页面不存在");
-    }
-    throw error;
-  }
-}
 
 export const server = createServer(async (request, response) => {
   try {
@@ -1849,7 +1781,7 @@ export const server = createServer(async (request, response) => {
     const flagApiMatch = url.pathname.match(/^\/api\/flags\/(1x1|4x3)\/([a-z]{2})$/);
     if (request.method === "GET" && flagApiMatch) {
       const [, ratio, countryCode] = flagApiMatch;
-      await serveFlag(request, response, ratio, countryCode);
+      await staticRouter.serveFlag(request, response, ratio, countryCode);
       return;
     }
 
@@ -1917,7 +1849,7 @@ export const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" || request.method === "HEAD") {
-      await serveStatic(request, response);
+      await staticRouter.serveStatic(request, response);
       return;
     }
 
