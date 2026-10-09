@@ -60,3 +60,9 @@ export async function readJsonBody(request) {
     throw new HttpError(400, "请求内容不是有效的 JSON");
   }
 }
+
+export function batchCancelledHttpError() {
+  return new HttpError(409, "Batch tracking task was cancelled", {
+    code: "BATCH_CANCELLED"
+  });
+}

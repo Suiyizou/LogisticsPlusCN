@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { fetchCmaTracking, snapshotHasCompleteContainerDetails } from "./lib/cma-query.mjs";
 import { createCoscoUpstream } from "./lib/cosco-upstream.mjs";
 import { createCoscoHealthMonitor } from "./lib/cosco-health.mjs";
 import {
@@ -29,6 +30,7 @@ import {
 import { createTrackingCache } from "./lib/tracking-cache.mjs";
 import {
   HttpError,
+  batchCancelledHttpError,
   readJsonBody,
   secureTextEquals,
   sendJson
@@ -40,12 +42,8 @@ import {
   fetchCoscoTrackingViaPlaywright,
   readCoscoPlaywrightProxyConfig
 } from "./channels/cosco-playwright.mjs";
-import {
-  closeCmaPlaywrightBrowser,
-  fetchCmaTrackingViaPlaywright
-} from "./channels/cma-playwright.mjs";
+import { closeCmaPlaywrightBrowser } from "./channels/cma-playwright.mjs";
 import { decodeCoscoPayload } from "./lib/cosco-payload.mjs";
-import { normalizeCmaSnapshot } from "./lib/cma-tracking.mjs";
 import {
   createCoscoProxyClient,
   proxyStatus,
@@ -263,13 +261,6 @@ const {
   startChannelCMonitor,
   stopChannelCMonitor
 } = coscoHealthMonitor;
-
-
-function batchCancelledHttpError() {
-  return new HttpError(409, "Batch tracking task was cancelled", {
-    code: "BATCH_CANCELLED"
-  });
-}
 
 
 export function parseRetryAfter(value, now = Date.now()) {
@@ -1068,56 +1059,6 @@ function runCoscoTrackingRequest(request, queryChannel, options = {}) {
   );
 }
 
-async function fetchCmaTracking(request, credentials = {}, options = {}) {
-  let result;
-  try {
-    result = await fetchCmaTrackingViaPlaywright(request, {
-      timeoutMs: Number.parseInt(process.env.CMA_PLAYWRIGHT_TIMEOUT_MS ?? "45000", 10),
-      sessionCookie: credentials.sessionCookie || undefined,
-      userAgent: credentials.userAgent || undefined,
-      signal: options.signal
-    });
-  } catch (error) {
-    if (options.signal?.aborted || error?.code === "BATCH_CANCELLED") {
-      throw batchCancelledHttpError();
-    }
-    throw new HttpError(
-      error?.httpStatus ?? 502,
-      error?.message || "CMA CGM Playwright 查询失败",
-      error?.details
-    );
-  }
-
-  return {
-    snapshot: normalizeCmaSnapshot(result, request, new Date().toISOString()),
-    raw: result,
-    strategy: {
-      requested: "PLAYWRIGHT",
-      used: "PLAYWRIGHT",
-      fallbackUsed: false
-    }
-  };
-}
-
-
-function snapshotHasCompleteContainerDetails(snapshot, trackingRequest) {
-  if (trackingRequest.type === "CONTAINER") {
-    return Array.isArray(snapshot?.containers) && snapshot.containers.length > 0;
-  }
-
-  const expectedContainerCount = (snapshot?.summary?.containers ?? []).reduce(
-    (total, container) => total + Number(container?.quantity ?? container?.count ?? 0),
-    0
-  );
-  if (expectedContainerCount <= 0) return true;
-
-  const actualContainerCount = new Set(
-    (snapshot?.containers ?? [])
-      .map((container) => String(container?.number ?? "").trim().toUpperCase())
-      .filter(Boolean)
-  ).size;
-  return actualContainerCount >= expectedContainerCount;
-}
 
 async function handleCoscoContainerListRequest(request, response) {
   const input = await readJsonBody(request);
