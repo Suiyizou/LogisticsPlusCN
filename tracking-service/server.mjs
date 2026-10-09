@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createCoscoUpstream } from "./lib/cosco-upstream.mjs";
 import { createCoscoHealthMonitor } from "./lib/cosco-health.mjs";
 import {
   decorateProxyFailure,
@@ -199,15 +200,7 @@ export function isIndependentCoscoPlaywrightProxy(playwrightProxy, apiProxy) {
   }
 }
 
-function coscoCoreTimeoutMs(options = {}) {
-  return options.proxyMode ? PROXY_NETWORK_CORE_TIMEOUT_MS : NETWORK_CORE_TIMEOUT_MS;
-}
 
-function coscoEnrichmentTimeoutMs(options = {}) {
-  return options.proxyMode
-    ? PROXY_NETWORK_ENRICHMENT_TIMEOUT_MS
-    : NETWORK_ENRICHMENT_TIMEOUT_MS;
-}
 const coscoUpstreamGate = createCoscoQueryGate({
   minIntervalMs: process.env.COSCO_UPSTREAM_MIN_INTERVAL_MS ?? 10_000,
   maxIntervalMs: process.env.COSCO_UPSTREAM_MAX_INTERVAL_MS ?? 12_000,
@@ -232,6 +225,27 @@ const batchTaskRegistry = createBatchTaskRegistry({
 
 const trackingCache = createTrackingCache({ ttlMs: CACHE_TTL_MS });
 const coscoPublicCookieStates = new Map();
+
+const coscoUpstream = createCoscoUpstream({
+  circuitBreakers: coscoCircuitBreakers,
+  proxyClient: coscoProxyClient,
+  cookieStates: coscoPublicCookieStates,
+  networkCoreTimeoutMs: NETWORK_CORE_TIMEOUT_MS,
+  proxyNetworkCoreTimeoutMs: PROXY_NETWORK_CORE_TIMEOUT_MS,
+  networkEnrichmentTimeoutMs: NETWORK_ENRICHMENT_TIMEOUT_MS,
+  proxyNetworkEnrichmentTimeoutMs: PROXY_NETWORK_ENRICHMENT_TIMEOUT_MS
+});
+const {
+  coscoBlockedHttpError,
+  coscoCircuitBreakerFor,
+  coscoCoreTimeoutMs,
+  coscoEnrichmentTimeoutMs,
+  coscoPublicCookieState,
+  coscoRateLimitedHttpError,
+  ensureCoscoCircuitAvailable,
+  fetchCoscoUpstream,
+  signalForTimeout
+} = coscoUpstream;
 const coscoHealthMonitor = createCoscoHealthMonitor({
   request: CHANNEL_C_MONITOR_REQUEST,
   enabled: CHANNEL_C_MONITOR_ENABLED,
@@ -257,24 +271,6 @@ function batchCancelledHttpError() {
   });
 }
 
-function coscoRouteKey(options = {}) {
-  return options.proxyMode ? "PROXY" : "DIRECT";
-}
-
-function coscoCircuitBreakerFor(options = {}) {
-  return coscoCircuitBreakers[coscoRouteKey(options)];
-}
-
-function coscoBlockedHttpError(options = {}) {
-  const breaker = coscoCircuitBreakerFor(options);
-  const retryAfterMs = Math.max(1_000, breaker.remainingMs());
-  return new HttpError(503, "COSCO temporarily rejected this outbound IP", {
-    code: "COSCO_UPSTREAM_BLOCKED",
-    upstreamStatus: 403,
-    route: coscoRouteKey(options),
-    retryAfterMs
-  });
-}
 
 export function parseRetryAfter(value, now = Date.now()) {
   const normalized = String(value ?? "").trim();
@@ -285,58 +281,6 @@ export function parseRetryAfter(value, now = Date.now()) {
   }
   const date = Date.parse(normalized);
   return Number.isFinite(date) ? Math.max(1_000, date - now) : null;
-}
-
-function coscoRateLimitedHttpError(retryAfterMs, options = {}) {
-  const breaker = coscoCircuitBreakerFor(options);
-  const safeRetryAfterMs = Math.max(1_000, Number(retryAfterMs) || 60_000);
-  breaker.recordFailure({ retryAfterMs: safeRetryAfterMs, immediate: true });
-  return new HttpError(429, "COSCO temporarily rate-limited this server", {
-    code: "COSCO_UPSTREAM_RATE_LIMITED",
-    upstreamStatus: 429,
-    route: coscoRouteKey(options),
-    retryAfterMs: Math.max(safeRetryAfterMs, breaker.remainingMs())
-  });
-}
-
-function ensureCoscoCircuitAvailable(options = {}) {
-  if (coscoCircuitBreakerFor(options).remainingMs() > 0) {
-    throw coscoBlockedHttpError(options);
-  }
-}
-
-
-function signalForTimeout(timeoutController, externalSignal) {
-  return externalSignal
-    ? AbortSignal.any([timeoutController.signal, externalSignal])
-    : timeoutController.signal;
-}
-
-async function fetchCoscoUpstream(url, requestOptions = {}, routeOptions = {}) {
-  if (!routeOptions.proxyMode) return fetch(url, requestOptions);
-  if (!coscoProxyClient) {
-    throw new HttpError(503, "COSCO proxy channel is not configured", {
-      code: "COSCO_PROXY_NOT_CONFIGURED",
-      route: "PROXY"
-    });
-  }
-  try {
-    return await coscoProxyClient.fetch(url, requestOptions);
-  } catch (error) {
-    if (requestOptions.signal?.aborted || error?.name === "AbortError") throw error;
-    throw new HttpError(502, "Configured COSCO proxy is unavailable", {
-      code: "COSCO_PROXY_UNAVAILABLE",
-      route: "PROXY"
-    });
-  }
-}
-
-function coscoPublicCookieState(options = {}) {
-  const key = coscoRouteKey(options);
-  if (!coscoPublicCookieStates.has(key)) {
-    coscoPublicCookieStates.set(key, { cache: null, promise: null });
-  }
-  return coscoPublicCookieStates.get(key);
 }
 
 
