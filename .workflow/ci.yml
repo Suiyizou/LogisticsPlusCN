@@ -85,6 +85,20 @@ stages:
           nodeVersion: "20"
           commands:
             - docker info
+            - node scripts/verify-staging-compose.mjs
             - docker build --file docker/backend.Dockerfile --tag "cargo-planner-backend:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" .
             - docker build --file tracking-service/Dockerfile --tag "cargo-platform-tracking:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" tracking-service
             - docker build --file docker/frontend.Dockerfile --tag "cargo-planner-frontend:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" .
+
+  # Opt-in test deployment. Credentials must be scoped to the protected release branch.
+  # No production deployment is configured here.
+  - stage:
+      name: staging_deploy
+      displayName: 隔离测试环境部署（按需启用）
+      steps:
+        - step: build@nodejs
+          name: deploy_staging
+          displayName: 指定提交部署到测试服务器
+          nodeVersion: "20"
+          commands:
+            - node scripts/ci-staging-deploy.mjs
