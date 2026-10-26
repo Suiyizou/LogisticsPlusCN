@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-26",
+  "release": "714d1077fbc6c6cb25c537b99a69377a9dc06db4",
+  "url": "http://127.0.0.1:18080/",
+  "health": {
+    "status": "UP"
+  },
+  "trackingHealth": "HTTP 200",
+  "login": "passed",
+  "authenticatedProfile": "passed",
+  "role": "ADMIN",
+  "logoutInvalidatesSession": true,
+  "anonymousProtectedApi": 401,
+  "engineVersion": "excel-package-evidence-v7",
+  "workbookTools": true,
+  "migrations": [
+    ["1", "baseline", "1"],
+    ["2", "llm key inheritance", "1"],
+    ["3", "consolidate legacy schema", "1"],
+    ["4", "service catalog", "1"],
+    ["5", "customer contact email", "1"]
+  ],
+  "backupChecksumsPassed": 1,
+  "assets": {
+    "/": 200,
+    "/favicon.svg": 200,
+    "/favicon.ico": 200,
+    "/icon-192.png": 200,
+    "/site.webmanifest": 200
+  },
+  "originalCheckoutUnchanged": true,
+  "bootstrapEnabled": "false",
+  "giteePipelineExecuted": false,
+  "liveDeepSeekCalled": false,
+  "deploymentTests": {
+    "passed": 7,
+    "failed": 0,
+    "composeIsolation": "passed",
+    "quality": "passed",
+    "browserPublicHomeErrors": 0,
+    "browserLoginErrors": 0,
+    "productionBranchModified": false,
+    "pendingCombineCommits": 7
+  }
+}
