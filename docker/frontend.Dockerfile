@@ -10,3 +10,6 @@ RUN npm run build
 FROM nginx:alpine
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# Public files copied by Vite can retain a restrictive source umask. Nginx workers
+# must be able to read all published assets regardless of checkout/archive modes.
+RUN chmod -R a+rX /usr/share/nginx/html

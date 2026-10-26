@@ -60,11 +60,16 @@ if [[ -n "$("${COMPOSE[@]}" ps -q mysql)" ]]; then
 fi
 
 echo "[staging] Building $RELEASE_SHA; output is loopback-only port 18080"
-"${COMPOSE[@]}" build
+for service in backend tracking frontend; do
+  "${COMPOSE[@]}" build "$service"
+done
 "${COMPOSE[@]}" up -d --wait --wait-timeout 240
 curl -fsS --retry 8 --retry-delay 3 --retry-connrefused http://127.0.0.1:18080/actuator/health >/dev/null
 curl -fsS --retry 8 --retry-delay 3 --retry-connrefused http://127.0.0.1:18080/tracking/api/health >/dev/null
 curl -fsS http://127.0.0.1:18080/ >/dev/null
+for asset in favicon.svg favicon.ico icon-192.png site.webmanifest; do
+  curl -fsS "http://127.0.0.1:18080/$asset" >/dev/null
+done
 ln -sfn "$RELEASE_DIR" "$STAGING_ROOT/current"
 printf '%s\n' "$IMAGE_TAG" > "$STAGING_ROOT/current-image-tag"
 echo "[staging] Healthy release $RELEASE_SHA at http://127.0.0.1:18080/"
