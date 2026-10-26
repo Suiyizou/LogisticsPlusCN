@@ -32,15 +32,18 @@ test("loads an authenticated SOCKS5 proxy without exposing credentials", async (
 });
 
 test("protects the proxy channel with a timing-safe internal adapter key", async () => {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../services/default-carrier-adapters.mjs", import.meta.url),
+    "utf8"
+  );
   const httpUtils = await readFile(new URL("../lib/http-utils.mjs", import.meta.url), "utf8");
   assert.match(
     source,
-    /function requireProxyAdapterAuthorization[\s\S]*?TRACKING_ADAPTER_KEY[\s\S]*?x-tracking-adapter-key[\s\S]*?secureTextEquals/
+    /function authorizeProxy[\s\S]*?adapterKey[\s\S]*?secureTextEquals[\s\S]*?x-tracking-adapter-key/
   );
   // 常量时间比较已下沉到 lib/http-utils.mjs，行为不变。
   assert.match(httpUtils, /timingSafeEqual\(leftBuffer, rightBuffer\)/);
-  assert.match(source, /requireProxyAdapterAuthorization\(request, queryChannel\)/);
+  assert.match(source, /queryChannel\.code === "PROXY"[\s\S]*?authorizeProxy\(headers\)/);
 });
 
 test("cancels an active batch request and rejects further work for the cancelled task id", () => {

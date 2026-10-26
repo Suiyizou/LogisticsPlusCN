@@ -18,7 +18,7 @@
 
   <properties>
     <java.version>17</java.version>
-    <mybatis-spring-boot.version>3.0.5</mybatis-spring-boot.version>
+    <mybatis-plus.version>3.5.12</mybatis-plus.version>
   </properties>
 
   <dependencies>
@@ -31,9 +31,14 @@
       <artifactId>spring-boot-starter-jdbc</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.mybatis.spring.boot</groupId>
-      <artifactId>mybatis-spring-boot-starter</artifactId>
-      <version>${mybatis-spring-boot.version}</version>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+      <version>${mybatis-plus.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-jsqlparser</artifactId>
+      <version>${mybatis-plus.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -99,6 +104,17 @@
           <violationSeverity>error</violationSeverity>
           <includeTestSourceDirectory>false</includeTestSourceDirectory>
           <includes>
+            **/auth/AuthFailureAuditService.java,
+            **/persistence/*.java,
+            **/platform/**/*.java,
+            **/api/*.java,
+            **/domain/*.java,
+            **/application/*.java,
+            **/infrastructure/*.java,
+            **/database/*.java,
+            **/db/migration/*.java,
+            **/announcement/persistence/*.java,
+            **/announcement/AnnouncementService.java,
             **/customer/dto/*.java,
             **/customer/persistence/*.java,
             **/customer/CustomerDirectoryService.java,

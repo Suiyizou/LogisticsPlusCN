@@ -49,14 +49,10 @@ test("serves flag icons through the tracking API path", async (context) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
   });
-  context.after(
-    () => new Promise((resolve) => server.close(resolve))
-  );
+  context.after(() => new Promise((resolve) => server.close(resolve)));
 
   const address = server.address();
-  const response = await fetch(
-    `http://127.0.0.1:${address.port}/api/flags/4x3/cn`
-  );
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/flags/4x3/cn`);
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^image\/svg\+xml/);
@@ -99,47 +95,41 @@ test("exposes a multi-carrier adapter registry", () => {
 });
 
 test("normalizes CMA local date text without inventing a timezone", () => {
-  assert.equal(
-    parseCmaLocalDateTime("Monday, 22-JUN-2026 09:03 AM"),
-    "2026-06-22T09:03:00"
-  );
-  assert.equal(
-    parseCmaLocalDateTime("Sun.14-JUN-2026 09:30 AM"),
-    "2026-06-14T09:30:00"
-  );
+  assert.equal(parseCmaLocalDateTime("Monday, 22-JUN-2026 09:03 AM"), "2026-06-22T09:03:00");
+  assert.equal(parseCmaLocalDateTime("Sun.14-JUN-2026 09:30 AM"), "2026-06-14T09:30:00");
 });
 
 test("parses CMA session cookies without truncating values that contain equals signs", () => {
-  assert.deepEqual(
-    parseCmaSessionCookies("datadome=abc==; XSRF-TOKEN=token-value"),
-    [
-      {
-        name: "datadome",
-        value: "abc==",
-        domain: ".cma-cgm.com",
-        path: "/",
-        secure: true
-      },
-      {
-        name: "XSRF-TOKEN",
-        value: "token-value",
-        domain: ".cma-cgm.com",
-        path: "/",
-        secure: true
-      }
-    ]
-  );
+  assert.deepEqual(parseCmaSessionCookies("datadome=abc==; XSRF-TOKEN=token-value"), [
+    {
+      name: "datadome",
+      value: "abc==",
+      domain: ".cma-cgm.com",
+      path: "/",
+      secure: true
+    },
+    {
+      name: "XSRF-TOKEN",
+      value: "token-value",
+      domain: ".cma-cgm.com",
+      path: "/",
+      secure: true
+    }
+  ]);
 });
 
 test("passes the server-stored CMA cookie and matching user agent into Playwright", async () => {
-  const serverSource = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
+  const serverSource = await readFile(
+    new URL("../services/default-carrier-adapters.mjs", import.meta.url),
+    "utf8"
+  );
   const cmaSource = await readFile(
     new URL("../channels/cma-playwright.mjs", import.meta.url),
     "utf8"
   );
 
-  assert.match(serverSource, /request\.headers\["x-cma-session-cookie"\]/);
-  assert.match(serverSource, /request\.headers\["x-cma-browser-user-agent"\]/);
+  assert.match(serverSource, /headers\["x-cma-session-cookie"\]/);
+  assert.match(serverSource, /headers\["x-cma-browser-user-agent"\]/);
   assert.match(
     cmaSource,
     /options\.userAgent \?\? process\.env\.CMA_BROWSER_USER_AGENT[\s\S]*?userAgent: browserUserAgent/
@@ -287,10 +277,12 @@ test("container discovery marks only incomplete boxes for low-priority subquerie
         eventLocationName: "Shanghai",
         transportMode: "TRUCK"
       },
-      milestones: [{
-        eventName: "Gate out",
-        actualEventDateTime: "2026-07-21T08:00:00Z"
-      }]
+      milestones: [
+        {
+          eventName: "Gate out",
+          actualEventDateTime: "2026-07-21T08:00:00Z"
+        }
+      ]
     },
     {
       containerNumberWithCheckDigit: "OOLU7654321",
@@ -314,16 +306,18 @@ test("normalizes booking references and transport details for supplemental loadi
         { name: "POD", value: "Long Beach-Pacific Container Terminal", seq: 2 }
       ]
     },
-    [{
-      containerNumberWithCheckDigit: "FBIU4832780",
-      trafficTerm: "CY | CY",
-      currentMilestone: {
-        eventName: "Empty pickup",
-        actualEventDateTime: "2026-07-16T07:49:00",
-        eventLocationName: "Shanghai Coscon Logistics Lin Gang",
-        transportMode: "Truck"
+    [
+      {
+        containerNumberWithCheckDigit: "FBIU4832780",
+        trafficTerm: "CY | CY",
+        currentMilestone: {
+          eventName: "Empty pickup",
+          actualEventDateTime: "2026-07-16T07:49:00",
+          eventLocationName: "Shanghai Coscon Logistics Lin Gang",
+          transportMode: "Truck"
+        }
       }
-    }],
+    ],
     normalizeTrackingRequest({ type: "BOOKING", number: "6508063160" }),
     "2026-07-21T12:00:00.000Z"
   );
@@ -417,10 +411,12 @@ test("maps business references and enriches missing container milestones with a 
           eventName: "Container Gated Out",
           actualEventDateTime: "2026-07-14T20:21:00"
         },
-        milestones: [{
-          eventName: "Container Gated Out",
-          actualEventDateTime: "2026-07-14T20:21:00"
-        }]
+        milestones: [
+          {
+            eventName: "Container Gated Out",
+            actualEventDateTime: "2026-07-14T20:21:00"
+          }
+        ]
       }
     ],
     async (request) => {

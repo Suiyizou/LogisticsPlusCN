@@ -1,0 +1,135 @@
+.admin-health-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e6f6ed;
+  color: #047857;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.admin-health-pill.warn {
+  background: #fff6df;
+  color: #9a5b00;
+}
+
+.llm-settings-form {
+  align-items: end;
+}
+
+.admin-toggle-row {
+  align-self: stretch;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #d7e1ee;
+  border-radius: 6px;
+  background: #f8fbff;
+}
+
+.admin-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.llm-current-settings {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-operation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-operation-grid button {
+  min-height: 72px;
+  background: #f8fbff;
+}
+
+.admin-setting-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-setting-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e1eaf5;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #40546b;
+}
+
+.admin-setting-list b {
+  color: #132033;
+}
+
+.admin-system-page {
+  display: grid;
+  gap: 18px;
+}
+.admin-health-pill {
+  white-space: nowrap;
+}
+.admin-setting-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-setting-list b {
+  flex-shrink: 0;
+}
+.llm-draft-state,
+.llm-key-hint,
+.llm-saved-settings {
+  grid-column: 1 / -1;
+}
+.llm-draft-state,
+.llm-key-hint {
+  margin: 0;
+  color: #526a82;
+  line-height: 1.6;
+}
+.llm-saved-settings h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+@media (max-width: 1180px) {
+  .admin-operation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .admin-operation-grid,
+  .llm-current-settings {
+    grid-template-columns: 1fr;
+  }
+  .admin-setting-list span {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .admin-panel-head {
+    flex-wrap: wrap;
+  }
+}
+
+.admin-panel {
+  padding: 20px 22px 22px;
+  border-color: #d7e3ef;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(25 65 100 / 6%);
+}
+.admin-panel-head {
+  min-height: 48px;
+  margin-bottom: 16px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid #e5edf5;
+}
+@media (max-width: 680px) {
+  .admin-panel {
+    padding: 16px;
+  }
+}

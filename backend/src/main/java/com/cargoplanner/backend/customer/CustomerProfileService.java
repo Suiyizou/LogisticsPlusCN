@@ -6,9 +6,9 @@ import com.cargoplanner.backend.auth.PasswordHasher.PasswordHash;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.CustomerTokenCodec.GeneratedCustomerCode;
+import com.cargoplanner.backend.customer.persistence.CustomerProfileEntity;
+import com.cargoplanner.backend.customer.persistence.CustomerProfileRepository;
 import java.security.SecureRandom;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,10 +19,11 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 客户建档与生命周期。
@@ -38,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CustomerProfileService {
   private final JdbcTemplate jdbcTemplate;
+  private final CustomerProfileRepository profileRepository;
+  private final TransactionTemplate rowTransaction;
   private final CustomerTokenCodec tokenCodec;
   private final PasswordHasher passwordHasher;
   private final CustomerAccessGuard accessGuard;
@@ -56,7 +59,9 @@ public class CustomerProfileService {
       CustomerLookupService lookupService,
       CustomerShipmentAccessPolicy accessPolicy,
       CustomerAuditService auditService,
-      OverseaAgentService overseaAgentService
+      OverseaAgentService overseaAgentService,
+      CustomerProfileRepository profileRepository,
+      PlatformTransactionManager transactionManager
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.tokenCodec = tokenCodec;
@@ -67,6 +72,19 @@ public class CustomerProfileService {
     this.accessPolicy = accessPolicy;
     this.auditService = auditService;
     this.overseaAgentService = overseaAgentService;
+    this.profileRepository = profileRepository;
+    this.rowTransaction = new TransactionTemplate(transactionManager);
+    this.rowTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+  }
+
+  /** Contact only; never used as login identity or sent to upstream carriers. */
+  private static String normalizeContactEmail(String input) {
+    if (input == null || input.isBlank()) return null;
+    String value = input.trim();
+    if (value.length() > 254 || !value.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Contact email is invalid");
+    }
+    return value;
   }
 
   public Map<String, Object> get(String customerPublicId, AuthenticatedUser actor) {
@@ -115,36 +133,24 @@ public class CustomerProfileService {
         : remarkRaw;
     PasswordHash passwordHash = passwordHasher.hash(password);
     String publicId = UUID.randomUUID().toString();
-    KeyHolder keyHolder = new GeneratedKeyHolder();
+    var row = new CustomerProfileEntity();
+    row.publicId = publicId;
+    row.username = username;
+    row.displayName = displayName;
+    row.clientCode = clientCode;
+    row.partyRole = partyRole;
+    row.passwordSalt = passwordHash.salt();
+    row.passwordHash = passwordHash.hash();
+    row.passwordIterations = passwordHash.iterations();
+    row.customerCodeHash = customerCodeHash;
+    row.customerCodePrefix = customerCodePrefix;
+    row.customerCodeMode = customerCodeMode;
+    row.provisioningSource = "MANUAL";
+    row.status = "ACTIVE";
+    row.remark = remark;
+    row.contactEmail = normalizeContactEmail(request == null ? null : request.contactEmail());
     try {
-      jdbcTemplate.update(connection -> {
-        PreparedStatement statement = connection.prepareStatement(
-            """
-            INSERT INTO cp_customers (
-              public_id, username, display_name, client_code, party_role,
-              password_salt, password_hash, password_iterations,
-              customer_code_hash, customer_code_prefix, customer_code_mode,
-              provisioning_source, status, remark, created_by, responsible_agent_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL', 'ACTIVE', ?, ?, ?)
-            """,
-            Statement.RETURN_GENERATED_KEYS
-        );
-        statement.setString(1, publicId);
-        statement.setString(2, username);
-        statement.setString(3, displayName);
-        statement.setString(4, clientCode);
-        statement.setString(5, partyRole);
-        statement.setString(6, passwordHash.salt());
-        statement.setString(7, passwordHash.hash());
-        statement.setInt(8, passwordHash.iterations());
-        statement.setString(9, customerCodeHash);
-        statement.setString(10, customerCodePrefix);
-        statement.setString(11, customerCodeMode);
-        statement.setString(12, remark);
-        statement.setLong(13, actor.id());
-        statement.setLong(14, actor.id());
-        return statement;
-      }, keyHolder);
+      profileRepository.create(row, actor);
     } catch (DuplicateKeyException error) {
       throw new ApiException(HttpStatus.CONFLICT, "Customer username or client code already exists");
     }
@@ -197,7 +203,8 @@ public class CustomerProfileService {
       row.put("clientCode", clientCode == null ? "" : clientCode.trim().toUpperCase(Locale.ROOT));
       row.put("partyRole", partyRole);
       try {
-        Map<String, Object> created = create(
+        // Each row is atomic even though this method calls create on the same instance.
+        Map<String, Object> created = rowTransaction.execute(transaction -> create(
             new CreateCustomerRequest(
                 username,
                 password,
@@ -208,7 +215,7 @@ public class CustomerProfileService {
             ),
             actor,
             ipAddress
-        );
+        ));
         row.put("status", "CREATED");
         row.put("customer", created);
         row.put("password", password);
@@ -263,37 +270,22 @@ public class CustomerProfileService {
     }
     try {
       boolean codeChanged = clientCode != null && !clientCode.equals(existing.clientCode());
+      var profile = new CustomerProfileEntity();
+      profile.id = existing.id();
+      profile.publicId = existing.publicId();
+      profile.username = username;
+      profile.displayName = displayName;
+      profile.clientCode = clientCode;
+      profile.partyRole = partyRole;
+      profile.status = status;
+      profile.remark = newRemark;
+      profile.contactEmail = request == null || request.contactEmail() == null
+          ? existing.contactEmail() : normalizeContactEmail(request.contactEmail());
       if (codeChanged) {
-        String codeHash = tokenCodec.hash(clientCode);
-        String codePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
-        jdbcTemplate.update(
-            """
-            UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ?,
-              customer_code_hash = ?, customer_code_prefix = ?, customer_code_mode = 'MANUAL'
-            WHERE id = ?
-            """,
-            username,
-            displayName,
-            clientCode,
-            partyRole,
-            status,
-            newRemark,
-            codeHash,
-            codePrefix,
-            existing.id()
-        );
-      } else {
-        jdbcTemplate.update(
-            "UPDATE cp_customers SET username = ?, display_name = ?, client_code = ?, party_role = ?, status = ?, remark = ? WHERE id = ?",
-            username,
-            displayName,
-            clientCode,
-            partyRole,
-            status,
-            newRemark,
-            existing.id()
-        );
+        profile.customerCodeHash = tokenCodec.hash(clientCode);
+        profile.customerCodePrefix = clientCode.length() > 4 ? clientCode.substring(0, 4) : clientCode;
       }
+      profileRepository.updateProfile(profile, codeChanged, actor);
       // The logistics role is a customer identity attribute in this model. Keep all existing
       // shipment relationships consistent when the business user changes that identity.
       if (!partyRole.equals(existing.partyRole())) {
@@ -330,7 +322,7 @@ public class CustomerProfileService {
     }
     if (!"ACTIVE".equals(status)) lookupService.revokeSessions(existing.id());
     auditService.customer(actor, "UPDATE_CUSTOMER", existing.id(), "Updated customer " + username, ipAddress);
-    return lookupService.customerMetadata(lookupService.requireManaged(customerPublicId, actor));
+    return lookupService.customerMetadataWithEmployee(lookupService.requireManaged(customerPublicId, actor));
   }
 
   @Transactional

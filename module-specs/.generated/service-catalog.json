@@ -1,0 +1,73 @@
+{
+  "spec": {
+    "id": "service-catalog",
+    "scope": "internal-reference",
+    "table": "cp_service_catalog",
+    "migrationVersion": 4,
+    "roles": ["ADMIN", "BUSINESS"],
+    "title": {
+      "zh-CN": "服务目录",
+      "en-US": "Service catalog"
+    },
+    "fields": [
+      {
+        "name": "code",
+        "type": "string",
+        "required": true,
+        "maxLength": 64,
+        "unique": true,
+        "search": true,
+        "label": {
+          "zh-CN": "服务代码",
+          "en-US": "Service code"
+        }
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": true,
+        "maxLength": 160,
+        "search": true,
+        "label": {
+          "zh-CN": "服务名称",
+          "en-US": "Service name"
+        }
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false,
+        "maxLength": 4000,
+        "label": {
+          "zh-CN": "服务说明",
+          "en-US": "Description"
+        }
+      },
+      {
+        "name": "enabled",
+        "type": "boolean",
+        "required": true,
+        "default": true,
+        "label": {
+          "zh-CN": "启用状态",
+          "en-US": "Enabled"
+        }
+      }
+    ]
+  },
+  "owned": {
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/infrastructure/ServiceCatalogEntity.java": "ca99595cb7b1609e9ee034571c4a685bbf575b4b8850fbb5341c9f73cd081958",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/infrastructure/ServiceCatalogMapper.java": "24afa9e46bee026cc5e195b7f469c2024826af3a6406d2dd7672916e14e35a6e",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/api/ServiceCatalogWrite.java": "295097d6b3058ae4d5047421683031afb4eb5ac5584c8c5cc86d304143f16374",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/api/ServiceCatalogUpdate.java": "edd4e5ec0dc84bfd1ad0a489caf414a19e7ea2b054a634ee7058bad0a85dcf5d",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/api/ServiceCatalogPatch.java": "d8c829643e1b9cf73da419d5db1c7e07e67e0aad1ffcdf1e0a9f680131f60f90",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/infrastructure/ServiceCatalogMapping.java": "8195a8a949cf44d3bd99ed5c80d4bfa03e63fed79e7956f3857c4bb0d89e8489",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/api/ServiceCatalogResponse.java": "083fa10095e35ffdc4bcc77d211cba0c3430bec4bd0f9d9975e15afb206d4459",
+    "backend/src/main/java/com/cargoplanner/backend/servicecatalog/domain/ServiceCatalogPolicy.java": "dcf0df3cdd1aed455e30b5c82da95cd7fd73d3b843c8fab25a102813620c1739",
+    "frontend/src/modules/service-catalog/module.js": "1336857fbaf3a8403c6f7b4f4f2661e9d36788a07f69308cba1ac8a26ec5634e",
+    "frontend/src/modules/service-catalog/messages.js": "45b0271b38526b14e1c22a55cf9191f021104928002054bc5a814ffd47ac56e3",
+    "frontend/src/generated/service-catalog-api.ts": "7e7aef97e74d81881338342e30fc5033a6783a21afe8fef92f3f4ae9263d60e2",
+    "frontend/src/generated/service-catalog-model.ts": "247abd574c1a13789b4edaddd76a16109c4516b01056f64fc30ed25ad8800400",
+    "backend/src/main/resources/db/migration/V4__service_catalog.sql": "cd01348db8a28475b49d1c2835f7c94a3cf263c702923e0333a4d3e459278e77"
+  }
+}

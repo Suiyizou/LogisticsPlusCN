@@ -2,7 +2,8 @@ import { createApp } from "vue";
 import { i18n } from "./i18n";
 
 async function mountApplication() {
-  const hasLegacyRouteHash = window.location.hash?.startsWith("#/") || window.location.hash === "#admin";
+  const hasLegacyRouteHash =
+    window.location.hash?.startsWith("#/") || window.location.hash === "#admin";
   const isPublicLanding = window.location.pathname === "/" && !hasLegacyRouteHash;
   let RootComponent;
   let appRouter = null;
@@ -15,12 +16,14 @@ async function mountApplication() {
     ]);
     RootComponent = LandingEntry;
   } else {
-    const [{ default: ApplicationEntry }, { installLegacyDomI18n }, { router }] = await Promise.all([
-      import("./ApplicationEntry.vue"),
-      import("./i18n/legacyDom"),
-      import("./router"),
-      import("./styles.css")
-    ]);
+    const [{ default: ApplicationEntry }, { installLegacyDomI18n }, { router }] = await Promise.all(
+      [
+        import("./ApplicationEntry.vue"),
+        import("./i18n/legacyDom"),
+        import("./router"),
+        import("./styles.css")
+      ]
+    );
     RootComponent = ApplicationEntry;
     appRouter = router;
     installSurface = () => installLegacyDomI18n();
@@ -29,7 +32,11 @@ async function mountApplication() {
   await import("./login.css");
 
   const app = createApp(RootComponent);
-  if (appRouter) app.use(appRouter);
+  if (appRouter) {
+    app.use(appRouter);
+    // Resolve nested module routes before rendering. Router errors render the retry page.
+    await appRouter.isReady().catch(() => {});
+  }
   app.use(i18n);
   installSurface(app);
   app.mount("#app");

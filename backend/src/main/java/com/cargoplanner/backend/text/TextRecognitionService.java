@@ -3,12 +3,15 @@ package com.cargoplanner.backend.text;
 import com.cargoplanner.backend.admin.LlmSettingsService;
 import com.cargoplanner.backend.admin.LlmSettingsService.LlmRuntimeSettings;
 import com.cargoplanner.backend.common.ApiException;
+import com.cargoplanner.backend.text.workbook.WorkbookPlanExecutor;
+import com.cargoplanner.backend.text.workbook.WorkbookToolConversation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -58,9 +61,11 @@ import org.springframework.web.client.RestTemplate;
 
 @Service
 public class TextRecognitionService {
-  private static final String TEXT_RECOGNITION_ENGINE_VERSION = "excel-agent-batch-v6";
+  private static final String TEXT_RECOGNITION_ENGINE_VERSION = "excel-package-evidence-v7";
+  private static final String WORKBOOK_DOCUMENT_PREFIX = "WORKBOOK_TOOL_DOCUMENT_V1\n";
   private static final List<String> OUTPUT_HEADERS = List.of(
-      "name", "model", "lengthCm", "widthCm", "heightCm", "quantity", "weightKg", "type", "nonStack", "keepUpright", "color", "sku", "remark"
+      "name", "model", "lengthCm", "widthCm", "heightCm", "quantity", "weightKg", "type", "nonStack", "keepUpright", "color", "sku", "remark",
+      "packageNo", "marks", "sourceSheet", "sourceRows", "innerQuantity", "totalWeightKg", "innerCargoJson", "packageInfoJson"
   );
   private static final Pattern SKID_LINE_PATTERN = Pattern.compile(
       "(?i)^\\s*(?:(?<name>[\\p{IsHan}A-Za-z][^\\d/]{1,80}?)\\s+)?(?<quantity>\\d+)\\s*"
@@ -136,7 +141,6 @@ public class TextRecognitionService {
     thread.setDaemon(true);
     return thread;
   });
-  private volatile boolean tableReady = false;
 
   public TextRecognitionService(
       JdbcTemplate jdbcTemplate,
@@ -163,7 +167,6 @@ public class TextRecognitionService {
   }
 
   public Map<String, Object> createTask(TextRecognitionRequest request) {
-    ensureTable();
     String text = cleanCell(request == null ? "" : request.text());
     if (text.isBlank()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Text is required");
@@ -189,8 +192,20 @@ public class TextRecognitionService {
     return getTask(taskId);
   }
 
+  public Map<String, Object> createWorkbookTask(Map<String, Object> document, String sourceName, String languageHint) {
+    if (document == null || document.isEmpty()) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Workbook evidence is required");
+    }
+    try {
+      String text = WORKBOOK_DOCUMENT_PREFIX + objectMapper.writeValueAsString(document);
+      return createTask(new TextRecognitionRequest(text, sourceName, "excel", languageHint));
+    } catch (JsonProcessingException error) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Workbook evidence cannot be serialized");
+    }
+  }
+
   public Map<String, Object> capabilities() {
-    return Map.of(
+    Map<String, Object> result = new LinkedHashMap<>(Map.of(
         "engineVersion", TEXT_RECOGNITION_ENGINE_VERSION,
         "adaptiveBatching", true,
         "parallelBatching", true,
@@ -201,12 +216,16 @@ public class TextRecognitionService {
         "taskDeadlineSeconds", EXCEL_AGENT_TASK_DEADLINE.toSeconds(),
         "requestReadTimeoutSeconds", LLM_READ_TIMEOUT.toSeconds(),
         "singleRowFailureMode", "issue"
-    );
+    ));
+    result.put("workbookTools", true);
+    result.put("workbookToolProtocol", "workbook-evidence-v1");
+    return result;
   }
 
   private void processTask(long taskId, String text, String languageHint) {
     try {
       RecognitionResult result = recognize(text, languageHint);
+      attachSourceReconciliation(result, taskId);
       String cleanedJson = objectMapper.writeValueAsString(result.cleanedRows());
       String issuesJson = objectMapper.writeValueAsString(result.issues());
       jdbcTemplate.update(
@@ -248,6 +267,25 @@ public class TextRecognitionService {
     }
   }
 
+  private void attachSourceReconciliation(RecognitionResult result, long taskId) {
+    for (Map<String, Object> metadata : result.issues()) {
+      if (!"PACKAGE_RECONCILIATION".equals(metadata.get("code"))) continue;
+      Map<String, Object> reconciliation = objectMap(metadata.get("reconciliation"));
+      reconciliation.put("sourceTaskId", taskId);
+      reconciliation.put("engineVersion", TEXT_RECOGNITION_ENGINE_VERSION);
+      reconciliation.put("partial", "blocked".equals(reconciliation.get("status")));
+      metadata.put("reconciliation", reconciliation);
+      // Keep the complete source audit with every exported row. A detached CSV
+      // or first worksheet must retain the same blocked/review-required state.
+      for (Map<String, Object> cargo : result.cleanedRows()) {
+        Map<String, Object> packageInfo = objectMap(cargo.get("packageInfo"));
+        packageInfo.put("sourceReconciliation", reconciliation);
+        cargo.put("packageInfo", packageInfo);
+      }
+      return;
+    }
+  }
+
   @PreDestroy
   public void shutdownRecognitionExecutor() {
     recognitionExecutor.shutdownNow();
@@ -255,7 +293,6 @@ public class TextRecognitionService {
   }
 
   public List<Map<String, Object>> listTasks() {
-    ensureTable();
     return jdbcTemplate.query(
         """
         SELECT id, task_no, source_channel, source_name, status, row_count, valid_count,
@@ -269,7 +306,6 @@ public class TextRecognitionService {
   }
 
   public Map<String, Object> getTask(long id) {
-    ensureTable();
     List<Map<String, Object>> rows = jdbcTemplate.query(
         """
         SELECT id, task_no, source_channel, source_name, status, row_count, valid_count,
@@ -288,7 +324,6 @@ public class TextRecognitionService {
   }
 
   public String cleanedJson(long id) {
-    ensureTable();
     String json = jdbcTemplate.query(
         "SELECT cleaned_json FROM cp_text_recognition_tasks WHERE id = ?",
         (rs) -> rs.next() ? rs.getString("cleaned_json") : null,
@@ -302,8 +337,8 @@ public class TextRecognitionService {
   }
 
   public byte[] cleanedWorkbook(long id) {
-    ensureTable();
-    List<Map<String, Object>> rows = parseJsonList(cleanedJson(id));
+    Map<String, Object> task = getTask(id);
+    List<Map<String, Object>> rows = mapList(task.get("cleanedRows"));
     try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
       Sheet sheet = workbook.createSheet("text-recognition");
       Row headerRow = sheet.createRow(0);
@@ -314,7 +349,7 @@ public class TextRecognitionService {
         Row sheetRow = sheet.createRow(rowIndex + 1);
         Map<String, Object> cargo = rows.get(rowIndex);
         for (int col = 0; col < OUTPUT_HEADERS.size(); col++) {
-          Object value = cargo.get(OUTPUT_HEADERS.get(col));
+          Object value = exportedCargoValue(cargo, OUTPUT_HEADERS.get(col));
           if (value instanceof Number number) {
             sheetRow.createCell(col).setCellValue(number.doubleValue());
           } else {
@@ -324,6 +359,10 @@ public class TextRecognitionService {
       }
       for (int i = 0; i < OUTPUT_HEADERS.size(); i++) {
         sheet.autoSizeColumn(i);
+        sheet.setColumnWidth(i, Math.min(sheet.getColumnWidth(i), 12_000));
+      }
+      if (task.get("reconciliation") instanceof Map<?, ?> reconciliation) {
+        writeReconciliationSheet(workbook, reconciliation);
       }
       workbook.write(output);
       return output.toByteArray();
@@ -332,37 +371,37 @@ public class TextRecognitionService {
     }
   }
 
-  private void ensureTable() {
-    if (tableReady) return;
-    synchronized (this) {
-      if (tableReady) return;
-      jdbcTemplate.execute(
-          """
-          CREATE TABLE IF NOT EXISTS cp_text_recognition_tasks (
-            id BIGINT PRIMARY KEY AUTO_INCREMENT,
-            task_no VARCHAR(40) NOT NULL UNIQUE,
-            source_channel ENUM('LOCAL', 'AGENT') NOT NULL DEFAULT 'AGENT',
-            source_name VARCHAR(255) NOT NULL DEFAULT 'pasted-text',
-            status ENUM('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED') NOT NULL DEFAULT 'PENDING',
-            raw_text LONGTEXT NOT NULL,
-            row_count INT NOT NULL DEFAULT 0,
-            valid_count INT NOT NULL DEFAULT 0,
-            issue_count INT NOT NULL DEFAULT 0,
-            cleaned_count INT NOT NULL DEFAULT 0,
-            cleaned_json LONGTEXT NULL,
-            issues_json LONGTEXT NULL,
-            agent_notes TEXT NULL,
-            error_message TEXT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            finished_at DATETIME NULL,
-            INDEX idx_cp_text_recognition_tasks_status_time (status, created_at),
-            INDEX idx_cp_text_recognition_tasks_created_at (created_at)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-          """
-      );
-      tableReady = true;
+  private Object exportedCargoValue(Map<String, Object> cargo, String field) throws JsonProcessingException {
+    Map<String, Object> packageInfo = objectMap(cargo.get("packageInfo"));
+    Map<String, Object> innerCargo = objectMap(packageInfo.get("innerCargo"));
+    return switch (field) {
+      case "sourceRows" -> objectMapper.writeValueAsString(
+          cargo.containsKey("sourceRowNumbers") ? cargo.get("sourceRowNumbers") : packageInfo.getOrDefault("sourceRows", List.of()));
+      case "innerQuantity" -> innerCargo.get("totalQuantity");
+      case "totalWeightKg" -> BigDecimal.valueOf(numberValue(cargo.get("weightKg")))
+          .multiply(BigDecimal.valueOf(intValue(cargo.get("quantity"), 0))).doubleValue();
+      case "innerCargoJson" -> objectMapper.writeValueAsString(innerCargo);
+      case "packageInfoJson" -> objectMapper.writeValueAsString(packageInfo);
+      default -> cargo.get(field);
+    };
+  }
+
+  private void writeReconciliationSheet(Workbook workbook, Map<?, ?> reconciliation) throws JsonProcessingException {
+    Sheet sheet = workbook.createSheet("reconciliation");
+    Row header = sheet.createRow(0);
+    header.createCell(0).setCellValue("field");
+    header.createCell(1).setCellValue("value");
+    int index = 1;
+    for (Map.Entry<?, ?> entry : reconciliation.entrySet()) {
+      Row row = sheet.createRow(index++);
+      row.createCell(0).setCellValue(String.valueOf(entry.getKey()));
+      Object value = entry.getValue();
+      if (value instanceof Number number) row.createCell(1).setCellValue(number.doubleValue());
+      else row.createCell(1).setCellValue(value instanceof Map<?, ?> || value instanceof List<?>
+          ? objectMapper.writeValueAsString(value) : String.valueOf(value));
     }
+    sheet.setColumnWidth(0, 7_000);
+    sheet.setColumnWidth(1, 18_000);
   }
 
   private long insertTask(TextRecognitionRequest request) {
@@ -393,6 +432,9 @@ public class TextRecognitionService {
   }
 
   private RecognitionResult recognize(String text, String languageHint) {
+    if (text.startsWith(WORKBOOK_DOCUMENT_PREFIX)) {
+      return recognizeWorkbookDocument(text.substring(WORKBOOK_DOCUMENT_PREFIX.length()), languageHint);
+    }
     boolean formattedExcelAgentInput = isFormattedExcelAgentInput(text);
     boolean requiresPackagingSemantics = hasPalletSemanticSignals(text);
 
@@ -431,6 +473,71 @@ public class TextRecognitionService {
     }
     RecognitionResult fallback = recognizeLocally(text);
     return fallback.withNotes("管理员已关闭 LLM 识别，当前使用规则兜底。");
+  }
+
+  private RecognitionResult recognizeWorkbookDocument(String documentJson, String languageHint) {
+    LlmRuntimeSettings settings = llmSettingsService.runtimeSettings();
+    if (!settings.enabled() || !settings.hasApiKey()) {
+      throw new IllegalStateException("工作簿智能导入需要已启用并配置 API Key 的 Agent；不会退化为猜测表头和数量的规则导入。");
+    }
+    Map<String, Object> document;
+    try {
+      document = objectMapper.readValue(documentJson, new TypeReference<Map<String, Object>>() {});
+    } catch (JsonProcessingException error) {
+      throw new IllegalStateException("保存的工作簿读取证据无效，不能继续识别。", error);
+    }
+    Map<String, Object> modelPlan = new WorkbookToolConversation(objectMapper).recognize(
+        document,
+        body -> exchangeOpenAiCompatible(settings, body)
+    );
+    Map<String, Object> execution = new WorkbookPlanExecutor(objectMapper).execute(document, modelPlan);
+    List<Map<String, Object>> issues = new ArrayList<>(mapList(execution.get("issues")));
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> row : mapList(execution.get("rows"))) {
+      int rowNumber = intValue(row.get("sourceRowNumber"), rows.size() + 1);
+      ParsedCargo parsed = normalizeCargo(row, rowNumber, cleanCell(row.get("sourceText")));
+      // The executor has already verified native numeric cells. Legacy text
+      // normalization rounds to two decimals; that must not alter audited cells.
+      for (String field : List.of("lengthCm", "widthCm", "heightCm", "weightKg")) {
+        if (row.get(field) instanceof Number) parsed.cargo().put(field, row.get(field));
+      }
+      if (row.get("packageInfo") instanceof Map<?, ?>) parsed.cargo().put("packageInfo", deepCopyJsonValue(row.get("packageInfo")));
+      List<String> validationErrors = validateCargo(parsed.cargo());
+      if (!validationErrors.isEmpty() || numberValue(parsed.cargo().get("weightKg")) <= 0) {
+        List<String> errors = new ArrayList<>(validationErrors);
+        if (numberValue(parsed.cargo().get("weightKg")) <= 0) errors.add("缺少可确认的单个包装毛重。");
+        Map<String, Object> issue = new LinkedHashMap<>(buildIssue(rowNumber, parsed.text(), errors, parsed.cargo()));
+        issue.put("code", "PACKAGE_SOURCE_INVALID");
+        issues.add(issue);
+      } else {
+        // Tool execution already defines individual shipping entities. Do not
+        // collapse units after their grouping and source checks have completed.
+        rows.add(parsed.cargo());
+      }
+    }
+    Map<String, Object> reconciliation = objectMap(execution.get("reconciliation"));
+    boolean blocked = booleanValue(execution.get("partial"))
+        || !mapList(reconciliation.get("blockingIssues")).isEmpty()
+        || issues.stream().anyMatch(issue -> isBlockingRecognitionIssueCode(issue.get("code")));
+    if (blocked) {
+      reconciliation.put("status", "blocked");
+      Map<String, Object> issue = new LinkedHashMap<>();
+      issue.put("code", "PACKAGE_CONSERVATION_MISMATCH");
+      issue.put("rowNumber", 0);
+      issue.put("text", "工作簿包装与来源核对");
+      issue.put("errors", List.of("工作簿的包装身份、内装明细或数量/重量核对尚未通过，必须复核后才能导入。"));
+      issues.add(issue);
+    }
+    int issueCount = issues.size();
+    Map<String, Object> metadata = new LinkedHashMap<>();
+    metadata.put("code", "PACKAGE_RECONCILIATION");
+    metadata.put("reconciliation", reconciliation);
+    metadata.put("errors", List.of());
+    issues.add(metadata);
+    String notes = "Agent 已通过工作簿读取工具生成读取计划，并按原始单元格逐包执行、核对；最终包装 " + rows.size() + " 个。";
+    return new RecognitionResult(
+        intValue(execution.get("totalSourceRows"), rows.size()), rows.size(), issueCount, rows, issues, notes
+    );
   }
 
   private RecognitionResult recognizeLocally(String text) {
@@ -999,6 +1106,9 @@ public class TextRecognitionService {
       case "quantity" -> !containsAny(header, "原始", "散件", "内装", "每托", "每箱", "order")
           && (containsAny(header, "最终搬运单元数量", "最终托盘", "托盘数量", "栈板数量", "托数", "箱数", "packagequantity", "palletquantity")
               || header.equals("数量") || header.equals("qty") || header.equals("quantity"));
+      case "finalQuantity" -> !containsAny(header, "原始", "散件", "内装", "每托", "每箱", "order")
+          && containsAny(header, "最终搬运单元数量", "最终托盘", "托盘数量", "栈板数量", "托数", "箱数",
+              "packagequantity", "palletquantity", "cartonquantity", "totalcartons", "totalctns", "t.ctns");
       case "weight" -> !containsAny(header, "总重量", "总重", "合计", "自重", "皮重", "净重", "tare", "netweight")
           && (containsAny(header, "单托总毛重", "单箱毛重", "单件重量", "单位重量", "单重", "unitweight", "grossweightper", "weightkg")
               || header.equals("毛重") || header.equals("重量"));
@@ -1375,12 +1485,7 @@ public class TextRecognitionService {
   }
 
   private String callOpenAiCompatibleChat(LlmRuntimeSettings settings, String text, String languageHint) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(settings.apiKey());
-
     Map<String, Object> body = new LinkedHashMap<>();
-    body.put("model", settings.model());
     body.put("temperature", 0.1);
     body.put("stream", false);
     body.put("max_tokens", 8192);
@@ -1389,7 +1494,19 @@ public class TextRecognitionService {
         Map.of("role", "system", "content", systemPrompt()),
         Map.of("role", "user", "content", userPrompt(text, languageHint))
     ));
-    if (settings.baseUrl().toLowerCase(Locale.ROOT).contains("deepseek.com")) {
+    return extractAssistantContent(exchangeOpenAiCompatible(settings, body));
+  }
+
+  private Map<String, Object> exchangeOpenAiCompatible(LlmRuntimeSettings settings, Map<String, Object> requestBody) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(settings.apiKey());
+    Map<String, Object> body = new LinkedHashMap<>(requestBody);
+    body.put("model", settings.model());
+    body.putIfAbsent("temperature", 0.1);
+    body.putIfAbsent("stream", false);
+    body.putIfAbsent("max_tokens", 8192);
+    if (cleanCell(settings.baseUrl()).toLowerCase(Locale.ROOT).contains("deepseek.com")) {
       body.put("thinking", Map.of("type", "disabled"));
     }
 
@@ -1404,7 +1521,8 @@ public class TextRecognitionService {
         if (!(responseBody instanceof Map<?, ?> payload)) {
           throw new IllegalStateException("LLM returned empty response body");
         }
-        return extractAssistantContent(payload);
+        if (payload.get("error") != null) throw new IllegalStateException(providerErrorMessage(payload.get("error")));
+        return objectMap(payload);
       } catch (HttpStatusCodeException error) {
         if (isTransientProviderStatus(error.getStatusCode().value()) && attempt < LLM_MAX_TRANSIENT_ATTEMPTS) {
           sleepBeforeProviderRetry(retryDelayMillis(error, attempt));
@@ -1973,12 +2091,20 @@ public class TextRecognitionService {
     if (row.get("packageInfo") instanceof Map<?, ?> packageInfo) {
       cargo.put("packageInfo", new LinkedHashMap<>(packageInfo));
     }
-    if (row.containsKey("sourceRowNumber") && row.containsKey("sourceRowNumbers")) {
-      for (Map.Entry<String, Object> entry : row.entrySet()) {
-        if (entry.getKey().startsWith("source")) {
-          cargo.put(entry.getKey(), deepCopyJsonValue(entry.getValue()));
-        }
+    for (Map.Entry<String, Object> entry : row.entrySet()) {
+      if (Set.of("packageNo", "marks", "packageGroupId", "sourceSheet", "sourceRowNumber", "sourceRowNumbers", "sourceRows", "sourceRange", "sourceReconstructed")
+          .contains(entry.getKey())) {
+        cargo.put(entry.getKey(), deepCopyJsonValue(entry.getValue()));
       }
+    }
+    Map<String, Object> sourcePackageInfo = objectMap(cargo.get("packageInfo"));
+    for (String field : List.of("packageNo", "marks", "sourceSheet")) {
+      if (cleanCell(cargo.get(field)).isBlank() && !cleanCell(sourcePackageInfo.get(field)).isBlank()) {
+        cargo.put(field, sourcePackageInfo.get(field));
+      }
+    }
+    if (!cargo.containsKey("sourceRowNumbers") && sourcePackageInfo.get("sourceRows") instanceof List<?>) {
+      cargo.put("sourceRowNumbers", deepCopyJsonValue(sourcePackageInfo.get("sourceRows")));
     }
     applyIndependentConstraints(cargo,
         row.get("nonStack"),
@@ -2190,7 +2316,9 @@ public class TextRecognitionService {
 
     String sourceType = sourceValueForRole(headerCells, sourceCells, "type");
     if (!sourceType.isBlank()) modelRow.put("type", normalizeType(sourceType));
-    Integer quantity = positiveSourceInteger(sourceValueForRole(headerCells, sourceCells, "quantity"));
+    // A bare QTY/数量 may count pieces inside one crate. Only unambiguous final-unit
+    // counts may override the agent's package quantity; keep inner counts separate.
+    Integer quantity = positiveSourceInteger(sourceValueForRole(headerCells, sourceCells, "finalQuantity"));
     Double weightKg = positiveSourceNumber(sourceValueForRole(headerCells, sourceCells, "weight"));
     if (quantity != null) modelRow.put("quantity", quantity);
     if (weightKg != null) modelRow.put("weightKg", round2(weightKg));
@@ -2792,7 +2920,14 @@ public class TextRecognitionService {
 
   private List<Map<String, Object>> aggregateCargos(List<Map<String, Object>> cargos) {
     Map<String, Map<String, Object>> aggregate = new LinkedHashMap<>();
+    int identifiedPackageIndex = 0;
     for (Map<String, Object> cargo : cargos) {
+      // Individually marked shipping units are entities, not interchangeable SKU
+      // rows. Preserve even duplicate identities so reconciliation can flag them.
+      if (hasExplicitPackageIdentity(cargo)) {
+        aggregate.put("identified-package-" + identifiedPackageIndex++, new LinkedHashMap<>(cargo));
+        continue;
+      }
       String key = List.of(
           String.valueOf(cargo.getOrDefault("sku", "")),
           String.valueOf(cargo.getOrDefault("name", "")),
@@ -2816,6 +2951,22 @@ public class TextRecognitionService {
       }
     }
     return assignCargoModels(new ArrayList<>(aggregate.values()));
+  }
+
+  private boolean hasExplicitPackageIdentity(Map<String, Object> cargo) {
+    Map<String, Object> packageInfo = objectMap(cargo.get("packageInfo"));
+    return !cleanCell(firstNonBlank(cargo.get("packageNo"), packageInfo.get("packageNo"))).isBlank()
+        || !cleanCell(firstNonBlank(cargo.get("marks"), packageInfo.get("marks"))).isBlank()
+        || !cleanCell(firstNonBlank(cargo.get("packageGroupId"), packageInfo.get("packageGroupId"))).isBlank()
+        || "source-package-group".equals(packageInfo.get("algorithmBasis"));
+  }
+
+  private Map<String, Object> objectMap(Object value) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    if (value instanceof Map<?, ?> map) {
+      map.forEach((key, item) -> result.put(String.valueOf(key), item));
+    }
+    return result;
   }
 
   @SuppressWarnings("unchecked")
@@ -2909,6 +3060,9 @@ public class TextRecognitionService {
             {
               "sourceRowNumber": 12,
               "sourceText": "original line or clause",
+               "packageNo": "source package identifier, empty when absent",
+               "marks": "source shipping marks, empty when absent",
+               "sourceSheet": "exact source sheet name when present",
               "name": "cargo name",
               "model": "model/specification, empty if unknown",
               "lengthCm": 0,
@@ -2948,6 +3102,8 @@ public class TextRecognitionService {
         - All dimensions must be centimeters.
         - All weights must be kilograms per single item.
         - The algorithm fields lengthCm,widthCm,heightCm,quantity,weightKg must always describe the final handled package unit: pallet, carton, crate, wooden case, or box. Never put loose-piece dimensions into these fields when the goods are shipped inside cartons/pallets.
+        - Preserve physical package identifiers and shipping marks in packageNo/marks/sourceSheet. Distinct marked packages must remain distinct records even when their products, dimensions and unit weights match.
+        - For a package with multiple product continuation rows, retain every inner product in packageInfo.innerCargo.lines with name, model, quantity, unitNetWeightKg and sourceRowNumber; totalQuantity is the sum of all those product quantities. Those product quantities must never replace the outer package count.
         - Infer the packaging hierarchy from the meaning and relationships of headers, values, file/sheet names, notes, merged cells, and neighboring rows. Header wording is not fixed and may differ by customer or language; do not depend on exact column names.
         - Signals that a row may represent a loaded pallet include cartons/packages per pallet, pallet/load total weight or volume, layer count, cartons per layer, pallet assembly notes, repeated one-pallet rows, or file/sheet names describing pallet loads. When these semantic signals exist, do not automatically fall back to carton-level cargo merely because carton dimensions and carton counts are present.
         - Do not skip a repeated pallet row merely because its product name and dimensions match another row. Different source rows/SKUs can represent different physical pallets; emit each source row first and let the backend aggregate only after the final handling unit is validated.
@@ -3447,12 +3603,19 @@ public class TextRecognitionService {
       row.put("cleanedRows", parseJsonList(rs.getString("cleaned_json")));
       row.put("issues", parsedIssues);
       row.put("partial", parsedIssues.stream().anyMatch(issue -> isBlockingRecognitionIssueCode(issue.get("code"))));
+      parsedIssues.stream()
+          .filter(issue -> "PACKAGE_RECONCILIATION".equals(cleanCell(issue.get("code"))))
+          .map(issue -> issue.get("reconciliation"))
+          .filter(value -> value instanceof Map<?, ?>)
+          .findFirst()
+          .ifPresent(value -> row.put("reconciliation", value));
     }
     return row;
   }
 
   private boolean isBlockingRecognitionIssueCode(Object code) {
-    return Set.of("AGENT_OUTPUT_LIMIT", "AGENT_ROW_COVERAGE", "AGENT_REQUEST_BUDGET", "INPUT_TRUNCATED", "PALLET_DIMENSIONS_MISSING")
+    return Set.of("AGENT_OUTPUT_LIMIT", "AGENT_ROW_COVERAGE", "AGENT_REQUEST_BUDGET", "INPUT_TRUNCATED", "PALLET_DIMENSIONS_MISSING",
+        "PACKAGE_SOURCE_INVALID", "PACKAGE_CONSERVATION_MISMATCH", "PACKAGE_IDENTITY_AMBIGUOUS", "PACKAGE_PLAN_INVALID")
         .contains(cleanCell(code));
   }
 

@@ -38,7 +38,7 @@ public class CustomerLookupService {
         SELECT c.id, c.public_id, c.username, c.display_name, c.client_code,
                c.party_role, c.customer_code_prefix, c.customer_code_mode,
                c.provisioning_source,
-               c.status, c.remark, c.created_by, c.responsible_agent_id,
+               c.status, c.remark, c.contact_email, c.created_by, c.responsible_agent_id,
                c.created_at, c.updated_at,
                creator.display_name AS created_by_display_name,
                owner.display_name AS responsible_agent_display_name,
@@ -143,6 +143,7 @@ public class CustomerLookupService {
         rs.getString("provisioning_source"),
         rs.getString("status"),
         rs.getString("remark"),
+        rs.getString("contact_email"),
         nullableLong(rs, "created_by"),
         rs.getString("created_by_display_name"),
         rs.getLong("responsible_agent_id"),
@@ -164,6 +165,7 @@ public class CustomerLookupService {
     value.put("provisioningSource", record.provisioningSource());
     value.put("status", record.status());
     value.put("remark", record.remark());
+    value.put("contactEmail", record.contactEmail());
     value.put("createdBy", record.createdBy());
     value.put("createdByDisplayName", record.createdByDisplayName());
     value.put("responsibleAgentId", record.responsibleAgentId());

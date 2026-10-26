@@ -9,18 +9,28 @@
     "verify": "node scripts/verify.mjs",
     "verify:quality": "node scripts/quality.mjs",
     "verify:backend": "node scripts/verify.mjs backend",
+    "verify:customers": "node scripts/verify.mjs customers",
+    "verify:release": "node scripts/verify.mjs release",
     "verify:tracking": "node scripts/verify.mjs tracking",
     "verify:packing": "node scripts/verify.mjs packing",
     "verify:frontend": "node scripts/verify.mjs frontend",
     "verify:typecheck": "node scripts/verify.mjs typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "module:create": "node scripts/create-module.mjs",
+    "module:check": "node scripts/verify-module-platform.mjs",
+    "api:generate": "node scripts/generate-api-contracts.mjs",
+    "api:check": "node scripts/generate-api-contracts.mjs --check",
+    "verify:modules": "node scripts/verify.mjs modules",
+    "verify:database": "node scripts/verify-database-migrations.mjs",
+    "verify:e2e": "node scripts/verify-platform-e2e.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "eslint": "^9.13.0",
     "globals": "^15.11.0",
+    "openapi-typescript": "7.13.0",
     "prettier": "^3.3.0"
   }
 }

@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
  * 不记录请求体、密码、令牌或 Cookie；detail / ip 截断规则与原实现一致。
  */
 @Service
-public class CustomerAuditService {
+public class CustomerAuditService implements com.cargoplanner.backend.platform.audit.AuditWriter {
   private final JdbcTemplate jdbcTemplate;
 
   public CustomerAuditService(JdbcTemplate jdbcTemplate) {

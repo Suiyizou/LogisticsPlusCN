@@ -1,10 +1,8 @@
 import test from "node:test";
+import { createCoscoRuntime } from "../services/cosco-runtime.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import {
-  createCoscoCircuitBreaker,
-  createCoscoQueryGate
-} from "../lib/cosco-request-guard.mjs";
+import { createCoscoCircuitBreaker, createCoscoQueryGate } from "../lib/cosco-request-guard.mjs";
 import {
   decorateProxySuccess,
   enrichCoscoShipmentContainers,
@@ -19,16 +17,29 @@ import {
 } from "../server.mjs";
 
 async function readServerSource() {
-  const source = await readFile(new URL("../server.mjs", import.meta.url), "utf8");
-  return source.replace(/\r\n/g, "\n");
+  const sources = await Promise.all(
+    [
+      "../services/cosco-channel-executor.mjs",
+      "../services/cosco-fallback-runner.mjs",
+      "../services/cosco-supplemental-workflow.mjs",
+      "../services/cosco-runtime.mjs",
+      "../http/tracking-controller.mjs",
+      "../services/cosco-policy.mjs"
+    ].map((path) => readFile(new URL(path, import.meta.url), "utf8"))
+  );
+  // Remove only the factory's outer indent so the legacy routing contracts retain their boundaries.
+  return sources.map((text) => text.replace(/\r\n/g, "\n").replace(/^ {2}/gm, "")).join("\n");
 }
-
 test("proxy exhaustion reports safe node names, attempt count, and root cause", () => {
-  const error = proxyPoolExhaustedError({
-    status: 502,
-    message: "Configured COSCO proxy is unavailable",
-    details: { code: "COSCO_PROXY_UNAVAILABLE" }
-  }, 3, ["🇭🇰 香港S01", "🇭🇰 香港S02", "🇯🇵 日本S01"]);
+  const error = proxyPoolExhaustedError(
+    {
+      status: 502,
+      message: "Configured COSCO proxy is unavailable",
+      details: { code: "COSCO_PROXY_UNAVAILABLE" }
+    },
+    3,
+    ["🇭🇰 香港S01", "🇭🇰 香港S02", "🇯🇵 日本S01"]
+  );
 
   assert.match(error.message, /已尝试 3 个出口节点/);
   assert.match(error.message, /香港S01.*香港S02.*日本S01/);
@@ -40,14 +51,17 @@ test("proxy exhaustion reports safe node names, attempt count, and root cause", 
 });
 
 test("successful proxy results expose only safe structured route diagnostics", () => {
-  const result = decorateProxySuccess({
-    snapshot: { tracking: { number: "6505740970" } },
-    strategy: { requested: "AUTO", fallbackUsed: true }
-  }, {
-    proxyNode: "socks5://operator:private-password@proxy.example:1080",
-    proxyAttempts: 2,
-    triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
-  });
+  const result = decorateProxySuccess(
+    {
+      snapshot: { tracking: { number: "6505740970" } },
+      strategy: { requested: "AUTO", fallbackUsed: true }
+    },
+    {
+      proxyNode: "socks5://operator:private-password@proxy.example:1080",
+      proxyAttempts: 2,
+      triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
+    }
+  );
 
   assert.equal(result.strategy.requested, "AUTO");
   assert.equal(result.strategy.used, "PROXY");
@@ -58,15 +72,17 @@ test("successful proxy results expose only safe structured route diagnostics", (
 });
 
 test("supplemental warning diagnostics retain source context without leaking proxy credentials", () => {
-  const warnings = safeSupplementalWarnings([{
-    source: "bookingInfo",
-    code: "COSCO_UPSTREAM_BLOCKED",
-    message: "blocked",
-    route: "PROXY",
-    proxyNode: "socks5://operator:private-password@proxy.example:1080",
-    attempts: 2,
-    triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
-  }]);
+  const warnings = safeSupplementalWarnings([
+    {
+      source: "bookingInfo",
+      code: "COSCO_UPSTREAM_BLOCKED",
+      message: "blocked",
+      route: "PROXY",
+      proxyNode: "socks5://operator:private-password@proxy.example:1080",
+      attempts: 2,
+      triedNodes: ["HK-S01", "socks5://operator:private-password@proxy.example:1080"]
+    }
+  ]);
 
   assert.equal(warnings.length, 1);
   assert.equal(warnings[0].source, "bookingInfo");
@@ -98,8 +114,9 @@ class VirtualTimers {
   };
 
   async runNext() {
-    const next = [...this.timers.entries()]
-      .sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
+    const next = [...this.timers.entries()].sort(
+      (left, right) => left[1].dueAt - right[1].dueAt
+    )[0];
     assert.ok(next, "Expected a pending virtual timer");
     const [id, timer] = next;
     this.timers.delete(id);
@@ -140,7 +157,11 @@ test("query gate applies deterministic 10-12 second jitter while keeping operati
 
   assert.deepEqual(await Promise.all(jobs), [1, 2, 3]);
   assert.equal(maximumActive, 1);
-  assert.deepEqual(startTimes, [[1, 1_000], [2, 11_000], [3, 23_000]]);
+  assert.deepEqual(startTimes, [
+    [1, 1_000],
+    [2, 11_000],
+    [3, 23_000]
+  ]);
   assert.deepEqual(
     timers.scheduledDelays.filter((delay) => delay <= 12_000),
     [0, 10_000, 12_000]
@@ -172,9 +193,12 @@ test("aborting during a delayed start rejects immediately without running the op
 
   const controller = new AbortController();
   let ran = false;
-  const delayed = gate.run(async () => {
-    ran = true;
-  }, { signal: controller.signal });
+  const delayed = gate.run(
+    async () => {
+      ran = true;
+    },
+    { signal: controller.signal }
+  );
   controller.abort();
 
   await assert.rejects(delayed, (error) => error.code === "BATCH_CANCELLED");
@@ -261,16 +285,13 @@ test("optional container enrichment remains partial on an ordinary child failure
     milestones: []
   };
   let childCalls = 0;
-  const containers = await enrichCoscoShipmentContainers(
-    [originalContainer],
-    async () => {
-      childCalls += 1;
-      throw Object.assign(new Error("optional container endpoint failed"), {
-        httpStatus: 502,
-        code: "OPTIONAL_ENRICHMENT_FAILED"
-      });
-    }
-  );
+  const containers = await enrichCoscoShipmentContainers([originalContainer], async () => {
+    childCalls += 1;
+    throw Object.assign(new Error("optional container endpoint failed"), {
+      httpStatus: 502,
+      code: "OPTIONAL_ENRICHMENT_FAILED"
+    });
+  });
   const snapshot = normalizeCoscoSnapshot(
     {
       cargoTrackingSummary: {
@@ -299,7 +320,9 @@ test("optional enrichment propagates 403 and 429 protection errors", async () =>
   };
   const blocked = Object.assign(new Error("blocked"), { upstreamStatus: 403 });
   await assert.rejects(
-    enrichCoscoShipmentContainers([container], async () => { throw blocked; }),
+    enrichCoscoShipmentContainers([container], async () => {
+      throw blocked;
+    }),
     (error) => error === blocked
   );
 
@@ -310,7 +333,9 @@ test("optional enrichment propagates 403 and 429 protection errors", async () =>
     retryAfterMs: 30_000
   });
   await assert.rejects(
-    enrichCoscoShipmentContainers([container], async () => { throw limited; }),
+    enrichCoscoShipmentContainers([container], async () => {
+      throw limited;
+    }),
     (error) => error === limited && error.retryAfterMs === 30_000
   );
 });
@@ -322,7 +347,10 @@ test("AUTO primary strategy never jumps from the direct API to direct Playwright
     source.indexOf("export function shouldRotateCoscoProxy")
   );
 
-  assert.match(autoStrategy, /if \(queryChannel\.code === "AUTO"\)[\s\S]*?fetchCoscoTrackingViaNetwork/);
+  assert.match(
+    autoStrategy,
+    /if \(queryChannel\.code === "AUTO"\)[\s\S]*?fetchCoscoTrackingViaNetwork/
+  );
   assert.doesNotMatch(
     autoStrategy.match(/if \(queryChannel\.code === "AUTO"\)[\s\S]*?\n {2}\}/)?.[0] ?? "",
     /fetchCoscoTrackingWithPlaywright/
@@ -335,8 +363,8 @@ test("AUTO uses direct API, then proxy API pool, then one dedicated-proxy Playwr
     source.indexOf("async function runCoscoWithAutomaticProxyFallback"),
     source.indexOf("function runCoscoTrackingRequest")
   );
-  const direct = routing.indexOf("runCoscoWithProxyRotation(\n      queryChannel");
-  const proxy = routing.indexOf("runCoscoWithProxyRotation(\n          COSCO_QUERY_CHANNELS.PROXY");
+  const direct = routing.search(/runCoscoWithProxyRotation\(\s*queryChannel/);
+  const proxy = routing.search(/runCoscoWithProxyRotation\(\s*COSCO_QUERY_CHANNELS\.PROXY/);
   const playwright = routing.indexOf("operation(COSCO_QUERY_CHANNELS.PLAYWRIGHT");
   const configuredGuard = routing.indexOf("!COSCO_PLAYWRIGHT_AUTO_FALLBACK_ENABLED");
 
@@ -366,78 +394,151 @@ test("main-query enrichment warnings preserve route and proxy diagnostics", asyn
 
 test("AUTO Playwright fallback requires an exit independent from the API proxy", () => {
   assert.equal(isIndependentCoscoPlaywrightProxy(null, null), false);
-  assert.equal(isIndependentCoscoPlaywrightProxy(
-    { server: "socks5://browser-proxy:1080" },
-    null
-  ), true);
-  assert.equal(isIndependentCoscoPlaywrightProxy(
-    { server: "socks5://mihomo:7891" },
-    { server: "socks5://mihomo:7891" }
-  ), false);
-  assert.equal(isIndependentCoscoPlaywrightProxy(
-    { server: "socks5://provider:1080", username: "browser-route" },
-    { server: "socks5://provider:1080", username: "api-route" }
-  ), true);
+  assert.equal(
+    isIndependentCoscoPlaywrightProxy({ server: "socks5://browser-proxy:1080" }, null),
+    true
+  );
+  assert.equal(
+    isIndependentCoscoPlaywrightProxy(
+      { server: "socks5://mihomo:7891" },
+      { server: "socks5://mihomo:7891" }
+    ),
+    false
+  );
+  assert.equal(
+    isIndependentCoscoPlaywrightProxy(
+      { server: "socks5://provider:1080", username: "browser-route" },
+      { server: "socks5://provider:1080", username: "api-route" }
+    ),
+    true
+  );
 });
 
 test("AUTO falls back to the proxy pool for block, timeout, and gateway failures", () => {
-  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("blocked"), {
-    upstreamStatus: 403
-  })), true);
-  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("timed out"), {
-    status: 504
-  })), true);
-  assert.equal(shouldFallbackCoscoAutoToProxy(Object.assign(new Error("bad gateway"), {
-    status: 502
-  })), true);
+  assert.equal(
+    shouldFallbackCoscoAutoToProxy(
+      Object.assign(new Error("blocked"), {
+        upstreamStatus: 403
+      })
+    ),
+    true
+  );
+  assert.equal(
+    shouldFallbackCoscoAutoToProxy(
+      Object.assign(new Error("timed out"), {
+        status: 504
+      })
+    ),
+    true
+  );
+  assert.equal(
+    shouldFallbackCoscoAutoToProxy(
+      Object.assign(new Error("bad gateway"), {
+        status: 502
+      })
+    ),
+    true
+  );
   assert.equal(shouldFallbackCoscoAutoToProxy(new Error("invalid reference")), false);
 });
 
-test("supplemental proxy failures escape warning handling and enter node rotation", async () => {
-  const source = await readServerSource();
-  const handler = source.slice(
-    source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
-    source.indexOf("async function handleTrackRequest")
-  );
-
-  assert.match(handler, /runCoscoWithAutomaticProxyFallback/);
-  assert.equal(
-    (handler.match(/if \(shouldRotateCoscoProxy\(error\)\) throw error;/g) ?? []).length,
-    2
-  );
+test("supplemental upstream protection is preserved instead of becoming a partial warning", async (t) => {
+  for (const [source, status, code] of [
+    ["bookingInfo", 403, "COSCO_UPSTREAM_BLOCKED"],
+    ["containerInfo", 429, "COSCO_UPSTREAM_RATE_LIMITED"]
+  ]) {
+    const runtime = createCoscoRuntime({
+      env: {
+        CHANNEL_C_MONITOR_ENABLED: "false",
+        COSCO_QUERY_MIN_INTERVAL_MS: "0",
+        COSCO_QUERY_MAX_INTERVAL_MS: "0",
+        COSCO_UPSTREAM_MIN_INTERVAL_MS: "0",
+        COSCO_UPSTREAM_MAX_INTERVAL_MS: "0"
+      },
+      fetchDirect: async (url) =>
+        url.endsWith(`/${source}`)
+          ? new Response("protected", { status })
+          : new Response(JSON.stringify({ code: "200", success: true, result: {} })),
+      closeBrowser: async () => {}
+    });
+    t.after(() => runtime.dispose());
+    await assert.rejects(
+      runtime.fetchSupplementalDetails(
+        normalizeTrackingRequest({ type: "BOOKING", number: "6502077380" }),
+        { code: "NETWORK" }
+      ),
+      (error) => error.details.code === code
+    );
+    assert.equal(runtime.getHealth().coscoProtection.circuitBreakers.direct.blocked, true);
+    assert.equal(runtime.getHealth().coscoProtection.circuitBreakers.proxy.blocked, false);
+  }
 });
 
-test("delayed supplemental retry queries only failed sources before one proxy-browser fallback", async () => {
-  const source = await readServerSource();
-  const handler = source.slice(
-    source.indexOf("async function handleCoscoSupplementalDetailsRequest"),
-    source.indexOf("async function handleTrackRequest")
+test("delayed supplemental retry queries only failed sources before one authorized browser fallback", async (t) => {
+  const calls = [];
+  const runtime = createCoscoRuntime({
+    env: {
+      CHANNEL_C_MONITOR_ENABLED: "false",
+      COSCO_QUERY_MIN_INTERVAL_MS: "0",
+      COSCO_QUERY_MAX_INTERVAL_MS: "0",
+      COSCO_UPSTREAM_MIN_INTERVAL_MS: "0",
+      COSCO_UPSTREAM_MAX_INTERVAL_MS: "0",
+      COSCO_PLAYWRIGHT_PROXY_SERVER: "socks5://browser.example:1080"
+    },
+    fetchDirect: async (url) => {
+      calls.push(url.split("/").at(-1));
+      return new Response("not found", { status: 404 });
+    },
+    fetchBrowser: async (request, options) => {
+      calls.push("browser");
+      assert.equal(options.dedicatedFallback, true);
+      return {
+        detail: { cargoTrackingSummary: { blNumber: request.number }, cargoTrackingFullChain: [] },
+        bookingInfo: { clientPoNumber: "UNREQUESTED" },
+        containerInfo: [{ containerNumberWithCheckDigit: "TEMU6003424", containerType: "40HQ" }]
+      };
+    },
+    closeBrowser: async () => {}
+  });
+  t.after(() => runtime.dispose());
+  const result = await runtime.fetchSupplementalDetails(
+    normalizeTrackingRequest({ type: "BOOKING", number: "6502077380" }),
+    { code: "AUTO" },
+    {
+      sources: ["containerInfo"],
+      allowPlaywrightFallback: true,
+      authorizeProxyFallback: () => calls.push("authorize")
+    }
   );
-
-  assert.match(handler, /const requestedSources = new Set/);
-  assert.match(handler, /const allowPlaywrightFallback = input\.allowPlaywrightFallback === true/);
-  assert.match(handler, /allowPlaywrightFallback,/);
-  assert.match(handler, /activeChannel\.code === "PLAYWRIGHT"/);
-  assert.match(handler, /await fetchCoscoTracking\(/);
-  assert.match(handler, /requestedSources\.has\("bookingInfo"\)/);
-  assert.match(handler, /requestedSources\.has\("containerInfo"\)/);
-  assert.match(handler, /allowPlaywrightFallback && warnings\.length > 0/);
-  assert.match(handler, /route: "PLAYWRIGHT_PROXY"/);
+  assert.deepEqual(calls, ["containerInfo", "authorize", "browser"]);
+  assert.equal(result.containers[0].number, "TEMU6003424");
+  assert.deepEqual(result.references, { external: [], business: {}, information: [] });
+  assert.equal(result.partial, false);
+  assert.equal(result.strategy.used, "PLAYWRIGHT_PROXY");
+  assert.equal(result.strategy.playwrightAttempts, 1);
 });
 
-test("business-code 403 opens protection before the generic adapter failure path", async () => {
-  const source = await readServerSource();
-  const endpoint = source.slice(
-    source.indexOf("async function fetchCoscoEndpointNow"),
-    source.indexOf("function extractCoscoPageCookies")
+test("business-code 403 opens protection before the generic adapter failure path", async (t) => {
+  const runtime = createCoscoRuntime({
+    env: {
+      CHANNEL_C_MONITOR_ENABLED: "false",
+      COSCO_QUERY_MIN_INTERVAL_MS: "0",
+      COSCO_QUERY_MAX_INTERVAL_MS: "0",
+      COSCO_UPSTREAM_MIN_INTERVAL_MS: "0",
+      COSCO_UPSTREAM_MAX_INTERVAL_MS: "0"
+    },
+    fetchDirect: async () => new Response(JSON.stringify({ code: "403", success: false })),
+    closeBrowser: async () => {}
+  });
+  t.after(() => runtime.dispose());
+  await assert.rejects(
+    runtime.runTracking(normalizeTrackingRequest({ type: "BOOKING", number: "6502077380" }), {
+      code: "NETWORK"
+    }),
+    (error) => error.status === 503 && error.details.code === "COSCO_UPSTREAM_BLOCKED"
   );
-  const blockedBranch = endpoint.indexOf('if (decodedCode === "403")');
-  const genericFailure = endpoint.indexOf('if (decoded?.code !== "200"');
-
-  assert.ok(blockedBranch >= 0, "Decoded COSCO 403 must have an explicit protection branch");
-  assert.ok(genericFailure > blockedBranch, "Decoded COSCO 403 must be handled before generic 502 fallback");
-  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoCircuitBreakerFor\(options\)\.trip/);
-  assert.match(endpoint.slice(blockedBranch, genericFailure), /coscoBlockedHttpError/);
+  assert.equal(runtime.getHealth().coscoProtection.circuitBreakers.direct.blocked, true);
+  assert.equal(runtime.getHealth().coscoProtection.circuitBreakers.proxy.blocked, false);
 });
 
 test("shipment queries never start per-container enrichment", async () => {
@@ -454,14 +555,14 @@ test("shipment queries never start per-container enrichment", async () => {
   assert.doesNotMatch(network, /enrichCoscoShipmentContainers\(/);
   assert.doesNotMatch(playwright, /enrichCoscoShipmentContainers\(/);
   assert.match(network, /fetchCoscoShipmentContainers\(request, options\)/);
-  assert.match(playwright, /partial: Boolean\(options\.batch \|\| enrichmentWarning\)/);
+  assert.match(playwright, /partial:\s*Boolean\(options\.batch \|\| enrichmentWarning\)/);
 });
 
 test("forced refresh bypasses the Node cache and in-flight reuse", async () => {
   const source = await readServerSource();
   const handler = source.slice(
     source.indexOf("async function handleTrackRequest"),
-    source.indexOf("export const server", source.indexOf("async function handleTrackRequest"))
+    source.indexOf("export function isIndependentCoscoPlaywrightProxy")
   );
 
   assert.match(handler, /const forceRefresh = input\.forceRefresh === true/);

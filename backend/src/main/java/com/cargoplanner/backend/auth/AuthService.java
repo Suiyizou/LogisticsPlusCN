@@ -27,17 +27,20 @@ public class AuthService {
 
   private final JdbcTemplate jdbcTemplate;
   private final PasswordHasher passwordHasher;
+  private final AuthFailureAuditService failureAudit;
   private final int deviceLimit;
   private final Duration tokenTtl;
 
   public AuthService(
       JdbcTemplate jdbcTemplate,
       PasswordHasher passwordHasher,
+      AuthFailureAuditService failureAudit,
       @Value("${app.device-limit-per-user:5}") int deviceLimit,
       @Value("${app.auth-token-hours:6}") long tokenHours
   ) {
     this.jdbcTemplate = jdbcTemplate;
     this.passwordHasher = passwordHasher;
+    this.failureAudit = failureAudit;
     this.deviceLimit = deviceLimit;
     this.tokenTtl = Duration.ofHours(Math.max(1, tokenHours));
   }
@@ -54,7 +57,7 @@ public class AuthService {
     UserAccount account = findActiveAccountForLogin(username);
 
     if (account == null || !"ACTIVE".equals(account.status())) {
-      recordEvent(null, username, "LOGIN_FAIL", request.deviceId(), ip, userAgent, "User not found or disabled");
+      failureAudit.record(null, username, "LOGIN_FAIL", request.deviceId(), ip, userAgent, "User not found or disabled");
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
     }
 
@@ -65,7 +68,7 @@ public class AuthService {
         account.passwordIterations()
     );
     if (!passwordValid) {
-      recordEvent(account.id(), username, "LOGIN_FAIL", request.deviceId(), ip, userAgent, "Bad password");
+      failureAudit.record(account.id(), username, "LOGIN_FAIL", request.deviceId(), ip, userAgent, "Bad password");
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
     }
 
@@ -74,7 +77,7 @@ public class AuthService {
     // account-deletion race, that lock serializes device admission for this account.
     int activeOtherDevices = countActiveOtherDevices(account.id(), deviceId);
     if (activeOtherDevices >= deviceLimit) {
-      recordEvent(account.id(), username, "DEVICE_LIMIT", deviceId, ip, userAgent, "Device limit reached");
+      failureAudit.record(account.id(), username, "DEVICE_LIMIT", deviceId, ip, userAgent, "Device limit reached");
       throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "This account already has 5 online devices");
     }
 
@@ -214,7 +217,7 @@ public class AuthService {
         account.passwordHash(),
         account.passwordIterations()
     )) {
-      recordEvent(
+      failureAudit.record(
           actor.id(),
           actor.username(),
           "PASSWORD_CHANGE_FAIL",

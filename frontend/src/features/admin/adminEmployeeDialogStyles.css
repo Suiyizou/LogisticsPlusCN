@@ -1,0 +1,223 @@
+.employee-modal {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.temporary-password-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.temporary-password-content {
+  display: grid;
+  gap: 16px;
+  padding: 4px 22px 22px;
+  color: #506a84;
+  line-height: 1.7;
+}
+
+.temporary-password-content code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 18px 20px;
+  border: 1px solid #bcd7ee;
+  border-radius: 14px;
+  background: #eef7ff;
+  color: #092b49;
+  font:
+    700 18px/1.4 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+.temporary-password-content strong {
+  color: #a46610;
+  font-size: 13px;
+}
+
+.employee-dialog-form {
+  padding: 18px 22px 22px;
+}
+
+.employee-dialog-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.reset-password-modal,
+.temporary-password-modal {
+  width: min(600px, calc(100vw - 40px));
+  border-color: #d5e0ea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgb(15 32 51 / 24%);
+}
+
+.reset-password-modal > header,
+.temporary-password-modal > header {
+  padding: 20px 22px 18px;
+  background: #fff;
+}
+
+.reset-password-modal > header button,
+.temporary-password-modal > header button {
+  display: inline-grid;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #5e7185;
+  background: transparent;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.reset-password-modal > header button svg,
+.temporary-password-modal > header button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.reset-password-modal > header button:hover:not(:disabled),
+.temporary-password-modal > header button:hover:not(:disabled) {
+  border-color: #d7e3ed;
+  background: #f4f8fb;
+}
+
+.reset-password-modal > header button:focus-visible,
+.temporary-password-modal > header button:focus-visible,
+.reset-password-actions button:focus-visible,
+.temporary-password-modal > .modal-actions button:focus-visible {
+  outline: 3px solid rgb(3 105 161 / 20%);
+  outline-offset: 2px;
+}
+
+.reset-password-confirmation {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 22px;
+  color: #415970;
+}
+
+.reset-password-confirmation > p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.reset-password-account {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+}
+
+.reset-password-account > span {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 10px;
+  color: #176eaa;
+  background: #eaf4fb;
+}
+
+.reset-password-account svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.reset-password-account strong {
+  overflow: hidden;
+  color: #142d45;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reset-password-security-note {
+  padding: 10px 12px;
+  border-left: 3px solid #d49a32;
+  color: #76571d;
+  background: #fff9ec;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.reset-password-error {
+  padding: 10px 12px;
+  border-left: 3px solid #dc2626;
+  color: #a51d2c;
+  background: #fff3f4;
+  font-size: 13px;
+}
+
+.reset-password-modal > .modal-actions,
+.temporary-password-modal > .modal-actions {
+  margin: 0;
+  padding: 16px 22px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcfe;
+}
+
+.reset-password-modal > .modal-actions button,
+.temporary-password-modal > .modal-actions button {
+  min-height: 40px;
+  padding-inline: 16px;
+}
+
+.temporary-password-content {
+  padding: 20px 22px 22px;
+}
+
+.temporary-password-content > p {
+  margin: 0;
+}
+
+.temporary-password-content code {
+  border-radius: 8px;
+}
+
+.employee-modal {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.employee-dialog-form .admin-hint,
+.employee-dialog-form .modal-actions {
+  grid-column: 1 / -1;
+}
+@media (max-width: 680px) {
+  .employee-modal,
+  .reset-password-modal,
+  .temporary-password-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    overflow-y: auto;
+  }
+  .employee-dialog-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+}

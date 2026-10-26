@@ -20,7 +20,7 @@ import org.apache.ibatis.plugin.Invocation;
 import org.apache.ibatis.plugin.Signature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration;
+import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -153,9 +153,9 @@ class CustomerDirectoryServiceTest {
   @Test
   void springBootDiscoversMapperAndXmlWithoutManualFactorySetup() {
     new ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(MybatisAutoConfiguration.class))
+        .withConfiguration(AutoConfigurations.of(MybatisPlusAutoConfiguration.class))
         .withUserConfiguration(MapperConfiguration.class)
-        .withPropertyValues("mybatis.mapper-locations=classpath*:mappers/**/*.xml")
+        .withPropertyValues("mybatis-plus.mapper-locations=classpath*:mappers/**/*.xml")
         .run(context -> {
           assertThat(context).hasSingleBean(CustomerDirectoryMapper.class);
           assertThat(context).hasSingleBean(CustomerDirectoryService.class);
@@ -196,7 +196,7 @@ class CustomerDirectoryServiceTest {
         CREATE TABLE cp_customers (id BIGINT PRIMARY KEY, public_id VARCHAR(36),
           username VARCHAR(64), display_name VARCHAR(80), client_code VARCHAR(64),
           party_role VARCHAR(20), customer_code_prefix VARCHAR(16), customer_code_mode VARCHAR(20),
-          provisioning_source VARCHAR(20), status VARCHAR(20), remark VARCHAR(500),
+          provisioning_source VARCHAR(20), status VARCHAR(20), contact_email VARCHAR(254), remark VARCHAR(500),
           created_by BIGINT, responsible_agent_id BIGINT,
           created_at TIMESTAMP(6), updated_at TIMESTAMP(6))
         """);

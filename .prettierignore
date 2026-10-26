@@ -11,11 +11,6 @@ package-lock.json
 
 # 历史大文件：在对应的重构批次（T07 追踪 / T09 装箱可视化）随拆分一起格式化，
 # 避免当前的工程规范批次混入大面积无关差异。改动这些文件时仍受 ESLint / tsc 约束。
-tracking-service/test/cosco-resilience-regression.test.mjs
 frontend/src/visualization/packingSceneBalance.ts
 frontend/src/visualization/packingSceneData.ts
 frontend/src/visualization/packingSceneRenderer.ts
-
-# T07 进行中：server.mjs 有基于精确空白的源码断言，重构完成后再格式化
-# （与 cosco-resilience 回归测试、装箱可视化文件同样的棘轮处理）
-tracking-service/server.mjs

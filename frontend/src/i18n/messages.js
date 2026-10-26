@@ -66,7 +66,8 @@ export const messages = {
           platform: {
             kicker: "货代数字化运营平台",
             title: "让每一票货物，从计划到交付，全程清晰可见。",
-            description: "DrewesLogistics 将智能装箱与货物追踪组织在统一入口，并为船期订舱和企业 ERP 接入保留持续扩展的空间。"
+            description:
+              "DrewesLogistics 将智能装箱与货物追踪组织在统一入口，并为船期订舱和企业 ERP 接入保留持续扩展的空间。"
           },
           planning: {
             kicker: "已上线 · 智能装箱",
@@ -114,7 +115,8 @@ export const messages = {
       statement: {
         eyebrow: "一个入口 · 清晰边界",
         title: "连接正在使用的业务工具，也为下一阶段留足空间。",
-        description: "DrewesLogistics 保留各模块清晰的业务边界，通过统一品牌入口组织装箱与追踪能力。货物追踪面向客户公开，企业工作台与管理能力继续由登录权限保护。",
+        description:
+          "DrewesLogistics 保留各模块清晰的业务边界，通过统一品牌入口组织装箱与追踪能力。货物追踪面向客户公开，企业工作台与管理能力继续由登录权限保护。",
         track: "公开查询货物",
         metricOnline: "项能力已上线",
         metricPublic: "项公开查询服务",
@@ -124,8 +126,10 @@ export const messages = {
         eyebrow: "COMPANY PROFILE · 上海",
         internationalName: "DREWES (SHANGHAI) SUPPLY CHAIN MANAGEMENT CO., LTD.",
         legalName: "德鲁威斯（上海）供应链管理有限公司",
-        description: "德鲁威斯（上海）供应链管理有限公司成立于 2023 年 3 月 16 日，注册于上海市虹口区，业务围绕供应链管理、国际与国内货运代理，以及船舶和运输设备相关服务展开。",
-        detail: "经营范围包括供应链管理服务、国际货物运输代理、海上／航空／陆路国际货运代理、报检业务、国际船舶代理、国内货运代理、运输设备与船舶租赁、集装箱销售及无船承运业务。",
+        description:
+          "德鲁威斯（上海）供应链管理有限公司成立于 2023 年 3 月 16 日，注册于上海市虹口区，业务围绕供应链管理、国际与国内货运代理，以及船舶和运输设备相关服务展开。",
+        detail:
+          "经营范围包括供应链管理服务、国际货物运输代理、海上／航空／陆路国际货运代理、报检业务、国际船舶代理、国内货运代理、运输设备与船舶租赁、集装箱销售及无船承运业务。",
         incorporatedLabel: "成立日期",
         typeLabel: "企业类型",
         typeValue: "有限责任公司（自然人独资）",
@@ -133,7 +137,8 @@ export const messages = {
         industryValue: "商务服务业",
         platformAction: "查看平台能力",
         creditCodeLabel: "统一社会信用代码",
-        sourceNote: "企业基础信息与经营范围依据用户提供的公开工商登记截图整理；登记信息可能发生变更，请以国家企业信用信息公示系统最新记录为准。",
+        sourceNote:
+          "企业基础信息与经营范围依据用户提供的公开工商登记截图整理；登记信息可能发生变更，请以国家企业信用信息公示系统最新记录为准。",
         operationsEyebrow: "SHANGHAI OPERATIONS",
         operationsTitle: "运输协同台",
         operationsOrigin: "上海执行",
@@ -142,7 +147,8 @@ export const messages = {
         operationsStatus: "多式联运链路",
         servicesEyebrow: "PRIMARY BUSINESS",
         servicesTitle: "围绕供应链与货运代理，连接每一个关键环节。",
-        servicesDescription: "从工商登记经营范围中提炼六项主要业务，清晰呈现企业当前登记的服务边界。",
+        servicesDescription:
+          "从工商登记经营范围中提炼六项主要业务，清晰呈现企业当前登记的服务边界。",
         services: {
           oceanAir: {
             title: "供应链管理服务",
@@ -173,7 +179,8 @@ export const messages = {
       roadmap: {
         eyebrow: "建设路线",
         title: "从独立工具，逐步走向连贯的货代工作流。",
-        description: "先稳定现有装箱与追踪能力，再按真实业务价值接入船期、订舱和 ERP 数据，不提前承诺尚未上线的功能。",
+        description:
+          "先稳定现有装箱与追踪能力，再按真实业务价值接入船期、订舱和 ERP 数据，不提前承诺尚未上线的功能。",
         currentLabel: "当前阶段",
         currentTitle: "智能装箱 · 货物追踪",
         currentDescription: "装箱工作台需登录使用；Cargo Tracking 作为公开查询入口直接开放。",
@@ -303,8 +310,10 @@ export const messages = {
       currentBoxWeight: "本柜重量",
       boxProgress: "第 {current}/{total} 柜",
       planAverageUtilization: "方案平均 {value}%",
-      currentBoxPlanHint: "当前显示第 {current}/{total} 柜；上方四项仅代表本柜，整套方案平均利用率为 {value}%。",
-      nonStackFallbackHint: "为避免增加货柜，本柜有不可重压货物提前占用局部暴露顶面；其上方不会再放置其他货物。",
+      currentBoxPlanHint:
+        "当前显示第 {current}/{total} 柜；上方四项仅代表本柜，整套方案平均利用率为 {value}%。",
+      nonStackFallbackHint:
+        "为避免增加货柜，本柜有不可重压货物提前占用局部暴露顶面；其上方不会再放置其他货物。",
       lengthPercent: "长度 {value}%",
       lengthSuffix: " · 长度 {value}%",
       deckUtilizationWithLength: "甲板利用率 {value}%{length}"
@@ -326,7 +335,8 @@ export const messages = {
       reservedCoordinates: "占位坐标",
       remainingBlockLabels: "净空区块编号",
       remainingDisplayTitle: "分色净空区块",
-      remainingDisplayHint: "开启后按 R1、R2…区分主要净空块；可悬停查看体积、长宽高与坐标范围，并使用多视角按钮交叉核对。",
+      remainingDisplayHint:
+        "开启后按 R1、R2…区分主要净空块；可悬停查看体积、长宽高与坐标范围，并使用多视角按钮交叉核对。",
       remainingAnalysisTitle: "剩余空间分析",
       remainingBlockCount: "{count} 个区块",
       remainingRatio: "净空占箱体",
@@ -357,7 +367,8 @@ export const messages = {
       partialReady: "部分方案可查看，其他箱型继续计算中"
     },
     smartImport: {
-      recognitionPlaceholder: "例如：\n蝶阀100 110*45*82cm 8件 单重180kg 木箱\n纸箱B 60*40*35cm 30件 单重12kg\n易碎品C 55×45×30cm 12件 单重18kg 不可重压",
+      recognitionPlaceholder:
+        "例如：\n蝶阀100 110*45*82cm 8件 单重180kg 木箱\n纸箱B 60*40*35cm 30件 单重12kg\n易碎品C 55×45×30cm 12件 单重18kg 不可重压",
       recognitionSample: [
         "蝶阀100 110*45*82cm 8件 单重180kg 木箱",
         "蝶阀200 125*55*90cm 4件 总重960kg 木箱",
@@ -382,7 +393,8 @@ export const messages = {
       supportRatio: "可承重支撑比例",
       nonStackSupportRatio: "不可重压支撑比例",
       supportRatioTrace: "可承重 / 不可重压支撑阈值",
-      supportConstraintNote: "如果货物不在箱底，下方必须由可承重货物的顶面覆盖达到当前配置的支撑比例，并通过中心/四角采样与四象限分布校验；不可重压货物不会作为上层支撑。",
+      supportConstraintNote:
+        "如果货物不在箱底，下方必须由可承重货物的顶面覆盖达到当前配置的支撑比例，并通过中心/四角采样与四象限分布校验；不可重压货物不会作为上层支撑。",
       supportFormula: "上层支撑条件 = 面积覆盖率达标 + 关键落脚点有支撑 + 四象限不能集中悬空"
     },
     algorithmGuide: {
@@ -472,15 +484,18 @@ export const messages = {
       customerLayerText: "当前正在进行 {scope} 的货舱装箱计算 - 第 {layer} 层：{detail}",
       customerGenericText: "当前正在处理 {scope}：{detail}",
       customerOptimizingTitle: "空间利用优化",
-      customerSupportTuningText: "正在优化 {scope} 的底层支撑和尾部空隙，尝试给上层货物提供更大的落脚面。",
+      customerSupportTuningText:
+        "正在优化 {scope} 的底层支撑和尾部空隙，尝试给上层货物提供更大的落脚面。",
       customerEvaluatingTitle: "箱型可装性评估",
       customerContainerText: "正在评估 {scope}，校验箱内尺寸、载重和可装性。",
       customerStrategyTitle: "装箱策略计算",
       customerStrategyText: "正在比较 {scope} 的装箱策略，寻找更稳、更满的摆放方式。",
-      customerStrategyProgressText: "正在比较 {scope} 的装箱策略（第 {current}/{total} 个策略）：{detail}",
+      customerStrategyProgressText:
+        "正在比较 {scope} 的装箱策略（第 {current}/{total} 个策略）：{detail}",
       customerSummaryTitle: "货舱结果汇总",
       customerHoldText: "正在汇总 {scope} 的第 {hold} 货舱结果：{detail}",
-      customerBoxProgressText: "当前正在进行 {scope} 的第 {hold} 个货舱装箱计算，剩余 {remaining} 个搜索单元。",
+      customerBoxProgressText:
+        "当前正在进行 {scope} 的第 {hold} 个货舱装箱计算，剩余 {remaining} 个搜索单元。",
       customerRecommendationText: "正在汇总当前搜索候选；全部约束合规后优先按箱数最少排序。",
       customerPrepareTitle: "装箱数据准备",
       customerPrepareText: "正在整理货物、箱型和装箱规则，准备开始本机计算。",
@@ -543,7 +558,8 @@ export const messages = {
       partialStatus: "部分结果可用",
       noFinalStatus: "未完成全部方案搜索",
       reasonTitle: "可能原因",
-      reasonFallback: "本次货物或箱型组合较复杂，Worker 未能在前端等待时间内完成所有箱型和策略搜索。",
+      reasonFallback:
+        "本次货物或箱型组合较复杂，Worker 未能在前端等待时间内完成所有箱型和策略搜索。",
       idleReason: "连续 3 分钟没有收到新的计算进度，系统已停止可能卡住的任务。",
       hardReason: "任务已达到本次计算的最长安全运行上限。",
       lastDecisionTitle: "最后执行到",
@@ -551,7 +567,8 @@ export const messages = {
       suggestionReduceContainers: "先减少参与计算的箱型数量，优先保留实际订舱候选箱型。",
       suggestionSplitCargo: "将大票货物按项目、目的港或装箱批次拆分后分别计算。",
       suggestionContinue: "已完成的箱型结果会保留，可直接续算剩余箱型，不需要从头开始。",
-      suggestionUsePartial: "如果页面已有常用箱型阶段结果，可先查看部分方案，再决定是否继续补算特殊箱型。",
+      suggestionUsePartial:
+        "如果页面已有常用箱型阶段结果，可先查看部分方案，再决定是否继续补算特殊箱型。",
       close: "关闭",
       usePartial: "使用当前方案",
       adjust: "返回调整",
@@ -618,18 +635,21 @@ export const messages = {
           platform: {
             kicker: "Digital operations for freight forwarders",
             title: "Make every shipment clear—from planning to delivery.",
-            description: "DrewesLogistics brings smart load planning and shipment visibility into one entrance, with room to grow into schedules, booking, and ERP connectivity."
+            description:
+              "DrewesLogistics brings smart load planning and shipment visibility into one entrance, with room to grow into schedules, booking, and ERP connectivity."
           },
           planning: {
             kicker: "Available · Smart load planning",
             title: "Turn loading experience into a plan teams can see and refine.",
-            description: "Build loading plans from cargo and container data, with clear views of space, balance, and operational constraints.",
+            description:
+              "Build loading plans from cargo and container data, with clear views of space, balance, and operational constraints.",
             action: "Open load planning"
           },
           tracking: {
             kicker: "Public service · Cargo Tracking",
             title: "Move from a reference number to the milestones that matter.",
-            description: "Open shipment tracking without signing in and query carrier milestones by booking or container number.",
+            description:
+              "Open shipment tracking without signing in and query carrier milestones by booking or container number.",
             action: "Track cargo now"
           }
         }
@@ -638,22 +658,26 @@ export const messages = {
         aria: "DrewesLogistics platform capabilities",
         planning: {
           title: "Smart Load Planning",
-          description: "Build 3D loading plans from cargo and container data, then review space, balance, and operating constraints.",
+          description:
+            "Build 3D loading plans from cargo and container data, then review space, balance, and operating constraints.",
           action: "Sign in to use"
         },
         tracking: {
           title: "Shipment Visibility",
-          description: "Bring carrier milestones together in a public view of current status, key dates, and route details.",
+          description:
+            "Bring carrier milestones together in a public view of current status, key dates, and route details.",
           action: "Track without signing in"
         },
         booking: {
           title: "Schedules & Booking",
-          description: "Planned schedule search and booking assistance will reduce cross-platform lookup and repeated entry.",
+          description:
+            "Planned schedule search and booking assistance will reduce cross-platform lookup and repeated entry.",
           action: "View the roadmap"
         },
         erp: {
           title: "ERP Connectivity",
-          description: "Planned standard interfaces will connect order, cargo, and shipment data into a continuous workflow.",
+          description:
+            "Planned standard interfaces will connect order, cargo, and shipment data into a continuous workflow.",
           action: "View the roadmap"
         },
         summary: {
@@ -666,7 +690,8 @@ export const messages = {
       statement: {
         eyebrow: "One entrance · Clear boundaries",
         title: "Connect the tools in use today while leaving room for what comes next.",
-        description: "DrewesLogistics keeps each module focused while presenting planning and tracking through one branded entrance. Cargo Tracking is public; enterprise workspaces and administration remain protected by sign-in and role checks.",
+        description:
+          "DrewesLogistics keeps each module focused while presenting planning and tracking through one branded entrance. Cargo Tracking is public; enterprise workspaces and administration remain protected by sign-in and role checks.",
         track: "Track cargo publicly",
         metricOnline: "capabilities available",
         metricPublic: "public query service",
@@ -676,8 +701,10 @@ export const messages = {
         eyebrow: "COMPANY PROFILE · SHANGHAI",
         internationalName: "德鲁威斯（上海）供应链管理有限公司",
         legalName: "Drewes (Shanghai) Supply Chain Management Co., Ltd.",
-        description: "Registered on March 16, 2023 in Hongkou District, Shanghai, the company focuses on supply chain management, international and domestic freight forwarding, ship agency, and transport equipment services.",
-        detail: "Its registered scope includes supply chain management; international, ocean, air, and road freight forwarding; inspection declaration; international ship agency; domestic freight forwarding; equipment and vessel leasing; container sales; and NVOCC services.",
+        description:
+          "Registered on March 16, 2023 in Hongkou District, Shanghai, the company focuses on supply chain management, international and domestic freight forwarding, ship agency, and transport equipment services.",
+        detail:
+          "Its registered scope includes supply chain management; international, ocean, air, and road freight forwarding; inspection declaration; international ship agency; domestic freight forwarding; equipment and vessel leasing; container sales; and NVOCC services.",
         incorporatedLabel: "Incorporated",
         typeLabel: "Entity type",
         typeValue: "Limited liability company (sole natural-person ownership)",
@@ -685,7 +712,8 @@ export const messages = {
         industryValue: "Business services",
         platformAction: "Explore platform capabilities",
         creditCodeLabel: "Unified social credit code",
-        sourceNote: "Company details and scope are based on the public registration snapshot supplied by the user. Refer to the latest national enterprise credit record for changes.",
+        sourceNote:
+          "Company details and scope are based on the public registration snapshot supplied by the user. Refer to the latest national enterprise credit record for changes.",
         operationsEyebrow: "SHANGHAI OPERATIONS",
         operationsTitle: "Transport coordination desk",
         operationsOrigin: "Shanghai execution",
@@ -694,11 +722,13 @@ export const messages = {
         operationsStatus: "Multimodal route",
         servicesEyebrow: "PRIMARY BUSINESS",
         servicesTitle: "Connecting the critical steps across supply chain and freight forwarding.",
-        servicesDescription: "Six primary activities distilled from the registered business scope, presented with clear service boundaries.",
+        servicesDescription:
+          "Six primary activities distilled from the registered business scope, presented with clear service boundaries.",
         services: {
           oceanAir: {
             title: "Supply chain management",
-            description: "Coordinate supply-chain activities around cargo flow and transport resources."
+            description:
+              "Coordinate supply-chain activities around cargo flow and transport resources."
           },
           groundRail: {
             title: "Ocean freight forwarding",
@@ -725,19 +755,23 @@ export const messages = {
       roadmap: {
         eyebrow: "Product roadmap",
         title: "From focused tools to a connected freight workflow.",
-        description: "We strengthen planning and tracking first, then connect schedules, booking, and ERP data according to real operating value—without promising unfinished features early.",
+        description:
+          "We strengthen planning and tracking first, then connect schedules, booking, and ERP data according to real operating value—without promising unfinished features early.",
         currentLabel: "Current",
         currentTitle: "Load Planning · Shipment Tracking",
-        currentDescription: "Load planning requires enterprise sign-in; Cargo Tracking is open as a public query service.",
+        currentDescription:
+          "Load planning requires enterprise sign-in; Cargo Tracking is open as a public query service.",
         nextLabel: "Next",
         nextTitle: "Schedules & Booking · ERP",
-        nextDescription: "Connect internal and external services around order and shipment data in practical stages.",
+        nextDescription:
+          "Connect internal and external services around order and shipment data in practical stages.",
         viewWorkspaces: "View current workspaces"
       },
       cta: {
         eyebrow: "START WITH DrewesLogistics",
         title: "Start with one query and see a more connected freight operation.",
-        description: "Public tracking needs no sign-in. Enterprise accounts and role checks protect load planning and administration.",
+        description:
+          "Public tracking needs no sign-in. Enterprise accounts and role checks protect load planning and administration.",
         publicTracking: "Open Cargo Tracking"
       },
       transition: {
@@ -753,10 +787,12 @@ export const messages = {
         termValue: "No fixed term",
         contactTitle: "Registration & address",
         registeredAddressLabel: "Registered address",
-        registeredAddress: "7F, No. 137 Haining Road, Hongkou District, Shanghai (centralized registration address)",
+        registeredAddress:
+          "7F, No. 137 Haining Road, Hongkou District, Shanghai (centralized registration address)",
         authorityLabel: "Registration authority",
         authority: "Hongkou District Market Supervision Administration",
-        disclaimer: "Registration details may change. Refer to the latest National Enterprise Credit Information Publicity System record.",
+        disclaimer:
+          "Registration details may change. Refer to the latest National Enterprise Credit Information Publicity System record.",
         copyright: "© 2026 德鲁威斯（上海）供应链管理有限公司",
         platform: "Cargo Operations Suite"
       }
@@ -767,7 +803,8 @@ export const messages = {
       kicker: "Intelligent container planning for global forwarding",
       heroTitle: "Turn every cubic metre into",
       heroAccent: "measurable transport efficiency",
-      heroDescription: "Combining 3D packing, constraint recognition, and load-balance validation to give freight teams clear, dependable planning decisions.",
+      heroDescription:
+        "Combining 3D packing, constraint recognition, and load-balance validation to give freight teams clear, dependable planning decisions.",
       capabilityPacking: "3D packing engine",
       capabilityBalance: "Balance and load checks",
       capabilityRules: "Constraint recognition",
@@ -811,7 +848,8 @@ export const messages = {
       roleEmployee: "Enterprise user",
       roleBusiness: "Business operator",
       greeting: "Hello, {name}. Choose today's workbench",
-      heroDescription: "Load planning and shipment tracking now live in one business platform with a shared sign-in and fast workbench switching.",
+      heroDescription:
+        "Load planning and shipment tracking now live in one business platform with a shared sign-in and fast workbench switching.",
       availableWorkbenches: "Workbenches",
       sharedIdentity: "Unified sign-in",
       operationCoverage: "Operational access",
@@ -820,7 +858,8 @@ export const messages = {
       sectionAria: "Available workbenches",
       sectionEyebrow: "SELECT A WORKBENCH",
       sectionTitle: "Enter a business workbench",
-      sectionDescription: "Each business workbench shares one entry point and sign-in while keeping clear operational boundaries.",
+      sectionDescription:
+        "Each business workbench shares one entry point and sign-in while keeping clear operational boundaries.",
       ready: "Ready",
       connected: "Connected",
       enterWorkbench: "Enter workbench",
@@ -831,7 +870,8 @@ export const messages = {
       planner: {
         label: "Load planning",
         title: "Cargo load planning workbench",
-        description: "Define cargo and container constraints, run 3D packing, validate balance, and export the selected plan.",
+        description:
+          "Define cargo and container constraints, run 3D packing, validate balance, and export the selected plan.",
         featurePacking: "3D packing",
         featureBalance: "Balance check",
         featureReport: "Plan export"
@@ -839,7 +879,8 @@ export const messages = {
       tracking: {
         label: "Shipment visibility",
         title: "Shipment tracking workbench",
-        description: "Search by booking or container number and review milestones and estimated arrival.",
+        description:
+          "Search by booking or container number and review milestones and estimated arrival.",
         featureReferences: "Reference search",
         featureRoute: "Route milestones",
         featureChannels: "Dual channels"
@@ -855,8 +896,10 @@ export const messages = {
       currentBoxWeight: "Current container weight",
       boxProgress: "Container {current}/{total}",
       planAverageUtilization: "Plan avg. {value}%",
-      currentBoxPlanHint: "Showing container {current} of {total}. The four metrics above apply only to this container; plan average utilization is {value}%.",
-      nonStackFallbackHint: "To avoid adding another container, some non-stackable cargo uses an earlier exposed top surface in this container; no cargo is placed above it.",
+      currentBoxPlanHint:
+        "Showing container {current} of {total}. The four metrics above apply only to this container; plan average utilization is {value}%.",
+      nonStackFallbackHint:
+        "To avoid adding another container, some non-stackable cargo uses an earlier exposed top surface in this container; no cargo is placed above it.",
       lengthPercent: "Length {value}%",
       lengthSuffix: " · Length {value}%",
       deckUtilizationWithLength: "Deck utilization {value}%{length}"
@@ -878,7 +921,8 @@ export const messages = {
       reservedCoordinates: "Envelope coordinates",
       remainingBlockLabels: "Clearance Block Labels",
       remainingDisplayTitle: "Color-coded clearance blocks",
-      remainingDisplayHint: "Major blocks are labeled R1, R2, and so on. Hover for volume, dimensions, and coordinate ranges, then compare them across multiple views.",
+      remainingDisplayHint:
+        "Major blocks are labeled R1, R2, and so on. Hover for volume, dimensions, and coordinate ranges, then compare them across multiple views.",
       remainingAnalysisTitle: "Remaining-space Analysis",
       remainingBlockCount: "{count} blocks",
       remainingRatio: "Share of Container",
@@ -891,7 +935,8 @@ export const messages = {
       viewFront: "Front",
       viewSide: "Side",
       majorRemainingBlocks: "Major Remaining-space Blocks",
-      remainingAnalysisNote: "Blocks are ordered by volume. Geometric clearance does not guarantee handling or loading access.",
+      remainingAnalysisNote:
+        "Blocks are ordered by volume. Geometric clearance does not guarantee handling or loading access.",
       remainingBlockName: "Remaining-space Block",
       geometricClearance: "Geometric Clearance",
       blockDimensions: "L × W × H",
@@ -928,19 +973,24 @@ export const messages = {
         "3 skids - each 18.100 kgs / 660 x 200 x 340 cm",
         "2 skids - each 33.700 kgs / 1.210 x 230 x 340 cm"
       ].join("\n"),
-      sampleLoadedMessage: "Sample text inserted. Click Smart Recognition to let the backend extract the mixed cargo and skid details."
+      sampleLoadedMessage:
+        "Sample text inserted. Click Smart Recognition to let the backend extract the mixed cargo and skid details."
     },
     planner: {
       priorityContainers: "Containers Included in Calculation",
-      priorityContainersHint: "This search includes {count} selected types; unpriced types are evaluated for fit only",
+      priorityContainersHint:
+        "This search includes {count} selected types; unpriced types are evaluated for fit only",
       priorityCommon: "Common GP/HQ",
       priorityAll: "All Containers",
-      containerScopeNote: "Common dry and high-cube containers are selected by default; add reefer and flat-rack equipment only when the shipment requires them.",
+      containerScopeNote:
+        "Common dry and high-cube containers are selected by default; add reefer and flat-rack equipment only when the shipment requires them.",
       supportRatio: "Stackable Support Ratio",
       nonStackSupportRatio: "Non-stack Support Ratio",
       supportRatioTrace: "Stackable / Non-stack Support Thresholds",
-      supportConstraintNote: "If cargo is not on the container floor, lower stackable surfaces must meet the configured support ratio and pass center/corner sampling plus quadrant distribution checks; non-stack cargo cannot support upper cargo.",
-      supportFormula: "Support condition = area coverage passes + key landing points are supported + support is distributed across quadrants"
+      supportConstraintNote:
+        "If cargo is not on the container floor, lower stackable surfaces must meet the configured support ratio and pass center/corner sampling plus quadrant distribution checks; non-stack cargo cannot support upper cargo.",
+      supportFormula:
+        "Support condition = area coverage passes + key landing points are supported + support is distributed across quadrants"
     },
     algorithmGuide: {
       eyebrow: "Packing Strategy Map",
@@ -1009,10 +1059,12 @@ export const messages = {
       renderKicker: "Rendering",
       renderMeta: "Refreshing visualization",
       renderText: "Generating the 3D packing scene...",
-      renderingText: "Generating the 3D packing scene. The current search plan and cargo coordinates will appear after rendering.",
+      renderingText:
+        "Generating the 3D packing scene. The current search plan and cargo coordinates will appear after rendering.",
       visualizing: "Visualization",
       doneMeta: "Local calculation completed",
-      doneText: "Local calculation is complete. The current plan is ready to inspect, export, or print.",
+      doneText:
+        "Local calculation is complete. The current plan is ready to inspect, export, or print.",
       waitingTitle: "Preparing Calculation",
       waitingMeta: "Preparing the local packing calculation",
       elapsedTimer: "Elapsed {value}",
@@ -1029,20 +1081,28 @@ export const messages = {
       customerLayerText: "Calculating hold packing for {scope} - layer {layer}: {detail}",
       customerGenericText: "Processing {scope}: {detail}",
       customerOptimizingTitle: "Space Utilization Optimization",
-      customerSupportTuningText: "Optimizing lower support and tail gaps for {scope} to create more landing area for upper cargo.",
+      customerSupportTuningText:
+        "Optimizing lower support and tail gaps for {scope} to create more landing area for upper cargo.",
       customerEvaluatingTitle: "Container Loadability Check",
-      customerContainerText: "Evaluating {scope}: checking internal dimensions, payload, and loadability.",
+      customerContainerText:
+        "Evaluating {scope}: checking internal dimensions, payload, and loadability.",
       customerStrategyTitle: "Packing Strategy Calculation",
-      customerStrategyText: "Comparing packing strategies for {scope} to find a more stable and fuller layout.",
-      customerStrategyProgressText: "Comparing packing strategies for {scope} (strategy {current}/{total}): {detail}",
+      customerStrategyText:
+        "Comparing packing strategies for {scope} to find a more stable and fuller layout.",
+      customerStrategyProgressText:
+        "Comparing packing strategies for {scope} (strategy {current}/{total}): {detail}",
       customerSummaryTitle: "Hold Result Summary",
       customerHoldText: "Summarizing hold {hold} for {scope}: {detail}",
-      customerBoxProgressText: "Calculating hold {hold} for {scope}; {remaining} search units remain.",
-      customerRecommendationText: "Summarizing current search candidates and ranking fewer containers first after all constraints pass.",
+      customerBoxProgressText:
+        "Calculating hold {hold} for {scope}; {remaining} search units remain.",
+      customerRecommendationText:
+        "Summarizing current search candidates and ranking fewer containers first after all constraints pass.",
       customerPrepareTitle: "Packing Data Preparation",
-      customerPrepareText: "Preparing cargo, container types, and packing rules before local calculation starts.",
+      customerPrepareText:
+        "Preparing cargo, container types, and packing rules before local calculation starts.",
       customerDetailFallback: "Calculation is still running",
-      partialReadyText: "The stage result for {scope} is ready to inspect while other container types continue in the background.",
+      partialReadyText:
+        "The stage result for {scope} is ready to inspect while other container types continue in the background.",
       partialReadyMeta: "Partial plans are ready; the current search result keeps updating",
       status: {
         done: "Done",
@@ -1080,7 +1140,8 @@ export const messages = {
         },
         recommendation: {
           label: "Plan Ranking",
-          description: "After all constraints pass, rank by fewer containers first, then composite reference freight and utilization"
+          description:
+            "After all constraints pass, rank by fewer containers first, then composite reference freight and utilization"
         }
       }
     },
@@ -1100,15 +1161,21 @@ export const messages = {
       partialStatus: "Partial results available",
       noFinalStatus: "Full plan search not completed",
       reasonTitle: "Likely Reason",
-      reasonFallback: "This cargo/container combination is complex, and the Worker did not finish all container and strategy searches within the frontend wait limit.",
-      idleReason: "No new calculation progress was received for 3 minutes, so the app stopped a potentially stalled task.",
+      reasonFallback:
+        "This cargo/container combination is complex, and the Worker did not finish all container and strategy searches within the frontend wait limit.",
+      idleReason:
+        "No new calculation progress was received for 3 minutes, so the app stopped a potentially stalled task.",
       hardReason: "The task reached its maximum safe runtime for this calculation.",
       lastDecisionTitle: "Last Reached Step",
       suggestionTitle: "Suggested Next Steps",
-      suggestionReduceContainers: "Reduce the container types included in the calculation and keep only realistic booking candidates first.",
-      suggestionSplitCargo: "Split large shipments by project, destination, or loading batch before recalculating.",
-      suggestionContinue: "Completed container results are retained, so you can continue only the remaining container types instead of restarting.",
-      suggestionUsePartial: "If common-container stage results are already visible, review the partial plan before deciding whether to continue special-container calculation.",
+      suggestionReduceContainers:
+        "Reduce the container types included in the calculation and keep only realistic booking candidates first.",
+      suggestionSplitCargo:
+        "Split large shipments by project, destination, or loading batch before recalculating.",
+      suggestionContinue:
+        "Completed container results are retained, so you can continue only the remaining container types instead of restarting.",
+      suggestionUsePartial:
+        "If common-container stage results are already visible, review the partial plan before deciding whether to continue special-container calculation.",
       close: "Close",
       usePartial: "Use Current Plan",
       adjust: "Adjust Setup",
@@ -1138,7 +1205,8 @@ Object.assign(messages["zh-CN"].login, {
   customerSuccess: "客户身份验证成功，货物追踪已在新页面打开。",
   customerPopupBlocked: "客户身份验证成功。浏览器阻止了新页面，请允许弹窗后重试。",
   customerErrorFallback: "客户码验证失败，请确认客户码仍然有效。",
-  customerTrackingSameOrigin: "客户登录态要求货物追踪与门户同域部署，请检查 VITE_TRACKING_WORKBENCH_URL。"
+  customerTrackingSameOrigin:
+    "客户登录态要求货物追踪与门户同域部署，请检查 VITE_TRACKING_WORKBENCH_URL。"
 });
 
 Object.assign(messages["en-US"].login, {
@@ -1151,7 +1219,8 @@ Object.assign(messages["en-US"].login, {
   employeeNumberPlaceholder: "Enter your employee number",
   customerEyebrow: "CUSTOMER TRACKING ACCESS",
   customerTitle: "Open tracking with a customer code",
-  customerDescription: "Your operator issues the code. It only grants access to shipments and shared files explicitly assigned to you.",
+  customerDescription:
+    "Your operator issues the code. It only grants access to shipments and shared files explicitly assigned to you.",
   customerCodeLabel: "Customer code",
   customerCodePlaceholder: "Enter the code provided by your operator",
   customerSessionNotice: "Separate customer session",
@@ -1159,9 +1228,11 @@ Object.assign(messages["en-US"].login, {
   customerSignIn: "Sign in and open tracking",
   customerSigningIn: "Verifying customer code...",
   customerSuccess: "Customer access verified. Tracking opened in a new page.",
-  customerPopupBlocked: "Customer access was verified, but the browser blocked the new page. Allow pop-ups and retry.",
+  customerPopupBlocked:
+    "Customer access was verified, but the browser blocked the new page. Allow pop-ups and retry.",
   customerErrorFallback: "Customer-code verification failed. Check that the code is still active.",
-  customerTrackingSameOrigin: "Customer sessions require tracking and the portal to share an origin. Check VITE_TRACKING_WORKBENCH_URL."
+  customerTrackingSameOrigin:
+    "Customer sessions require tracking and the portal to share an origin. Check VITE_TRACKING_WORKBENCH_URL."
 });
 
 Object.assign(messages["zh-CN"].portal, {
@@ -1207,7 +1278,8 @@ Object.assign(messages["en-US"].portal, {
   customers: {
     label: "Customer collaboration",
     title: "Customer and shipment access",
-    description: "Issue separate customer codes and explicitly assign shipment access; searching never grants file permissions.",
+    description:
+      "Issue separate customer codes and explicitly assign shipment access; searching never grants file permissions.",
     featureCodes: "One-time codes",
     featureRoles: "Freight identities",
     featureBindings: "Shipment assignment"
@@ -1218,13 +1290,16 @@ messages["zh-CN"].customers = {
   transferSelected: "转交客户（{count}）",
   responsibleAgent: "负责业务员",
   transferTitle: "批量转交客户",
-  transferDescription: "将已选的 {count} 个客户转接给海外代理，并同步其已发布票单与文件的客户通道权限。",
+  transferDescription:
+    "将已选的 {count} 个客户转接给海外代理，并同步其已发布票单与文件的客户通道权限。",
   targetAgent: "目标海外代理",
   targetAgentPlaceholder: "请选择接收客户的海外代理",
-  transferPermissionHint: "业务员仍保留全部客户、票单、文件及历史数据的查看和更新权限；原海外代理的客户链接将被替换。",
+  transferPermissionHint:
+    "业务员仍保留全部客户、票单、文件及历史数据的查看和更新权限；原海外代理的客户链接将被替换。",
   confirmTransfer: "确认转交",
   transferring: "正在转交...",
-  transferSuccess: "已将 {count} 个客户转接给 {agent}，可继承查看 {shipments} 张关联票单；业务历史数据已保留。",
+  transferSuccess:
+    "已将 {count} 个客户转接给 {agent}，可继承查看 {shipments} 张关联票单；业务历史数据已保留。",
   transferFailed: "客户转交失败，所有变更均已回滚。",
   loadTransferAgentsFailed: "可接收客户的海外代理列表加载失败。",
   batchBindSelected: "批量绑定已选票单（{count}）",
@@ -1241,13 +1316,16 @@ messages["zh-CN"].customers = {
   batchRefreshToolbarProgress: "批量更新 {done}/{total}",
   trackPartial: "主查询已更新，但部分补充详情查询失败。",
   createShipment: "新建票单",
-  createShipmentDescription: "完整录入票单概况、四节点路线、订舱信息、运输分段及箱型资料；带 * 的主要信息必须填写，后续仍可执行实时追踪。",
+  createShipmentDescription:
+    "完整录入票单概况、四节点路线、订舱信息、运输分段及箱型资料；带 * 的主要信息必须填写，后续仍可执行实时追踪。",
   saveShipment: "保存票单基础信息",
   savingShipment: "正在保存...",
   deleteShipment: "删除票单",
-  deleteShipmentConfirm: "确认删除这张票单吗？票单的客户绑定和查询快照也会一并删除；存在附件时不能删除。",
+  deleteShipmentConfirm:
+    "确认删除这张票单吗？票单的客户绑定和查询快照也会一并删除；存在附件时不能删除。",
   shipmentCreated: "票单已创建。",
-  confirmOverwriteSnapshots: "检测到 {count} 张相同票单已有当前快照：{references}{more}。继续录入将覆盖原快照，是否确认？",
+  confirmOverwriteSnapshots:
+    "检测到 {count} 张相同票单已有当前快照：{references}{more}。继续录入将覆盖原快照，是否确认？",
   moreOverwriteSnapshots: "，另有 {count} 张",
   shipmentSaved: "票单已更新。",
   shipmentDeleted: "票单已删除。",
@@ -1278,15 +1356,16 @@ messages["zh-CN"].customers = {
   noteSaved: "票单备注已保存。",
   noteSaveFailed: "票单备注保存失败。",
   loadAvailableShipmentsFailed: "已追踪票单列表加载失败。",
-    loadShipmentDetailFailed: "票单快照详情加载失败。",
-    loadingShipmentDetail: "正在加载票单快照...",
-    productLine: "客户访问控制",
+  loadShipmentDetailFailed: "票单快照详情加载失败。",
+  loadingShipmentDetail: "正在加载票单快照...",
+  productLine: "客户访问控制",
   internalPartyAgent: "内部身份 · 代理 AGENT",
   businessOperator: "业务员",
   logout: "退出",
   eyebrow: "CUSTOMER ACCESS CONTROL",
   title: "把每一票货物，明确交给正确的客户。",
-  description: "客户码是独立于员工账号的登录凭证。业务员负责创建客户、定义货运身份，并显式维护客户可访问的票单。",
+  description:
+    "客户码是独立于员工账号的登录凭证。业务员负责创建客户、定义货运身份，并显式维护客户可访问的票单。",
   boundaryTitle: "权限边界已收紧",
   boundaryDescription: "客户只有在票单被绑定后才能访问双方文件；公开追踪查询不会建立授权关系。",
   createTitle: "创建客户",
@@ -1323,7 +1402,8 @@ messages["zh-CN"].customers = {
   profileTitle: "客户资料与物流身份",
   profileDescription: "海外代理、发货人和收货人均使用客户通道查看已分配的票单与文件。",
   linkedCustomersTitle: "海外代理关联客户",
-  linkedCustomersDescription: "选择该海外代理负责的发货人或收货人。海外代理登录后可查看这些客户已发布的票单，以及对海外代理可见的文件。",
+  linkedCustomersDescription:
+    "选择该海外代理负责的发货人或收货人。海外代理登录后可查看这些客户已发布的票单，以及对海外代理可见的文件。",
   linkedCustomersPlaceholder: "选择发货人或收货人客户",
   saveLinkedCustomers: "保存关联客户",
   linkedCustomersSaved: "海外代理的关联客户已保存。",
@@ -1334,7 +1414,8 @@ messages["zh-CN"].customers = {
   codePrefixHint: "仅用于核对；完整客户码不会再次显示。",
   notAvailable: "未提供",
   shipmentsTitle: "已授权票单",
-  shipmentsDescription: "票单统一按承运人与订舱号绑定；提单号仅作为附属信息，系统记录 ID 仅作为高级备用入口。",
+  shipmentsDescription:
+    "票单统一按承运人与订舱号绑定；提单号仅作为附属信息，系统记录 ID 仅作为高级备用入口。",
   bindMode: "选择票单绑定方式",
   bindByReference: "按承运人与单号",
   bindByShipmentId: "按系统记录 ID",
@@ -1347,7 +1428,6 @@ messages["zh-CN"].customers = {
   referenceType: "单号类型",
   referenceBooking: "订舱号",
   referenceBill: "提单号",
-  referenceContainer: "箱号",
   referenceUnknown: "业务单号",
   referenceNo: "业务单号",
   referenceNoPlaceholder: "输入订舱号",
@@ -1385,12 +1465,15 @@ messages["zh-CN"].customers = {
   deactivateFailed: "客户停用失败。",
   reactivateFailed: "客户重新启用失败。",
   bindFailed: "票单绑定失败，请检查 publicId 或承运人和单号是否存在。",
-  trackedShipmentNotFound: "未找到已追踪货物。请先进入货运追踪工作台查询并确认这是你的业务票单，再返回绑定。",
-  shipmentAccessRequired: "这张票单不在你的业务权限范围内，不能绑定给客户。请先确认票单归属或联系管理员授权。",
+  trackedShipmentNotFound:
+    "未找到已追踪货物。请先进入货运追踪工作台查询并确认这是你的业务票单，再返回绑定。",
+  shipmentAccessRequired:
+    "这张票单不在你的业务权限范围内，不能绑定给客户。请先确认票单归属或联系管理员授权。",
   unbindFailed: "票单解绑失败。",
   batchTrack: "批量追踪",
   batchTrackKicker: "BATCH TRACKING",
-  batchTrackDescription: "输入多个订舱号，一次性查询主票及箱型/数量总览，不再逐箱补查。查询完成后会自动刷新票单列表。",
+  batchTrackDescription:
+    "输入多个订舱号，一次性查询主票及箱型/数量总览，不再逐箱补查。查询完成后会自动刷新票单列表。",
   batchTrackAllTasks: "全部查询任务（{count}）",
   batchTrackNumbers: "单号列表",
   batchTrackPlaceholder: "每行一个单号，例如：\n6505766900\n6505766901",
@@ -1403,13 +1486,16 @@ messages["zh-CN"].customers = {
   batchTrackCloseHint: "关闭窗口不会中断后台任务，可随时重新打开查看进度。",
   batchTrackStopConfirm: "确认终止当前批量追踪任务？已完成的票单会保留。",
   batchTrackRetryWait: "接口限流，冷却后自动重试。下次尝试：{time}",
-  batchTrackPaused: "上游持续保护，任务已安全暂停；当前票单已标记失败，尚未处理的票单仍保持等待。请稍后重新提交。",
+  batchTrackPaused:
+    "上游持续保护，任务已安全暂停；当前票单已标记失败，尚未处理的票单仍保持等待。请稍后重新提交。",
   batchTrackRetryItem: "接口限流，冷却后自动重试",
   trackPending: "等待中",
   trackRunning: "查询中",
   referenceContainer: "箱号",
   index: "序号",
   shipmentCount: "票单数量",
+  contactEmail: "联系邮箱",
+  contactEmailPlaceholder: "例如 logistics{'@'}example.com",
   remark: "备注",
   remarkPlaceholder: "记录客户相关备注信息，便于快速识别...",
   createdAt: "创建时间",
@@ -1432,7 +1518,8 @@ messages["zh-CN"].customers = {
   customerPasswordPlaceholder: "至少 8 位，建议包含大小写字母与数字",
   chooseTrackExcel: "选择 Excel 文件",
   trackExcelColumnsHint: "支持 .xlsx/.xls/.csv；请选择包含订舱号的列",
-  trackExcelRule: "每一行必须以订舱号建立或更新票单；提单号列只会作为附属信息保存，不参与查询、建档或去重。",
+  trackExcelRule:
+    "每一行必须以订舱号建立或更新票单；提单号列只会作为附属信息保存，不参与查询、建档或去重。",
   trackRowsReady: "已识别 {count} 条单号",
   batchTrackNoDetails: "承运人返回为空，请检查单号",
   trackCancelled: "已中断",
@@ -1492,13 +1579,16 @@ messages["en-US"].customers = {
   transferSelected: "Transfer customers ({count})",
   responsibleAgent: "Responsible operator",
   transferTitle: "Transfer customers",
-  transferDescription: "Assign the {count} selected customers to an overseas agent and carry over customer-channel access to published shipments and files.",
+  transferDescription:
+    "Assign the {count} selected customers to an overseas agent and carry over customer-channel access to published shipments and files.",
   targetAgent: "Target overseas agent",
   targetAgentPlaceholder: "Select the receiving overseas agent",
-  transferPermissionHint: "Business operators retain full customer, shipment, file, and history access. Any previous overseas-agent link is replaced.",
+  transferPermissionHint:
+    "Business operators retain full customer, shipment, file, and history access. Any previous overseas-agent link is replaced.",
   confirmTransfer: "Confirm transfer",
   transferring: "Transferring...",
-  transferSuccess: "Assigned {count} customers to {agent} with access to {shipments} related shipments. Business history was retained.",
+  transferSuccess:
+    "Assigned {count} customers to {agent} with access to {shipments} related shipments. Business history was retained.",
   transferFailed: "Customer transfer failed. All changes were rolled back.",
   loadTransferAgentsFailed: "Could not load eligible overseas agents.",
   batchBindSelected: "Assign selected ({count})",
@@ -1515,13 +1605,16 @@ messages["en-US"].customers = {
   batchRefreshToolbarProgress: "Updating {done}/{total}",
   trackPartial: "The main snapshot was updated, but some supplemental queries failed.",
   createShipment: "New shipment",
-  createShipmentDescription: "Enter the shipment overview, four-node route, booking details, routing legs, and equipment. Required primary fields are marked with *, and live tracking remains available later.",
+  createShipmentDescription:
+    "Enter the shipment overview, four-node route, booking details, routing legs, and equipment. Required primary fields are marked with *, and live tracking remains available later.",
   saveShipment: "Save shipment details",
   savingShipment: "Saving...",
   deleteShipment: "Delete shipment",
-  deleteShipmentConfirm: "Delete this shipment? Customer assignments and tracking snapshots are removed too. Shipments with files cannot be deleted.",
+  deleteShipmentConfirm:
+    "Delete this shipment? Customer assignments and tracking snapshots are removed too. Shipments with files cannot be deleted.",
   shipmentCreated: "Shipment created.",
-  confirmOverwriteSnapshots: "{count} matching shipment(s) already have a current snapshot: {references}{more}. Continuing will replace the existing snapshot. Proceed?",
+  confirmOverwriteSnapshots:
+    "{count} matching shipment(s) already have a current snapshot: {references}{more}. Continuing will replace the existing snapshot. Proceed?",
   moreOverwriteSnapshots: ", plus {count} more",
   shipmentSaved: "Shipment updated.",
   shipmentDeleted: "Shipment deleted.",
@@ -1534,12 +1627,14 @@ messages["en-US"].customers = {
   cancel: "Cancel",
   close: "Close",
   availableShipments: "Confirmed tracked shipments",
-  availableShipmentsHint: "Review tracked shipments in your scope, edit their information, and assign them to the selected customer.",
+  availableShipmentsHint:
+    "Review tracked shipments in your scope, edit their information, and assign them to the selected customer.",
   refresh: "Refresh",
   refreshAllActive: "Update active shipments",
   refreshAllEmpty: "There are no active shipments to update.",
   refreshAllFailed: "Could not start the update-all task.",
-  refreshReturnedNoData: "The carrier returned no usable details, so the previous snapshot was kept. Try again later.",
+  refreshReturnedNoData:
+    "The carrier returned no usable details, so the previous snapshot was kept. Try again later.",
   view: "View",
   loadingAvailableShipments: "Loading tracked shipments...",
   emptyAvailableShipments: "No tracked shipments are available to assign.",
@@ -1552,19 +1647,22 @@ messages["en-US"].customers = {
   noteSaved: "Shipment note saved.",
   noteSaveFailed: "Could not save the shipment note.",
   loadAvailableShipmentsFailed: "Could not load tracked shipments.",
-    loadShipmentDetailFailed: "Could not load shipment snapshot details.",
-    loadingShipmentDetail: "Loading shipment snapshot...",
-    productLine: "Customer Access Control",
+  loadShipmentDetailFailed: "Could not load shipment snapshot details.",
+  loadingShipmentDetail: "Loading shipment snapshot...",
+  productLine: "Customer Access Control",
   internalPartyAgent: "Internal identity · AGENT",
   businessOperator: "Business operator",
   logout: "Sign out",
   eyebrow: "CUSTOMER ACCESS CONTROL",
   title: "Put every shipment in the right customer's hands.",
-  description: "Customer codes are separate from employee accounts. Operators create customers, define freight identities, and explicitly maintain each customer's shipment scope.",
+  description:
+    "Customer codes are separate from employee accounts. Operators create customers, define freight identities, and explicitly maintain each customer's shipment scope.",
   boundaryTitle: "A deliberate access boundary",
-  boundaryDescription: "Customers can access shared files only after assignment. A public tracking search never creates authorization.",
+  boundaryDescription:
+    "Customers can access shared files only after assignment. A public tracking search never creates authorization.",
   createTitle: "Create customer",
-  createDescription: "Create overseas-agent, shipper, or consignee customers here. All three use the customer sign-in channel.",
+  createDescription:
+    "Create overseas-agent, shipper, or consignee customers here. All three use the customer sign-in channel.",
   createDisplayName: "Display name",
   createDisplayNamePlaceholder: "e.g. ACME Shanghai Purchasing",
   createAccount: "Account",
@@ -1595,9 +1693,11 @@ messages["en-US"].customers = {
   deactivate: "Deactivate customer",
   reactivate: "Reactivate",
   profileTitle: "Profile and freight identity",
-  profileDescription: "Overseas agents, shippers, and consignees use the customer channel to view assigned shipments and files.",
+  profileDescription:
+    "Overseas agents, shippers, and consignees use the customer channel to view assigned shipments and files.",
   linkedCustomersTitle: "Overseas agent customers",
-  linkedCustomersDescription: "Select the shippers or consignees represented by this overseas agent. Published shipments and files visible to overseas agents become available after sign-in.",
+  linkedCustomersDescription:
+    "Select the shippers or consignees represented by this overseas agent. Published shipments and files visible to overseas agents become available after sign-in.",
   linkedCustomersPlaceholder: "Select shipper or consignee customers",
   saveLinkedCustomers: "Save linked customers",
   linkedCustomersSaved: "Linked customers were saved for the overseas agent.",
@@ -1608,20 +1708,22 @@ messages["en-US"].customers = {
   codePrefixHint: "For verification only; the full customer code is never displayed again.",
   notAvailable: "Not available",
   shipmentsTitle: "Authorized shipments",
-  shipmentsDescription: "Shipments are keyed by carrier and booking number. A bill of lading is supplementary data only; the system record ID is an advanced fallback.",
+  shipmentsDescription:
+    "Shipments are keyed by carrier and booking number. A bill of lading is supplementary data only; the system record ID is an advanced fallback.",
   bindMode: "Choose shipment assignment mode",
   bindByReference: "By carrier & reference",
   bindByShipmentId: "By system record ID",
   shipmentId: "System shipment record ID",
   shipmentIdPlaceholder: "Paste the system record ID from tracking",
-  shipmentIdHint: "This is a platform-generated UUID, not a booking, bill-of-lading, container, customer-order, or forwarder job number.",
-  referenceHint: "Track and verify that the shipment belongs to your business before assigning customer access here.",
+  shipmentIdHint:
+    "This is a platform-generated UUID, not a booking, bill-of-lading, container, customer-order, or forwarder job number.",
+  referenceHint:
+    "Track and verify that the shipment belongs to your business before assigning customer access here.",
   carrier: "Carrier",
   carrierPlaceholder: "e.g. COSCO",
   referenceType: "Reference type",
   referenceBooking: "Booking number",
   referenceBill: "Bill of lading",
-  referenceContainer: "Container number",
   referenceUnknown: "Business reference",
   referenceNo: "Reference number",
   referenceNoPlaceholder: "Enter a booking number",
@@ -1632,20 +1734,24 @@ messages["en-US"].customers = {
   assignedAt: "Assigned at",
   actions: "Actions",
   loadingShipments: "Loading authorized shipments...",
-  emptyShipments: "No shipments assigned. The customer may use public tracking but cannot access related files.",
+  emptyShipments:
+    "No shipments assigned. The customer may use public tracking but cannot access related files.",
   bound: "Assigned",
   unbind: "Remove access",
   statusActive: "Active",
   statusDisabled: "Disabled",
   codeDialogTitle: "Save this customer code now",
-  codeDialogDescription: "This is the complete customer code for {name}. It will not be shown again after closing.",
-  codeDialogWarning: "Share it through a trusted channel. Resetting the code immediately revokes the old code and active customer sessions.",
+  codeDialogDescription:
+    "This is the complete customer code for {name}. It will not be shown again after closing.",
+  codeDialogWarning:
+    "Share it through a trusted channel. Resetting the code immediately revokes the old code and active customer sessions.",
   copyCode: "Copy customer code",
   copied: "Copied",
   confirmStored: "I stored it safely",
   resetConfirm: "The old code and active customer sessions will be revoked immediately. Continue?",
   deactivateConfirm: "This customer will no longer be able to sign in. Continue?",
-  unbindConfirm: "The customer will immediately lose access to shared files for this shipment. Continue?",
+  unbindConfirm:
+    "The customer will immediately lose access to shared files for this shipment. Continue?",
   saved: "Customer profile updated.",
   deactivated: "Customer deactivated.",
   reactivated: "Customer reactivated.",
@@ -1659,12 +1765,15 @@ messages["en-US"].customers = {
   deactivateFailed: "Could not deactivate the customer.",
   reactivateFailed: "Could not reactivate the customer.",
   bindFailed: "Could not assign the shipment. Check the publicId or carrier and reference.",
-  trackedShipmentNotFound: "No tracked shipment was found. Track it in the shipment workbench and verify it belongs to your business before assigning it here.",
-  shipmentAccessRequired: "This shipment is outside your business access scope and cannot be assigned. Verify ownership or ask an administrator to grant access.",
+  trackedShipmentNotFound:
+    "No tracked shipment was found. Track it in the shipment workbench and verify it belongs to your business before assigning it here.",
+  shipmentAccessRequired:
+    "This shipment is outside your business access scope and cannot be assigned. Verify ownership or ask an administrator to grant access.",
   unbindFailed: "Could not remove shipment access.",
   batchTrack: "Batch Track",
   batchTrackKicker: "BATCH TRACKING",
-  batchTrackDescription: "Track multiple booking numbers. Each task fetches the shipment and its container type/count overview without per-container lookups.",
+  batchTrackDescription:
+    "Track multiple booking numbers. Each task fetches the shipment and its container type/count overview without per-container lookups.",
   batchTrackAllTasks: "All query tasks ({count})",
   batchTrackNumbers: "Reference numbers",
   batchTrackPlaceholder: "One number per line, e.g.:\n6505766900\n6505766901",
@@ -1674,16 +1783,21 @@ messages["en-US"].customers = {
   batchTrackProgress: "Progress: {done}/{total} ({succeeded} success, {failed} failed)",
   batchTrackToolbarProgress: "Batch Track {done}/{total}",
   batchTrackStop: "Stop task",
-  batchTrackCloseHint: "Closing this window does not stop the background task. Reopen it at any time to view progress.",
+  batchTrackCloseHint:
+    "Closing this window does not stop the background task. Reopen it at any time to view progress.",
   batchTrackStopConfirm: "Stop this batch tracking task? Completed shipments will be kept.",
-  batchTrackRetryWait: "Rate limited. The task will retry automatically after cooldown. Next attempt: {time}",
-  batchTrackPaused: "Upstream protection persisted. The task was safely paused; the current shipment is marked failed while unprocessed shipments remain pending. Submit again later.",
+  batchTrackRetryWait:
+    "Rate limited. The task will retry automatically after cooldown. Next attempt: {time}",
+  batchTrackPaused:
+    "Upstream protection persisted. The task was safely paused; the current shipment is marked failed while unprocessed shipments remain pending. Submit again later.",
   batchTrackRetryItem: "Rate limited; waiting to retry automatically",
   trackPending: "Pending",
   trackRunning: "Tracking",
   referenceContainer: "Container No.",
   index: "#",
   shipmentCount: "Shipments",
+  contactEmail: "Contact email",
+  contactEmailPlaceholder: "e.g. logistics{'@'}example.com",
   remark: "Remark",
   remarkPlaceholder: "Add notes for quick identification...",
   createdAt: "Created at",
@@ -1694,8 +1808,8 @@ messages["en-US"].customers = {
   resetPassword: "Reset password",
   disable: "Disable",
   enable: "Enable",
-  confirmDisable: "Disable customer \"{name}\"? They will no longer be able to sign in.",
-  confirmEnable: "Re-enable customer \"{name}\"?",
+  confirmDisable: 'Disable customer "{name}"? They will no longer be able to sign in.',
+  confirmEnable: 'Re-enable customer "{name}"?',
   disabled: "Customer disabled.",
   enabled: "Customer enabled.",
   editTitle: "Edit customer",
@@ -1706,7 +1820,8 @@ messages["en-US"].customers = {
   customerPasswordPlaceholder: "At least 8 characters, mix of letters and numbers recommended",
   chooseTrackExcel: "Choose Excel file",
   trackExcelColumnsHint: "Supports .xlsx/.xls/.csv; select the column containing booking numbers.",
-  trackExcelRule: "Every row is created or updated by booking number. A bill-of-lading column is stored only as supplementary data and is never used for querying, creation, or deduplication.",
+  trackExcelRule:
+    "Every row is created or updated by booking number. A bill-of-lading column is stored only as supplementary data and is never used for querying, creation, or deduplication.",
   trackRowsReady: "{count} numbers ready",
   batchTrackNoDetails: "Carrier returned empty, please check the reference number",
   trackCancelled: "Interrupted",
@@ -1729,7 +1844,8 @@ messages["en-US"].customers = {
   updateTrackingResponseMessage: "Response message",
   updateTrackingNumber: "Reference number",
   updateTrackingNoDetails: "Details check",
-  updateTrackingNumberInvalidOrEmpty: "No valid details returned. Check the reference number or try again later.",
+  updateTrackingNumberInvalidOrEmpty:
+    "No valid details returned. Check the reference number or try again later.",
   updateTrackingSuccessDefault: "Carrier interface returned successfully",
   refreshSuccess: "Latest data fetched from carrier.",
   refreshFailed: "Refresh failed. Please try again later.",
@@ -1738,10 +1854,13 @@ messages["en-US"].customers = {
   quickImport: "Quick Entry",
   excelImport: "Excel Import",
   quickImportNames: "Customer name list",
-  quickImportPlaceholder: "One customer name per line, e.g.:\nACME Shanghai Purchasing\nGlobal Trading Co.",
-  quickImportHint: "One name per line; system will auto-generate login accounts and initial passwords",
+  quickImportPlaceholder:
+    "One customer name per line, e.g.:\nACME Shanghai Purchasing\nGlobal Trading Co.",
+  quickImportHint:
+    "One name per line; system will auto-generate login accounts and initial passwords",
   chooseExcel: "Choose Excel file",
-  excelColumnsHint: "First column = customer name, second column (optional) = initial password. Supports .xlsx/.xls/.csv",
+  excelColumnsHint:
+    "First column = customer name, second column (optional) = initial password. Supports .xlsx/.xls/.csv",
   rowsReady: "{count} rows ready",
   replaceFile: "Replace file",
   chooseFile: "Choose file",
@@ -1752,7 +1871,8 @@ messages["en-US"].customers = {
   importFailed: "Import failed. Please check the data and try again.",
   importCreated: "Created",
   batchCredentialTitle: "Batch Import Results",
-  batchCredentialDescription: "Please save the following initial passwords securely. They will not be shown again after closing.",
+  batchCredentialDescription:
+    "Please save the following initial passwords securely. They will not be shown again after closing.",
   customerName: "Customer Name",
   initialPassword: "Initial Password",
   importStatus: "Status",
@@ -1787,11 +1907,14 @@ messages["zh-CN"].admin = {
     selfPasswordEditHint: "当前管理员请在个人账户安全设置中修改自己的密码。",
     resetPassword: "重置密码",
     selfResetDisabled: "为防止当前管理员被锁定，不能在此重置自己的密码。",
-    resetPasswordConfirm: "确认重置账号“{username}”的密码吗？密码将统一设为“用户名 + !{'@'}#2026”，并让该账号已登录设备下线。",
+    resetPasswordConfirm:
+      "确认重置账号“{username}”的密码吗？密码将统一设为“用户名 + !{'@'}#2026”，并让该账号已登录设备下线。",
     resetPasswordSuccess: "账号 {username} 的密码已安全重置。",
     temporaryPasswordTitle: "立即保存重置密码",
-    temporaryPasswordDescription: "这是账号 {username} 按统一规则生成的新重置密码；关闭后请从本弹窗安全交付给用户。",
-    temporaryPasswordWarning: "请通过可信渠道交给账号使用者。该密码会持续有效，直到管理员再次修改或重置。",
+    temporaryPasswordDescription:
+      "这是账号 {username} 按统一规则生成的新重置密码；关闭后请从本弹窗安全交付给用户。",
+    temporaryPasswordWarning:
+      "请通过可信渠道交给账号使用者。该密码会持续有效，直到管理员再次修改或重置。",
     copyTemporaryPassword: "复制临时密码",
     temporaryPasswordCopied: "已复制",
     temporaryPasswordStored: "我已安全保存",
@@ -1809,7 +1932,8 @@ messages["en-US"].admin = {
     edit: "Edit",
     editTitle: "Edit internal account",
     createTitle: "Create internal account",
-    agentForcedHint: "BUSINESS and ADMIN are internal operator roles, so their freight identity is fixed to AGENT.",
+    agentForcedHint:
+      "BUSINESS and ADMIN are internal operator roles, so their freight identity is fixed to AGENT.",
     save: "Save account",
     create: "Create account",
     saved: "Internal account updated.",
@@ -1823,20 +1947,27 @@ messages["en-US"].admin = {
     passwordOptionalHint: "Setting a password here signs the user out on all active devices.",
     confirmPassword: "Confirm password",
     confirmPasswordPlaceholder: "Enter the password again",
-    passwordRuleError: "Password must be 8–128 characters and include at least one letter and one number.",
+    passwordRuleError:
+      "Password must be 8–128 characters and include at least one letter and one number.",
     passwordMismatch: "The passwords do not match.",
-    selfPasswordEditHint: "Change the current administrator password from personal account security settings.",
+    selfPasswordEditHint:
+      "Change the current administrator password from personal account security settings.",
     resetPassword: "Reset password",
-    selfResetDisabled: "You cannot reset your own password here because it would lock the active administrator session.",
-    resetPasswordConfirm: "Reset the password for account “{username}” to “username + !{'@'}#2026” and revoke all active sessions?",
+    selfResetDisabled:
+      "You cannot reset your own password here because it would lock the active administrator session.",
+    resetPasswordConfirm:
+      "Reset the password for account “{username}” to “username + !{'@'}#2026” and revoke all active sessions?",
     resetPasswordSuccess: "Password for account {username} was reset securely.",
     temporaryPasswordTitle: "Save the reset password now",
-    temporaryPasswordDescription: "This is the reset password generated for {username} using the shared rule. Deliver it securely from this dialog.",
-    temporaryPasswordWarning: "Share it through a trusted channel. It remains valid until an administrator changes or resets it again.",
+    temporaryPasswordDescription:
+      "This is the reset password generated for {username} using the shared rule. Deliver it securely from this dialog.",
+    temporaryPasswordWarning:
+      "Share it through a trusted channel. It remains valid until an administrator changes or resets it again.",
     copyTemporaryPassword: "Copy temporary password",
     temporaryPasswordCopied: "Copied",
     temporaryPasswordStored: "I stored it safely",
-    temporaryPasswordMissing: "The server did not return a temporary password. Retry or verify the deployed backend version.",
+    temporaryPasswordMissing:
+      "The server did not return a temporary password. Retry or verify the deployed backend version.",
     copyTemporaryPasswordFailed: "Copy failed. Select and copy the temporary password manually.",
     errorTitle: "Operation not completed",
     errorConfirm: "OK",
@@ -1892,9 +2023,11 @@ Object.assign(messages["zh-CN"].customers, {
   loadingCustomerShipmentAccess: "正在加载当前客户的票单授权...",
   emptyCustomerShipmentAccess: "当前没有已绑定或可绑定的票单。",
   publishAllDrafts: "确认发布待发布票单（{count}）",
-  publishAllDraftsConfirm: "确认将当前客户的 {count} 张待发布票单逐张发布？无有效运输数据的票单会保留为待发布。",
+  publishAllDraftsConfirm:
+    "确认将当前客户的 {count} 张待发布票单逐张发布？无有效运输数据的票单会保留为待发布。",
   publishAllDraftsSuccess: "已向客户发布 {count} 张票单，刷新客户总览即可查看。",
-  publishAllDraftsPartial: "已发布 {published} 张，另有 {failed} 张因运输数据不完整而保留为待发布。",
+  publishAllDraftsPartial:
+    "已发布 {published} 张，另有 {failed} 张因运输数据不完整而保留为待发布。",
   clientCode: "客户码",
   clientCodePlaceholder: "例如 HAYDEN01",
   pendingMatches: "Client Code 待确认队列",
@@ -1932,13 +2065,15 @@ Object.assign(messages["zh-CN"].customers, {
   currentLocation: "当前位置",
   clientNameCode: "客户名称代码",
   manualSnapshotTitle: "人工补录货物信息",
-  manualSnapshotDescription: "紧凑补录业务字段和运输信息；JOB、PO、Client No./Name 独立保存在票单中，不会被后续追踪覆盖。",
+  manualSnapshotDescription:
+    "紧凑补录业务字段和运输信息；JOB、PO、Client No./Name 独立保存在票单中，不会被后续追踪覆盖。",
   saveManualSnapshot: "保存人工追踪信息",
   manualSaveHint: "保存运输状态及人工补录的运输字段",
   shipmentSaveHint: "仅保存订舱号和备注",
   manualSnapshotSaved: "人工货物信息已保存，可绑定后展示给客户。",
   manualSnapshotFailed: "人工货物信息保存失败，请检查单号与字段长度。",
-  manualRequiredHint: "主要信息和四个基础路线节点为必填；中转港、订舱补充、运输分段及箱号均可按实际情况选填。",
+  manualRequiredHint:
+    "主要信息和四个基础路线节点为必填；中转港、订舱补充、运输分段及箱号均可按实际情况选填。",
   manualRequiredSection: "主要信息 · 必填",
   manualOptionalSection: "补充信息 · 选填",
   manualSectionBasic: "票单概况、预计时间与最新动态",
@@ -2018,7 +2153,8 @@ Object.assign(messages["zh-CN"].customers, {
   backToList: "返回列表",
   tabCustomerManagement: "客户管理",
   tabShipmentManagement: "票单管理",
-  customerCodeUniqueHint: "客户名称可以重复；客户码是全局唯一识别码，创建后会用于票单匹配，请勿随意修改。",
+  customerCodeUniqueHint:
+    "客户名称可以重复；客户码是全局唯一识别码，创建后会用于票单匹配，请勿随意修改。",
   customerFilterLabel: "客户筛选",
   filterByCustomer: "按客户筛选票单",
   trackingChannel: "追踪通道",
@@ -2052,11 +2188,13 @@ Object.assign(messages["zh-CN"].customers, {
   bookingReferenceStage: "订舱参考信息",
   transportDetailsStage: "运输/箱信息",
   batchTrackProgress: "进度：{done}/{total}（成功 {succeeded}，部分失败 {partial}，失败 {failed}）",
-  batchTrackCircuitOpened: "已自动熔断：连续 {count} 条出现上游错误（{code}），剩余 {remaining} 条未执行。",
+  batchTrackCircuitOpened:
+    "已自动熔断：连续 {count} 条出现上游错误（{code}），剩余 {remaining} 条未执行。",
   batchTrackCircuitSkipped: "批次已熔断，本条未执行",
   batchEditBusinessFields: "统一编辑信息（{count}）",
   batchEditBusinessFieldsTitle: "批量编辑业务信息",
-  batchEditBusinessFieldsHint: "每张票单分别填写 JOB NUMBER、客户 PO NO. 和 Client No./Name；这些字段独立保存在票单中，不会被后续追踪快照覆盖。",
+  batchEditBusinessFieldsHint:
+    "每张票单分别填写 JOB NUMBER、客户 PO NO. 和 Client No./Name；这些字段独立保存在票单中，不会被后续追踪快照覆盖。",
   saveBatchBusinessFields: "保存全部修改",
   batchBusinessFieldsSaved: "已保存 {count} 张票单的业务信息。",
   batchBusinessFieldsSaveFailed: "批量业务信息保存失败。",
@@ -2102,17 +2240,22 @@ Object.assign(messages["zh-CN"].customers, {
 
 Object.assign(messages["en-US"].customers, {
   customerShipmentAccess: "Shipment assignment and publication",
-  customerShipmentAccessHint: "Publish or withdraw assigned shipments here; unassigned shipments can be selected for batch assignment.",
+  customerShipmentAccessHint:
+    "Publish or withdraw assigned shipments here; unassigned shipments can be selected for batch assignment.",
   loadingCustomerShipmentAccess: "Loading shipment access for this customer...",
   emptyCustomerShipmentAccess: "There are no assigned or available shipments.",
   publishAllDrafts: "Publish drafts ({count})",
-  publishAllDraftsConfirm: "Publish the {count} draft shipments to this customer one by one? Shipments without valid operational data will remain drafts.",
-  publishAllDraftsSuccess: "Published {count} shipments. Refresh the customer overview to see them.",
-  publishAllDraftsPartial: "Published {published} shipments; {failed} remain drafts because their operational data is incomplete.",
+  publishAllDraftsConfirm:
+    "Publish the {count} draft shipments to this customer one by one? Shipments without valid operational data will remain drafts.",
+  publishAllDraftsSuccess:
+    "Published {count} shipments. Refresh the customer overview to see them.",
+  publishAllDraftsPartial:
+    "Published {published} shipments; {failed} remain drafts because their operational data is incomplete.",
   clientCode: "Client Code",
   clientCodePlaceholder: "For example, HAYDEN01",
   pendingMatches: "Client Code review queue",
-  pendingMatchesHint: "When batch import cannot find one customer, bind the item to the selected customer and publish it separately.",
+  pendingMatchesHint:
+    "When batch import cannot find one customer, bind the item to the selected customer and publish it separately.",
   noPendingMatches: "No Client Code matches need review",
   bindToCurrentCustomer: "Bind to selected customer",
   loadPendingMatchesFailed: "Could not load the Client Code review queue.",
@@ -2126,10 +2269,12 @@ Object.assign(messages["en-US"].customers, {
   withdrawConfirm: "Withdraw this shipment from the selected customer's workspace?",
   publishedSuccess: "Shipment published to the customer.",
   withdrawnSuccess: "Shipment withdrawn from the customer workspace.",
-  publishFailed: "Publication failed. Complete valid operational fields; Unknown or empty movement cannot be published.",
+  publishFailed:
+    "Publication failed. Complete valid operational fields; Unknown or empty movement cannot be published.",
   withdrawFailed: "Could not withdraw the shipment.",
   invalidateSnapshot: "Invalidate current snapshot",
-  invalidateReasonPrompt: "Enter the reason. The snapshot remains auditable but is no longer customer-visible.",
+  invalidateReasonPrompt:
+    "Enter the reason. The snapshot remains auditable but is no longer customer-visible.",
   snapshotInvalidated: "The bad snapshot was invalidated and the shipment returned to draft.",
   snapshotInvalidateFailed: "Could not invalidate the snapshot.",
   jobNumber: "Forwarder job number",
@@ -2146,13 +2291,16 @@ Object.assign(messages["en-US"].customers, {
   currentLocation: "Current location",
   clientNameCode: "Client name code",
   manualSnapshotTitle: "Manual shipment information",
-  manualSnapshotDescription: "Compactly edit business and transport details. JOB, PO, and Client No./Name are stored on the shipment and survive later tracking refreshes.",
+  manualSnapshotDescription:
+    "Compactly edit business and transport details. JOB, PO, and Client No./Name are stored on the shipment and survive later tracking refreshes.",
   saveManualSnapshot: "Save manual tracking",
   manualSaveHint: "Save tracking status and manually entered transport fields",
   shipmentSaveHint: "Save only reference type, reference number, and note",
   manualSnapshotSaved: "Manual shipment information saved and ready for assigned customers.",
-  manualSnapshotFailed: "Could not save the manual shipment information. Check the reference and field lengths.",
-  manualRequiredHint: "Primary information and the four base route nodes are required. Transshipment ports, booking details, routing legs, and container numbers are optional.",
+  manualSnapshotFailed:
+    "Could not save the manual shipment information. Check the reference and field lengths.",
+  manualRequiredHint:
+    "Primary information and the four base route nodes are required. Transshipment ports, booking details, routing legs, and container numbers are optional.",
   manualRequiredSection: "Primary information · required",
   manualOptionalSection: "Supplementary · optional",
   manualSectionBasic: "Shipment overview, estimated times, and latest event",
@@ -2161,10 +2309,14 @@ Object.assign(messages["en-US"].customers, {
   manualSectionContainerTypes: "Container types and quantities",
   manualSectionRouting: "Routing legs",
   manualSectionContainers: "Transport details / containers",
-  manualRouteHint: "POR, FPOL, LPOD, and FND are required. Add as many transshipment ports as needed.",
-  manualContainerTypeHint: "Enter at least one equipment type and quantity. Individual container numbers can be added later.",
-  manualRoutingHint: "Optionally enter sea, truck, rail, or barge legs. This section can remain empty.",
-  manualContainerHint: "Container numbers are optional. Add type, current location, and status when container-level details are known.",
+  manualRouteHint:
+    "POR, FPOL, LPOD, and FND are required. Add as many transshipment ports as needed.",
+  manualContainerTypeHint:
+    "Enter at least one equipment type and quantity. Individual container numbers can be added later.",
+  manualRoutingHint:
+    "Optionally enter sea, truck, rail, or barge legs. This section can remain empty.",
+  manualContainerHint:
+    "Container numbers are optional. Add type, current location, and status when container-level details are known.",
   manualRoutingEmpty: "No routing legs have been added.",
   manualContainerEmpty: "No container-level transport details have been added.",
   latestEventName: "Latest event / current status",
@@ -2213,7 +2365,8 @@ Object.assign(messages["en-US"].customers, {
   initialPassword: "Initial password",
   customerPasswordPlaceholder: "8–128 characters",
   resetPassword: "Reset sign-in password",
-  resetPasswordDescription: "Set a new password for “{name}”. Existing sessions will be revoked after saving.",
+  resetPasswordDescription:
+    "Set a new password for “{name}”. Existing sessions will be revoked after saving.",
   newPassword: "New password",
   confirmPassword: "Confirm new password",
   confirmResetPassword: "Reset password",
@@ -2224,7 +2377,8 @@ Object.assign(messages["en-US"].customers, {
   workspaceCustomersHint: "Manage customer profiles, roles, and shipment access",
   workspaceTracking: "Tracking workspace",
   workspaceTrackingHint: "Import, search, and inspect shipment movements",
-  trackingEmbeddedDescription: "Queries, imports, and shipment details now live inside this customer operations workspace.",
+  trackingEmbeddedDescription:
+    "Queries, imports, and shipment details now live inside this customer operations workspace.",
   refreshTrackingWorkspace: "Refresh tracking",
   openLiveTracking: "Track latest movement",
   friendlyError: "The operation failed. Try again later or contact customer service.",
@@ -2232,7 +2386,8 @@ Object.assign(messages["en-US"].customers, {
   backToList: "Back to list",
   tabCustomerManagement: "Customer Management",
   tabShipmentManagement: "Shipment Management",
-  customerCodeUniqueHint: "Customer names may repeat. The customer code is the globally unique identifier used for shipment matching, so do not change it casually after creation.",
+  customerCodeUniqueHint:
+    "Customer names may repeat. The customer code is the globally unique identifier used for shipment matching, so do not change it casually after creation.",
   customerFilterLabel: "Customer",
   filterByCustomer: "Filter shipments by customer",
   trackingChannel: "Tracking channel",
@@ -2259,18 +2414,24 @@ Object.assign(messages["en-US"].customers, {
   proxyNodeUsed: "Proxy node",
   snapshotFetchedAt: "Current snapshot time",
   fullErrorDetails: "Full error and proxy diagnostics",
-  supplementalRetryScheduled: "Only the failed supplemental queries will retry in 15–30 minutes; the main query will not run again.",
-  trackStaleFallback: "The live carrier refresh failed. The previous snapshot ({time}) remains visible and was not marked as updated.",
+  supplementalRetryScheduled:
+    "Only the failed supplemental queries will retry in 15–30 minutes; the main query will not run again.",
+  trackStaleFallback:
+    "The live carrier refresh failed. The previous snapshot ({time}) remains visible and was not marked as updated.",
   trackLiveNoChange: "The live carrier query succeeded; no tracking data changed.",
-  trackPartialRetryScheduled: "The live main snapshot was saved. Incomplete supplemental details will be retried automatically in 15–30 minutes.",
+  trackPartialRetryScheduled:
+    "The live main snapshot was saved. Incomplete supplemental details will be retried automatically in 15–30 minutes.",
   bookingReferenceStage: "Booking reference",
   transportDetailsStage: "Transport/container details",
-  batchTrackProgress: "Progress: {done}/{total} ({succeeded} success, {partial} partial, {failed} failed)",
-  batchTrackCircuitOpened: "Circuit opened after {count} consecutive upstream failures ({code}); {remaining} items were not run.",
+  batchTrackProgress:
+    "Progress: {done}/{total} ({succeeded} success, {partial} partial, {failed} failed)",
+  batchTrackCircuitOpened:
+    "Circuit opened after {count} consecutive upstream failures ({code}); {remaining} items were not run.",
   batchTrackCircuitSkipped: "Not run because the batch circuit opened",
   batchEditBusinessFields: "Edit business fields ({count})",
   batchEditBusinessFieldsTitle: "Batch edit business information",
-  batchEditBusinessFieldsHint: "Edit JOB NUMBER, client PO, and Client No./Name independently for every shipment. These fields are stored outside tracking snapshots.",
+  batchEditBusinessFieldsHint:
+    "Edit JOB NUMBER, client PO, and Client No./Name independently for every shipment. These fields are stored outside tracking snapshots.",
   saveBatchBusinessFields: "Save all changes",
   batchBusinessFieldsSaved: "Saved business information for {count} shipments.",
   batchBusinessFieldsSaveFailed: "Could not save the batch business information.",
@@ -2293,7 +2454,8 @@ Object.assign(messages["en-US"].customers, {
   editSupplement: "Edit",
   manualSupplement: "Manual entry",
   supplementClientCode: "Edit Client Code",
-  supplementClientCodeHint: "Set a Client Code for business matching and automatic shipment association.",
+  supplementClientCodeHint:
+    "Set a Client Code for business matching and automatic shipment association.",
   supplementSaved: "Client code updated.",
   batchBindingFailed: "Batch bind complete: {success} succeeded, {failed} failed",
   carrierCOSCO: "COSCO SHIPPING",
@@ -2317,10 +2479,12 @@ Object.assign(messages["en-US"].customers, {
 Object.assign(messages["zh-CN"].customers, {
   shipmentExcelImport: "Excel 批量导入票单",
   dialogKickerShipmentExcelImport: "完整票单批量录入",
-  shipmentExcelImportDescription: "通过多工作表 Excel 一次导入多张完整票单；遇到已有订舱号时，可仅导入新增票单并保留原快照，也可明确选择更新已有票单。",
+  shipmentExcelImportDescription:
+    "通过多工作表 Excel 一次导入多张完整票单；遇到已有订舱号时，可仅导入新增票单并保留原快照，也可明确选择更新已有票单。",
   downloadShipmentExcelTemplate: "下载完整导入模板",
   chooseShipmentExcel: "选择或拖入票单 Excel",
-  shipmentExcelSheetsHint: "支持 .xlsx/.xls；请优先使用系统模板中的票单主表、中转港、分段运输、箱型数量和箱级详情工作表。",
+  shipmentExcelSheetsHint:
+    "支持 .xlsx/.xls；请优先使用系统模板中的票单主表、中转港、分段运输、箱型数量和箱级详情工作表。",
   shipmentExcelRowsReady: "已读取 {count} 张票单，请先检查校验结果",
   shipmentExcelTotal: "票单总数",
   shipmentExcelValid: "可导入",
@@ -2335,9 +2499,11 @@ Object.assign(messages["zh-CN"].customers, {
   importPending: "等待导入",
   importUpdated: "已覆盖更新",
   importSkippedExisting: "已保留原快照，本次跳过",
-  shipmentExcelImportProgress: "导入进度 {done}/{total}（成功 {succeeded}，失败 {failed}，保留已有 {skipped}）",
+  shipmentExcelImportProgress:
+    "导入进度 {done}/{total}（成功 {succeeded}，失败 {failed}，保留已有 {skipped}）",
   shipmentExcelConflictTitle: "发现已有票单",
-  shipmentExcelConflictSummary: "Excel 共 {total} 张：新增 {newCount} 张，系统已有 {existing} 张（其中 {snapshots} 张有当前快照）。请选择本次导入方式。",
+  shipmentExcelConflictSummary:
+    "Excel 共 {total} 张：新增 {newCount} 张，系统已有 {existing} 张（其中 {snapshots} 张有当前快照）。请选择本次导入方式。",
   importNewOnly: "仅导入 {count} 张新增（推荐）",
   importAllAndUpdateExisting: "全部导入并更新 {count} 张已有",
   keepExistingSnapshots: "保留已有快照，不导入",
@@ -2350,7 +2516,8 @@ Object.assign(messages["zh-CN"].customers, {
   shipmentExcelImportConflictCheckFailed: "无法检查重复票单，请稍后重试；本次尚未写入任何票单。",
   shipmentExcelImportItemFailed: "该票单创建失败。",
   shipmentExcelImportFinished: "批量导入完成：成功 {succeeded} 张，失败 {failed} 张。",
-  shipmentExcelImportFinishedWithSkipped: "批量导入完成：成功 {succeeded} 张，失败 {failed} 张，保留并跳过已有票单 {skipped} 张。",
+  shipmentExcelImportFinishedWithSkipped:
+    "批量导入完成：成功 {succeeded} 张，失败 {failed} 张，保留并跳过已有票单 {skipped} 张。",
   shipmentExcelNoNewShipments: "没有新增票单可导入；已保留现有 {count} 张票单及其快照。",
   shipmentExcelResultsFailed: "导入结果 Excel 生成失败。"
 });
@@ -2358,10 +2525,12 @@ Object.assign(messages["zh-CN"].customers, {
 Object.assign(messages["en-US"].customers, {
   shipmentExcelImport: "Import shipments from Excel",
   dialogKickerShipmentExcelImport: "COMPLETE SHIPMENT BATCH ENTRY",
-  shipmentExcelImportDescription: "Import complete shipment records from a multi-sheet workbook. When booking numbers already exist, you can import only new shipments and preserve current snapshots, or explicitly update existing shipments.",
+  shipmentExcelImportDescription:
+    "Import complete shipment records from a multi-sheet workbook. When booking numbers already exist, you can import only new shipments and preserve current snapshots, or explicitly update existing shipments.",
   downloadShipmentExcelTemplate: "Download complete template",
   chooseShipmentExcel: "Choose or drop a shipment workbook",
-  shipmentExcelSheetsHint: "Supports .xlsx/.xls. Use the supplied Shipments, Transshipments, Routing Legs, Container Types, and Containers sheets.",
+  shipmentExcelSheetsHint:
+    "Supports .xlsx/.xls. Use the supplied Shipments, Transshipments, Routing Legs, Container Types, and Containers sheets.",
   shipmentExcelRowsReady: "{count} shipments read. Review validation before importing.",
   shipmentExcelTotal: "Total shipments",
   shipmentExcelValid: "Ready",
@@ -2376,9 +2545,11 @@ Object.assign(messages["en-US"].customers, {
   importPending: "Waiting",
   importUpdated: "Updated existing shipment",
   importSkippedExisting: "Kept the current snapshot and skipped",
-  shipmentExcelImportProgress: "Progress {done}/{total} ({succeeded} succeeded, {failed} failed, {skipped} existing preserved)",
+  shipmentExcelImportProgress:
+    "Progress {done}/{total} ({succeeded} succeeded, {failed} failed, {skipped} existing preserved)",
   shipmentExcelConflictTitle: "Existing shipments found",
-  shipmentExcelConflictSummary: "The workbook contains {total} shipments: {newCount} new and {existing} already in the system ({snapshots} with a current snapshot). Choose how to continue.",
+  shipmentExcelConflictSummary:
+    "The workbook contains {total} shipments: {newCount} new and {existing} already in the system ({snapshots} with a current snapshot). Choose how to continue.",
   importNewOnly: "Import {count} new only (recommended)",
   importAllAndUpdateExisting: "Import all and update {count} existing",
   keepExistingSnapshots: "Keep existing snapshots; import nothing",
@@ -2388,18 +2559,23 @@ Object.assign(messages["en-US"].customers, {
   shipmentExcelTemplateFailed: "Could not generate the complete shipment Excel template.",
   shipmentExcelUnsupportedFile: "Choose an .xlsx or .xls workbook.",
   shipmentExcelFileTooLarge: "The workbook cannot exceed 10 MB.",
-  shipmentExcelImportConflictCheckFailed: "Could not check for duplicate shipments. Nothing has been imported; try again.",
+  shipmentExcelImportConflictCheckFailed:
+    "Could not check for duplicate shipments. Nothing has been imported; try again.",
   shipmentExcelImportItemFailed: "This shipment could not be created.",
   shipmentExcelImportFinished: "Batch import finished: {succeeded} succeeded and {failed} failed.",
-  shipmentExcelImportFinishedWithSkipped: "Batch import finished: {succeeded} succeeded, {failed} failed, and {skipped} existing shipments were preserved.",
-  shipmentExcelNoNewShipments: "There are no new shipments to import; {count} existing shipments and their snapshots were preserved.",
+  shipmentExcelImportFinishedWithSkipped:
+    "Batch import finished: {succeeded} succeeded, {failed} failed, and {skipped} existing shipments were preserved.",
+  shipmentExcelNoNewShipments:
+    "There are no new shipments to import; {count} existing shipments and their snapshots were preserved.",
   shipmentExcelResultsFailed: "Could not generate the import-results workbook."
 });
 
 Object.assign(messages["zh-CN"].customers, {
-  batchImportDescription: "通过标准客户模板或快速录入批量创建客户账号；上传后会先预览并校验，不会直接写入数据库。",
+  batchImportDescription:
+    "通过标准客户模板或快速录入批量创建客户账号；上传后会先预览并校验，不会直接写入数据库。",
   quickImportNames: "用户名与客户码",
-  quickImportPlaceholder: "每行一个用户名；客户码可用逗号分隔，例如：\nacme-shipper, ACME-001\nhayden-us",
+  quickImportPlaceholder:
+    "每行一个用户名；客户码可用逗号分隔，例如：\nacme-shipper, ACME-001\nhayden-us",
   quickImportHint: "格式：用户名, 客户码（客户码可省略）。初始密码与未填写的客户码由系统自动生成。",
   excelColumnsHint: "请使用客户导入模板；支持用户名、初始密码、客户码、显示名称、客户角色和备注。",
   downloadCustomerTemplate: "下载客户导入模板",
@@ -2411,7 +2587,8 @@ Object.assign(messages["zh-CN"].customers, {
   passwordRuleTitle: "初始密码",
   passwordRule: "8–128 位，至少包含一个字母和一个数字；留空时系统生成 18 位密码。",
   clientCodeRuleTitle: "客户码",
-  clientCodeRule: "6–10 位字母、数字、点、下划线或连字符；必须全局唯一，留空时系统自动生成 10 位短码。",
+  clientCodeRule:
+    "6–10 位字母、数字、点、下划线或连字符；必须全局唯一，留空时系统自动生成 10 位短码。",
   displayNameRuleTitle: "显示名称",
   displayNameRule: "2–80 个字符；可重复，留空时使用用户名。",
   roleRuleTitle: "客户角色",
@@ -2430,12 +2607,14 @@ Object.assign(messages["zh-CN"].customers, {
   importCreatedCount: "创建成功",
   importFailedCount: "创建失败",
   importFailureExplanation: "失败项已单独列出",
-  importFailureHint: "常见原因是用户名或客户码已存在。成功项不会回滚，请按行修正失败数据后再次导入。",
+  importFailureHint:
+    "常见原因是用户名或客户码已存在。成功项不会回滚，请按行修正失败数据后再次导入。",
   failureReason: "失败原因",
   importFailedStatus: "创建失败",
   credentialsSaveReminder: "初始密码仅展示一次，请先导出或妥善保存。",
   customerImportEmptyWorkbook: "工作簿中没有可读取的工作表。",
-  customerImportWrongTemplate: "上传的是票单导入模板，不是客户导入模板。请点击右上角“下载客户导入模板”后重新填写。",
+  customerImportWrongTemplate:
+    "上传的是票单导入模板，不是客户导入模板。请点击右上角“下载客户导入模板”后重新填写。",
   customerImportMissingSheet: "未找到“客户导入”工作表，也没有识别到标准客户表头。",
   customerImportMissingUsernameColumn: "客户数据表缺少“用户名”列。请使用系统提供的客户导入模板。",
   customerImportTooManyRows: "单次最多导入 {max} 个客户。",
@@ -2452,21 +2631,28 @@ Object.assign(messages["zh-CN"].customers, {
 });
 
 Object.assign(messages["en-US"].customers, {
-  batchImportDescription: "Batch-create customer accounts from the standard template or quick entry. Data is previewed and validated before anything is written.",
+  batchImportDescription:
+    "Batch-create customer accounts from the standard template or quick entry. Data is previewed and validated before anything is written.",
   quickImportNames: "Username and customer code",
-  quickImportPlaceholder: "One username per line; optionally add a customer code after a comma:\nacme-shipper, ACME-001\nhayden-us",
-  quickImportHint: "Format: username, customer code (optional). The system generates blank passwords and customer codes.",
-  excelColumnsHint: "Use the customer template. It supports username, initial password, customer code, display name, role, and remark.",
+  quickImportPlaceholder:
+    "One username per line; optionally add a customer code after a comma:\nacme-shipper, ACME-001\nhayden-us",
+  quickImportHint:
+    "Format: username, customer code (optional). The system generates blank passwords and customer codes.",
+  excelColumnsHint:
+    "Use the customer template. It supports username, initial password, customer code, display name, role, and remark.",
   downloadCustomerTemplate: "Download customer template",
   customerTemplateFailed: "Could not generate the customer import template.",
   importRulesTitle: "Account and customer-code rules",
-  importRulesHint: "Rows are validated before import. Username and customer code are also checked for global uniqueness by the server.",
+  importRulesHint:
+    "Rows are validated before import. Username and customer code are also checked for global uniqueness by the server.",
   usernameRuleTitle: "Username",
   usernameRule: "2–64 letters, numbers, dots, underscores, or hyphens; no spaces; globally unique.",
   passwordRuleTitle: "Initial password",
-  passwordRule: "8–128 characters with at least one letter and one number. Leave blank for an 18-character generated password.",
+  passwordRule:
+    "8–128 characters with at least one letter and one number. Leave blank for an 18-character generated password.",
   clientCodeRuleTitle: "Customer code",
-  clientCodeRule: "6–10 letters, numbers, dots, underscores, or hyphens; globally unique. Leave blank to generate a 10-character short code.",
+  clientCodeRule:
+    "6–10 letters, numbers, dots, underscores, or hyphens; globally unique. Leave blank to generate a 10-character short code.",
   displayNameRuleTitle: "Display name",
   displayNameRule: "2–80 characters; may repeat. Defaults to the username.",
   roleRuleTitle: "Customer role",
@@ -2485,34 +2671,43 @@ Object.assign(messages["en-US"].customers, {
   importCreatedCount: "Created",
   importFailedCount: "Failed",
   importFailureExplanation: "Failed rows are listed separately",
-  importFailureHint: "A username or customer code usually already exists. Successful rows remain created; correct and retry only failed rows.",
+  importFailureHint:
+    "A username or customer code usually already exists. Successful rows remain created; correct and retry only failed rows.",
   failureReason: "Failure reason",
   importFailedStatus: "Failed",
   credentialsSaveReminder: "Initial passwords are shown once. Export or save them before closing.",
   customerImportEmptyWorkbook: "The workbook has no readable sheets.",
-  customerImportWrongTemplate: "This is a shipment template, not a customer template. Download the customer template from the top-right button and try again.",
+  customerImportWrongTemplate:
+    "This is a shipment template, not a customer template. Download the customer template from the top-right button and try again.",
   customerImportMissingSheet: "No Customer Import sheet or standard customer header was found.",
-  customerImportMissingUsernameColumn: "The customer sheet is missing the Username column. Use the supplied template.",
+  customerImportMissingUsernameColumn:
+    "The customer sheet is missing the Username column. Use the supplied template.",
   customerImportTooManyRows: "A single import can contain at most {max} customers.",
   customerImportUsernameRequired: "Username is required.",
   customerImportPasswordLength: "Password length must be 8–128 characters.",
   customerImportPasswordComplexity: "Password must contain at least one letter and one number.",
-  customerImportClientCodeFormat: "Customer code allows 6–10 letters, numbers, dots, underscores, or hyphens.",
+  customerImportClientCodeFormat:
+    "Customer code allows 6–10 letters, numbers, dots, underscores, or hyphens.",
   customerImportRemarkLength: "Remark cannot exceed 500 characters.",
   customerImportDuplicateUsername: "Username “{value}” is duplicated in this file.",
   customerImportDuplicateClientCode: "Customer code “{value}” is duplicated in this file.",
-  customerImportPasswordGenerated: "Blank; a strong password will be generated after successful import.",
-  customerImportClientCodeGenerated: "Blank; a globally unique customer code will be generated after successful import.",
-  customerImportDuplicateServer: "The username or customer code already exists. Both must be globally unique."
+  customerImportPasswordGenerated:
+    "Blank; a strong password will be generated after successful import.",
+  customerImportClientCodeGenerated:
+    "Blank; a globally unique customer code will be generated after successful import.",
+  customerImportDuplicateServer:
+    "The username or customer code already exists. Both must be globally unique."
 });
 
 Object.assign(messages["zh-CN"].customers, {
   transferSelected: "分配海外代理（{count}）",
   transferTitle: "分配内部海外代理",
-  transferDescription: "将选中的 {count} 个客户分配给内部海外代理员工。该员工可跟进相关票单、文件和留言。",
+  transferDescription:
+    "将选中的 {count} 个客户分配给内部海外代理员工。该员工可跟进相关票单、文件和留言。",
   targetAgent: "海外代理员工",
   targetAgentPlaceholder: "选择内部海外代理员工",
-  transferPermissionHint: "业务员始终保留客户、票单和全局更新权限；海外代理仅获得被分配业务的跟进权限。",
+  transferPermissionHint:
+    "业务员始终保留客户、票单和全局更新权限；海外代理仅获得被分配业务的跟进权限。",
   confirmTransfer: "确认分配",
   transferring: "正在分配…",
   transferSuccess: "已把 {count} 个客户分配给 {agent}，同步授权 {shipments} 张关联票单。",
@@ -2524,8 +2719,10 @@ Object.assign(messages["zh-CN"].customers, {
   createDescription: "创建发货人或收货人客户账号；海外代理创建为内部员工。",
   createOverseaAgent: "新增海外代理",
   createOverseaAgentTitle: "创建内部海外代理员工",
-  createOverseaAgentHint: "海外代理通过员工通道登录，只能查看和跟进业务员分配的客户、票单、文件与留言，不能执行全局更新。",
-  createOverseaAgentValidation: "请填写 2–64 位账号、2–80 位姓名，并使用 8–128 位且至少包含一个字母和一个数字的密码。",
+  createOverseaAgentHint:
+    "海外代理通过员工通道登录，只能查看和跟进业务员分配的客户、票单、文件与留言，不能执行全局更新。",
+  createOverseaAgentValidation:
+    "请填写 2–64 位账号、2–80 位姓名，并使用 8–128 位且至少包含一个字母和一个数字的密码。",
   createOverseaAgentSuccess: "海外代理员工账号创建成功。",
   createOverseaAgentFailed: "海外代理员工账号创建失败。"
 });
@@ -2533,23 +2730,29 @@ Object.assign(messages["zh-CN"].customers, {
 Object.assign(messages["en-US"].customers, {
   transferSelected: "Assign agent ({count})",
   transferTitle: "Assign internal overseas agent",
-  transferDescription: "Assign the {count} selected customers to an internal overseas-agent employee for shipment, file, and message follow-up.",
+  transferDescription:
+    "Assign the {count} selected customers to an internal overseas-agent employee for shipment, file, and message follow-up.",
   targetAgent: "Overseas-agent employee",
   targetAgentPlaceholder: "Select an internal overseas-agent employee",
-  transferPermissionHint: "The business operator retains customer, shipment, and global refresh authority. The agent receives follow-up access only.",
+  transferPermissionHint:
+    "The business operator retains customer, shipment, and global refresh authority. The agent receives follow-up access only.",
   confirmTransfer: "Confirm assignment",
   transferring: "Assigning…",
-  transferSuccess: "Assigned {count} customers to {agent} with access to {shipments} related shipments.",
+  transferSuccess:
+    "Assigned {count} customers to {agent} with access to {shipments} related shipments.",
   transferFailed: "Agent assignment failed. Incomplete changes were rolled back.",
   loadTransferAgentsFailed: "Could not load internal overseas-agent employees.",
   unassigned: "Unassigned",
   overseaAgentEmployee: "Overseas-agent employee",
   roleRule: "SHIPPER or CONSIGNEE only. Overseas agents use internal employee accounts.",
-  createDescription: "Create shipper or consignee customer accounts. Overseas agents are internal employees.",
+  createDescription:
+    "Create shipper or consignee customer accounts. Overseas agents are internal employees.",
   createOverseaAgent: "New overseas agent",
   createOverseaAgentTitle: "Create internal overseas-agent employee",
-  createOverseaAgentHint: "The agent signs in through the employee route and may only follow assigned customers, shipments, files, and messages. Global refresh is not permitted.",
-  createOverseaAgentValidation: "Enter a 2–64 character username, 2–80 character name, and an 8–128 character password with a letter and a number.",
+  createOverseaAgentHint:
+    "The agent signs in through the employee route and may only follow assigned customers, shipments, files, and messages. Global refresh is not permitted.",
+  createOverseaAgentValidation:
+    "Enter a 2–64 character username, 2–80 character name, and an 8–128 character password with a letter and a number.",
   createOverseaAgentSuccess: "Overseas-agent employee created.",
   createOverseaAgentFailed: "Could not create the overseas-agent employee."
 });
@@ -2559,7 +2762,8 @@ Object.assign(messages["zh-CN"].admin.employee, {
 });
 
 Object.assign(messages["en-US"].admin.employee, {
-  overseaAgentHint: "Employee accounts are internal overseas agents who sign in through the employee route and only follow assigned work."
+  overseaAgentHint:
+    "Employee accounts are internal overseas agents who sign in through the employee route and only follow assigned work."
 });
 
 messages["zh-CN"].admin.list = {
@@ -2633,27 +2837,30 @@ Object.assign(messages["zh-CN"].customers, {
   customerArchived: "客户已删除。",
   deleteCustomerFailed: "客户删除失败。",
   confirmAgentStatusChange: "确认更改海外代理“{name}”的状态吗？",
-  refresh: "刷新"
-  ,assignAgentShort: "分配代理"
-  ,deleteSelectedCustomers: "删除所选（{count}）"
-  ,confirmDeleteSelectedCustomers: "确认删除所选的 {count} 个客户吗？删除后将撤销登录权限，历史业务记录仍会保留。"
-  ,selectedCustomersArchived: "已删除 {count} 个客户。"
-  ,transferDescription: "为当前客户选择一个海外代理；保存后，该代理可跟进相关票单、文件和留言。"
-  ,targetAgent: "海外代理"
-  ,targetAgentPlaceholder: "选择可用海外代理"
-  ,loadTransferAgentsFailed: "无法加载可用海外代理。"
-  ,overseaAgentEmployee: "海外代理"
-  ,createOverseaAgentTitle: "创建海外代理"
-  ,createOverseaAgentSuccess: "海外代理账号创建成功。"
-  ,createOverseaAgentFailed: "海外代理账号创建失败。"
+  refresh: "刷新",
+  assignAgentShort: "分配代理",
+  deleteSelectedCustomers: "删除所选（{count}）",
+  confirmDeleteSelectedCustomers:
+    "确认删除所选的 {count} 个客户吗？删除后将撤销登录权限，历史业务记录仍会保留。",
+  selectedCustomersArchived: "已删除 {count} 个客户。",
+  transferDescription: "为当前客户选择一个海外代理；保存后，该代理可跟进相关票单、文件和留言。",
+  targetAgent: "海外代理",
+  targetAgentPlaceholder: "选择可用海外代理",
+  loadTransferAgentsFailed: "无法加载可用海外代理。",
+  overseaAgentEmployee: "海外代理",
+  createOverseaAgentTitle: "创建海外代理",
+  createOverseaAgentSuccess: "海外代理账号创建成功。",
+  createOverseaAgentFailed: "海外代理账号创建失败。"
 });
 
 Object.assign(messages["en-US"].customers, {
   overview: "Overview",
-  overviewHint: "Review customers, shipments, and overseas agents, then enter a workflow from the sidebar.",
+  overviewHint:
+    "Review customers, shipments, and overseas agents, then enter a workflow from the sidebar.",
   personalInfo: "Personal information",
   overseaAgentManagement: "Overseas agents",
-  overseaAgentManagementHint: "The single business operator creates, maintains, and disables overseas-agent accounts.",
+  overseaAgentManagementHint:
+    "The single business operator creates, maintains, and disables overseas-agent accounts.",
   linkedCustomerCount: "Customers",
   selectCustomerFirst: "Select customer first",
   customer: "Customer",
@@ -2661,23 +2868,26 @@ Object.assign(messages["en-US"].customers, {
   assignAgent: "Assign agent",
   changeAgent: "Change agent",
   deleteCustomer: "Delete customer",
-  confirmDeleteCustomer: "Delete “{name}”? Sign-in access will be revoked while historical business records remain available.",
+  confirmDeleteCustomer:
+    "Delete “{name}”? Sign-in access will be revoked while historical business records remain available.",
   customerArchived: "Customer deleted.",
   deleteCustomerFailed: "Could not delete the customer.",
   confirmAgentStatusChange: "Change the status of overseas agent “{name}”?",
-  refresh: "Refresh"
-  ,assignAgentShort: "Assign agent"
-  ,deleteSelectedCustomers: "Delete selected ({count})"
-  ,confirmDeleteSelectedCustomers: "Delete the {count} selected customers? Sign-in access will be revoked while historical business records remain available."
-  ,selectedCustomersArchived: "{count} customers deleted."
-  ,transferDescription: "Select one overseas agent for this customer. The agent can then follow related shipments, files, and comments."
-  ,targetAgent: "Overseas agent"
-  ,targetAgentPlaceholder: "Select an available overseas agent"
-  ,loadTransferAgentsFailed: "Could not load available overseas agents."
-  ,overseaAgentEmployee: "Overseas agent"
-  ,createOverseaAgentTitle: "Create overseas agent"
-  ,createOverseaAgentSuccess: "Overseas-agent account created."
-  ,createOverseaAgentFailed: "Could not create the overseas-agent account."
+  refresh: "Refresh",
+  assignAgentShort: "Assign agent",
+  deleteSelectedCustomers: "Delete selected ({count})",
+  confirmDeleteSelectedCustomers:
+    "Delete the {count} selected customers? Sign-in access will be revoked while historical business records remain available.",
+  selectedCustomersArchived: "{count} customers deleted.",
+  transferDescription:
+    "Select one overseas agent for this customer. The agent can then follow related shipments, files, and comments.",
+  targetAgent: "Overseas agent",
+  targetAgentPlaceholder: "Select an available overseas agent",
+  loadTransferAgentsFailed: "Could not load available overseas agents.",
+  overseaAgentEmployee: "Overseas agent",
+  createOverseaAgentTitle: "Create overseas agent",
+  createOverseaAgentSuccess: "Overseas-agent account created.",
+  createOverseaAgentFailed: "Could not create the overseas-agent account."
 });
 
 messages["zh-CN"].portal.roleOverseaAgent = "海外代理";
@@ -2749,7 +2959,8 @@ Object.assign(messages["zh-CN"].customers, {
   agentDuplicateUsername: "文件中用户名“{username}”重复。",
   agentBatchKicker: "海外代理账号部署",
   agentBatchTitle: "批量创建海外代理",
-  agentBatchHint: "上传后先在本地完成字段、重复项和密码强度校验；确认后一次性事务创建，任一条失败整批不写入。",
+  agentBatchHint:
+    "上传后先在本地完成字段、重复项和密码强度校验；确认后一次性事务创建，任一条失败整批不写入。",
   downloadAgentTemplate: "下载代理模板",
   chooseAgentExcel: "拖入或选择海外代理 Excel",
   agentExcelColumns: "支持 .xlsx/.xls/.csv；必填列：用户名、显示名称、初始密码。",
@@ -2772,7 +2983,8 @@ Object.assign(messages["en-US"].customers, {
   overviewSevenDayTrend: "7-day business trend",
   overviewTrendHint: "Based on creation and update timestamps visible to this account",
   overviewTodayCompositionTitle: "Today's activity mix",
-  overviewTodayCompositionHint: "Live mix of new, updated, file, message, and customer sign-in activity",
+  overviewTodayCompositionHint:
+    "Live mix of new, updated, file, message, and customer sign-in activity",
   overviewResourceTitle: "Business resources",
   overviewDataSource: "Live APIs first; unavailable fields fall back to visible data",
   overviewShipmentStatusTitle: "Shipment status mix",
@@ -2795,7 +3007,8 @@ Object.assign(messages["en-US"].customers, {
   overviewLoadFailed: "The live overview could not load; visible list data is shown as a fallback.",
   batchCreateAgents: "Excel batch create",
   agentUsernamePlaceholder: "For example, eileen.chen",
-  agentUsernameRule: "Required; 2–64 letters, numbers, dots, underscores, or hyphens; globally unique.",
+  agentUsernameRule:
+    "Required; 2–64 letters, numbers, dots, underscores, or hyphens; globally unique.",
   agentDisplayNamePlaceholder: "Enter the agent name or public display name",
   agentDisplayNameRule: "Required; 2–80 characters.",
   agentPasswordPlaceholder: "8–128 characters with a letter and a number",
@@ -2808,21 +3021,26 @@ Object.assign(messages["en-US"].customers, {
   agentDuplicateUsername: "Username “{username}” is duplicated in this file.",
   agentBatchKicker: "Overseas-agent provisioning",
   agentBatchTitle: "Batch-create overseas agents",
-  agentBatchHint: "Fields, duplicates, and password strength are checked locally first, then all accounts are created in one transaction; if any row fails, none are written.",
+  agentBatchHint:
+    "Fields, duplicates, and password strength are checked locally first, then all accounts are created in one transaction; if any row fails, none are written.",
   downloadAgentTemplate: "Download agent template",
   chooseAgentExcel: "Drop or choose an overseas-agent workbook",
-  agentExcelColumns: "Supports .xlsx/.xls/.csv. Required columns: username, display name, and initial password.",
+  agentExcelColumns:
+    "Supports .xlsx/.xls/.csv. Required columns: username, display name, and initial password.",
   agentTemplateFailed: "Could not generate the overseas-agent import template.",
   agentWorkbookEmpty: "The workbook has no readable sheets.",
-  agentWorkbookHeaderMissing: "Username, display name, and initial password headers were not found. Use the supplied template.",
+  agentWorkbookHeaderMissing:
+    "Username, display name, and initial password headers were not found. Use the supplied template.",
   agentWorkbookNoRows: "The workbook has no overseas-agent rows to import.",
   agentWorkbookTooManyRows: "A single import supports at most 200 overseas-agent accounts.",
   agentWorkbookUnsupported: "Choose an .xlsx, .xls, or .csv file.",
   agentWorkbookTooLarge: "The import file cannot exceed 10 MB.",
   agentWorkbookParseFailed: "Could not parse the overseas-agent workbook.",
   importAgentsCount: "Import {count} agents",
-  agentBatchFinished: "Overseas-agent batch creation finished: {created} succeeded and {failed} failed.",
-  agentBatchCreateFailed: "Batch creation failed. The atomic transaction rolled back without partial writes."
+  agentBatchFinished:
+    "Overseas-agent batch creation finished: {created} succeeded and {failed} failed.",
+  agentBatchCreateFailed:
+    "Batch creation failed. The atomic transaction rolled back without partial writes."
 });
 
 Object.assign(messages["zh-CN"].portal, {
@@ -2858,7 +3076,8 @@ Object.assign(messages["zh-CN"].portal, {
 Object.assign(messages["en-US"].portal, {
   accountActive: "Active",
   basicProfile: "Basic profile",
-  basicProfileHint: "Username and system role are administrator-managed. You can update your display name.",
+  basicProfileHint:
+    "Username and system role are administrator-managed. You can update your display name.",
   accountSecurity: "Account security",
   accountSecurityHint: "Changing the password securely revokes sessions on other devices.",
   currentPassword: "Current password",
@@ -2900,7 +3119,8 @@ Object.assign(messages["zh-CN"].customers, {
   handoverCustomersPlaceholder: "请选择需要交接的客户",
   handoverReason: "交接原因与说明",
   handoverReasonPlaceholder: "请填写交接原因、当前进度、注意事项和后续安排",
-  businessHandoverPermissionHint: "确认后立即变更客户负责人并补充关联票单权限；原业务员的历史票单访问记录会保留。",
+  businessHandoverPermissionHint:
+    "确认后立即变更客户负责人并补充关联票单权限；原业务员的历史票单访问记录会保留。",
   confirmBusinessHandover: "确认并完成交接",
   businessHandoverSuccess: "交接记录 #{requestId} 已完成：{count} 个客户已交接给 {agent}。",
   businessHandoverFailed: "交接未完成，客户归属未发生变化。",
@@ -2931,7 +3151,8 @@ Object.assign(messages["zh-CN"].customers, {
 Object.assign(messages["en-US"].customers, {
   businessHandover: "Business handover",
   businessHandoverKicker: "CUSTOMER OWNERSHIP",
-  businessHandoverHint: "Business operators complete handovers directly. Administrators can view the records without approving them.",
+  businessHandoverHint:
+    "Business operators complete handovers directly. Administrators can view the records without approving them.",
   currentBusinessOperator: "Current account",
   ownedCustomerCount: "Owned customers",
   startBusinessHandover: "Start handover",
@@ -2942,11 +3163,15 @@ Object.assign(messages["en-US"].customers, {
   handoverCustomers: "Select your customers",
   handoverCustomersPlaceholder: "Select customers to hand over",
   handoverReason: "Reason and handover notes",
-  handoverReasonPlaceholder: "Describe the reason, current progress, concerns, and follow-up arrangements",
-  businessHandoverPermissionHint: "Confirmation immediately changes customer ownership and adds related shipment access. Historical access is retained for the previous operator.",
+  handoverReasonPlaceholder:
+    "Describe the reason, current progress, concerns, and follow-up arrangements",
+  businessHandoverPermissionHint:
+    "Confirmation immediately changes customer ownership and adds related shipment access. Historical access is retained for the previous operator.",
   confirmBusinessHandover: "Confirm and complete",
-  businessHandoverSuccess: "Handover #{requestId} completed: {count} customers were transferred to {agent}.",
-  businessHandoverFailed: "The handover could not be completed. Customer ownership was not changed.",
+  businessHandoverSuccess:
+    "Handover #{requestId} completed: {count} customers were transferred to {agent}.",
+  businessHandoverFailed:
+    "The handover could not be completed. Customer ownership was not changed.",
   loadBusinessHandoverAgentsFailed: "Could not load the business operator list.",
   loadBusinessHandoverRequestsFailed: "Could not load handover records.",
   handoverWorkflowSubmit: "Confirm the scope",
@@ -2968,7 +3193,8 @@ Object.assign(messages["en-US"].customers, {
   handoverReviewComment: "Completed at",
   noHandoverRequests: "No handover records",
   chooseHandoverReceiver: "Choose receiving operator",
-  chooseHandoverReceiverHint: "The receiver gains customer ownership as soon as the handover is confirmed."
+  chooseHandoverReceiverHint:
+    "The receiver gains customer ownership as soon as the handover is confirmed."
 });
 
 Object.assign(messages["zh-CN"].customers, {
@@ -2993,11 +3219,13 @@ Object.assign(messages["en-US"].customers, {
   businessTransfer: "Business transfer",
   businessFilterLabel: "Business status",
   businessFilterAll: "All business",
-  businessHandoverReadonlyHint: "Select the customers to transfer, then hand them to another overseas agent.",
+  businessHandoverReadonlyHint:
+    "Select the customers to transfer, then hand them to another overseas agent.",
   pendingBusinessUpdate: "Update pending",
   businessUpdateFailed: "Update failed",
   defaultPasswordRule: "The password will be reset to “username + !{'@'}#2026”.",
-  confirmDefaultPasswordReset: "Reset the sign-in password for “{name}”? Existing sessions will be revoked.",
+  confirmDefaultPasswordReset:
+    "Reset the sign-in password for “{name}”? Existing sessions will be revoked.",
   passwordResetResultTitle: "Password reset complete",
   passwordResetResultHint: "Share the following temporary credentials with the user securely.",
   copyCredentials: "Copy credentials",
@@ -3014,7 +3242,8 @@ Object.assign(messages["zh-CN"].customers, {
   taskElapsed: "任务用时 {time}",
   elapsedUnderSecond: "<1 秒",
   batchTrackChecking: "正在检查票单...",
-  batchTrackExistingConfirm: "发现 {count} 个订舱号已存在：{references}{more}。继续后只更新原票单，不会新建重复业务。是否继续？"
+  batchTrackExistingConfirm:
+    "发现 {count} 个订舱号已存在：{references}{more}。继续后只更新原票单，不会新建重复业务。是否继续？"
 });
 
 Object.assign(messages["en-US"].customers, {
@@ -3026,17 +3255,20 @@ Object.assign(messages["en-US"].customers, {
   taskElapsed: "Task elapsed {time}",
   elapsedUnderSecond: "<1 sec",
   batchTrackChecking: "Checking existing shipments...",
-  batchTrackExistingConfirm: "{count} booking number(s) already exist: {references}{more}. Continuing updates the existing shipments once and will not create duplicate business records. Continue?"
+  batchTrackExistingConfirm:
+    "{count} booking number(s) already exist: {references}{more}. Continuing updates the existing shipments once and will not create duplicate business records. Continue?"
 });
 
 Object.assign(messages["zh-CN"].customers, {
-  confirmDeleteAgent: "\u786e\u8ba4\u5220\u9664\u6d77\u5916\u4ee3\u7406\u201c{name}\u201d\u5417\uff1f\u5220\u9664\u540e\u5c06\u64a4\u9500\u767b\u5f55\u6743\u9650\u4e14\u65e0\u6cd5\u6062\u590d\uff0c\u5386\u53f2\u4e1a\u52a1\u8bb0\u5f55\u4f1a\u4fdd\u7559\u3002",
+  confirmDeleteAgent:
+    "\u786e\u8ba4\u5220\u9664\u6d77\u5916\u4ee3\u7406\u201c{name}\u201d\u5417\uff1f\u5220\u9664\u540e\u5c06\u64a4\u9500\u767b\u5f55\u6743\u9650\u4e14\u65e0\u6cd5\u6062\u590d\uff0c\u5386\u53f2\u4e1a\u52a1\u8bb0\u5f55\u4f1a\u4fdd\u7559\u3002",
   agentDeleted: "\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u5df2\u5220\u9664\u3002",
   deleteAgentFailed: "\u6d77\u5916\u4ee3\u7406\u8d26\u53f7\u5220\u9664\u5931\u8d25\u3002"
 });
 
 Object.assign(messages["en-US"].customers, {
-  confirmDeleteAgent: "Delete overseas agent \u201c{name}\u201d? Sign-in access will be revoked, the account cannot be restored, and historical business records will be retained.",
+  confirmDeleteAgent:
+    "Delete overseas agent \u201c{name}\u201d? Sign-in access will be revoked, the account cannot be restored, and historical business records will be retained.",
   agentDeleted: "Overseas-agent account deleted.",
   deleteAgentFailed: "Could not delete the overseas-agent account."
 });

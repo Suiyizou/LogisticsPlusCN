@@ -24,16 +24,15 @@ spring:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:80MB}
       max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:85MB}
   flyway:
-    # 版本化迁移：新库直接由 V1 初始化；已有库先标记 baseline(0) 再幂等执行 V1。
-    # 在真实 MySQL 验收前保持可开关，便于回退。
+    # Flyway is the only DDL owner. Existing unversioned databases require explicit reviewed adoption.
     enabled: ${SPRING_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
-    baseline-on-migrate: true
+    baseline-on-migrate: false
     baseline-version: 0
     baseline-description: existing schema before versioned migrations
     validate-on-migrate: true
 
-mybatis:
+mybatis-plus:
   mapper-locations: classpath*:mappers/**/*.xml
 
 management:

@@ -1,11 +1,5 @@
 import { fetchWithApiFallback, requestJson } from "./apiClient";
-import {
-  clearSession,
-  getDeviceId,
-  getDeviceName,
-  saveSession,
-  storedToken
-} from "./authSession";
+import { clearSession, getDeviceId, getDeviceName, saveSession, storedToken } from "./authSession";
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL;
 
@@ -21,7 +15,7 @@ export function clearAdminToken() {
   clearSession();
 }
 
-export async function loginAdmin(username, password) {
+export async function loginAdmin(username, password, { persist = true } = {}) {
   const response = await request("/auth/login", {
     method: "POST",
     body: {
@@ -31,13 +25,22 @@ export async function loginAdmin(username, password) {
       deviceName: getDeviceName()
     }
   });
-  saveSession(response);
+  if (persist) saveSession(response);
   return response;
 }
 
 export async function logoutAdmin() {
-  await request("/auth/logout", { method: "POST" });
-  clearSession();
+  const token = storedToken();
+  try {
+    await request("/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Auth-Token": token },
+      ignoreAuthExpiry: true
+    });
+  } finally {
+    // A late logout may revoke only the session it actually submitted.
+    if (storedToken() === token) clearSession();
+  }
 }
 
 export async function fetchAdminMe() {
@@ -171,15 +174,13 @@ export async function fetchAdminWorkspaceFiles(options = {}) {
   params.set("page", String(Math.max(0, Number(options.page || 0))));
   params.set("size", String(Math.max(1, Number(options.size || 200))));
   if (options.userId) params.set("userId", options.userId);
-  if (options.includeExpired != null) params.set("includeExpired", String(Boolean(options.includeExpired)));
+  if (options.includeExpired != null)
+    params.set("includeExpired", String(Boolean(options.includeExpired)));
   return request(`/admin/workspace-files?${params.toString()}`);
 }
 
 export async function downloadAdminWorkspaceFile(id, fileName = "workspace-file.xlsx") {
-  return downloadAdminFile(
-    `/admin/workspace-files/${encodeURIComponent(id)}/download`,
-    fileName
-  );
+  return downloadAdminFile(`/admin/workspace-files/${encodeURIComponent(id)}/download`, fileName);
 }
 
 export async function fetchAdminShipmentFiles(options = {}) {
@@ -188,15 +189,13 @@ export async function fetchAdminShipmentFiles(options = {}) {
   params.set("size", String(Math.max(1, Number(options.size || 200))));
   if (options.shipmentId) params.set("shipmentId", options.shipmentId);
   if (options.uploaderUserId) params.set("uploaderUserId", options.uploaderUserId);
-  if (options.includeDeleted != null) params.set("includeDeleted", String(Boolean(options.includeDeleted)));
+  if (options.includeDeleted != null)
+    params.set("includeDeleted", String(Boolean(options.includeDeleted)));
   return request(`/admin/shipment-files?${params.toString()}`);
 }
 
 export async function downloadAdminShipmentFile(id, fileName = "shipment-file") {
-  return downloadAdminFile(
-    `/admin/shipment-files/${encodeURIComponent(id)}/download`,
-    fileName
-  );
+  return downloadAdminFile(`/admin/shipment-files/${encodeURIComponent(id)}/download`, fileName);
 }
 
 export async function fetchAdminShipmentFileBlob(id) {
@@ -229,9 +228,17 @@ async function downloadAdminFile(path, fileName) {
 
 async function request(path, options = {}) {
   const multipart = options.body instanceof FormData;
-  return requestJson(path, {
-    method: options.method || "GET",
-    headers: multipart ? {} : { "Content-Type": "application/json" },
-    body: options.body
-  }, configuredBase);
+  return requestJson(
+    path,
+    {
+      method: options.method || "GET",
+      headers: {
+        ...(multipart ? {} : { "Content-Type": "application/json" }),
+        ...(options.headers || {})
+      },
+      ignoreAuthExpiry: Boolean(options.ignoreAuthExpiry),
+      body: options.body
+    },
+    configuredBase
+  );
 }

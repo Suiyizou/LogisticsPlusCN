@@ -1,6 +1,17 @@
 import * as XLSX from "xlsx";
-import { normalizeCargoConstraints } from "../utils/cargoConstraints.js";
+import { cargoHandlingUnitType, normalizeCargoConstraints } from "../utils/cargoConstraints.js";
 import { assignCargoModels } from "../utils/cargoModels.js";
+import {
+  detectExplicitPackageCandidates,
+  hasExplicitPackageIdentity,
+  reconcileExplicitPackages,
+  restorePackageMetadata
+} from "./explicitPackageImport.js";
+import {
+  collectSourceReconciliations,
+  explicitPreviewReconciliation,
+  reviewCargoPreview
+} from "./packingReconciliation.js";
 
 export { assignCargoModels } from "../utils/cargoModels.js";
 
@@ -23,25 +34,181 @@ const STANDARD_FIELDS = [
 ];
 
 const FIELD_ALIASES = {
-  name: ["name", "cargo", "cargoName", "goods", "goodsName", "product", "货物", "货物名称", "货名", "名称", "品名", "产品名称", "箱名", "物品名称"],
+  name: [
+    "name",
+    "cargo",
+    "cargoName",
+    "goods",
+    "goodsName",
+    "product",
+    "货物",
+    "货物名称",
+    "货名",
+    "名称",
+    "品名",
+    "产品名称",
+    "箱名",
+    "物品名称"
+  ],
   model: ["model", "specModel", "variant", "型号", "规格型号", "产品型号", "货物型号", "型号规格"],
-  lengthCm: ["lengthCm", "length", "l", "长", "长度", "外长", "长cm", "长度cm", "长厘米", "长mm", "长度mm", "长毫米", "长m", "长度m"],
-  widthCm: ["widthCm", "width", "w", "宽", "宽度", "外宽", "宽cm", "宽度cm", "宽厘米", "宽mm", "宽度mm", "宽毫米", "宽m", "宽度m"],
-  heightCm: ["heightCm", "height", "h", "高", "高度", "外高", "高cm", "高度cm", "高厘米", "高mm", "高度mm", "高毫米", "高m", "高度m"],
-  quantity: ["quantity", "qty", "count", "num", "pcs", "palletqty", "pallets", "skids", "数量", "件数", "箱数", "个数", "数量pcs", "总件数", "托盘数", "托数", "栈板数"],
-  weightKg: ["weightKg", "unitWeight", "unitWeightKg", "weight", "单重", "单件重量", "每件重量", "重量kg", "单重kg", "单件重量kg", "毛重kg", "净重kg"],
-  totalWeightKg: ["totalWeight", "totalWeightKg", "grossWeight", "总重", "总重量", "总毛重", "毛重", "总净重", "总重量kg"],
+  lengthCm: [
+    "lengthCm",
+    "length",
+    "l",
+    "长",
+    "长度",
+    "外长",
+    "长cm",
+    "长度cm",
+    "长厘米",
+    "长mm",
+    "长度mm",
+    "长毫米",
+    "长m",
+    "长度m"
+  ],
+  widthCm: [
+    "widthCm",
+    "width",
+    "w",
+    "宽",
+    "宽度",
+    "外宽",
+    "宽cm",
+    "宽度cm",
+    "宽厘米",
+    "宽mm",
+    "宽度mm",
+    "宽毫米",
+    "宽m",
+    "宽度m"
+  ],
+  heightCm: [
+    "heightCm",
+    "height",
+    "h",
+    "高",
+    "高度",
+    "外高",
+    "高cm",
+    "高度cm",
+    "高厘米",
+    "高mm",
+    "高度mm",
+    "高毫米",
+    "高m",
+    "高度m"
+  ],
+  quantity: [
+    "quantity",
+    "qty",
+    "count",
+    "num",
+    "pcs",
+    "palletqty",
+    "pallets",
+    "skids",
+    "数量",
+    "件数",
+    "箱数",
+    "个数",
+    "数量pcs",
+    "总件数",
+    "托盘数",
+    "托数",
+    "栈板数"
+  ],
+  weightKg: [
+    "weightKg",
+    "unitWeight",
+    "unitWeightKg",
+    "weight",
+    "单重",
+    "单件重量",
+    "每件重量",
+    "重量kg",
+    "单重kg",
+    "单件重量kg",
+    "毛重kg",
+    "净重kg"
+  ],
+  totalWeightKg: [
+    "totalWeight",
+    "totalWeightKg",
+    "grossWeight",
+    "总重",
+    "总重量",
+    "总毛重",
+    "毛重",
+    "总净重",
+    "总重量kg"
+  ],
   type: ["type", "cargoType", "rule", "货物类型", "类型", "规则", "摆放规则", "堆叠规则", "属性"],
-  nonStack: ["nonStack", "nonStackable", "\u4e0d\u53ef\u91cd\u538b", "\u4e0d\u80fd\u91cd\u538b", "\u7981\u6b62\u91cd\u538b", "\u6613\u788e", "\u627f\u538b\u9650\u5236", "\u5806\u53e0\u9650\u5236", "\u5806\u7801\u9650\u5236"],
-  keepUpright: ["keepUpright", "upright", "\u4fdd\u6301\u671d\u4e0a", "\u671d\u4e0a", "\u4e0d\u53ef\u5012\u7f6e", "\u65b9\u5411\u9650\u5236", "\u671d\u5411\u8981\u6c42", "\u65b9\u5411\u8981\u6c42", "\u6446\u653e\u65b9\u5411"],
+  nonStack: [
+    "nonStack",
+    "nonStackable",
+    "\u4e0d\u53ef\u91cd\u538b",
+    "\u4e0d\u80fd\u91cd\u538b",
+    "\u7981\u6b62\u91cd\u538b",
+    "\u6613\u788e",
+    "\u627f\u538b\u9650\u5236",
+    "\u5806\u53e0\u9650\u5236",
+    "\u5806\u7801\u9650\u5236"
+  ],
+  keepUpright: [
+    "keepUpright",
+    "upright",
+    "\u4fdd\u6301\u671d\u4e0a",
+    "\u671d\u4e0a",
+    "\u4e0d\u53ef\u5012\u7f6e",
+    "\u65b9\u5411\u9650\u5236",
+    "\u671d\u5411\u8981\u6c42",
+    "\u65b9\u5411\u8981\u6c42",
+    "\u6446\u653e\u65b9\u5411"
+  ],
   color: ["color", "颜色", "色值", "显示颜色"],
-  id: ["id", "sku", "code", "cargoId", "goodsId", "productId", "货物ID", "货物编号", "货号", "编号", "物料编码", "产品编号", "条码"],
+  id: [
+    "id",
+    "sku",
+    "code",
+    "cargoId",
+    "goodsId",
+    "productId",
+    "货物ID",
+    "货物编号",
+    "货号",
+    "编号",
+    "物料编码",
+    "产品编号",
+    "条码"
+  ],
   remark: ["remark", "remarks", "note", "notes", "备注", "说明", "特殊要求", "装箱要求"],
-  dimensionText: ["dimension", "dimensions", "size", "palletsize", "skidsize", "packagesize", "规格", "尺寸", "外尺寸", "长宽高", "尺寸cm", "尺寸mm", "规格尺寸", "托盘尺寸", "托盘尺寸cm", "栈板尺寸", "包装尺寸"]
+  dimensionText: [
+    "dimension",
+    "dimensions",
+    "size",
+    "palletsize",
+    "skidsize",
+    "packagesize",
+    "规格",
+    "尺寸",
+    "外尺寸",
+    "长宽高",
+    "尺寸cm",
+    "尺寸mm",
+    "规格尺寸",
+    "托盘尺寸",
+    "托盘尺寸cm",
+    "栈板尺寸",
+    "包装尺寸"
+  ]
 };
 
 const TYPE_ALIASES = [
-  { type: "nonstack", words: ["不可重压", "不能重压", "勿压", "易碎", "fragile", "nonstack", "non-stack", "no stack"] },
+  {
+    type: "nonstack",
+    words: ["不可重压", "不能重压", "勿压", "易碎", "fragile", "nonstack", "non-stack", "no stack"]
+  },
   { type: "pallet", words: ["托盘", "木箱", "栈板", "pallet", "wooden", "wood"] },
   { type: "upright", words: ["向上", "朝上", "不可倒置", "保持朝上", "upright", "this side up"] },
   { type: "normal", words: ["普通", "可堆叠", "normal", "standard"] }
@@ -50,7 +217,20 @@ const TYPE_ALIASES = [
 export const importFields = STANDARD_FIELDS;
 
 export function downloadTemplateWorkbook(rows) {
-  const headers = ["name", "model", "lengthCm", "widthCm", "heightCm", "quantity", "weightKg", "type", "nonStack", "keepUpright", "color", "remark"];
+  const headers = [
+    "name",
+    "model",
+    "lengthCm",
+    "widthCm",
+    "heightCm",
+    "quantity",
+    "weightKg",
+    "type",
+    "nonStack",
+    "keepUpright",
+    "color",
+    "remark"
+  ];
   const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "cargo-template");
@@ -62,11 +242,13 @@ export async function readWorkbook(file) {
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: false });
   const sheets = workbook.SheetNames.map((name) => {
     const worksheet = workbook.Sheets[name];
-    const rawRows = XLSX.utils.sheet_to_json(worksheet, {
-      header: 1,
-      defval: "",
-      blankrows: true
-    }).map((row) => trimTrailingEmptyCells((row || []).map(cleanCell)));
+    const rawRows = XLSX.utils
+      .sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+        blankrows: true
+      })
+      .map((row) => trimTrailingEmptyCells((row || []).map(cleanCell)));
     const mergeCells = buildMergeCellMetadata(worksheet?.["!merges"] || [], rawRows);
     const formulaCells = buildFormulaCellMetadata(worksheet);
     const { headerRowIndex, headers, bodyRows } = extractTable(rawRows);
@@ -96,6 +278,7 @@ export function formatWorkbookForRecognition(workbook, options = {}) {
     "TASK: Extract final handled shipping units for container packing. Prefer final pallet/carton/crate package units over loose product rows.",
     "HIERARCHY_RULE: Infer product -> carton -> pallet/crate relationships semantically from any headers, values, sheet/file names, notes, merged cells, and neighboring rows; customer header names are not fixed.",
     "PALLET_RULE: When the source describes loaded pallets, algorithm quantity means pallet count. Carton count, carton dimensions, cartons per pallet, layers, and cartons per layer are innerCargo only.",
+    "EXPLICIT_PACKAGE_RULE: A source Item/Marks identity is one physical package. Preserve every identity separately with quantity=1, package gross weight and outer dimensions; all product continuation rows belong in packageInfo.innerCargo.lines. Never copy product QTY to algorithm quantity or collapse different marks.",
     "PALLET_DIMENSION_RULE: Use pallet L/W/H only when the loaded-pallet outer dimensions are explicitly present. If absent, never substitute carton dimensions or infer dimensions from volume/layers; return a pallet candidate with zero dimensions and mark palletDimensionsMissing for user input.",
     "WEIGHT_RULE: If a final pallet/wooden package has pallet tare/wood-package weight and contains product rows, calculate unit weight as (pallet tare total + contained product gross total) / pallet quantity. If a final gross-weight column clearly already includes pallet plus cargo, do not double count; explain the basis in remark/packageInfo.",
     "STRUCTURE_RULE: In sheets with left product/carton details and right pallet/final-package columns, output the right-side final pallet/package rows as algorithm cargo. Store left-side loose/carton details only in packageInfo.innerCargo or remark."
@@ -115,22 +298,40 @@ export function formatWorkbookForRecognition(workbook, options = {}) {
     const mergeValueLines = formatMergedCellValueLines(sheet, maxMergeRanges, maxCellChars);
     mergeValueLines.forEach((line) => lines.push(line));
     if (Array.isArray(sheet.formulaCells) && sheet.formulaCells.length) {
-      lines.push(`FORMULA_CELLS: ${sheet.formulaCells.slice(0, maxMergeRanges).map((cell) => `${cell.address}=${quoteForRecognition(`=${cell.formula}`, maxCellChars)} -> ${quoteForRecognition(cell.value, maxCellChars)}`).join(" | ")}`);
+      lines.push(
+        `FORMULA_CELLS: ${sheet.formulaCells
+          .slice(0, maxMergeRanges)
+          .map(
+            (cell) =>
+              `${cell.address}=${quoteForRecognition(`=${cell.formula}`, maxCellChars)} -> ${quoteForRecognition(cell.value, maxCellChars)}`
+          )
+          .join(" | ")}`
+      );
       if (sheet.formulaCells.length > maxMergeRanges) {
-        lines.push(`FORMULA_CELLS_TRUNCATED: emitted ${maxMergeRanges} of ${sheet.formulaCells.length}.`);
+        lines.push(
+          `FORMULA_CELLS_TRUNCATED: emitted ${maxMergeRanges} of ${sheet.formulaCells.length}.`
+        );
       }
     }
     const finalHandlingUnitCandidates = detectFinalHandlingUnitCandidates(sheet);
     if (finalHandlingUnitCandidates.length) {
-      lines.push("FINAL_HANDLING_UNIT_CANDIDATES: High-confidence source-derived outer packages. These final pallets/crates override aligned loose-product or inner-carton rows.");
+      const reconciliation = reconcileExplicitPackages(finalHandlingUnitCandidates);
+      if (reconciliation)
+        lines.push(`EXPLICIT_PACKAGE_RECONCILIATION: ${JSON.stringify(reconciliation)}`);
+      lines.push(
+        "FINAL_HANDLING_UNIT_CANDIDATES: High-confidence source-derived outer packages. These final pallets/crates override aligned loose-product or inner-carton rows."
+      );
       finalHandlingUnitCandidates.forEach((candidate, candidateIndex) => {
-        lines.push(`FINAL_PACKAGE_CANDIDATE ${candidateIndex + 1}: ${JSON.stringify(candidateForRecognition(candidate))}`);
+        lines.push(
+          `FINAL_PACKAGE_CANDIDATE ${candidateIndex + 1}: ${JSON.stringify(candidateForRecognition(candidate))}`
+        );
       });
     }
     lines.push("ROWS_WITH_EXCEL_COORDINATES:");
-    const rows = Array.isArray(sheet.rawRows) && sheet.rawRows.length
-      ? sheet.rawRows
-      : [[...(sheet.headers || [])], ...(sheet.rows || [])];
+    const rows =
+      Array.isArray(sheet.rawRows) && sheet.rawRows.length
+        ? sheet.rawRows
+        : [[...(sheet.headers || [])], ...(sheet.rows || [])];
     let emitted = 0;
     let truncatedCellCount = 0;
     let truncatedColumnRowCount = 0;
@@ -150,17 +351,25 @@ export function formatWorkbookForRecognition(workbook, options = {}) {
       if (!cells.length) return;
       emitted += 1;
       emittedWorkbookRows += 1;
-      lines.push(`R${rowIndex + 1}: ${cells.map((cell) => `${columnName(cell.columnIndex)}=${quoteForRecognition(cell.value, maxCellChars)}`).join(" | ")}`);
+      lines.push(
+        `R${rowIndex + 1}: ${cells.map((cell) => `${columnName(cell.columnIndex)}=${quoteForRecognition(cell.value, maxCellChars)}`).join(" | ")}`
+      );
     });
-    const nonEmptyRows = rows.filter((row) => (row || []).some((cell) => cleanCell(cell) !== "")).length;
+    const nonEmptyRows = rows.filter((row) =>
+      (row || []).some((cell) => cleanCell(cell) !== "")
+    ).length;
     if (nonEmptyRows > emitted) {
       lines.push(`TRUNCATED: emitted ${emitted} non-empty rows of ${nonEmptyRows}.`);
     }
     if (truncatedColumnRowCount > 0) {
-      lines.push(`COLUMNS_TRUNCATED: ${truncatedColumnRowCount} emitted row(s) contained non-empty cells after column ${columnName(maxColumns - 1)}.`);
+      lines.push(
+        `COLUMNS_TRUNCATED: ${truncatedColumnRowCount} emitted row(s) contained non-empty cells after column ${columnName(maxColumns - 1)}.`
+      );
     }
     if (truncatedCellCount > 0) {
-      lines.push(`CELL_VALUES_TRUNCATED: shortened ${truncatedCellCount} cell value(s) longer than ${maxCellChars} characters.`);
+      lines.push(
+        `CELL_VALUES_TRUNCATED: shortened ${truncatedCellCount} cell value(s) longer than ${maxCellChars} characters.`
+      );
     }
   });
 
@@ -168,6 +377,8 @@ export function formatWorkbookForRecognition(workbook, options = {}) {
 }
 
 export function detectFinalHandlingUnitCandidates(sheet) {
+  const explicitPackages = detectExplicitPackageCandidates(sheet);
+  if (explicitPackages.length) return explicitPackages;
   const rows = finalUnitSourceRows(sheet);
   if (!rows.length) return [];
   const mergeCells = normalizedMergeCells(sheet, rows);
@@ -191,12 +402,31 @@ export function detectFinalHandlingUnitCandidates(sheet) {
       if (!dimensions || dimensions.ownerRow !== rowIndex) continue;
       const rowSpan = dimensionRowSpan(mergeCells, spec, rowIndex);
       const palletStartColumn = Math.min(...spec.columns);
-      const quantityEvidence = finalPackageQuantity(rows, columns, mergeCells, rowIndex, palletStartColumn);
+      const quantityEvidence = finalPackageQuantity(
+        rows,
+        columns,
+        mergeCells,
+        rowIndex,
+        palletStartColumn
+      );
       const quantity = quantityEvidence.quantity || 1;
       const nameEvidence = finalPackageName(rows, columns, mergeCells, rowSpan, palletStartColumn);
       const remark = finalPackageRemark(rows, columns, mergeCells, rowSpan, palletStartColumn);
-      const innerCargo = innerCargoForCandidate(rows, columns, mergeCells, rowSpan, palletStartColumn);
-      const weights = finalPackageWeights(rows, columns, mergeCells, rowIndex, palletStartColumn, quantity);
+      const innerCargo = innerCargoForCandidate(
+        rows,
+        columns,
+        mergeCells,
+        rowSpan,
+        palletStartColumn
+      );
+      const weights = finalPackageWeights(
+        rows,
+        columns,
+        mergeCells,
+        rowIndex,
+        palletStartColumn,
+        quantity
+      );
       candidates.push({
         sourceRowNumber: rowIndex + 1,
         sourceRowNumbers: integerRange(rowSpan.startRow + 1, rowSpan.endRow + 1),
@@ -218,10 +448,16 @@ export function detectFinalHandlingUnitCandidates(sheet) {
     }
   }
 
-  const uniqueCandidates = [...new Map(candidates.map((candidate) => [
-    [candidate.sourceRowNumber, candidate.lengthCm, candidate.widthCm, candidate.heightCm].join("|"),
-    candidate
-  ])).values()].sort((left, right) => left.sourceRowNumber - right.sourceRowNumber);
+  const uniqueCandidates = [
+    ...new Map(
+      candidates.map((candidate) => [
+        [candidate.sourceRowNumber, candidate.lengthCm, candidate.widthCm, candidate.heightCm].join(
+          "|"
+        ),
+        candidate
+      ])
+    ).values()
+  ].sort((left, right) => left.sourceRowNumber - right.sourceRowNumber);
   if (!uniqueCandidates.length) return [];
   return finalizeHandlingUnitCandidates(uniqueCandidates);
 }
@@ -248,14 +484,15 @@ function buildFinalHandlingUnitPreview(candidates) {
     else validRows.push(row);
   });
   const aggregated = aggregateCargos(validRows.map((row) => row.cargo));
-  return {
+  return withPackingReconciliation({
     totalRows: candidates.length,
     validRows,
     invalidRows,
     aggregated,
+    reconciliation: reconcileExplicitPackages(candidates),
     importedQuantity: aggregated.reduce((sum, cargo) => sum + Number(cargo.quantity || 0), 0),
     skippedRows: invalidRows.length
-  };
+  });
 }
 
 function finalUnitSourceRows(sheet) {
@@ -308,11 +545,46 @@ function headerPartsForColumn(rows, mergeCells, columnIndex) {
 function isLikelyHeaderValue(value) {
   const text = cleanCell(value);
   if (!text || parseDimensionText(text, "auto")) return false;
-  if (containsAnyText(text, [
-    "名称", "品名", "尺寸", "规格", "数量", "件数", "箱数", "重量", "毛重", "净重", "体积", "方数", "备注",
-    "托盘", "木托", "栈板", "合计", "总", "长", "宽", "高", "size", "qty", "quantity", "ctn", "carton", "pallet", "skid",
-    "weight", "n.w", "g.w", "cbm", "volume", "remark", "order"
-  ])) return true;
+  if (
+    containsAnyText(text, [
+      "名称",
+      "品名",
+      "尺寸",
+      "规格",
+      "数量",
+      "件数",
+      "箱数",
+      "重量",
+      "毛重",
+      "净重",
+      "体积",
+      "方数",
+      "备注",
+      "托盘",
+      "木托",
+      "栈板",
+      "合计",
+      "总",
+      "长",
+      "宽",
+      "高",
+      "size",
+      "qty",
+      "quantity",
+      "ctn",
+      "carton",
+      "pallet",
+      "skid",
+      "weight",
+      "n.w",
+      "g.w",
+      "cbm",
+      "volume",
+      "remark",
+      "order"
+    ])
+  )
+    return true;
   return !/^[\s\d.,+\-*/()（）]+$/.test(text) && !/^\d/.test(text);
 }
 
@@ -337,32 +609,50 @@ function palletDimensionSpecs(columns, rows, mergeCells) {
   });
   if (axisColumns.length.length && axisColumns.width.length && axisColumns.height.length) {
     for (const lengthColumn of axisColumns.length) {
-      const widthColumn = axisColumns.width.find((value) => value > lengthColumn && value - lengthColumn <= 4);
-      const heightColumn = axisColumns.height.find((value) => value > (widthColumn ?? lengthColumn) && value - lengthColumn <= 5);
+      const widthColumn = axisColumns.width.find(
+        (value) => value > lengthColumn && value - lengthColumn <= 4
+      );
+      const heightColumn = axisColumns.height.find(
+        (value) => value > (widthColumn ?? lengthColumn) && value - lengthColumn <= 5
+      );
       if (widthColumn != null && heightColumn != null) {
         specs.push({ kind: "axes", columns: [lengthColumn, widthColumn, heightColumn] });
         break;
       }
     }
   }
-  return [...new Map(specs.map((spec) => [`${spec.kind}:${spec.columns.join(",")}`, spec])).values()];
+  return [
+    ...new Map(specs.map((spec) => [`${spec.kind}:${spec.columns.join(",")}`, spec])).values()
+  ];
 }
 
 function isPalletDimensionGroupHeader(value) {
   const text = normalizeHeader(value);
-  return hasPalletSignal(text)
-    && containsAnyText(text, ["尺寸", "规格", "外廓", "体积", "size", "dimension", "volume"]);
+  return (
+    hasPalletSignal(text) &&
+    containsAnyText(text, ["尺寸", "规格", "外廓", "体积", "size", "dimension", "volume"])
+  );
 }
 
 function hasPalletSignal(value) {
-  return containsAnyText(normalizeHeader(value), ["托盘", "木托", "栈板", "免熏蒸", "pallet", "skid"]);
+  return containsAnyText(normalizeHeader(value), [
+    "托盘",
+    "木托",
+    "栈板",
+    "免熏蒸",
+    "pallet",
+    "skid"
+  ]);
 }
 
 function dimensionAxisFromHeaderParts(parts) {
   const normalized = parts.map((part) => normalizeHeader(part));
-  if (normalized.some((part) => ["l", "长", "长度"].includes(part) || part.endsWith("长"))) return "length";
-  if (normalized.some((part) => ["w", "宽", "宽度"].includes(part) || part.endsWith("宽"))) return "width";
-  if (normalized.some((part) => ["h", "高", "高度"].includes(part) || part.endsWith("高"))) return "height";
+  if (normalized.some((part) => ["l", "长", "长度"].includes(part) || part.endsWith("长")))
+    return "length";
+  if (normalized.some((part) => ["w", "宽", "宽度"].includes(part) || part.endsWith("宽")))
+    return "width";
+  if (normalized.some((part) => ["h", "高", "高度"].includes(part) || part.endsWith("高")))
+    return "height";
   return "";
 }
 
@@ -382,12 +672,16 @@ function dimensionsAt(rows, mergeCells, spec, rowIndex) {
     return positiveNumber(rows[ownerRow]?.[column], unitFromHeader(header, "auto"), null);
   });
   if (!values.every((value) => value > 0)) return null;
-  const ownerRows = spec.columns.map((column) => mergeOwnerAt(mergeCells, rowIndex, column)?.startRow ?? rowIndex);
+  const ownerRows = spec.columns.map(
+    (column) => mergeOwnerAt(mergeCells, rowIndex, column)?.startRow ?? rowIndex
+  );
   return { ownerRow: Math.min(...ownerRows), values: values.map(round2) };
 }
 
 function dimensionRowSpan(mergeCells, spec, rowIndex) {
-  const owners = spec.columns.map((column) => mergeOwnerAt(mergeCells, rowIndex, column)).filter(Boolean);
+  const owners = spec.columns
+    .map((column) => mergeOwnerAt(mergeCells, rowIndex, column))
+    .filter(Boolean);
   if (!owners.length) return { startRow: rowIndex, endRow: rowIndex };
   return {
     startRow: Math.min(rowIndex, ...owners.map((merge) => merge.startRow)),
@@ -396,14 +690,21 @@ function dimensionRowSpan(mergeCells, spec, rowIndex) {
 }
 
 function finalPackageQuantity(rows, columns, mergeCells, rowIndex, palletStartColumn) {
-  const quantityColumns = columns.filter((column) => column.columnIndex >= palletStartColumn
-    && isFinalPackageQuantityHeader(column.headerText));
+  const quantityColumns = columns.filter(
+    (column) =>
+      column.columnIndex >= palletStartColumn && isFinalPackageQuantityHeader(column.headerText)
+  );
   for (const column of quantityColumns) {
-    const value = positiveInteger(mergeAwareCellValue(rows, mergeCells, rowIndex, column.columnIndex));
-    if (value) return { quantity: value, source: columnName(column.columnIndex), basis: column.headerText };
+    const value = positiveInteger(
+      mergeAwareCellValue(rows, mergeCells, rowIndex, column.columnIndex)
+    );
+    if (value)
+      return { quantity: value, source: columnName(column.columnIndex), basis: column.headerText };
   }
   for (const column of columns.filter((item) => item.columnIndex >= palletStartColumn)) {
-    const match = cleanCell(column.headerText).match(/(\d+)\s*(?:个|只|件|pcs?)?\s*(?:托盘|木托|栈板|pallets?|skids?)/i);
+    const match = cleanCell(column.headerText).match(
+      /(\d+)\s*(?:个|只|件|pcs?)?\s*(?:托盘|木托|栈板|pallets?|skids?)/i
+    );
     if (match) return { quantity: Number(match[1]), source: "header", basis: match[0] };
   }
   return { quantity: 1, source: "row", basis: "one explicit final-package row" };
@@ -411,15 +712,30 @@ function finalPackageQuantity(rows, columns, mergeCells, rowIndex, palletStartCo
 
 function isFinalPackageQuantityHeader(value) {
   const text = normalizeHeader(value);
-  if (containsAnyText(text, ["体积", "方数", "重量", "毛重", "净重", "volume", "weight", "cbm"])) return false;
-  return containsAnyText(text, ["托盘数量", "木托数量", "栈板数量", "托数", "palletqty", "palletquantity", "skidqty"])
-    || ["数量", "qty", "quantity"].includes(text);
+  if (containsAnyText(text, ["体积", "方数", "重量", "毛重", "净重", "volume", "weight", "cbm"]))
+    return false;
+  return (
+    containsAnyText(text, [
+      "托盘数量",
+      "木托数量",
+      "栈板数量",
+      "托数",
+      "palletqty",
+      "palletquantity",
+      "skidqty"
+    ]) || ["数量", "qty", "quantity"].includes(text)
+  );
 }
 
 function finalPackageName(rows, columns, mergeCells, rowSpan, palletStartColumn) {
-  const nameColumns = columns.filter((column) => column.columnIndex < palletStartColumn && isNameHeader(column.headerText));
-  const fallbackColumns = columns.filter((column) => column.columnIndex < palletStartColumn
-    && containsAnyText(normalizeHeader(column.headerText), ["size", "尺寸"]));
+  const nameColumns = columns.filter(
+    (column) => column.columnIndex < palletStartColumn && isNameHeader(column.headerText)
+  );
+  const fallbackColumns = columns.filter(
+    (column) =>
+      column.columnIndex < palletStartColumn &&
+      containsAnyText(normalizeHeader(column.headerText), ["size", "尺寸"])
+  );
   const column = nameColumns[0] || fallbackColumns[0];
   const names = [];
   if (column) {
@@ -437,22 +753,42 @@ function finalPackageName(rows, columns, mergeCells, rowSpan, palletStartColumn)
 
 function isNameHeader(value) {
   const text = normalizeHeader(value);
-  return containsAnyText(text, ["品名", "货物名称", "产品名称", "物料名称", "cargoname", "goodsname", "productname"])
-    || text === "name";
+  return (
+    containsAnyText(text, [
+      "品名",
+      "货物名称",
+      "产品名称",
+      "物料名称",
+      "cargoname",
+      "goodsname",
+      "productname"
+    ]) || text === "name"
+  );
 }
 
 function finalPackageRemark(rows, columns, mergeCells, rowSpan, palletStartColumn) {
-  const remarkColumns = columns.filter((column) => column.columnIndex >= palletStartColumn
-    && containsAnyText(normalizeHeader(column.headerText), ["备注", "说明", "remark", "note"]));
+  const remarkColumns = columns.filter(
+    (column) =>
+      column.columnIndex >= palletStartColumn &&
+      containsAnyText(normalizeHeader(column.headerText), ["备注", "说明", "remark", "note"])
+  );
   const values = [];
   for (let rowIndex = rowSpan.startRow; rowIndex <= rowSpan.endRow; rowIndex += 1) {
     for (const column of remarkColumns) {
       const value = cleanCell(mergeAwareCellValue(rows, mergeCells, rowIndex, column.columnIndex));
       if (value && !values.includes(value)) values.push(value);
     }
-    for (let columnIndex = palletStartColumn; columnIndex < (rows[rowIndex]?.length || 0); columnIndex += 1) {
+    for (
+      let columnIndex = palletStartColumn;
+      columnIndex < (rows[rowIndex]?.length || 0);
+      columnIndex += 1
+    ) {
       const value = cleanCell(rows[rowIndex]?.[columnIndex]);
-      if (containsAnyText(value, ["拼装", "拼托", "混装", "合拼", "mixed", "combined"]) && !values.includes(value)) values.push(value);
+      if (
+        containsAnyText(value, ["拼装", "拼托", "混装", "合拼", "mixed", "combined"]) &&
+        !values.includes(value)
+      )
+        values.push(value);
     }
   }
   return values.join("；");
@@ -460,58 +796,119 @@ function finalPackageRemark(rows, columns, mergeCells, rowSpan, palletStartColum
 
 function innerCargoForCandidate(rows, columns, mergeCells, rowSpan, palletStartColumn) {
   const leftColumns = columns.filter((column) => column.columnIndex < palletStartColumn);
-  const nameColumn = leftColumns.find((column) => isNameHeader(column.headerText))
-    || leftColumns.find((column) => containsAnyText(normalizeHeader(column.headerText), ["size", "尺寸"]));
+  const nameColumn =
+    leftColumns.find((column) => isNameHeader(column.headerText)) ||
+    leftColumns.find((column) =>
+      containsAnyText(normalizeHeader(column.headerText), ["size", "尺寸"])
+    );
   const cartonCountColumn = leftColumns.find((column) => isCartonCountHeader(column.headerText));
-  const totalQuantityColumn = leftColumns.find((column) => isLooseTotalQuantityHeader(column.headerText));
-  const piecesPerCartonColumn = leftColumns.find((column) => isPiecesPerCartonHeader(column.headerText));
-  const cartonDimensionColumn = leftColumns.find((column) => isOuterCartonDimensionHeader(normalizeHeader(column.headerText)));
+  const totalQuantityColumn = leftColumns.find((column) =>
+    isLooseTotalQuantityHeader(column.headerText)
+  );
+  const piecesPerCartonColumn = leftColumns.find((column) =>
+    isPiecesPerCartonHeader(column.headerText)
+  );
+  const cartonDimensionColumn = leftColumns.find((column) =>
+    isOuterCartonDimensionHeader(normalizeHeader(column.headerText))
+  );
   const cartonAxes = cartonDimensionAxisColumns(leftColumns);
-  const unitGrossColumn = leftColumns.find((column) => isUnitGrossWeightHeader(normalizeHeader(column.headerText)));
-  const totalGrossColumn = leftColumns.find((column) => isTotalWeightHeader(normalizeHeader(column.headerText)));
+  const unitGrossColumn = leftColumns.find((column) =>
+    isUnitGrossWeightHeader(normalizeHeader(column.headerText))
+  );
+  const totalGrossColumn = leftColumns.find((column) =>
+    isTotalWeightHeader(normalizeHeader(column.headerText))
+  );
   const lines = [];
   for (let rowIndex = rowSpan.startRow; rowIndex <= rowSpan.endRow; rowIndex += 1) {
-    const name = cleanCell(nameColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, nameColumn.columnIndex) : "");
+    const name = cleanCell(
+      nameColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, nameColumn.columnIndex) : ""
+    );
     if (isSummaryText(name)) continue;
-    const cartonCount = positiveInteger(cartonCountColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, cartonCountColumn.columnIndex) : "");
-    const totalQuantity = positiveInteger(totalQuantityColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, totalQuantityColumn.columnIndex) : "");
-    const piecesPerCarton = numberFromCell(piecesPerCartonColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, piecesPerCartonColumn.columnIndex) : "");
-    const cartonDimensions = cartonDimensionsAt(rows, mergeCells, rowIndex, cartonDimensionColumn, cartonAxes);
-    const cartonGrossWeightKg = numberFromCell(unitGrossColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, unitGrossColumn.columnIndex) : "");
-    const explicitTotalGrossWeightKg = numberFromCell(totalGrossColumn ? mergeAwareCellValue(rows, mergeCells, rowIndex, totalGrossColumn.columnIndex) : "");
+    const cartonCount = positiveInteger(
+      cartonCountColumn
+        ? mergeAwareCellValue(rows, mergeCells, rowIndex, cartonCountColumn.columnIndex)
+        : ""
+    );
+    const totalQuantity = positiveInteger(
+      totalQuantityColumn
+        ? mergeAwareCellValue(rows, mergeCells, rowIndex, totalQuantityColumn.columnIndex)
+        : ""
+    );
+    const piecesPerCarton = numberFromCell(
+      piecesPerCartonColumn
+        ? mergeAwareCellValue(rows, mergeCells, rowIndex, piecesPerCartonColumn.columnIndex)
+        : ""
+    );
+    const cartonDimensions = cartonDimensionsAt(
+      rows,
+      mergeCells,
+      rowIndex,
+      cartonDimensionColumn,
+      cartonAxes
+    );
+    const cartonGrossWeightKg = numberFromCell(
+      unitGrossColumn
+        ? mergeAwareCellValue(rows, mergeCells, rowIndex, unitGrossColumn.columnIndex)
+        : ""
+    );
+    const explicitTotalGrossWeightKg = numberFromCell(
+      totalGrossColumn
+        ? mergeAwareCellValue(rows, mergeCells, rowIndex, totalGrossColumn.columnIndex)
+        : ""
+    );
     if (!name && !cartonCount && !totalQuantity && !cartonDimensions) continue;
-    const calculatedTotalGrossWeightKg = cartonCount && cartonGrossWeightKg ? cartonCount * cartonGrossWeightKg : null;
-    lines.push(compactObject({
-      sourceRowNumber: rowIndex + 1,
-      name,
-      cartonCount,
-      totalQuantity,
-      piecesPerCarton,
-      cartonDimensionsCm: cartonDimensions ? {
-        lengthCm: cartonDimensions[0], widthCm: cartonDimensions[1], heightCm: cartonDimensions[2]
-      } : null,
-      cartonGrossWeightKg,
-      explicitTotalGrossWeightKg,
-      calculatedTotalGrossWeightKg: calculatedTotalGrossWeightKg == null ? null : round2(calculatedTotalGrossWeightKg)
-    }));
+    const calculatedTotalGrossWeightKg =
+      cartonCount && cartonGrossWeightKg ? cartonCount * cartonGrossWeightKg : null;
+    lines.push(
+      compactObject({
+        sourceRowNumber: rowIndex + 1,
+        name,
+        cartonCount,
+        totalQuantity,
+        piecesPerCarton,
+        cartonDimensionsCm: cartonDimensions
+          ? {
+              lengthCm: cartonDimensions[0],
+              widthCm: cartonDimensions[1],
+              heightCm: cartonDimensions[2]
+            }
+          : null,
+        cartonGrossWeightKg,
+        explicitTotalGrossWeightKg,
+        calculatedTotalGrossWeightKg:
+          calculatedTotalGrossWeightKg == null ? null : round2(calculatedTotalGrossWeightKg)
+      })
+    );
   }
   return compactObject({ lines });
 }
 
 function isCartonCountHeader(value) {
   const text = normalizeHeader(value);
-  return containsAnyText(text, ["总箱数", "箱数", "件数", "tctns", "totalcartons", "totalcarton"])
-    && !containsAnyText(text, ["装箱数量", "每箱"]);
+  return (
+    containsAnyText(text, ["总箱数", "箱数", "件数", "tctns", "totalcartons", "totalcarton"]) &&
+    !containsAnyText(text, ["装箱数量", "每箱"])
+  );
 }
 
 function isLooseTotalQuantityHeader(value) {
   const text = normalizeHeader(value);
-  return containsAnyText(text, ["orderqty", "orderquantity", "总数量", "产品数量"])
-    || ["数量", "qty", "quantity"].includes(text);
+  return (
+    containsAnyText(text, ["orderqty", "orderquantity", "总数量", "产品数量"]) ||
+    ["数量", "qty", "quantity"].includes(text)
+  );
 }
 
 function isPiecesPerCartonHeader(value) {
-  return containsAnyText(normalizeHeader(value), ["装箱数量", "每箱数量", "pcsctn", "qtyctn", "个箱", "只箱", "条箱"]);
+  return containsAnyText(normalizeHeader(value), [
+    "装箱数量",
+    "每箱数量",
+    "pcsctn",
+    "qtyctn",
+    "个箱",
+    "只箱",
+    "条箱"
+  ]);
 }
 
 function cartonDimensionAxisColumns(columns) {
@@ -534,20 +931,28 @@ function cartonDimensionsAt(rows, mergeCells, rowIndex, combinedColumn, axes) {
     if (parsed) return parsed.map(round2);
   }
   if (axes.length == null || axes.width == null || axes.height == null) return null;
-  const values = [axes.length, axes.width, axes.height].map((columnIndex) => positiveNumber(
-    mergeAwareCellValue(rows, mergeCells, rowIndex, columnIndex),
-    unitFromHeader(headerPartsForColumn(rows, mergeCells, columnIndex).join(" "), "auto"),
-    null
-  ));
+  const values = [axes.length, axes.width, axes.height].map((columnIndex) =>
+    positiveNumber(
+      mergeAwareCellValue(rows, mergeCells, rowIndex, columnIndex),
+      unitFromHeader(headerPartsForColumn(rows, mergeCells, columnIndex).join(" "), "auto"),
+      null
+    )
+  );
   return values.every((value) => value > 0) ? values.map(round2) : null;
 }
 
 function finalPackageWeights(rows, columns, mergeCells, rowIndex, palletStartColumn, quantity) {
-  const quantityColumns = columns.filter((column) => column.columnIndex >= palletStartColumn
-    && isFinalPackageQuantityHeader(column.headerText)).map((column) => column.columnIndex);
+  const quantityColumns = columns
+    .filter(
+      (column) =>
+        column.columnIndex >= palletStartColumn && isFinalPackageQuantityHeader(column.headerText)
+    )
+    .map((column) => column.columnIndex);
   const quantityColumn = quantityColumns.length ? Math.min(...quantityColumns) : null;
   const entries = columns
-    .filter((column) => column.columnIndex >= palletStartColumn && isFinalWeightHeader(column.headerText))
+    .filter(
+      (column) => column.columnIndex >= palletStartColumn && isFinalWeightHeader(column.headerText)
+    )
     .map((column) => ({
       columnIndex: column.columnIndex,
       header: column.headerText,
@@ -559,13 +964,19 @@ function finalPackageWeights(rows, columns, mergeCells, rowIndex, palletStartCol
   const result = { entries };
   if (tareEntries.length) {
     result.tareUnitWeightKg = round2(tareEntries[0].value);
-    const relatedTotal = entries.find((entry) => entry !== tareEntries[0]
-      && Math.abs(entry.value - tareEntries[0].value * quantity) <= Math.max(0.1, entry.value * 0.002));
+    const relatedTotal = entries.find(
+      (entry) =>
+        entry !== tareEntries[0] &&
+        Math.abs(entry.value - tareEntries[0].value * quantity) <=
+          Math.max(0.1, entry.value * 0.002)
+    );
     result.tareTotalWeightKg = round2(relatedTotal?.value ?? tareEntries[0].value * quantity);
   }
-  if (finalTotalEntries.length) result.finalTotalGrossWeightKg = round2(finalTotalEntries.at(-1).value);
+  if (finalTotalEntries.length)
+    result.finalTotalGrossWeightKg = round2(finalTotalEntries.at(-1).value);
   if (!result.finalTotalGrossWeightKg && !tareEntries.length && entries.length) {
-    const afterQuantity = quantityColumn == null ? null : entries.find((entry) => entry.columnIndex > quantityColumn);
+    const afterQuantity =
+      quantityColumn == null ? null : entries.find((entry) => entry.columnIndex > quantityColumn);
     if (afterQuantity) result.finalTotalGrossWeightKg = round2(afterQuantity.value);
     else result.unitGrossWeightKg = round2(entries[0].value);
   }
@@ -574,39 +985,61 @@ function finalPackageWeights(rows, columns, mergeCells, rowIndex, palletStartCol
 
 function isFinalWeightHeader(value) {
   const text = normalizeHeader(value);
-  return containsAnyText(text, ["重量", "毛重", "weight", "gw", "g.w"])
-    && !containsAnyText(text, ["净重", "netweight", "nw", "n.w"]);
+  return (
+    containsAnyText(text, ["重量", "毛重", "weight", "gw", "g.w"]) &&
+    !containsAnyText(text, ["净重", "netweight", "nw", "n.w"])
+  );
 }
 
 function isPalletTareWeightHeader(value) {
   const text = normalizeHeader(value);
-  return hasPalletSignal(text)
-    && containsAnyText(text, ["重量", "weight"])
-    && !containsAnyText(text, ["装货后", "含货", "总重量", "合计重量", "总毛重", "totalweight", "gross"]);
+  return (
+    hasPalletSignal(text) &&
+    containsAnyText(text, ["重量", "weight"]) &&
+    !containsAnyText(text, [
+      "装货后",
+      "含货",
+      "总重量",
+      "合计重量",
+      "总毛重",
+      "totalweight",
+      "gross"
+    ])
+  );
 }
 
 function isFinalGrossTotalHeader(value) {
   const text = normalizeHeader(value);
-  return containsAnyText(text, ["总重量", "总毛重", "totalweight", "totalgross"])
-    || /\d+.*(?:托盘|pallet|skid).*总.*(?:重量|weight)/i.test(cleanCell(value));
+  return (
+    containsAnyText(text, ["总重量", "总毛重", "totalweight", "totalgross"]) ||
+    /\d+.*(?:托盘|pallet|skid).*总.*(?:重量|weight)/i.test(cleanCell(value))
+  );
 }
 
 function finalizeHandlingUnitCandidates(candidates) {
-  const mixedCandidate = candidates.find((candidate) => containsAnyText(candidate.rawRemark, [
-    "拼装", "拼托", "混装", "合拼", "mixed", "combined"
-  ]));
+  const mixedCandidate = candidates.find((candidate) =>
+    containsAnyText(candidate.rawRemark, ["拼装", "拼托", "混装", "合拼", "mixed", "combined"])
+  );
   const leftovers = [];
   candidates.forEach((candidate) => {
-    const sourceLines = Array.isArray(candidate.innerCargo?.lines) ? candidate.innerCargo.lines : [];
+    const sourceLines = Array.isArray(candidate.innerCargo?.lines)
+      ? candidate.innerCargo.lines
+      : [];
     const allocatedLines = [];
     sourceLines.forEach((line) => {
       const cartonCount = Number(line.cartonCount || 0);
       let allocatedCartons = cartonCount;
-      if (mixedCandidate && candidate !== mixedCandidate && candidate.quantity > 1 && cartonCount > candidate.quantity) {
+      if (
+        mixedCandidate &&
+        candidate !== mixedCandidate &&
+        candidate.quantity > 1 &&
+        cartonCount > candidate.quantity
+      ) {
         const cartonsPerPallet = Math.floor(cartonCount / candidate.quantity);
         allocatedCartons = cartonsPerPallet * candidate.quantity;
         const remainder = cartonCount - allocatedCartons;
-        if (remainder > 0) leftovers.push({ ...line, cartonCount: remainder, originalCartonCount: cartonCount });
+        if (remainder > 0)
+          leftovers.push({ ...line, cartonCount: remainder, originalCartonCount: cartonCount });
         if (cartonsPerPallet > 0) candidate.cartonsPerPallet = cartonsPerPallet;
       }
       if (allocatedCartons <= 0) return;
@@ -615,11 +1048,15 @@ function finalizeHandlingUnitCandidates(candidates) {
     candidate.innerCargo = summarizeInnerCargo(allocatedLines, candidate.cartonsPerPallet);
   });
   if (mixedCandidate && leftovers.length) {
-    mixedCandidate.innerCargo = summarizeInnerCargo(leftovers.map((line) => scaleInnerCargoLine(
-      line,
-      Number(line.cartonCount || 0),
-      Number(line.originalCartonCount || line.cartonCount || 0)
-    )));
+    mixedCandidate.innerCargo = summarizeInnerCargo(
+      leftovers.map((line) =>
+        scaleInnerCargoLine(
+          line,
+          Number(line.cartonCount || 0),
+          Number(line.originalCartonCount || line.cartonCount || 0)
+        )
+      )
+    );
     mixedCandidate.sourceNames = leftovers.map((line) => line.name).filter(Boolean);
     mixedCandidate.name = mixedCandidate.sourceNames.length
       ? `${[...new Set(mixedCandidate.sourceNames)].join(" + ")}拼装`
@@ -633,7 +1070,11 @@ function finalizeHandlingUnitCandidates(candidates) {
     let packageTotalGrossWeightKg = Number(evidence.finalTotalGrossWeightKg || 0);
     let palletTotalTareWeightKg = Number(evidence.tareTotalWeightKg || 0);
     let palletTareWeightKg = Number(evidence.tareUnitWeightKg || 0);
-    if (packageTotalGrossWeightKg > 0 && !palletTotalTareWeightKg && packageTotalGrossWeightKg >= innerCargoTotal) {
+    if (
+      packageTotalGrossWeightKg > 0 &&
+      !palletTotalTareWeightKg &&
+      packageTotalGrossWeightKg >= innerCargoTotal
+    ) {
       palletTotalTareWeightKg = round2(packageTotalGrossWeightKg - innerCargoTotal);
       palletTareWeightKg = round2(palletTotalTareWeightKg / quantity);
     } else if (!packageTotalGrossWeightKg && palletTotalTareWeightKg > 0) {
@@ -642,7 +1083,14 @@ function finalizeHandlingUnitCandidates(candidates) {
       packageTotalGrossWeightKg = round2(Number(evidence.unitGrossWeightKg) * quantity);
     }
     const packageGrossWeightKg = round2(packageTotalGrossWeightKg / quantity);
-    const mixed = containsAnyText(candidate.rawRemark, ["拼装", "拼托", "混装", "合拼", "mixed", "combined"]);
+    const mixed = containsAnyText(candidate.rawRemark, [
+      "拼装",
+      "拼托",
+      "混装",
+      "合拼",
+      "mixed",
+      "combined"
+    ]);
     const notes = [
       `最终木托盘优先；源表 ${candidate.sourceRange}`,
       candidate.sharedMergedRows ? "合并单元格跨多条产品行，仅生成一个托盘记录" : "",
@@ -666,9 +1114,10 @@ function finalizeHandlingUnitCandidates(candidates) {
       palletTareWeightKg,
       palletTotalTareWeightKg,
       cargoTotalWeightKg: innerCargoTotal,
-      weightFormula: palletTotalTareWeightKg > 0
-        ? "(pallet tare total + contained cargo gross total) / pallet quantity"
-        : "final package gross total / pallet quantity",
+      weightFormula:
+        palletTotalTareWeightKg > 0
+          ? "(pallet tare total + contained cargo gross total) / pallet quantity"
+          : "final package gross total / pallet quantity",
       sourceRows: candidate.sourceRowNumbers,
       sourceRange: candidate.sourceRange,
       sharedMergedRows: candidate.sharedMergedRows,
@@ -699,26 +1148,32 @@ function scaleInnerCargoLine(line, allocatedCartons, originalCartons) {
   const ratio = originalCartons > 0 ? allocatedCartons / originalCartons : 1;
   const explicitTotal = Number(line.explicitTotalGrossWeightKg);
   const calculatedTotal = Number(line.calculatedTotalGrossWeightKg);
-  const sourceTotal = Number.isFinite(explicitTotal) && line.explicitTotalGrossWeightKg != null
-    ? explicitTotal
-    : Number.isFinite(calculatedTotal) && line.calculatedTotalGrossWeightKg != null
-      ? calculatedTotal
-      : Number(line.cartonGrossWeightKg || 0) * originalCartons;
+  const sourceTotal =
+    Number.isFinite(explicitTotal) && line.explicitTotalGrossWeightKg != null
+      ? explicitTotal
+      : Number.isFinite(calculatedTotal) && line.calculatedTotalGrossWeightKg != null
+        ? calculatedTotal
+        : Number(line.cartonGrossWeightKg || 0) * originalCartons;
   return compactObject({
     ...line,
     cartonCount: allocatedCartons,
     totalGrossWeightKg: round2(sourceTotal * ratio),
     sourceTotalGrossWeightKg: round2(sourceTotal),
-    sourceTotalMismatch: explicitTotal > 0 && calculatedTotal > 0 && Math.abs(explicitTotal - calculatedTotal) > 0.01
+    sourceTotalMismatch:
+      explicitTotal > 0 && calculatedTotal > 0 && Math.abs(explicitTotal - calculatedTotal) > 0.01
   });
 }
 
 function summarizeInnerCargo(lines, cartonsPerPallet) {
   const cartonCount = lines.reduce((sum, line) => sum + Number(line.cartonCount || 0), 0);
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.totalQuantity || 0), 0);
-  const totalGrossWeightKg = round2(lines.reduce((sum, line) => sum + Number(line.totalGrossWeightKg || 0), 0));
+  const totalGrossWeightKg = round2(
+    lines.reduce((sum, line) => sum + Number(line.totalGrossWeightKg || 0), 0)
+  );
   const firstDimensions = lines.find((line) => line.cartonDimensionsCm)?.cartonDimensionsCm;
-  const firstGrossWeight = lines.find((line) => Number(line.cartonGrossWeightKg) > 0)?.cartonGrossWeightKg;
+  const firstGrossWeight = lines.find(
+    (line) => Number(line.cartonGrossWeightKg) > 0
+  )?.cartonGrossWeightKg;
   return compactObject({
     cartonCount,
     cartonsPerPallet,
@@ -741,14 +1196,18 @@ function formatMergedCellValueLines(sheet, maxMergeRanges, maxCellChars) {
     `MERGED_CELL_VALUES: ${mergeCells.map((merge) => `${merge.range}=${quoteForRecognition(merge.value, maxCellChars)}`).join(" | ")}`
   ];
   const rowSpans = new Map();
-  mergeCells.filter((merge) => merge.endRow > merge.startRow).forEach((merge) => {
-    const key = `${merge.startRow}:${merge.endRow}`;
-    if (!rowSpans.has(key)) rowSpans.set(key, []);
-    rowSpans.get(key).push(merge);
-  });
+  mergeCells
+    .filter((merge) => merge.endRow > merge.startRow)
+    .forEach((merge) => {
+      const key = `${merge.startRow}:${merge.endRow}`;
+      if (!rowSpans.has(key)) rowSpans.set(key, []);
+      rowSpans.get(key).push(merge);
+    });
   rowSpans.forEach((merges, key) => {
     const [startRow, endRow] = key.split(":").map(Number);
-    lines.push(`MERGED_ROW_SPAN R${startRow + 1}:R${endRow + 1}: ${merges.map((merge) => `${merge.range}=${quoteForRecognition(merge.value, maxCellChars)}`).join(" | ")}`);
+    lines.push(
+      `MERGED_ROW_SPAN R${startRow + 1}:R${endRow + 1}: ${merges.map((merge) => `${merge.range}=${quoteForRecognition(merge.value, maxCellChars)}`).join(" | ")}`
+    );
   });
   return lines;
 }
@@ -758,6 +1217,9 @@ function candidateForRecognition(candidate) {
     sourceRowNumber: candidate.sourceRowNumber,
     sourceRowNumbers: candidate.sourceRowNumbers,
     sourceRange: candidate.sourceRange,
+    packageNo: candidate.cargo.packageNo,
+    marks: candidate.cargo.marks,
+    sourceSheet: candidate.cargo.sourceSheet,
     name: candidate.cargo.name,
     model: candidate.cargo.model,
     lengthCm: candidate.cargo.lengthCm,
@@ -781,8 +1243,15 @@ function mergeAwareCellValue(rows, mergeCells, rowIndex, columnIndex) {
 }
 
 function mergeOwnerAt(mergeCells, rowIndex, columnIndex) {
-  return mergeCells.find((merge) => rowIndex >= merge.startRow && rowIndex <= merge.endRow
-    && columnIndex >= merge.startColumn && columnIndex <= merge.endColumn) || null;
+  return (
+    mergeCells.find(
+      (merge) =>
+        rowIndex >= merge.startRow &&
+        rowIndex <= merge.endRow &&
+        columnIndex >= merge.startColumn &&
+        columnIndex <= merge.endColumn
+    ) || null
+  );
 }
 
 function trimTrailingEmptyCells(row) {
@@ -793,7 +1262,10 @@ function trimTrailingEmptyCells(row) {
 
 function buildFormulaCellMetadata(worksheet) {
   return Object.entries(worksheet || {})
-    .filter(([address, cell]) => /^[A-Z]+\d+$/i.test(address) && cell && typeof cell.f === "string" && cell.f.trim())
+    .filter(
+      ([address, cell]) =>
+        /^[A-Z]+\d+$/i.test(address) && cell && typeof cell.f === "string" && cell.f.trim()
+    )
     .map(([address, cell]) => ({
       address,
       formula: cell.f.trim(),
@@ -819,7 +1291,12 @@ function formatMergeRange(range) {
 }
 
 function columnIndex(name) {
-  return String(name || "").toUpperCase().split("").reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0) - 1;
+  return (
+    String(name || "")
+      .toUpperCase()
+      .split("")
+      .reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0) - 1
+  );
 }
 
 function integerRange(start, end) {
@@ -856,14 +1333,32 @@ export function buildPreview(sheet, mapping, options = {}) {
   });
 
   const aggregated = aggregateCargos(validRows.map((row) => row.cargo));
-  return {
+  return withPackingReconciliation({
     totalRows: parsedRowCount,
     validRows,
     invalidRows,
     aggregated,
     importedQuantity: aggregated.reduce((sum, cargo) => sum + Number(cargo.quantity || 0), 0),
     skippedRows: invalidRows.length
-  };
+  });
+}
+
+function withPackingReconciliation(preview) {
+  const allRows = [...preview.validRows, ...preview.invalidRows]
+    .map((row) => row.cargo)
+    .filter(Boolean);
+  let reports = collectSourceReconciliations(allRows);
+  if (!reports.length) {
+    const report = explicitPreviewReconciliation(preview.reconciliation);
+    if (report) {
+      for (const cargo of [...allRows, ...preview.aggregated])
+        cargo.packageInfo = { ...(cargo.packageInfo || {}), sourceReconciliation: report };
+      reports = [report];
+    }
+  }
+  preview.sourceReconciliations = reports;
+  preview.packingReview = reviewCargoPreview(preview);
+  return preview;
 }
 
 export function parseCargoText(text, options = {}) {
@@ -897,12 +1392,30 @@ export function guessMapping(headers) {
     let matchIndex = normalized.findIndex((header) => normalizedAliases.includes(header));
     if (matchIndex < 0) {
       matchIndex = normalized.findIndex((header) =>
-        normalizedAliases.some((alias) => alias && canFuzzyMatchAlias(alias) && header.includes(alias))
+        normalizedAliases.some(
+          (alias) => alias && canFuzzyMatchAlias(alias) && header.includes(alias)
+        )
       );
     }
     mapping[field.key] = matchIndex >= 0 ? headers[matchIndex] : "";
   }
   if (!mapping.name && mapping.id) mapping.name = mapping.id;
+  for (const field of [
+    "packageNo",
+    "marks",
+    "sourceSheet",
+    "packageInfo",
+    "innerCargoJson",
+    "sourceRows",
+    "innerQuantity"
+  ]) {
+    const index = normalized.findIndex(
+      (header) =>
+        header === normalizeHeader(field) ||
+        (field === "packageInfo" && header === "packageinfojson")
+    );
+    if (index >= 0) mapping[`__${field}`] = headers[index];
+  }
   return refineMapping(headers, mapping);
 }
 
@@ -914,9 +1427,15 @@ function refineMapping(headers, mapping) {
 }
 
 function applyLoadedPalletMapping(headers, mapping) {
-  const palletLengthHeader = firstHeader(headers, (header) => isLoadedPalletDimensionHeader(header, "length"));
-  const palletWidthHeader = firstHeader(headers, (header) => isLoadedPalletDimensionHeader(header, "width"));
-  const palletHeightHeader = firstHeader(headers, (header) => isLoadedPalletDimensionHeader(header, "height"));
+  const palletLengthHeader = firstHeader(headers, (header) =>
+    isLoadedPalletDimensionHeader(header, "length")
+  );
+  const palletWidthHeader = firstHeader(headers, (header) =>
+    isLoadedPalletDimensionHeader(header, "width")
+  );
+  const palletHeightHeader = firstHeader(headers, (header) =>
+    isLoadedPalletDimensionHeader(header, "height")
+  );
   if (!palletLengthHeader || !palletWidthHeader || !palletHeightHeader) return;
 
   const palletQuantityHeader = firstHeader(headers, isPalletQuantityHeader);
@@ -943,75 +1462,85 @@ function applyLoadedPalletMapping(headers, mapping) {
 }
 
 function isLoadedPalletDimensionHeader(header, axis) {
-  const palletSignal = header.includes("\u6258\u76d8")
-    || header.includes("\u6808\u677f")
-    || header.includes("pallet")
-    || header.includes("skid");
-  const outerSignal = header.includes("\u88c5\u8d27\u540e")
-    || header.includes("\u5916\u5ed3")
-    || header.includes("\u5916\u5f62")
-    || header.includes("loaded")
-    || header.includes("overall");
+  const palletSignal =
+    header.includes("\u6258\u76d8") ||
+    header.includes("\u6808\u677f") ||
+    header.includes("pallet") ||
+    header.includes("skid");
+  const outerSignal =
+    header.includes("\u88c5\u8d27\u540e") ||
+    header.includes("\u5916\u5ed3") ||
+    header.includes("\u5916\u5f62") ||
+    header.includes("loaded") ||
+    header.includes("overall");
   const axisSignals = {
     length: ["\u957f", "length"],
     width: ["\u5bbd", "width"],
     height: ["\u9ad8", "height"]
   };
-  return palletSignal
-    && outerSignal
-    && axisSignals[axis].some((signal) => header.includes(signal));
+  return palletSignal && outerSignal && axisSignals[axis].some((signal) => header.includes(signal));
 }
 
 function isPalletQuantityHeader(header) {
-  return header.includes("\u6258\u76d8\u6570\u91cf")
-    || header.includes("\u6258\u76d8\u6570")
-    || header.includes("\u6258\u6570")
-    || header.includes("\u6808\u677f\u6570\u91cf")
-    || header.includes("\u6808\u677f\u6570")
-    || header.includes("palletqty")
-    || header.includes("palletquantity")
-    || header.includes("skidqty");
+  return (
+    header.includes("\u6258\u76d8\u6570\u91cf") ||
+    header.includes("\u6258\u76d8\u6570") ||
+    header.includes("\u6258\u6570") ||
+    header.includes("\u6808\u677f\u6570\u91cf") ||
+    header.includes("\u6808\u677f\u6570") ||
+    header.includes("palletqty") ||
+    header.includes("palletquantity") ||
+    header.includes("skidqty")
+  );
 }
 
 function isPalletIdentifierHeader(header) {
-  return header.includes("\u6258\u76d8\u7f16\u53f7")
-    || header.includes("\u6258\u76d8id")
-    || header.includes("\u6808\u677f\u7f16\u53f7")
-    || header.includes("\u6808\u677fid")
-    || header.includes("palletno")
-    || header.includes("palletid")
-    || header.includes("skidno")
-    || header.includes("skidid");
+  return (
+    header.includes("\u6258\u76d8\u7f16\u53f7") ||
+    header.includes("\u6258\u76d8id") ||
+    header.includes("\u6808\u677f\u7f16\u53f7") ||
+    header.includes("\u6808\u677fid") ||
+    header.includes("palletno") ||
+    header.includes("palletid") ||
+    header.includes("skidno") ||
+    header.includes("skidid")
+  );
 }
 
 function isLoadedPalletUnitGrossWeightHeader(header) {
-  const unitSignal = header.includes("\u5355\u6258")
-    || header.includes("\u6bcf\u6258")
-    || header.includes("\u5355\u6808\u677f")
-    || header.includes("\u6bcf\u6808\u677f")
-    || header.includes("perpallet")
-    || header.includes("perskid");
-  const finalGrossSignal = header.includes("\u603b\u6bdb\u91cd")
-    || header.includes("\u542b\u6258\u6bdb\u91cd")
-    || header.includes("\u88c5\u8d27\u540e\u6bdb\u91cd")
-    || header.includes("totalgrossweight");
+  const unitSignal =
+    header.includes("\u5355\u6258") ||
+    header.includes("\u6bcf\u6258") ||
+    header.includes("\u5355\u6808\u677f") ||
+    header.includes("\u6bcf\u6808\u677f") ||
+    header.includes("perpallet") ||
+    header.includes("perskid");
+  const finalGrossSignal =
+    header.includes("\u603b\u6bdb\u91cd") ||
+    header.includes("\u542b\u6258\u6bdb\u91cd") ||
+    header.includes("\u88c5\u8d27\u540e\u6bdb\u91cd") ||
+    header.includes("totalgrossweight");
   return unitSignal && finalGrossSignal;
 }
 
 function isStackConstraintHeader(header) {
-  return header.includes("\u5806\u53e0\u9650\u5236")
-    || header.includes("\u5806\u7801\u9650\u5236")
-    || header.includes("\u627f\u538b\u9650\u5236")
-    || header.includes("stackingrestriction")
-    || header.includes("stacklimit");
+  return (
+    header.includes("\u5806\u53e0\u9650\u5236") ||
+    header.includes("\u5806\u7801\u9650\u5236") ||
+    header.includes("\u627f\u538b\u9650\u5236") ||
+    header.includes("stackingrestriction") ||
+    header.includes("stacklimit")
+  );
 }
 
 function isOrientationConstraintHeader(header) {
-  return header.includes("\u671d\u5411\u8981\u6c42")
-    || header.includes("\u65b9\u5411\u8981\u6c42")
-    || header.includes("\u6446\u653e\u65b9\u5411")
-    || header.includes("orientationrequirement")
-    || header.includes("orientation");
+  return (
+    header.includes("\u671d\u5411\u8981\u6c42") ||
+    header.includes("\u65b9\u5411\u8981\u6c42") ||
+    header.includes("\u6446\u653e\u65b9\u5411") ||
+    header.includes("orientationrequirement") ||
+    header.includes("orientation")
+  );
 }
 
 function applyPackingListMapping(headers, mapping) {
@@ -1025,9 +1554,10 @@ function applyPackingListMapping(headers, mapping) {
   const totalWeightHeader = firstHeader(productHeaders, isTotalWeightHeader);
   const remarkHeader = firstHeader(productHeaders, isRemarkHeader);
 
-  const looksLikePackingList = nameHeader
-    && outerDimensionHeader
-    && (packageCountHeader || packingQuantityHeader || unitGrossWeightHeader || totalWeightHeader);
+  const looksLikePackingList =
+    nameHeader &&
+    outerDimensionHeader &&
+    (packageCountHeader || packingQuantityHeader || unitGrossWeightHeader || totalWeightHeader);
   if (!looksLikePackingList) return;
 
   mapping.__packingList = "true";
@@ -1071,43 +1601,49 @@ function isCargoNameHeader(header) {
 }
 
 function isOuterCartonDimensionHeader(header) {
-  return header.includes("\u5916\u7bb1\u5c3a\u5bf8")
-    || header.includes("\u5916\u7bb1\u89c4\u683c")
-    || header.includes("\u7eb8\u7bb1\u5c3a\u5bf8")
-    || header.includes("\u5305\u88c5\u5c3a\u5bf8")
-    || header === "\u7bb1\u89c4"
-    || header === "\u7bb1\u5c3a\u5bf8"
-    || header.includes("cartonsize")
-    || header.includes("outersize")
-    || header.includes("outercarton");
+  return (
+    header.includes("\u5916\u7bb1\u5c3a\u5bf8") ||
+    header.includes("\u5916\u7bb1\u89c4\u683c") ||
+    header.includes("\u7eb8\u7bb1\u5c3a\u5bf8") ||
+    header.includes("\u5305\u88c5\u5c3a\u5bf8") ||
+    header === "\u7bb1\u89c4" ||
+    header === "\u7bb1\u5c3a\u5bf8" ||
+    header.includes("cartonsize") ||
+    header.includes("outersize") ||
+    header.includes("outercarton")
+  );
 }
 
 function isPackageCountHeader(header) {
-  return [
-    "\u4ef6\u6570",
-    "\u7bb1\u6570",
-    "\u603b\u4ef6\u6570",
-    "\u603b\u7bb1\u6570",
-    "ctn",
-    "ctns",
-    "tctn",
-    "tctns",
-    "totalctn",
-    "totalctns",
-    "totalcarton",
-    "totalcartons",
-    "carton",
-    "cartons",
-    "boxes"
-  ].includes(header) && !header.includes("\u88c5\u7bb1");
+  return (
+    [
+      "\u4ef6\u6570",
+      "\u7bb1\u6570",
+      "\u603b\u4ef6\u6570",
+      "\u603b\u7bb1\u6570",
+      "ctn",
+      "ctns",
+      "tctn",
+      "tctns",
+      "totalctn",
+      "totalctns",
+      "totalcarton",
+      "totalcartons",
+      "carton",
+      "cartons",
+      "boxes"
+    ].includes(header) && !header.includes("\u88c5\u7bb1")
+  );
 }
 
 function isPackingQuantityHeader(header) {
-  return header.includes("\u88c5\u7bb1\u6570\u91cf")
-    || header.includes("\u6bcf\u7bb1\u6570\u91cf")
-    || header.includes("\u5165\u6570")
-    || header.includes("pcsctn")
-    || header.includes("qtyctn");
+  return (
+    header.includes("\u88c5\u7bb1\u6570\u91cf") ||
+    header.includes("\u6bcf\u7bb1\u6570\u91cf") ||
+    header.includes("\u5165\u6570") ||
+    header.includes("pcsctn") ||
+    header.includes("qtyctn")
+  );
 }
 
 function isSourceQuantityHeader(header) {
@@ -1152,25 +1688,29 @@ function isUnitGrossWeightHeader(header) {
     "grossweighttotal",
     "tgw"
   ];
-  return unitSignals.some((signal) => header.includes(signal))
-    && !totalSignals.some((signal) => header.includes(signal))
-    && !isPalletHeader(header);
+  return (
+    unitSignals.some((signal) => header.includes(signal)) &&
+    !totalSignals.some((signal) => header.includes(signal)) &&
+    !isPalletHeader(header)
+  );
 }
 
 function isTotalWeightHeader(header) {
-  return (header.includes("\u603b\u91cd\u91cf")
-    || header.includes("\u603b\u91cd")
-    || header.includes("\u603b\u6bdb\u91cd")
-    || header.includes("\u91cd\u91cf\u5408\u8ba1")
-    || header.includes("\u5408\u8ba1\u91cd\u91cf")
-    || header.includes("totalweight")
-    || header.includes("tgw")
-    || header.includes("tgwkg")
-    || header.includes("tgwkgs")
-    || header.includes("totalgw")
-    || header.includes("grossweighttotal"))
-    && !header.includes("\u4f53\u79ef")
-    && !isPalletHeader(header);
+  return (
+    (header.includes("\u603b\u91cd\u91cf") ||
+      header.includes("\u603b\u91cd") ||
+      header.includes("\u603b\u6bdb\u91cd") ||
+      header.includes("\u91cd\u91cf\u5408\u8ba1") ||
+      header.includes("\u5408\u8ba1\u91cd\u91cf") ||
+      header.includes("totalweight") ||
+      header.includes("tgw") ||
+      header.includes("tgwkg") ||
+      header.includes("tgwkgs") ||
+      header.includes("totalgw") ||
+      header.includes("grossweighttotal")) &&
+    !header.includes("\u4f53\u79ef") &&
+    !isPalletHeader(header)
+  );
 }
 
 function isRemarkHeader(header) {
@@ -1179,10 +1719,12 @@ function isRemarkHeader(header) {
 
 function isPalletHeader(header) {
   const normalized = normalizeHeader(header);
-  return normalized.includes("\u6258\u76d8")
-    || normalized.includes("\u6808\u677f")
-    || normalized.includes("\u514d\u718f\u84b8")
-    || normalized.includes("pallet");
+  return (
+    normalized.includes("\u6258\u76d8") ||
+    normalized.includes("\u6808\u677f") ||
+    normalized.includes("\u514d\u718f\u84b8") ||
+    normalized.includes("pallet")
+  );
 }
 
 function parseCargoTextLine(line, rowNumber, options = {}) {
@@ -1192,7 +1734,10 @@ function parseCargoTextLine(line, rowNumber, options = {}) {
   const quantity = extractTextQuantity(text);
   const weight = extractTextWeight(text, quantity.value, options.weightUnit || "auto");
   const explicitModel = extractTextModel(text);
-  const nameModel = extractTextNameModel(text, [dimension, quantity, weight, explicitModel].filter(Boolean));
+  const nameModel = extractTextNameModel(
+    text,
+    [dimension, quantity, weight, explicitModel].filter(Boolean)
+  );
   const inferredType = normalizeType(text, text);
   const type = inferredType === "pallet" ? "pallet" : "normal";
   const constraints = normalizeCargoConstraints({ type, remark: text, constraintText: text });
@@ -1254,7 +1799,10 @@ function normalizeTextSymbols(value) {
 function extractTextDimensions(text, defaultUnit) {
   const number = "(\\d+(?:\\.\\d+)?)";
   const unit = "(mm|毫米|cm|厘米|m|米)?";
-  const sizePattern = new RegExp(`${number}\\s*${unit}\\s*[*]\\s*${number}\\s*${unit}\\s*[*]\\s*${number}\\s*${unit}`, "i");
+  const sizePattern = new RegExp(
+    `${number}\\s*${unit}\\s*[*]\\s*${number}\\s*${unit}\\s*[*]\\s*${number}\\s*${unit}`,
+    "i"
+  );
   const sizeMatch = text.match(sizePattern);
   if (sizeMatch) {
     const units = [sizeMatch[2], sizeMatch[4], sizeMatch[6]].filter(Boolean);
@@ -1262,11 +1810,16 @@ function extractTextDimensions(text, defaultUnit) {
     return {
       raw: sizeMatch[0],
       index: sizeMatch.index ?? -1,
-      values: [sizeMatch[1], sizeMatch[3], sizeMatch[5]].map((value) => round2(convertDimension(Number(value), finalUnit)))
+      values: [sizeMatch[1], sizeMatch[3], sizeMatch[5]].map((value) =>
+        round2(convertDimension(Number(value), finalUnit))
+      )
     };
   }
 
-  const namedPattern = new RegExp(`长(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}\\s*宽(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}\\s*高(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}`, "i");
+  const namedPattern = new RegExp(
+    `长(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}\\s*宽(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}\\s*高(?:度)?\\s*[:：]?\\s*${number}\\s*${unit}`,
+    "i"
+  );
   const namedMatch = text.match(namedPattern);
   if (namedMatch) {
     const units = [namedMatch[2], namedMatch[4], namedMatch[6]].filter(Boolean);
@@ -1274,14 +1827,18 @@ function extractTextDimensions(text, defaultUnit) {
     return {
       raw: namedMatch[0],
       index: namedMatch.index ?? -1,
-      values: [namedMatch[1], namedMatch[3], namedMatch[5]].map((value) => round2(convertDimension(Number(value), finalUnit)))
+      values: [namedMatch[1], namedMatch[3], namedMatch[5]].map((value) =>
+        round2(convertDimension(Number(value), finalUnit))
+      )
     };
   }
   return null;
 }
 
 function extractTextQuantity(text) {
-  const labeled = text.match(/(?:数量|件数|箱数|个数|qty|pcs)\s*[:：]?\s*(\d+)\s*(?:件|箱|个|pcs)?/i);
+  const labeled = text.match(
+    /(?:数量|件数|箱数|个数|qty|pcs)\s*[:：]?\s*(\d+)\s*(?:件|箱|个|pcs)?/i
+  );
   const loose = text.match(/(\d+)\s*(?:件|箱|个|pcs)/i);
   const match = labeled || loose;
   return {
@@ -1292,9 +1849,14 @@ function extractTextQuantity(text) {
 }
 
 function extractTextWeight(text, quantity, defaultUnit) {
-  const total = text.match(/(?:总重|总重量|总毛重|总净重|毛重合计|重量合计|合计重量)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)/i);
+  const total = text.match(
+    /(?:总重|总重量|总毛重|总净重|毛重合计|重量合计|合计重量)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)/i
+  );
   if (total) {
-    const totalKg = convertWeight(Number(total[1]), normalizeWeightUnit(total[2] || defaultUnit || "kg"));
+    const totalKg = convertWeight(
+      Number(total[1]),
+      normalizeWeightUnit(total[2] || defaultUnit || "kg")
+    );
     return {
       raws: [total[0]],
       index: total.index ?? -1,
@@ -1303,20 +1865,28 @@ function extractTextWeight(text, quantity, defaultUnit) {
     };
   }
 
-  const labeled = text.match(/(?:单重|单件重量|每件重量|每件|重量|净重|毛重|重)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)(?:\s*(?:\/|／)\s*(?:件|箱|pcs))?/i);
-  const perPiece = text.match(/(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)\s*(?:\/|／)?\s*(?:件|箱|pcs|每件)/i);
+  const labeled = text.match(
+    /(?:单重|单件重量|每件重量|每件|重量|净重|毛重|重)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)(?:\s*(?:\/|／)\s*(?:件|箱|pcs))?/i
+  );
+  const perPiece = text.match(
+    /(\d+(?:\.\d+)?)\s*(kg|公斤|千克|g|克|t|吨)\s*(?:\/|／)?\s*(?:件|箱|pcs|每件)/i
+  );
   const match = labeled || perPiece;
   if (!match) return { raws: [], index: -1, value: 0, fromTotal: false };
   return {
     raws: [match[0]],
     index: match.index ?? -1,
-    value: round2(convertWeight(Number(match[1]), normalizeWeightUnit(match[2] || defaultUnit || "kg"))),
+    value: round2(
+      convertWeight(Number(match[1]), normalizeWeightUnit(match[2] || defaultUnit || "kg"))
+    ),
     fromTotal: false
   };
 }
 
 function extractTextModel(text) {
-  const match = text.match(/(?:型号|规格|model)\s*[:：]?\s*([A-Za-z0-9#\-_/.一二三四五六七八九十]+)\b/i);
+  const match = text.match(
+    /(?:型号|规格|model)\s*[:：]?\s*([A-Za-z0-9#\-_/.一二三四五六七八九十]+)\b/i
+  );
   if (!match || /[*]/.test(match[1])) return null;
   return { raw: match[0], index: match.index ?? -1, value: cleanCell(match[1]) };
 }
@@ -1364,8 +1934,14 @@ function buildTextSuggestion(line, cargo, errors, rowNumber) {
     remark: cargo.remark || ""
   };
   const notes = [];
-  if (errors.some((error) => error.includes("名称"))) notes.push("名称未识别，建议从原始文本中截取货物名");
-  if (errors.some((error) => error.includes("长度") || error.includes("宽度") || error.includes("高度"))) notes.push("尺寸未识别，建议补充长宽高");
+  if (errors.some((error) => error.includes("名称")))
+    notes.push("名称未识别，建议从原始文本中截取货物名");
+  if (
+    errors.some(
+      (error) => error.includes("长度") || error.includes("宽度") || error.includes("高度")
+    )
+  )
+    notes.push("尺寸未识别，建议补充长宽高");
   if (errors.some((error) => error.includes("数量"))) notes.push("数量未识别，建议确认件数");
   return {
     cargo: suggested,
@@ -1405,7 +1981,9 @@ function findHeaderRow(rows) {
       const normalized = normalizeHeader(cell);
       if (!normalized) return sum;
       const matched = Object.values(FIELD_ALIASES).some((aliases) =>
-        aliases.map(normalizeHeader).some((alias) => alias && (normalized.includes(alias) || alias.includes(normalized)))
+        aliases
+          .map(normalizeHeader)
+          .some((alias) => alias && (normalized.includes(alias) || alias.includes(normalized)))
       );
       return sum + (matched ? 2 : cell ? 0.25 : 0);
     }, 0);
@@ -1428,13 +2006,35 @@ function parseCargoRow(raw, mapping, context) {
       valueFor(raw, mapping.__sourceQuantity),
       valueFor(raw, mapping.__packingQuantity)
     );
-    if (quantity) notes.push("\u5df2\u7528\u4ea7\u54c1\u6570\u91cf / \u88c5\u7bb1\u6570\u91cf\u6362\u7b97\u8fd0\u8f93\u4ef6\u6570");
+    if (quantity)
+      notes.push(
+        "\u5df2\u7528\u4ea7\u54c1\u6570\u91cf / \u88c5\u7bb1\u6570\u91cf\u6362\u7b97\u8fd0\u8f93\u4ef6\u6570"
+      );
   }
-  const lengthCm = positiveNumber(valueFor(raw, mapping.lengthCm), unitFromHeader(mapping.lengthCm, context.dimensionUnit), dimensions?.[0]);
-  const widthCm = positiveNumber(valueFor(raw, mapping.widthCm), unitFromHeader(mapping.widthCm, context.dimensionUnit), dimensions?.[1]);
-  const heightCm = positiveNumber(valueFor(raw, mapping.heightCm), unitFromHeader(mapping.heightCm, context.dimensionUnit), dimensions?.[2]);
-  const totalWeightKg = nonNegativeNumber(valueFor(raw, mapping.totalWeightKg), weightUnitFromHeader(mapping.totalWeightKg, context.weightUnit), null);
-  const weightSource = mapping.weightKg && mapping.weightKg !== mapping.totalWeightKg ? valueFor(raw, mapping.weightKg) : "";
+  const lengthCm = positiveNumber(
+    valueFor(raw, mapping.lengthCm),
+    unitFromHeader(mapping.lengthCm, context.dimensionUnit),
+    dimensions?.[0]
+  );
+  const widthCm = positiveNumber(
+    valueFor(raw, mapping.widthCm),
+    unitFromHeader(mapping.widthCm, context.dimensionUnit),
+    dimensions?.[1]
+  );
+  const heightCm = positiveNumber(
+    valueFor(raw, mapping.heightCm),
+    unitFromHeader(mapping.heightCm, context.dimensionUnit),
+    dimensions?.[2]
+  );
+  const totalWeightKg = nonNegativeNumber(
+    valueFor(raw, mapping.totalWeightKg),
+    weightUnitFromHeader(mapping.totalWeightKg, context.weightUnit),
+    null
+  );
+  const weightSource =
+    mapping.weightKg && mapping.weightKg !== mapping.totalWeightKg
+      ? valueFor(raw, mapping.weightKg)
+      : "";
   const weightKg = nonNegativeNumber(
     weightSource,
     weightUnitFromHeader(mapping.weightKg, context.weightUnit),
@@ -1466,16 +2066,27 @@ function parseCargoRow(raw, mapping, context) {
   if (dimensionText && !dimensions) notes.push("合并尺寸未识别，已尝试使用独立长宽高字段");
   if (totalWeightKg != null && !weightSource) notes.push("已用总重量 / 数量换算单件重量");
 
-  const packageInfo = buildPackageInfo({
-    mapping,
-    raw,
-    quantity,
-    lengthCm,
-    widthCm,
-    heightCm,
-    weightKg,
-    totalWeightKg
+  const restoredPackage = restorePackageMetadata(raw, {
+    packageNo: mapping.__packageNo,
+    marks: mapping.__marks,
+    sourceSheet: mapping.__sourceSheet,
+    packageInfo: mapping.__packageInfo,
+    innerCargoJson: mapping.__innerCargoJson,
+    sourceRows: mapping.__sourceRows,
+    innerQuantity: mapping.__innerQuantity
   });
+  const packageInfo =
+    restoredPackage.packageInfo ||
+    buildPackageInfo({
+      mapping,
+      raw,
+      quantity,
+      lengthCm,
+      widthCm,
+      heightCm,
+      weightKg,
+      totalWeightKg
+    });
   if (packageInfo && isPackingListMapping(mapping)) {
     notes.push("导入口径：算法货物=外包装箱/托盘，散件数量仅保存为包装明细");
   }
@@ -1496,6 +2107,10 @@ function parseCargoRow(raw, mapping, context) {
     remark,
     packageInfo
   });
+  Object.assign(cargo, restoredPackage);
+  if (hasExplicitPackageIdentity(cargo) || restoredPackage.packageInfo) {
+    for (const error of validateCargo(cargo)) if (!errors.includes(error)) errors.push(error);
+  }
 
   return {
     rowNumber: context.rowNumber,
@@ -1507,26 +2122,81 @@ function parseCargoRow(raw, mapping, context) {
   };
 }
 
+export function serializeCargoCsv(cargos) {
+  const headers = [
+    "name",
+    "model",
+    "lengthCm",
+    "widthCm",
+    "heightCm",
+    "quantity",
+    "weightKg",
+    "type",
+    "nonStack",
+    "keepUpright",
+    "color",
+    "sku",
+    "remark",
+    "packageNo",
+    "marks",
+    "sourceSheet",
+    "sourceRows",
+    "innerQuantity",
+    "totalWeightKg",
+    "innerCargoJson",
+    "packageInfoJson"
+  ];
+  const values = cargos.map((cargo) => {
+    const packageInfo = cargo.packageInfo;
+    const normalized = {
+      ...normalizeCargoConstraints(cargo),
+      type: cargoHandlingUnitType(cargo),
+      packageNo: cargo.packageNo ?? packageInfo?.packageNo ?? "",
+      marks: cargo.marks ?? packageInfo?.marks ?? "",
+      sourceSheet: cargo.sourceSheet ?? packageInfo?.sourceSheet ?? "",
+      sourceRows: JSON.stringify(cargo.sourceRows ?? packageInfo?.sourceRows ?? []),
+      innerQuantity: packageInfo?.innerCargo?.totalQuantity ?? "",
+      totalWeightKg: Number(cargo.quantity) * Number(cargo.weightKg),
+      innerCargoJson: packageInfo?.innerCargo ? JSON.stringify(packageInfo.innerCargo) : "",
+      packageInfoJson: packageInfo ? JSON.stringify(packageInfo) : ""
+    };
+    return headers.map((header) => normalized[header] ?? "");
+  });
+  return XLSX.utils.sheet_to_csv(XLSX.utils.aoa_to_sheet([headers, ...values]), {
+    RS: "\n",
+    FS: ","
+  });
+}
+
 export function aggregateCargos(cargos) {
   const map = new Map();
   cargos.forEach((cargo) => {
-    const key = [
-      cargo.sku || cargo.name,
-      cargo.name,
-      cargo.model,
-      cargo.lengthCm,
-      cargo.widthCm,
-      cargo.heightCm,
-      cargo.weightKg,
-      cargo.type,
-      Boolean(cargo.nonStack),
-      Boolean(cargo.keepUpright),
-      cargo.color
-    ].join("|");
+    const key =
+      hasExplicitPackageIdentity(cargo) ||
+      cargo.packageInfo?.algorithmBasis === "source-package-group" ||
+      cargo.packageInfo?.sourceReconciliation != null
+        ? Symbol("physical-package")
+        : [
+            cargo.sku || cargo.name,
+            cargo.name,
+            cargo.model,
+            cargo.lengthCm,
+            cargo.widthCm,
+            cargo.heightCm,
+            cargo.weightKg,
+            cargo.type,
+            Boolean(cargo.nonStack),
+            Boolean(cargo.keepUpright),
+            cargo.color
+          ].join("|");
     const existing = map.get(key);
     if (existing) {
       existing.quantity += cargo.quantity;
-      existing.packageInfo = mergePackageInfo(existing.packageInfo, cargo.packageInfo, existing.quantity);
+      existing.packageInfo = mergePackageInfo(
+        existing.packageInfo,
+        cargo.packageInfo,
+        existing.quantity
+      );
     } else {
       map.set(key, { ...cargo });
     }
@@ -1546,10 +2216,12 @@ function mergePackageInfo(left, right, packageQuantity) {
     const total = sumNumericField(leftInner, rightInner, field);
     if (total != null) innerCargo[field] = Math.round(total);
   });
-  ["cartonTotalGrossWeightKg", "totalGrossWeightKg", "totalWeightKg", "cargoTotalWeightKg"].forEach((field) => {
-    const total = sumNumericField(leftInner, rightInner, field);
-    if (total != null) innerCargo[field] = round2(total);
-  });
+  ["cartonTotalGrossWeightKg", "totalGrossWeightKg", "totalWeightKg", "cargoTotalWeightKg"].forEach(
+    (field) => {
+      const total = sumNumericField(leftInner, rightInner, field);
+      if (total != null) innerCargo[field] = round2(total);
+    }
+  );
 
   if (Object.keys(innerCargo).length) base.innerCargo = compactObject(innerCargo);
   [
@@ -1582,8 +2254,18 @@ export function validateCargo(cargo) {
   if (!(Number(cargo.lengthCm) > 0)) errors.push("长度必须大于 0");
   if (!(Number(cargo.widthCm) > 0)) errors.push("宽度必须大于 0");
   if (!(Number(cargo.heightCm) > 0)) errors.push("高度必须大于 0");
-  if (!(Number(cargo.quantity) > 0 && Number.isInteger(Number(cargo.quantity)))) errors.push("数量必须是正整数");
+  if (!(Number(cargo.quantity) > 0 && Number.isInteger(Number(cargo.quantity))))
+    errors.push("数量必须是正整数");
   if (!(Number(cargo.weightKg) >= 0)) errors.push("单件重量必须大于等于 0");
+  if (hasExplicitPackageIdentity(cargo)) {
+    if (Number(cargo.quantity) !== 1)
+      errors.push("An identified physical package must have quantity 1.");
+    if (!(Number(cargo.weightKg) > 0))
+      errors.push("An identified package requires positive gross weight.");
+  }
+  for (const issue of cargo.packageInfo?.sourceIssues || []) {
+    errors.push(`${issue.code}: ${issue.message}`);
+  }
   return errors;
 }
 
@@ -1605,11 +2287,20 @@ function buildRowSuggestion(raw, cargo, errors, rowNumber) {
     remark: cargo.remark || ""
   };
   const notes = [];
-  if (errors.some((error) => error.includes("名称"))) notes.push("名称缺失，已用原始行文本或行号生成临时名称");
-  if (errors.some((error) => error.includes("数量"))) notes.push("数量缺失，建议先按 1 件导入，请确认");
-  if (errors.some((error) => error.includes("重量"))) notes.push("重量缺失，建议先按 0 kg 导入，请确认");
-  if (errors.some((error) => error.includes("长度") || error.includes("宽度") || error.includes("高度"))) {
-    notes.push(fallbackDimensions ? "已从整行文本中重新识别长宽高" : "尺寸仍未识别，需要手动补充长宽高");
+  if (errors.some((error) => error.includes("名称")))
+    notes.push("名称缺失，已用原始行文本或行号生成临时名称");
+  if (errors.some((error) => error.includes("数量")))
+    notes.push("数量缺失，建议先按 1 件导入，请确认");
+  if (errors.some((error) => error.includes("重量")))
+    notes.push("重量缺失，建议先按 0 kg 导入，请确认");
+  if (
+    errors.some(
+      (error) => error.includes("长度") || error.includes("宽度") || error.includes("高度")
+    )
+  ) {
+    notes.push(
+      fallbackDimensions ? "已从整行文本中重新识别长宽高" : "尺寸仍未识别，需要手动补充长宽高"
+    );
   }
   return {
     cargo: suggested,
@@ -1632,7 +2323,9 @@ function inferDimensionsFromRow(raw) {
 function inferNameFromRow(raw) {
   return Object.values(raw)
     .map(cleanCell)
-    .find((value) => value && /[\u4e00-\u9fa5a-zA-Z]/.test(value) && !/^\d+(?:\.\d+)?$/.test(value));
+    .find(
+      (value) => value && /[\u4e00-\u9fa5a-zA-Z]/.test(value) && !/^\d+(?:\.\d+)?$/.test(value)
+    );
 }
 
 function parsedCargo({
@@ -1652,19 +2345,19 @@ function parsedCargo({
   packageInfo
 }) {
   const cargo = normalizeCargoConstraints({
-      name,
-      model,
-      lengthCm: round2(lengthCm),
-      widthCm: round2(widthCm),
-      heightCm: round2(heightCm),
-      quantity,
-      weightKg: round2(weightKg || 0),
-      type,
-      nonStack,
-      keepUpright,
-      color,
-      sku,
-      remark
+    name,
+    model,
+    lengthCm: Number(lengthCm),
+    widthCm: Number(widthCm),
+    heightCm: Number(heightCm),
+    quantity,
+    weightKg: Number(weightKg ?? 0),
+    type,
+    nonStack,
+    keepUpright,
+    color,
+    sku,
+    remark
   });
   if (packageInfo) cargo.packageInfo = packageInfo;
   return cargo;
@@ -1701,11 +2394,15 @@ function quoteForRecognition(value, maxChars = 1_000) {
 
 function cleanCell(value) {
   if (value == null) return "";
-  return String(value).replace(/\uFEFF/g, "").trim();
+  return String(value)
+    .replace(/\uFEFF/g, "")
+    .trim();
 }
 
 function normalizeHeader(value) {
-  return cleanCell(value).toLowerCase().replace(/[\s_()（）\-:：/\\.【】\[\]]/g, "");
+  return cleanCell(value)
+    .toLowerCase()
+    .replace(/[\s_()（）\-:：/\\.【】[\]]/g, "");
 }
 
 function canFuzzyMatchAlias(alias) {
@@ -1738,18 +2435,18 @@ function buildPackageInfo({
   const innerTotalQuantity = numberFromCell(valueFor(raw, mapping.__sourceQuantity));
   const innerPiecesPerPackage = numberFromCell(valueFor(raw, mapping.__packingQuantity));
   const unit = packageUnitFromMapping(mapping);
-  const hasPackageSignal = isPackingListMapping(mapping)
-    || unit !== "carton"
-    || normalizeHeader(mapping.dimensionText).includes("pallet")
-    || normalizeHeader(mapping.dimensionText).includes("skid")
-    || normalizeHeader(mapping.dimensionText).includes("\u6258\u76d8")
-    || normalizeHeader(mapping.dimensionText).includes("\u6808\u677f");
+  const hasPackageSignal =
+    isPackingListMapping(mapping) ||
+    unit !== "carton" ||
+    normalizeHeader(mapping.dimensionText).includes("pallet") ||
+    normalizeHeader(mapping.dimensionText).includes("skid") ||
+    normalizeHeader(mapping.dimensionText).includes("\u6258\u76d8") ||
+    normalizeHeader(mapping.dimensionText).includes("\u6808\u677f");
   const hasInnerInfo = innerTotalQuantity > 0 || innerPiecesPerPackage > 0;
   if (!hasPackageSignal && !hasInnerInfo) return null;
 
-  const packageTotalGrossWeightKg = totalWeightKg != null
-    ? round2(totalWeightKg)
-    : round2(packageGrossWeightKg * packageQuantity);
+  const packageTotalGrossWeightKg =
+    totalWeightKg != null ? round2(totalWeightKg) : round2(packageGrossWeightKg * packageQuantity);
   return compactObject({
     algorithmBasis: "package-unit",
     packageUnit: unit,
@@ -1774,18 +2471,32 @@ function buildPackageInfo({
 function packageUnitFromMapping(mapping = {}) {
   const text = `${mapping.__packageUnit || ""} ${mapping.dimensionText || ""}`.toLowerCase();
   const normalized = normalizeHeader(text);
-  if (normalized.includes("pallet") || normalized.includes("skid") || normalized.includes("\u6258\u76d8") || normalized.includes("\u6808\u677f")) return "pallet";
-  if (normalized.includes("crate") || normalized.includes("wood") || normalized.includes("\u6728\u7bb1")) return "crate";
+  if (
+    normalized.includes("pallet") ||
+    normalized.includes("skid") ||
+    normalized.includes("\u6258\u76d8") ||
+    normalized.includes("\u6808\u677f")
+  )
+    return "pallet";
+  if (
+    normalized.includes("crate") ||
+    normalized.includes("wood") ||
+    normalized.includes("\u6728\u7bb1")
+  )
+    return "crate";
   return "carton";
 }
 
 function compactObject(object) {
-  return Object.fromEntries(Object.entries(object).filter(([, value]) => {
-    if (value == null || value === "") return false;
-    if (typeof value === "number" && !Number.isFinite(value)) return false;
-    if (value && typeof value === "object" && !Array.isArray(value)) return Object.keys(value).length > 0;
-    return true;
-  }));
+  return Object.fromEntries(
+    Object.entries(object).filter(([, value]) => {
+      if (value == null || value === "") return false;
+      if (typeof value === "number" && !Number.isFinite(value)) return false;
+      if (value && typeof value === "object" && !Array.isArray(value))
+        return Object.keys(value).length > 0;
+      return true;
+    })
+  );
 }
 
 function shouldSkipDataRow(raw, mapping, cells) {
@@ -1796,7 +2507,9 @@ function shouldSkipDataRow(raw, mapping, cells) {
 }
 
 function isSummaryText(value) {
-  return ["\u5408\u8ba1", "\u5c0f\u8ba1", "\u603b\u8ba1", "total", "subtotal"].includes(normalizeHeader(value));
+  return ["\u5408\u8ba1", "\u5c0f\u8ba1", "\u603b\u8ba1", "total", "subtotal"].includes(
+    normalizeHeader(value)
+  );
 }
 
 function uniquifyHeaders(headers) {
@@ -1917,8 +2630,35 @@ function typeAliasMatches(type, text) {
 function constraintFieldValue(value) {
   const text = cleanCell(value).toLowerCase();
   if (!text) return undefined;
-  if (["1", "true", "yes", "y", "\u662f", "\u6709", "\u9700\u8981", "\u5fc5\u9700", "\u221a", "\u2713"].includes(text)) return true;
-  if (["0", "false", "no", "n", "\u5426", "\u65e0", "\u4e0d\u9700\u8981", "\u00d7", "\u2715"].includes(text)) return false;
+  if (
+    [
+      "1",
+      "true",
+      "yes",
+      "y",
+      "\u662f",
+      "\u6709",
+      "\u9700\u8981",
+      "\u5fc5\u9700",
+      "\u221a",
+      "\u2713"
+    ].includes(text)
+  )
+    return true;
+  if (
+    [
+      "0",
+      "false",
+      "no",
+      "n",
+      "\u5426",
+      "\u65e0",
+      "\u4e0d\u9700\u8981",
+      "\u00d7",
+      "\u2715"
+    ].includes(text)
+  )
+    return false;
   return cleanCell(value);
 }
 

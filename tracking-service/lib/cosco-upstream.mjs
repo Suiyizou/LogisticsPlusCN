@@ -8,7 +8,8 @@ export function createCoscoUpstream({
   networkCoreTimeoutMs,
   proxyNetworkCoreTimeoutMs,
   networkEnrichmentTimeoutMs,
-  proxyNetworkEnrichmentTimeoutMs
+  proxyNetworkEnrichmentTimeoutMs,
+  fetchDirect = (...args) => fetch(...args)
 }) {
   function coscoCoreTimeoutMs(options = {}) {
     return options.proxyMode ? proxyNetworkCoreTimeoutMs : networkCoreTimeoutMs;
@@ -62,7 +63,7 @@ export function createCoscoUpstream({
   }
 
   async function fetchCoscoUpstream(url, requestOptions = {}, routeOptions = {}) {
-    if (!routeOptions.proxyMode) return fetch(url, requestOptions);
+    if (!routeOptions.proxyMode) return fetchDirect(url, requestOptions);
     if (!proxyClient) {
       throw new HttpError(503, "COSCO proxy channel is not configured", {
         code: "COSCO_PROXY_NOT_CONFIGURED",

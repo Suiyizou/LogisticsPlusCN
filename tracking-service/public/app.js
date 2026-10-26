@@ -1,3 +1,10 @@
+import {
+  trackingResponseMessage,
+  trackingDiagnosticMessage as presentTrackingDiagnostic,
+  isPublicTrackingRouteUnavailable
+} from "./tracking-response.mjs";
+import { localReturnPath } from "./local-return-path.mjs";
+
 const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
@@ -47,14 +54,20 @@ const overviewVisibleCount = document.querySelector("#overview-visible-count");
 const agentShipmentTableHead = document.querySelector("#agent-shipment-table-head");
 const agentShipmentsNavItem = document.querySelector("#agent-shipments-nav-item");
 const agentManagementFollowingFilter = document.querySelector("#agent-management-following-filter");
-const agentManagementCustomerFilterWrap = document.querySelector("#agent-management-customer-filter-wrap");
-const agentManagementCustomerFilterSelect = document.querySelector("#agent-management-customer-filter");
+const agentManagementCustomerFilterWrap = document.querySelector(
+  "#agent-management-customer-filter-wrap"
+);
+const agentManagementCustomerFilterSelect = document.querySelector(
+  "#agent-management-customer-filter"
+);
 const agentManagementSearchInput = document.querySelector("#agent-management-search-input");
 const agentManagementSearchClear = document.querySelector("#agent-management-search-clear");
 const agentManagementSelectAll = document.querySelector("#agent-management-select-all");
 const agentManagementSelectedCount = document.querySelector("#agent-management-selected-count");
 const agentManagementBulkUpdate = document.querySelector("#agent-management-bulk-update");
-const agentManagementBulkUpdateLabel = document.querySelector("#agent-management-bulk-update-label");
+const agentManagementBulkUpdateLabel = document.querySelector(
+  "#agent-management-bulk-update-label"
+);
 const agentManagementRefreshAll = document.querySelector("#agent-management-refresh-all");
 const agentManagementRefreshAllLabel = agentManagementRefreshAll?.querySelector("b");
 const agentManagementRefresh = document.querySelector("#agent-management-refresh");
@@ -166,16 +179,26 @@ const relatedFilesCategoryTrigger = document.querySelector("#related-files-categ
 const relatedFilesCategoryLabel = document.querySelector("#related-files-category-label");
 const relatedFilesCategoryMenu = document.querySelector("#related-files-category-menu");
 const relatedFilesCategoryOptions = Array.from(document.querySelectorAll("[data-category-value]"));
-const relatedFilesUploadVisibilityField = document.querySelector("#related-files-upload-visibility-field");
+const relatedFilesUploadVisibilityField = document.querySelector(
+  "#related-files-upload-visibility-field"
+);
 const relatedFilesUploadVisibility = document.querySelector("#related-files-upload-visibility");
-const relatedFilesUploadVisibilitySummary = document.querySelector("#related-files-upload-visibility-summary");
-const relatedFilesUploadVisibilityHint = document.querySelector("#related-files-upload-visibility-hint");
+const relatedFilesUploadVisibilitySummary = document.querySelector(
+  "#related-files-upload-visibility-summary"
+);
+const relatedFilesUploadVisibilityHint = document.querySelector(
+  "#related-files-upload-visibility-hint"
+);
 const relatedFilesUploadRoleInputs = Array.from(
   document.querySelectorAll("[data-related-files-upload-role]")
 );
-const relatedFilesTargetCustomerField = document.querySelector("#related-files-target-customer-field");
+const relatedFilesTargetCustomerField = document.querySelector(
+  "#related-files-target-customer-field"
+);
 const relatedFilesTargetCustomer = document.querySelector("#related-files-target-customer");
-const relatedFilesTargetCustomerHint = document.querySelector("#related-files-target-customer-hint");
+const relatedFilesTargetCustomerHint = document.querySelector(
+  "#related-files-target-customer-hint"
+);
 const relatedFilesUploadInput = document.querySelector("#related-files-upload-input");
 const relatedFilesSelectButton = document.querySelector("#related-files-select-button");
 const relatedFilesUploadButton = document.querySelector("#related-files-upload-button");
@@ -212,10 +235,7 @@ const BATCH_STORAGE_KEY = "shipment-track:batch-import:v2";
 const BATCH_VERSION = 2;
 const BATCH_IMPORT_LIMIT = 50;
 const BATCH_FILE_SIZE_LIMIT = 2 * 1024 * 1024;
-const BATCH_REQUEST_INTERVAL_MS = 10_000;
-const BATCH_RETRY_BASE_MS = 2_200;
-const BATCH_RETRY_LIMIT = 2;
-const BATCH_RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+
 const BATCH_TASK_POLL_INTERVAL_MS = 1_500;
 const PLATFORM_AUTH_TOKEN_KEY = "cargo-planner-auth-token";
 const PLATFORM_AUTH_USER_KEY = "cargo-planner-auth-user";
@@ -236,11 +256,7 @@ function requireAuthorizedResponse(response) {
 }
 const BUSINESS_REFERENCE_PREFIX = "shipment-track:business-references:";
 const DOCUMENT_METADATA_PREFIX = "shipment-track:documents:";
-const FILE_VISIBILITY_ROLES = Object.freeze([
-  "OVERSEA_AGENT",
-  "SHIPPER",
-  "CONSIGNEE"
-]);
+const FILE_VISIBILITY_ROLES = Object.freeze(["OVERSEA_AGENT", "SHIPPER", "CONSIGNEE"]);
 
 const DOCUMENT_TYPES = Object.freeze([
   {
@@ -355,14 +371,16 @@ const MESSAGES = {
     "nav.profile": "Personal information",
     "profile.kicker": "CUSTOMER PROFILE",
     "profile.title": "Personal information",
-    "profile.description": "Review the identity and shipment access assigned by your service representative.",
+    "profile.description":
+      "Review the identity and shipment access assigned by your service representative.",
     "profile.account": "CUSTOMER ACCOUNT",
     "profile.active": "Active",
     "profile.username": "Login account",
     "profile.code": "Customer code",
     "profile.verified": "Verified",
     "profile.role": "Freight identity",
-    "profile.help": "To change account information or reset credentials, contact your service representative.",
+    "profile.help":
+      "To change account information or reset credentials, contact your service representative.",
     "nav.carriers": "Carrier adapters",
     "carrier.connected": "Connected · 2 channels",
     "carrier.planned": "Adapter reserved",
@@ -373,11 +391,13 @@ const MESSAGES = {
     "breadcrumb.workspace": "Workspace",
     "overview.kicker": "SHIPMENT DASHBOARD",
     "overview.title": "Your shipments, moving in plain sight.",
-    "overview.description": "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
+    "overview.description":
+      "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
     "overview.agentTitle": "Your customer shipments, moving in plain sight.",
-    "overview.agentDescription": "Review every authorized shipment in one overview, then filter by customer code before updating that customer's tracking.",
+    "overview.agentDescription":
+      "Review every authorized shipment in one overview, then filter by customer code before updating that customer's tracking.",
     "overview.agentStartTracking": "Choose a customer code",
     "overview.savedSearches": "Saved searches",
     "overview.carriersUsed": "Carriers used",
@@ -386,7 +406,8 @@ const MESSAGES = {
     "overview.noRecords": "No records",
     "workbench.kicker": "QUERY WORKBENCH",
     "workbench.title": "Channel health",
-    "workbench.description": "COSCO uses the network API first and switches to the browser DOM automatically when needed.",
+    "workbench.description":
+      "COSCO uses the network API first and switches to the browser DOM automatically when needed.",
     "workbench.policy": "API FIRST · DOM FALLBACK",
     "workbench.check": "Check both channels",
     "workbench.checking": "Checking both channels…",
@@ -397,20 +418,23 @@ const MESSAGES = {
     "workbench.notChecked": "Not checked",
     "workbench.available": "Available",
     "workbench.unavailable": "Unavailable",
-    "workbench.helper": "The check uses the current shipment number; it does not add a tracking record.",
+    "workbench.helper":
+      "The check uses the current shipment number; it does not add a tracking record.",
     "workbench.checkedAt": "Both channels checked at {time}",
     "workbench.checkFailed": "Channel check failed: {message}",
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
     "history.subtitle": "Latest shipment snapshots stored in the database",
     "history.agentTitle": "My shipments",
-    "history.agentSubtitle": "Authorized shipments across linked customers; filter by customer code to update tracking",
+    "history.agentSubtitle":
+      "Authorized shipments across linked customers; filter by customer code to update tracking",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
     "history.loadingDescription": "Loading the latest records from the database…",
     "history.loadFailedTitle": "Shipment list could not be loaded",
-    "history.loadFailedDescription": "The server could not return your shipments. Please retry shortly.",
+    "history.loadFailedDescription":
+      "The server could not return your shipments. Please retry shortly.",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.accountEmptyTitle": "No shipments are bound to this account yet",
@@ -424,7 +448,8 @@ const MESSAGES = {
     "history.pageSize": "Per page",
     "history.pageInfo": "Page {page} of {pages} · {total} shipments",
     "history.searchEmptyTitle": "No matching shipments",
-    "history.searchEmptyDescription": "Try another shipment number, job number, client, port or status.",
+    "history.searchEmptyDescription":
+      "Try another shipment number, job number, client, port or status.",
     "history.customerFilter": "Customer filter",
     "history.customerFilterLabel": "Filter shipments by customer",
     "history.currentCustomer": "Current customer",
@@ -442,7 +467,8 @@ const MESSAGES = {
     "agent.followFailed": "Follow-up selection could not be saved: {message}",
     "agent.lastAgentUpdate": "Agent update {time}",
     "agent.emptyTitle": "No shipments have been assigned",
-    "agent.emptyDescription": "Authorized shipments for the current service customer will appear here.",
+    "agent.emptyDescription":
+      "Authorized shipments for the current service customer will appear here.",
     "agent.columnIndex": "No.",
     "agent.columnReference": "Shipment No.",
     "agent.columnBusinessReference": "Business No.",
@@ -458,7 +484,8 @@ const MESSAGES = {
     "agent.noCustomer": "Service customer unavailable",
     "agent.managementKicker": "SHIPMENT MANAGEMENT",
     "agent.managementTitle": "Assigned tracked shipments",
-    "agent.managementDescription": "Review and manually refresh the shipments assigned to linked customers.",
+    "agent.managementDescription":
+      "Review and manually refresh the shipments assigned to linked customers.",
     "agent.managementEmptyTitle": "No assigned shipments",
     "agent.managementEmptyDescription": "Authorized customer shipments will appear here.",
     "agent.columnSelectIndex": "Select / No.",
@@ -537,7 +564,8 @@ const MESSAGES = {
     "welcome.greeting": "Welcome",
     "welcome.subtitle": ", welcome to the tracking platform.",
     "files.trigger": "Shipment files",
-    "files.unavailable": "Shipment files will be available after this shipment is saved by the platform.",
+    "files.unavailable":
+      "Shipment files will be available after this shipment is saved by the platform.",
     "files.kicker": "SHIPMENT DOCUMENTS",
     "files.title": "Shipment files",
     "files.close": "Close shipment files",
@@ -547,9 +575,12 @@ const MESSAGES = {
     "files.customerSession": "Customer access",
     "files.customerLogout": "Sign out",
     "files.customerLoginAction": "Sign in with user code",
-    "files.customerSignedOut": "Customer session ended. Public shipment tracking remains available.",
-    "files.customerLoginExpired": "Your customer session has expired. Sign in again with your user code to access assigned files.",
-    "files.customerNotAssigned": "This shipment is not assigned to your customer account. Ask your service representative to link the booking number.",
+    "files.customerSignedOut":
+      "Customer session ended. Public shipment tracking remains available.",
+    "files.customerLoginExpired":
+      "Your customer session has expired. Sign in again with your user code to access assigned files.",
+    "files.customerNotAssigned":
+      "This shipment is not assigned to your customer account. Ask your service representative to link the booking number.",
     "files.forbidden": "Your account does not have access to the files for this shipment.",
     "files.logisticsRoleAgent": "Freight agent",
     "files.logisticsRoleShipper": "Shipper",
@@ -558,7 +589,8 @@ const MESSAGES = {
     "files.errorTitle": "Files could not be loaded",
     "files.retry": "Try again",
     "files.emptyTitle": "No related files yet",
-    "files.emptyDescription": "Upload cargo details, invoices or shipping documents for this shipment.",
+    "files.emptyDescription":
+      "Upload cargo details, invoices or shipping documents for this shipment.",
     "files.uploadTitle": "Add files",
     "files.uploadDescription": "Files are linked to this shipment record.",
     "files.category": "Category",
@@ -577,7 +609,8 @@ const MESSAGES = {
     "files.targetCustomer": "Share with customer",
     "files.targetPlaceholder": "Select a customer",
     "files.targetRequired": "Select a specific customer before uploading a shared file.",
-    "files.targetUnavailable": "No customer is available for sharing. Assign a customer first or keep this file internal.",
+    "files.targetUnavailable":
+      "No customer is available for sharing. Assign a customer first or keep this file internal.",
     "files.targetRequiredForFile": "Choose a customer to finish sharing this file.",
     "files.sharedWith": "Shared with {name}",
     "files.sharedWithSelf": "Shared with your account",
@@ -590,7 +623,8 @@ const MESSAGES = {
     "files.noSelection": "No files selected.",
     "files.selection": "{count} file(s) selected · {size}",
     "files.uploadFailed": "Upload failed: {message}",
-    "files.serverError": "The server could not save the file. Please try again or contact the administrator.",
+    "files.serverError":
+      "The server could not save the file. Please try again or contact the administrator.",
     "files.download": "Download",
     "files.downloading": "Downloading…",
     "files.downloadFailed": "Download failed: {message}",
@@ -605,10 +639,13 @@ const MESSAGES = {
     "files.previewing": "Loading…",
     "files.previewTitle": "File preview",
     "files.previewFailed": "Preview failed: {message}",
-    "files.previewNotSupported": "Preview is not supported for this file type. Please download the file to view it.",
-    "files.previewDownloadTip": "If the preview is incomplete, please download the file to view the original content.",
+    "files.previewNotSupported":
+      "Preview is not supported for this file type. Please download the file to view it.",
+    "files.previewDownloadTip":
+      "If the preview is incomplete, please download the file to view the original content.",
     "files.previewTextFallback": "Showing extracted text content for {name}.",
-    "files.previewTooLarge": "This file is too large for an in-browser text preview. Download it to view the original.",
+    "files.previewTooLarge":
+      "This file is too large for an in-browser text preview. Download it to view the original.",
     "files.commentsTitle": "File messages",
     "files.commentsDescription": "Messages shared with people who can access this shipment.",
     "files.commentsLoading": "Loading messages…",
@@ -643,8 +680,10 @@ const MESSAGES = {
     "batch.subtitle": "Import an Excel or CSV list and process it as a background task",
     "batch.localBadge": "Background task",
     "batch.selectFile": "Select Excel / CSV",
-    "batch.columns": "Uses the Booking column as the shipment identity. M/B/L No., Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are supplementary information.",
-    "batch.localNotice": "After it starts, the task continues in the background. Use Terminate task below to stop pending queries.",
+    "batch.columns":
+      "Uses the Booking column as the shipment identity. M/B/L No., Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are supplementary information.",
+    "batch.localNotice":
+      "After it starts, the task continues in the background. Use Terminate task below to stop pending queries.",
     "batch.resume": "Continue pending queries",
     "batch.stop": "Terminate task",
     "batch.stopping": "Stopping the current batch query…",
@@ -662,28 +701,34 @@ const MESSAGES = {
     "batch.pending": "Pending",
     "batch.parsing": "Reading {name}…",
     "batch.unsupportedFile": "Choose an .xlsx, .xls, or .csv file no larger than 2 MB.",
-    "batch.noRecognizedColumns": "No booking-number column was found. Use Booking / Booking Ref / Booking No.",
+    "batch.noRecognizedColumns":
+      "No booking-number column was found. Use Booking / Booking Ref / Booking No.",
     "batch.noRows": "No valid shipment numbers were found in the recognized columns.",
     "batch.workerUnsupported": "This browser cannot process spreadsheets in a background worker.",
     "batch.workerFailed": "The background spreadsheet parser stopped unexpectedly.",
     "batch.parseTimeout": "Spreadsheet parsing took too long. Try a smaller file.",
     "batch.previewTitle": "Confirm the tracking column",
-    "batch.previewDescription": "Review the spreadsheet and choose the one column that contains the shipment numbers.",
+    "batch.previewDescription":
+      "Review the spreadsheet and choose the one column that contains the shipment numbers.",
     "batch.previewSheet": "Worksheet",
     "batch.previewColumn": "Track column",
     "batch.previewType": "Number type",
     "batch.previewRecommended": "Recommended",
-    "batch.previewRows": "The first rows are shown only for confirmation; your selected column is the final source.",
+    "batch.previewRows":
+      "The first rows are shown only for confirmation; your selected column is the final source.",
     "batch.previewConfirm": "Use this column and start",
     "batch.previewRequired": "Choose a worksheet and tracking column before starting.",
-    "batch.limit": "Found {found} unique rows. The first {limit} were imported to keep this browser responsive.",
+    "batch.limit":
+      "Found {found} unique rows. The first {limit} were imported to keep this browser responsive.",
     "batch.ready": "{count} unique shipment numbers imported.",
     "batch.running": "Querying {current} of {total}: {number}",
-    "batch.completed": "Batch complete: {success} tracked, {manual} saved for manual entry and {failed} failed.",
+    "batch.completed":
+      "Batch complete: {success} tracked, {manual} saved for manual entry and {failed} failed.",
     "batch.restored": "The locally saved queue is ready to continue.",
     "batch.importFailed": "The spreadsheet could not be read: {message}",
     "batch.backgroundFailed": "The background task could not be refreshed: {message}",
-    "batch.requiresBusiness": "Sign in as a business operator or administrator to start a batch task.",
+    "batch.requiresBusiness":
+      "Sign in as a business operator or administrator to start a batch task.",
     "batch.itemPending": "Pending",
     "batch.itemRunning": "Querying",
     "batch.itemSuccess": "Succeeded",
@@ -704,23 +749,31 @@ const MESSAGES = {
     "batch.listAria": "Imported shipment queue",
     "batch.openItem": "Open saved details for {type} {number}",
     "batch.detailUnavailable": "This task does not have a saved shipment result yet.",
-    "batch.confirmClear": "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
-    "query.helper": "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
-    "query.cmaHelper": "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
+    "batch.confirmClear":
+      "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
+    "query.helper":
+      "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
+    "query.cmaHelper":
+      "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
     "cmaSession.kicker": "CMA ACCESS SESSION",
     "cmaSession.title": "DataDome session",
-    "cmaSession.description": "Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned; a successful query is still required to verify it.",
-    "cmaSession.permission": "Only signed-in business users or administrators can maintain this session.",
+    "cmaSession.description":
+      "Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned; a successful query is still required to verify it.",
+    "cmaSession.permission":
+      "Only signed-in business users or administrators can maintain this session.",
     "cmaSession.cookie": "DataDome value or Cookie header",
-    "cmaSession.cookieHelp": "Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.",
+    "cmaSession.cookieHelp":
+      "Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.",
     "cmaSession.userAgent": "Browser User-Agent",
-    "cmaSession.userAgentHelp": "Filled from this browser because DataDome may bind the session to it.",
+    "cmaSession.userAgentHelp":
+      "Filled from this browser because DataDome may bind the session to it.",
     "cmaSession.save": "Save encrypted session",
     "cmaSession.clear": "Clear session",
     "cmaSession.checking": "Checking…",
     "cmaSession.configured": "Saved · verify with a query · {time}",
     "cmaSession.notConfigured": "Not configured",
-    "cmaSession.saved": "The CMA session was encrypted and saved. Run a CMA query to verify that the server can use it.",
+    "cmaSession.saved":
+      "The CMA session was encrypted and saved. Run a CMA query to verify that the server can use it.",
     "cmaSession.cleared": "The CMA session was cleared.",
     "cmaSession.required": "Enter a DataDome value or CMA Cookie header.",
     "cmaSession.loadFailed": "Could not read the CMA session status: {message}",
@@ -739,7 +792,8 @@ const MESSAGES = {
     "type.container": "Container number",
     "error.title": "Tracking request failed",
     "error.generic": "Tracking failed. Please try again.",
-    "error.customerFriendly": "Tracking failed. Please try again later or contact customer service.",
+    "error.customerFriendly":
+      "Tracking failed. Please try again later or contact customer service.",
     "error.http": "Tracking failed (HTTP {status})",
     "notice.cacheTitle": "Live refresh unavailable",
     "empty.title": "Ready when you are",
@@ -823,15 +877,19 @@ const MESSAGES = {
     "containers.noMilestones": "No container-specific milestones were returned.",
     "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
-    "supplemental.loading": "Loading transport details and booking references. This may take about 20 seconds…",
-    "supplemental.stale": "The main route is current. Container and booking details are from {time} and are awaiting refresh.",
+    "supplemental.loading":
+      "Loading transport details and booking references. This may take about 20 seconds…",
+    "supplemental.stale":
+      "The main route is current. Container and booking details are from {time} and are awaiting refresh.",
     "supplemental.complete": "Transport details and booking references are up to date.",
-    "supplemental.partial": "Available transport details were loaded; some carrier fields are temporarily unavailable.",
+    "supplemental.partial":
+      "Available transport details were loaded; some carrier fields are temporarily unavailable.",
     "supplemental.failed": "Transport details could not be loaded. Reopen the shipment to retry.",
     "documents.kicker": "SHIPMENT FILES",
     "documents.title": "Document details",
     "documents.open": "Documents",
-    "documents.intro": "One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.",
+    "documents.intro":
+      "One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.",
     "documents.uploadedTitle": "Uploaded shipment files",
     "documents.uploadedCount": "{count} files uploaded",
     "documents.file": "File",
@@ -868,7 +926,8 @@ const MESSAGES = {
     "documents.visibility.CONSIGNEE": "Consignee",
     "documents.visibility.OVERSEA_AGENT": "Overseas agent",
     "raw.title": "Decoded source payload",
-    "raw.cacheNotice": "The database stores the unified snapshot only, not the carrier's raw payload.",
+    "raw.cacheNotice":
+      "The database stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
     "common.cancel": "Cancel",
     "common.save": "Save",
@@ -929,7 +988,8 @@ const MESSAGES = {
     "overview.startTracking": "查询一票货物",
     "overview.agentKicker": "海外代理业务台",
     "overview.agentTitle": "客户票单动态，一页尽览。",
-    "overview.agentDescription": "统一查看名下全部授权票单；需要更新时，先按客户码筛选，再更新该客户的运输进度。",
+    "overview.agentDescription":
+      "统一查看名下全部授权票单；需要更新时，先按客户码筛选，再更新该客户的运输进度。",
     "overview.agentStartTracking": "选择客户码",
     "overview.savedSearches": "已保存查询",
     "overview.carriersUsed": "已使用船司",
@@ -1081,7 +1141,8 @@ const MESSAGES = {
     "announcement.todayOnly": "\u4ec5\u5c55\u793a\u5f53\u65e5\u6709\u6548\u516c\u544a\u3002",
     "announcement.acknowledge": "\u6211\u77e5\u9053\u4e86",
     "announcement.emptyTitle": "\u4eca\u65e5\u6682\u65e0\u65b0\u516c\u544a",
-    "announcement.emptyHint": "\u5df2\u53d1\u5e03\u7684\u7cfb\u7edf\u6d88\u606f\u4f1a\u51fa\u73b0\u5728\u8fd9\u91cc\u3002",
+    "announcement.emptyHint":
+      "\u5df2\u53d1\u5e03\u7684\u7cfb\u7edf\u6d88\u606f\u4f1a\u51fa\u73b0\u5728\u8fd9\u91cc\u3002",
     "announcement.customer": "\u5ba2\u6237\u53ef\u89c1",
     "announcement.employee": "\u5458\u5de5\u53ef\u89c1",
     "announcement.all": "\u5168\u5458\u53ef\u89c1",
@@ -1195,7 +1256,8 @@ const MESSAGES = {
     "batch.subtitle": "导入 Excel 或 CSV 清单后，以后台任务逐票处理",
     "batch.localBadge": "后台任务",
     "batch.selectFile": "选择 Excel / CSV",
-    "batch.columns": "统一使用订舱号列作为票单标识；M/B/L NO.、提单号、Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code 仅作为附属信息导入。",
+    "batch.columns":
+      "统一使用订舱号列作为票单标识；M/B/L NO.、提单号、Job Number、Vessel/Voy、POL、POD、PO No.、ETD、ETA、Volume 和 Client Code 仅作为附属信息导入。",
     "batch.localNotice": "任务开始后在后台运行；如需停止后续查询，请点击下方“终止任务”。",
     "batch.resume": "继续查询待处理项目",
     "batch.stop": "终止任务",
@@ -1214,7 +1276,8 @@ const MESSAGES = {
     "batch.pending": "待处理",
     "batch.parsing": "正在读取 {name}…",
     "batch.unsupportedFile": "请选择不超过 2 MB 的 .xlsx、.xls 或 .csv 文件。",
-    "batch.noRecognizedColumns": "没有找到订舱号列，请使用 Booking / Booking Ref / Booking No. / 订舱号。",
+    "batch.noRecognizedColumns":
+      "没有找到订舱号列，请使用 Booking / Booking Ref / Booking No. / 订舱号。",
     "batch.noRows": "识别到的列中没有有效运输单号。",
     "batch.workerUnsupported": "当前浏览器无法在后台线程中处理表格。",
     "batch.workerFailed": "后台表格解析器意外停止。",
@@ -1231,7 +1294,8 @@ const MESSAGES = {
     "batch.limit": "共识别 {found} 条唯一记录。为保持页面流畅，本次导入前 {limit} 条。",
     "batch.ready": "已导入 {count} 条唯一运输单号。",
     "batch.running": "正在查询第 {current}/{total} 条：{number}",
-    "batch.completed": "批量任务完成：查询成功 {success} 条，已收录待手工补录 {manual} 条，失败 {failed} 条。",
+    "batch.completed":
+      "批量任务完成：查询成功 {success} 条，已收录待手工补录 {manual} 条，失败 {failed} 条。",
     "batch.restored": "本设备保存的队列已恢复，可以继续处理。",
     "batch.importFailed": "无法读取表格：{message}",
     "batch.backgroundFailed": "无法刷新后台任务状态：{message}",
@@ -1261,10 +1325,12 @@ const MESSAGES = {
     "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
     "cmaSession.kicker": "CMA 访问会话",
     "cmaSession.title": "DataDome 会话",
-    "cmaSession.description": "业务员和管理员可在这里维护 CMA 浏览器会话。该值由后端加密保存且不会回传；仍需成功查询一次才能确认可用。",
+    "cmaSession.description":
+      "业务员和管理员可在这里维护 CMA 浏览器会话。该值由后端加密保存且不会回传；仍需成功查询一次才能确认可用。",
     "cmaSession.permission": "只有已登录的业务员或管理员可以维护此会话。",
     "cmaSession.cookie": "DataDome 值或 Cookie 请求头",
-    "cmaSession.cookieHelp": "可只粘贴 datadome 的值，也可粘贴 CMA 请求的完整 Cookie 头；保存后不会再次显示。",
+    "cmaSession.cookieHelp":
+      "可只粘贴 datadome 的值，也可粘贴 CMA 请求的完整 Cookie 头；保存后不会再次显示。",
     "cmaSession.userAgent": "浏览器 User-Agent",
     "cmaSession.userAgentHelp": "自动取当前浏览器值，因为 DataDome 可能会绑定浏览器指纹。",
     "cmaSession.save": "加密保存会话",
@@ -1459,7 +1525,8 @@ Object.assign(MESSAGES.en, {
   "history.unfinishedOnly": "Unfinished business only",
   "history.allBusiness": "Show all business",
   "history.unfinishedEmptyTitle": "No unfinished shipments",
-  "history.unfinishedEmptyDescription": "All shipments in this account are complete. Switch to Show all business to review history.",
+  "history.unfinishedEmptyDescription":
+    "All shipments in this account are complete. Switch to Show all business to review history.",
   "diagnostic.RATE_LIMITED": "Carrier rate limit / risk control",
   "diagnostic.UPSTREAM_EMPTY": "Carrier returned no operational data",
   "diagnostic.INVALID_REFERENCE": "Invalid number or reference type",
@@ -1480,7 +1547,8 @@ Object.assign(MESSAGES.zh, {
   "history.unfinishedOnly": "仅展示未结束业务",
   "history.allBusiness": "展示全部业务",
   "history.unfinishedEmptyTitle": "暂无未结束业务",
-  "history.unfinishedEmptyDescription": "当前账号的业务均已结束，可切换“展示全部业务”查看历史票单。",
+  "history.unfinishedEmptyDescription":
+    "当前账号的业务均已结束，可切换“展示全部业务”查看历史票单。",
   "diagnostic.RATE_LIMITED": "船司限流 / 风控拦截",
   "diagnostic.UPSTREAM_EMPTY": "船司返回空数据或暂无有效运输节点",
   "diagnostic.INVALID_REFERENCE": "单号格式或号型错误",
@@ -1590,7 +1658,6 @@ let batchRunPromise = null;
 let batchImportNotice = null;
 let pendingBatchFile = null;
 let batchPreviewSheets = [];
-let lastBatchRequestAt = 0;
 let historySearchTerm = "";
 let historyCustomerFilter = "";
 let historyBusinessScope = "unfinished";
@@ -1603,7 +1670,7 @@ let historyTotal = 0;
 let historyTotalPages = 0;
 let historyAllTotal = 0;
 let historyUnfinishedTotal = 0;
-let historyScopeCustomer = null;
+
 let historyAvailableCustomers = [];
 let agentShipmentDetailOpen = false;
 const agentManagementSelectedKeys = new Set();
@@ -1635,7 +1702,7 @@ let relatedFilesCloseTimer = null;
 let relatedFilesCategoryOpen = false;
 let trackingAccountMenuOpen = false;
 let systemAnnouncements = [];
-let systemAnnouncementsLoading = false;
+
 let systemAnnouncementLoadPromise = null;
 let systemAnnouncementLoadingFingerprint = "";
 let systemAnnouncementAutoOpenRequested = false;
@@ -1658,7 +1725,6 @@ function resetHistoryPagination() {
   historyTotalPages = 0;
   historyAllTotal = 0;
   historyUnfinishedTotal = 0;
-  historyScopeCustomer = null;
 }
 
 function t(key, variables = {}) {
@@ -1716,9 +1782,7 @@ function readCustomerSession() {
   let storedSession = null;
   try {
     token = localStorage.getItem(CUSTOMER_AUTH_TOKEN_KEY) || "";
-    storedSession = JSON.parse(
-      localStorage.getItem(CUSTOMER_AUTH_SESSION_KEY) || "null"
-    );
+    storedSession = JSON.parse(localStorage.getItem(CUSTOMER_AUTH_SESSION_KEY) || "null");
   } catch {
     token = "";
     storedSession = null;
@@ -1726,10 +1790,7 @@ function readCustomerSession() {
   if (customerPrincipalAwaitingRefresh) storedSession = null;
 
   const customer =
-    storedSession?.customer ??
-    storedSession?.principal ??
-    storedSession?.user ??
-    storedSession;
+    storedSession?.customer ?? storedSession?.principal ?? storedSession?.user ?? storedSession;
   return { token, customer, storedSession };
 }
 
@@ -1790,79 +1851,22 @@ function fileSessionFingerprint(session = readFileSession()) {
   return `${session?.kind ?? "ANONYMOUS"}:${hashSessionIdentity(identity)}`;
 }
 
-function trackingResponseMessage(payload, response) {
-  const directMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
-  const nestedMessage =
-    typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
-  const stringError = typeof payload?.error === "string" ? payload.error.trim() : "";
-  return (
-    directMessage ||
-    nestedMessage ||
-    stringError ||
-    `${response?.status ?? ""} ${response?.statusText || "Request failed"}`.trim()
-  );
-}
-
 function trackingDiagnosticMessage(payload, response) {
-  const technical = trackingResponseMessage(payload, response)
-    || t("error.http", { status: response?.status ?? "-" });
-  if (!canManageFileVisibility(readFileSession())) return customerFacingTrackingError();
-  const code = String(payload?.code || "").trim();
-  const known = ["RATE_LIMITED", "UPSTREAM_EMPTY", "INVALID_REFERENCE", "ADAPTER_FAILURE"];
-  const normalized = known.includes(code)
-    ? code
-    : response?.status === 429 || response?.status === 403
-      ? "RATE_LIMITED"
-      : response?.status === 400
-        ? "INVALID_REFERENCE"
-        : response?.status >= 500
-          ? "ADAPTER_FAILURE"
-          : "UPSTREAM_EMPTY";
-  return `${t(`diagnostic.${normalized}`)}: ${technical}`;
+  return presentTrackingDiagnostic(payload, response, {
+    t,
+    canViewDiagnostics: canManageFileVisibility(readFileSession())
+  });
 }
 
 function customerFacingTrackingError() {
   return t("error.customerFriendly");
 }
 
-function isPublicTrackingRouteUnavailable(result) {
-  const { response, payload } = result ?? {};
-  if (response?.status === 405) return true;
-  if (response?.status !== 404) return false;
-
-  const headerMarker = response?.headers?.get?.("X-Route-Not-Found");
-  if (String(headerMarker ?? "").toLowerCase() === "true") return true;
-  if (payload?.routeNotFound === true || payload?.endpointNotFound === true) return true;
-
-  const code = String(
-    payload?.code ?? payload?.errorCode ?? payload?.error?.code ?? ""
-  ).trim().toUpperCase();
-  if (["ROUTE_NOT_FOUND", "ENDPOINT_NOT_FOUND", "NO_HANDLER"].includes(code)) return true;
-
-  const path = String(payload?.path ?? payload?.instance ?? "")
-    .split("?", 1)[0]
-    .replace(/\/+$/, "");
-  const targetsPublicRoute = path === "/api/public/shipments/track";
-  const message = trackingResponseMessage(payload, { status: 404, statusText: "" });
-  const routeMarker =
-    /(?:no\s+(?:static\s+resource|handler|route|endpoint)|route\s+not\s+found|endpoint\s+not\s+found|cannot\s+post)/i;
-  const messageNamesPublicRoute = message.includes("/api/public/shipments/track");
-  if (routeMarker.test(message) && (targetsPublicRoute || messageNamesPublicRoute)) return true;
-
-  const hasSpecificMessage =
-    (typeof payload?.message === "string" && payload.message.trim()) ||
-    (typeof payload?.error?.message === "string" && payload.error.message.trim());
-  const genericError = typeof payload?.error === "string" ? payload.error.trim() : "";
-  return (
-    targetsPublicRoute &&
-    !hasSpecificMessage &&
-    /^not found$/i.test(genericError)
-  );
-}
-
 function isRestorableBatchNumber(value) {
   return /^(?=.{4,64}$)[A-Z0-9](?:[A-Z0-9./-]*[A-Z0-9])$/.test(
-    String(value ?? "").trim().toUpperCase()
+    String(value ?? "")
+      .trim()
+      .toUpperCase()
   );
 }
 /* TRACKING_CONTRACT_HELPERS_END */
@@ -1932,10 +1936,7 @@ function isCurrentRelatedFilesSession(fingerprint) {
 
 function clearPlatformSession(expectedToken = null) {
   try {
-    if (
-      expectedToken !== null &&
-      localStorage.getItem(PLATFORM_AUTH_TOKEN_KEY) !== expectedToken
-    ) {
+    if (expectedToken !== null && localStorage.getItem(PLATFORM_AUTH_TOKEN_KEY) !== expectedToken) {
       return false;
     }
     localStorage.removeItem(PLATFORM_AUTH_TOKEN_KEY);
@@ -1949,10 +1950,7 @@ function clearPlatformSession(expectedToken = null) {
 
 function clearCustomerSession(expectedToken = null) {
   try {
-    if (
-      expectedToken !== null &&
-      localStorage.getItem(CUSTOMER_AUTH_TOKEN_KEY) !== expectedToken
-    ) {
+    if (expectedToken !== null && localStorage.getItem(CUSTOMER_AUTH_TOKEN_KEY) !== expectedToken) {
       return false;
     }
     localStorage.removeItem(CUSTOMER_AUTH_TOKEN_KEY);
@@ -1980,18 +1978,6 @@ function clearFileSession(session = readFileSession(), { expired = false } = {})
   });
   renderRelatedFilesDrawer();
   return true;
-}
-
-function platformAuthHeaders() {
-  const { token } = readPlatformSession();
-  return token ? { "X-Auth-Token": token } : {};
-}
-
-function trackingAuthHeaders() {
-  const session = readFileSession();
-  if (session.kind === "CUSTOMER") return { "X-Customer-Token": session.token };
-  if (session.kind === "INTERNAL") return { "X-Auth-Token": session.token };
-  return {};
 }
 
 function fileAuthHeaders(session = readFileSession()) {
@@ -2052,7 +2038,8 @@ function announcementSafeUrl(value, { image = false } = {}) {
       /\/(?:tracking\/)?api\/public\/announcement-images\/([a-f0-9]{32}\.(?:jpe?g|png|gif))$/i
     );
     if (image && storedImage) {
-      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin).href;
+      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin)
+        .href;
     }
     if (["https:", "http:"].includes(resolved.protocol)) return resolved.href;
     if (
@@ -2081,9 +2068,7 @@ function announcementInlineMarkdown(value) {
   let output = announcementEscapeHtml(value);
   output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => {
     const safe = announcementSafeUrl(url, { image: true });
-    return safe
-      ? `<img src="${announcementEscapeHtml(safe)}" alt="${alt}" loading="lazy">`
-      : "";
+    return safe ? `<img src="${announcementEscapeHtml(safe)}" alt="${alt}" loading="lazy">` : "";
   });
   output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
     const safe = announcementSafeUrl(url);
@@ -2098,13 +2083,17 @@ function announcementInlineMarkdown(value) {
 }
 
 function announcementMarkdown(markdown) {
-  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = String(markdown || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
   const blocks = [];
   let list = [];
   let listType = "";
   const flushList = () => {
     if (!list.length) return;
-    blocks.push(`<${listType}>${list.map((item) => `<li>${announcementInlineMarkdown(item)}</li>`).join("")}</${listType}>`);
+    blocks.push(
+      `<${listType}>${list.map((item) => `<li>${announcementInlineMarkdown(item)}</li>`).join("")}</${listType}>`
+    );
     list = [];
     listType = "";
   };
@@ -2126,7 +2115,9 @@ function announcementMarkdown(markdown) {
       const level = Math.min(5, heading[1].length + 2);
       blocks.push(`<h${level}>${announcementInlineMarkdown(heading[2])}</h${level}>`);
     } else if (/^>\s?/.test(line)) {
-      blocks.push(`<blockquote>${announcementInlineMarkdown(line.replace(/^>\s?/, ""))}</blockquote>`);
+      blocks.push(
+        `<blockquote>${announcementInlineMarkdown(line.replace(/^>\s?/, ""))}</blockquote>`
+      );
     } else {
       blocks.push(`<p>${announcementInlineMarkdown(line)}</p>`);
     }
@@ -2196,7 +2187,8 @@ function renderSystemAnnouncements() {
 
     const content = document.createElement("div");
     content.className = "system-announcement-markdown";
-    content.innerHTML = announcementMarkdown(item.contentMarkdown) || `<p>${t("announcement.emptyHint")}</p>`;
+    content.innerHTML =
+      announcementMarkdown(item.contentMarkdown) || `<p>${t("announcement.emptyHint")}</p>`;
     card.append(content);
     systemAnnouncementBody.append(card);
   }
@@ -2257,7 +2249,7 @@ async function loadSystemAnnouncements({ autoOpen = false, force = false } = {})
 
   systemAnnouncementAutoOpenRequested = autoOpen;
   systemAnnouncementLoadingFingerprint = fingerprint;
-  systemAnnouncementsLoading = true;
+
   const requestPromise = (async () => {
     try {
       const response = await fetch(announcementListPath(session), {
@@ -2279,10 +2271,7 @@ async function loadSystemAnnouncements({ autoOpen = false, force = false } = {})
       }));
       systemAnnouncementSessionFingerprint = fingerprint;
       renderSystemAnnouncementButton();
-      if (
-        systemAnnouncementAutoOpenRequested &&
-        systemAnnouncements.some((item) => !item.read)
-      ) {
+      if (systemAnnouncementAutoOpenRequested && systemAnnouncements.some((item) => !item.read)) {
         openSystemAnnouncements();
       }
     } catch {
@@ -2293,7 +2282,6 @@ async function loadSystemAnnouncements({ autoOpen = false, force = false } = {})
       }
     } finally {
       if (systemAnnouncementLoadingFingerprint === fingerprint) {
-        systemAnnouncementsLoading = false;
         systemAnnouncementLoadPromise = null;
         systemAnnouncementLoadingFingerprint = "";
         systemAnnouncementAutoOpenRequested = false;
@@ -2320,9 +2308,10 @@ function shipmentFileCommentsPath(session, shipmentId) {
 
 function shipmentFilePath(session, fileId, suffix = "") {
   const encodedFileId = encodeURIComponent(fileId);
-  const base = session.kind === "CUSTOMER"
-    ? `/api/customer/shipment-files/${encodedFileId}`
-    : `/api/shipment-files/${encodedFileId}`;
+  const base =
+    session.kind === "CUSTOMER"
+      ? `/api/customer/shipment-files/${encodedFileId}`
+      : `/api/shipment-files/${encodedFileId}`;
   return `${base}${suffix}`;
 }
 
@@ -2355,8 +2344,12 @@ function fileSessionRoleLabel(session = readFileSession()) {
   if (session.kind === "CUSTOMER") {
     return customerLogisticsRoleLabel(session) || t("account.customer");
   }
-  const role = String(session.user?.role ?? "").trim().toUpperCase();
-  return t({ ADMIN: "account.roleAdmin", BUSINESS: "account.roleBusiness" }[role] ?? "account.roleUser");
+  const role = String(session.user?.role ?? "")
+    .trim()
+    .toUpperCase();
+  return t(
+    { ADMIN: "account.roleAdmin", BUSINESS: "account.roleBusiness" }[role] ?? "account.roleUser"
+  );
 }
 
 function setTrackingAccountMenuOpen(open) {
@@ -2373,10 +2366,18 @@ function renderTrackingAccount(session = readFileSession()) {
   const workbenchLink = document.querySelector("#account-workbench-link");
   const welcomeMessage = document.querySelector("#welcome-message");
   const welcomeUsername = document.querySelector("#welcome-username");
-  if (!portalReturnLink || !trackingAccount || !trackingAccountName || !trackingAccountRole || !trackingAccountMark) {
+  if (
+    !portalReturnLink ||
+    !trackingAccount ||
+    !trackingAccountName ||
+    !trackingAccountRole ||
+    !trackingAccountMark
+  ) {
     return;
   }
-  const internalRole = String(session.user?.role ?? "").trim().toUpperCase();
+  const internalRole = String(session.user?.role ?? "")
+    .trim()
+    .toUpperCase();
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
   portalReturnLink.href = returnsToWorkbenches ? "/workbenches" : "/";
@@ -2419,7 +2420,11 @@ function renderTrackingAccount(session = readFileSession()) {
   if (isCustomer) {
     const principal = session.principal ?? {};
     const username = principal.username ?? principal.loginName ?? "—";
-    const code = principal.customerCodePrefix ?? principal.codePrefix ?? principal.customerCode ?? t("profile.verified");
+    const code =
+      principal.customerCodePrefix ??
+      principal.codePrefix ??
+      principal.customerCode ??
+      t("profile.verified");
     const customerProfileName = document.querySelector("#customer-profile-name");
     if (customerProfileName) customerProfileName.textContent = name;
     const customerProfileUsername = document.querySelector("#customer-profile-username");
@@ -2429,7 +2434,8 @@ function renderTrackingAccount(session = readFileSession()) {
     const customerProfileRole = document.querySelector("#customer-profile-role");
     if (customerProfileRole) customerProfileRole.textContent = fileSessionRoleLabel(session);
     const customerProfileAvatar = document.querySelector("#customer-profile-avatar");
-    if (customerProfileAvatar) customerProfileAvatar.textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
+    if (customerProfileAvatar)
+      customerProfileAvatar.textContent = Array.from(name.trim())[0]?.toUpperCase() || "C";
   }
 }
 
@@ -2442,13 +2448,15 @@ function customerPartyRole(session = readFileSession()) {
   if (session.kind !== "CUSTOMER") return "";
   return String(
     session.principal?.partyRole ??
-    session.principal?.logisticsRole ??
-    session.storedSession?.customer?.partyRole ??
-    session.storedSession?.customer?.logisticsRole ??
-    session.storedSession?.partyRole ??
-    session.storedSession?.logisticsRole ??
-    ""
-  ).trim().toUpperCase();
+      session.principal?.logisticsRole ??
+      session.storedSession?.customer?.partyRole ??
+      session.storedSession?.customer?.logisticsRole ??
+      session.storedSession?.partyRole ??
+      session.storedSession?.logisticsRole ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
 }
 
 function isOverseaAgentSession(session = readFileSession()) {
@@ -2476,25 +2484,16 @@ function renderOverseaAgentWorkspace(session = readFileSession()) {
   document.body.classList.toggle("is-oversea-agent-session", managed);
   if (trackingNavItem) trackingNavItem.hidden = managed;
   if (agentShipmentsNavItem) agentShipmentsNavItem.hidden = !managed;
+  setLocalizedElement("overview-nav-label", "nav.overview");
+  setLocalizedElement("overview-kicker", managed ? "overview.agentKicker" : "overview.kicker");
+  setLocalizedElement("overview-title", managed ? "overview.agentTitle" : "overview.title");
   setLocalizedElement(
-      "overview-nav-label",
-      "nav.overview"
+    "overview-description",
+    managed ? "overview.agentDescription" : "overview.description"
   );
   setLocalizedElement(
-      "overview-kicker",
-      managed ? "overview.agentKicker" : "overview.kicker"
-  );
-  setLocalizedElement(
-      "overview-title",
-      managed ? "overview.agentTitle" : "overview.title"
-  );
-  setLocalizedElement(
-      "overview-description",
-      managed ? "overview.agentDescription" : "overview.description"
-  );
-  setLocalizedElement(
-      "start-tracking-label",
-      managed ? "overview.agentStartTracking" : "overview.startTracking"
+    "start-tracking-label",
+    managed ? "overview.agentStartTracking" : "overview.startTracking"
   );
   if (!managed) {
     historyFollowingOnly = false;
@@ -2512,21 +2511,20 @@ function logisticsPartyRoleLabel(value) {
     OVERSEA_AGENT: "files.logisticsRoleAgent",
     SHIPPER: "files.logisticsRoleShipper",
     CONSIGNEE: "files.logisticsRoleConsignee"
-  }[String(value ?? "").trim().toUpperCase()];
+  }[
+    String(value ?? "")
+      .trim()
+      .toUpperCase()
+  ];
   return key ? t(key) : "";
 }
 
 function canManageFileVisibility(session = readFileSession()) {
   if (session.kind !== "INTERNAL") return false;
-  const role = String(session.user?.role ?? "").trim().toUpperCase();
+  const role = String(session.user?.role ?? "")
+    .trim()
+    .toUpperCase();
   return role === "BUSINESS" || role === "ADMIN";
-}
-
-function canAssignRelatedFilesCustomer(session = readFileSession()) {
-  return (
-    canManageFileVisibility(session) &&
-    relatedFilesPermissions?.canAssignCustomer === true
-  );
 }
 
 function normalizeAssignableCustomer(customer) {
@@ -2534,8 +2532,12 @@ function normalizeAssignableCustomer(customer) {
     id: String(customer?.id ?? customer?.publicId ?? "").trim(),
     username: String(customer?.username ?? customer?.customerCode ?? "").trim(),
     displayName: String(customer?.displayName ?? customer?.customerName ?? "").trim(),
-    partyRole: String(customer?.partyRole ?? "").trim().toUpperCase(),
-    relationshipRole: String(customer?.relationshipRole ?? "").trim().toUpperCase()
+    partyRole: String(customer?.partyRole ?? "")
+      .trim()
+      .toUpperCase(),
+    relationshipRole: String(customer?.relationshipRole ?? "")
+      .trim()
+      .toUpperCase()
   };
 }
 
@@ -2569,10 +2571,7 @@ function renderRelatedFilesTargetOptions() {
 
 function shipmentRecordId(payload) {
   return (
-    payload?.shipmentRecord?.publicId ??
-    payload?.shipmentRecord?.id ??
-    payload?.shipmentId ??
-    null
+    payload?.shipmentRecord?.publicId ?? payload?.shipmentRecord?.id ?? payload?.shipmentId ?? null
   );
 }
 
@@ -2585,9 +2584,7 @@ function setRelatedFilesContext(payload) {
   );
   const contextChanged = String(nextShipmentId ?? "") !== String(relatedFilesShipmentId ?? "");
   const payloadSessionFingerprint =
-    payload && typeof payload === "object"
-      ? trackingPayloadSessionFingerprints.get(payload)
-      : null;
+    payload && typeof payload === "object" ? trackingPayloadSessionFingerprints.get(payload) : null;
 
   relatedFilesShipmentId = nextShipmentId ? String(nextShipmentId) : null;
   relatedFilesShipmentNumber = nextShipmentNumber;
@@ -2704,10 +2701,16 @@ function normalizeFileVisibilityRoles(value, legacyVisibility = "") {
 
   const normalized = new Set(
     candidates
-      .map((role) => String(role ?? "").trim().toUpperCase())
+      .map((role) =>
+        String(role ?? "")
+          .trim()
+          .toUpperCase()
+      )
       .filter((role) => FILE_VISIBILITY_ROLES.includes(role))
   );
-  const legacy = String(legacyVisibility ?? "").trim().toUpperCase();
+  const legacy = String(legacyVisibility ?? "")
+    .trim()
+    .toUpperCase();
   if (normalized.size === 0 && FILE_VISIBILITY_ROLES.includes(legacy)) {
     normalized.add(legacy);
   } else if (normalized.size === 0 && legacy === "INTERNAL") {
@@ -2721,9 +2724,7 @@ function normalizeFileVisibilityRoles(value, legacyVisibility = "") {
 
 function legacyVisibilityForRoles(roles) {
   const normalized = normalizeFileVisibilityRoles(roles);
-  return normalized.length === 1 && normalized[0] === "OVERSEA_AGENT"
-    ? "INTERNAL"
-    : "PARTIES";
+  return normalized.length === 1 && normalized[0] === "OVERSEA_AGENT" ? "INTERNAL" : "PARTIES";
 }
 
 function fileVisibilityRolesLabel(roles) {
@@ -2736,8 +2737,7 @@ function fileVisibilityRolesLabel(roles) {
 
 function allowedRelatedFileVisibilityRoles() {
   const configured = normalizeFileVisibilityRoles(
-    relatedFilesPermissions?.allowedVisibilityRoles ??
-      relatedFilesPermissions?.visibleToRoles
+    relatedFilesPermissions?.allowedVisibilityRoles ?? relatedFilesPermissions?.visibleToRoles
   );
   return configured.length > 0 ? configured : [...FILE_VISIBILITY_ROLES];
 }
@@ -2790,8 +2790,7 @@ function normalizeRelatedFileItem(item) {
   return {
     ...item,
     id: item?.id ?? item?.publicId ?? item?.fileId,
-    originalFileName:
-      item?.originalFileName ?? item?.fileName ?? item?.name ?? "shipment-file",
+    originalFileName: item?.originalFileName ?? item?.fileName ?? item?.name ?? "shipment-file",
     extension:
       item?.extension ??
       String(item?.originalFileName ?? item?.fileName ?? "")
@@ -2814,7 +2813,9 @@ function normalizeRelatedFileItem(item) {
     uploadedAt: item?.uploadedAt ?? item?.createdAt ?? null,
     contentType: String(item?.contentType ?? item?.mimeType ?? "").trim(),
     previewUrl: String(item?.previewUrl ?? "").trim(),
-    previewMode: String(item?.previewMode ?? "").trim().toUpperCase(),
+    previewMode: String(item?.previewMode ?? "")
+      .trim()
+      .toUpperCase(),
     canDelete: item?.canDelete === true,
     canChangeVisibility: item?.canChangeVisibility === true
   };
@@ -2860,9 +2861,7 @@ async function requestRelatedFilesApi(path, options = {}) {
   if (response.status === 401) {
     clearFileSession(session, { expired: true });
     const error = new Error(
-      session.kind === "CUSTOMER"
-        ? t("files.customerLoginExpired")
-        : t("files.loginTitle")
+      session.kind === "CUSTOMER" ? t("files.customerLoginExpired") : t("files.loginTitle")
     );
     error.status = 401;
     throw error;
@@ -2887,10 +2886,6 @@ function setRelatedFilesUploadMessage(message = "", variant = "") {
   relatedFilesUploadMessage.dataset.variant = variant;
 }
 
-function relatedFilesUploadTargetMissing(session = readFileSession()) {
-  return false;
-}
-
 function updateRelatedFilesSelection() {
   const session = readFileSession();
   const files = Array.from(relatedFilesUploadInput.files ?? []);
@@ -2906,10 +2901,7 @@ function updateRelatedFilesSelection() {
       : t("files.noSelection");
   relatedFilesSelection.dataset.state = files.length > 0 ? "ready" : "empty";
   relatedFilesUploadButton.disabled =
-    relatedFilesUploading ||
-    files.length === 0 ||
-    !relatedFilesShipmentId ||
-    !visibilityReady;
+    relatedFilesUploading || files.length === 0 || !relatedFilesShipmentId || !visibilityReady;
 }
 
 function relatedFileActionButton(labelKey, className, handler) {
@@ -2919,22 +2911,6 @@ function relatedFileActionButton(labelKey, className, handler) {
   button.textContent = t(labelKey);
   button.addEventListener("click", handler);
   return button;
-}
-
-function relatedFileTargetCustomer(file) {
-  return relatedFilesAssignableCustomers.find(
-    (customer) => customer.id === String(file.targetCustomerId ?? "")
-  );
-}
-
-function relatedFileTargetDisplayName(file) {
-  const customer = relatedFileTargetCustomer(file);
-  return (
-    file.targetCustomerDisplayName ||
-    customer?.displayName ||
-    customer?.username ||
-    ""
-  );
 }
 
 function relatedFileSharingLabel(file, session = readFileSession()) {
@@ -2952,7 +2928,9 @@ function createRelatedFileItem(file) {
 
   const extension = document.createElement("span");
   extension.className = "related-file-extension";
-  extension.textContent = String(file.extension || "FILE").slice(0, 5).toUpperCase();
+  extension.textContent = String(file.extension || "FILE")
+    .slice(0, 5)
+    .toUpperCase();
 
   const content = document.createElement("div");
   content.className = "related-file-content";
@@ -3003,19 +2981,18 @@ function createRelatedFileItem(file) {
       if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
       const previousRoles = [...committedRoles];
       picker.classList.add("is-disabled", "is-saving");
-      controls.forEach((control) => { control.disabled = true; });
+      controls.forEach((control) => {
+        control.disabled = true;
+      });
       try {
-        await requestRelatedFilesApi(
-          shipmentFilePath(session, file.id, "/visibility"),
-          {
-            method: "PATCH",
-            body: {
-              visibilityRoles: nextRoles,
-              visibility: legacyVisibilityForRoles(nextRoles)
-            },
-            session
-          }
-        );
+        await requestRelatedFilesApi(shipmentFilePath(session, file.id, "/visibility"), {
+          method: "PATCH",
+          body: {
+            visibilityRoles: nextRoles,
+            visibility: legacyVisibilityForRoles(nextRoles)
+          },
+          session
+        });
         if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
         committedRoles = [...nextRoles];
         file.visibilityRoles = [...nextRoles];
@@ -3034,7 +3011,9 @@ function createRelatedFileItem(file) {
       } finally {
         if (isCurrentRelatedFilesSession(sessionFingerprint)) {
           picker.classList.remove("is-disabled", "is-saving");
-          controls.forEach((control) => { control.disabled = false; });
+          controls.forEach((control) => {
+            control.disabled = false;
+          });
         }
       }
     };
@@ -3047,7 +3026,9 @@ function createRelatedFileItem(file) {
       checkbox.value = role;
       copy.textContent = fileVisibilityLabel(role);
       checkbox.addEventListener("change", () => {
-        const nextRoles = controls.filter((control) => control.checked).map((control) => control.value);
+        const nextRoles = controls
+          .filter((control) => control.checked)
+          .map((control) => control.value);
         if (nextRoles.length === 0) {
           checkbox.checked = true;
           setRelatedFilesUploadMessage(t("files.visibilityRequired"), "error");
@@ -3094,8 +3075,12 @@ function normalizeRelatedFileComment(item) {
     id: String(item?.id ?? ""),
     body: String(item?.body ?? "").trim(),
     authorDisplayName: String(item?.authorDisplayName ?? item?.authorName ?? "").trim(),
-    authorType: String(item?.authorType ?? "").trim().toUpperCase(),
-    authorRole: String(item?.authorRole ?? "").trim().toUpperCase(),
+    authorType: String(item?.authorType ?? "")
+      .trim()
+      .toUpperCase(),
+    authorRole: String(item?.authorRole ?? "")
+      .trim()
+      .toUpperCase(),
     createdAt: item?.createdAt ?? null
   };
 }
@@ -3184,7 +3169,8 @@ async function loadRelatedFileComments() {
     if (
       requestSequence !== relatedFileCommentsRequestSequence ||
       !isCurrentRelatedFilesSession(sessionFingerprint)
-    ) return;
+    )
+      return;
     const items = Array.isArray(payload?.items) ? payload.items : [];
     relatedFileCommentItems = items.map(normalizeRelatedFileComment).filter((item) => item.body);
     if (session.kind === "CUSTOMER") relatedFilesCustomerAccess = true;
@@ -3192,7 +3178,8 @@ async function loadRelatedFileComments() {
     if (
       requestSequence !== relatedFileCommentsRequestSequence ||
       !isCurrentRelatedFilesSession(sessionFingerprint)
-    ) return;
+    )
+      return;
     if (session.kind === "CUSTOMER" && error?.status === 403) {
       relatedFilesCustomerAccess = false;
     }
@@ -3220,10 +3207,11 @@ async function sendRelatedFileComment() {
   setRelatedFileCommentMessage();
   renderRelatedFileComments();
   try {
-    await requestRelatedFilesApi(
-      shipmentFileCommentsPath(session, relatedFilesShipmentId),
-      { method: "POST", body: { body }, session }
-    );
+    await requestRelatedFilesApi(shipmentFileCommentsPath(session, relatedFilesShipmentId), {
+      method: "POST",
+      body: { body },
+      session
+    });
     if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
     relatedFileCommentInput.value = "";
     setRelatedFileCommentMessage(t("files.commentSent"), "success");
@@ -3249,7 +3237,7 @@ function renderRelatedFilesDrawer() {
   const hasItems = relatedFilesItems.length > 0;
   const isCustomer = session.kind === "CUSTOMER";
   const canManageVisibility = canManageFileVisibility(session);
-  const canAssignCustomer = canAssignRelatedFilesCustomer(session);
+
   renderTrackingAccount(session);
   setRelatedFilesCategory(relatedFilesCategory.value);
 
@@ -3272,8 +3260,7 @@ function renderRelatedFilesDrawer() {
   relatedFilesCount.hidden = !hasItems;
 
   relatedFilesAuthRequired.hidden = authenticated;
-  const customerSessionExpired =
-    !authenticated && relatedFilesExpiredSessionKind === "CUSTOMER";
+  const customerSessionExpired = !authenticated && relatedFilesExpiredSessionKind === "CUSTOMER";
   relatedFilesAuthTitle.textContent = t(
     customerSessionExpired ? "files.customerLoginExpired" : "files.loginTitle"
   );
@@ -3286,24 +3273,17 @@ function renderRelatedFilesDrawer() {
   relatedFilesAuthLink.href = customerSessionExpired ? "/" : "/workbenches";
   relatedFilesContent.hidden = !authenticated;
   relatedFilesUploadPanel.hidden =
-    !authenticated ||
-    !relatedFilesShipmentId ||
-    relatedFilesPermissions?.canUpload === false;
-  relatedFilesUserName.textContent =
-    fileSessionDisplayName(session);
+    !authenticated || !relatedFilesShipmentId || relatedFilesPermissions?.canUpload === false;
+  relatedFilesUserName.textContent = fileSessionDisplayName(session);
   relatedFilesUploadVisibilityField.hidden =
     !authenticated || relatedFilesPermissions?.canUpload === false || !canManageVisibility;
 
   relatedFilesLoading.hidden = !relatedFilesLoadingState;
   relatedFilesError.hidden = !relatedFilesErrorText || relatedFilesLoadingState;
   relatedFilesErrorMessage.textContent = relatedFilesErrorText;
-  relatedFilesEmpty.hidden =
-    relatedFilesLoadingState || Boolean(relatedFilesErrorText) || hasItems;
-  relatedFilesList.hidden =
-    relatedFilesLoadingState || Boolean(relatedFilesErrorText) || !hasItems;
-  relatedFilesList.replaceChildren(
-    ...relatedFilesItems.map((item) => createRelatedFileItem(item))
-  );
+  relatedFilesEmpty.hidden = relatedFilesLoadingState || Boolean(relatedFilesErrorText) || hasItems;
+  relatedFilesList.hidden = relatedFilesLoadingState || Boolean(relatedFilesErrorText) || !hasItems;
+  relatedFilesList.replaceChildren(...relatedFilesItems.map((item) => createRelatedFileItem(item)));
   renderRelatedFileComments();
 
   relatedFilesSelectButton.disabled = relatedFilesUploading;
@@ -3390,7 +3370,8 @@ async function loadRelatedFiles() {
     if (
       requestSequence !== relatedFilesRequestSequence ||
       !isCurrentRelatedFilesSession(sessionFingerprint)
-    ) return;
+    )
+      return;
     const items = Array.isArray(payload?.items)
       ? payload.items
       : Array.isArray(payload?.files)
@@ -3417,7 +3398,8 @@ async function loadRelatedFiles() {
     if (
       requestSequence !== relatedFilesRequestSequence ||
       !isCurrentRelatedFilesSession(sessionFingerprint)
-    ) return;
+    )
+      return;
     if (session.kind === "CUSTOMER" && error?.status === 403) {
       relatedFilesCustomerAccess = false;
     }
@@ -3472,10 +3454,11 @@ async function uploadRelatedFiles() {
   }
 
   try {
-    await requestRelatedFilesApi(
-      shipmentFilesPath(session, relatedFilesShipmentId),
-      { method: "POST", body: formData, session }
-    );
+    await requestRelatedFilesApi(shipmentFilesPath(session, relatedFilesShipmentId), {
+      method: "POST",
+      body: formData,
+      session
+    });
     if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
     relatedFilesUploadInput.value = "";
     setRelatedFilesUploadMessage(t("files.uploaded", { count: files.length }), "success");
@@ -3505,10 +3488,9 @@ async function downloadRelatedFile(file, button) {
   button.disabled = true;
   button.textContent = t("files.downloading");
   try {
-    const response = await fetch(
-      shipmentFilePath(session, file.id, "/download"),
-      { headers: { ...fileAuthHeaders(session) } }
-    );
+    const response = await fetch(shipmentFilePath(session, file.id, "/download"), {
+      headers: { ...fileAuthHeaders(session) }
+    });
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       return;
@@ -3551,18 +3533,66 @@ async function downloadRelatedFile(file, button) {
 const PREVIEW_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"]);
 const PREVIEW_PDF_EXTENSIONS = new Set(["pdf"]);
 const PREVIEW_TEXT_EXTENSIONS = new Set([
-  "txt", "csv", "log", "json", "xml", "md", "markdown", "html", "htm",
-  "js", "ts", "jsx", "tsx", "css", "scss", "less", "yml", "yaml",
-  "ini", "conf", "properties", "sh", "bash", "bat", "ps1", "sql",
-  "java", "py", "rb", "go", "rs", "c", "cc", "cpp", "h", "hpp",
-  "php", "swift", "kt", "dart", "toml", "env", "gitignore"
+  "txt",
+  "csv",
+  "log",
+  "json",
+  "xml",
+  "md",
+  "markdown",
+  "html",
+  "htm",
+  "js",
+  "ts",
+  "jsx",
+  "tsx",
+  "css",
+  "scss",
+  "less",
+  "yml",
+  "yaml",
+  "ini",
+  "conf",
+  "properties",
+  "sh",
+  "bash",
+  "bat",
+  "ps1",
+  "sql",
+  "java",
+  "py",
+  "rb",
+  "go",
+  "rs",
+  "c",
+  "cc",
+  "cpp",
+  "h",
+  "hpp",
+  "php",
+  "swift",
+  "kt",
+  "dart",
+  "toml",
+  "env",
+  "gitignore"
 ]);
-const PREVIEW_OFFICE_EXTENSIONS = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"]);
+const PREVIEW_OFFICE_EXTENSIONS = new Set([
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "odt",
+  "ods",
+  "odp"
+]);
 const PREVIEW_TEXT_BYTE_LIMIT = 2 * 1024 * 1024;
 
 const filePreviewDialog = document.querySelector("#file-preview-dialog");
 const filePreviewName = document.querySelector("#file-preview-name");
-const filePreviewBody = document.querySelector("#file-preview-body");
+
 const filePreviewMessage = document.querySelector("#file-preview-message");
 const filePreviewContent = document.querySelector("#file-preview-content");
 const filePreviewClose = document.querySelector("#file-preview-close");
@@ -3572,7 +3602,9 @@ let filePreviewObjectUrls = [];
 let currentPreviewFile = null;
 
 function getFileExtension(fileName) {
-  const name = String(fileName || "").trim().toLowerCase();
+  const name = String(fileName || "")
+    .trim()
+    .toLowerCase();
   if (!name) return "";
   const idx = name.lastIndexOf(".");
   if (idx < 0 || idx === name.length - 1) return "";
@@ -3585,7 +3617,11 @@ function clearFilePreviewContent() {
   filePreviewMessage.textContent = "";
   filePreviewMessage.classList.remove("error");
   for (const url of filePreviewObjectUrls) {
-    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
   }
   filePreviewObjectUrls = [];
 }
@@ -3823,10 +3859,7 @@ function renderFilePreviewBlob(blob, extension, contentType = "") {
     filePreviewContent.replaceChildren(iframe);
     return;
   }
-  if (
-    PREVIEW_IMAGE_EXTENSIONS.has(extension) &&
-    contentType !== "image/svg+xml"
-  ) {
+  if (PREVIEW_IMAGE_EXTENSIONS.has(extension) && contentType !== "image/svg+xml") {
     const img = document.createElement("img");
     img.src = url;
     img.alt = filePreviewName.textContent || t("files.previewTitle");
@@ -3846,7 +3879,7 @@ async function readBlobAsText(blob, { force = false } = {}) {
       const sample = text.slice(0, 4_096);
       const controlCharacters = Array.from(sample).filter((character) => {
         const code = character.charCodeAt(0);
-        return code === 0 || (code < 9 || (code > 13 && code < 32));
+        return code === 0 || code < 9 || (code > 13 && code < 32);
       }).length;
       if (sample.length > 0 && controlCharacters / sample.length > 0.02) {
         return { text: null, tooLarge: false };
@@ -3862,10 +3895,7 @@ function safeSameOriginFileUrl(candidate, fallback) {
   const fallbackUrl = new URL(fallback, window.location.origin);
   try {
     const resolved = new URL(candidate || fallbackUrl, window.location.origin);
-    if (
-      resolved.origin !== window.location.origin ||
-      !resolved.pathname.startsWith("/api/")
-    ) {
+    if (resolved.origin !== window.location.origin || !resolved.pathname.startsWith("/api/")) {
       return fallbackUrl.toString();
     }
     return resolved.toString();
@@ -3931,9 +3961,10 @@ async function previewRelatedFile(file, button) {
       );
     }
     const extension = getFileExtension(file.originalFileName);
-    const contentType = String(
-      response.headers.get("Content-Type") || file.contentType || ""
-    ).split(";", 1)[0].trim().toLowerCase();
+    const contentType = String(response.headers.get("Content-Type") || file.contentType || "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
     const previewMode = String(file.previewMode || "").toUpperCase();
     const blob = await response.blob();
     if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
@@ -4008,7 +4039,9 @@ async function previewRelatedFile(file, button) {
         setFilePreviewMessage(t("files.previewDownloadTip"));
       } else if (text != null) {
         renderFilePreviewText(text, { asTextarea: false });
-        setFilePreviewMessage(t("files.previewTextFallback", { name: file.originalFileName || "" }));
+        setFilePreviewMessage(
+          t("files.previewTextFallback", { name: file.originalFileName || "" })
+        );
       } else {
         renderFilePreviewFallback("files.previewNotSupported");
       }
@@ -4079,10 +4112,7 @@ async function deleteRelatedFile(file) {
   if (!session.token) return;
   const sessionFingerprint = relatedFilesSessionFingerprint;
   try {
-    await requestRelatedFilesApi(
-      shipmentFilePath(session, file.id),
-      { method: "DELETE", session }
-    );
+    await requestRelatedFilesApi(shipmentFilePath(session, file.id), { method: "DELETE", session });
     if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
     relatedFilesItems = relatedFilesItems.filter((item) => item.id !== file.id);
     setRelatedFilesUploadMessage();
@@ -4099,7 +4129,9 @@ async function deleteRelatedFile(file) {
 }
 
 function normalizeCountryCode(countryCode) {
-  const code = String(countryCode ?? "").trim().toUpperCase();
+  const code = String(countryCode ?? "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(code)) return "";
   return code === "UK" ? "GB" : code;
 }
@@ -4152,17 +4184,26 @@ function normalizeImportedDetails(details) {
   if (!details || typeof details !== "object") return null;
   const normalized = {};
   for (const [key, limit] of Object.entries(IMPORT_DETAIL_LIMITS)) {
-    const value = String(details[key] ?? "").replace(/\s+/g, " ").trim().slice(0, limit);
+    const value = String(details[key] ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, limit);
     if (value) normalized[key] = value;
   }
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 function normalizeQuery(query) {
-  const requestedType = String(query.type ?? "BOOKING").trim().toUpperCase();
+  const requestedType = String(query.type ?? "BOOKING")
+    .trim()
+    .toUpperCase();
   const normalized = {
-    carrier: String(query.carrier ?? "COSCO").trim().toUpperCase(),
-    channel: String(query.channel ?? "AUTO").trim().toUpperCase(),
+    carrier: String(query.carrier ?? "COSCO")
+      .trim()
+      .toUpperCase(),
+    channel: String(query.channel ?? "AUTO")
+      .trim()
+      .toUpperCase(),
     type: requestedType === "CONTAINER" ? "CONTAINER" : "BOOKING",
     number: String(query.number ?? "")
       .trim()
@@ -4180,9 +4221,15 @@ function trackingQueryKey(query) {
 }
 
 function snapshotStorageIdentity(snapshot) {
-  const provider = String(snapshot?.provider?.code ?? "COSCO").trim().toUpperCase();
-  const type = String(snapshot?.tracking?.type ?? "BOOKING").trim().toUpperCase();
-  const number = String(snapshot?.tracking?.number ?? "").trim().toUpperCase();
+  const provider = String(snapshot?.provider?.code ?? "COSCO")
+    .trim()
+    .toUpperCase();
+  const type = String(snapshot?.tracking?.type ?? "BOOKING")
+    .trim()
+    .toUpperCase();
+  const number = String(snapshot?.tracking?.number ?? "")
+    .trim()
+    .toUpperCase();
   return `${provider}:${type}:${number}`;
 }
 
@@ -4201,10 +4248,7 @@ function readSupplementaryRecord(prefix, snapshot, fallback) {
 function writeSupplementaryRecord(prefix, snapshot, value) {
   if (!snapshot?.tracking?.number) return;
   try {
-    localStorage.setItem(
-      `${prefix}${snapshotStorageIdentity(snapshot)}`,
-      JSON.stringify(value)
-    );
+    localStorage.setItem(`${prefix}${snapshotStorageIdentity(snapshot)}`, JSON.stringify(value));
   } catch {
     // Restricted storage should not prevent the detail view from remaining usable.
   }
@@ -4216,13 +4260,13 @@ function businessReferencesForSnapshot(snapshot) {
   return {
     clientNameCode: hasText(stored.clientNameCode)
       ? stored.clientNameCode
-      : upstream.clientNameCode ?? "",
+      : (upstream.clientNameCode ?? ""),
     clientPoNumber: hasText(stored.clientPoNumber)
       ? stored.clientPoNumber
-      : upstream.clientPoNumber ?? "",
+      : (upstream.clientPoNumber ?? ""),
     forwarderJobNumber: hasText(stored.forwarderJobNumber)
       ? stored.forwarderJobNumber
-      : upstream.forwarderJobNumber ?? ""
+      : (upstream.forwarderJobNumber ?? "")
   };
 }
 
@@ -4337,15 +4381,12 @@ function mergeImportedDetailsIntoPayload(payload, importedDetails) {
   if (!payload?.snapshot || !details) return payload;
   const merged = JSON.parse(JSON.stringify(payload));
   const snapshot = merged.snapshot;
-  snapshot.tracking = snapshot.tracking && typeof snapshot.tracking === "object"
-    ? snapshot.tracking
-    : {};
-  snapshot.summary = snapshot.summary && typeof snapshot.summary === "object"
-    ? snapshot.summary
-    : {};
-  snapshot.references = snapshot.references && typeof snapshot.references === "object"
-    ? snapshot.references
-    : {};
+  snapshot.tracking =
+    snapshot.tracking && typeof snapshot.tracking === "object" ? snapshot.tracking : {};
+  snapshot.summary =
+    snapshot.summary && typeof snapshot.summary === "object" ? snapshot.summary : {};
+  snapshot.references =
+    snapshot.references && typeof snapshot.references === "object" ? snapshot.references : {};
   snapshot.references.business =
     snapshot.references.business && typeof snapshot.references.business === "object"
       ? snapshot.references.business
@@ -4426,8 +4467,7 @@ function openBusinessReferenceDialog() {
   const references = businessReferencesForSnapshot(currentPayload.snapshot);
   document.querySelector("#business-client-code-input").value = references.clientNameCode;
   document.querySelector("#business-client-po-input").value = references.clientPoNumber;
-  document.querySelector("#business-forwarder-job-input").value =
-    references.forwarderJobNumber;
+  document.querySelector("#business-forwarder-job-input").value = references.forwarderJobNumber;
   businessReferenceDialog.showModal();
 }
 
@@ -4497,9 +4537,8 @@ function openDocumentEditor(code) {
     existing?.uploader ?? definition.uploaders[0]
   );
   const session = readFileSession();
-  const visibilityOptions = session.kind === "CUSTOMER"
-    ? ["SHIPPER"]
-    : ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"];
+  const visibilityOptions =
+    session.kind === "CUSTOMER" ? ["SHIPPER"] : ["SHIPPER", "CONSIGNEE", "OVERSEA_AGENT"];
   populateSelect(
     document.querySelector("#document-visibility-input"),
     visibilityOptions,
@@ -4556,7 +4595,10 @@ function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
 
     const constraints = document.createElement("dl");
     for (const [label, value] of [
-      [t("documents.uploader"), documentSubjectLabel(existing?.uploader ?? definition.uploaders[0])],
+      [
+        t("documents.uploader"),
+        documentSubjectLabel(existing?.uploader ?? definition.uploaders[0])
+      ],
       [
         t("documents.visibility"),
         documentVisibilityLabel(existing?.visibility ?? definition.visibility[0])
@@ -4616,19 +4658,6 @@ function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
   }
 }
 
-function openDocumentDrawer() {
-  if (!currentPayload?.snapshot) return;
-  renderDocumentDrawer(currentPayload.snapshot);
-  if (readFileSession().token && relatedFilesShipmentId) {
-    void loadRelatedFiles().then(() => renderDocumentDrawer(currentPayload?.snapshot));
-  }
-  documentDrawerLayer.hidden = false;
-  requestAnimationFrame(() => {
-    documentDrawerLayer.classList.add("is-open");
-    documentDrawer.setAttribute("aria-hidden", "false");
-  });
-}
-
 function clearLegacyBrowserSnapshots() {
   try {
     for (const indexKey of ["shipment-track:v3:index", "shipment-track:v2:index"]) {
@@ -4659,7 +4688,7 @@ async function loadCustomerAssignedHistory() {
   if (session.kind !== "CUSTOMER" || !session.token) {
     customerAssignedHistory = [];
     historyLoadFailed = false;
-    historyScopeCustomer = null;
+
     historyAvailableCustomers = [];
     resetHistoryPagination();
     return;
@@ -4698,20 +4727,19 @@ async function loadCustomerAssignedHistory() {
     historyAllTotal = Number(payload?.allTotal ?? historyTotal);
     historyUnfinishedTotal = Number(payload?.unfinishedTotal ?? historyTotal);
     const agentManagement = payload?.overseaAgentManagement === true;
-    historyScopeCustomer = agentManagement
-      ? normalizeHistoryBoundCustomers([payload?.scopeCustomer])[0] || null
-      : null;
+
     historyAvailableCustomers = agentManagement
       ? normalizeHistoryBoundCustomers(payload?.availableCustomers)
       : [];
     customerAssignedHistory = items
-      .filter((item) => agentManagement
-        ? Boolean(item?.referenceNo || item?.shipmentId)
-        : Boolean(item?.dataAvailable && item?.snapshot))
+      .filter((item) =>
+        agentManagement
+          ? Boolean(item?.referenceNo || item?.shipmentId)
+          : Boolean(item?.dataAvailable && item?.snapshot)
+      )
       .map((item) => {
-        const serverSnapshot = item?.snapshot && typeof item.snapshot === "object"
-          ? item.snapshot
-          : null;
+        const serverSnapshot =
+          item?.snapshot && typeof item.snapshot === "object" ? item.snapshot : null;
         const carrier = String(
           item.carrier || serverSnapshot?.tracking?.carrier || "COSCO"
         ).toUpperCase();
@@ -4721,9 +4749,8 @@ async function loadCustomerAssignedHistory() {
         const referenceNo = String(
           item.referenceNo || serverSnapshot?.tracking?.number || ""
         ).trim();
-        const lastTrackedAt = item.lastTrackedAt
-          || serverSnapshot?.fetchedAt
-          || new Date().toISOString();
+        const lastTrackedAt =
+          item.lastTrackedAt || serverSnapshot?.fetchedAt || new Date().toISOString();
         const trackingStatus = String(item.trackingStatus || "PENDING_UPDATE").trim();
         const snapshot = serverSnapshot || {
           tracking: {
@@ -4795,7 +4822,7 @@ async function loadCustomerAssignedHistory() {
 
 async function loadInternalTrackedHistory() {
   const session = readFileSession();
-  historyScopeCustomer = null;
+
   if (session.kind !== "INTERNAL" || !session.token) {
     internalTrackedHistory = [];
     historyLoadFailed = false;
@@ -4835,11 +4862,13 @@ async function loadInternalTrackedHistory() {
     internalTrackedHistory = items
       .filter((item) => item?.referenceNo || item?.shipmentId)
       .map((item) => {
-        const serverSnapshot = item?.snapshot && typeof item.snapshot === "object"
-          ? item.snapshot
-          : null;
+        const serverSnapshot =
+          item?.snapshot && typeof item.snapshot === "object" ? item.snapshot : null;
         const carrier = String(
-          item.carrier || serverSnapshot?.tracking?.carrier || serverSnapshot?.provider?.code || "COSCO"
+          item.carrier ||
+            serverSnapshot?.tracking?.carrier ||
+            serverSnapshot?.provider?.code ||
+            "COSCO"
         ).toUpperCase();
         const referenceType = String(
           item.referenceType || serverSnapshot?.tracking?.type || "BOOKING"
@@ -4848,11 +4877,12 @@ async function loadInternalTrackedHistory() {
           item.referenceNo || item.trackingNumber || serverSnapshot?.tracking?.number || ""
         ).trim();
         const trackingStatus = String(item.trackingStatus || "").trim();
-        const lastTrackedAt = item.lastTrackedAt
-          || item.updatedAt
-          || serverSnapshot?.fetchedAt
-          || item.createdAt
-          || new Date().toISOString();
+        const lastTrackedAt =
+          item.lastTrackedAt ||
+          item.updatedAt ||
+          serverSnapshot?.fetchedAt ||
+          item.createdAt ||
+          new Date().toISOString();
         const pendingStatus = trackingStatus || "PENDING_MANUAL";
         const snapshot = serverSnapshot
           ? {
@@ -4982,10 +5012,13 @@ function endSystemWait(token, { complete = false } = {}) {
   document.body.classList.add("is-system-waiting");
   appShell.inert = true;
   document.body.setAttribute("aria-busy", "true");
-  systemWaitCompletionTimer = window.setTimeout(() => {
-    systemWaitCompletionTimer = null;
-    renderSystemWait();
-  }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 240 : 520);
+  systemWaitCompletionTimer = window.setTimeout(
+    () => {
+      systemWaitCompletionTimer = null;
+      renderSystemWait();
+    },
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 240 : 520
+  );
 }
 
 function clearSystemWaitType(type) {
@@ -5071,14 +5104,17 @@ function restoreBatchState() {
           carrier,
           type,
           number,
-          displayNumber: String(item?.displayNumber ?? number).trim().slice(0, 64),
+          displayNumber: String(item?.displayNumber ?? number)
+            .trim()
+            .slice(0, 64),
           importedDetails: normalizeImportedDetails(item?.importedDetails),
           status,
-          source: status === "success"
-            ? String(item?.source ?? "live")
-            : status === "manual"
-              ? "manual"
-              : null,
+          source:
+            status === "success"
+              ? String(item?.source ?? "live")
+              : status === "manual"
+                ? "manual"
+                : null,
           error: status === "failed" ? String(item?.error ?? "") : null,
           manualOnly,
           submitted: item?.submitted === true,
@@ -5093,7 +5129,8 @@ function restoreBatchState() {
     if (items.length === 0) return null;
     const storedStatus = String(stored.status ?? "").toLowerCase();
     const hasActiveTask =
-      Boolean(stored.taskId) && ["running", "stopping", "cooldown", "paused"].includes(storedStatus);
+      Boolean(stored.taskId) &&
+      ["running", "stopping", "cooldown", "paused"].includes(storedStatus);
     return {
       version: BATCH_VERSION,
       fileName: String(stored.fileName ?? "Imported queue"),
@@ -5103,7 +5140,9 @@ function restoreBatchState() {
       status: hasActiveTask
         ? storedStatus
         : items.some((item) => item.status === "pending")
-          ? storedStatus === "stopped" ? "stopped" : "paused"
+          ? storedStatus === "stopped"
+            ? "stopped"
+            : "paused"
           : "complete",
       items
     };
@@ -5128,7 +5167,11 @@ function setBatchImportNotice(key = null, variables = {}, variant = "info") {
 
 function batchStatusKey(item) {
   if (item.status === "success") {
-    if (String(item.source ?? "").toUpperCase().startsWith("MYSQL")) {
+    if (
+      String(item.source ?? "")
+        .toUpperCase()
+        .startsWith("MYSQL")
+    ) {
       return "batch.itemDatabase";
     }
     return item.source === "device-cache" ? "batch.itemCached" : "batch.itemSuccess";
@@ -5142,7 +5185,9 @@ function batchStatusKey(item) {
 }
 
 function normalizeBatchSubtaskStatus(value) {
-  const status = String(value ?? "").trim().toUpperCase();
+  const status = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (status === "SUCCEEDED" || status === "SUCCESS") return "success";
   if (status === "FAILED") return "failed";
   if (status === "RUNNING") return "running";
@@ -5166,8 +5211,8 @@ function normalizeBatchSubtasks(values) {
 }
 
 function batchSubtaskStatusLabel(subtask) {
-  if (subtask.status === "success" && subtask.source === "CONTAINER_LIST"
-      && subtask.attempts === 0) return t("batch.childSkipped");
+  if (subtask.status === "success" && subtask.source === "CONTAINER_LIST" && subtask.attempts === 0)
+    return t("batch.childSkipped");
   if (subtask.status === "retry") return t("batch.childRetry");
   if (subtask.status === "failed") return t("batch.itemFailed");
   if (subtask.status === "running") return t("batch.itemRunning");
@@ -5182,7 +5227,10 @@ function renderBatchState() {
   batchImportEmpty.hidden = hasQueue;
   batchImportSummary.hidden = !hasQueue;
   batchResumeButton.hidden =
-    !hasQueue || batchRunning || Boolean(batchRunPromise) || !items.some(
+    !hasQueue ||
+    batchRunning ||
+    Boolean(batchRunPromise) ||
+    !items.some(
       (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
     );
   batchStopButton.hidden = !hasQueue || !batchRunning;
@@ -5243,9 +5291,7 @@ function renderBatchState() {
     row.type = "button";
     row.className = `batch-result-item is-${item.status}`;
     row.disabled =
-      !item.carrier ||
-      item.manualOnly ||
-      !["success", "core", "partial"].includes(item.status);
+      !item.carrier || item.manualOnly || !["success", "core", "partial"].includes(item.status);
     row.setAttribute(
       "aria-label",
       t("batch.openItem", {
@@ -5318,21 +5364,20 @@ function renderBatchState() {
         child.setAttribute("role", "listitem");
         const childCopy = document.createElement("span");
         const childName = document.createElement("strong");
-        childName.textContent = subtask.type === "CONTAINER_LIST"
-          ? t("batch.childContainerList")
-          : t("batch.childContainer", { number: subtask.number });
+        childName.textContent =
+          subtask.type === "CONTAINER_LIST"
+            ? t("batch.childContainerList")
+            : t("batch.childContainer", { number: subtask.number });
         const childMeta = document.createElement("small");
         childMeta.textContent = [
-          subtask.error
-            ? t("batch.childError", { message: subtask.error })
-            : null,
-          subtask.attempts > 0
-            ? t("batch.childAttempts", { count: subtask.attempts })
-            : null,
+          subtask.error ? t("batch.childError", { message: subtask.error }) : null,
+          subtask.attempts > 0 ? t("batch.childAttempts", { count: subtask.attempts }) : null,
           subtask.nextRetryAt
             ? t("batch.childRetryAt", { time: formatLocalDateTime(subtask.nextRetryAt) })
             : null
-        ].filter(Boolean).join(" · ");
+        ]
+          .filter(Boolean)
+          .join(" · ");
         childMeta.hidden = !childMeta.textContent;
         childCopy.append(childName, childMeta);
         const childStatus = document.createElement("b");
@@ -5390,7 +5435,7 @@ async function parseBatchFile(file, selection = null) {
               ? t("batch.noRows")
               : code === "invalid_selection"
                 ? t("batch.previewRequired")
-              : event.data?.error?.message || t("batch.workerFailed");
+                : event.data?.error?.message || t("batch.workerFailed");
         reject(new Error(message));
       },
       { once: true }
@@ -5423,9 +5468,11 @@ function spreadsheetColumnName(index) {
 }
 
 function activeBatchPreviewSheet() {
-  return batchPreviewSheets.find((sheet) => sheet.name === batchPreviewSheet.value)
-    ?? batchPreviewSheets[0]
-    ?? null;
+  return (
+    batchPreviewSheets.find((sheet) => sheet.name === batchPreviewSheet.value) ??
+    batchPreviewSheets[0] ??
+    null
+  );
 }
 
 function renderBatchPreviewTable(sheet = activeBatchPreviewSheet()) {
@@ -5469,19 +5516,17 @@ function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
   const options = (sheet.columns ?? []).map((column) => {
     const option = document.createElement("option");
     option.value = String(column.index);
-    const recommended = column.index === sheet.suggestedColumnIndex
-      ? ` · ${t("batch.previewRecommended")}`
-      : "";
+    const recommended =
+      column.index === sheet.suggestedColumnIndex ? ` · ${t("batch.previewRecommended")}` : "";
     option.textContent = `${spreadsheetColumnName(column.index)} · ${column.label}${recommended}`;
     option.dataset.suggestedType = "BOOKING";
     return option;
   });
   batchPreviewColumn.replaceChildren(...options);
   const suggested = Number(sheet.suggestedColumnIndex);
-  batchPreviewColumn.value = Number.isInteger(suggested) && suggested >= 0
-    ? String(suggested)
-    : options[0]?.value ?? "";
-  const selectedOption = batchPreviewColumn.selectedOptions[0];
+  batchPreviewColumn.value =
+    Number.isInteger(suggested) && suggested >= 0 ? String(suggested) : (options[0]?.value ?? "");
+
   batchPreviewType.value = "BOOKING";
   batchPreviewConfirm.disabled = !batchPreviewColumn.value;
   renderBatchPreviewTable(sheet);
@@ -5493,7 +5538,7 @@ function openBatchWorkspace() {
   batchWorkspaceDialog.showModal();
   requestAnimationFrame(() => {
     const focusTarget = batchState?.items?.length
-      ? batchResultList?.querySelector("button:not(:disabled), summary") ?? batchWorkspaceClose
+      ? (batchResultList?.querySelector("button:not(:disabled), summary") ?? batchWorkspaceClose)
       : batchSelectButton;
     focusTarget?.focus({ preventScroll: true });
   });
@@ -5519,7 +5564,7 @@ function showBatchColumnPreview(file, preview) {
     (sheet) => sheet.name === preview?.suggestedSheetName
   )
     ? preview.suggestedSheetName
-    : sheetOptions[0]?.value ?? "";
+    : (sheetOptions[0]?.value ?? "");
   renderBatchPreviewColumns();
   batchWorkspaceDialog?.classList.add("is-previewing");
   batchColumnPreview.hidden = false;
@@ -5597,49 +5642,6 @@ function yieldToBrowser(delay = 80, signal) {
   });
 }
 
-function retryAfterDelay(response) {
-  const value = response?.headers?.get("Retry-After")?.trim();
-  if (!value) return null;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
-  const retryAt = Date.parse(value);
-  if (!Number.isFinite(retryAt)) return null;
-  return Math.max(0, retryAt - Date.now());
-}
-
-async function waitForBatchRequestWindow(signal) {
-  const elapsed = Date.now() - lastBatchRequestAt;
-  const remaining = BATCH_REQUEST_INTERVAL_MS - elapsed;
-  if (lastBatchRequestAt > 0 && remaining > 0) await yieldToBrowser(remaining, signal);
-  throwIfBatchAborted(signal);
-  lastBatchRequestAt = Date.now();
-}
-
-async function requestBatchTracking(query, { signal, taskId } = {}) {
-  let result = null;
-  for (let attempt = 0; attempt <= BATCH_RETRY_LIMIT; attempt += 1) {
-    await waitForBatchRequestWindow(signal);
-    result = await requestTracking(query, { signal, batchTaskId: taskId });
-    if (
-      !BATCH_RETRYABLE_STATUSES.has(result.response.status) ||
-      attempt >= BATCH_RETRY_LIMIT
-    ) {
-      return result;
-    }
-
-    const retryDelay =
-      retryAfterDelay(result.response) ?? BATCH_RETRY_BASE_MS * 2 ** attempt;
-    await yieldToBrowser(retryDelay, signal);
-  }
-  return result;
-}
-
-function createBatchTaskId() {
-  const random = globalThis.crypto?.randomUUID?.()
-    ?? `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
-  return `batch_${random}`;
-}
-
 async function cancelBatchTask(taskId) {
   if (!taskId) return null;
   const encodedTaskId = encodeURIComponent(taskId);
@@ -5681,7 +5683,9 @@ async function requestBusinessBatchTask(path, options = {}) {
 }
 
 function batchItemStatusFromServer(value) {
-  const status = String(value ?? "").trim().toUpperCase();
+  const status = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (status === "SUCCEEDED") return "success";
   if (status === "FAILED") return "failed";
   if (status === "PARTIAL") return "partial";
@@ -5712,7 +5716,7 @@ function applyBusinessBatchTask(snapshot) {
       manualOnly,
       submitted: true,
       status,
-      source: status === "manual" ? "manual" : remote.source ?? item.source ?? null,
+      source: status === "manual" ? "manual" : (remote.source ?? item.source ?? null),
       error: status === "failed" ? String(remote.error ?? t("error.generic")) : null,
       attempts: Number.isFinite(remote.attempts) ? remote.attempts : item.attempts,
       shipmentId: remote.shipmentId ?? item.shipmentId ?? null,
@@ -5721,18 +5725,21 @@ function applyBusinessBatchTask(snapshot) {
     };
   });
 
-  const taskStatus = String(snapshot.status ?? "").trim().toUpperCase();
+  const taskStatus = String(snapshot.status ?? "")
+    .trim()
+    .toUpperCase();
   const active = ["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"].includes(taskStatus);
   batchState.taskId = String(snapshot.taskId ?? batchState.taskId ?? "").trim() || null;
-  batchState.status = taskStatus === "COMPLETED"
-    ? "complete"
-    : taskStatus === "STOPPED"
-      ? "stopped"
-      : taskStatus === "STOPPING"
-        ? "stopping"
-        : active
-          ? "running"
-          : "paused";
+  batchState.status =
+    taskStatus === "COMPLETED"
+      ? "complete"
+      : taskStatus === "STOPPED"
+        ? "stopped"
+        : taskStatus === "STOPPING"
+          ? "stopping"
+          : active
+            ? "running"
+            : "paused";
   batchTaskId = batchState.taskId;
   batchRunning = active;
   batchStopRequested = taskStatus === "STOPPING";
@@ -5761,12 +5768,14 @@ function recoverMissingBusinessBatchTask() {
 function batchItemForQuery(query) {
   if (!batchState?.items?.length) return null;
   const normalized = normalizeQuery(query);
-  return batchState.items.find(
-    (item) =>
-      item.carrier === normalized.carrier &&
-      item.type === normalized.type &&
-      item.number === normalized.number
-  ) ?? null;
+  return (
+    batchState.items.find(
+      (item) =>
+        item.carrier === normalized.carrier &&
+        item.type === normalized.type &&
+        item.number === normalized.number
+    ) ?? null
+  );
 }
 
 function queryForBatchItem(item) {
@@ -5775,9 +5784,7 @@ function queryForBatchItem(item) {
     channel: "AUTO",
     type: item.type,
     number: item.number,
-    importedDetails: canManageFileVisibility(readFileSession())
-      ? item.importedDetails
-      : null
+    importedDetails: canManageFileVisibility(readFileSession()) ? item.importedDetails : null
   });
 }
 
@@ -5797,7 +5804,8 @@ async function executeBatchQueue() {
   const hasUnsubmittedWork = batchState?.items?.some(
     (item) => item.status === "pending" || (item.status === "manual" && !item.submitted)
   );
-  const canReconnectTask = Boolean(batchState?.taskId) &&
+  const canReconnectTask =
+    Boolean(batchState?.taskId) &&
     ["running", "stopping", "cooldown", "paused"].includes(batchState?.status);
   if (batchRunning || (!hasUnsubmittedWork && !canReconnectTask)) return;
 
@@ -5901,15 +5909,22 @@ function clearError() {
 }
 
 const ROUTE_STAGE_ICONS = Object.freeze({
-  origin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.5 12 4l7.5 4.5v10L12 22l-7.5-3.5z"/><path d="M4.5 8.5 12 13l7.5-4.5M12 13v9"/></svg>',
-  departure: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16h14l-2 4H7zM8 16V8h8v8M12 8V4M9.5 11h5"/><path d="M3 22c2-1 4-1 6 0 2-1 4-1 6 0 2-1 4-1 6 0"/></svg>',
-  arrival: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 7v12M7 11h10M5 15c1.5 4 4 6 7 6s5.5-2 7-6M7 15H4m13 0h3"/></svg>',
-  destination: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-13A7 7 0 0 0 5 9c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/><path d="m9.5 15.5 1.7 1.7 3.5-3.7"/></svg>',
-  waypoint: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 12h3.5c3.5 0 3-6 3.5-6M12 12c3.5 0 3 6 3.5 6"/></svg>'
+  origin:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 8.5 12 4l7.5 4.5v10L12 22l-7.5-3.5z"/><path d="M4.5 8.5 12 13l7.5-4.5M12 13v9"/></svg>',
+  departure:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16h14l-2 4H7zM8 16V8h8v8M12 8V4M9.5 11h5"/><path d="M3 22c2-1 4-1 6 0 2-1 4-1 6 0 2-1 4-1 6 0"/></svg>',
+  arrival:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 7v12M7 11h10M5 15c1.5 4 4 6 7 6s5.5-2 7-6M7 15H4m13 0h3"/></svg>',
+  destination:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-13A7 7 0 0 0 5 9c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/><path d="m9.5 15.5 1.7 1.7 3.5-3.7"/></svg>',
+  waypoint:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 12h3.5c3.5 0 3-6 3.5-6M12 12c3.5 0 3 6 3.5 6"/></svg>'
 });
 
 function routeStageKind(node, index, total) {
-  const locationType = String(node?.locationType ?? "").trim().toUpperCase();
+  const locationType = String(node?.locationType ?? "")
+    .trim()
+    .toUpperCase();
   if (locationType === "FND" || locationType.includes("FINAL")) return "destination";
   if (["LPOD", "POD"].includes(locationType) || locationType.includes("DISCHARGE")) {
     return "arrival";
@@ -5940,7 +5955,11 @@ function selectDisplayRouteNodes(route) {
       node.event,
       node.actualTime ?? node.estimatedTime
     ]
-      .map((value) => String(value ?? "").trim().toUpperCase())
+      .map((value) =>
+        String(value ?? "")
+          .trim()
+          .toUpperCase()
+      )
       .join("|");
     if (seen.has(identity)) return false;
     seen.add(identity);
@@ -5990,15 +6009,12 @@ function containerTypeSummary(snapshot) {
   for (const container of source) {
     const type = String(container.type).trim().toUpperCase();
     if (!type) continue;
-    const quantity = Number.isFinite(container.quantity) && container.quantity > 0
-      ? container.quantity
-      : 1;
+    const quantity =
+      Number.isFinite(container.quantity) && container.quantity > 0 ? container.quantity : 1;
     counts.set(type, (counts.get(type) ?? 0) + quantity);
   }
 
-  return [...counts.entries()]
-    .map(([type, count]) => `${type} × ${count}`)
-    .join(" · ");
+  return [...counts.entries()].map(([type, count]) => `${type} × ${count}`).join(" · ");
 }
 
 function renderPrimaryFacts(snapshot) {
@@ -6118,13 +6134,14 @@ function renderRoutingLegs(legs) {
       valueOrDash(leg.dischargePort)
     );
     row.append(dischargePort);
-    const isTruckLeg = String(leg.mode ?? "").trim().toUpperCase() === "TRUCK";
+    const isTruckLeg =
+      String(leg.mode ?? "")
+        .trim()
+        .toUpperCase() === "TRUCK";
     const showTruckInfoNote = isTruckLeg && !leg.estimatedDeparture;
     appendCell(
       row,
-      showTruckInfoNote
-        ? t("routing.truckInfoProvided")
-        : formatDateTime(leg.estimatedDeparture),
+      showTruckInfoNote ? t("routing.truckInfoProvided") : formatDateTime(leg.estimatedDeparture),
       showTruckInfoNote ? "truck-source-note" : ""
     );
     appendCell(
@@ -6161,10 +6178,7 @@ function uniqueTextValues(...sources) {
 }
 
 function bookingNumbersForSnapshot(snapshot) {
-  return uniqueTextValues(
-    snapshot?.summary?.bookingNumbers,
-    snapshot?.references?.bookingNumbers
-  );
+  return uniqueTextValues(snapshot?.summary?.bookingNumbers, snapshot?.references?.bookingNumbers);
 }
 
 function renderReferences(snapshot) {
@@ -6194,13 +6208,17 @@ function renderReferences(snapshot) {
 
   const list = elements["reference-information"];
   list.replaceChildren();
-  const internalReferencePattern = /(?:b\/?l\s*type|bill\s*of\s*lading\s*type|surrender(?:ed)?\s*status)/i;
-  const safeInformation = (references.information ?? []).filter((item) =>
-    item?.name && item?.value && !internalReferencePattern.test(String(item.name))
+  const internalReferencePattern =
+    /(?:b\/?l\s*type|bill\s*of\s*lading\s*type|surrender(?:ed)?\s*status)/i;
+  const safeInformation = (references.information ?? []).filter(
+    (item) => item?.name && item?.value && !internalReferencePattern.test(String(item.name))
   );
   const visibleByName = new Map();
   for (const item of safeInformation) {
-    const key = String(item.name).trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+    const key = String(item.name)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
     if (key) visibleByName.set(key, item);
   }
   const visible = [...visibleByName.values()].sort(
@@ -6296,7 +6314,8 @@ function renderContainers(containers) {
     detailsButton.className = "container-details-button";
     detailsButton.textContent = t("containers.openDetails");
     detailsButton.setAttribute("aria-expanded", "false");
-    const showMilestoneDetails = readFileSession().kind !== "CUSTOMER" || (container.milestones ?? []).length > 0;
+    const showMilestoneDetails =
+      readFileSession().kind !== "CUSTOMER" || (container.milestones ?? []).length > 0;
     if (showMilestoneDetails) actionCell.append(detailsButton);
     else actionCell.textContent = "—";
     row.append(actionCell);
@@ -6359,9 +6378,7 @@ function renderTimeMetric({ cardId, labelId, valueId, locationId, record, labelK
     elements[labelId].dataset.i18n = labelKey;
     elements[labelId].textContent = t(labelKey);
   }
-  elements[valueId].textContent = visible
-    ? formatDateTime(time, record?.timezone)
-    : "—";
+  elements[valueId].textContent = visible ? formatDateTime(time, record?.timezone) : "—";
   const location = typeof record === "object" ? record?.location : "";
   elements[locationId].textContent = hasText(location) ? String(location).trim() : "";
   elements[locationId].hidden = !hasText(location);
@@ -6369,11 +6386,19 @@ function renderTimeMetric({ cardId, labelId, valueId, locationId, record, labelK
 }
 
 function metricRecordsMatch(left, right) {
-  const leftTime = String(metricTimeValue(left) ?? "").trim().toUpperCase();
-  const rightTime = String(metricTimeValue(right) ?? "").trim().toUpperCase();
+  const leftTime = String(metricTimeValue(left) ?? "")
+    .trim()
+    .toUpperCase();
+  const rightTime = String(metricTimeValue(right) ?? "")
+    .trim()
+    .toUpperCase();
   if (!leftTime || leftTime !== rightTime) return false;
-  const leftLocation = String(left?.location ?? "").trim().toUpperCase();
-  const rightLocation = String(right?.location ?? "").trim().toUpperCase();
+  const leftLocation = String(left?.location ?? "")
+    .trim()
+    .toUpperCase();
+  const rightLocation = String(right?.location ?? "")
+    .trim()
+    .toUpperCase();
   return !leftLocation || !rightLocation || leftLocation === rightLocation;
 }
 
@@ -6391,13 +6416,16 @@ function shouldLoadSupplementalDetails(payload) {
   if (snapshot.supplementalDetails?.updatedAt && !snapshot.supplementalDetails.partial) {
     return false;
   }
-  if (snapshot.supplementalDetails?.carriedForward
-      || snapshot.supplementalDetails?.pendingRefresh) {
+  if (
+    snapshot.supplementalDetails?.carriedForward ||
+    snapshot.supplementalDetails?.pendingRefresh
+  ) {
     return true;
   }
   const containersMissing = !Array.isArray(snapshot.containers) || snapshot.containers.length === 0;
-  const referencesMissing = !Array.isArray(snapshot.references?.information)
-    || snapshot.references.information.length === 0;
+  const referencesMissing =
+    !Array.isArray(snapshot.references?.information) ||
+    snapshot.references.information.length === 0;
   return containersMissing || referencesMissing;
 }
 
@@ -6406,28 +6434,24 @@ function setSupplementalDetailsStatus(state = "idle", variables = {}) {
   elements["supplemental-details-status"].dataset.state = state;
   elements["supplemental-details-status"].hidden = state === "idle";
   if (state !== "idle") {
-    elements["supplemental-details-message"].textContent = t(
-      `supplemental.${state}`,
-      variables
-    );
+    elements["supplemental-details-message"].textContent = t(`supplemental.${state}`, variables);
   }
   if (["complete", "partial"].includes(state)) {
-    supplementalStatusTimer = window.setTimeout(
-      () => setSupplementalDetailsStatus("idle"),
-      3_200
-    );
+    supplementalStatusTimer = window.setTimeout(() => setSupplementalDetailsStatus("idle"), 3_200);
   }
 }
 
 async function loadSupplementalDetails(payload) {
   if (!shouldLoadSupplementalDetails(payload)) return;
   const shipmentId = String(payload.shipmentId);
-  const key = `${shipmentId}:${trackingQueryKey(normalizeQuery({
-    carrier: payload.snapshot.provider?.code ?? "COSCO",
-    channel: "NETWORK",
-    type: payload.snapshot.tracking?.type,
-    number: payload.snapshot.tracking?.number
-  }))}`;
+  const key = `${shipmentId}:${trackingQueryKey(
+    normalizeQuery({
+      carrier: payload.snapshot.provider?.code ?? "COSCO",
+      channel: "NETWORK",
+      type: payload.snapshot.tracking?.type,
+      number: payload.snapshot.tracking?.number
+    })
+  )}`;
   if (supplementalDetailRequests.has(key)) return supplementalDetailRequests.get(key);
 
   const requestPayload = payload;
@@ -6516,10 +6540,7 @@ function renderResult(payload) {
   elements["summary-destination-name"].textContent = valueOrDash(
     [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
   );
-  const summaryLatestDetail = [
-    latest?.location,
-    formatDateTime(latest?.occurredAt)
-  ]
+  const summaryLatestDetail = [latest?.location, formatDateTime(latest?.occurredAt)]
     .filter((value) => value && value !== "—")
     .join(" · ");
   elements["summary-latest-detail"].textContent = summaryLatestDetail;
@@ -6527,7 +6548,11 @@ function renderResult(payload) {
 
   const transportModes = new Set(
     (snapshot.routingLegs ?? [])
-      .map((leg) => String(leg?.mode ?? "").trim().toUpperCase())
+      .map((leg) =>
+        String(leg?.mode ?? "")
+          .trim()
+          .toUpperCase()
+      )
       .filter(Boolean)
   );
   const serviceScopes = (summary.serviceScopes ?? []).map((scope) =>
@@ -6539,7 +6564,9 @@ function renderResult(payload) {
       ["TRUCK", "RAIL", "ROAD", "INLAND"].some((mode) => transportModes.has(mode)) ||
       serviceScopes.some((scope) => scope.includes("truck") || scope.includes("inland")),
     customs: serviceScopes.some((scope) => scope.includes("custom")),
-    warehouse: serviceScopes.some((scope) => scope.includes("warehouse") || scope.includes("storage"))
+    warehouse: serviceScopes.some(
+      (scope) => scope.includes("warehouse") || scope.includes("storage")
+    )
   };
   setSummaryService(elements["summary-service-sea"], enabledServices.sea);
   setSummaryService(elements["summary-service-inland"], enabledServices.inland);
@@ -6555,10 +6582,7 @@ function renderResult(payload) {
     : "";
   elements["fetched-at"].textContent = formatLocalDateTime(snapshot.fetchedAt);
 
-  const departureRecord = firstTimedRecord(
-    keyTimes.actualDeparture,
-    keyTimes.estimatedDeparture
-  );
+  const departureRecord = firstTimedRecord(keyTimes.actualDeparture, keyTimes.estimatedDeparture);
   const arrivalRecord = firstTimedRecord(
     keyTimes.actualArrival,
     keyTimes.estimatedFinalArrival,
@@ -6566,37 +6590,50 @@ function renderResult(payload) {
   );
   const deliveryRecord = firstTimedRecord(keyTimes.estimatedDelivery);
   const visibleMetrics = [];
-  visibleMetrics.push(renderTimeMetric({
-    cardId: "departure-metric-card",
-    labelId: "departure-metric-label",
-    valueId: "actual-departure",
-    locationId: "actual-departure-location",
-    record: departureRecord,
-    labelKey: departureRecord === keyTimes.actualDeparture
-      ? "metrics.actualDeparture"
-      : "metrics.estimatedDeparture"
-  }));
-  visibleMetrics.push(renderTimeMetric({
-    cardId: "arrival-metric-card",
-    labelId: "arrival-metric-label",
-    valueId: "actual-arrival",
-    locationId: "actual-arrival-location",
-    record: arrivalRecord,
-    labelKey: arrivalRecord === keyTimes.actualArrival
-      ? "metrics.actualArrival"
-      : "metrics.estimatedArrival"
-  }));
-  const showDelivery = Boolean(deliveryRecord) && !metricRecordsMatch(deliveryRecord, arrivalRecord);
-  visibleMetrics.push(renderTimeMetric({
-    cardId: "delivery-metric-card",
-    labelId: null,
-    valueId: "estimated-delivery",
-    locationId: "estimated-delivery-location",
-    record: showDelivery ? deliveryRecord : null,
-    labelKey: "metrics.estimatedDelivery"
-  }));
-  const hasLatestEvent = [latest?.name, latest?.location, latest?.occurredAt, latest?.transportMode]
-    .some(hasText);
+  visibleMetrics.push(
+    renderTimeMetric({
+      cardId: "departure-metric-card",
+      labelId: "departure-metric-label",
+      valueId: "actual-departure",
+      locationId: "actual-departure-location",
+      record: departureRecord,
+      labelKey:
+        departureRecord === keyTimes.actualDeparture
+          ? "metrics.actualDeparture"
+          : "metrics.estimatedDeparture"
+    })
+  );
+  visibleMetrics.push(
+    renderTimeMetric({
+      cardId: "arrival-metric-card",
+      labelId: "arrival-metric-label",
+      valueId: "actual-arrival",
+      locationId: "actual-arrival-location",
+      record: arrivalRecord,
+      labelKey:
+        arrivalRecord === keyTimes.actualArrival
+          ? "metrics.actualArrival"
+          : "metrics.estimatedArrival"
+    })
+  );
+  const showDelivery =
+    Boolean(deliveryRecord) && !metricRecordsMatch(deliveryRecord, arrivalRecord);
+  visibleMetrics.push(
+    renderTimeMetric({
+      cardId: "delivery-metric-card",
+      labelId: null,
+      valueId: "estimated-delivery",
+      locationId: "estimated-delivery-location",
+      record: showDelivery ? deliveryRecord : null,
+      labelKey: "metrics.estimatedDelivery"
+    })
+  );
+  const hasLatestEvent = [
+    latest?.name,
+    latest?.location,
+    latest?.occurredAt,
+    latest?.transportMode
+  ].some(hasText);
   elements["latest-metric-card"].hidden = !hasLatestEvent;
   elements["latest-event"].textContent = hasText(latest?.name) ? String(latest.name) : "—";
   elements["latest-event-detail"].textContent = [
@@ -6642,13 +6679,15 @@ function renderResult(payload) {
   results.hidden = false;
   results.classList.toggle("is-refreshing", loading);
   restartResultAnimation();
-  if (snapshot.supplementalDetails?.carriedForward
-      || snapshot.supplementalDetails?.pendingRefresh) {
+  if (
+    snapshot.supplementalDetails?.carriedForward ||
+    snapshot.supplementalDetails?.pendingRefresh
+  ) {
     setSupplementalDetailsStatus("stale", {
       time: formatLocalDateTime(
-        snapshot.supplementalDetails.sourceFetchedAt
-          ?? snapshot.supplementalDetails.updatedAt
-          ?? snapshot.fetchedAt
+        snapshot.supplementalDetails.sourceFetchedAt ??
+          snapshot.supplementalDetails.updatedAt ??
+          snapshot.fetchedAt
       )
     });
   }
@@ -6667,18 +6706,20 @@ function formatShipmentDate(value) {
 }
 
 function portCode(value) {
-  return String(value ?? "")
-    .toUpperCase()
-    .match(/\b[A-Z]{5}\b/)?.[0] ?? "";
+  return (
+    String(value ?? "")
+      .toUpperCase()
+      .match(/\b[A-Z]{5}\b/)?.[0] ?? ""
+  );
 }
 
 function historyPort(snapshot, side) {
   const route = snapshot.route ?? [];
   const isOrigin = side === "origin";
   const preferredTypes = isOrigin ? ["FPOL", "POR"] : ["LPOD", "FND"];
-  const node = preferredTypes
-    .map((type) => route.find((item) => item.locationType === type))
-    .find(Boolean) ?? (isOrigin ? route[0] : route.at(-1));
+  const node =
+    preferredTypes.map((type) => route.find((item) => item.locationType === type)).find(Boolean) ??
+    (isOrigin ? route[0] : route.at(-1));
   const summary = snapshot.summary?.[side] ?? {};
   const name = node?.city ?? summary.name ?? t("route.unknownLocation");
   const code = portCode(node?.facilityCode) || portCode(name);
@@ -6763,11 +6804,13 @@ function historyTimeline(snapshot) {
     );
   }
   add(t("metrics.actualArrival"), keyTimes.actualArrival?.time, keyTimes.actualArrival?.location);
-  add(t("metrics.actualDeparture"), keyTimes.actualDeparture?.time, keyTimes.actualDeparture?.location);
+  add(
+    t("metrics.actualDeparture"),
+    keyTimes.actualDeparture?.time,
+    keyTimes.actualDeparture?.location
+  );
 
-  return items
-    .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
-    .slice(0, 3);
+  return items.sort((left, right) => Date.parse(right.time) - Date.parse(left.time)).slice(0, 3);
 }
 
 function createHistoryPort(port, side) {
@@ -6861,7 +6904,8 @@ function uniqueHistoryEntries(entries) {
 function normalizeHistoryBoundCustomers(customers) {
   const unique = new Map();
   for (const customer of Array.isArray(customers) ? customers : []) {
-    const value = typeof customer === "string" ? { id: customer, displayName: customer } : customer ?? {};
+    const value =
+      typeof customer === "string" ? { id: customer, displayName: customer } : (customer ?? {});
     const id = String(value.id ?? value.publicId ?? "").trim();
     if (!id || unique.has(id)) continue;
     unique.set(id, {
@@ -6869,7 +6913,9 @@ function normalizeHistoryBoundCustomers(customers) {
       displayName: String(value.displayName ?? value.customerName ?? "").trim(),
       username: String(value.username ?? "").trim(),
       clientCode: String(value.clientCode ?? value.clientNo ?? "").trim(),
-      partyRole: String(value.partyRole ?? value.relationshipRole ?? "").trim().toUpperCase(),
+      partyRole: String(value.partyRole ?? value.relationshipRole ?? "")
+        .trim()
+        .toUpperCase(),
       shipmentCount: Number(value.shipmentCount ?? 0)
     });
   }
@@ -6879,8 +6925,9 @@ function normalizeHistoryBoundCustomers(customers) {
 function historyCustomerLabel(customer) {
   const name = customer.displayName || customer.clientCode || customer.id;
   const role = logisticsPartyRoleLabel(customer.partyRole);
-  const details = [customer.clientCode, role]
-    .filter((value, index, values) => value && value !== name && values.indexOf(value) === index);
+  const details = [customer.clientCode, role].filter(
+    (value, index, values) => value && value !== name && values.indexOf(value) === index
+  );
   return details.length ? `${name} · ${details.join(" · ")}` : name;
 }
 
@@ -6941,8 +6988,9 @@ function renderHistoryCustomerFilter(entries, session) {
 
 function historyMatchesCustomer(entry, customerId) {
   if (!customerId) return true;
-  return normalizeHistoryBoundCustomers(entry?.boundCustomers)
-    .some((customer) => customer.id === customerId);
+  return normalizeHistoryBoundCustomers(entry?.boundCustomers).some(
+    (customer) => customer.id === customerId
+  );
 }
 
 function historySearchText(entry) {
@@ -6952,29 +7000,33 @@ function historySearchText(entry) {
   const extraInformation = Array.isArray(snapshot.extraInformation)
     ? snapshot.extraInformation.flatMap((item) => [item?.key, item?.value])
     : [];
-  return normalizeHistorySearch([
-    entry?.query?.number,
-    entry?.query?.carrier,
-    entry?.query?.type,
-    snapshot.tracking?.originalNumber,
-    summary.billOfLading,
-    ...(Array.isArray(summary.bookingNumbers) ? summary.bookingNumbers : []),
-    businessReferences.clientNameCode,
-    businessReferences.clientPoNumber,
-    businessReferences.forwarderJobNumber,
-    summary.origin?.name,
-    summary.origin?.countryCode,
-    summary.destination?.name,
-    summary.destination?.countryCode,
-    summary.latestEvent?.name,
-    summary.latestEvent?.location,
-    ...normalizeHistoryBoundCustomers(entry?.boundCustomers).flatMap((customer) => [
-      customer.displayName,
-      customer.username,
-      customer.clientCode
-    ]),
-    ...extraInformation
-  ].filter(Boolean).join(" "));
+  return normalizeHistorySearch(
+    [
+      entry?.query?.number,
+      entry?.query?.carrier,
+      entry?.query?.type,
+      snapshot.tracking?.originalNumber,
+      summary.billOfLading,
+      ...(Array.isArray(summary.bookingNumbers) ? summary.bookingNumbers : []),
+      businessReferences.clientNameCode,
+      businessReferences.clientPoNumber,
+      businessReferences.forwarderJobNumber,
+      summary.origin?.name,
+      summary.origin?.countryCode,
+      summary.destination?.name,
+      summary.destination?.countryCode,
+      summary.latestEvent?.name,
+      summary.latestEvent?.location,
+      ...normalizeHistoryBoundCustomers(entry?.boundCustomers).flatMap((customer) => [
+        customer.displayName,
+        customer.username,
+        customer.clientCode
+      ]),
+      ...extraInformation
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
 
 function historyMatchesSearch(entry, searchTerm) {
@@ -6991,7 +7043,11 @@ function isHistoryFinished(entry) {
     entry?.snapshot?.summary?.latestEvent?.name
   ]
     .filter(Boolean)
-    .map((value) => String(value).toUpperCase().replace(/[^A-Z0-9]+/g, "_"));
+    .map((value) =>
+      String(value)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, "_")
+    );
   return terminalStatus.some((status) => status.includes("EMPTY_RETURN"));
 }
 
@@ -7023,9 +7079,11 @@ async function setOverseaAgentShipmentFollowing(entry, following) {
     entry.followed = payload?.following === true;
     saved = true;
   } catch (error) {
-    showError(t("agent.followFailed", {
-      message: error?.message || t("error.generic")
-    }));
+    showError(
+      t("agent.followFailed", {
+        message: error?.message || t("error.generic")
+      })
+    );
   } finally {
     entry.followBusy = false;
     if (saved && historyFollowingOnly) {
@@ -7036,10 +7094,7 @@ async function setOverseaAgentShipmentFollowing(entry, following) {
   }
 }
 
-async function refreshOverseaAgentShipment(
-  entry,
-  { render = true, reportError = true } = {}
-) {
+async function refreshOverseaAgentShipment(entry, { render = true, reportError = true } = {}) {
   const session = readFileSession();
   if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return false;
   entry.refreshing = true;
@@ -7067,18 +7122,18 @@ async function refreshOverseaAgentShipment(
     if (!response.ok) throw new Error(trackingResponseMessage(payload, response));
     if (payload?.snapshot && typeof payload.snapshot === "object") {
       entry.snapshot = payload.snapshot;
-      entry.savedAt = payload.fetchedAt
-        || payload.snapshot?.fetchedAt
-        || new Date().toISOString();
+      entry.savedAt = payload.fetchedAt || payload.snapshot?.fetchedAt || new Date().toISOString();
       entry.agentLastRefreshedAt = entry.savedAt;
     }
     updated = true;
   } catch (error) {
     entry.refreshError = error?.message || t("error.generic");
     if (reportError) {
-      showError(t("agent.updateFailed", {
-        message: entry.refreshError
-      }));
+      showError(
+        t("agent.updateFailed", {
+          message: entry.refreshError
+        })
+      );
     }
   } finally {
     entry.refreshing = false;
@@ -7088,8 +7143,9 @@ async function refreshOverseaAgentShipment(
 }
 
 function agentShipmentCustomers(entry) {
-  return normalizeHistoryBoundCustomers(entry?.boundCustomers)
-    .filter((customer) => String(customer.partyRole || "").toUpperCase() !== "OVERSEA_AGENT");
+  return normalizeHistoryBoundCustomers(entry?.boundCustomers).filter(
+    (customer) => String(customer.partyRole || "").toUpperCase() !== "OVERSEA_AGENT"
+  );
 }
 
 function agentShipmentClientLabel(entry) {
@@ -7143,10 +7199,9 @@ function renderAgentShipmentManagement(history) {
     const reference = document.createElement("b");
     reference.textContent = entry.query?.number || "—";
     const referenceMeta = document.createElement("small");
-    referenceMeta.textContent = [
-      entry.query?.carrier,
-      trackingTypeLabel(entry.query?.type)
-    ].filter(Boolean).join(" · ");
+    referenceMeta.textContent = [entry.query?.carrier, trackingTypeLabel(entry.query?.type)]
+      .filter(Boolean)
+      .join(" · ");
     identity.append(reference, referenceMeta);
 
     const carrier = document.createElement("span");
@@ -7183,9 +7238,8 @@ function renderAgentShipmentManagement(history) {
     status.className = "agent-shipment-status";
     const statusDot = document.createElement("i");
     const statusName = document.createElement("b");
-    statusName.textContent = entry.snapshot?.summary?.latestEvent?.name
-      || entry.trackingStatus
-      || "—";
+    statusName.textContent =
+      entry.snapshot?.summary?.latestEvent?.name || entry.trackingStatus || "—";
     status.append(statusDot, statusName);
 
     const note = document.createElement("span");
@@ -7269,8 +7323,8 @@ function renderAgentShipmentManagementView(history, session) {
 
   const canUpdate = managed && !agentBulkUpdating;
   const selectedCount = agentManagementSelectedKeys.size;
-  const allVisibleSelected = hasRows
-    && history.every((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
+  const allVisibleSelected =
+    hasRows && history.every((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
   if (agentManagementSelectAll) {
     agentManagementSelectAll.disabled = !canUpdate || !hasRows;
     agentManagementSelectAll.checked = allVisibleSelected;
@@ -7288,8 +7342,8 @@ function renderAgentShipmentManagementView(history, session) {
   if (agentManagementBulkUpdateLabel) {
     agentManagementBulkUpdateLabel.textContent =
       agentBulkUpdating && agentBulkUpdateMode === "selected"
-      ? t("agent.bulkUpdating", agentBulkUpdateProgress)
-      : t("agent.bulkUpdate", { count: selectedCount });
+        ? t("agent.bulkUpdating", agentBulkUpdateProgress)
+        : t("agent.bulkUpdate", { count: selectedCount });
   }
   if (agentManagementBulkStatus) {
     agentManagementBulkStatus.hidden = !agentBulkUpdateResult;
@@ -7298,9 +7352,8 @@ function renderAgentShipmentManagementView(history, session) {
       Number(agentBulkUpdateResult?.failed || 0) > 0
     );
     if (agentBulkUpdateResult) {
-      const key = agentBulkUpdateResult.failed > 0
-        ? "agent.bulkUpdatePartial"
-        : "agent.bulkUpdateComplete";
+      const key =
+        agentBulkUpdateResult.failed > 0 ? "agent.bulkUpdatePartial" : "agent.bulkUpdateComplete";
       agentManagementBulkStatus.textContent = t(key, agentBulkUpdateResult);
     } else {
       agentManagementBulkStatus.textContent = "";
@@ -7347,8 +7400,7 @@ function renderAgentShipmentManagementView(history, session) {
   }
 
   if (agentManagementPagination) {
-    agentManagementPagination.hidden =
-      !managed || historyLoadingState || historyTotalPages <= 1;
+    agentManagementPagination.hidden = !managed || historyLoadingState || historyTotalPages <= 1;
     agentManagementPagePrevious.disabled =
       historyLoadingState || agentBulkUpdating || historyPage <= 1;
     agentManagementPageNext.disabled =
@@ -7413,11 +7465,11 @@ async function loadAllRefreshableOverseaAgentShipments() {
 
 function agentUpdateTaskShipmentNumber(entry, index) {
   return String(
-    entry?.query?.number
-    || entry?.snapshot?.tracking?.number
-    || entry?.referenceNo
-    || entry?.shipmentId
-    || index + 1
+    entry?.query?.number ||
+      entry?.snapshot?.tracking?.number ||
+      entry?.referenceNo ||
+      entry?.shipmentId ||
+      index + 1
   );
 }
 
@@ -7454,9 +7506,7 @@ function renderAgentUpdateTaskDialog() {
   const running = task.status === "RUNNING";
   const processed = task.success + task.failed;
   const pending = Math.max(0, task.total - processed);
-  const progress = task.total > 0
-    ? Math.min(100, Math.round((processed / task.total) * 100))
-    : 0;
+  const progress = task.total > 0 ? Math.min(100, Math.round((processed / task.total) * 100)) : 0;
 
   if (agentUpdateTaskDialog) {
     agentUpdateTaskDialog.classList.toggle("is-complete", task.status === "COMPLETED");
@@ -7493,9 +7543,7 @@ function renderAgentUpdateTaskDialog() {
   if (agentUpdateTaskFailed) agentUpdateTaskFailed.textContent = String(task.failed);
   if (agentUpdateTaskPending) agentUpdateTaskPending.textContent = String(pending);
   if (agentUpdateTaskCurrent) {
-    agentUpdateTaskCurrent.textContent = running && task.currentNumber
-      ? task.currentNumber
-      : "—";
+    agentUpdateTaskCurrent.textContent = running && task.currentNumber ? task.currentNumber : "—";
   }
   if (agentUpdateTaskHint) {
     agentUpdateTaskHint.textContent = t(
@@ -7615,8 +7663,9 @@ async function performOverseaAgentShipmentRefresh(
 
 async function refreshSelectedOverseaAgentShipments() {
   if (agentBulkUpdating) return;
-  const selectedEntries = filteredAgentManagementHistory(readHistory())
-    .filter((entry) => agentManagementSelectedKeys.has(historyShipmentKey(entry)));
+  const selectedEntries = filteredAgentManagementHistory(readHistory()).filter((entry) =>
+    agentManagementSelectedKeys.has(historyShipmentKey(entry))
+  );
   await performOverseaAgentShipmentRefresh(selectedEntries, { mode: "selected" });
 }
 
@@ -7650,38 +7699,13 @@ async function refreshAllOverseaAgentShipments() {
   } catch (error) {
     agentBulkUpdating = false;
     agentBulkUpdateMode = "";
-    showError(t("agent.updateFailed", {
-      message: error?.message || t("error.generic")
-    }));
+    showError(
+      t("agent.updateFailed", {
+        message: error?.message || t("error.generic")
+      })
+    );
     renderHistory();
   }
-}
-
-function historyEtaTimestamp(entry) {
-  const timing = historyTiming(entry?.snapshot ?? {});
-  const parsed = Date.parse(timing.arrivalTime ?? "");
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function sortHistoryByEta(entries) {
-  const direction = historyEtaSort === "desc" ? -1 : 1;
-  return [...entries].sort((left, right) => {
-    const leftEta = historyEtaTimestamp(left);
-    const rightEta = historyEtaTimestamp(right);
-    if (leftEta == null && rightEta == null) {
-      return String(left?.query?.number || "").localeCompare(
-        String(right?.query?.number || ""),
-        currentLanguage
-      );
-    }
-    if (leftEta == null) return 1;
-    if (rightEta == null) return -1;
-    if (leftEta !== rightEta) return (leftEta - rightEta) * direction;
-    return String(left?.query?.number || "").localeCompare(
-      String(right?.query?.number || ""),
-      currentLanguage
-    );
-  });
 }
 
 function renderHistory() {
@@ -7689,9 +7713,10 @@ function renderHistory() {
   const session = readFileSession();
   const agentManagement = isOverseaAgentSession(session);
   renderHistoryCustomerFilter(allHistory, session);
-  const followedHistory = historyFollowingOnly && agentManagement
-    ? allHistory.filter((entry) => entry.followed === true)
-    : allHistory;
+  const followedHistory =
+    historyFollowingOnly && agentManagement
+      ? allHistory.filter((entry) => entry.followed === true)
+      : allHistory;
   const customerHistory = historyCustomerFilter
     ? followedHistory.filter((entry) => historyMatchesCustomer(entry, historyCustomerFilter))
     : followedHistory;
@@ -7703,11 +7728,11 @@ function renderHistory() {
   // by the server. Preserve that order here so page boundaries cannot change the sort.
   const history = searchedHistory;
   const accountBound = Boolean(session.token && ["INTERNAL", "CUSTOMER"].includes(session.kind));
-  const searchHasNoResults = Boolean(normalizedSearch && allHistory.length > 0 && history.length === 0);
+  const searchHasNoResults = Boolean(
+    normalizedSearch && allHistory.length > 0 && history.length === 0
+  );
   const unfinishedHasNoResults = Boolean(
-    !normalizedSearch
-    && historyBusinessScope === "unfinished"
-    && historyTotal === 0
+    !normalizedSearch && historyBusinessScope === "unfinished" && historyTotal === 0
   );
 
   if (overviewTotalCount) overviewTotalCount.textContent = String(historyAllTotal);
@@ -7715,11 +7740,7 @@ function renderHistory() {
   if (overviewVisibleCount) overviewVisibleCount.textContent = String(history.length);
 
   historyTitle.textContent = t(
-    agentManagement
-      ? "history.agentTitle"
-      : accountBound
-        ? "history.accountTitle"
-        : "history.title"
+    agentManagement ? "history.agentTitle" : accountBound ? "history.accountTitle" : "history.title"
   );
   historySubtitle.textContent = t(
     agentManagement
@@ -7746,11 +7767,11 @@ function renderHistory() {
         ? "history.searchEmptyTitle"
         : unfinishedHasNoResults
           ? "history.unfinishedEmptyTitle"
-        : agentManagement
-          ? "agent.emptyTitle"
-        : accountBound
-          ? "history.accountEmptyTitle"
-          : "history.emptyTitle"
+          : agentManagement
+            ? "agent.emptyTitle"
+            : accountBound
+              ? "history.accountEmptyTitle"
+              : "history.emptyTitle"
   );
   historyEmptyDescription.textContent = t(
     historyLoadFailed
@@ -7759,11 +7780,11 @@ function renderHistory() {
         ? "history.searchEmptyDescription"
         : unfinishedHasNoResults
           ? "history.unfinishedEmptyDescription"
-        : agentManagement
-          ? "agent.emptyDescription"
-        : accountBound
-          ? "history.accountEmptyDescription"
-          : "history.emptyDescription"
+          : agentManagement
+            ? "agent.emptyDescription"
+            : accountBound
+              ? "history.accountEmptyDescription"
+              : "history.emptyDescription"
   );
   historyLoading.hidden = !historyLoadingState;
   historyEmpty.hidden = historyLoadingState || history.length > 0;
@@ -7813,7 +7834,11 @@ function renderHistory() {
 
     item.dataset.shipmentNumber = entry.query.number;
     item.classList.add(
-      timing.arrivalIsActual ? "is-arrived" : timing.actualDeparture ? "is-in-transit" : "is-planned"
+      timing.arrivalIsActual
+        ? "is-arrived"
+        : timing.actualDeparture
+          ? "is-in-transit"
+          : "is-planned"
     );
     item.style.setProperty("--shipment-progress", `${progress}%`);
 
@@ -7852,9 +7877,7 @@ function renderHistory() {
       businessReferences.forwarderJobNumber
         ? `${t("business.forwarderJob")} ${businessReferences.forwarderJobNumber}`
         : null,
-      normalizeHistoryBoundCustomers(entry.boundCustomers)
-        .map(historyCustomerLabel)
-        .join(" / "),
+      normalizeHistoryBoundCustomers(entry.boundCustomers).map(historyCustomerLabel).join(" / "),
       trackingTypeLabel(entry.query.type),
       entry.query.carrier
     ]
@@ -7956,9 +7979,9 @@ function renderHistory() {
       followButton.className = "agent-follow-button";
       followButton.classList.toggle("is-following", entry.followed === true);
       followButton.disabled = entry.followBusy === true;
-      followButton.innerHTML = `<span aria-hidden="true">★</span><b>${
-        t(entry.followed ? "agent.unfollow" : "agent.follow")
-      }</b>`;
+      followButton.innerHTML = `<span aria-hidden="true">★</span><b>${t(
+        entry.followed ? "agent.unfollow" : "agent.follow"
+      )}</b>`;
       followButton.addEventListener("click", (event) => {
         event.stopPropagation();
         void setOverseaAgentShipmentFollowing(entry, !entry.followed);
@@ -8014,7 +8037,9 @@ function renderHistory() {
 }
 
 function cmaSessionErrorMessage(payload, response) {
-  return String(payload?.message ?? payload?.error ?? `${response.status} ${response.statusText}`).trim();
+  return String(
+    payload?.message ?? payload?.error ?? `${response.status} ${response.statusText}`
+  ).trim();
 }
 
 function setCmaSessionMessage(message = "", variant = "info") {
@@ -8062,9 +8087,11 @@ async function refreshCmaSessionStatus() {
   cmaSessionLoading = true;
   renderCmaSessionPanel();
   try {
-    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
-      headers: { ...fileAuthHeaders(session) }
-    }));
+    const response = requireAuthorizedResponse(
+      await fetch("/api/tracking/cma-session", {
+        headers: { ...fileAuthHeaders(session) }
+      })
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
     cmaSessionStatus = payload;
@@ -8073,9 +8100,12 @@ async function refreshCmaSessionStatus() {
   } catch (error) {
     cmaSessionStatusLoaded = true;
     cmaSessionStatus = null;
-    setCmaSessionMessage(t("cmaSession.loadFailed", {
-      message: error?.message || t("error.generic")
-    }), "error");
+    setCmaSessionMessage(
+      t("cmaSession.loadFailed", {
+        message: error?.message || t("error.generic")
+      }),
+      "error"
+    );
   } finally {
     cmaSessionLoading = false;
     renderCmaSessionPanel();
@@ -8094,17 +8124,19 @@ async function saveCmaSession() {
   cmaSessionLoading = true;
   renderCmaSessionPanel();
   try {
-    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...fileAuthHeaders(session)
-      },
-      body: JSON.stringify({
-        sessionCookie,
-        userAgent: cmaSessionUserAgent.value.trim()
+    const response = requireAuthorizedResponse(
+      await fetch("/api/tracking/cma-session", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...fileAuthHeaders(session)
+        },
+        body: JSON.stringify({
+          sessionCookie,
+          userAgent: cmaSessionUserAgent.value.trim()
+        })
       })
-    }));
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
     cmaSessionStatus = payload;
@@ -8112,9 +8144,12 @@ async function saveCmaSession() {
     cmaSessionCookie.value = "";
     setCmaSessionMessage(t("cmaSession.saved"), "success");
   } catch (error) {
-    setCmaSessionMessage(t("cmaSession.saveFailed", {
-      message: error?.message || t("error.generic")
-    }), "error");
+    setCmaSessionMessage(
+      t("cmaSession.saveFailed", {
+        message: error?.message || t("error.generic")
+      }),
+      "error"
+    );
   } finally {
     cmaSessionLoading = false;
     renderCmaSessionPanel();
@@ -8128,10 +8163,12 @@ async function clearCmaSession() {
   cmaSessionLoading = true;
   renderCmaSessionPanel();
   try {
-    const response = requireAuthorizedResponse(await fetch("/api/tracking/cma-session", {
-      method: "DELETE",
-      headers: { ...fileAuthHeaders(session) }
-    }));
+    const response = requireAuthorizedResponse(
+      await fetch("/api/tracking/cma-session", {
+        method: "DELETE",
+        headers: { ...fileAuthHeaders(session) }
+      })
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(cmaSessionErrorMessage(payload, response));
     cmaSessionStatus = payload;
@@ -8139,9 +8176,12 @@ async function clearCmaSession() {
     cmaSessionCookie.value = "";
     setCmaSessionMessage(t("cmaSession.cleared"), "success");
   } catch (error) {
-    setCmaSessionMessage(t("cmaSession.saveFailed", {
-      message: error?.message || t("error.generic")
-    }), "error");
+    setCmaSessionMessage(
+      t("cmaSession.saveFailed", {
+        message: error?.message || t("error.generic")
+      }),
+      "error"
+    );
   } finally {
     cmaSessionLoading = false;
     renderCmaSessionPanel();
@@ -8261,9 +8301,7 @@ function renderChannelStatus(status) {
     lastChannelStatus.nextCheckAt
       ? t("status.nextCheck", { time: formatLocalDateTime(lastChannelStatus.nextCheckAt) })
       : null,
-    lastChannelStatus.lastError
-      ? t("status.error", { message: lastChannelStatus.lastError })
-      : null
+    lastChannelStatus.lastError ? t("status.error", { message: lastChannelStatus.lastError }) : null
   ]
     .filter(Boolean)
     .join("\n");
@@ -8396,10 +8434,12 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
 
 function historyEntryForQuery(query, shipmentId = null) {
   const normalized = normalizeQuery(query);
-  return readHistory().find((entry) => {
-    if (shipmentId && String(entry.shipmentId ?? "") === String(shipmentId)) return true;
-    return trackingQueryKey(entry.query) === trackingQueryKey(normalized);
-  }) ?? null;
+  return (
+    readHistory().find((entry) => {
+      if (shipmentId && String(entry.shipmentId ?? "") === String(shipmentId)) return true;
+      return trackingQueryKey(entry.query) === trackingQueryKey(normalized);
+    }) ?? null
+  );
 }
 
 function showStoredTrackingQuery(
@@ -8584,14 +8624,9 @@ async function requestTracking(query, options = {}) {
   if (!isPublicTrackingRouteUnavailable(platform)) return platform;
 
   const primary = await postTrackingRequest("/api/track", query, options);
-  if (
-    query.carrier === "COSCO" &&
-    [404, 405].includes(primary.response.status)
-  ) {
+  if (query.carrier === "COSCO" && [404, 405].includes(primary.response.status)) {
     const compatibilityPath =
-      query.channel === "PLAYWRIGHT"
-        ? "/api/track/cosco/playwright"
-        : "/api/track/cosco";
+      query.channel === "PLAYWRIGHT" ? "/api/track/cosco/playwright" : "/api/track/cosco";
     return postTrackingRequest(compatibilityPath, query, options);
   }
   return primary;
@@ -8624,8 +8659,7 @@ checkChannelsButton?.addEventListener("click", async () => {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(
-        trackingResponseMessage(payload, response) ||
-        t("error.http", { status: response.status })
+        trackingResponseMessage(payload, response) || t("error.http", { status: response.status })
       );
     }
     renderChannelCheck(payload);
@@ -8676,10 +8710,7 @@ form.addEventListener("submit", async (event) => {
       throw new Error(trackingDiagnosticMessage(upstreamPayload, response));
     }
 
-    const payload = mergeImportedDetailsIntoPayload(
-      upstreamPayload,
-      importedItem?.importedDetails
-    );
+    const payload = mergeImportedDetailsIntoPayload(upstreamPayload, importedItem?.importedDetails);
     markBatchItemResult(query, {
       status: "success",
       source: payload?.cached ? "server-cache" : "live"
@@ -8778,7 +8809,6 @@ batchPreviewSheet?.addEventListener("change", () => {
 });
 
 batchPreviewColumn?.addEventListener("change", () => {
-  const selectedOption = batchPreviewColumn.selectedOptions[0];
   batchPreviewType.value = "BOOKING";
   renderBatchPreviewTable();
 });
@@ -9000,13 +9030,14 @@ document.querySelectorAll("[data-view-target]").forEach((link) => {
 document.querySelectorAll("[data-home-link]").forEach((link) => {
   link.addEventListener("click", (event) => {
     if (
-      event.defaultPrevented
-      || event.button !== 0
-      || event.metaKey
-      || event.ctrlKey
-      || event.shiftKey
-      || event.altKey
-    ) return;
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
 
     event.preventDefault();
     if (document.body.classList.contains("is-page-leaving")) return;
@@ -9019,18 +9050,17 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
 
 document.querySelector("#portal-return-link")?.addEventListener("click", (event) => {
   if (
-    event.defaultPrevented
-    || event.button !== 0
-    || event.metaKey
-    || event.ctrlKey
-    || event.shiftKey
-    || event.altKey
-  ) return;
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  )
+    return;
   event.preventDefault();
   const requestedReturn = new URLSearchParams(window.location.search).get("returnTo") ?? "";
-  const safeReturn = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//")
-    ? requestedReturn
-    : "";
+  const safeReturn = localReturnPath(requestedReturn);
   if (safeReturn) {
     showPlatformRouteWait();
     window.location.assign(safeReturn);
@@ -9233,15 +9263,9 @@ businessReferenceForm.addEventListener("submit", (event) => {
   const references = {
     clientNameCode: document.querySelector("#business-client-code-input").value.trim(),
     clientPoNumber: document.querySelector("#business-client-po-input").value.trim(),
-    forwarderJobNumber: document
-      .querySelector("#business-forwarder-job-input")
-      .value.trim()
+    forwarderJobNumber: document.querySelector("#business-forwarder-job-input").value.trim()
   };
-  writeSupplementaryRecord(
-    BUSINESS_REFERENCE_PREFIX,
-    currentPayload.snapshot,
-    references
-  );
+  writeSupplementaryRecord(BUSINESS_REFERENCE_PREFIX, currentPayload.snapshot, references);
   businessReferenceDialog.close();
   renderBusinessReferences(currentPayload.snapshot);
   renderHistory();
@@ -9276,10 +9300,11 @@ documentEditorForm.addEventListener("submit", async (event) => {
       formData.append("visibility", selectedVisibility);
     }
     try {
-      await requestRelatedFilesApi(
-        shipmentFilesPath(session, relatedFilesShipmentId),
-        { method: "POST", body: formData, session }
-      );
+      await requestRelatedFilesApi(shipmentFilesPath(session, relatedFilesShipmentId), {
+        method: "POST",
+        body: formData,
+        session
+      });
       await loadRelatedFiles();
     } catch (error) {
       window.alert(t("files.uploadFailed", { message: error?.message || t("error.generic") }));
@@ -9387,10 +9412,7 @@ batchState = restoreBatchState();
 if (batchState) persistBatchState();
 historyLoadingState = ["INTERNAL", "CUSTOMER"].includes(readFileSession().kind);
 applyLanguage(currentLanguage, { persist: false });
-if (
-  batchState?.taskId &&
-  ["running", "stopping", "paused"].includes(batchState.status)
-) {
+if (batchState?.taskId && ["running", "stopping", "paused"].includes(batchState.status)) {
   window.setTimeout(() => void runBatchQueue(), 0);
 }
 
@@ -9413,11 +9435,14 @@ async function initializeTrackingPage() {
     }
     return;
   }
-  showView(["overview", "shipments", "tracking", "profile"].includes(window.location.hash.slice(1))
-    ? window.location.hash.slice(1)
-    : "overview", {
-    updateLocation: false
-  });
+  showView(
+    ["overview", "shipments", "tracking", "profile"].includes(window.location.hash.slice(1))
+      ? window.location.hash.slice(1)
+      : "overview",
+    {
+      updateLocation: false
+    }
+  );
   await Promise.all([
     loadCustomerAssignedHistory(),
     loadInternalTrackedHistory(),

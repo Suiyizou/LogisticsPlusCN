@@ -1,0 +1,685 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Shipment platform module contracts", "version": "1.0.0" },
+  "servers": [{ "url": "/api" }],
+  "paths": {
+    "/business/customers": {
+      "post": {
+        "operationId": "createCustomerProfile",
+        "security": [{ "employeeToken": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CustomerProfileCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileResponse"
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid customer profile" },
+          "401": { "description": "Unauthenticated" },
+          "403": { "description": "Forbidden" },
+          "404": {
+            "description": "Customer outside the permitted scope or absent"
+          },
+          "409": { "description": "Username or customer code already exists" }
+        }
+      },
+      "get": {
+        "operationId": "listCustomerDirectory",
+        "security": [{ "employeeToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Authorized customer directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDirectoryResponse"
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthenticated" },
+          "403": { "description": "Forbidden" }
+        }
+      }
+    },
+    "/business/customers/{customerId}": {
+      "parameters": [
+        {
+          "name": "customerId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string" }
+        }
+      ],
+      "get": {
+        "operationId": "readCustomerProfile",
+        "security": [{ "employeeToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Authorized customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileResponse"
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid customer profile" },
+          "401": { "description": "Unauthenticated" },
+          "403": { "description": "Forbidden" },
+          "404": {
+            "description": "Customer outside the permitted scope or absent"
+          },
+          "409": { "description": "Username or customer code already exists" }
+        }
+      },
+      "patch": {
+        "operationId": "updateCustomerProfile",
+        "security": [{ "employeeToken": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CustomerProfileUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileResponse"
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid customer profile" },
+          "401": { "description": "Unauthenticated" },
+          "403": { "description": "Forbidden" },
+          "404": {
+            "description": "Customer outside the permitted scope or absent"
+          },
+          "409": { "description": "Username or customer code already exists" }
+        }
+      }
+    },
+    "/business/service-catalog": {
+      "get": {
+        "operationId": "listServiceCatalog",
+        "security": [{ "employeeToken": [] }],
+        "tags": ["service-catalog"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": { "type": "string", "maxLength": 100 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ServiceCatalogPage" }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createServiceCatalog",
+        "security": [{ "employeeToken": [] }],
+        "tags": ["service-catalog"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ServiceCatalogWrite" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/business/service-catalog/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "maxLength": 64 }
+        }
+      ],
+      "get": {
+        "operationId": "getServiceCatalog",
+        "security": [{ "employeeToken": [] }],
+        "tags": ["service-catalog"],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateServiceCatalog",
+        "security": [{ "employeeToken": [] }],
+        "tags": ["service-catalog"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ServiceCatalogUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "employeeToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Auth-Token"
+      },
+      "customerToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Customer-Token"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "integer" },
+          "message": { "type": "string" },
+          "code": { "type": "string" },
+          "errorId": { "type": "string" },
+          "retryAfterMs": { "type": "integer" }
+        }
+      },
+      "CustomerProfileCreate": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "minLength": 2, "maxLength": 64 },
+          "displayName": { "type": "string", "minLength": 2, "maxLength": 80 },
+          "partyRole": { "type": "string", "enum": ["SHIPPER", "CONSIGNEE"] },
+          "clientCode": { "type": "string", "nullable": true },
+          "remark": { "type": "string", "nullable": true, "maxLength": 500 },
+          "contactEmail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 254,
+            "description": "Optional contact address. PATCH omission/null preserves; empty string clears."
+          },
+          "password": { "type": "string", "minLength": 8, "maxLength": 128 }
+        }
+      },
+      "CustomerProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string", "minLength": 2, "maxLength": 64 },
+          "displayName": { "type": "string", "minLength": 2, "maxLength": 80 },
+          "partyRole": { "type": "string", "enum": ["SHIPPER", "CONSIGNEE"] },
+          "clientCode": { "type": "string", "nullable": true },
+          "remark": { "type": "string", "nullable": true, "maxLength": 500 },
+          "contactEmail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 254,
+            "description": "Optional contact address. PATCH omission/null preserves; empty string clears."
+          },
+          "status": { "type": "string", "enum": ["ACTIVE", "DISABLED"] }
+        }
+      },
+      "CustomerProfileResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "displayName",
+          "clientCode",
+          "partyRole",
+          "customerCodePrefix",
+          "customerCodeMode",
+          "provisioningSource",
+          "status",
+          "remark",
+          "contactEmail",
+          "createdBy",
+          "createdByDisplayName",
+          "responsibleAgentId",
+          "responsibleAgentDisplayName",
+          "createdAt",
+          "updatedAt",
+          "shipmentCount",
+          "overseaAgentUserId",
+          "overseaAgentUsername",
+          "overseaAgentDisplayName",
+          "customerCode"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "username": { "type": "string" },
+          "displayName": { "type": "string" },
+          "clientCode": { "type": "string", "nullable": true },
+          "partyRole": { "type": "string" },
+          "customerCodePrefix": { "type": "string" },
+          "customerCodeMode": { "type": "string" },
+          "provisioningSource": { "type": "string" },
+          "status": { "type": "string" },
+          "remark": { "type": "string", "nullable": true },
+          "contactEmail": { "type": "string", "nullable": true },
+          "createdBy": { "type": "integer", "nullable": true },
+          "createdByDisplayName": { "type": "string", "nullable": true },
+          "responsibleAgentId": { "type": "integer" },
+          "responsibleAgentDisplayName": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "nullable": true },
+          "updatedAt": { "type": "string", "nullable": true },
+          "shipmentCount": { "type": "integer" },
+          "overseaAgentUserId": { "type": "integer", "nullable": true },
+          "overseaAgentUsername": { "type": "string", "nullable": true },
+          "overseaAgentDisplayName": { "type": "string", "nullable": true },
+          "customerCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only returned for the explicit create operation; null on ordinary reads/updates."
+          }
+        }
+      },
+      "CustomerDirectoryItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "displayName",
+          "clientCode",
+          "partyRole",
+          "customerCodePrefix",
+          "customerCodeMode",
+          "provisioningSource",
+          "status",
+          "remark",
+          "contactEmail",
+          "createdBy",
+          "createdByDisplayName",
+          "responsibleAgentId",
+          "responsibleAgentDisplayName",
+          "createdAt",
+          "updatedAt",
+          "shipmentCount",
+          "overseaAgentUserId",
+          "overseaAgentUsername",
+          "overseaAgentDisplayName"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "username": { "type": "string" },
+          "displayName": { "type": "string" },
+          "clientCode": { "type": "string", "nullable": true },
+          "partyRole": { "type": "string" },
+          "customerCodePrefix": { "type": "string" },
+          "customerCodeMode": { "type": "string" },
+          "provisioningSource": { "type": "string" },
+          "status": { "type": "string" },
+          "remark": { "type": "string", "nullable": true },
+          "contactEmail": { "type": "string", "nullable": true },
+          "createdBy": { "type": "integer", "nullable": true },
+          "createdByDisplayName": { "type": "string", "nullable": true },
+          "responsibleAgentId": { "type": "integer" },
+          "responsibleAgentDisplayName": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string" },
+          "updatedAt": { "type": "string" },
+          "shipmentCount": { "type": "integer" },
+          "overseaAgentUserId": { "type": "integer", "nullable": true },
+          "overseaAgentUsername": { "type": "string", "nullable": true },
+          "overseaAgentDisplayName": { "type": "string", "nullable": true }
+        }
+      },
+      "CustomerDirectoryResponse": {
+        "type": "object",
+        "required": ["items", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CustomerDirectoryItem" }
+          },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ServiceCatalogWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "enabled"],
+        "properties": {
+          "code": { "type": "string", "maxLength": 64, "minLength": 1 },
+          "name": { "type": "string", "maxLength": 160, "minLength": 1 },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "enabled": { "type": "boolean", "default": true }
+        }
+      },
+      "ServiceCatalogPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string", "maxLength": 64, "minLength": 1 },
+          "name": { "type": "string", "maxLength": 160, "minLength": 1 },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "enabled": { "type": "boolean" }
+        }
+      },
+      "ServiceCatalogUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "values"],
+        "properties": {
+          "version": { "type": "integer", "minimum": 0 },
+          "values": { "$ref": "#/components/schemas/ServiceCatalogPatch" }
+        }
+      },
+      "ServiceCatalogResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "code",
+          "name",
+          "description",
+          "enabled"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "version": { "type": "integer", "minimum": 0 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "code": { "type": "string", "maxLength": 64, "minLength": 1 },
+          "name": { "type": "string", "maxLength": 160, "minLength": 1 },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "enabled": { "type": "boolean", "default": true }
+        }
+      },
+      "ServiceCatalogPage": {
+        "type": "object",
+        "required": ["items", "page", "pageSize", "total", "totalPages"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ServiceCatalogResponse" }
+          },
+          "page": { "type": "integer", "minimum": 0 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "total": { "type": "integer", "minimum": 0 },
+          "totalPages": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

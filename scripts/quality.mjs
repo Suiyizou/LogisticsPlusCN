@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { ESLint } from "eslint";
 import prettier from "prettier";
+import { lintVueScriptSources } from "./lib/vue-script-lint.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const FALLBACK_TARGETS = ["scripts"];
@@ -191,6 +192,7 @@ async function checkLint(files) {
 const targets = selectTargets();
 const formatTargets = targets.files.filter((file) => PRETTIER_EXTENSIONS.has(extensionOf(file)));
 const lintTargets = targets.files.filter((file) => ESLINT_EXTENSIONS.has(extensionOf(file)));
+const vueTargets = targets.files.filter((file) => extensionOf(file) === ".vue");
 
 console.log(`[quality] mode: ${targets.mode}`);
 console.log(
@@ -221,6 +223,24 @@ if (lintTargets.length > 0) {
   } else {
     console.log(`[quality] eslint: ok (${lintTargets.length} file(s))`);
   }
+}
+
+if (vueTargets.length > 0) {
+  const { results, checked, skipped } = await lintVueScriptSources(
+    vueTargets.map((file) => ({ file, source: readFileSync(resolve(root, file), "utf8") }))
+  );
+  if (results.length > 0) {
+    failed = true;
+    const formatter = await new ESLint({ cwd: root }).loadFormatter("stylish");
+    console.error("[quality] Vue JS binding errors (compiled script/template lines):");
+    console.error(await formatter.format(results));
+  } else {
+    console.log(`[quality] Vue JS bindings: ok (${checked} file(s))`);
+  }
+  if (skipped.length)
+    console.log(
+      `[quality] Vue scripts requiring a separate TS/external-script check: ${skipped.join(", ")}`
+    );
 }
 
 if (failed) process.exit(1);

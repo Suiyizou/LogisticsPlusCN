@@ -2,12 +2,14 @@ import { requestJson } from "./apiClient";
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL;
 
-export function fetchBusinessCustomers() {
-  return request("/business/customers");
+export async function fetchBusinessCustomers() {
+  const { readCustomerDirectory } = await import("./customerDirectoryContract");
+  return readCustomerDirectory();
 }
 
-export function createBusinessCustomer(payload) {
-  return request("/business/customers", { method: "POST", body: payload });
+export async function createBusinessCustomer(payload) {
+  const { createCustomerProfile } = await import("./customerDirectoryContract.ts");
+  return createCustomerProfile(payload);
 }
 
 export function batchCreateBusinessCustomers(payload) {
@@ -26,11 +28,7 @@ export function handoverBusinessCustomers(payload) {
   return request("/business/customers/handover", { method: "POST", body: payload });
 }
 
-export function fetchBusinessHandoverRequests({
-  status = "",
-  page = 0,
-  size = 20
-} = {}) {
+export function fetchBusinessHandoverRequests({ status = "", page = 0, size = 20 } = {}) {
   const query = new URLSearchParams({ page: String(page), size: String(size) });
   if (status) query.set("status", status);
   return request(`/business/customers/handover-requests?${query}`);
@@ -79,11 +77,9 @@ export function transferBusinessCustomers(payload) {
   return request("/business/customers/transfer", { method: "POST", body: payload });
 }
 
-export function updateBusinessCustomer(customerId, payload) {
-  return request(`/business/customers/${encodeURIComponent(customerId)}`, {
-    method: "PATCH",
-    body: payload
-  });
+export async function updateBusinessCustomer(customerId, payload) {
+  const { updateCustomerProfile } = await import("./customerDirectoryContract.ts");
+  return updateCustomerProfile(customerId, payload);
 }
 
 export function deleteBusinessCustomer(customerId) {
@@ -91,7 +87,9 @@ export function deleteBusinessCustomer(customerId) {
 }
 
 export function resetBusinessCustomerCode(customerId) {
-  return request(`/business/customers/${encodeURIComponent(customerId)}/reset-code`, { method: "POST" });
+  return request(`/business/customers/${encodeURIComponent(customerId)}/reset-code`, {
+    method: "POST"
+  });
 }
 
 export function resetBusinessCustomerPassword(customerId, password) {
@@ -153,7 +151,9 @@ export function fetchShipmentBatchTask(taskId) {
 }
 
 export function cancelShipmentBatchTask(taskId) {
-  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" });
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST"
+  });
 }
 
 export function fetchBusinessShipmentSnapshot(shipmentId) {
@@ -165,10 +165,13 @@ export function fetchPendingClientMatches() {
 }
 
 export function resolvePendingClientMatch(matchId, customerId) {
-  return request(`/business/customers/pending-client-matches/${encodeURIComponent(matchId)}/resolve`, {
-    method: "POST",
-    body: { customerId }
-  });
+  return request(
+    `/business/customers/pending-client-matches/${encodeURIComponent(matchId)}/resolve`,
+    {
+      method: "POST",
+      body: { customerId }
+    }
+  );
 }
 
 export function createBusinessShipment(
@@ -198,10 +201,13 @@ export function updateBusinessShipment(shipmentId, payload) {
 }
 
 export function updateBusinessShipmentManualSnapshot(shipmentId, payload) {
-  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/manual-snapshot`, {
-    method: "POST",
-    body: payload
-  });
+  return request(
+    `/business/customers/shipments/${encodeURIComponent(shipmentId)}/manual-snapshot`,
+    {
+      method: "POST",
+      body: payload
+    }
+  );
 }
 
 export function batchUpdateBusinessShipmentFields(items) {
@@ -212,10 +218,13 @@ export function batchUpdateBusinessShipmentFields(items) {
 }
 
 export function invalidateBusinessShipmentSnapshot(shipmentId, reason) {
-  return request(`/business/customers/shipments/${encodeURIComponent(shipmentId)}/invalidate-snapshot`, {
-    method: "POST",
-    body: { reason }
-  });
+  return request(
+    `/business/customers/shipments/${encodeURIComponent(shipmentId)}/invalidate-snapshot`,
+    {
+      method: "POST",
+      body: { reason }
+    }
+  );
 }
 
 export function setBusinessShipmentPublication(customerId, shipmentId, published) {
@@ -245,7 +254,6 @@ export function updateBusinessShipmentNote(shipmentId, note) {
   });
 }
 
-
 export function bindBusinessCustomerShipment(customerId, payload) {
   return request(`/business/customers/${encodeURIComponent(customerId)}/shipments`, {
     method: "POST",
@@ -268,9 +276,13 @@ export function unbindBusinessCustomerShipment(customerId, shipmentId) {
 }
 
 function request(path, options = {}) {
-  return requestJson(path, {
-    method: options.method || "GET",
-    headers: { "Content-Type": "application/json" },
-    body: options.body
-  }, configuredBase);
+  return requestJson(
+    path,
+    {
+      method: options.method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: options.body
+    },
+    configuredBase
+  );
 }

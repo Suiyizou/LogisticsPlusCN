@@ -2373,7 +2373,7 @@ class ShipmentTrackingServiceTest {
           customer_code_prefix VARCHAR(16),
           customer_code_mode VARCHAR(20) DEFAULT 'RANDOM',
           provisioning_source VARCHAR(20) DEFAULT 'MANUAL',
-          remark VARCHAR(500)
+          contact_email VARCHAR(254), remark VARCHAR(500)
         )
         """);
     jdbcTemplate.execute("""

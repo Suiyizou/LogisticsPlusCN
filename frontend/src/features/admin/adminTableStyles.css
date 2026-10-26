@@ -1,0 +1,119 @@
+.admin-table-wrap :deep(.el-table__cell) {
+  padding: 9px 0;
+}
+
+.table-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.table-actions button {
+  min-width: 0;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.admin-pagination {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 0;
+  justify-content: flex-end;
+  overflow: visible;
+  padding: 16px 2px 2px;
+}
+
+.admin-pagination :deep(.el-pagination__sizes) {
+  flex: 0 0 auto;
+  margin-inline: 8px;
+}
+
+.admin-pagination :deep(.el-pagination__sizes .el-select) {
+  width: 112px !important;
+  min-width: 112px;
+}
+
+.admin-pagination :deep(.el-pagination__total) {
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+
+.admin-page-pane .admin-panel {
+  border-color: #d7e3ef;
+  padding: 20px 22px 22px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(25 65 100 / 6%);
+}
+
+.admin-page-pane .admin-panel:hover {
+  border-color: #c8d8e7;
+  box-shadow: 0 10px 28px rgb(25 65 100 / 8%);
+  transform: none;
+}
+
+.admin-page-pane .admin-panel-head {
+  min-height: 48px;
+  margin-bottom: 16px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid #e5edf5;
+}
+
+.admin-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 0;
+  border-top: 1px solid #dce6f0;
+  border-bottom: 1px solid #dce6f0;
+  background: #fff;
+}
+
+.admin-table-wrap :deep(.el-table) {
+  min-width: 760px;
+}
+
+.admin-table-wrap :deep(.el-table .cell) {
+  padding-inline: 14px;
+}
+
+.admin-table-wrap :deep(.el-table__header th) {
+  color: #344e68;
+  background: #f3f7fb !important;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.admin-table-wrap :deep(.el-table__body tr) {
+  transition: background-color 0.18s ease;
+}
+
+.admin-inline-actions > button,
+.admin-top-actions > button,
+.table-actions > button {
+  border-radius: 8px;
+  font-weight: 700;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.admin-inline-actions > button:hover:not(:disabled),
+.admin-top-actions > button:hover:not(:disabled),
+.table-actions > button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 16px rgb(47 128 209 / 12%);
+}
+
+@media (max-width: 680px) {
+  .admin-page-pane .admin-panel {
+    padding: 16px;
+  }
+  .admin-panel-head {
+    align-items: stretch;
+  }
+  .admin-pagination {
+    justify-content: flex-start;
+  }
+}

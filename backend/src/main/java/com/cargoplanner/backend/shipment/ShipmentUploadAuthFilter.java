@@ -28,7 +28,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class ShipmentUploadAuthFilter extends OncePerRequestFilter {
   private static final Pattern INTERNAL_UPLOAD = Pattern.compile(
-      "^/api/(?:shipments/[^/;]+/files|workspace-files|excel-cleaning/tasks|cargo-imports/preview)(?:;[^/]*)?/?$"
+      "^/api/(?:shipments/[^/;]+/files|workspace-files|excel-cleaning/tasks|cargo-imports/preview|text-recognition/tasks/workbook)(?:;[^/]*)?/?$"
   );
   private static final Pattern CUSTOMER_UPLOAD = Pattern.compile(
       "^/api/customer/shipments/[^/;]+/files(?:;[^/]*)?/?$"

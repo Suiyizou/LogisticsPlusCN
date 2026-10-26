@@ -6,10 +6,10 @@ import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const trackingTarget =
-    process.env.VITE_TRACKING_DEV_TARGET ||
-    env.VITE_TRACKING_DEV_TARGET ||
-    "http://127.0.0.1:3000";
+    process.env.VITE_TRACKING_DEV_TARGET || env.VITE_TRACKING_DEV_TARGET || "http://127.0.0.1:3000";
 
+  const backendTarget =
+    process.env.VITE_BACKEND_DEV_TARGET || env.VITE_BACKEND_DEV_TARGET || "http://127.0.0.1:8080";
   return {
     plugins: [
       vue(),
@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
       })
     ],
     base: "/",
+    cacheDir: process.env.VITE_CACHE_DIR || "node_modules/.vite",
     server: {
       proxy: {
         "/tracking": {
@@ -28,11 +29,11 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/tracking/, "") || "/"
         },
         "/api": {
-          target: "http://127.0.0.1:8080",
+          target: backendTarget,
           changeOrigin: true
         },
         "/actuator": {
-          target: "http://127.0.0.1:8080",
+          target: backendTarget,
           changeOrigin: true
         }
       }

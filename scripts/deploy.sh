@@ -58,11 +58,15 @@ export IMAGE_TAG="$RELEASE_TAG"
 echo "[deploy] target=$TARGET_REF previous=$CURRENT_REF image_tag=$RELEASE_TAG"
 
 if [[ -n "$BACKUP_DIR" ]]; then
+  # The verified backup is immutable. Deployment metadata belongs beside it.
+  RELEASE_MANIFEST="${BACKUP_DIR}.release.txt"
   {
     echo "release_commit=$TARGET_REF"
     echo "release_image_tag=$RELEASE_TAG"
     echo "previous_commit=$CURRENT_REF"
-  } >> "$BACKUP_DIR/version.txt"
+    echo "backup_dir=$BACKUP_DIR"
+  } > "$RELEASE_MANIFEST"
+  echo "[deploy] release manifest: $RELEASE_MANIFEST"
 fi
 
 if [[ "$DO_BUILD" == "1" ]]; then

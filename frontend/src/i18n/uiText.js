@@ -1,4 +1,74 @@
 const uiText = {
+  "excel.importNeedsReconciliation": {
+    zh: "该文件包含原单核对结果，请在下方核对包装、合计和体积差异后导入。未通过的资料需要补全原单并重新识别。",
+    en: "This file includes source reconciliation. Review packages, totals and volume differences below before importing. Incomplete source data must be corrected and recognized again."
+  },
+  "excel.packingCheckMatchedWithoutContents": {
+    zh: "外包装数量与总毛重已核对一致。原单未提供完整内装件数。",
+    en: "Package count and gross weight reconcile. A complete goods count was not provided in the source."
+  },
+  "excel.packageUnitDetails": { zh: "外包装装箱信息", en: "Handling-unit packing details" },
+  "excel.packageGrossWeight": { zh: "每个包装毛重 kg", en: "Gross weight per handling unit kg" },
+  "excel.packingCheckTitle": { zh: "包装清单核对", en: "Packing list reconciliation" },
+  "excel.packingCheckBasis": {
+    zh: "按外包装计算装箱数量、毛重及体积，内装商品单独计数",
+    en: "Handling units drive packing count, gross weight and volume; goods inside are counted separately"
+  },
+  "excel.packageCount": { zh: "外包装数量", en: "Handling units" },
+  "excel.packagesUnit": { zh: "个包装", en: "packages" },
+  "excel.goodsPiecesUnit": { zh: "件", en: "pieces" },
+  "excel.innerGoodsCount": { zh: "内装商品件数", en: "Goods inside" },
+  "excel.totalGrossWeight": { zh: "总毛重", en: "Total gross weight" },
+  "excel.dimensionVolume": { zh: "按外包装尺寸计算体积", en: "Volume from outer dimensions" },
+  "excel.sourceTotal": { zh: "原单合计：{value}", en: "Source total: {value}" },
+  "excel.declaredVolume": {
+    zh: "原单声明体积：{value} m³",
+    en: "Source declared volume: {value} m³"
+  },
+  "excel.packingCheckBlocked": {
+    zh: "资料或合计未核对通过，暂不能导入。请核查原单后重新识别。",
+    en: "Source details or totals have not reconciled. Review the source and recognize it again before importing."
+  },
+  "excel.volumeDifferenceReview": {
+    zh: "尺寸计算体积与原单声明或原始尺寸合计有差异。请核实尺寸和体积口径；装箱将使用当前外包装尺寸计算。",
+    en: "Calculated volume differs from the source declaration or original dimensions. Verify the dimensions and volume basis. Packing uses the current outer dimensions."
+  },
+  "excel.confirmVolumeDifference": {
+    zh: "我已核实这项差异，确认按当前外包装尺寸进行装箱计算",
+    en: "I have reviewed the difference and confirm using the current outer dimensions for packing"
+  },
+  "excel.packingCheckMatched": {
+    zh: "包装数、内装件数和总毛重已核对一致。",
+    en: "Package count, goods count and gross weight reconcile."
+  },
+  "excel.sourceTotalsChanged": {
+    zh: "修改后的包装数、内装件数或总毛重与原单不一致。",
+    en: "Edited package count, goods count or gross weight differs from the source."
+  },
+  "excel.packageIdentityUnclear": {
+    zh: "包装编号或唛头不明确、重复，或一箱被计为多个包装。",
+    en: "Package numbers or marks are ambiguous, duplicated, or one identified package is counted multiple times."
+  },
+  "excel.packageContentsUnclear": {
+    zh: "包装内商品明细与内装合计不一致。",
+    en: "Goods detail lines do not reconcile with the package contents total."
+  },
+  "excel.packageResultIncomplete": {
+    zh: "源单资料或识别结果不完整，请补全后重新识别。",
+    en: "Source details or recognition results are incomplete. Complete the source and recognize it again."
+  },
+  "excel.packageSourceNeedsReview": {
+    zh: "原单中的包装、重量、尺寸或汇总信息需要核实。",
+    en: "Verify source package, weight, dimension or summary information."
+  },
+  "excel.sourceRowAt": { zh: "第 {row} 行", en: "row {row}" },
+  "excel.packageTraceability": { zh: "包装与原单明细", en: "Package and source details" },
+  "excel.packageIdentity": { zh: "包装编号 / 唛头", en: "Package number / marks" },
+  "excel.packageSourceRows": { zh: "工作表 / 源行", en: "Sheet / source rows" },
+  "excel.originalWorkbookChecked": {
+    zh: "已读取原始工作簿，请核对包装与合计后导入。",
+    en: "Original workbook read. Review packages and totals before importing."
+  },
   "common.cargo": { zh: "货物", en: "Cargo" },
   "common.model": { zh: "型号", en: "Model" },
   "common.dimensionsCm": { zh: "尺寸 cm", en: "Dimensions cm" },
@@ -47,8 +117,14 @@ const uiText = {
   "cargo.nonstack": { zh: "不可重压", en: "Non-stackable" },
   "cargo.pallet": { zh: "托盘/木箱", en: "Pallet/Wooden Crate" },
   "cargo.packageType": { zh: "包装类型", en: "Package Type" },
-  "cargo.constraints": { zh: "装箱条件（可同时选择）", en: "Packing Constraints (select both if needed)" },
-  "cargo.constraintsHelp": { zh: "两个条件彼此独立；例如精密设备可以同时要求“不可重压”和“保持朝上”。", en: "The constraints are independent; precision equipment may require both non-stackable and keep-upright handling." },
+  "cargo.constraints": {
+    zh: "装箱条件（可同时选择）",
+    en: "Packing Constraints (select both if needed)"
+  },
+  "cargo.constraintsHelp": {
+    zh: "两个条件彼此独立；例如精密设备可以同时要求“不可重压”和“保持朝上”。",
+    en: "The constraints are independent; precision equipment may require both non-stackable and keep-upright handling."
+  },
 
   "app.currentCargoList": { zh: "当前货物列表", en: "Current Cargo List" },
   "app.manualEntry": { zh: "手动录入", en: "Manual Entry" },
@@ -56,71 +132,155 @@ const uiText = {
   "app.importCsv": { zh: "导入 CSV", en: "Import CSV" },
   "app.importActionAppend": { zh: "已追加", en: "Appended" },
   "app.importActionReplace": { zh: "已导入", en: "Imported" },
-  "app.importCargoSuccess": { zh: "{action} {count} 类货物{skipped}", en: "{action} {count} cargo types{skipped}" },
+  "app.importCargoSuccess": {
+    zh: "{action} {count} 类货物{skipped}",
+    en: "{action} {count} cargo types{skipped}"
+  },
   "app.importSkippedRows": { zh: "，跳过 {count} 行异常数据", en: ", skipped {count} issue rows" },
-  "result.bestFreight": { zh: "当前方案综合参考运价", en: "Selected Plan Composite Reference Freight" },
+  "result.bestFreight": {
+    zh: "当前方案综合参考运价",
+    en: "Selected Plan Composite Reference Freight"
+  },
   "result.referenceFreight": { zh: "综合参考运价", en: "Composite Reference Freight" },
-  "result.priceMissing": { zh: "未设置价格，仅参与可装性计算", en: "Price not set; fit calculation only" },
-  "result.estimatedFreight": { zh: "综合参考运价估算（未完成全部逐箱验证）", en: "Composite reference freight estimate (not fully verified per container)" },
-  "result.estimatedCandidate": { zh: "估算候选 · 未完成全部逐箱验证", en: "Estimated candidate · not fully verified per container" },
+  "result.priceMissing": {
+    zh: "未设置价格，仅参与可装性计算",
+    en: "Price not set; fit calculation only"
+  },
+  "result.estimatedFreight": {
+    zh: "综合参考运价估算（未完成全部逐箱验证）",
+    en: "Composite reference freight estimate (not fully verified per container)"
+  },
+  "result.estimatedCandidate": {
+    zh: "估算候选 · 未完成全部逐箱验证",
+    en: "Estimated candidate · not fully verified per container"
+  },
   "result.estimatedCandidates": { zh: "估算候选", en: "Estimated Candidates" },
-  "result.verificationIncomplete": { zh: "未完成全部逐箱验证", en: "Not fully verified per container" },
-  "result.mixedCurrencyPrice": { zh: "币种不一致，未进行运价比较", en: "Currencies differ; freight was not compared" },
-  "result.currencySetMismatch": { zh: "参与方案币种不一致，未形成最低运价结论", en: "Plan currencies differ; no lowest-freight conclusion was produced" },
+  "result.verificationIncomplete": {
+    zh: "未完成全部逐箱验证",
+    en: "Not fully verified per container"
+  },
+  "result.mixedCurrencyPrice": {
+    zh: "币种不一致，未进行运价比较",
+    en: "Currencies differ; freight was not compared"
+  },
+  "result.currencySetMismatch": {
+    zh: "参与方案币种不一致，未形成最低运价结论",
+    en: "Plan currencies differ; no lowest-freight conclusion was produced"
+  },
   "result.currentPlanBoxes": { zh: "当前方案箱数", en: "Current Plan Containers" },
-  "result.calculatedPlanComparison": { zh: "参与计算箱型与方案对比", en: "Calculated Containers and Plan Comparison" },
+  "result.calculatedPlanComparison": {
+    zh: "参与计算箱型与方案对比",
+    en: "Calculated Containers and Plan Comparison"
+  },
   "result.currentBestMark": { zh: "综合方案优选", en: "Best Overall Plan" },
   "result.noFeasiblePlan": { zh: "暂无可行方案", en: "No Feasible Plan" },
   "result.cacheHit": { zh: "已复用上次计算", en: "Reused Last Result" },
   "result.optimizationEyebrow": { zh: "搜索依据", en: "Search Basis" },
-  "result.optimizationTitle": { zh: "合规后优先搜索最少箱数", en: "Search for the Fewest Containers After Compliance" },
-  "result.optimizationBasis": { zh: "最终候选同时通过尺寸、支撑、载重和偏载门槛后，优先选择箱数更少的方案；箱数相同时再比较综合参考运价和利用率。本结论只覆盖本次有界搜索，不表示已证明任意规模下的全局最优。", en: "Final candidates must jointly pass dimensions, support, payload, and balance gates; fewer containers rank first, followed by composite reference freight and utilization for equal-count plans. This conclusion covers the bounded search and is not a proof of global optimality at arbitrary scale." },
+  "result.optimizationTitle": {
+    zh: "合规后优先搜索最少箱数",
+    en: "Search for the Fewest Containers After Compliance"
+  },
+  "result.optimizationBasis": {
+    zh: "最终候选同时通过尺寸、支撑、载重和偏载门槛后，优先选择箱数更少的方案；箱数相同时再比较综合参考运价和利用率。本结论只覆盖本次有界搜索，不表示已证明任意规模下的全局最优。",
+    en: "Final candidates must jointly pass dimensions, support, payload, and balance gates; fewer containers rank first, followed by composite reference freight and utilization for equal-count plans. This conclusion covers the bounded search and is not a proof of global optimality at arbitrary scale."
+  },
   "result.optimizationBest": { zh: "当前搜索最优方案", en: "Best Plan Found" },
   "result.optimizationCompare": { zh: "对比方案", en: "Compared Plan" },
-  "result.optimizationSaving": { zh: "按当前综合参考运价较该方案低 {amount}", en: "Current composite reference freight is {amount} lower than this plan" },
-  "result.optimizationNoSaving": { zh: "箱数相同且综合参考运价相近，按利用率继续排序", en: "Container counts and composite reference freight are similar; utilization decides the order" },
+  "result.optimizationSaving": {
+    zh: "按当前综合参考运价较该方案低 {amount}",
+    en: "Current composite reference freight is {amount} lower than this plan"
+  },
+  "result.optimizationNoSaving": {
+    zh: "箱数相同且综合参考运价相近，按利用率继续排序",
+    en: "Container counts and composite reference freight are similar; utilization decides the order"
+  },
   "result.optimizationMixed": { zh: "箱型组合", en: "Container Combination" },
-  "result.optimizationMixedDetail": { zh: "系统在有界搜索范围内比较多箱型组合；单一箱型是组合搜索中的一种特殊结果。", en: "The bounded search compares multi-container combinations; a single container type is a special case of the same search." },
+  "result.optimizationMixedDetail": {
+    zh: "系统在有界搜索范围内比较多箱型组合；单一箱型是组合搜索中的一种特殊结果。",
+    en: "The bounded search compares multi-container combinations; a single container type is a special case of the same search."
+  },
   "result.mixedPlan": { zh: "多箱型组合", en: "Mixed Container Plan" },
   "result.holdLabel": { zh: "第 {index} 货舱", en: "Hold {index}" },
-  "result.holdDetail": { zh: "装入 {pieces} 件，箱型参考价 {freight}", en: "{pieces} pcs loaded, container reference price {freight}" },
+  "result.holdDetail": {
+    zh: "装入 {pieces} 件，箱型参考价 {freight}",
+    en: "{pieces} pcs loaded, container reference price {freight}"
+  },
   "result.recalculate": { zh: "重新计算", en: "Recalculate" },
-  "result.freightFormula": { zh: "仅汇总已设置且币种一致的箱型参考价，不等同实际订舱价", en: "Only configured, same-currency reference prices are summed; this is not a live booking price" },
-  "result.priceFirstBasis": { zh: "全部约束合规后先按箱数最少排序，同箱数再比较运价", en: "Ranked by fewer containers first after all constraints pass, then by freight for equal counts" },
+  "result.freightFormula": {
+    zh: "仅汇总已设置且币种一致的箱型参考价，不等同实际订舱价",
+    en: "Only configured, same-currency reference prices are summed; this is not a live booking price"
+  },
+  "result.priceFirstBasis": {
+    zh: "全部约束合规后先按箱数最少排序，同箱数再比较运价",
+    en: "Ranked by fewer containers first after all constraints pass, then by freight for equal counts"
+  },
   "result.planFallback": { zh: "方案", en: "Plan" },
-  "result.remainingReportEmpty": { zh: "当前没有可分析的剩余空间。", en: "There is no remaining space to analyze in the current hold." },
-  "result.remainingReportBlocked": { zh: "当前方案未通过正式导出校验，不能导出剩余空间报告。", en: "The current plan did not pass formal export validation, so the remaining-space report cannot be exported." },
-  "result.remainingReportGenerating": { zh: "正在生成独立剩余空间报告…", en: "Generating the standalone remaining-space report…" },
-  "result.remainingReportExported": { zh: "剩余空间报告已导出。", en: "Remaining-space report exported." },
-  "result.remainingReportFailed": { zh: "剩余空间报告导出失败，请稍后重试。", en: "Failed to export the remaining-space report. Please try again later." },
+  "result.remainingReportEmpty": {
+    zh: "当前没有可分析的剩余空间。",
+    en: "There is no remaining space to analyze in the current hold."
+  },
+  "result.remainingReportBlocked": {
+    zh: "当前方案未通过正式导出校验，不能导出剩余空间报告。",
+    en: "The current plan did not pass formal export validation, so the remaining-space report cannot be exported."
+  },
+  "result.remainingReportGenerating": {
+    zh: "正在生成独立剩余空间报告…",
+    en: "Generating the standalone remaining-space report…"
+  },
+  "result.remainingReportExported": {
+    zh: "剩余空间报告已导出。",
+    en: "Remaining-space report exported."
+  },
+  "result.remainingReportFailed": {
+    zh: "剩余空间报告导出失败，请稍后重试。",
+    en: "Failed to export the remaining-space report. Please try again later."
+  },
   "app.batchDelete": { zh: "批量删除", en: "Batch Delete" },
   "app.clearAll": { zh: "清空全部", en: "Clear All" },
-  "app.emptyCargoList": { zh: "还没有录入货物，可以先手动新增，或使用上方智能导入/CSV 导入表格。", en: "No cargo has been entered yet. Add cargo manually, or use Smart Import/CSV import above." },
-  "template.deleteConfirm": { zh: "确认删除模板「{name}」吗？", en: "Delete template \"{name}\"?" },
+  "app.emptyCargoList": {
+    zh: "还没有录入货物，可以先手动新增，或使用上方智能导入/CSV 导入表格。",
+    en: "No cargo has been entered yet. Add cargo manually, or use Smart Import/CSV import above."
+  },
+  "template.deleteConfirm": { zh: "确认删除模板「{name}」吗？", en: 'Delete template "{name}"?' },
   "template.deleted": { zh: "已删除模板。", en: "Template deleted." },
   "template.cargoTemplates": { zh: "货物模板", en: "Cargo Templates" },
   "template.save": { zh: "保存模板", en: "Save Template" },
   "template.name": { zh: "模板名称", en: "Template Name" },
   "template.scale": { zh: "规模", en: "Scale" },
   "template.unnamed": { zh: "未命名模板", en: "Unnamed Template" },
-  "template.generatedName": { zh: "货物清单 {types}类/{pieces}件", en: "Cargo List {types} types / {pieces} pcs" },
-  "template.saved": { zh: "已保存模板「{name}」。", en: "Saved template \"{name}\"." },
+  "template.generatedName": {
+    zh: "货物清单 {types}类/{pieces}件",
+    en: "Cargo List {types} types / {pieces} pcs"
+  },
+  "template.saved": { zh: "已保存模板「{name}」。", en: 'Saved template "{name}".' },
 
   "profile.personalCenter": { zh: "个人中心", en: "Personal Center" },
   "profile.role.admin": { zh: "管理员", en: "Admin" },
   "profile.role.employee": { zh: "员工", en: "Employee" },
   "profile.role.overseaAgent": { zh: "海外代理", en: "Overseas agent" },
   "profile.role.business": { zh: "业务员", en: "Business Operator" },
-  "admin.audit.apiTitle": { zh: "\u7cfb\u7edf\u64cd\u4f5c\u5ba1\u8ba1", en: "System operation audit" },
+  "admin.audit.apiTitle": {
+    zh: "\u7cfb\u7edf\u64cd\u4f5c\u5ba1\u8ba1",
+    en: "System operation audit"
+  },
   "admin.audit.time": { zh: "时间", en: "Time" },
   "admin.audit.userRole": { zh: "\u64cd\u4f5c\u4eba / \u89d2\u8272", en: "Actor / role" },
   "admin.audit.endpoint": { zh: "\u7cfb\u7edf\u64cd\u4f5c", en: "System operation" },
   "admin.audit.result": { zh: "\u7c7b\u522b", en: "Category" },
   "admin.audit.duration": { zh: "\u64cd\u4f5c\u5bf9\u8c61", en: "Target" },
   "admin.audit.ipDevice": { zh: "\u6765\u6e90 IP", en: "Source IP" },
-  "admin.audit.empty": { zh: "\u6682\u65e0\u7cfb\u7edf\u64cd\u4f5c\u8bb0\u5f55", en: "No system operation records" },
-  "admin.platform.title": { zh: "货踪平台客户与代理分配", en: "Tracking platform customer assignments" },
-  "admin.platform.summary": { zh: "客户 {customers} 个，已分配代理 {assigned} 个", en: "{customers} customers, {assigned} assigned" },
+  "admin.audit.empty": {
+    zh: "\u6682\u65e0\u7cfb\u7edf\u64cd\u4f5c\u8bb0\u5f55",
+    en: "No system operation records"
+  },
+  "admin.platform.title": {
+    zh: "货踪平台客户与代理分配",
+    en: "Tracking platform customer assignments"
+  },
+  "admin.platform.summary": {
+    zh: "客户 {customers} 个，已分配代理 {assigned} 个",
+    en: "{customers} customers, {assigned} assigned"
+  },
   "admin.platform.business": { zh: "负责业务员", en: "Business operator" },
   "admin.platform.agent": { zh: "分配的海外代理", en: "Assigned overseas agent" },
   "admin.platform.customer": { zh: "客户 / 用户名", en: "Customer / username" },
@@ -144,13 +304,19 @@ const uiText = {
   "profile.planParameters": { zh: "计划参数", en: "Plan Parameters" },
   "profile.utilizationGap": { zh: "可用率 / 间隙", en: "Utilization / Gap" },
   "profile.packingCalculation": { zh: "装箱计算", en: "Packing Calculation" },
-  "profile.configParametersContainers": { zh: "配置参数和箱型", en: "Configure parameters and containers" },
+  "profile.configParametersContainers": {
+    zh: "配置参数和箱型",
+    en: "Configure parameters and containers"
+  },
   "profile.smartImport": { zh: "智能导入", en: "Smart Import" },
   "profile.excelTextRecognition": { zh: "Excel 与文本识别", en: "Excel and text recognition" },
   "profile.algorithmNotes": { zh: "算法说明", en: "Algorithm Notes" },
   "profile.viewRulesStrategies": { zh: "查看规则与策略", en: "View rules and strategies" },
   "profile.adminConsole": { zh: "管理后台", en: "Admin Console" },
-  "profile.employeesDevicesSystem": { zh: "员工、设备和系统", en: "Employees, devices, and system" },
+  "profile.employeesDevicesSystem": {
+    zh: "员工、设备和系统",
+    en: "Employees, devices, and system"
+  },
   "profile.logout": { zh: "退出登录", en: "Log Out" },
 
   "admin.runtimeHasFailedRequests": { zh: "有失败请求", en: "Failed Requests" },
@@ -158,12 +324,21 @@ const uiText = {
   "admin.files.navLabel": { zh: "文件管理", en: "File Management" },
   "admin.files.navDescription": { zh: "工作区与货运文件", en: "Workspace and shipment files" },
   "admin.files.title": { zh: "文件中心", en: "File Center" },
-  "admin.files.subtitle": { zh: "分别管理短期工作区文件与长期关联到货物的业务文件。", en: "Manage temporary workspace files and long-lived documents attached to shipments." },
+  "admin.files.subtitle": {
+    zh: "分别管理短期工作区文件与长期关联到货物的业务文件。",
+    en: "Manage temporary workspace files and long-lived documents attached to shipments."
+  },
   "admin.files.scopeAria": { zh: "文件分类", en: "File categories" },
   "admin.files.workspaceTab": { zh: "工作区临时文件", en: "Temporary Workspace Files" },
-  "admin.files.workspaceTabDescription": { zh: "导入与识别任务产生的短期文件", en: "Short-lived files used by import and recognition tasks" },
+  "admin.files.workspaceTabDescription": {
+    zh: "导入与识别任务产生的短期文件",
+    en: "Short-lived files used by import and recognition tasks"
+  },
   "admin.files.shipmentTab": { zh: "货运相关文件", en: "Shipment Documents" },
-  "admin.files.shipmentTabDescription": { zh: "关联订舱、提单与货物记录的业务文件", en: "Business documents linked to bookings, bills of lading, and shipments" },
+  "admin.files.shipmentTabDescription": {
+    zh: "关联订舱、提单与货物记录的业务文件",
+    en: "Business documents linked to bookings, bills of lading, and shipments"
+  },
   "admin.files.workspaceTitle": { zh: "工作区临时文件", en: "Temporary Workspace Files" },
   "admin.files.shipmentTitle": { zh: "货运相关文件", en: "Shipment Documents" },
   "admin.files.includeExpired": { zh: "\u5305\u542b\u5df2\u8fc7\u671f", en: "Include expired" },
@@ -184,7 +359,10 @@ const uiText = {
   "admin.files.expired": { zh: "\u5df2\u8fc7\u671f", en: "Expired" },
   "admin.files.download": { zh: "\u4e0b\u8f7d", en: "Download" },
   "admin.files.delete": { zh: "删除", en: "Delete" },
-  "admin.files.deleteConfirm": { zh: "确认删除文件“{name}”吗？文件将进入软删除状态并保留审计记录。", en: "Delete \"{name}\"? The file will be soft-deleted and retained in the audit trail." },
+  "admin.files.deleteConfirm": {
+    zh: "确认删除文件“{name}”吗？文件将进入软删除状态并保留审计记录。",
+    en: 'Delete "{name}"? The file will be soft-deleted and retained in the audit trail.'
+  },
   "admin.files.deleteSuccess": { zh: "货运文件已删除。", en: "Shipment file deleted." },
   "admin.files.workspaceEmpty": { zh: "暂无工作区临时文件", en: "No temporary workspace files" },
   "admin.files.shipmentEmpty": { zh: "暂无货运相关文件", en: "No shipment documents" },
@@ -202,9 +380,18 @@ const uiText = {
   "admin.files.previewLoading": { zh: "加载中…", en: "Loading…" },
   "admin.files.previewTitle": { zh: "文件预览", en: "File preview" },
   "admin.files.previewFailed": { zh: "预览失败：{message}", en: "Preview failed: {message}" },
-  "admin.files.previewNotSupported": { zh: "此文件类型不支持预览，请下载后查看。", en: "Preview is not supported for this file type. Please download the file to view it." },
-  "admin.files.previewDownloadTip": { zh: "如预览不完整，请下载文件查看原始内容。", en: "If the preview is incomplete, please download the file to view the original content." },
-  "admin.files.previewTextFallback": { zh: "正在以文本方式展示 {name} 的内容。", en: "Showing extracted text content for {name}." },
+  "admin.files.previewNotSupported": {
+    zh: "此文件类型不支持预览，请下载后查看。",
+    en: "Preview is not supported for this file type. Please download the file to view it."
+  },
+  "admin.files.previewDownloadTip": {
+    zh: "如预览不完整，请下载文件查看原始内容。",
+    en: "If the preview is incomplete, please download the file to view the original content."
+  },
+  "admin.files.previewTextFallback": {
+    zh: "正在以文本方式展示 {name} 的内容。",
+    en: "Showing extracted text content for {name}."
+  },
 
   "report.title": { zh: "装箱分层剖析报告", en: "Layered Packing Analysis Report" },
   "report.subtitle": {
@@ -214,16 +401,25 @@ const uiText = {
   "report.holdNo": { zh: "第 {index} 货舱", en: "Hold {index}" },
   "report.generatedAt": { zh: "生成时间：{value}", en: "Generated At: {value}" },
   "report.pageNumber": { zh: "第 {current} / {total} 页", en: "Page {current} / {total}" },
-  "report.cargoLayerCounts": { zh: "货物类别：{cargoTypes} 类 · 分层数量：{layers} 层", en: "Cargo Types: {cargoTypes} · Layer Count: {layers}" },
+  "report.cargoLayerCounts": {
+    zh: "货物类别：{cargoTypes} 类 · 分层数量：{layers} 层",
+    en: "Cargo Types: {cargoTypes} · Layer Count: {layers}"
+  },
   "report.summaryContainer": { zh: "箱型内尺寸", en: "Container Interior" },
   "report.summaryCurrentHold": { zh: "当前货舱", en: "Current Hold" },
-  "report.summaryPiecesLayers": { zh: "{pieces} 件 / {layers} 层", en: "{pieces} pcs / {layers} layers" },
+  "report.summaryPiecesLayers": {
+    zh: "{pieces} 件 / {layers} 层",
+    en: "{pieces} pcs / {layers} layers"
+  },
   "report.summaryCargoVolume": { zh: "本舱货物体积", en: "Cargo Volume in Hold" },
   "report.summaryFill": { zh: "本舱体积占用", en: "Hold Volume Used" },
   "report.summaryTheoreticalFree": { zh: "理论空余体积", en: "Theoretical Free Volume" },
   "report.summaryUsableFree": { zh: "几何净空体积", en: "Geometric Clearance" },
   "report.summaryCargoGap": { zh: "货物安全间距", en: "Cargo Safety Gap" },
-  "report.remainingSpaceTitle": { zh: "剩余空间分块与几何净空", en: "Remaining-space Blocks and Geometric Clearance" },
+  "report.remainingSpaceTitle": {
+    zh: "剩余空间分块与几何净空",
+    en: "Remaining-space Blocks and Geometric Clearance"
+  },
   "report.remainingSpaceText": {
     zh: "理论空余按箱体减去实际货物体积计算；几何净空按含安全间距的占位包络扣除，并拆分为互不重叠的 R1、R2…长方体区块。",
     en: "Theoretical free volume subtracts physical cargo volume. Geometric clearance subtracts occupied envelopes including safety gaps and is partitioned into non-overlapping cuboids R1, R2, and so on."
@@ -238,12 +434,27 @@ const uiText = {
   "report.remainingEnvelopeMetric": { zh: "安全间距 / 包络差额", en: "Gap / Envelope Allowance" },
   "report.remainingLargestMetric": { zh: "最大净空块占比", en: "Largest Block Share" },
   "report.remainingIsoTitle": { zh: "三维净空分块图", en: "3D Clearance Block Map" },
-  "report.remainingIsoText": { zh: "显示体积最大的 {count} 个净空块；仅为几何分区，不代表最大可装块或装卸可达空间。", en: "Shows the {count} largest clearance blocks. This is a geometric partition, not a maximum loadable cuboid or a guarantee of handling access." },
-  "report.remainingBlockListTitle": { zh: "主要净空区块（长 × 宽 × 高）", en: "Major Clearance Blocks (L × W × H)" },
-  "report.remainingBlockCoordinates": { zh: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm", en: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm" },
-  "report.remainingOtherBlocks": { zh: "另有 {count} 个零散净空块，共 {volume} m³，已计入几何净空总量。", en: "Another {count} fragmented clearance blocks totaling {volume} m³ are included in geometric clearance." },
+  "report.remainingIsoText": {
+    zh: "显示体积最大的 {count} 个净空块；仅为几何分区，不代表最大可装块或装卸可达空间。",
+    en: "Shows the {count} largest clearance blocks. This is a geometric partition, not a maximum loadable cuboid or a guarantee of handling access."
+  },
+  "report.remainingBlockListTitle": {
+    zh: "主要净空区块（长 × 宽 × 高）",
+    en: "Major Clearance Blocks (L × W × H)"
+  },
+  "report.remainingBlockCoordinates": {
+    zh: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm",
+    en: "X {x1}–{x2} / Y {y1}–{y2} / Z {z1}–{z2} cm"
+  },
+  "report.remainingOtherBlocks": {
+    zh: "另有 {count} 个零散净空块，共 {volume} m³，已计入几何净空总量。",
+    en: "Another {count} fragmented clearance blocks totaling {volume} m³ are included in geometric clearance."
+  },
   "report.remainingDetailTitle": { zh: "净空分块完整明细", en: "Complete Clearance-block Details" },
-  "report.remainingDetailSubtitle": { zh: "第 {start}–{end} 项，共 {total} 个区块；按体积从大到小排列。", en: "Blocks {start}–{end} of {total}, ordered by volume from largest to smallest." },
+  "report.remainingDetailSubtitle": {
+    zh: "第 {start}–{end} 项，共 {total} 个区块；按体积从大到小排列。",
+    en: "Blocks {start}–{end} of {total}, ordered by volume from largest to smallest."
+  },
   "report.remainingDetailBlock": { zh: "区块", en: "Block" },
   "report.remainingDetailDimensions": { zh: "尺寸（长 × 宽 × 高）", en: "Dimensions (L × W × H)" },
   "report.remainingDetailX": { zh: "X 坐标范围", en: "X Range" },
@@ -251,26 +462,65 @@ const uiText = {
   "report.remainingDetailZ": { zh: "Z 坐标范围", en: "Z Range" },
   "report.remainingDetailVolume": { zh: "体积", en: "Volume" },
   "report.remainingDetailShare": { zh: "净空占比", en: "Clearance Share" },
-  "report.remainingDetailTotal": { zh: "本段区块合计 {volume} m³，占几何净空 {share}%", en: "Section total: {volume} m³, {share}% of geometric clearance" },
-  "report.remainingReportTitle": { zh: "独立剩余空间分析报告", en: "Standalone Remaining-space Analysis Report" },
-  "report.remainingReportSubtitle": { zh: "轴测、俯视、正视与侧视交叉分析，并列出全部净空区块的体积、长宽高和坐标范围", en: "Cross-analysis using isometric, top, front, and side views, with volume, dimensions, and coordinate ranges for every clearance block" },
-  "report.remainingReportBlockMeta": { zh: "净空分块：{count} 个 · 按体积从大到小编号", en: "Clearance blocks: {count} · ordered by volume" },
+  "report.remainingDetailTotal": {
+    zh: "本段区块合计 {volume} m³，占几何净空 {share}%",
+    en: "Section total: {volume} m³, {share}% of geometric clearance"
+  },
+  "report.remainingReportTitle": {
+    zh: "独立剩余空间分析报告",
+    en: "Standalone Remaining-space Analysis Report"
+  },
+  "report.remainingReportSubtitle": {
+    zh: "轴测、俯视、正视与侧视交叉分析，并列出全部净空区块的体积、长宽高和坐标范围",
+    en: "Cross-analysis using isometric, top, front, and side views, with volume, dimensions, and coordinate ranges for every clearance block"
+  },
+  "report.remainingReportBlockMeta": {
+    zh: "净空分块：{count} 个 · 按体积从大到小编号",
+    en: "Clearance blocks: {count} · ordered by volume"
+  },
   "report.remainingReportBlockCount": { zh: "净空区块数量", en: "Clearance Block Count" },
-  "report.remainingReportLargestBlock": { zh: "最大区块长 × 宽 × 高", en: "Largest Block L × W × H" },
-  "report.remainingMultiViewTitle": { zh: "四视角剩余空间交叉分析", en: "Four-view Remaining-space Cross-analysis" },
-  "report.remainingMultiViewSubtitle": { zh: "四个视角使用相同的 R1–R10 编号与颜色；投影视图用于确认区块在长、宽、高三个方向上的分布。", en: "All four views use the same R1–R10 labels and colors. Projections reveal how blocks are distributed along container length, width, and height." },
+  "report.remainingReportLargestBlock": {
+    zh: "最大区块长 × 宽 × 高",
+    en: "Largest Block L × W × H"
+  },
+  "report.remainingMultiViewTitle": {
+    zh: "四视角剩余空间交叉分析",
+    en: "Four-view Remaining-space Cross-analysis"
+  },
+  "report.remainingMultiViewSubtitle": {
+    zh: "四个视角使用相同的 R1–R10 编号与颜色；投影视图用于确认区块在长、宽、高三个方向上的分布。",
+    en: "All four views use the same R1–R10 labels and colors. Projections reveal how blocks are distributed along container length, width, and height."
+  },
   "report.remainingTopViewTitle": { zh: "俯视投影（X × Y）", en: "Top Projection (X × Y)" },
-  "report.remainingTopViewNote": { zh: "沿 Z 轴向下观察，核对区块底面位置与长宽。", en: "Look down the Z axis to verify footprint position, length, and width." },
+  "report.remainingTopViewNote": {
+    zh: "沿 Z 轴向下观察，核对区块底面位置与长宽。",
+    en: "Look down the Z axis to verify footprint position, length, and width."
+  },
   "report.remainingFrontViewTitle": { zh: "正视投影（X × Z）", en: "Front Projection (X × Z)" },
-  "report.remainingFrontViewNote": { zh: "沿 Y 轴观察，核对区块长度、高度与垂直位置。", en: "Look along the Y axis to verify block length, height, and vertical position." },
+  "report.remainingFrontViewNote": {
+    zh: "沿 Y 轴观察，核对区块长度、高度与垂直位置。",
+    en: "Look along the Y axis to verify block length, height, and vertical position."
+  },
   "report.remainingSideViewTitle": { zh: "侧视投影（Y × Z）", en: "Side Projection (Y × Z)" },
-  "report.remainingSideViewNote": { zh: "沿 X 轴观察，核对区块宽度、高度与垂直位置。", en: "Look along the X axis to verify block width, height, and vertical position." },
+  "report.remainingSideViewNote": {
+    zh: "沿 X 轴观察，核对区块宽度、高度与垂直位置。",
+    en: "Look along the X axis to verify block width, height, and vertical position."
+  },
   "report.remainingAxisLength": { zh: "X 箱体长 {value} cm", en: "X Length {value} cm" },
   "report.remainingAxisWidth": { zh: "Y 箱体宽 {value} cm", en: "Y Width {value} cm" },
   "report.remainingAxisHeight": { zh: "Z 箱体高 {value} cm", en: "Z Height {value} cm" },
-  "report.remainingReportNoData": { zh: "当前货舱没有可生成剩余空间报告的摆放结果。", en: "The current hold has no placement result for a remaining-space report." },
-  "report.remainingReportAnalysisFailed": { zh: "剩余空间几何分析未通过体积守恒校验，报告未生成。", en: "The remaining-space geometry failed volume-conservation validation, so the report was not generated." },
-  "report.remainingReportFooterNote": { zh: "说明：净空块为互不重叠的轴对齐几何分区，体积可直接求和；结果不代表最大可装块、装卸路径、绑扎空间或实际作业可达性。", en: "Note: Clearance blocks are non-overlapping axis-aligned geometric partitions whose volumes can be summed. They do not guarantee maximum loadable cuboids, handling paths, lashing space, or operational access." },
+  "report.remainingReportNoData": {
+    zh: "当前货舱没有可生成剩余空间报告的摆放结果。",
+    en: "The current hold has no placement result for a remaining-space report."
+  },
+  "report.remainingReportAnalysisFailed": {
+    zh: "剩余空间几何分析未通过体积守恒校验，报告未生成。",
+    en: "The remaining-space geometry failed volume-conservation validation, so the report was not generated."
+  },
+  "report.remainingReportFooterNote": {
+    zh: "说明：净空块为互不重叠的轴对齐几何分区，体积可直接求和；结果不代表最大可装块、装卸路径、绑扎空间或实际作业可达性。",
+    en: "Note: Clearance blocks are non-overlapping axis-aligned geometric partitions whose volumes can be summed. They do not guarantee maximum loadable cuboids, handling paths, lashing space, or operational access."
+  },
   "report.massBalanceTitle": { zh: "质量重心与偏载", en: "Center of Mass and Load Balance" },
   "report.massBalanceText": {
     zh: "按每件货物重量和货物中心计算整舱重心；红点为重心，十字为箱体几何中心，四区显示质量占比。",
@@ -286,7 +536,10 @@ const uiText = {
     zh: "图中 #编号 对应录入货物顺序；A=长×宽、B=宽×高、C=长×高，不同底面会拆成 #2A/#2B。",
     en: "The # number follows cargo entry order; A=L x W, B=W x H, C=L x H. Different base faces split into #2A/#2B."
   },
-  "report.dimensionsQuantity": { zh: "{dimensions} cm / {quantity} 件", en: "{dimensions} cm / {quantity} pcs" },
+  "report.dimensionsQuantity": {
+    zh: "{dimensions} cm / {quantity} 件",
+    en: "{dimensions} cm / {quantity} pcs"
+  },
   "report.itemCount": { zh: "{count} 件", en: "{count} pcs" },
   "report.faceStatsTitle": { zh: "A/B/C 面与摆放方向", en: "A/B/C Faces and Orientation" },
   "report.faceStatsNote": {
@@ -297,25 +550,46 @@ const uiText = {
     zh: "另有 {count} 种编号 / 底面方向未在此栏展开；其编号、位置与颜色仍完整保留在视图和图例中。",
     en: "Another {count} label / base-orientation entries are not expanded here; their labels, positions, and colors remain available in the view and legend."
   },
-  "report.additionalOrientations": { zh: "另有 {count} 种 X/Y 轴向", en: "{count} additional X/Y orientation(s)" },
+  "report.additionalOrientations": {
+    zh: "另有 {count} 种 X/Y 轴向",
+    en: "{count} additional X/Y orientation(s)"
+  },
   "report.faceNameA": { zh: "长×宽", en: "L × W" },
   "report.faceNameB": { zh: "宽×高", en: "W × H" },
   "report.faceNameC": { zh: "长×高", en: "L × H" },
   "report.faceBottomLine": { zh: "{face}面 = {name}", en: "Face {face} = {name}" },
-  "report.faceSizeLine": { zh: "{a}={aValue}cm / {b}={bValue}cm", en: "{a}={aValue}cm / {b}={bValue}cm" },
-  "report.faceAxisLine": { zh: "当前 X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm", en: "Current X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm" },
-  "report.layerTitle": { zh: "第 {index} 层 / 共 {total} 层：z={z} cm", en: "Layer {index} of {total}: z={z} cm" },
-  "report.layerSubtitle": { zh: "高度范围 {bottom}–{top} cm；本层单独展开，编号与右侧摆放方向统计一一对应。", en: "Height range {bottom}–{top} cm. This layer is expanded separately; badge codes map directly to the orientation table on the right." },
+  "report.faceSizeLine": {
+    zh: "{a}={aValue}cm / {b}={bValue}cm",
+    en: "{a}={aValue}cm / {b}={bValue}cm"
+  },
+  "report.faceAxisLine": {
+    zh: "当前 X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm",
+    en: "Current X={xAxis}{xValue}cm / Y={yAxis}{yValue}cm / Z={zAxis}{zValue}cm"
+  },
+  "report.layerTitle": {
+    zh: "第 {index} 层 / 共 {total} 层：z={z} cm",
+    en: "Layer {index} of {total}: z={z} cm"
+  },
+  "report.layerSubtitle": {
+    zh: "高度范围 {bottom}–{top} cm；本层单独展开，编号与右侧摆放方向统计一一对应。",
+    en: "Height range {bottom}–{top} cm. This layer is expanded separately; badge codes map directly to the orientation table on the right."
+  },
   "report.layerTopTitle": { zh: "本层俯视图：X × Y", en: "Layer Top View: X × Y" },
   "report.layerIsoTitle": { zh: "本层剖析图：单层斜侧立体", en: "Layer Exploded View: Oblique 3D" },
-  "report.layerBadgeNote": { zh: "密集同编号合并为一个避让徽标，×N 为本视图真实件数；右侧提供底面与轴向摘要。", en: "Dense repeated codes are consolidated into a collision-free badge. ×N is the true count in this view; the right-hand panel provides a base-face and axis summary." },
+  "report.layerBadgeNote": {
+    zh: "密集同编号合并为一个避让徽标，×N 为本视图真实件数；右侧提供底面与轴向摘要。",
+    en: "Dense repeated codes are consolidated into a collision-free badge. ×N is the true count in this view; the right-hand panel provides a base-face and axis summary."
+  },
   "report.footerNote": {
     zh: "说明：分层按货物底面 z 坐标分组；A=长×宽底、B=宽×高底、C=长×高底；大批量同规格货物可能以组合块显示，件数按真实数量统计。",
     en: "Note: Layers are grouped by cargo base z-coordinate; A=L x W base, B=W x H base, C=L x H base. Bulk same-size cargo may be shown as grouped blocks while counts remain true quantities."
   },
 
   "algorithm.eyebrow": { zh: "计算说明", en: "Calculation Notes" },
-  "algorithm.title": { zh: "当前装箱算法与计算留痕", en: "Current Packing Algorithm and Calculation Trace" },
+  "algorithm.title": {
+    zh: "当前装箱算法与计算留痕",
+    en: "Current Packing Algorithm and Calculation Trace"
+  },
   "algorithm.whereRuns": { zh: "计算过程在哪执行", en: "Where the Calculation Runs" },
   "algorithm.whereRunsText": {
     zh: "主页面只负责收集货物和箱型参数，点击计算或修改数量后，浏览器主线程通过 packingClient.js 创建 Web Worker，把数据复制给 packingWorker.js。真正的装箱、旋转、支撑判断、箱型对比都在 Worker 里完成，所以 3D 视图和表单不会被计算过程长时间阻塞。",
@@ -376,27 +650,48 @@ const uiText = {
     en: "Default dimensions and conservative cargo payloads are based on the customer-provided container reference workbook. Packing uses reference internal dimensions; verify the actual unit, door opening, floor load and carrier equipment before loading. Static prices are planning inputs, not booking quotes."
   },
   "container.flatRackHeightIgnored": { zh: "平板不计高度", en: "Flat rack height ignored" },
-  "container.flatRackHeightLimitTag": { zh: "装载高限 {value} cm", en: "Load height limit {value} cm" },
+  "container.flatRackHeightLimitTag": {
+    zh: "装载高限 {value} cm",
+    en: "Load height limit {value} cm"
+  },
   "container.heightLimitCm": { zh: "装载高度上限 cm", en: "Load Height Limit cm" },
   "container.heightCm": { zh: "高 cm", en: "Height cm" },
   "container.heightLimitShort": { zh: "高限", en: "Height Limit" },
   "container.frameHeightShort": { zh: "设备高", en: "Frame Height" },
-  "container.useCustomHeightLimit": { zh: "平板/超限设备使用自定义装载高度上限", en: "Use custom load height limit for flat-rack/OOG equipment" },
+  "container.useCustomHeightLimit": {
+    zh: "平板/超限设备使用自定义装载高度上限",
+    en: "Use custom load height limit for flat-rack/OOG equipment"
+  },
   "container.heightLimitHelp": {
     zh: "平板柜不再无限制堆高；计算会以这里的高度作为最高装载边界。",
     en: "Flat racks are no longer treated as unlimited height; packing uses this value as the maximum load height."
   },
   "container.calcSize": { zh: "计算尺寸", en: "Calculation Size" },
   "container.maxPayload": { zh: "配货载重参考", en: "Cargo Payload Reference" },
-  "container.referenceOnly": { zh: "只读资料 · 不参与自动计算", en: "Reference only · Excluded from packing" },
-  "container.dimensionsNotApplicable": { zh: "内部装箱尺寸不适用", en: "Internal packing dimensions not applicable" },
+  "container.referenceOnly": {
+    zh: "只读资料 · 不参与自动计算",
+    en: "Reference only · Excluded from packing"
+  },
+  "container.dimensionsNotApplicable": {
+    zh: "内部装箱尺寸不适用",
+    en: "Internal packing dimensions not applicable"
+  },
   "container.referencePrice": { zh: "箱型静态参考价", en: "Static Container Reference Price" },
-  "container.priceMissing": { zh: "未设置；不参与最低运价比较", en: "Not set; excluded from lowest-freight comparison" },
-  "container.priceOptionalHint": { zh: "可留空；箱型仍参与可装性计算，但不会参与最低运价比较。", en: "Optional. The container remains in fit calculations but is excluded from lowest-freight comparison." },
+  "container.priceMissing": {
+    zh: "未设置；不参与最低运价比较",
+    en: "Not set; excluded from lowest-freight comparison"
+  },
+  "container.priceOptionalHint": {
+    zh: "可留空；箱型仍参与可装性计算，但不会参与最低运价比较。",
+    en: "Optional. The container remains in fit calculations but is excluded from lowest-freight comparison."
+  },
   "container.referencePriceSourceFallback": { zh: "参考运价来源", en: "Reference Freight Source" },
   "container.restoreDefaultPrice": { zh: "恢复默认价格", en: "Restore Default Price" },
   "container.restorePriceShort": { zh: "恢复价格", en: "Restore Price" },
-  "container.defaultPriceHint": { zh: "默认参考价：USD {value}", en: "Default reference price: USD {value}" },
+  "container.defaultPriceHint": {
+    zh: "默认参考价：USD {value}",
+    en: "Default reference price: USD {value}"
+  },
   "container.userEditedPrice": { zh: "用户编辑参考价", en: "User-edited reference price" },
   "container.userEditedPriceBasis": {
     zh: "用户自定义参考价；实际订舱前请按实时询价复核。",
@@ -404,11 +699,20 @@ const uiText = {
   },
   "container.parametersUpdated": { zh: "箱型参数已更新。", en: "Container parameters updated." },
   "container.customAdded": { zh: "已加入自定义箱型。", en: "Custom container added." },
-  "container.restoredDefaults": { zh: "{name} 已恢复默认尺寸和价格。", en: "{name} restored to default dimensions and price." },
-  "container.restoredDefaultPrice": { zh: "{name} 已恢复默认参考价格。", en: "{name} restored to the default reference price." },
+  "container.restoredDefaults": {
+    zh: "{name} 已恢复默认尺寸和价格。",
+    en: "{name} restored to default dimensions and price."
+  },
+  "container.restoredDefaultPrice": {
+    zh: "{name} 已恢复默认参考价格。",
+    en: "{name} restored to the default reference price."
+  },
   "container.dimensionBasis": { zh: "尺寸依据", en: "Dimension Basis" },
   "container.manualDimensions": { zh: "手动录入尺寸", en: "Manual Dimensions" },
-  "container.customNote": { zh: "自定义箱型，请按实际设备复核。", en: "Custom container; verify against actual equipment." },
+  "container.customNote": {
+    zh: "自定义箱型，请按实际设备复核。",
+    en: "Custom container; verify against actual equipment."
+  },
   "container.userDefinedDimensions": { zh: "用户自定义尺寸", en: "User-defined Dimensions" },
   "container.priority.common": { zh: "常用", en: "Common" },
   "container.priority.limited": { zh: "少量使用", en: "Limited Use" },
@@ -420,9 +724,15 @@ const uiText = {
   "excel.importCargoTitle": { zh: "选择导入方式", en: "Choose an import method" },
   "excel.importModeChoice": { zh: "货物导入方式", en: "Cargo import method" },
   "excel.manualImport": { zh: "快速导入", en: "Quick Import" },
-  "excel.manualSubtitle": { zh: "适合字段清晰、格式规范的表格", en: "For clean tables with clearly labeled fields" },
+  "excel.manualSubtitle": {
+    zh: "适合字段清晰、格式规范的表格",
+    en: "For clean tables with clearly labeled fields"
+  },
   "excel.smartRecognition": { zh: "智能导入", en: "Smart Import" },
-  "excel.recognitionSubtitle": { zh: "适合不规整、杂糅或拼盘表格", en: "For irregular, mixed, or consolidated sheets" },
+  "excel.recognitionSubtitle": {
+    zh: "适合不规整、杂糅或拼盘表格",
+    en: "For irregular, mixed, or consolidated sheets"
+  },
   "excel.fieldTemplate": { zh: "字段样板", en: "Field Template" },
   "excel.fieldSubtitle": { zh: "标准字段、规则和示例", en: "Standard fields, rules, and examples" },
   "excel.manualPath": { zh: "快速导入", en: "Quick Import" },
@@ -430,19 +740,58 @@ const uiText = {
     zh: "在浏览器后台线程中按标准字段映射、校验并直接生成装箱货物，通常几秒内完成。",
     en: "Map and validate standard fields in a browser worker, then create packing cargo directly—usually within seconds."
   },
-  "excel.quickImportCheckTitle": { zh: "快速导入需要人工复核", en: "Quick import requires a manual check" },
-  "excel.quickImportCheckDescription": { zh: "适合表头和条目清晰的表格；复杂包装关系、拼盘信息或特殊约束可能识别不完整，请在导入前后核对名称、尺寸、数量、单重和装箱条件。", en: "Best for clean headers and rows. Complex packaging, consolidated loads, or special constraints may be incomplete; verify names, dimensions, quantities, unit weights, and handling constraints before and after import." },
-  "excel.quickImportParsing": { zh: "正在按字段映射快速解析文件。", en: "Parsing the file with field mapping." },
-  "excel.quickImportFailed": { zh: "快速导入解析失败，请检查文件格式和字段。", en: "Quick import parsing failed. Check the file format and fields." },
-  "excel.localParseFallback": { zh: "后端解析不可用，已切换浏览器本地解析：{message}", en: "Backend parsing is unavailable. Switched to local browser parsing: {message}" },
-  "excel.localParsing": { zh: "正在解析文件，请稍候。大文件会在后台线程处理，页面不会被阻塞。", en: "Parsing the file. Large files are processed in a background worker so the page remains responsive." },
-  "excel.workbookRead": { zh: "已读取 {count} 个工作表，正在生成预览。", en: "Read {count} worksheet(s). Generating the preview." },
-  "excel.fileParseFailed": { zh: "文件解析失败，请检查 Excel/CSV 格式。", en: "Could not parse the file. Check the Excel/CSV format." },
-  "excel.validatingRows": { zh: "正在校验行数据与字段映射...", en: "Validating rows and field mappings..." },
-  "excel.previewValidationFailed": { zh: "预览校验失败，请检查字段映射。", en: "Preview validation failed. Check the field mappings." },
-  "excel.previewCompleteWithIssues": { zh: "已完成预览：{valid} 行有效，{invalid} 行需要确认。", en: "Preview complete: {valid} valid row(s), {invalid} row(s) need review." },
-  "excel.previewCompleteAllValid": { zh: "已完成预览：{count} 行全部通过校验。", en: "Preview complete: all {count} row(s) passed validation." },
-  "excel.quickImportPostCheck": { zh: "已快速导入 {count} 类货物。识别结果可能存在偏差，请检查名称、尺寸、数量、单重、不可重压和保持朝上条件，确认后再进入计算。", en: "Quick-imported {count} cargo types. Results may contain mapping errors; verify names, dimensions, quantities, unit weights, non-stackable, and keep-upright constraints before calculating." },
+  "excel.quickImportCheckTitle": {
+    zh: "快速导入需要人工复核",
+    en: "Quick import requires a manual check"
+  },
+  "excel.quickImportCheckDescription": {
+    zh: "适合表头和条目清晰的表格；复杂包装关系、拼盘信息或特殊约束可能识别不完整，请在导入前后核对名称、尺寸、数量、单重和装箱条件。",
+    en: "Best for clean headers and rows. Complex packaging, consolidated loads, or special constraints may be incomplete; verify names, dimensions, quantities, unit weights, and handling constraints before and after import."
+  },
+  "excel.quickImportParsing": {
+    zh: "正在按字段映射快速解析文件。",
+    en: "Parsing the file with field mapping."
+  },
+  "excel.quickImportFailed": {
+    zh: "快速导入解析失败，请检查文件格式和字段。",
+    en: "Quick import parsing failed. Check the file format and fields."
+  },
+  "excel.localParseFallback": {
+    zh: "后端解析不可用，已切换浏览器本地解析：{message}",
+    en: "Backend parsing is unavailable. Switched to local browser parsing: {message}"
+  },
+  "excel.localParsing": {
+    zh: "正在解析文件，请稍候。大文件会在后台线程处理，页面不会被阻塞。",
+    en: "Parsing the file. Large files are processed in a background worker so the page remains responsive."
+  },
+  "excel.workbookRead": {
+    zh: "已读取 {count} 个工作表，正在生成预览。",
+    en: "Read {count} worksheet(s). Generating the preview."
+  },
+  "excel.fileParseFailed": {
+    zh: "文件解析失败，请检查 Excel/CSV 格式。",
+    en: "Could not parse the file. Check the Excel/CSV format."
+  },
+  "excel.validatingRows": {
+    zh: "正在校验行数据与字段映射...",
+    en: "Validating rows and field mappings..."
+  },
+  "excel.previewValidationFailed": {
+    zh: "预览校验失败，请检查字段映射。",
+    en: "Preview validation failed. Check the field mappings."
+  },
+  "excel.previewCompleteWithIssues": {
+    zh: "已完成预览：{valid} 行有效，{invalid} 行需要确认。",
+    en: "Preview complete: {valid} valid row(s), {invalid} row(s) need review."
+  },
+  "excel.previewCompleteAllValid": {
+    zh: "已完成预览：{count} 行全部通过校验。",
+    en: "Preview complete: all {count} row(s) passed validation."
+  },
+  "excel.quickImportPostCheck": {
+    zh: "已快速导入 {count} 类货物。识别结果可能存在偏差，请检查名称、尺寸、数量、单重、不可重压和保持朝上条件，确认后再进入计算。",
+    en: "Quick-imported {count} cargo types. Results may contain mapping errors; verify names, dimensions, quantities, unit weights, non-stackable, and keep-upright constraints before calculating."
+  },
   "excel.choosePreciseFile": { zh: "选择 Excel 精确识别", en: "Choose Excel for Precise Import" },
   "excel.dropToRecognize": { zh: "拖拽文件到此快速导入", en: "Drop a file here for quick import" },
   "excel.dropRelease": { zh: "松开文件，立即快速解析", en: "Release to parse immediately" },
@@ -451,8 +800,14 @@ const uiText = {
     zh: "也可以点击此区域选择文件；快速导入不会调用 Agent。",
     en: "You can also click this area to choose a file. Quick import does not call the Agent."
   },
-  "excel.smartDropToRecognize": { zh: "拖拽文件到此进行智能导入", en: "Drop a file here for smart import" },
-  "excel.smartDropRelease": { zh: "松开文件，立即开始智能识别", en: "Release to start smart recognition" },
+  "excel.smartDropToRecognize": {
+    zh: "拖拽文件到此进行智能导入",
+    en: "Drop a file here for smart import"
+  },
+  "excel.smartDropRelease": {
+    zh: "松开文件，立即开始智能识别",
+    en: "Release to start smart recognition"
+  },
   "excel.smartDropBusy": { zh: "正在读取并智能识别文件", en: "Reading and recognizing the file" },
   "excel.smartDropSupportText": {
     zh: "也可以点击此区域选择文件；系统会交给 Agent 标准化并审查结果。",
@@ -492,21 +847,48 @@ const uiText = {
   },
   "excel.fileQueue": { zh: "\u6587\u4ef6\u961f\u5217", en: "File Queue" },
   "excel.fileQueueCount": { zh: "{count} \u4e2a\u6587\u4ef6", en: "{count} file(s)" },
-  "excel.smartQueueHint": { zh: "\u4e00\u6b21\u8bc6\u522b\u4e00\u4efd\uff1b\u9996\u4efd\u81ea\u52a8\u5f00\u59cb\uff0c\u5176\u4f59\u53ef\u5728\u961f\u5217\u4e2d\u9010\u4efd\u542f\u52a8", en: "One file at a time; the first starts automatically, then start each remaining queued file" },
+  "excel.smartQueueHint": {
+    zh: "\u4e00\u6b21\u8bc6\u522b\u4e00\u4efd\uff1b\u9996\u4efd\u81ea\u52a8\u5f00\u59cb\uff0c\u5176\u4f59\u53ef\u5728\u961f\u5217\u4e2d\u9010\u4efd\u542f\u52a8",
+    en: "One file at a time; the first starts automatically, then start each remaining queued file"
+  },
   "excel.queueQueued": { zh: "\u7b49\u5f85\u5904\u7406", en: "Queued" },
   "excel.queueProcessing": { zh: "\u5904\u7406\u4e2d", en: "Processing" },
   "excel.queueReady": { zh: "\u5df2\u5b8c\u6210", en: "Ready" },
   "excel.queueFailed": { zh: "\u5904\u7406\u5931\u8d25", en: "Failed" },
   "excel.recognizeThisFile": { zh: "\u8bc6\u522b\u6b64\u6587\u4ef6", en: "Recognize This File" },
   "excel.workspaceFiles": { zh: "\u5de5\u4f5c\u533a\u6587\u4ef6", en: "Workspace Files" },
-  "excel.workspaceFilesEyebrow": { zh: "\u6211\u7684\u4e0a\u4f20\u6587\u4ef6", en: "MY UPLOADED FILES" },
-  "excel.workspaceFilesRetention": { zh: "\u6587\u4ef6\u4fdd\u7559 14 \u5929\uff0c\u91cd\u65b0\u4f7f\u7528\u540e\u81ea\u52a8\u5ef6\u957f\u6709\u6548\u671f\u3002", en: "Files are retained for 14 days; reusing one renews its retention period." },
-  "excel.workspaceFilesEmpty": { zh: "\u6682\u65e0\u5df2\u4e0a\u4f20\u6587\u4ef6\u3002", en: "No uploaded files yet." },
-  "excel.workspaceFilesLoadFailed": { zh: "\u65e0\u6cd5\u8bfb\u53d6\u5de5\u4f5c\u533a\u6587\u4ef6\uff1a{message}", en: "Could not load workspace files: {message}" },
-  "excel.workspaceFileReuseFailed": { zh: "\u65e0\u6cd5\u590d\u7528\u8be5\u6587\u4ef6\uff1a{message}", en: "Could not reuse this file: {message}" },
-  "excel.workspaceFilePreviewFailed": { zh: "\u65e0\u6cd5\u9884\u89c8\u8be5\u6587\u4ef6\uff1a{message}", en: "Could not preview this file: {message}" },
-  "excel.workspaceFileDeleteFailed": { zh: "\u65e0\u6cd5\u5220\u9664\u8be5\u6587\u4ef6\uff1a{message}", en: "Could not delete this file: {message}" },
-  "excel.workspaceFileDaysRemaining": { zh: "\u5269\u4f59 {count} \u5929", en: "{count} day(s) remaining" },
+  "excel.workspaceFilesEyebrow": {
+    zh: "\u6211\u7684\u4e0a\u4f20\u6587\u4ef6",
+    en: "MY UPLOADED FILES"
+  },
+  "excel.workspaceFilesRetention": {
+    zh: "\u6587\u4ef6\u4fdd\u7559 14 \u5929\uff0c\u91cd\u65b0\u4f7f\u7528\u540e\u81ea\u52a8\u5ef6\u957f\u6709\u6548\u671f\u3002",
+    en: "Files are retained for 14 days; reusing one renews its retention period."
+  },
+  "excel.workspaceFilesEmpty": {
+    zh: "\u6682\u65e0\u5df2\u4e0a\u4f20\u6587\u4ef6\u3002",
+    en: "No uploaded files yet."
+  },
+  "excel.workspaceFilesLoadFailed": {
+    zh: "\u65e0\u6cd5\u8bfb\u53d6\u5de5\u4f5c\u533a\u6587\u4ef6\uff1a{message}",
+    en: "Could not load workspace files: {message}"
+  },
+  "excel.workspaceFileReuseFailed": {
+    zh: "\u65e0\u6cd5\u590d\u7528\u8be5\u6587\u4ef6\uff1a{message}",
+    en: "Could not reuse this file: {message}"
+  },
+  "excel.workspaceFilePreviewFailed": {
+    zh: "\u65e0\u6cd5\u9884\u89c8\u8be5\u6587\u4ef6\uff1a{message}",
+    en: "Could not preview this file: {message}"
+  },
+  "excel.workspaceFileDeleteFailed": {
+    zh: "\u65e0\u6cd5\u5220\u9664\u8be5\u6587\u4ef6\uff1a{message}",
+    en: "Could not delete this file: {message}"
+  },
+  "excel.workspaceFileDaysRemaining": {
+    zh: "\u5269\u4f59 {count} \u5929",
+    en: "{count} day(s) remaining"
+  },
   "excel.useForQuickImport": { zh: "\u5feb\u901f\u5bfc\u5165", en: "Use for Quick Import" },
   "excel.useForSmartImport": { zh: "\u667a\u80fd\u5bfc\u5165", en: "Use for Smart Import" },
   "excel.refreshFiles": { zh: "\u5237\u65b0", en: "Refresh" },
@@ -525,8 +907,14 @@ const uiText = {
   "excel.previewWorkbook": { zh: "在线预览", en: "Preview Online" },
   "excel.downloadOriginalWorkbook": { zh: "下载原文件", en: "Download Original" },
   "excel.onlinePreview": { zh: "浏览器内预览", en: "Browser Preview" },
-  "excel.previewLimit": { zh: "为保证页面流畅，最多展示前 {count} 行；下载文件不受影响。", en: "Up to {count} rows are shown for performance. Downloads are unaffected." },
-  "excel.emptyWorksheet": { zh: "该工作表没有可预览的数据。", en: "This worksheet has no previewable data." },
+  "excel.previewLimit": {
+    zh: "为保证页面流畅，最多展示前 {count} 行；下载文件不受影响。",
+    en: "Up to {count} rows are shown for performance. Downloads are unaffected."
+  },
+  "excel.emptyWorksheet": {
+    zh: "该工作表没有可预览的数据。",
+    en: "This worksheet has no previewable data."
+  },
   "excel.needsAction": { zh: "需要处理", en: "Needs Action" },
   "excel.recognitionTip": { zh: "识别提示", en: "Recognition Tip" },
   "excel.recognitionCompleteMessage": {
@@ -599,7 +987,10 @@ const uiText = {
   "excel.autoDetect": { zh: "自动识别", en: "Auto Detect" },
   "excel.fieldMapping": { zh: "字段自动映射", en: "Automatic Field Mapping" },
   "excel.unmapped": { zh: "未映射", en: "Unmapped" },
-  "excel.rowsFailedValidation": { zh: "行未通过校验，导入时会跳过这些行。", en: "rows failed validation and will be skipped during import." },
+  "excel.rowsFailedValidation": {
+    zh: "行未通过校验，导入时会跳过这些行。",
+    en: "rows failed validation and will be skipped during import."
+  },
   "excel.allRowsValid": { zh: "全部行已通过校验。", en: "All rows passed validation." },
   "excel.validPreview": { zh: "有效数据预览", en: "Valid Data Preview" },
   "excel.moreCargoHidden": { zh: "类货物未显示", en: "more cargo types hidden" },
@@ -635,14 +1026,20 @@ const uiText = {
     en: "Quick import uses deterministic local rules for standard sheets. Precise import accepts Excel or text and uses the backend Agent for complex packaging and consolidated loads. Both paths require user confirmation before writing cargo."
   },
   "excel.suggestStandardCargo": { zh: "建议修改为标准货物", en: "Suggest Standard Cargo" },
-  "excel.preserveFields": { zh: "系统已尽量保留原始行中的可识别字段。", en: "The system kept identifiable fields from the original row where possible." },
+  "excel.preserveFields": {
+    zh: "系统已尽量保留原始行中的可识别字段。",
+    en: "The system kept identifiable fields from the original row where possible."
+  },
   "excel.cargoName": { zh: "货物名称", en: "Cargo Name" },
   "excel.modelSpec": { zh: "型号/规格", en: "Model / Spec" },
   "excel.lengthCm": { zh: "长度 cm", en: "Length cm" },
   "excel.widthCm": { zh: "宽度 cm", en: "Width cm" },
   "excel.heightCm": { zh: "高度 cm", en: "Height cm" },
   "excel.singleWeightKg": { zh: "单件重量 kg", en: "Unit Weight kg" },
-  "excel.handlingConstraints": { zh: "装箱条件（可同时选择）", en: "Packing Constraints (select both if needed)" },
+  "excel.handlingConstraints": {
+    zh: "装箱条件（可同时选择）",
+    en: "Packing Constraints (select both if needed)"
+  },
   "excel.needsChanges": { zh: "还需要修改", en: "Still needs changes" },
   "excel.recognitionResultNo": { zh: "识别结果第", en: "Recognition Result" },
   "excel.editRecognitionCargo": { zh: "编辑识别货物", en: "Edit Recognized Cargo" },
@@ -650,14 +1047,20 @@ const uiText = {
     zh: "这里修改的是导入前的识别结果，不会重新调用 Agent。",
     en: "These edits apply to the pre-import recognition result and do not call the Agent again."
   },
-  "excel.editUseCase": { zh: "适合修正重量千分位、型号、尺寸或货物类型。", en: "Useful for fixing weight separators, models, dimensions, or cargo types." },
+  "excel.editUseCase": {
+    zh: "适合修正重量千分位、型号、尺寸或货物类型。",
+    en: "Useful for fixing weight separators, models, dimensions, or cargo types."
+  },
   "excel.unnamedCargo": { zh: "未命名货物", en: "Unnamed Cargo" },
   "excel.cargoEditSummary": {
     zh: "{label}，{length} × {width} × {height} cm，{quantity} 件，{weight} kg/件",
     en: "{label}, {length} × {width} × {height} cm, {quantity} pcs, {weight} kg/pc"
   },
   "excel.recognitionReviewEyebrow": { zh: "识别复核", en: "Recognition Review" },
-  "excel.recognitionReviewTitle": { zh: "请确认智能识别结果", en: "Review Smart Recognition Results" },
+  "excel.recognitionReviewTitle": {
+    zh: "请确认智能识别结果",
+    en: "Review Smart Recognition Results"
+  },
   "excel.recognitionReviewNotice": {
     zh: "每条待确认信息按“原文 → Agent 识别 → 最终导入格式”展示。请重点检查第三行；如尺寸、数量、重量或类型不正确，点击“编辑导入格式”后再导入。",
     en: "Each item is shown as Source → Agent Recognition → Final Import Format. Check the third line carefully; if dimensions, quantity, weight, or type are incorrect, select Edit Import Format before importing."
@@ -680,15 +1083,33 @@ const uiText = {
   "excel.reviewImportedCandidate": { zh: "将以以下格式导入", en: "Will Be Imported As" },
   "excel.reviewEditImport": { zh: "编辑导入格式", en: "Edit Import Format" },
   "excel.reviewEnterPalletDimensions": { zh: "输入托盘尺寸", en: "Enter Pallet Dimensions" },
-  "excel.reviewFinalPalletOuterDimensions": { zh: "最终托盘外廓尺寸", en: "Final Loaded Pallet Dimensions" },
-  "excel.reviewOriginalCartonDimensions": { zh: "源文件单箱/内装尺寸", en: "Source Carton / Inner-package Dimensions" },
-  "excel.reviewDimensionsNotProvided": { zh: "未提供，需用户补录", en: "Not provided; user input required" },
-  "excel.reviewNotImportedYet": { zh: "当前没有可导入数据，请点击右侧按钮补全。", en: "No importable data yet. Use the button on the right to complete it." },
-  "excel.reviewNoSuggestion": { zh: "Agent 没有生成完整字段，请结合原文检查最终导入格式。", en: "The Agent did not produce complete fields. Compare the source with the final import format." },
+  "excel.reviewFinalPalletOuterDimensions": {
+    zh: "最终托盘外廓尺寸",
+    en: "Final Loaded Pallet Dimensions"
+  },
+  "excel.reviewOriginalCartonDimensions": {
+    zh: "源文件单箱/内装尺寸",
+    en: "Source Carton / Inner-package Dimensions"
+  },
+  "excel.reviewDimensionsNotProvided": {
+    zh: "未提供，需用户补录",
+    en: "Not provided; user input required"
+  },
+  "excel.reviewNotImportedYet": {
+    zh: "当前没有可导入数据，请点击右侧按钮补全。",
+    en: "No importable data yet. Use the button on the right to complete it."
+  },
+  "excel.reviewNoSuggestion": {
+    zh: "Agent 没有生成完整字段，请结合原文检查最终导入格式。",
+    en: "The Agent did not produce complete fields. Compare the source with the final import format."
+  },
   "excel.reviewSourceText": { zh: "来源原文", en: "Source Text" },
   "excel.reviewRowNumber": { zh: "来源行号", en: "Source Row" },
   "excel.reviewPackageInfo": { zh: "包装信息", en: "Package Info" },
-  "excel.reviewCargoUnitInfo": { zh: "\u8d27\u7269\u5355\u7bb1\u4fe1\u606f", en: "Cargo / Carton Information" },
+  "excel.reviewCargoUnitInfo": {
+    zh: "\u8d27\u7269\u5355\u7bb1\u4fe1\u606f",
+    en: "Cargo / Carton Information"
+  },
   "excel.reviewPalletInfo": { zh: "\u6258\u76d8\u4fe1\u606f", en: "Pallet Information" },
   "excel.reviewNotesInfo": { zh: "\u5907\u6ce8\u4fe1\u606f", en: "Notes" },
   "excel.reviewPiecesPerPallet": { zh: "\u4e00\u6258\u88c5\u8f7d", en: "Loaded per Pallet" },
@@ -696,10 +1117,19 @@ const uiText = {
   "excel.reviewPalletCount": { zh: "\u6258\u76d8\u6570\u91cf", en: "Pallet Quantity" },
   "excel.reviewAgentNotes": { zh: "Agent 备注", en: "Agent Notes" },
   "excel.reviewValidation": { zh: "校验结果", en: "Validation" },
-  "excel.reviewNoIssues": { zh: "暂无需确认项，可继续检查正常识别结果后导入。", en: "No items need confirmation; review the normal results before importing." },
-  "excel.reviewAllNeedConfirm": { zh: "本次识别结果均需要人工确认。", en: "All recognized items need manual confirmation." },
+  "excel.reviewNoIssues": {
+    zh: "暂无需确认项，可继续检查正常识别结果后导入。",
+    en: "No items need confirmation; review the normal results before importing."
+  },
+  "excel.reviewAllNeedConfirm": {
+    zh: "本次识别结果均需要人工确认。",
+    en: "All recognized items need manual confirmation."
+  },
   "excel.reviewUnknownItem": { zh: "未命名识别项", en: "Unnamed Recognized Item" },
-  "excel.reviewUnknownReason": { zh: "系统未能给出明确原因，请对照原文复核后再导入。", en: "No clear reason was provided; compare with the source text before importing." },
+  "excel.reviewUnknownReason": {
+    zh: "系统未能给出明确原因，请对照原文复核后再导入。",
+    en: "No clear reason was provided; compare with the source text before importing."
+  },
   "excel.reviewReasonEmptyPallet": {
     zh: "疑似空托盘/单独托盘：请确认它是否真的要作为独立装柜货物；如果只是托盘皮重说明，应改进备注或删除该项。",
     en: "Possible empty or standalone pallet: confirm whether it should be imported as its own handled unit; if it only describes tare weight, move it to notes or remove it."

@@ -107,14 +107,6 @@ public class AdminBootstrapInitializer implements ApplicationRunner {
   }
 
   private boolean auditAndMigrateLegacyDefaultCredential(BootstrapSettings bootstrap) {
-    jdbcTemplate.execute(
-        """
-        CREATE TABLE IF NOT EXISTS cp_security_migrations (
-          migration_key VARCHAR(100) PRIMARY KEY,
-          applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    );
     Integer alreadyAudited = jdbcTemplate.queryForObject(
         "SELECT COUNT(*) FROM cp_security_migrations WHERE migration_key = ?",
         Integer.class,

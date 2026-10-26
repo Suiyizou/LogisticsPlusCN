@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.cargoplanner.backend.auth.PasswordHasher;
-import com.cargoplanner.backend.shipment.ShipmentSchemaInitializer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -60,6 +59,7 @@ class AdminBootstrapInitializerTest {
         )
         """);
 
+    jdbcTemplate.execute("CREATE TABLE cp_security_migrations (migration_key VARCHAR(100) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
     properties = new AdminBootstrapProperties();
   }
 
@@ -112,9 +112,8 @@ class AdminBootstrapInitializerTest {
   }
 
   @Test
-  void runsAfterAdditiveSchemaInitialization() {
-    assertThat(ShipmentSchemaInitializer.class.getAnnotation(Order.class).value())
-        .isLessThan(AdminBootstrapInitializer.class.getAnnotation(Order.class).value());
+  void bootstrapRetainsExplicitStartupOrderingAfterFlyway() {
+    assertThat(AdminBootstrapInitializer.class.getAnnotation(Order.class).value()).isPositive();
   }
 
   @Test

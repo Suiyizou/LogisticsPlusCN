@@ -3,6 +3,11 @@ package com.cargoplanner.backend.announcement;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.cargoplanner.backend.auth.AuthenticatedUser;
+import com.cargoplanner.backend.announcement.persistence.AnnouncementMapper;
+import com.cargoplanner.backend.announcement.persistence.AnnouncementReadMapper;
+import com.cargoplanner.backend.announcement.persistence.AnnouncementAuditMapper;
+import com.cargoplanner.backend.announcement.persistence.AnnouncementRepository;
+import com.cargoplanner.backend.persistence.MyBatisTestSupport;
 import com.cargoplanner.backend.customer.CustomerPrincipal;
 import java.time.Clock;
 import java.time.Instant;
@@ -61,12 +66,18 @@ class AnnouncementServiceTest {
           (2, 'employee', 'Employee', 'BUSINESS')
         """
     );
-    new AnnouncementSchemaInitializer(jdbcTemplate).run(null);
+    new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+        new org.springframework.core.io.ClassPathResource("fixtures/announcement-schema.sql")
+    ).execute(dataSource);
     Clock clock = Clock.fixed(
         Instant.parse("2026-07-28T02:00:00Z"),
         ZoneId.of("Asia/Shanghai")
     );
-    service = new AnnouncementService(jdbcTemplate, clock);
+    var session = MyBatisTestSupport.session(dataSource,
+        AnnouncementMapper.class, AnnouncementReadMapper.class, AnnouncementAuditMapper.class);
+    service = new AnnouncementService(new AnnouncementRepository(
+        session.getMapper(AnnouncementMapper.class), session.getMapper(AnnouncementReadMapper.class),
+        session.getMapper(AnnouncementAuditMapper.class)), clock);
     admin = new AuthenticatedUser(1, "admin", "Administrator", "ADMIN", "ACTIVE");
     employee = new AuthenticatedUser(2, "employee", "Employee", "BUSINESS", "ACTIVE");
     customer = new CustomerPrincipal(

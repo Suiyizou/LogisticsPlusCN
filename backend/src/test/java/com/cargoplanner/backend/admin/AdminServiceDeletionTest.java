@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import com.cargoplanner.backend.auth.AuthFailureAuditService;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 class AdminServiceDeletionTest {
@@ -164,7 +166,7 @@ class AdminServiceDeletionTest {
     jdbcTemplate.update(
         "INSERT INTO cp_shipments (id, responsible_agent_id) VALUES (50, 2)"
     );
-    authService = new AuthService(jdbcTemplate, hasher, 5, 6);
+    authService = new AuthService(jdbcTemplate, hasher, new AuthFailureAuditService(jdbcTemplate, new DataSourceTransactionManager(dataSource)), 5, 6);
     service = new AdminService(
         jdbcTemplate,
         hasher,

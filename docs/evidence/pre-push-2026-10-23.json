@@ -1,0 +1,286 @@
+{
+  "at": "2026-10-23T04:18:03.425Z",
+  "repository": "thirty-party-shippment-tracking",
+  "branch": "codex/refactor-customer-directory",
+  "head": "1dae78ca3c67e2222208ebf5ac7d59c511c3f23f",
+  "scope": "Local working tree, including modified and untracked refactoring files; not committed or pushed",
+  "fetchedOriginMainComparison": {
+    "ahead": 34,
+    "behind": 0
+  },
+  "host": {
+    "node": "v24.9.0",
+    "java": "17.0.7",
+    "maven": "3.9.9",
+    "dockerEngine": "29.4.0"
+  },
+  "checks": {
+    "backend": {
+      "tests": 264,
+      "passed": true,
+      "package": true
+    },
+    "frontend": {
+      "tests": 601,
+      "passed": true,
+      "typecheck": true,
+      "productionBuild": true
+    },
+    "tracking": {
+      "tests": 219,
+      "passed": true
+    },
+    "modulePlatform": {
+      "tests": 24,
+      "passed": true
+    },
+    "release": {
+      "tests": 13,
+      "passed": true
+    },
+    "schemaEquivalence": {
+      "tests": 14,
+      "passed": true
+    },
+    "packing": {
+      "groups": 4,
+      "passed": true
+    },
+    "quality": {
+      "formattedFiles": 350,
+      "lintedFiles": 229,
+      "passed": true
+    }
+  },
+  "database": {
+    "at": "2026-10-23T03:58:56.106Z",
+    "jarSha256": "5fd9d4d4cc6b4f9a87e9b2e9795aa991a6563e8c82f3443bb0ddd1fac6886578",
+    "suppliedSqlSha256": "73aabf602eb041fdeb0c5eb7f1e3b254973e59dde929bff72a18047749d3e6a0",
+    "checks": [
+      {
+        "label": "empty database migrates using Flyway only",
+        "passed": true
+      },
+      {
+        "label": "Java V3 has a persisted non-null checksum",
+        "passed": true
+      },
+      {
+        "label": "unversioned non-empty database is rejected without implicit baseline",
+        "passed": true
+      },
+      {
+        "label": "baseline rejection does not create history",
+        "passed": true
+      },
+      {
+        "label": "changed schema fingerprint cannot be adopted",
+        "passed": true
+      },
+      {
+        "label": "tampered backup cannot be adopted",
+        "passed": true
+      },
+      {
+        "label": "reviewed legacy database can be explicitly adopted",
+        "passed": true
+      },
+      {
+        "label": "known legacy data upgrades to current schema",
+        "passed": true
+      },
+      {
+        "label": "fresh and legacy migration paths produce equivalent columns/indexes/constraints",
+        "passed": true
+      },
+      {
+        "label": "legacy employee role is converted without losing accounts",
+        "passed": true
+      },
+      {
+        "label": "snapshot owner and business fields are backfilled",
+        "passed": true
+      },
+      {
+        "label": "legacy customer roles and delegated shipment access are migrated",
+        "passed": true
+      },
+      {
+        "label": "old scoped agent sessions are revoked",
+        "passed": true
+      },
+      {
+        "label": "shipper sessions retain their own customer scope",
+        "passed": true
+      },
+      {
+        "label": "file visibility roles are backfilled",
+        "passed": true
+      },
+      {
+        "label": "invalid discovered references are removed and valid references retained",
+        "passed": true
+      },
+      {
+        "label": "second migrate validates and applies no migration",
+        "passed": true
+      },
+      {
+        "label": "real application startup 1 on migrated legacy database",
+        "passed": true
+      },
+      {
+        "label": "real application startup 2 on migrated legacy database",
+        "passed": true
+      },
+      {
+        "label": "repeated execution does not rerun legacy permission backfills",
+        "passed": true
+      },
+      {
+        "label": "repeated execution leaves structure and history unchanged",
+        "passed": true
+      },
+      {
+        "label": "unrecognized database cannot be adopted even with its exact fingerprint",
+        "passed": true
+      },
+      {
+        "label": "supplied historical SQL upgrades on an isolated copy",
+        "passed": true
+      },
+      {
+        "label": "supplied legacy customer/shipment counts remain intact",
+        "passed": true
+      },
+      {
+        "label": "supplied legacy schema equals clean migrated schema",
+        "passed": true
+      },
+      {
+        "label": "supplied SQL file is unchanged",
+        "passed": true
+      },
+      {
+        "label": "all migration checks completed",
+        "passed": true
+      },
+      {
+        "label": "only owned test container and its anonymous volume removed",
+        "passed": true
+      }
+    ]
+  },
+  "http": {
+    "at": "2026-10-23T04:11:44.300Z",
+    "jarSha256": "5fd9d4d4cc6b4f9a87e9b2e9795aa991a6563e8c82f3443bb0ddd1fac6886578",
+    "previousBinaryUsed": false,
+    "mockedApi": false,
+    "checks": [
+      {
+        "label": "V4 to V5 preserves existing customer identity and remark; email is nullable",
+        "passed": true
+      },
+      {
+        "label": "existing single-business-account policy remains enforced",
+        "passed": true
+      },
+      {
+        "label": "real login and controlled customer create return an explicit credential-safe profile",
+        "passed": true
+      },
+      {
+        "label": "business user cannot list, read or modify another user's customer",
+        "passed": true
+      },
+      {
+        "label": "invalid profile is rejected atomically; omission preserves and empty text clears in MySQL",
+        "passed": true
+      },
+      {
+        "label": "duplicate customer is a conflict and creates no extra database row",
+        "passed": true
+      },
+      {
+        "label": "customer sees only own published shipment and cannot use employee credentials or foreign shipment IDs",
+        "passed": true
+      },
+      {
+        "label": "application restart preserves profiles and customer sessions without reapplying migration",
+        "passed": true
+      },
+      {
+        "label": "only owned test processes, MySQL container and anonymous volumes removed",
+        "passed": true
+      }
+    ]
+  },
+  "compose": {
+    "at": "2026-10-23T04:15:16.246Z",
+    "project": "cargo-prepush-1908e7cb33",
+    "checks": [
+      {
+        "name": "production Compose resolves with isolated names, volumes and loopback ports",
+        "passed": true
+      },
+      {
+        "name": "production MySQL, Java, tracking and Nginx images start together",
+        "passed": true
+      },
+      {
+        "name": "Nginx proxies real Java and Node health endpoints",
+        "passed": true
+      },
+      {
+        "name": "production SPA deep links, tracking UI and fingerprinted assets load",
+        "passed": true
+      },
+      {
+        "name": "real login, generated module create/PATCH/list and optimistic conflict via Nginx",
+        "passed": true
+      },
+      {
+        "name": "fresh MySQL applies V1 through V5 exactly once",
+        "passed": true
+      },
+      {
+        "name": "only owned Compose containers, networks and temporary volumes removed",
+        "passed": true
+      }
+    ]
+  },
+  "productionImages": {
+    "tag": "prepush-20261023",
+    "ids": {
+      "backend": "sha256:077b3e135c6a368eedeadbdde28417c228226477551b0ba291e8ad561215f6f7",
+      "tracking": "sha256:a1afab2e7e56694f0cea80096839f4c985a68075205c749488a2fd3642fd5386",
+      "frontend": "sha256:7c3596d20cb0772efb2b72b4987f9a8fd63fb41d11c4bd8a5405b6ced0d1ad0e"
+    },
+    "backendJarSha256": "a1b4a96f5d49a477e0c5fdc7bb54f1a6835cd2452cf9451c6d42f438c1383cfc"
+  },
+  "browser": {
+    "realApi": true,
+    "verified": [
+      "employee login and client directory",
+      "edit email/remark then reload persists",
+      "customer login and own published shipment detail",
+      "independent customer module host"
+    ],
+    "screenshots": [
+      "output/playwright/prepush-20261023-customer-profile.png",
+      "output/playwright/prepush-20261023-customer-tracking.png",
+      "output/playwright/prepush-20261023-customer-module.png"
+    ],
+    "initialHarnessIssue": "Node was initially absent from Vite E2E environment; starting the real Node service resolved /tracking/ proxy error. Production Compose passed separately."
+  },
+  "cleanup": {
+    "ownedProcessesAndContainersRemoved": true,
+    "existingUserDatabaseUntouched": true
+  },
+  "limits": [
+    "Remote Gitee pipeline not triggered",
+    "Live carrier/LLM/proxy provider queries and load testing not run",
+    "Historical unversioned database requires explicit reviewed adoption before deployment"
+  ],
+  "optionalNetworkDiagnostic": "A separate Maven download diagnostic was intentionally stopped after confirming normal dependency downloads. The actual production Docker build finished successfully."
+}

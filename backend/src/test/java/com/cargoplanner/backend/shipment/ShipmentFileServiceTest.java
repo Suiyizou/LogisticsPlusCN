@@ -749,7 +749,7 @@ class ShipmentFileServiceTest {
           customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
           provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
           status VARCHAR(20) NOT NULL,
-          remark VARCHAR(500),
+          contact_email VARCHAR(254), remark VARCHAR(500),
           created_by BIGINT NOT NULL,
           responsible_agent_id BIGINT
         )

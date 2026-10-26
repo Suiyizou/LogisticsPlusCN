@@ -2,56 +2,50 @@
   <el-config-provider :locale="elementPlusLocale">
     <LanguageSwitcher v-if="!authChecked || !currentUser" class="global-language-switcher" />
     <LoginPage v-if="authChecked && !currentUser" @logged-in="handleLoggedIn" />
-    <SystemWaitOverlay
-      v-else-if="!authChecked"
-      :visible="true"
-      :message="t('app.loadingAuth')"
-    />
-    <AdminDashboard
-      v-else-if="activePage === 'admin' && currentUser?.role === 'ADMIN'"
-      :current-user="currentUser"
-      :announcement-count="unreadAnnouncementCount"
-      @logout="handleLogout"
-      @user-updated="handleUserUpdated"
-      @open-announcements="openAnnouncements"
-    />
-    <BusinessCustomerPage
-      v-else-if="(activePage === 'customers' || (activePage === 'workbenches' && currentUser?.role === 'OVERSEA_AGENT'))
-        && ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
-      :current-user="currentUser"
-      :announcement-count="unreadAnnouncementCount"
-      @logout="handleLogout"
-      @user-updated="handleUserUpdated"
-      @open-announcements="openAnnouncements"
-    />
-    <WorkbenchPortal
-      v-else
-      :current-user="currentUser"
-      :announcement-count="unreadAnnouncementCount"
-      @logout="handleLogout"
-      @user-updated="handleUserUpdated"
-      @open-announcements="openAnnouncements"
-    />
+    <SystemWaitOverlay v-else-if="!authChecked" :visible="true" :message="t('app.loadingAuth')" />
+    <RouterView v-else-if="authorizedPage" v-slot="{ Component }">
+      <component
+        :is="Component"
+        :key="workspaceSessionKey(currentUser)"
+        :current-user="currentUser"
+        :announcement-count="unreadAnnouncementCount"
+        @logout="handleLogout"
+        @user-updated="handleUserUpdated"
+        @open-announcements="openAnnouncements"
+      />
+    </RouterView>
+    <SystemWaitOverlay v-else :visible="true" :message="t('app.loadingPage')" />
     <SystemAnnouncementDialog
       v-if="authChecked && currentUser"
       v-model="announcementDialogOpen"
       :announcements="announcements"
       @dismiss="dismissAnnouncements"
     />
-    <SystemWaitOverlay
-      :visible="loginRedirecting"
-      :message="loginRedirectText"
-    />
+    <SystemWaitOverlay :visible="loginRedirecting" :message="loginRedirectText" />
   </el-config-provider>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import {
+  computed,
+  defineAsyncComponent,
+  h,
+  onMounted,
+  onUnmounted,
+  provide,
+  readonly,
+  ref,
+  watch
+} from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import { applicationViews } from "./modules/views.js";
+import { canAccessRoute, operationsHome, postLoginDestination } from "./modules/registry.js";
+import { workspaceContextKey, workspaceSessionKey } from "./modules/workspaceContext.js";
 import AsyncPageError from "./components/AsyncPageError.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import SystemAnnouncementDialog from "./components/SystemAnnouncementDialog.vue";
 import SystemWaitOverlay from "./components/SystemWaitOverlay.vue";
+import { markApiErrorHandled } from "./services/apiClient";
 import { fetchAdminMe, logoutAdmin } from "./services/adminApi";
 import { fetchTodayAnnouncements, markAnnouncementRead } from "./services/announcementApi";
 import { clearSession, isSessionExpired, storedToken, storedUser } from "./services/authSession";
@@ -66,53 +60,44 @@ const loginRedirectText = ref("");
 const announcements = ref([]);
 const announcementDialogOpen = ref(false);
 const announcementLoading = ref(false);
-const unreadAnnouncementCount = computed(() =>
-  announcements.value.filter((item) => !item?.read).length
+const unreadAnnouncementCount = computed(
+  () => announcements.value.filter((item) => !item?.read).length
 );
 let loadedAnnouncementIdentity = "";
-const operationsPageNames = new Set(["workbenches", "customers", "admin"]);
-const operationsPageByPath = {
-  "/workbenches": "workbenches",
-  "/customers": "customers",
-  "/admin": "admin"
-};
-const normalizeOperationsPath = (path) => String(path || "").replace(/\/+$/, "") || "/";
-const activePage = computed(() => {
-  const routeName = String(route.name || "");
-  if (operationsPageNames.has(routeName)) return routeName;
-
-  // The first render can run before vue-router resolves its initial location.
-  // Fall back to the actual browser path instead of briefly mounting workbenches.
-  const routePath = normalizeOperationsPath(route.path);
-  const browserPath = normalizeOperationsPath(window.location.pathname);
-  return operationsPageByPath[routePath] || operationsPageByPath[browserPath] || "workbenches";
+provide(workspaceContextKey, {
+  user: readonly(currentUser),
+  announcementCount: readonly(unreadAnnouncementCount),
+  logout: handleLogout,
+  updateUser: handleUserUpdated,
+  openAnnouncements
 });
+const authorizedPage = computed(
+  () =>
+    authChecked.value &&
+    canAccessRoute(route, currentUser.value?.role) &&
+    !(route.name === "workbenches" && currentUser.value?.role === "OVERSEA_AGENT")
+);
 
 const loadingPage = {
   name: "LoadingOperationsPage",
   inheritAttrs: false,
   setup() {
-    return () => h(SystemWaitOverlay, {
-      visible: true,
-      message: t("app.loadingPage")
-    });
+    return () =>
+      h(SystemWaitOverlay, {
+        visible: true,
+        message: t("app.loadingPage")
+      });
   }
 };
-const lazyPage = (loader) => defineAsyncComponent({
-  loader,
-  delay: 120,
-  timeout: 30000,
-  loadingComponent: loadingPage,
-  errorComponent: AsyncPageError
-});
-const loadAdminDashboard = () => import("./components/AdminDashboard.vue");
-const loadBusinessCustomerPage = () => import("./components/BusinessCustomerPage.vue");
-const loadLoginPage = () => import("./components/LoginPage.vue");
-const loadWorkbenchPortal = () => import("./components/WorkbenchPortal.vue");
-const AdminDashboard = lazyPage(loadAdminDashboard);
-const BusinessCustomerPage = lazyPage(loadBusinessCustomerPage);
-const LoginPage = lazyPage(loadLoginPage);
-const WorkbenchPortal = lazyPage(loadWorkbenchPortal);
+const lazyPage = (loader) =>
+  defineAsyncComponent({
+    loader,
+    delay: 120,
+    timeout: 30000,
+    loadingComponent: loadingPage,
+    errorComponent: AsyncPageError
+  });
+const LoginPage = lazyPage(() => import("./components/LoginPage.vue"));
 
 onMounted(async () => {
   window.addEventListener("auth-expired", handleAuthExpired);
@@ -123,16 +108,9 @@ onUnmounted(() => {
   window.removeEventListener("auth-expired", handleAuthExpired);
 });
 
-watch([activePage, currentUser, authChecked], () => {
-  if (!authChecked.value || !currentUser.value) return;
-  const overseaHome = currentUser.value.role === "OVERSEA_AGENT" ? "/customers" : "/workbenches";
-  if (activePage.value === "admin" && currentUser.value.role !== "ADMIN") {
-    void router.replace(overseaHome);
-  } else if (activePage.value === "customers" && !["BUSINESS", "ADMIN", "OVERSEA_AGENT"].includes(currentUser.value.role)) {
-    void router.replace("/workbenches");
-  } else if (activePage.value === "workbenches" && currentUser.value.role === "OVERSEA_AGENT") {
-    void router.replace("/customers");
-  }
+watch([() => route.fullPath, currentUser, authChecked], () => {
+  if (!authChecked.value || !currentUser.value || authorizedPage.value) return;
+  void router.replace(operationsHome(currentUser.value.role));
 });
 
 watch(
@@ -170,12 +148,13 @@ async function initializeAuth() {
 }
 
 async function handleLoggedIn(user) {
-  const isOverseaAgent = user?.role === "OVERSEA_AGENT";
-  const target = isOverseaAgent ? "/customers" : "/workbenches";
+  const target = postLoginDestination(route, user?.role);
   loginRedirectText.value = t("portal.entering");
   loginRedirecting.value = true;
   try {
-    await (isOverseaAgent ? loadBusinessCustomerPage() : loadWorkbenchPortal());
+    await (target.startsWith("/customers")
+      ? applicationViews.business()
+      : applicationViews.workbenches());
     await router.replace(target);
     currentUser.value = user;
   } finally {
@@ -184,16 +163,20 @@ async function handleLoggedIn(user) {
 }
 
 async function handleLogout() {
-  try {
-    await logoutAdmin();
-  } catch {
-    clearSession();
-  }
+  // Dispatch while the old token exists; all local state is revoked immediately.
+  const request = logoutAdmin();
+  clearSession();
   announcements.value = [];
   announcementDialogOpen.value = false;
   loadedAnnouncementIdentity = "";
   currentUser.value = null;
-  await router.push("/workbenches");
+  const navigation = router.push("/workbenches");
+  try {
+    await request;
+  } catch (error) {
+    markApiErrorHandled(error);
+  }
+  await navigation;
 }
 
 function handleAuthExpired() {
@@ -264,8 +247,6 @@ function dismissAnnouncements(items = announcements.value) {
     rememberReadLocally(item);
     return { ...item, read: true };
   });
-  void Promise.allSettled(
-    [...unreadIds].filter(Boolean).map((id) => markAnnouncementRead(id))
-  );
+  void Promise.allSettled([...unreadIds].filter(Boolean).map((id) => markAnnouncementRead(id)));
 }
 </script>

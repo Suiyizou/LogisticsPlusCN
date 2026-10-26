@@ -1,3 +1,6 @@
+-- REFERENCE SNAPSHOT ONLY: runtime initialization belongs exclusively to Flyway.
+-- Do not execute this snapshot during deployment or edit it as a migration.
+-- Export updated snapshots from a clean migrated database; see docs/DATABASE_MIGRATIONS.md.
 CREATE DATABASE IF NOT EXISTS cargo_planner
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_0900_ai_ci;
@@ -662,9 +665,7 @@ INSERT INTO cp_system_settings (setting_key, setting_value, description)
 SELECT 'llm.model', 'deepseek-v4-flash', 'LLM model name for text recognition'
 WHERE NOT EXISTS (SELECT 1 FROM cp_system_settings WHERE setting_key = 'llm.model');
 
-INSERT INTO cp_system_settings (setting_key, setting_value, description)
-SELECT 'llm.api_key', '', 'API key for the configured OpenAI-compatible LLM provider'
-WHERE NOT EXISTS (SELECT 1 FROM cp_system_settings WHERE setting_key = 'llm.api_key');
+-- No API-key seed: absence inherits environment; explicit admin clear overrides it.
 
 -- No administrator credential is seeded here. Production administrators must
 -- be provisioned explicitly with a deployment-specific secret.

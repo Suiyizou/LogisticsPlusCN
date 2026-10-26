@@ -10,8 +10,8 @@
 #      DOCKER_PASSWORD，不要在 YAML 里写明文。
 #
 # 注意：
-#   - `build@docker` 阶段需要 Runner 具备 Docker 能力。若 Runner 未开通 Docker，
-#     可直接删除 `images` 阶段的 step，不影响校验与测试阶段。
+#   - 数据库迁移验收与镜像构建需要 Docker-capable Runner；Docker 不可用时明确失败，
+#     不能删除数据库质量门或把未运行标成通过。
 #   - 质量门必须拿到可信变更基线：优先用 Gitee 提供的前一提交 SHA；若该变量不可用，
 #     quality.mjs 会在 CI 下退回 HEAD~1。因此 Runner 必须能访问足够历史（非浅克隆）。
 #     若拿不到基线，质量门会直接失败（不会静默只检查 scripts）。
@@ -44,7 +44,9 @@ stages:
             - npm --prefix frontend ci --include=dev --ignore-scripts
             - npm --prefix tracking-service ci
             - QUALITY_BASE_REF="${GITEE_PIPELINE_BEFORE_SHA:-}" node scripts/quality.mjs
+            - node scripts/verify.mjs modules
             - npm --prefix frontend run typecheck
+            - node scripts/verify.mjs customers release
             - npm --prefix tracking-service test
             - npm --prefix frontend run test:packing
             - npm --prefix frontend run build
@@ -57,27 +59,32 @@ stages:
           commands:
             - cd backend && mvn -B -q test
 
+  # This mandatory stage needs a Docker-capable Runner. Missing Docker is a failure, not a skip.
+  # Maven/Java use the same Docker build target as production; no host JDK/Maven installation required.
+  - stage:
+      name: database_migrations
+      displayName: MySQL 8.4 新旧库迁移验收
+      steps:
+        - step: build@nodejs
+          name: mysql_migration_matrix
+          displayName: 空库 / 历史库 / 幂等 / 权限数据 / 结构一致性
+          nodeVersion: "20"
+          commands:
+            - node --test scripts/test/schema-equivalence.test.mjs
+            - node scripts/verify-database-ci.mjs
+
   - stage:
       name: images
       displayName: 构建镜像
       steps:
-        - step: build@docker
-          name: build_backend_image
-          displayName: 后端镜像
-          dockerfilePath: ./docker/backend.Dockerfile
-          imageName: cargo-planner-backend
-          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
-
-        - step: build@docker
-          name: build_tracking_image
-          displayName: 追踪服务镜像
-          dockerfilePath: ./tracking-service/Dockerfile
-          imageName: cargo-platform-tracking
-          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
-
-        - step: build@docker
-          name: build_frontend_image
-          displayName: 前端镜像
-          dockerfilePath: ./docker/frontend.Dockerfile
-          imageName: cargo-planner-frontend
-          imageTag: ${GITEE_PIPELINE_BUILD_NUMBER}
+        # Use explicit CLI contexts; -f does not change Docker's context directory.
+        # Like the migration job, this Node step requires a Docker-capable Runner.
+        - step: build@nodejs
+          name: build_images
+          displayName: 后端 / 追踪 / 前端生产镜像
+          nodeVersion: "20"
+          commands:
+            - docker info
+            - docker build --file docker/backend.Dockerfile --tag "cargo-planner-backend:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" .
+            - docker build --file tracking-service/Dockerfile --tag "cargo-platform-tracking:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" tracking-service
+            - docker build --file docker/frontend.Dockerfile --tag "cargo-planner-frontend:${GITEE_PIPELINE_BUILD_NUMBER:?missing build number}" .

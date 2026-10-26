@@ -30,7 +30,11 @@ export function fetchExcelCleaningTask(id) {
 }
 
 export async function downloadCleanedExcel(id, fileName = "cleaned-cargos.xlsx") {
-  const response = await fetchWithApiFallback(`/excel-cleaning/tasks/${id}/cleaned-excel`, {}, configuredBase);
+  const response = await fetchWithApiFallback(
+    `/excel-cleaning/tasks/${id}/cleaned-excel`,
+    {},
+    configuredBase
+  );
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -54,6 +58,16 @@ export function createTextRecognitionTask(text, options = {}) {
   });
 }
 
+export function createWorkbookRecognitionTask(file, options = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("languageHint", options.languageHint || "auto");
+  return request("/text-recognition/tasks/workbook", {
+    method: "POST",
+    body: formData
+  });
+}
+
 export function fetchTextRecognitionCapabilities() {
   return request("/text-recognition/capabilities");
 }
@@ -68,7 +82,10 @@ export function fetchTextRecognitionTask(id) {
 
 export async function waitForTextRecognitionTask(id, options = {}) {
   const requestedIntervalMs = Number(options.intervalMs);
-  const initialIntervalMs = Math.max(800, Number.isFinite(requestedIntervalMs) ? requestedIntervalMs : 1000);
+  const initialIntervalMs = Math.max(
+    800,
+    Number.isFinite(requestedIntervalMs) ? requestedIntervalMs : 1000
+  );
   const requestedMaxIntervalMs = Number(options.maxIntervalMs);
   const maxIntervalMs = Math.max(
     initialIntervalMs,
@@ -80,11 +97,12 @@ export async function waitForTextRecognitionTask(id, options = {}) {
     const task = await fetchTextRecognitionTask(id);
     if (["SUCCEEDED", "FAILED"].includes(task?.status)) return task;
     const elapsedMs = Date.now() - startedAt;
-    const intervalMs = elapsedMs < 15000
-      ? initialIntervalMs
-      : elapsedMs < 60000
-        ? Math.min(maxIntervalMs, Math.max(initialIntervalMs, 1500))
-        : maxIntervalMs;
+    const intervalMs =
+      elapsedMs < 15000
+        ? initialIntervalMs
+        : elapsedMs < 60000
+          ? Math.min(maxIntervalMs, Math.max(initialIntervalMs, 1500))
+          : maxIntervalMs;
     await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
   }
   const error = new Error("TEXT_RECOGNITION_TIMEOUT");
@@ -93,7 +111,11 @@ export async function waitForTextRecognitionTask(id, options = {}) {
 }
 
 export async function downloadTextRecognitionExcel(id, fileName = "text-recognition-cargos.xlsx") {
-  const response = await fetchWithApiFallback(`/text-recognition/tasks/${id}/cleaned-excel`, {}, configuredBase);
+  const response = await fetchWithApiFallback(
+    `/text-recognition/tasks/${id}/cleaned-excel`,
+    {},
+    configuredBase
+  );
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -107,9 +129,13 @@ export async function downloadTextRecognitionExcel(id, fileName = "text-recognit
 
 async function request(path, options = {}) {
   const headers = options.body instanceof FormData ? {} : { "Content-Type": "application/json" };
-  return requestJson(path, {
-    method: options.method || "GET",
-    headers,
-    body: options.body
-  }, configuredBase);
+  return requestJson(
+    path,
+    {
+      method: options.method || "GET",
+      headers,
+      body: options.body
+    },
+    configuredBase
+  );
 }

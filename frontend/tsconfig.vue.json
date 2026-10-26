@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/modules/**/*.vue",
+    "src/modules/**/module.js",
+    "src/modules/moduleCatalog.js",
+    "src/features/shipments/ManualShipmentCreateDialog.vue",
+    "src/features/shipments/ManualShipmentImportDialog.vue",
+    "src/features/account/PersonalProfileDialog.vue",
+    "src/features/overview/BusinessOverviewCharts.vue",
+    "src/types/**/*.ts",
+    "src/types/**/*.d.ts",
+    "src/features/admin/**/*.js",
+    "src/features/admin/AdminDevicesPage.vue",
+    "src/features/admin/AdminAnnouncementDialogs.vue",
+    "src/features/admin/AdminAnnouncementsPage.vue",
+    "src/features/admin/AdminFilePreviewDialog.vue",
+    "src/features/admin/AdminFilesPage.vue",
+    "src/features/admin/AdminEmployeesPage.vue",
+    "src/features/admin/AdminEmployeeDialogs.vue",
+    "src/features/admin/AdminLlmSettingsPanel.vue",
+    "src/features/admin/AdminSystemSettingsPage.vue",
+    "src/features/admin/AdminOverviewPage.vue",
+    "src/features/admin/AdminAuditPage.vue",
+    "src/features/admin/AdminLoginPage.vue",
+    "src/features/admin/AdminConsoleShell.vue",
+    "src/features/admin/AdminPlatformPage.vue",
+    "src/features/admin/AdminTicketsPage.vue",
+    "src/features/admin/AdminHandoversPage.vue"
+  ],
+  "vueCompilerOptions": {
+    "strictTemplates": true
+  }
+}

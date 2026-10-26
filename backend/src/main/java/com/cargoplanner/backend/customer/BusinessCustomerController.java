@@ -4,6 +4,7 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ClientInfo;
 import com.cargoplanner.backend.customer.dto.CustomerDirectoryResponse;
+import com.cargoplanner.backend.customer.dto.CustomerProfileResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -250,12 +251,12 @@ public class BusinessCustomerController {
   }
 
   @PostMapping
-  public Map<String, Object> create(
+  public CustomerProfileResponse create(
       @RequestBody CreateCustomerRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
       HttpServletRequest httpRequest
   ) {
-    return service.create(request, actor, ClientInfo.ip(httpRequest));
+    return CustomerProfileResponse.from(service.create(request, actor, ClientInfo.ip(httpRequest)));
   }
 
   @PostMapping("/batch")
@@ -268,21 +269,21 @@ public class BusinessCustomerController {
   }
 
   @GetMapping("/{customerId}")
-  public Map<String, Object> get(
+  public CustomerProfileResponse get(
       @PathVariable String customerId,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor
   ) {
-    return service.get(customerId, actor);
+    return CustomerProfileResponse.from(service.get(customerId, actor));
   }
 
   @PatchMapping("/{customerId}")
-  public Map<String, Object> update(
+  public CustomerProfileResponse update(
       @PathVariable String customerId,
       @RequestBody UpdateCustomerRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser actor,
       HttpServletRequest httpRequest
   ) {
-    return service.update(customerId, request, actor, ClientInfo.ip(httpRequest));
+    return CustomerProfileResponse.from(service.update(customerId, request, actor, ClientInfo.ip(httpRequest)));
   }
 
   @DeleteMapping("/{customerId}")

@@ -1,0 +1,16 @@
+.admin-audit-panel {
+  scroll-margin-top: 20px;
+}
+.admin-audit-table :deep(.cell b),
+.admin-audit-table :deep(.cell small) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-audit-table :deep(.cell small) {
+  margin-top: 2px;
+  color: #7b8da3;
+  font-size: 11px;
+}

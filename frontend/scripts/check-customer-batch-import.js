@@ -17,6 +17,12 @@ assert.equal(parsedTemplate.invalid, 0);
 assert.equal(parsedTemplate.items[0].username, "acme-shipper");
 assert.equal(parsedTemplate.items[0].clientCode, "ACME-001");
 assert.equal(parsedTemplate.items[0].partyRole, "SHIPPER");
+const serializedTemplate = XLSX.write(template, { bookType: "xlsx", type: "buffer" });
+const roundTrip = parseCustomerImportWorkbook(
+  XLSX.read(serializedTemplate, { type: "buffer" }),
+  XLSX
+);
+assert.deepEqual(roundTrip.items, parsedTemplate.items);
 
 const invalid = validateCustomerImportRows([
   {
@@ -60,7 +66,10 @@ assert(invalid.rows[4].errors.some((item) => item.code === "CLIENT_CODE_FORMAT")
 const shipmentWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(
   shipmentWorkbook,
-  XLSX.utils.aoa_to_sheet([["IMPORT KEY", "REFERENCE NO"], ["SHIP-001", "6508205930"]]),
+  XLSX.utils.aoa_to_sheet([
+    ["IMPORT KEY", "REFERENCE NO"],
+    ["SHIP-001", "6508205930"]
+  ]),
   "\u7968\u5355\u4e3b\u8868"
 );
 const wrongTemplate = parseCustomerImportWorkbook(shipmentWorkbook, XLSX);
@@ -71,11 +80,15 @@ const component = await readFile(
   new URL("../src/components/BusinessCustomerPage.vue", import.meta.url),
   "utf8"
 );
-assert(component.includes("downloadCustomerImportTemplate"));
-assert(component.includes("activeCustomerBatchPreview.rows"));
-assert(component.includes("customer-import-rules"));
-assert(component.includes("customer-import-preview"));
-assert(component.includes("localizeCustomerImportResult"));
-assert(component.includes("return { rowNumber: index + 1, username, clientCode };"));
+const importDialog = await readFile(
+  new URL("../src/modules/customers/components/CustomerImportDialog.vue", import.meta.url),
+  "utf8"
+);
+assert(component.includes("CustomerDialogs"));
+assert(importDialog.includes("activeCustomerBatchPreview.rows"));
+assert(importDialog.includes("customer-import-rules"));
+assert(importDialog.includes("customer-import-preview"));
+// Page commands execute the production workflows in customer-module-pages.test.mjs.
+// Quick-entry parsing and session races execute the production composable in customer-operations.test.mjs.
 
 console.log("customer batch import checks passed");

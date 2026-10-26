@@ -1170,7 +1170,7 @@ public class CustomerShipmentMutationService {
     return value;
   }
 
-
+  @Transactional
   public Map<String, Object> invalidateCurrentSnapshot(
       String shipmentPublicId,
       SnapshotInvalidationRequest request,
@@ -1185,20 +1185,27 @@ public class CustomerShipmentMutationService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Invalidation reason must contain 1-500 characters");
     }
     Long snapshotId = jdbcTemplate.queryForObject(
-        "SELECT current_snapshot_id FROM cp_shipments WHERE id = ?",
+        // Refresh persistence takes the shipment lock before touching snapshots too.
+        "SELECT current_snapshot_id FROM cp_shipments WHERE id = ? FOR UPDATE",
         Long.class,
         shipment.id()
     );
     if (snapshotId == null) throw new ApiException(HttpStatus.CONFLICT, "Shipment has no current snapshot");
     Instant now = Instant.now();
-    jdbcTemplate.update(
-        "UPDATE cp_tracking_snapshots SET invalidated_at = ?, invalidated_by = ?, invalidation_reason = ? WHERE id = ?",
-        Timestamp.from(now), actor.id(), reason, snapshotId
+    int invalidated = jdbcTemplate.update(
+        "UPDATE cp_tracking_snapshots SET invalidated_at = ?, invalidated_by = ?, invalidation_reason = ? WHERE id = ? AND shipment_id = ? AND invalidated_at IS NULL",
+        Timestamp.from(now), actor.id(), reason, snapshotId, shipment.id()
     );
-    jdbcTemplate.update(
-        "UPDATE cp_shipments SET current_snapshot_id = NULL, tracking_status = 'Needs review', last_tracked_at = NULL, fresh_until = NULL, updated_at = ? WHERE id = ?",
-        Timestamp.from(now), shipment.id()
+    if (invalidated != 1) {
+      throw new ApiException(HttpStatus.CONFLICT, "Current snapshot is no longer valid");
+    }
+    int cleared = jdbcTemplate.update(
+        "UPDATE cp_shipments SET current_snapshot_id = NULL, tracking_status = 'Needs review', last_tracked_at = NULL, fresh_until = NULL, updated_at = ? WHERE id = ? AND current_snapshot_id = ?",
+        Timestamp.from(now), shipment.id(), snapshotId
     );
+    if (cleared != 1) {
+      throw new ApiException(HttpStatus.CONFLICT, "Current snapshot changed during invalidation");
+    }
     jdbcTemplate.update(
         "UPDATE cp_customer_shipment_access SET publication_status = 'DRAFT', published_at = NULL, published_by = NULL WHERE shipment_id = ?",
         shipment.id()

@@ -18,6 +18,7 @@ public record CustomerRecord(
     String provisioningSource,
     String status,
     String remark,
+    String contactEmail,
     Long createdBy,
     String createdByDisplayName,
     long responsibleAgentId,

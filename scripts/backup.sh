@@ -30,6 +30,36 @@ COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml
 mkdir -p "$TARGET"
 echo "[backup] target: $TARGET"
 
+# A deployment exports IMAGE_TAG only for its own Compose process. The next
+# invocation may therefore see an older .env value; inspect the running release.
+RUNNING_TAG=""
+: > "$TARGET/images.txt"
+for service in backend tracking frontend; do
+  case "$service" in
+    backend) image_name=cargo-planner-backend ;;
+    tracking) image_name=cargo-platform-tracking ;;
+    frontend) image_name=cargo-planner-frontend ;;
+  esac
+  container_id="$("${COMPOSE[@]}" ps -q "$service")"
+  [[ -n "$container_id" && "$container_id" != *$'\n'* ]] || {
+    echo "[backup] expected one running $service container; refusing an ambiguous release backup" >&2
+    exit 1
+  }
+  image_ref="$(docker inspect --format '{{.Config.Image}}' "$container_id")"
+  image_id="$(docker inspect --format '{{.Image}}' "$container_id")"
+  [[ "$image_ref" == "$image_name":* && -n "$image_id" ]] || {
+    echo "[backup] unexpected running image for $service: $image_ref" >&2
+    exit 1
+  }
+  image_tag="${image_ref#"$image_name":}"
+  [[ -n "$image_tag" && ( -z "$RUNNING_TAG" || "$RUNNING_TAG" == "$image_tag" ) ]] || {
+    echo "[backup] application containers do not share one release tag; reconcile the running release first" >&2
+    exit 1
+  }
+  RUNNING_TAG="$image_tag"
+  printf 'service=%s image_ref=%s image_id=%s\n' "$service" "$image_ref" "$image_id" >> "$TARGET/images.txt"
+done
+
 echo "[backup] database ..."
 "${COMPOSE[@]}" exec -T mysql sh -c \
   'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers "$MYSQL_DATABASE"' \
@@ -57,15 +87,9 @@ fi
   echo "git_commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "git_branch=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
   echo "git_describe=$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo unknown)"
-  echo "image_tag=$(dotenv_value IMAGE_TAG "")"
+  echo "image_tag=$RUNNING_TAG"
   echo "backed_up_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$TARGET/version.txt"
-
-"${COMPOSE[@]}" ps -q 2>/dev/null | while read -r container_id; do
-  [[ -n "$container_id" ]] || continue
-  docker inspect --format \
-    'container={{.Name}} image_ref={{.Config.Image}} image_id={{.Image}}' "$container_id"
-done > "$TARGET/images.txt" 2>/dev/null || true
 
 if [[ -f "$ROOT/.env" ]]; then
   sed -E 's/=.*/=<redacted>/' "$ROOT/.env" > "$TARGET/env.snapshot"

@@ -1,0 +1,976 @@
+.assignment-customer-row {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid #d9e2ef;
+  border-radius: 0;
+  background: #f8fafc;
+}
+.assignment-customer-row > label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.assignment-customer-row .business-select {
+  width: 100%;
+}
+
+.business-select-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #18324b;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:deep(.el-select__selection) {
+  min-width: 0;
+}
+:deep(.el-select__selected-item) {
+  min-width: 0;
+  max-width: 100%;
+  color: #18324b;
+  opacity: 1;
+}
+:deep(.el-select__selected-item > span) {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.required-star {
+  color: #f56c6c;
+  font-style: normal;
+  margin-left: 2px;
+}
+
+.customer-code-overlay {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 20, 36, 0.62);
+  backdrop-filter: blur(8px);
+  animation: operations-overlay-in 220ms ease both;
+}
+.customer-code-overlay * {
+  box-sizing: border-box;
+}
+.customer-code-dialog {
+  box-sizing: border-box;
+  display: grid;
+  gap: 13px;
+  width: min(520px, 100%);
+  padding: 30px;
+  border: 1px solid rgba(180, 200, 220, 0.5);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(6, 24, 44, 0.28);
+  animation: operations-dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.customer-code-dialog h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #0f1d2e;
+}
+.customer-code-dialog p,
+.customer-code-dialog > small {
+  margin: 0;
+  color: #6b8095;
+  line-height: 1.6;
+}
+.customer-code-kicker {
+  color: #4086d2;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.customer-code-dialog > div {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.customer-code-dialog > div button {
+  flex: 1;
+}
+.customer-access-primary {
+  min-height: 40px;
+  border: 1px solid #1a4f80;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, #1a4f80, #2e7cc4);
+  box-shadow: 0 8px 20px rgba(15, 50, 90, 0.18);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+.customer-access-primary:hover {
+  box-shadow: 0 10px 26px rgba(15, 50, 90, 0.28);
+}
+
+.customer-dialog-form {
+  display: grid;
+  gap: 12px;
+}
+.customer-dialog-form label {
+  display: grid;
+  gap: 5px;
+}
+.customer-dialog-form label > span {
+  color: #435d76;
+  font-size: 11px;
+  font-weight: 800;
+}
+.customer-dialog-form input,
+.customer-dialog-form select,
+.customer-dialog-form textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #cfdeec;
+  border-radius: 8px;
+  color: #183652;
+  background: #fbfdff;
+  font-size: 13px;
+}
+
+.customer-dialog-form input:focus,
+.customer-dialog-form select:focus,
+.customer-dialog-form textarea:focus {
+  border-color: #4086d2;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(64, 134, 210, 0.1);
+}
+.customer-dialog-form textarea {
+  min-height: 100px;
+  resize: vertical;
+  font: inherit;
+}
+
+.customer-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.customer-dialog-actions button {
+  flex: 1;
+  min-height: 38px;
+  border: 1px solid #cfdeec;
+  border-radius: 8px;
+  color: #3a5572;
+  background: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.customer-dialog-actions button:hover {
+  background: #f4f7fb;
+}
+
+.manual-shipment-dialog {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 48px));
+  max-height: min(92vh, 980px);
+  padding: 24px 26px 0;
+  overflow: hidden;
+}
+
+.manual-shipment-dialog > p {
+  max-width: 900px;
+}
+
+.manual-shipment-form {
+  min-height: 0;
+  max-height: calc(min(92vh, 980px) - 132px);
+  padding: 2px 8px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.manual-required-hint {
+  padding: 10px 12px;
+  border: 1px solid #f1d59b;
+  border-radius: 9px;
+  color: #895b14 !important;
+  background: #fff9eb;
+  font-size: 11px;
+}
+
+.manual-entry-section {
+  display: grid;
+  padding: 16px;
+  border: 1px solid #dbe6f0;
+  border-radius: 12px;
+  background: #f9fbfd;
+  gap: 14px;
+}
+
+.manual-entry-section-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.manual-entry-section-head > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.manual-entry-section-head > span > b {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #2474c8;
+  background: #eaf4ff;
+  place-items: center;
+  font-size: 10px;
+}
+
+.manual-entry-section-head strong {
+  color: #1d3852;
+  font-size: 14px;
+}
+
+.manual-entry-section-head > small {
+  color: #7a8ea2;
+  font-size: 10px;
+  text-align: right;
+}
+
+.manual-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-entry-grid.is-route {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.manual-route-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-repeat-list {
+  display: grid;
+  gap: 12px;
+}
+
+.manual-repeat-card {
+  display: grid;
+  padding: 13px;
+  border: 1px solid #d9e5f0;
+  border-radius: 10px;
+  background: #fff;
+  gap: 12px;
+}
+
+.manual-repeat-card > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manual-repeat-card > header > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.manual-repeat-card > header b {
+  color: #234867;
+  font-size: 12px;
+}
+
+.manual-repeat-card > header small {
+  color: #3f83c5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.manual-add-button,
+.manual-remove-button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid #bfd4e8;
+  border-radius: 7px;
+  color: #276da8;
+  background: #f4f9ff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manual-add-button {
+  justify-self: start;
+}
+
+.manual-remove-button {
+  flex: 0 0 auto;
+  border-color: #ead0d2;
+  color: #a94c56;
+  background: #fff8f8;
+}
+
+.manual-service-field {
+  display: grid;
+  gap: 8px;
+}
+
+.manual-service-field > span {
+  color: #435d76;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.manual-service-field > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manual-service-choice {
+  display: inline-flex !important;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d2dfeb;
+  border-radius: 8px;
+  background: #fff;
+  align-items: center;
+  gap: 7px !important;
+  cursor: pointer;
+}
+
+.manual-service-choice input {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  accent-color: #2877c8;
+}
+
+.manual-service-choice > span {
+  color: #3a5873 !important;
+  font-size: 11px !important;
+}
+
+.manual-compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.manual-compact-row {
+  display: grid;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f0;
+  border-radius: 9px;
+  background: #fff;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.35fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.manual-empty-copy {
+  padding: 14px;
+  border: 1px dashed #cad9e8;
+  border-radius: 9px;
+  color: #8193a6 !important;
+  background: #fff;
+  text-align: center;
+  font-size: 11px;
+}
+
+.manual-shipment-note {
+  padding: 14px;
+  border: 1px solid #dbe6f0;
+  border-radius: 10px;
+  background: #f9fbfd;
+}
+
+.manual-shipment-form > .customer-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin: 0 -8px 0 0;
+  padding: 13px 0 16px;
+  border-top: 1px solid #dce6ef;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+}
+
+.manual-shipment-form > .customer-dialog-actions button {
+  flex: 0 0 auto;
+  min-width: 124px;
+}
+
+.shipment-excel-import-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1320px, calc(100vw - 64px));
+  max-height: min(94vh, 1020px);
+  padding: 28px 32px 0;
+  overflow: hidden;
+}
+
+.shipment-excel-import-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.shipment-excel-import-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.shipment-excel-import-heading p {
+  max-width: 900px;
+  color: #64788c;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.shipment-excel-import-heading > .shipment-excel-import-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.shipment-excel-import-heading-actions > .manual-add-button {
+  flex: 0 0 auto;
+  min-width: 176px;
+  white-space: nowrap;
+}
+
+.shipment-excel-close-button {
+  display: inline-grid;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid #d7e1eb;
+  border-radius: 8px;
+  color: #526b82;
+  background: #fff;
+  cursor: pointer;
+  place-items: center;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.shipment-excel-close-button:hover {
+  border-color: #9eb5c9;
+  color: #153b5c;
+  background: #f6f9fc;
+}
+
+.shipment-excel-close-button:focus-visible {
+  outline: 3px solid rgba(3, 105, 161, 0.18);
+  outline-offset: 2px;
+}
+
+.customer-code-dialog > .shipment-excel-import-body {
+  display: grid;
+  min-height: 0;
+  max-height: calc(min(94vh, 1020px) - 210px);
+  margin-top: 4px;
+  padding: 2px 8px 4px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: 16px;
+}
+
+.shipment-excel-customer-row {
+  padding: 0 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.shipment-excel-customer-row > label > span {
+  color: #435d76;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.shipment-excel-customer-row :deep(.el-checkbox) {
+  min-height: 40px;
+  padding: 0 4px;
+}
+
+.shipment-excel-import-dropzone {
+  min-height: 150px;
+  border-width: 1px;
+  border-color: #a9bfd1;
+  border-radius: 12px;
+  background: #f8fbfd;
+}
+
+.shipment-excel-import-dropzone:hover,
+.shipment-excel-import-dropzone.is-dragover {
+  border-color: #4288ba;
+  background: #f2f8fc;
+  transform: none;
+}
+
+.shipment-excel-upload-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: #126b9f;
+  background: #e7f3f9;
+  font-size: 20px;
+  place-items: center;
+}
+
+.shipment-excel-import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shipment-excel-import-summary > span {
+  display: grid;
+  min-height: 74px;
+  padding: 12px 16px;
+  border: 0;
+  border-left: 3px solid #9bb0c2;
+  border-radius: 8px;
+  background: #f7f9fb;
+  align-content: center;
+  gap: 3px;
+}
+
+.shipment-excel-import-summary b {
+  color: #24445f;
+  font-size: 22px;
+}
+
+.shipment-excel-import-summary small {
+  color: #7b90a5;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.shipment-excel-import-summary .is-valid {
+  border-color: #45a781;
+  background: #f2fbf7;
+}
+
+.shipment-excel-import-summary .is-valid b {
+  color: #238560;
+}
+
+.shipment-excel-import-summary .is-invalid {
+  border-color: #d46a73;
+  background: #fff7f7;
+}
+
+.shipment-excel-import-summary .is-invalid b {
+  color: #be4f5b;
+}
+
+.shipment-excel-import-summary .has-warning {
+  border-color: #c99235;
+  background: #fffbf1;
+}
+
+.shipment-excel-import-summary .has-warning b {
+  color: #a46a17;
+}
+
+.shipment-excel-import-errors {
+  padding: 13px 16px;
+  border: 0;
+  border-left: 3px solid #d46a73;
+  border-radius: 8px;
+  color: #9c3f49;
+  background: #fff7f7;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.shipment-excel-import-errors ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.shipment-excel-import-table-wrap {
+  max-height: 420px;
+  border: 1px solid #dce5ee;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.shipment-excel-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 11px;
+}
+
+.shipment-excel-import-table :deep(th) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px;
+  color: #4d657b;
+  background: #f2f6fa;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.shipment-excel-import-table :deep(td) {
+  max-width: 330px;
+  padding: 11px 12px;
+  color: #526a80;
+  vertical-align: top;
+}
+
+.shipment-excel-import-table :deep(tr.is-invalid td) {
+  background: #fff8f8;
+}
+
+.shipment-excel-import-table :deep(tr.has-warning:not(.is-invalid) td) {
+  background: #fffdf7;
+}
+
+.import-state-error,
+.import-state-ready {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.import-state-error {
+  color: #b84955;
+  background: #fdecef;
+}
+
+.import-state-ready {
+  color: #237b59;
+  background: #e8f7f0;
+}
+
+.shipment-excel-validation-list {
+  display: grid;
+  gap: 5px;
+}
+
+.shipment-excel-validation-list > span {
+  position: relative;
+  padding-left: 12px;
+  color: #8e3f49;
+  line-height: 1.5;
+}
+
+.shipment-excel-validation-list > span::before {
+  position: absolute;
+  top: 0.62em;
+  left: 1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.shipment-excel-validation-list.is-warning > span {
+  color: #8b641e;
+}
+
+.shipment-excel-validation-empty {
+  color: #91a0ae;
+}
+
+.shipment-excel-import-progress {
+  display: grid;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #f8fbfe;
+  gap: 13px;
+}
+
+.shipment-excel-import-progress > div:first-child {
+  display: grid;
+  gap: 9px;
+}
+
+.shipment-excel-import-result-list {
+  display: grid;
+  max-height: 210px;
+  overflow-y: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.shipment-excel-import-result-list > span {
+  display: grid;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid #dce5ee;
+  border-radius: 8px;
+  background: #fff;
+  gap: 2px;
+}
+
+.shipment-excel-import-result-list .is-created {
+  border-color: #bfe5d4;
+}
+
+.shipment-excel-import-result-list .is-updated {
+  border-color: #b9d7f5;
+  background: #f5faff;
+}
+
+.shipment-excel-import-result-list .is-skipped {
+  border-color: #d8e0e8;
+  background: #f8fafc;
+}
+
+.shipment-excel-import-result-list .is-failed {
+  border-color: #f0c9cd;
+  background: #fff8f8;
+}
+
+.shipment-excel-import-result-list .is-not-submitted {
+  border-color: #ecd2a0;
+  background: #fff9ed;
+}
+
+.shipment-excel-import-result-list b,
+.shipment-excel-import-result-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipment-excel-import-result-list small {
+  color: #7b90a5;
+  font-size: 9px;
+}
+
+.shipment-excel-import-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  margin: 0 -32px;
+  padding: 14px 32px 18px;
+  border-top: 1px solid #dce6ef;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -10px 22px rgba(15, 35, 55, 0.045);
+  backdrop-filter: blur(8px);
+}
+
+.shipment-excel-import-actions button {
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
+.customer-excel-dropzone {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 28px 16px;
+  border: 2px dashed #c8d6e2;
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.customer-excel-dropzone:hover {
+  border-color: #5b8def;
+  background: #f5f9ff;
+}
+.customer-excel-dropzone.has-file {
+  border-color: #56b88d;
+  background: #f6fdf9;
+}
+.customer-excel-dropzone.is-dragover {
+  border-color: #5b8def;
+  background: #eef4ff;
+  transform: scale(1.02);
+}
+.customer-excel-dropzone input {
+  display: none;
+}
+.customer-excel-dropzone b {
+  color: #1a2d42;
+  font-size: 13px;
+}
+.customer-excel-dropzone small {
+  color: #889aaf;
+  font-size: 11px;
+}
+.customer-excel-dropzone button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid #cfdeec;
+  border-radius: 6px;
+  color: #3a5572;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes operations-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes operations-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.shipment-dialog-fields {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.customer-code-overlay {
+  color: #1a2d42;
+}
+.customer-code-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.customer-code-dialog button:focus-visible {
+  outline: 3px solid rgba(64, 134, 210, 0.3);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .assignment-customer-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .customer-code-overlay {
+    padding: 8px;
+  }
+  .manual-shipment-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 18px 16px 0;
+  }
+  .manual-shipment-form {
+    max-height: calc(100vh - 132px);
+  }
+  .manual-entry-grid,
+  .manual-entry-grid.is-route,
+  .manual-route-list {
+    grid-template-columns: 1fr;
+  }
+  .manual-entry-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .manual-entry-section-head > small {
+    text-align: left;
+  }
+  .manual-compact-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .manual-compact-row .manual-remove-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .manual-shipment-form > .customer-dialog-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .shipment-excel-import-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 18px 16px 0;
+  }
+  .shipment-excel-import-heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .shipment-excel-import-heading-actions {
+    width: 100%;
+  }
+  .shipment-excel-import-heading-actions > .manual-add-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .shipment-excel-import-body {
+    max-height: calc(100vh - 220px);
+  }
+  .shipment-excel-customer-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .shipment-excel-import-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shipment-excel-import-result-list {
+    grid-template-columns: 1fr;
+  }
+  .shipment-excel-import-actions {
+    margin: 0 -16px;
+    padding: 12px 16px 16px;
+  }
+  .shipment-excel-import-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-code-overlay,
+  .customer-code-dialog {
+    animation: none;
+  }
+  .customer-code-dialog * {
+    transition: none;
+  }
+}

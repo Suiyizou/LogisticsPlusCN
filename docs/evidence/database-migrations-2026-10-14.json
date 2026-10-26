@@ -1,0 +1,253 @@
+{
+  "verifiedAt": "2026-10-14",
+  "scope": "Local isolated MySQL validation; remote Gitee pipeline and production deployment not executed",
+  "schemaComparatorUnitTests": {
+    "passed": 14,
+    "failed": 0
+  },
+  "productionDockerfileBuildTarget": "build",
+  "productionDockerfileBuildTargetSucceeded": true,
+  "remotePipelineTriggered": false,
+  "reports": [
+    {
+      "name": "database-migrations-final-20261014.json",
+      "at": "2026-10-14T09:40:35.323Z",
+      "jarSha256": "d037c7536861f60a51dec7531771bdd9181719516688f16cfbc305eeae2b2756",
+      "suppliedSqlSha256": "73aabf602eb041fdeb0c5eb7f1e3b254973e59dde929bff72a18047749d3e6a0",
+      "checks": [
+        {
+          "label": "empty database migrates using Flyway only",
+          "passed": true
+        },
+        {
+          "label": "Java V3 has a persisted non-null checksum",
+          "passed": true
+        },
+        {
+          "label": "unversioned non-empty database is rejected without implicit baseline",
+          "passed": true
+        },
+        {
+          "label": "baseline rejection does not create history",
+          "passed": true
+        },
+        {
+          "label": "changed schema fingerprint cannot be adopted",
+          "passed": true
+        },
+        {
+          "label": "tampered backup cannot be adopted",
+          "passed": true
+        },
+        {
+          "label": "reviewed legacy database can be explicitly adopted",
+          "passed": true
+        },
+        {
+          "label": "known legacy data upgrades to current schema",
+          "passed": true
+        },
+        {
+          "label": "fresh and legacy migration paths produce equivalent columns/indexes/constraints",
+          "passed": true
+        },
+        {
+          "label": "legacy employee role is converted without losing accounts",
+          "passed": true
+        },
+        {
+          "label": "snapshot owner and business fields are backfilled",
+          "passed": true
+        },
+        {
+          "label": "legacy customer roles and delegated shipment access are migrated",
+          "passed": true
+        },
+        {
+          "label": "old scoped agent sessions are revoked",
+          "passed": true
+        },
+        {
+          "label": "shipper sessions retain their own customer scope",
+          "passed": true
+        },
+        {
+          "label": "file visibility roles are backfilled",
+          "passed": true
+        },
+        {
+          "label": "invalid discovered references are removed and valid references retained",
+          "passed": true
+        },
+        {
+          "label": "second migrate validates and applies no migration",
+          "passed": true
+        },
+        {
+          "label": "real application startup 1 on migrated legacy database",
+          "passed": true
+        },
+        {
+          "label": "real application startup 2 on migrated legacy database",
+          "passed": true
+        },
+        {
+          "label": "repeated execution does not rerun legacy permission backfills",
+          "passed": true
+        },
+        {
+          "label": "repeated execution leaves structure and history unchanged",
+          "passed": true
+        },
+        {
+          "label": "unrecognized database cannot be adopted even with its exact fingerprint",
+          "passed": true
+        },
+        {
+          "label": "supplied historical SQL upgrades on an isolated copy",
+          "passed": true
+        },
+        {
+          "label": "supplied legacy customer/shipment counts remain intact",
+          "passed": true
+        },
+        {
+          "label": "supplied legacy schema equals clean migrated schema",
+          "passed": true
+        },
+        {
+          "label": "supplied SQL file is unchanged",
+          "passed": true
+        },
+        {
+          "label": "all migration checks completed",
+          "passed": true
+        },
+        {
+          "label": "owned Java verification runtime removed",
+          "passed": true
+        },
+        {
+          "label": "only owned test container and its anonymous volume removed",
+          "passed": true
+        },
+        {
+          "label": "owned isolated verification network removed",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "database-migrations-ci.json",
+      "at": "2026-10-14T09:43:56.449Z",
+      "jarSha256": "08ec67974338e153438a466b4cd944e54ee62a29e4aa6a3226de93a36365b299",
+      "suppliedSqlSha256": null,
+      "checks": [
+        {
+          "label": "empty database migrates using Flyway only",
+          "passed": true
+        },
+        {
+          "label": "Java V3 has a persisted non-null checksum",
+          "passed": true
+        },
+        {
+          "label": "unversioned non-empty database is rejected without implicit baseline",
+          "passed": true
+        },
+        {
+          "label": "baseline rejection does not create history",
+          "passed": true
+        },
+        {
+          "label": "changed schema fingerprint cannot be adopted",
+          "passed": true
+        },
+        {
+          "label": "tampered backup cannot be adopted",
+          "passed": true
+        },
+        {
+          "label": "reviewed legacy database can be explicitly adopted",
+          "passed": true
+        },
+        {
+          "label": "known legacy data upgrades to current schema",
+          "passed": true
+        },
+        {
+          "label": "fresh and legacy migration paths produce equivalent columns/indexes/constraints",
+          "passed": true
+        },
+        {
+          "label": "legacy employee role is converted without losing accounts",
+          "passed": true
+        },
+        {
+          "label": "snapshot owner and business fields are backfilled",
+          "passed": true
+        },
+        {
+          "label": "legacy customer roles and delegated shipment access are migrated",
+          "passed": true
+        },
+        {
+          "label": "old scoped agent sessions are revoked",
+          "passed": true
+        },
+        {
+          "label": "shipper sessions retain their own customer scope",
+          "passed": true
+        },
+        {
+          "label": "file visibility roles are backfilled",
+          "passed": true
+        },
+        {
+          "label": "invalid discovered references are removed and valid references retained",
+          "passed": true
+        },
+        {
+          "label": "second migrate validates and applies no migration",
+          "passed": true
+        },
+        {
+          "label": "real application startup 1 on migrated legacy database",
+          "passed": true
+        },
+        {
+          "label": "real application startup 2 on migrated legacy database",
+          "passed": true
+        },
+        {
+          "label": "repeated execution does not rerun legacy permission backfills",
+          "passed": true
+        },
+        {
+          "label": "repeated execution leaves structure and history unchanged",
+          "passed": true
+        },
+        {
+          "label": "unrecognized database cannot be adopted even with its exact fingerprint",
+          "passed": true
+        },
+        {
+          "label": "all migration checks completed",
+          "passed": true
+        },
+        {
+          "label": "owned Java verification runtime removed",
+          "passed": true
+        },
+        {
+          "label": "only owned test container and its anonymous volume removed",
+          "passed": true
+        },
+        {
+          "label": "owned isolated verification network removed",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

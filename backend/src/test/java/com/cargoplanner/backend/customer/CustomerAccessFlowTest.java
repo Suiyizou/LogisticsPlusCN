@@ -8,6 +8,10 @@ import com.cargoplanner.backend.auth.PasswordHasher;
 import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.customer.dto.CustomerDirectoryItem;
+import com.cargoplanner.backend.customer.persistence.CustomerProfileMapper;
+import com.cargoplanner.backend.customer.persistence.CustomerProfileRepository;
+import com.cargoplanner.backend.persistence.MyBatisTestSupport;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import com.cargoplanner.backend.shipment.ShipmentAccessService;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.cargoplanner.backend.shipment.ShipmentBatchDeleteRequest;
@@ -67,7 +71,8 @@ class CustomerAccessFlowTest {
       JsonNode existing = json.readTree(json.writeValueAsString(
           customerService.get(item.get("id").asText(), business)));
       assertThat(item).isEqualTo(existing);
-      assertThat(item.size()).isEqualTo(20);
+      assertThat(item.size()).isEqualTo(21);
+      assertThat(item.has("contactEmail")).isTrue();
     }
   }
 
@@ -417,7 +422,10 @@ class CustomerAccessFlowTest {
                 lookupService,
                 accessPolicy,
                 auditService,
-                overseaAgentService),
+                overseaAgentService,
+                new CustomerProfileRepository(MyBatisTestSupport.session(dataSource,
+                    CustomerProfileMapper.class).getMapper(CustomerProfileMapper.class), accessGuard),
+                new DataSourceTransactionManager(dataSource)),
             new CustomerShipmentQueryService(jdbcTemplate, new ObjectMapper(), accessGuard),
             new CustomerTransferService(
                 jdbcTemplate, accessGuard, lookupService, overseaAgentService, auditService),
@@ -2321,7 +2329,7 @@ class CustomerAccessFlowTest {
           customer_code_mode VARCHAR(20) NOT NULL DEFAULT 'RANDOM',
           provisioning_source VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
           status VARCHAR(20) NOT NULL,
-          remark VARCHAR(500),
+          contact_email VARCHAR(254), remark VARCHAR(500),
           created_by BIGINT NOT NULL,
           responsible_agent_id BIGINT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

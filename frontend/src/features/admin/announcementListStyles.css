@@ -1,0 +1,75 @@
+.announcement-title-cell {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: center;
+}
+
+.announcement-title-cell > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.announcement-title-cell b,
+.announcement-title-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcement-title-cell small {
+  color: #7b8da1;
+}
+
+.announcement-image-indicator {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #b9daf4;
+  border-radius: 9px;
+  background:
+    linear-gradient(145deg, rgb(55 155 213 / 18%), rgb(96 125 218 / 8%)),
+    linear-gradient(135deg, transparent 48%, #55a9da 49% 53%, transparent 54%);
+}
+
+.announcement-visibility {
+  display: inline-flex;
+  min-height: 26px;
+  padding: 0 9px;
+  align-items: center;
+  border: 1px solid #bfcee0;
+  border-radius: 999px;
+  color: #4d6782;
+  background: #f5f8fc;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.announcement-visibility.customer {
+  border-color: #abdccf;
+  color: #17866c;
+  background: #effaf6;
+}
+
+.announcement-visibility.employee {
+  border-color: #b8cdf2;
+  color: #346eb6;
+  background: #f0f6ff;
+}
+
+.announcement-row-actions {
+  gap: 5px;
+}
+
+.announcement-row-actions button {
+  padding: 6px 8px;
+}
+
+@media (max-width: 680px) {
+  .admin-inline-actions {
+    width: 100%;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+}

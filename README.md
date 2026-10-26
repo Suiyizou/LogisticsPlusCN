@@ -13,7 +13,7 @@
 - 桌面打包：Electron
 - 后端：Spring Boot 3 + MyBatis（客户列表）+ JDBC（其余模块逐步迁移）
 - 货物追踪：Node.js + Playwright，源码位于 `tracking-service/`
-- 智能导入：后台可控制 LLM 开关、API Key、Base URL 和模型，未配置 Key 时使用规则兜底
+- 智能导入：后台可控制 LLM 开关、API Key、Base URL 和模型；原文件智能模式通过工作簿工具生成读取计划并核对来源，需配置支持工具调用的模型。规则预览与粘贴文本路径独立保留。
 - 数据库：MySQL 8
 - 部署：单仓库 Docker Compose；Nginx 代理 `/api/` 到 Spring、`/tracking/` 到追踪服务
 
@@ -28,7 +28,7 @@
 - 提供 CSV 导入导出、Excel 样板说明、示例数据、清空货物和算法说明页面。
 - 新增管理后台：总管理员登录、员工账号管理、在线设备/IP 查看、设备踢下线、基础运行监控。
 - 同一账号默认限制最多 5 台在线设备。
-- 智能导入支持两条路径：本地规则预览，以及后端文本识别任务；管理员启用 LLM 后可由模型抽取非标准文本。
+- 智能导入保留本地规则预览与文本识别，新增原始 XLSX/XLS/CSV/TSV 工具任务，保留包号、唛头与混装明细；数量、重量不符时阻止导入，来源体积有差异时要求复核。详见 [工作簿工具与验证边界](docs/SMART_IMPORT_WORKBOOK_TOOLS.md)。
 
 ## 公开主页与工作台入口
 
@@ -188,9 +188,18 @@ backend/target/cargo-planner-backend-0.1.0.jar
 
 ## Docker 部署
 
+首次安装先复制 `.env.example` 为 `.env`，修改数据库凭据；空库还需显式设置管理员初始化开关、用户名和满足复杂度要求的密码，首次成功启动后关闭初始化并移除该密码。Compose 使用名为 `mysql-data` 的外部数据卷，不会自动创建它：
+
 ```bash
+docker volume inspect mysql-data
+# 仅在首次安装且确认没有既有数据卷时创建；已有部署保留原卷。
+docker volume create mysql-data
 docker compose up -d --build
 ```
+
+新建空库由 Flyway 自动迁移。已有未版本化的非空数据库必须先备份，并在隔离副本完成演练，再按 [旧库显式接管流程](docs/DATABASE_MIGRATIONS.md#已有未版本化数据库显式接入) 执行 inspect、adopt-legacy 和 migrate，最后启动新后端；不能删除原卷、直接挂载 `schema.sql` 或开启自动 baseline 来跳过接管。已有 Flyway 版本库按正常版本迁移处理。
+
+后续发布可使用 `scripts/deploy.sh --ref <已验收的提交SHA>`。备份从运行容器记录实际镜像标签和摘要，避免 `.env` 中旧标签影响回退；三个应用容器必须属于同一 release。备份与恢复仍须在维护窗口协调业务写入，完整数据库恢复会覆盖备份后的新增数据。
 
 默认端口：
 
@@ -203,7 +212,7 @@ MySQL（服务器本机）：127.0.0.1:3306
 
 后端与 MySQL 默认只绑定服务器环回地址，公网仅需开放统一入口的 `80/443`。追踪服务的 `3000` 端口只暴露在 Compose 内部网络，不需要单独映射或手工启动。首次构建会拉取含 Chromium 的 Playwright 镜像，体积和内存占用会高于普通 Node 镜像；Chromium 仅在浏览器兜底通道实际使用时启动。
 
-可复制 `.env.example` 为 `.env` 后修改数据库密码、端口和设备登录上限。
+`.env` 同时支持修改端口和设备登录上限。发布脚本的 release 标签优先于 `.env`；回滚使用备份中记录的实际运行标签，只有经核实后才通过 `--image-tag` 显式覆盖。
 
 ## Windows 客户端打包
 

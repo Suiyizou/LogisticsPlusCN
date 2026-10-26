@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 class AuthServicePasswordChangeTest {
@@ -88,7 +89,7 @@ class AuthServicePasswordChangeTest {
         hash.hash(),
         hash.iterations()
     );
-    authService = new AuthService(jdbcTemplate, passwordHasher, 5, 6);
+    authService = new AuthService(jdbcTemplate, passwordHasher, new AuthFailureAuditService(jdbcTemplate, new DataSourceTransactionManager(dataSource)), 5, 6);
     request = new MockHttpServletRequest();
     request.setRemoteAddr("127.0.0.1");
     request.addHeader("User-Agent", "Password change test");

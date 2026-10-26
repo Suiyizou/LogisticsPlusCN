@@ -1,4 +1,4 @@
-import { authHeaders, clearSession } from "./authSession";
+import { authHeaders, clearSession, storedToken } from "./authSession";
 
 export const API_ERROR_EVENT = "app-api-error";
 
@@ -22,11 +22,12 @@ export function apiBaseCandidates(configuredBase) {
 
 export async function requestJson(path, options = {}, configuredBase = "") {
   const candidates = apiBaseCandidates(configuredBase);
+  const identity = requestIdentity(options);
   let lastError;
   let routingError;
   for (const base of candidates) {
     try {
-      return await requestJsonOnce(base, path, options);
+      return await requestJsonOnce(base, path, options, identity);
     } catch (error) {
       lastError = error;
       if (!routingError && isApiRoutingError(error)) routingError = error;
@@ -40,20 +41,24 @@ export async function requestJson(path, options = {}, configuredBase = "") {
 
 export async function fetchWithApiFallback(path, options = {}, configuredBase = "") {
   const candidates = apiBaseCandidates(configuredBase);
+  const identity = requestIdentity(options);
   let lastError;
   let routingError;
   for (const base of candidates) {
     try {
       const response = await fetch(`${base}${path}`, {
         ...options,
-        headers: { ...authHeaders(), ...(options.headers || {}) }
+        headers: identity.headers
       });
-      if (response.ok && !isHtmlResponse(response)) return response;
-      if (response.status === 401) {
+      identity.assertCurrent();
+      if (response.ok && !isHtmlResponse(response))
+        return guardResponseBody(response, identity.assertCurrent);
+      const message = await readResponseError(response);
+      identity.assertCurrent();
+      if (response.status === 401 && !options.ignoreAuthExpiry) {
         clearSession();
         window.dispatchEvent(new CustomEvent("auth-expired"));
       }
-      const message = await readResponseError(response);
       const error = createApiError(message, {
         status: response.status,
         retryable: response.ok || shouldRetryStatus(response.status),
@@ -85,16 +90,21 @@ export async function readResponseError(response) {
   }
 }
 
-async function requestJsonOnce(base, path, options) {
+async function requestJsonOnce(base, path, options, identity) {
   const response = await fetch(`${base}${path}`, {
     method: options.method || "GET",
-    headers: { ...authHeaders(), ...(options.headers || { "Content-Type": "application/json" }) },
+    headers: {
+      ...(!options.headers ? { "Content-Type": "application/json" } : {}),
+      ...identity.headers
+    },
     body: normalizeBody(options.body)
   });
+  identity.assertCurrent();
   const text = await response.text();
+  identity.assertCurrent();
   const data = parseJson(text, response.url);
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && !options.ignoreAuthExpiry) {
       clearSession();
       window.dispatchEvent(new CustomEvent("auth-expired"));
     }
@@ -135,9 +145,54 @@ function shouldRetryStatus(status) {
 }
 
 function normalizeNetworkError(error) {
+  if (error.name === "AbortError") {
+    error.retryable = false;
+    return error;
+  }
   if (error.retryable !== undefined) return error;
   error.retryable = true;
   return error;
+}
+
+function requestIdentity(options) {
+  const token = storedToken();
+  return {
+    headers: { ...authHeaders(), ...(options.headers || {}) },
+    assertCurrent() {
+      // Logout deliberately addresses its captured old token after local revocation.
+      if (!options.ignoreAuthExpiry && storedToken() !== token)
+        throw new DOMException("Employee identity changed", "AbortError");
+    }
+  };
+}
+
+function guardResponseBody(response, assertCurrent) {
+  // Downloads may finish reading a streamed body after another login. Preserve the
+  // native Response contract while applying the same identity check to body reads.
+  for (const name of ["arrayBuffer", "blob", "bytes", "formData", "json", "text"]) {
+    if (typeof response[name] !== "function") continue;
+    const read = response[name].bind(response);
+    Object.defineProperty(response, name, {
+      configurable: true,
+      value: async (...args) => {
+        assertCurrent();
+        const value = await read(...args);
+        assertCurrent();
+        return value;
+      }
+    });
+  }
+  if (typeof response.clone === "function") {
+    const clone = response.clone.bind(response);
+    Object.defineProperty(response, "clone", {
+      configurable: true,
+      value: () => {
+        assertCurrent();
+        return guardResponseBody(clone(), assertCurrent);
+      }
+    });
+  }
+  return response;
 }
 
 function createApiError(message, { status, retryable, data, url } = {}) {
@@ -151,6 +206,10 @@ function createApiError(message, { status, retryable, data, url } = {}) {
   error.retryAfterMs = data?.retryAfterMs;
   error.url = url;
   return error;
+}
+
+export function notifyApiFailure(error) {
+  scheduleGlobalErrorNotice(error);
 }
 
 function scheduleGlobalErrorNotice(error) {

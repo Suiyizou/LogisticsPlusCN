@@ -3,6 +3,7 @@ package com.cargoplanner.backend.admin;
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ClientInfo;
+import com.cargoplanner.backend.shipment.SecretValueCodec;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,20 +20,25 @@ public class LlmSettingsService {
   private static final String KEY_MODEL = "llm.model";
   private static final String KEY_API_KEY = "llm.api_key";
   private static final String DEFAULT_MODEL = "deepseek-v4-flash";
+  private static final String KEY_ENCRYPTION_PREFIX = "{aes-gcm}";
+  private static final String KEY_ENCRYPTION_PURPOSE = "llm-api-key";
 
   private final JdbcTemplate jdbcTemplate;
   private final String defaultBaseUrl;
   private final String defaultModel;
   private final String defaultApiKey;
-  private volatile boolean tableReady = false;
+  private final SecretValueCodec secretCodec;
+  private volatile boolean settingsReady = false;
 
   public LlmSettingsService(
       JdbcTemplate jdbcTemplate,
+      SecretValueCodec secretCodec,
       @Value("${spring.ai.openai.base-url:https://api.deepseek.com}") String defaultBaseUrl,
       @Value("${spring.ai.openai.chat.options.model:deepseek-v4-flash}") String defaultModel,
       @Value("${spring.ai.openai.api-key:}") String defaultApiKey
   ) {
     this.jdbcTemplate = jdbcTemplate;
+    this.secretCodec = secretCodec;
     this.defaultBaseUrl = defaultBaseUrl;
     this.defaultModel = defaultModel;
     this.defaultApiKey = defaultApiKey;
@@ -51,9 +57,12 @@ public class LlmSettingsService {
   }
 
   public LlmRuntimeSettings runtimeSettings() {
-    ensureTable();
+    ensureSettingsInitialized();
     Map<String, String> values = loadValues();
-    String apiKey = firstNonBlank(values.get(KEY_API_KEY), defaultApiKey);
+    // Only an absent setting inherits the environment. An explicit empty value means cleared.
+    String apiKey = values.containsKey(KEY_API_KEY)
+        ? decodeApiKey(values.get(KEY_API_KEY))
+        : clean(defaultApiKey);
     return new LlmRuntimeSettings(
         Boolean.parseBoolean(firstNonBlank(values.get(KEY_ENABLED), "true")),
         firstNonBlank(values.get(KEY_BASE_URL), defaultBaseUrl, "https://api.deepseek.com"),
@@ -64,7 +73,7 @@ public class LlmSettingsService {
 
   @Transactional
   public Map<String, Object> updateSettings(LlmSettingsRequest request, AuthenticatedUser admin, String ip) {
-    ensureTable();
+    ensureSettingsInitialized();
     if (request == null) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "LLM settings are required");
     }
@@ -88,31 +97,19 @@ public class LlmSettingsService {
     if (Boolean.TRUE.equals(request.clearApiKey())) {
       upsert(KEY_API_KEY, "", admin.id());
     } else if (request.apiKey() != null && !request.apiKey().isBlank()) {
-      upsert(KEY_API_KEY, clean(request.apiKey()), admin.id());
+      upsert(KEY_API_KEY, encodeApiKey(clean(request.apiKey())), admin.id());
     }
     audit(admin.id(), ip);
     return publicSettings();
   }
 
-  private void ensureTable() {
-    if (tableReady) return;
+  private void ensureSettingsInitialized() {
+    if (settingsReady) return;
     synchronized (this) {
-      if (tableReady) return;
-      jdbcTemplate.execute(
-          """
-          CREATE TABLE IF NOT EXISTS cp_system_settings (
-            setting_key VARCHAR(120) PRIMARY KEY,
-            setting_value LONGTEXT NULL,
-            description VARCHAR(255) NULL,
-            updated_by BIGINT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_cp_system_settings_updated_at (updated_at)
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-          """
-      );
+      if (settingsReady) return;
       seedDefaults();
-      tableReady = true;
+      encryptLegacyApiKey();
+      settingsReady = true;
     }
   }
 
@@ -120,7 +117,38 @@ public class LlmSettingsService {
     upsertIfMissing(KEY_ENABLED, "true", "Whether text recognition should call the configured LLM first");
     upsertIfMissing(KEY_BASE_URL, firstNonBlank(defaultBaseUrl, "https://api.deepseek.com"), "OpenAI-compatible base URL for text recognition");
     upsertIfMissing(KEY_MODEL, normalizeModel(firstNonBlank(defaultModel, DEFAULT_MODEL)), "LLM model name for text recognition");
-    upsertIfMissing(KEY_API_KEY, firstNonBlank(defaultApiKey, ""), "API key for the configured OpenAI-compatible LLM provider");
+    // Environment secrets stay outside the database; do not seed a key row.
+  }
+
+  private void encryptLegacyApiKey() {
+    List<String> keys = jdbcTemplate.queryForList(
+        "SELECT setting_value FROM cp_system_settings WHERE setting_key = ?", String.class, KEY_API_KEY
+    );
+    if (keys.isEmpty()) return;
+    String original = keys.get(0);
+    String value = clean(original);
+    if (value.isBlank() || value.startsWith(KEY_ENCRYPTION_PREFIX)) return;
+    // Compare-and-set avoids replacing a concurrent administrator's clear/update.
+    jdbcTemplate.update(
+        """
+        UPDATE cp_system_settings SET setting_value = ?
+        WHERE setting_key = ? AND CAST(setting_value AS BINARY) = CAST(? AS BINARY)
+        """,
+        encodeApiKey(value), KEY_API_KEY, original
+    );
+  }
+
+  private String encodeApiKey(String value) {
+    return KEY_ENCRYPTION_PREFIX + secretCodec.encrypt(KEY_ENCRYPTION_PURPOSE, value);
+  }
+
+  private String decodeApiKey(String value) {
+    if (value == null || value.isBlank()) return "";
+    // Legacy values can occur when an old instance shares the DB during a rolling update.
+    // Normal startup migrates them. Decryption failure never falls back to environment secrets.
+    return value.startsWith(KEY_ENCRYPTION_PREFIX)
+        ? secretCodec.decrypt(KEY_ENCRYPTION_PURPOSE, value.substring(KEY_ENCRYPTION_PREFIX.length()))
+        : value;
   }
 
   private Map<String, String> loadValues() {
@@ -215,6 +243,12 @@ public class LlmSettingsService {
       String model,
       String apiKey
   ) {
+    @Override
+    public String toString() {
+      return "LlmRuntimeSettings[enabled=" + enabled + ", baseUrl=" + baseUrl
+          + ", model=" + model + ", apiKey=<redacted>]";
+    }
+
     public boolean hasApiKey() {
       return apiKey != null && !apiKey.isBlank();
     }

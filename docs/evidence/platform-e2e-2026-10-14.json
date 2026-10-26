@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-14",
+  "scope": "Local real browser / Java / MySQL acceptance; no production deployment or remote CI",
+  "mockedApi": false,
+  "frontend": {
+    "tests": 592,
+    "failures": 0,
+    "sfcStrict": 48,
+    "portNegativeCases": 94,
+    "apiNegativeCases": 8,
+    "productionBuild": true
+  },
+  "backend": {
+    "tests": 264,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": 34
+  },
+  "moduleContracts": {
+    "tests": 24,
+    "failures": 0
+  },
+  "qualityPassed": true,
+  "realHttpAndMysql": {
+    "at": "2026-10-14T10:30:43.764Z",
+    "jarSha256": "5fd9d4d4cc6b4f9a87e9b2e9795aa991a6563e8c82f3443bb0ddd1fac6886578",
+    "previousBinaryUsed": false,
+    "mockedApi": false,
+    "checks": [
+      {
+        "label": "V4 to V5 preserves existing customer identity and remark; email is nullable",
+        "passed": true
+      },
+      {
+        "label": "existing single-business-account policy remains enforced",
+        "passed": true
+      },
+      {
+        "label": "real login and controlled customer create return an explicit credential-safe profile",
+        "passed": true
+      },
+      {
+        "label": "business user cannot list, read or modify another user's customer",
+        "passed": true
+      },
+      {
+        "label": "invalid profile is rejected atomically; omission preserves and empty text clears in MySQL",
+        "passed": true
+      },
+      {
+        "label": "duplicate customer is a conflict and creates no extra database row",
+        "passed": true
+      },
+      {
+        "label": "customer sees only own published shipment and cannot use employee credentials or foreign shipment IDs",
+        "passed": true
+      },
+      {
+        "label": "application restart preserves profiles and customer sessions without reapplying migration",
+        "passed": true
+      },
+      {
+        "label": "only owned test processes, MySQL container and anonymous volumes removed",
+        "passed": true
+      }
+    ]
+  },
+  "realPreviousBinaryUpgrade": {
+    "previousJarSha256": "d037c7536861f60a51dec7531771bdd9181719516688f16cfbc305eeae2b2756",
+    "upgradedJarSha256": "236198c6592ec4e898adb453cc1e5ca3f33c28eb4ed3c5f563b8097cd82a0726",
+    "checks": [
+      {
+        "label": "V4 to V5 preserves existing customer identity and remark; email is nullable",
+        "passed": true
+      },
+      {
+        "label": "existing single-business-account policy remains enforced",
+        "passed": true
+      },
+      {
+        "label": "real login and controlled customer create return an explicit credential-safe profile",
+        "passed": true
+      },
+      {
+        "label": "business user cannot list, read or modify another user's customer",
+        "passed": true
+      },
+      {
+        "label": "invalid profile is rejected atomically; omission preserves and empty text clears in MySQL",
+        "passed": true
+      },
+      {
+        "label": "duplicate customer is a conflict and creates no extra database row",
+        "passed": true
+      },
+      {
+        "label": "customer sees only own published shipment and cannot use employee credentials or foreign shipment IDs",
+        "passed": true
+      },
+      {
+        "label": "application restart preserves profiles and customer sessions without reapplying migration",
+        "passed": true
+      }
+    ]
+  },
+  "browser": {
+    "tool": "Playwright CLI",
+    "backendJarSha256": "236198c6592ec4e898adb453cc1e5ca3f33c28eb4ed3c5f563b8097cd82a0726",
+    "checks": [
+      {
+        "label": "employee login preserves customer detail deep link and query",
+        "passed": true
+      },
+      {
+        "label": "create customer through the real UI and reload",
+        "passed": true
+      },
+      {
+        "label": "edit profile through UI; clear email; restore and reload",
+        "passed": true
+      },
+      {
+        "label": "independent SQL probe confirms browser-created and edited rows",
+        "passed": true
+      },
+      {
+        "label": "customer sees only own published shipment; no employee token in request",
+        "passed": true
+      },
+      {
+        "label": "customer logout survives reload and employee session remains usable",
+        "passed": true
+      }
+    ],
+    "screenshots": [
+      "output/playwright/real-customer-profile-20261014.png",
+      "output/playwright/real-customer-shipments-20261014.png"
+    ]
+  },
+  "databaseMigrationMatrix": {
+    "at": "2026-10-14T10:36:34.870Z",
+    "jarSha256": "5fd9d4d4cc6b4f9a87e9b2e9795aa991a6563e8c82f3443bb0ddd1fac6886578",
+    "suppliedSqlSha256": "73aabf602eb041fdeb0c5eb7f1e3b254973e59dde929bff72a18047749d3e6a0",
+    "checks": [
+      {
+        "label": "empty database migrates using Flyway only",
+        "passed": true
+      },
+      {
+        "label": "Java V3 has a persisted non-null checksum",
+        "passed": true
+      },
+      {
+        "label": "unversioned non-empty database is rejected without implicit baseline",
+        "passed": true
+      },
+      {
+        "label": "baseline rejection does not create history",
+        "passed": true
+      },
+      {
+        "label": "changed schema fingerprint cannot be adopted",
+        "passed": true
+      },
+      {
+        "label": "tampered backup cannot be adopted",
+        "passed": true
+      },
+      {
+        "label": "reviewed legacy database can be explicitly adopted",
+        "passed": true
+      },
+      {
+        "label": "known legacy data upgrades to current schema",
+        "passed": true
+      },
+      {
+        "label": "fresh and legacy migration paths produce equivalent columns/indexes/constraints",
+        "passed": true
+      },
+      {
+        "label": "legacy employee role is converted without losing accounts",
+        "passed": true
+      },
+      {
+        "label": "snapshot owner and business fields are backfilled",
+        "passed": true
+      },
+      {
+        "label": "legacy customer roles and delegated shipment access are migrated",
+        "passed": true
+      },
+      {
+        "label": "old scoped agent sessions are revoked",
+        "passed": true
+      },
+      {
+        "label": "shipper sessions retain their own customer scope",
+        "passed": true
+      },
+      {
+        "label": "file visibility roles are backfilled",
+        "passed": true
+      },
+      {
+        "label": "invalid discovered references are removed and valid references retained",
+        "passed": true
+      },
+      {
+        "label": "second migrate validates and applies no migration",
+        "passed": true
+      },
+      {
+        "label": "real application startup 1 on migrated legacy database",
+        "passed": true
+      },
+      {
+        "label": "real application startup 2 on migrated legacy database",
+        "passed": true
+      },
+      {
+        "label": "repeated execution does not rerun legacy permission backfills",
+        "passed": true
+      },
+      {
+        "label": "repeated execution leaves structure and history unchanged",
+        "passed": true
+      },
+      {
+        "label": "unrecognized database cannot be adopted even with its exact fingerprint",
+        "passed": true
+      },
+      {
+        "label": "supplied historical SQL upgrades on an isolated copy",
+        "passed": true
+      },
+      {
+        "label": "supplied legacy customer/shipment counts remain intact",
+        "passed": true
+      },
+      {
+        "label": "supplied legacy schema equals clean migrated schema",
+        "passed": true
+      },
+      {
+        "label": "supplied SQL file is unchanged",
+        "passed": true
+      },
+      {
+        "label": "all migration checks completed",
+        "passed": true
+      },
+      {
+        "label": "only owned test container and its anonymous volume removed",
+        "passed": true
+      }
+    ]
+  },
+  "remoteCiTriggered": false,
+  "productionDeploymentExecuted": false
+}

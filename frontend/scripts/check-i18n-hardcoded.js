@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { collectFileChineseLines } from "./lib/i18n-source-boundaries.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = path.join(root, "src");
@@ -22,21 +23,11 @@ function walk(dir, files = []) {
   return files;
 }
 
-function normalizeLine(line) {
-  return line.trim().replace(/\s+/g, " ");
-}
-
 function collectChineseLines() {
   const items = [];
   for (const file of walk(srcDir)) {
     const relativePath = path.relative(root, file).replace(/\\/g, "/");
-    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
-    lines.forEach((line, index) => {
-      if (!/[\u3400-\u9fff]/.test(line)) return;
-      const text = normalizeLine(line);
-      if (!text || text.startsWith("// i18n-ignore")) return;
-      items.push({ file: relativePath, line: index + 1, text });
-    });
+    items.push(...collectFileChineseLines(relativePath, fs.readFileSync(file, "utf8")));
   }
   return items;
 }
@@ -48,15 +39,22 @@ function readBaseline() {
 }
 
 const items = collectChineseLines();
-const entries = [...new Set(items.map((item) => item.text))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+const entries = [...new Set(items.map((item) => item.text))].sort((a, b) =>
+  a.localeCompare(b, "zh-CN")
+);
 
 if (writeBaseline) {
   fs.writeFileSync(
     baselinePath,
-    `${JSON.stringify({
-      description: "Baseline for existing hardcoded Chinese outside src/i18n. New user-facing text should go through i18n instead of being added here by default.",
-      entries
-    }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        description:
+          "Baseline for existing hardcoded Chinese outside src/i18n. New user-facing text should go through i18n instead of being added here by default.",
+        entries
+      },
+      null,
+      2
+    )}\n`,
     "utf8"
   );
   console.log(`i18n baseline updated: ${entries.length} entries`);
@@ -67,7 +65,9 @@ const baseline = readBaseline();
 const unknown = items.filter((item) => !baseline.has(item.text));
 
 if (unknown.length) {
-  console.error("Found new hardcoded Chinese text outside src/i18n. Add it to i18n messages or intentionally update the baseline.");
+  console.error(
+    "Found new hardcoded Chinese text outside src/i18n. Add it to i18n messages or intentionally update the baseline."
+  );
   unknown.slice(0, 80).forEach((item) => {
     console.error(`- ${item.file}:${item.line} ${item.text}`);
   });

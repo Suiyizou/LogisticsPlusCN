@@ -1,0 +1,25 @@
+/* Opt-in workspace controls. Import as a scoped SFC style source; :deep() crosses module component boundaries without affecting other application surfaces. */
+:deep(.el-select__selection) {
+  min-width: 0;
+}
+:deep(.el-select__selected-item) {
+  min-width: 0;
+  max-width: 100%;
+  color: #18324b;
+  opacity: 1;
+}
+:deep(.el-select__selected-item > span) {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:deep(.business-select) {
+  width: 100%;
+}
+:deep(.el-divider--vertical) {
+  margin: 0 2px;
+}
+:deep(.el-tag) {
+  font-weight: 600;
+}

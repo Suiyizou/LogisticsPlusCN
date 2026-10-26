@@ -2,21 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
+import { presentBatchTask } from "../../frontend/src/features/shipments/batchTrackingPresentation.js";
+import { hasRefreshIssue } from "../../frontend/src/features/shipments/shipmentPresentation.js";
+import {
+  trackingResponseMessage,
+  isPublicTrackingRouteUnavailable
+} from "../public/tracking-response.mjs";
 
-const appSource = await readFile(
-  new URL("../public/app.js", import.meta.url),
-  "utf8"
-);
-const indexSource = await readFile(
-  new URL("../public/index.html", import.meta.url),
-  "utf8"
-);
-const stylesSource = await readFile(
-  new URL("../public/styles.css", import.meta.url),
-  "utf8"
-);
+const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+const indexSource = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+const stylesSource = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 const businessCustomerSource = await readFile(
   new URL("../../frontend/src/components/BusinessCustomerPage.vue", import.meta.url),
+  "utf8"
+);
+const batchTrackingSource = await readFile(
+  new URL("../../frontend/src/features/shipments/useShipmentBatchTracking.js", import.meta.url),
+  "utf8"
+);
+const shipmentListSource = await readFile(
+  new URL("../../frontend/src/features/shipments/useShipmentList.js", import.meta.url),
   "utf8"
 );
 
@@ -28,7 +33,7 @@ function loadContractHelpers() {
   assert.notEqual(start, -1, "tracking contract helper start marker is missing");
   assert.notEqual(end, -1, "tracking contract helper end marker is missing");
 
-  const context = vm.createContext({});
+  const context = vm.createContext({ trackingResponseMessage, isPublicTrackingRouteUnavailable });
   vm.runInContext(
     `${appSource.slice(start + startMarker.length, end)}\n` +
       "globalThis.contract = { fileSessionFingerprint, trackingResponseMessage, isPublicTrackingRouteUnavailable, isRestorableBatchNumber };",
@@ -107,10 +112,7 @@ test("falls back only when the Spring public tracking route is unavailable", () 
     }),
     true
   );
-  assert.equal(
-    isPublicTrackingRouteUnavailable({ response: response(405), payload: {} }),
-    true
-  );
+  assert.equal(isPublicTrackingRouteUnavailable({ response: response(405), payload: {} }), true);
   assert.equal(
     isPublicTrackingRouteUnavailable({
       response: response(404),
@@ -156,7 +158,10 @@ test("auth storage changes invoke the centralized sensitive related-file reset",
 
 test("shipment files expose a three-role multi-select governed by server permissions", () => {
   for (const role of ["OVERSEA_AGENT", "SHIPPER", "CONSIGNEE"]) {
-    assert.match(indexSource, new RegExp(`type="checkbox" value="${role}" data-related-files-upload-role`));
+    assert.match(
+      indexSource,
+      new RegExp(`type="checkbox" value="${role}" data-related-files-upload-role`)
+    );
   }
   assert.match(indexSource, /class="visibility-role-picker" id="related-files-upload-visibility"/);
   assert.match(
@@ -219,7 +224,7 @@ test("documents use one shipment-file drawer and sensitive bill metadata is alwa
   assert.doesNotMatch(indexSource, /id="open-document-drawer"/);
   assert.match(
     appSource,
-    /const internalReferencePattern =[\s\S]*?surrender[\s\S]*?filter\(\(item\) =>[\s\S]*?!internalReferencePattern\.test/
+    /const internalReferencePattern =[\s\S]*?surrender[\s\S]*?filter\(\s*\(item\) =>[\s\S]*?!internalReferencePattern\.test/
   );
 });
 
@@ -257,10 +262,7 @@ test("system announcements are audience-scoped, read-once, and safely rendered",
     appSource,
     /function announcementLocalReadKey[\s\S]*?announcement-read:[\s\S]*?announcementIdentity/
   );
-  assert.match(
-    appSource,
-    /loadSystemAnnouncements\(\{ autoOpen: true \}\)/
-  );
+  assert.match(appSource, /loadSystemAnnouncements\(\{ autoOpen: true \}\)/);
   assert.match(
     appSource,
     /systemAnnouncementAutoOpenRequested[\s\S]*?systemAnnouncements\.some\(\(item\) => !item\.read\)/
@@ -381,10 +383,7 @@ test("overseas agents manually update only their assigned shipment list", () => 
     stylesSource,
     /body\.is-oversea-agent-session #tracking-nav-item[\s\S]*?display: none !important/
   );
-  assert.match(
-    stylesSource,
-    /body\.is-oversea-agent-session #tracking-view > \.query-panel/
-  );
+  assert.match(stylesSource, /body\.is-oversea-agent-session #tracking-view > \.query-panel/);
   assert.match(
     stylesSource,
     /\.agent-management-bulk-toolbar[\s\S]*?\.agent-management-bulk-update/
@@ -400,17 +399,14 @@ test("overseas agents manually update only their assigned shipment list", () => 
   assert.doesNotMatch(appSource, /overviewNavItem\.hidden = managed/);
   const restrictedWorkspaceRule = stylesSource.slice(
     stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"),
-    stylesSource.indexOf("display: none !important", stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item"))
+    stylesSource.indexOf(
+      "display: none !important",
+      stylesSource.indexOf("body.is-oversea-agent-session #tracking-nav-item")
+    )
   );
   assert.doesNotMatch(restrictedWorkspaceRule, /\.overview-hero/);
-  assert.match(
-    appSource,
-    /function sortHistoryByEta[\s\S]*?historyEtaSort === "desc"[\s\S]*?historyEtaTimestamp/
-  );
-  assert.match(
-    appSource,
-    /function historyEtaTimestamp[\s\S]*?Date\.parse\(timing\.arrivalTime \?\? ""\)/
-  );
+  assert.match(appSource, /const history = searchedHistory;/);
+  assert.doesNotMatch(appSource, /sortHistoryByEta\(/);
   assert.match(
     appSource,
     /followingOnly:[\s\S]*?etaSort: historyEtaSort,[\s\S]*?unfinishedOnly: String\(historyBusinessScope === "unfinished"\)/
@@ -421,13 +417,74 @@ test("overseas agents manually update only their assigned shipment list", () => 
   );
 });
 
+test("customer history sends the chosen ETA sort to the server and retains server page order", async () => {
+  const start = appSource.indexOf("async function loadCustomerAssignedHistory()");
+  const end = appSource.indexOf("async function loadInternalTrackedHistory()", start);
+  assert.ok(start >= 0 && end > start);
+  const calls = [];
+  const context = vm.createContext({
+    URLSearchParams,
+    readFileSession: () => ({ kind: "CUSTOMER", token: "test-token" }),
+    isOverseaAgentSession: () => false,
+    historyPage: 3,
+    historyPageSize: 20,
+    historyFollowingOnly: false,
+    historyEtaSort: "desc",
+    historyBusinessScope: "unfinished",
+    historyCustomerFilter: "",
+    renderHistory: () => {},
+    normalizeQuery: (query) => query,
+    normalizeHistoryBoundCustomers: (customers) => customers || [],
+    resetHistoryPagination: () => {},
+    customerFacingTrackingError: () => "unexpected-error",
+    showError: (error) => {
+      throw Error(error);
+    },
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          page: 3,
+          pageSize: 20,
+          total: 42,
+          totalPages: 3,
+          items: ["second-carrier-result", "first-carrier-result"].map((shipmentId) => ({
+            shipmentId,
+            referenceNo: shipmentId,
+            dataAvailable: true,
+            snapshot: { tracking: { number: shipmentId } }
+          }))
+        })
+      };
+    }
+  });
+  vm.runInContext(appSource.slice(start, end), context);
+  await context.loadCustomerAssignedHistory();
+  const query = new URL(calls[0].url, "http://localhost").searchParams;
+  assert.equal(query.get("etaSort"), "desc");
+  assert.equal(query.get("page"), "3");
+  assert.equal(query.get("unfinishedOnly"), "true");
+  assert.equal(calls[0].options.headers["X-Customer-Token"], "test-token");
+  assert.deepEqual(
+    Array.from(context.customerAssignedHistory, (entry) => entry.shipmentId),
+    ["second-carrier-result", "first-carrier-result"]
+  );
+  assert.equal(context.historyLoadFailed, false);
+  assert.equal(context.historyLoadingState, false);
+});
+
 test("business users can explicitly select the alternate proxy channel", () => {
   assert.match(
     indexSource,
     /class="field channel-field internal-query-channel"[\s\S]*?id="channel-select"[\s\S]*?<option value="PROXY"/
   );
   assert.match(appSource, /PROXY:[\s\S]*?labelKey: "channel\.proxy"/);
-  assert.match(stylesSource, /body\.is-internal-session \.internal-query-channel[\s\S]*?display: flex/);
+  assert.match(
+    stylesSource,
+    /body\.is-internal-session \.internal-query-channel[\s\S]*?display: flex/
+  );
   assert.match(stylesSource, /\.internal-query-channel[\s\S]*?display: none/);
 });
 
@@ -443,12 +500,18 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
   assert.doesNotMatch(indexSource, /id="batch-workspace-trigger"/);
-  assert.match(indexSource, /<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/);
+  assert.match(
+    indexSource,
+    /<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/
+  );
   assert.doesNotMatch(indexSource, /id="batch-container-details"/);
   assert.match(appSource, /requestBusinessBatchTask\("\/api\/business\/shipment-batch-tasks"/);
   assert.doesNotMatch(appSource, /includeContainerDetails/);
   assert.match(appSource, /\["QUEUED", "RUNNING", "COOLDOWN", "STOPPING"\]/);
-  assert.match(appSource, /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/);
+  assert.match(
+    appSource,
+    /while \(applyBusinessBatchTask\(snapshot\)\)[\s\S]*?BATCH_TASK_POLL_INTERVAL_MS/
+  );
   assert.match(appSource, /\/api\/business\/shipment-batch-tasks\/\$\{encodedTaskId\}\/cancel/);
   assert.match(appSource, /status === "manual" \|\| item\.manualOnly[\s\S]*?batch\.itemManual/);
   assert.match(appSource, /subtasks: normalizeBatchSubtasks\(remote\.subtasks/);
@@ -469,16 +532,33 @@ test("batch work is submitted to Spring, polled, and cancelled as a background t
 });
 
 test("batch progress de-duplicates identical supplemental failure messages", () => {
-  assert.match(
-    businessCustomerSource,
-    /const details = \[\.\.\.new Set\(\(item\.subtasks \|\| \[\]\)[\s\S]*?\.filter\(Boolean\)\)\];/
+  const { results } = presentBatchTask(
+    {
+      status: "COMPLETED",
+      items: [
+        {
+          status: "PARTIAL",
+          subtasks: [
+            { status: "FAILED", error: "Timeout" },
+            { status: "FAILED", error: "Timeout" }
+          ]
+        }
+      ]
+    },
+    0,
+    (key) => key,
+    (text) => text
   );
+  assert.equal(results[0].message, "Timeout");
 });
 
 test("business shipment failures remain filterable while the customer review queue stays hidden", () => {
-  assert.match(businessCustomerSource, /lastRefreshResult === 'FAILED'/);
-  assert.match(businessCustomerSource, /batchTrackProblemsOnly = ref\(false\)/);
-  assert.match(businessCustomerSource, /refreshIssuesOnly = ref\(false\)/);
+  assert.match(businessCustomerSource, /hasRefreshIssue/);
+  assert.equal(hasRefreshIssue({ lastRefreshResult: "FAILED" }), true);
+  assert.equal(hasRefreshIssue({ lastRefreshResult: "PARTIAL" }), true);
+  assert.equal(hasRefreshIssue({ lastRefreshResult: "SUCCESS" }), false);
+  assert.match(batchTrackingSource, /batchTrackProblemsOnly = ref\(false\)/);
+  assert.match(shipmentListSource, /refreshIssuesOnly = ref\(false\)/);
   assert.doesNotMatch(businessCustomerSource, /pendingClientMatches|loadPendingClientMatches/);
 });
 
@@ -502,8 +582,14 @@ test("overview shows a database loading state without exposing one-click update"
 
 test("shipment drawer exposes business document slots and database-backed messages", () => {
   for (const category of [
-    "EXPORT_CIV_PL", "HOUSE_BILL", "MASTER_BILL", "ARRIVAL_NOTICE",
-    "DELIVERY_ORDER", "POD", "DUTY_SUMMARY", "IMPORT_CIV_PL"
+    "EXPORT_CIV_PL",
+    "HOUSE_BILL",
+    "MASTER_BILL",
+    "ARRIVAL_NOTICE",
+    "DELIVERY_ORDER",
+    "POD",
+    "DUTY_SUMMARY",
+    "IMPORT_CIV_PL"
   ]) {
     assert.match(indexSource, new RegExp(`data-category-value="${category}"`));
   }
@@ -552,18 +638,12 @@ test("batch restore preserves safe manual reference punctuation", () => {
   assert.equal(isRestorableBatchNumber("784-84422343"), true);
   assert.equal(isRestorableBatchNumber("../unsafe"), false);
   assert.equal(isRestorableBatchNumber("ABC/123."), false);
-  assert.match(
-    appSource,
-    /if \(!isRestorableBatchNumber\(number\)\) return null;/
-  );
+  assert.match(appSource, /if \(!isRestorableBatchNumber\(number\)\) return null;/);
 });
 
 test("batch resume waits for the previous polling loop to settle", () => {
   assert.match(appSource, /let batchRunPromise = null;/);
-  assert.match(
-    appSource,
-    /batchResumeButton\.hidden =[\s\S]*?Boolean\(batchRunPromise\)/
-  );
+  assert.match(appSource, /batchResumeButton\.hidden =[\s\S]*?Boolean\(batchRunPromise\)/);
   assert.match(
     appSource,
     /function runBatchQueue\(\) \{[\s\S]*?if \(batchRunPromise\) return batchRunPromise;[\s\S]*?const currentRun = executeBatchQueue\(\);[\s\S]*?batchRunPromise = null;[\s\S]*?renderBatchState\(\);/
@@ -571,8 +651,14 @@ test("batch resume waits for the previous polling loop to settle", () => {
 });
 
 test("spreadsheet import previews the detected sheet and column before starting", () => {
-  assert.match(indexSource, /id="batch-column-preview"[\s\S]*?id="batch-preview-sheet"[\s\S]*?id="batch-preview-column"/);
-  assert.match(appSource, /const preview = await parseBatchFile\(file\)[\s\S]*?showBatchColumnPreview\(file, preview\)/);
+  assert.match(
+    indexSource,
+    /id="batch-column-preview"[\s\S]*?id="batch-preview-sheet"[\s\S]*?id="batch-preview-column"/
+  );
+  assert.match(
+    appSource,
+    /const preview = await parseBatchFile\(file\)[\s\S]*?showBatchColumnPreview\(file, preview\)/
+  );
   assert.match(
     appSource,
     /batchPreviewConfirm\?\.addEventListener\("click"[\s\S]*?parseBatchFile\(file, \{[\s\S]*?sheetName: sheet\.name,[\s\S]*?columnIndex,[\s\S]*?type: batchPreviewType\.value[\s\S]*?startImportedBatch\(fileName, imported\)/
@@ -665,10 +751,7 @@ test("view navigation keeps browser back-forward state and restores stored track
     appSource,
     /function syncViewFromLocation\(\)[\s\S]*?trackingQueryFromLocation\(\)[\s\S]*?showStoredTrackingQuery\(query, \{ clearWhenMissing: true \}\)/
   );
-  assert.match(
-    appSource,
-    /showView\(link\.dataset\.viewTarget, \{ pushLocation: true \}\)/
-  );
+  assert.match(appSource, /showView\(link\.dataset\.viewTarget, \{ pushLocation: true \}\)/);
 });
 
 test("tracking sidebar returns to the safe caller page and uses the light workspace style", () => {
@@ -676,12 +759,9 @@ test("tracking sidebar returns to the safe caller page and uses the light worksp
   assert.doesNotMatch(indexSource, /id="portal-return-link"[\s\S]{0,180}?data-home-link/);
   assert.match(
     appSource,
-    /requestedReturn\.startsWith\("\/"\) && !requestedReturn\.startsWith\("\/\/"\)[\s\S]*?window\.location\.assign\(safeReturn\)[\s\S]*?window\.history\.back\(\)/
+    /const safeReturn = localReturnPath\(requestedReturn\);[\s\S]*?window\.location\.assign\(safeReturn\)[\s\S]*?window\.history\.back\(\)/
   );
-  assert.match(
-    stylesSource,
-    /body\.is-customer-session \.sidebar \{[\s\S]*?background: #fff;/
-  );
+  assert.match(stylesSource, /body\.is-customer-session \.sidebar \{[\s\S]*?background: #fff;/);
 });
 
 test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {
@@ -802,16 +882,37 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
     appSource,
     /firstTimedRecord\([\s\S]*?keyTimes\.actualArrival,[\s\S]*?keyTimes\.estimatedFinalArrival/
   );
-  assert.match(indexSource, /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/);
+  assert.match(
+    indexSource,
+    /id="route-panel"[\s\S]*?id="routing-panel"[\s\S]*?id="container-panel"/
+  );
   assert.match(indexSource, /id="supplemental-details-status"/);
-  assert.match(appSource, /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/);
-  assert.match(appSource, /snapshot\.supplementalDetails\?\.carriedForward[\s\S]*?snapshot\.supplementalDetails\?\.pendingRefresh/);
+  assert.match(
+    appSource,
+    /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/
+  );
+  assert.match(
+    appSource,
+    /snapshot\.supplementalDetails\?\.carriedForward[\s\S]*?snapshot\.supplementalDetails\?\.pendingRefresh/
+  );
   assert.match(appSource, /setSupplementalDetailsStatus\("stale",[\s\S]*?sourceFetchedAt/);
-  assert.match(appSource, /"supplemental\.stale": "主路线已更新；箱动态与订舱参考信息沿用 \{time\} 的旧数据/);
+  assert.match(
+    appSource,
+    /"supplemental\.stale": "主路线已更新；箱动态与订舱参考信息沿用 \{time\} 的旧数据/
+  );
   assert.match(stylesSource, /supplemental-details-status\[data-state="stale"\]/);
-  assert.match(appSource, /if \(containers\.length === 0\) \{[\s\S]*?cell\.colSpan = 8;[\s\S]*?t\("containers\.empty"\)/);
-  assert.match(appSource, /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = false;[\s\S]*?renderContainers\(containers\)/);
-  assert.doesNotMatch(appSource, /elements\["container-panel"\]\.hidden = containers\.length === 0/);
+  assert.match(
+    appSource,
+    /if \(containers\.length === 0\) \{[\s\S]*?cell\.colSpan = 8;[\s\S]*?t\("containers\.empty"\)/
+  );
+  assert.match(
+    appSource,
+    /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = false;[\s\S]*?renderContainers\(containers\)/
+  );
+  assert.doesNotMatch(
+    appSource,
+    /elements\["container-panel"\]\.hidden = containers\.length === 0/
+  );
   assert.match(appSource, /"references\.title": "订舱信息及参考号"/);
   assert.match(appSource, /"containers\.title": "运输详情"/);
 });

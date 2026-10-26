@@ -6,7 +6,10 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // 默认执行顺序：质量门与类型检查先行，随后是各模块回归，最后是生产构建。
 const checks = {
   quality: { directory: ".", command: "node", args: ["scripts/quality.mjs"] },
+  modules: { directory: ".", command: "node", args: ["scripts/verify-module-platform.mjs"] },
   typecheck: { directory: "frontend", command: "npm", args: ["run", "typecheck"] },
+  customers: { directory: "frontend", command: "npm", args: ["run", "test:features"] },
+  release: { directory: ".", command: "node", args: ["--test", "scripts/test/release.test.mjs"] },
   backend: { directory: "backend", command: "mvn", args: ["-q", "test"] },
   tracking: { directory: "tracking-service", command: "npm", args: ["test"] },
   packing: { directory: "frontend", command: "npm", args: ["run", "test:packing"] },
@@ -20,7 +23,7 @@ const selected =
 
 if (selected.some((name) => !Object.hasOwn(checks, name))) {
   console.error(
-    "Usage: node scripts/verify.mjs [all | quality typecheck backend tracking packing frontend]"
+    "Usage: node scripts/verify.mjs [all | quality modules typecheck customers release backend tracking packing frontend]"
   );
   process.exit(2);
 }

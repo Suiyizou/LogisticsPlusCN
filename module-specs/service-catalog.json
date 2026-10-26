@@ -1,0 +1,56 @@
+{
+  "id": "service-catalog",
+  "scope": "internal-reference",
+  "table": "cp_service_catalog",
+  "migrationVersion": 4,
+  "roles": ["ADMIN", "BUSINESS"],
+  "title": {
+    "zh-CN": "服务目录",
+    "en-US": "Service catalog"
+  },
+  "fields": [
+    {
+      "name": "code",
+      "type": "string",
+      "required": true,
+      "maxLength": 64,
+      "unique": true,
+      "search": true,
+      "label": {
+        "zh-CN": "服务代码",
+        "en-US": "Service code"
+      }
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "maxLength": 160,
+      "search": true,
+      "label": {
+        "zh-CN": "服务名称",
+        "en-US": "Service name"
+      }
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "required": false,
+      "maxLength": 4000,
+      "label": {
+        "zh-CN": "服务说明",
+        "en-US": "Description"
+      }
+    },
+    {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true,
+      "default": true,
+      "label": {
+        "zh-CN": "启用状态",
+        "en-US": "Enabled"
+      }
+    }
+  ]
+}
