@@ -37,7 +37,7 @@ html:root {
   --control-height: 44px;
   --control-height-small: 36px;
   --radius-control: 6px;
-  --radius-card: 10px;
+  --radius-card: 6px;
   --radius-dialog: 12px;
   --radius-pill: 999px;
   --shadow-sm: 0 1px 2px rgb(21 56 74 / 4%);
@@ -45,7 +45,17 @@ html:root {
   --shadow-card-hover: 0 5px 16px rgb(21 56 74 / 6%);
   --shadow-overlay: 0 18px 48px rgb(21 56 74 / 18%);
   --motion-fast: 180ms;
-  --motion-normal: 220ms;
+  --motion-slow: 320ms;
+  --text-page-title: 32px;
+  --text-section-title: 20px;
+  --text-body: 14px;
+  --text-caption: 12px;
+  --text-kpi: 30px;
+  --workspace-header-height: 56px;
+  --workspace-content-padding: 24px;
+  --workspace-gap: 16px;
+  --workspace-row-height: 50px;
+  --motion-normal: 240ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --layer-base: 0;
   --layer-sticky: 20;

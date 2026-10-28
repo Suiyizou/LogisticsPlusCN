@@ -1,0 +1,463 @@
+.app-login-shell {
+  display: grid;
+  grid-template-columns: 58.5% 41.5%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  color: var(--color-primary);
+  background: white;
+  font-family: var(--font-ui);
+}
+.app-login-shell * {
+  box-sizing: border-box;
+}
+.app-login-shell .app-login-photo {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 60px;
+  min-width: 0;
+  padding: 42px 48px 48px;
+  background: #10384b url("/brand/v2/maritime-1920.webp") 68% center/cover;
+  color: white;
+}
+.app-login-shell .app-login-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(3, 29, 43, 0.26),
+    rgba(3, 29, 43, 0.08) 48%,
+    rgba(3, 29, 43, 0.69)
+  );
+}
+.app-login-shell .app-login-photo h2 {
+  max-width: 710px;
+  color: white;
+  font-size: 42px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+  margin: 0;
+}
+.app-login-shell .app-login-photo h2 br {
+  display: none;
+}
+.app-login-shell .app-login-photo p {
+  font-size: 18px;
+  line-height: 1.7;
+  color: #e5eef3;
+  max-width: 650px;
+  margin: 14px 0 24px;
+}
+.app-login-shell .app-login-photo > div::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-accent) 0 60%, #90aabb 60%);
+}
+.app-login-shell .app-login-side {
+  min-width: 0;
+  padding: 32px 48px 28px;
+  display: flex;
+  flex-direction: column;
+}
+.app-login-shell .app-login-top {
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 24px;
+  min-height: 44px;
+  font-size: 14px;
+}
+.app-login-shell .app-login-mobile-brand {
+  display: none;
+}
+.app-login-shell .app-login-back {
+  color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  text-decoration: none;
+}
+.app-login-shell .app-login-back:hover {
+  color: var(--color-accent);
+}
+.app-login-shell .language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.app-login-shell .language-switcher button {
+  position: relative;
+  min-height: 36px;
+  min-width: 32px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 500 14px/1 var(--font-ui);
+}
+.app-login-shell .language-switcher button.active {
+  color: var(--color-accent);
+  background: transparent;
+}
+.app-login-shell .language-switcher button.active::after {
+  position: absolute;
+  content: "";
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--color-accent);
+}
+.app-login-shell .app-login-form {
+  width: min(400px, 100%);
+  margin: auto;
+  padding: 48px 0;
+  animation: auth-form-enter 300ms ease-out both;
+}
+.app-login-shell .app-login-title h1 {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+  margin: 0 0 12px;
+}
+.app-login-shell .app-login-title p {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--color-muted);
+  margin: 0;
+}
+.app-login-shell .app-login-route-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--color-border-strong);
+  margin: 38px 0 32px;
+  gap: 0;
+}
+.app-login-shell .app-login-route-switch button {
+  min-height: 50px;
+  padding: 12px 8px 15px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: 500 16px/1.4 var(--font-ui);
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease;
+}
+.app-login-shell .app-login-route-switch button.is-active {
+  border-bottom-color: var(--color-accent);
+  background: transparent;
+  color: var(--color-primary);
+  font-weight: 650;
+}
+.app-login-shell .app-login-route-switch button:hover {
+  color: var(--color-primary);
+}
+.app-login-shell .app-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 25px;
+}
+.app-login-shell .app-login-field > span {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 550;
+  color: var(--color-primary);
+}
+.app-login-shell .app-login-input-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  border: 1px solid #b9c8d1;
+  border-radius: 5px;
+  background: white;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.app-login-shell .app-login-input-wrap:hover {
+  border-color: #8da7b6;
+}
+.app-login-shell .app-login-input-wrap:focus-within {
+  border-color: var(--color-ring);
+  box-shadow: 0 0 0 3px rgb(21 56 74 / 8%);
+}
+.app-login-shell .app-login-input-wrap > svg {
+  display: none;
+}
+.app-login-shell .app-login-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  height: 50px;
+  padding: 12px 15px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-primary);
+  font: 400 16px/1.5 var(--font-ui);
+}
+.app-login-shell .app-login-input-wrap input::placeholder {
+  color: #a3afb8;
+  font-size: 15px;
+}
+.app-login-shell .app-login-input-wrap input:focus {
+  outline: none;
+}
+.app-login-shell .app-login-input-wrap input:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+.app-login-shell .app-login-input-wrap:has(input:disabled) {
+  background: var(--color-surface-subtle);
+}
+.app-login-shell .app-login-password-toggle {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  min-height: 48px;
+  flex: none;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: #526a79;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.app-login-shell .app-login-password-toggle:hover {
+  color: var(--color-primary);
+  background: #f3f7f9;
+}
+.app-login-shell .app-login-password-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.app-login-shell .app-login-message {
+  padding: 0;
+  margin: -10px 0 20px;
+  color: var(--color-destructive);
+  font-size: 13px;
+  line-height: 1.6;
+  display: flex;
+  gap: 8px;
+  align-items: start;
+}
+.app-login-shell .app-login-message svg {
+  display: none;
+}
+.app-login-shell .app-login-message.is-success {
+  color: var(--color-success);
+}
+.app-login-shell .app-login-submit {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 30px;
+  padding: 14px 20px;
+  border: 1px solid var(--color-primary);
+  border-radius: 5px;
+  background: var(--color-primary);
+  color: white;
+  font: 600 16px/1.5 var(--font-ui);
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+.app-login-shell .app-login-submit:hover:not(:disabled) {
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+}
+.app-login-shell .app-login-submit > svg {
+  display: none;
+}
+.app-login-shell .app-login-submit:disabled {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border-strong);
+  color: var(--color-secondary);
+  opacity: 1;
+  cursor: wait;
+}
+.app-login-shell .app-login-submit-loader {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #b8cbd5;
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: auth-spin 800ms linear infinite;
+}
+.app-login-shell .app-login-page-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-muted);
+  text-align: center;
+}
+.app-login-shell .app-login-page-footer > span:first-child {
+  display: none;
+}
+.app-login-shell :is(button, a):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 4px;
+}
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes auth-form-enter {
+  from {
+    opacity: 0.4;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 1200px) {
+  .app-login-shell .app-login-side {
+    padding-inline: 36px;
+  }
+  .app-login-shell .app-login-photo {
+    padding-inline: 36px;
+  }
+  .app-login-shell .app-login-photo h2 {
+    font-size: 36px;
+  }
+  .app-login-shell .app-login-photo p {
+    font-size: 16px;
+  }
+  .app-login-shell .app-login-title h1 {
+    font-size: 36px;
+  }
+}
+@media (max-width: 900px) {
+  .app-login-shell {
+    grid-template-columns: 52% 48%;
+  }
+  .app-login-shell .app-login-side {
+    padding-inline: 28px;
+  }
+  .app-login-shell .app-login-photo {
+    padding: 32px;
+  }
+  .app-login-shell .app-login-photo h2 {
+    font-size: 32px;
+  }
+  .app-login-shell .app-login-top {
+    gap: 14px;
+  }
+}
+@media (max-width: 760px) {
+  .app-login-shell {
+    display: block;
+    min-height: 100dvh;
+  }
+  .app-login-shell .app-login-photo {
+    display: none;
+  }
+  .app-login-shell .app-login-side {
+    min-height: 100dvh;
+    padding: 26px 24px 24px;
+  }
+  .app-login-shell .app-login-top {
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+  }
+  .app-login-shell .app-login-mobile-brand {
+    display: inline-flex;
+  }
+  .app-login-shell .app-login-mobile-brand .maritime-brand__wordmark {
+    font-size: 20px;
+  }
+  .app-login-shell .app-login-back {
+    display: none;
+  }
+  .app-login-shell .language-switcher {
+    gap: 1px;
+  }
+  .app-login-shell .language-switcher button {
+    min-width: 28px;
+    font-size: 12px;
+  }
+  .app-login-shell .app-login-form {
+    width: 100%;
+    margin: 64px auto 44px;
+    padding: 0;
+    max-width: 420px;
+  }
+  .app-login-shell .app-login-title h1 {
+    font-size: 36px;
+    margin-bottom: 10px;
+  }
+  .app-login-shell .app-login-title p {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .app-login-shell .app-login-route-switch {
+    margin: 32px 0 28px;
+  }
+  .app-login-shell .app-login-route-switch button {
+    font-size: 15px;
+  }
+  .app-login-shell .app-login-field {
+    margin-bottom: 24px;
+  }
+  .app-login-shell .app-login-field > span {
+    font-size: 15px;
+  }
+  .app-login-shell .app-login-submit {
+    margin-top: 32px;
+    min-height: 54px;
+  }
+  .app-login-shell .app-login-page-footer {
+    margin-top: auto;
+    padding-top: 20px;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-login-shell .app-login-form {
+    animation: none;
+  }
+  .app-login-shell .app-login-submit-loader {
+    animation: none;
+    border-right-color: transparent;
+  }
+  .app-login-shell .app-login-route-switch button,
+  .app-login-shell .app-login-submit,
+  .app-login-shell .app-login-input-wrap {
+    transition: none;
+  }
+}

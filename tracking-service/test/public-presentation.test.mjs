@@ -427,3 +427,181 @@ test("an identity change during a refresh interrupts the queue before the next i
   assert.equal(result.busy, false);
   assert.equal(result.reloads, 0);
 });
+
+test("the batch workbench entry is visible only for signed-in business managers", () => {
+  for (const [kind, role, token, allowed] of [
+    ["ANONYMOUS", "", "", false],
+    ["CUSTOMER", "OVERSEA_AGENT", "customer", false],
+    ["INTERNAL", "USER", "employee", false],
+    ["INTERNAL", "ADMIN", "", false],
+    ["INTERNAL", "ADMIN", "admin", true],
+    ["INTERNAL", "BUSINESS", "business", true]
+  ]) {
+    let opened = 0;
+    let focused = 0;
+    let fileChoosers = 0;
+    const session = { kind, token, user: { role } };
+    const trigger = { hidden: true, setAttribute() {} };
+    const dialog = {
+      open: false,
+      showModal() {
+        this.open = true;
+        opened += 1;
+      },
+      close() {
+        this.open = false;
+      }
+    };
+    const context = vm.createContext({
+      readFileSession: () => session,
+      batchWorkspaceTrigger: trigger,
+      batchLegacyNotice: { hidden: true },
+      batchWorkspaceDialog: dialog,
+      batchState: null,
+      renderBatchState() {},
+      requestAnimationFrame: (callback) => callback(),
+      batchSelectButton: {
+        focus() {
+          focused += 1;
+        }
+      },
+      batchFileInput: {
+        click() {
+          fileChoosers += 1;
+        }
+      }
+    });
+    const permissionStart = app.indexOf("function canManageFileVisibility(");
+    const permissionEnd = app.indexOf("function normalizeAssignableCustomer(", permissionStart);
+    const start = app.indexOf("function canOpenBatchWorkspace(");
+    const end = app.indexOf("function showBatchColumnPreview(", start);
+    vm.runInContext(
+      `${app.slice(permissionStart, permissionEnd)}\n${app.slice(start, end)}`,
+      context
+    );
+    context.renderBatchWorkspaceAccess();
+    assert.equal(trigger.hidden, !allowed, `${kind}/${role}`);
+    assert.equal(opened, 0);
+    assert.equal(focused, 0);
+    assert.equal(fileChoosers, 0, "rendering the workbench entry must not launch the old chooser");
+    context.closeBatchWorkspace();
+    assert.equal(dialog.open, false);
+    session.token = "";
+    context.renderBatchWorkspaceAccess();
+    assert.equal(dialog.open, false, "session loss closes the restricted workspace");
+    assert.equal(trigger.hidden, true);
+  }
+});
+
+test("canceling the batch file chooser does not parse, start or close the workspace", async () => {
+  let onChange;
+  const selectButton = { disabled: false };
+  const context = vm.createContext({
+    batchFileInput: {
+      files: [],
+      addEventListener: (_, callback) => {
+        onChange = callback;
+      }
+    },
+    batchRunning: false,
+    batchSelectButton: selectButton,
+    parseBatchFile() {
+      throw new Error("chooser cancellation must not parse");
+    },
+    startImportedBatch() {
+      throw new Error("chooser cancellation must not submit");
+    },
+    closeBatchWorkspace() {
+      throw new Error("chooser cancellation must not close");
+    }
+  });
+  const start = app.indexOf('batchFileInput?.addEventListener("change"');
+  const end = app.indexOf("batchPreviewSheet?.addEventListener", start);
+  vm.runInContext(app.slice(start, end), context);
+  await onChange();
+  assert.equal(selectButton.disabled, false);
+});
+
+test("legacy document metadata drawer/editor remain dormant instead of counted as visible pages", () => {
+  assert.doesNotMatch(
+    app,
+    /documentDrawerLayer\.hidden = false|documentDrawerLayer\.classList\.add\("is-open"/
+  );
+  assert.match(
+    app,
+    /querySelector\("#open-document-drawer"\)\?\.addEventListener\("click", openRelatedFilesDrawer\)/
+  );
+  assert.match(
+    app,
+    /editButton\.addEventListener\("click", \(\) => openDocumentEditor\(definition\.code\)\)/
+  );
+});
+
+test("the batch entry uses the existing platform navigation without opening or submitting legacy work", () => {
+  for (const allowed of [true, false]) {
+    let onClick;
+    const scheduled = [];
+    const destinations = [];
+    const waits = [];
+    const link = {
+      href: "/customers/shipments",
+      hasAttribute: () => true,
+      addEventListener: (_, handler) => {
+        onClick = handler;
+      }
+    };
+    const context = vm.createContext({
+      document: { querySelectorAll: () => [link], body: { classList: { contains: () => false } } },
+      batchWorkspaceTrigger: link,
+      canOpenBatchWorkspace: () => allowed,
+      showPlatformRouteWait: (key) => waits.push(key),
+      hidePlatformRouteWait() {},
+      window: {
+        matchMedia: () => ({ matches: false }),
+        setTimeout: (callback, delay) => scheduled.push({ callback, delay }),
+        location: { assign: (url) => destinations.push(url) }
+      },
+      openBatchWorkspace() {
+        throw new Error("the dormant dialog must not open");
+      },
+      runBatchQueue() {
+        throw new Error("navigation must not submit a queue");
+      }
+    });
+    const start = app.indexOf(
+      'document.querySelectorAll("[data-home-link], [data-platform-link]")'
+    );
+    const end = app.indexOf('document.querySelector("#portal-return-link")', start);
+    vm.runInContext(app.slice(start, end), context);
+    onClick({ button: 0, preventDefault() {} });
+    for (const entry of scheduled.filter((entry) => entry.delay === 180)) entry.callback();
+    assert.deepEqual(destinations, allowed ? ["/customers/shipments"] : []);
+    assert.deepEqual(waits, allowed ? ["batch.workspaceOpening"] : []);
+  }
+});
+
+test("loading a legacy local queue preserves records without automatically resuming a task", () => {
+  const legacy = { taskId: "old-task", status: "paused", items: [{ number: "OLD123" }] };
+  const context = vm.createContext({
+    clearLegacyBrowserSnapshots() {},
+    restoreBatchState: () => legacy,
+    batchState: null,
+    persistBatchState() {},
+    historyLoadingState: false,
+    readFileSession: () => ({ kind: "INTERNAL" }),
+    currentLanguage: "en",
+    applyLanguage() {},
+    window: {
+      setTimeout() {
+        throw new Error("initialization must not schedule legacy batch work");
+      }
+    },
+    runBatchQueue() {
+      throw new Error("initialization must not resume a legacy task");
+    }
+  });
+  const start = app.indexOf("clearLegacyBrowserSnapshots();");
+  const end = app.indexOf("async function initializeTrackingPage()", start);
+  vm.runInContext(app.slice(start, end), context);
+  assert.equal(context.batchState, legacy);
+});

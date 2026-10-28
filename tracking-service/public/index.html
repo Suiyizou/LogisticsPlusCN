@@ -25,6 +25,7 @@
     <!-- A versioned link also replaces brand tokens held by an older immutable cache. -->
     <link rel="stylesheet" href="./brand-tokens.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./tracking-refinement.css?v=maritime-v2-20261028-r3" />
+    <link rel="stylesheet" href="./tracking-composition.css?v=maritime-comp-20261028" />
     <script src="./app.js?v=maritime-v2-20261028-r3" type="module"></script>
   </head>
   <body>
@@ -678,8 +679,32 @@
                   shipment reference.
                 </p>
               </div>
-              <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
+              <div class="tracking-heading-actions">
+                <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
+                <a
+                  class="batch-workspace-trigger"
+                  id="batch-workspace-trigger"
+                  href="/customers/shipments"
+                  data-platform-link
+                  hidden
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 4h14v16H5zM9 8h6M9 12h6M9 16h4" />
+                  </svg>
+                  <span data-i18n="batch.workspaceNavigate">Batch tracking in workbench</span>
+                </a>
+              </div>
             </section>
+
+            <p
+              class="batch-legacy-notice"
+              id="batch-legacy-notice"
+              data-i18n="batch.legacyNotice"
+              hidden
+            >
+              This device has older batch records. They will not resume or transfer automatically.
+              Open the workbench to select your file and start a new batch.
+            </p>
 
             <section class="query-panel">
               <form id="tracking-form">
@@ -1363,97 +1388,115 @@
         </button>
       </header>
 
-      <section class="related-files-auth" id="related-files-auth-required" hidden>
-        <span class="related-files-auth-icon" aria-hidden="true">↗</span>
-        <div>
-          <strong id="related-files-auth-title" data-i18n="files.loginTitle"
-            >Sign in to manage shipment files</strong
-          >
-          <p id="related-files-auth-description" data-i18n="files.loginDescription">
-            Shipment documents are available to authenticated enterprise users.
-          </p>
-          <a id="related-files-auth-link" href="/workbenches" data-i18n="files.loginAction"
-            >Sign in to the platform</a
-          >
-        </div>
-      </section>
-
-      <div class="related-files-content" id="related-files-content">
-        <div class="related-files-state related-files-loading" id="related-files-loading" hidden>
-          <span aria-hidden="true"></span>
-          <strong data-i18n="files.loading">Loading related files…</strong>
-        </div>
-
-        <div class="related-files-state related-files-error" id="related-files-error" hidden>
-          <span aria-hidden="true">!</span>
-          <strong data-i18n="files.errorTitle">Files could not be loaded</strong>
-          <p id="related-files-error-message"></p>
-          <button id="related-files-retry-button" type="button" data-i18n="files.retry">
-            Try again
-          </button>
-        </div>
-
-        <div class="related-files-state related-files-empty" id="related-files-empty" hidden>
-          <span aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M5 4.5h9l5 5V20H5zM14 4.5V10h5M8 14h8M8 17h5" />
-            </svg>
-          </span>
-          <strong data-i18n="files.emptyTitle">No related files yet</strong>
-          <p data-i18n="files.emptyDescription">
-            Upload cargo details, invoices or shipping documents for this shipment.
-          </p>
-        </div>
-
-        <ul class="related-files-list" id="related-files-list" aria-live="polite"></ul>
-      </div>
-
-      <section class="related-file-comments" id="related-file-comments" hidden>
-        <header>
-          <span>
-            <strong data-i18n="files.commentsTitle">File messages</strong>
-            <small data-i18n="files.commentsDescription"
-              >Messages shared with people who can access this shipment.</small
-            >
-          </span>
-          <span class="related-file-comments-count" id="related-file-comments-count">0</span>
-        </header>
-        <div class="related-file-comments-loading" id="related-file-comments-loading" hidden>
-          <span aria-hidden="true"></span>
-          <small data-i18n="files.commentsLoading">Loading messages…</small>
-        </div>
-        <p
-          class="related-file-comments-empty"
-          id="related-file-comments-empty"
-          data-i18n="files.commentsEmpty"
-        >
-          No messages yet.
-        </p>
-        <ul
-          class="related-file-comments-list"
-          id="related-file-comments-list"
-          aria-live="polite"
-        ></ul>
-        <form class="related-file-comment-form" id="related-file-comment-form">
-          <label for="related-file-comment-input" data-i18n="files.commentLabel"
-            >Add a message</label
-          >
+      <div class="related-files-scroll-region">
+        <section class="related-files-auth" id="related-files-auth-required" hidden>
+          <span class="related-files-auth-icon" aria-hidden="true">↗</span>
           <div>
-            <textarea
-              id="related-file-comment-input"
-              maxlength="2000"
-              rows="2"
-              data-i18n-placeholder="files.commentPlaceholder"
-              placeholder="Leave a note about the shipment documents"
-            ></textarea>
-            <button id="related-file-comment-send" type="submit" data-i18n="files.commentSend">
-              Send
+            <strong id="related-files-auth-title" data-i18n="files.loginTitle"
+              >Sign in to manage shipment files</strong
+            >
+            <p id="related-files-auth-description" data-i18n="files.loginDescription">
+              Shipment documents are available to authenticated enterprise users.
+            </p>
+            <a id="related-files-auth-link" href="/workbenches" data-i18n="files.loginAction"
+              >Sign in to the platform</a
+            >
+          </div>
+        </section>
+
+        <div class="related-files-content" id="related-files-content">
+          <header class="related-files-section-heading">
+            <h3>
+              <span data-i18n="files.relatedTitle">Related files</span>
+              <span id="related-files-list-count">0</span>
+            </h3>
+          </header>
+          <div class="related-files-state related-files-loading" id="related-files-loading" hidden>
+            <span aria-hidden="true"></span>
+            <strong data-i18n="files.loading">Loading related files…</strong>
+          </div>
+
+          <div class="related-files-state related-files-error" id="related-files-error" hidden>
+            <span aria-hidden="true">!</span>
+            <strong data-i18n="files.errorTitle">Files could not be loaded</strong>
+            <p id="related-files-error-message"></p>
+            <button id="related-files-retry-button" type="button" data-i18n="files.retry">
+              Try again
             </button>
           </div>
-          <p id="related-file-comment-message" role="status" aria-live="polite" hidden></p>
-        </form>
-      </section>
 
+          <div class="related-files-state related-files-empty" id="related-files-empty" hidden>
+            <span aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M5 4.5h9l5 5V20H5zM14 4.5V10h5M8 14h8M8 17h5" />
+              </svg>
+            </span>
+            <strong data-i18n="files.emptyTitle">No related files yet</strong>
+            <p data-i18n="files.emptyDescription">
+              Upload cargo details, invoices or shipping documents for this shipment.
+            </p>
+          </div>
+
+          <div
+            class="related-files-table-head"
+            id="related-files-table-head"
+            aria-hidden="true"
+            hidden
+          >
+            <span data-i18n="files.columnName">File name</span>
+            <span data-i18n="files.category">Category</span>
+            <span data-i18n="files.columnUploaded">Uploaded</span>
+            <span data-i18n="files.columnActions">Actions</span>
+          </div>
+          <ul class="related-files-list" id="related-files-list" aria-live="polite"></ul>
+        </div>
+
+        <section class="related-file-comments" id="related-file-comments" hidden>
+          <header>
+            <span>
+              <strong data-i18n="files.commentsTitle">File messages</strong>
+              <small data-i18n="files.commentsDescription"
+                >Messages shared with people who can access this shipment.</small
+              >
+            </span>
+            <span class="related-file-comments-count" id="related-file-comments-count">0</span>
+          </header>
+          <div class="related-file-comments-loading" id="related-file-comments-loading" hidden>
+            <span aria-hidden="true"></span>
+            <small data-i18n="files.commentsLoading">Loading messages…</small>
+          </div>
+          <p
+            class="related-file-comments-empty"
+            id="related-file-comments-empty"
+            data-i18n="files.commentsEmpty"
+          >
+            No messages yet.
+          </p>
+          <ul
+            class="related-file-comments-list"
+            id="related-file-comments-list"
+            aria-live="polite"
+          ></ul>
+          <form class="related-file-comment-form" id="related-file-comment-form">
+            <label for="related-file-comment-input" data-i18n="files.commentLabel"
+              >Add a message</label
+            >
+            <div>
+              <textarea
+                id="related-file-comment-input"
+                maxlength="2000"
+                rows="2"
+                data-i18n-placeholder="files.commentPlaceholder"
+                placeholder="Leave a note about the shipment documents"
+              ></textarea>
+              <button id="related-file-comment-send" type="submit" data-i18n="files.commentSend">
+                Send
+              </button>
+            </div>
+            <p id="related-file-comment-message" role="status" aria-live="polite" hidden></p>
+          </form>
+        </section>
+      </div>
       <footer class="related-files-upload" id="related-files-upload-panel" hidden>
         <div class="related-files-upload-heading">
           <div>

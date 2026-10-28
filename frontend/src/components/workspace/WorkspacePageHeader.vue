@@ -47,7 +47,7 @@ withDefaults(
 .workspace-page-header__title {
   margin: 0;
   color: var(--color-primary);
-  font-size: clamp(26px, 2.4vw, 30px);
+  font-size: var(--text-page-title);
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.02em;
@@ -110,8 +110,8 @@ withDefaults(
 }
 .workspace-heading-enter-active {
   transition:
-    opacity 220ms ease,
-    transform 220ms ease;
+    opacity var(--motion-normal) ease,
+    transform var(--motion-normal) ease;
 }
 .workspace-heading-enter-from {
   opacity: 0;

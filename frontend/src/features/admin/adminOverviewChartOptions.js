@@ -11,7 +11,18 @@ import {
 /** @param {Overview | null} overview @param {string} locale @param {boolean} [reducedMotion] */
 export function adminOverviewChartOptions(overview, locale, reducedMotion = false) {
   const copy = adminOverviewCopy(locale);
-  const animation = { animation: !reducedMotion, animationDuration: reducedMotion ? 0 : 450 };
+  const animation = {
+    animation: !reducedMotion,
+    animationDuration: reducedMotion ? 0 : 320,
+    textStyle: {
+      fontFamily:
+        typeof document !== "undefined" && typeof getComputedStyle !== "undefined"
+          ? getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() ||
+            "sans-serif"
+          : "sans-serif",
+      fontSize: 12
+    }
+  };
   const trend = Array.isArray(overview?.activityTrend) ? overview.activityTrend : [];
   const displayOperations =
     Array.isArray(overview?.operationTypes) && overview.operationTypes.length
@@ -26,9 +37,9 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
     legend: {
       bottom: 0,
       itemWidth: 18,
-      textStyle: { color: chartColor("--color-muted"), fontSize: 11 }
+      textStyle: { color: chartColor("--color-muted"), fontSize: 12 }
     },
-    grid: { left: 58, right: 58, top: 36, bottom: 48 },
+    grid: { left: 44, right: 44, top: 28, bottom: 36 },
     xAxis: {
       type: "category",
       boundaryGap: false,
@@ -42,7 +53,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         name: copy.businessActions,
         position: "left",
         minInterval: 1,
-        nameTextStyle: { color: chartColor("--color-primary"), fontSize: 10 },
+        nameTextStyle: { color: chartColor("--color-primary"), fontSize: 12 },
         axisLabel: { color: chartColor("--color-muted") },
         splitLine: { lineStyle: { color: chartColor("--color-border") } }
       },
@@ -51,7 +62,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         name: copy.managementActions,
         position: "right",
         minInterval: 1,
-        nameTextStyle: { color: chartColor("--color-accent"), fontSize: 10 },
+        nameTextStyle: { color: chartColor("--color-accent"), fontSize: 12 },
         axisLabel: { color: chartColor("--color-muted") },
         splitLine: { show: false }
       }
@@ -91,16 +102,53 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
     locale,
     animation
   );
-  const status = donut(
-    (Array.isArray(overview?.accountStatus) ? overview.accountStatus : []).map((item) => ({
+  const accountStates = (Array.isArray(overview?.accountStatus) ? overview.accountStatus : []).map(
+    (item) => ({
       name:
         item.code === "ACTIVE" ? copy.active : item.code === "DISABLED" ? copy.disabled : item.code,
-      value: adminCount(item.value)
-    })),
-    [chartColor("--color-success"), chartColor("--color-border-strong")],
-    locale,
-    animation
+      value: adminCount(item.value),
+      code: item.code
+    })
   );
+  const accountTotal = accountStates.reduce((sum, item) => sum + item.value, 0);
+  /** @type {ChartOption} */
+  const status = {
+    ...animation,
+    tooltip: { trigger: "axis", renderMode: "richText", confine: true },
+    grid: { left: 60, right: 70, top: 12, bottom: 12 },
+    xAxis: { type: "value", max: Math.max(1, accountTotal), show: false },
+    yAxis: {
+      type: "category",
+      inverse: true,
+      data: accountStates.map((item) => item.name),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { fontSize: 12, color: chartColor("--color-primary") }
+    },
+    series: [
+      {
+        type: "bar",
+        barMaxWidth: 22,
+        showBackground: true,
+        backgroundStyle: { color: chartColor("--color-surface-subtle") },
+        label: {
+          show: accountTotal > 0,
+          position: "right",
+          color: chartColor("--color-muted"),
+          fontSize: 12,
+          formatter: /** @param {{value:unknown}} params */ (params) =>
+            `${params.value}  ${accountTotal ? ((Number(params.value) / accountTotal) * 100).toFixed(1) : "0"}%`
+        },
+        data: accountStates.map((item) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: {
+            color: chartColor(item.code === "ACTIVE" ? "--color-primary" : "--color-accent")
+          }
+        }))
+      }
+    ]
+  };
   /** @type {ChartOption} */
   const operations = {
     ...animation,
@@ -111,25 +159,31 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
       renderMode: "richText",
       confine: true
     },
-    grid: { left: 12, right: 28, top: 16, bottom: 28, containLabel: true },
+    grid: { left: 30, right: 12, top: 16, bottom: 26 },
     xAxis: {
-      type: "value",
-      minInterval: 1,
-      splitLine: { lineStyle: { color: chartColor("--color-border") } },
-      axisLabel: { color: chartColor("--color-quiet") }
-    },
-    yAxis: {
       type: "category",
       data: displayOperations.map((item) => presentation.action(item.code)),
       axisTick: { show: false },
-      axisLine: { show: false },
-      axisLabel: { color: chartColor("--color-muted"), fontSize: 11 }
+      axisLine: { lineStyle: { color: chartColor("--color-border") } },
+      axisLabel: {
+        color: chartColor("--color-muted"),
+        fontSize: 12,
+        width: 88,
+        overflow: "truncate"
+      }
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      splitLine: { lineStyle: { color: chartColor("--color-border") } },
+      axisLabel: { color: chartColor("--color-quiet"), fontSize: 12 }
     },
     series: [
       {
         type: "bar",
-        barMaxWidth: 22,
-        itemStyle: { borderRadius: [0, 2, 2, 0] },
+        barMaxWidth: 48,
+        label: { show: true, position: "top", fontSize: 12, color: chartColor("--color-primary") },
+        itemStyle: { borderRadius: 0 },
         data: displayOperations.map((item) => adminCount(item.value))
       }
     ]
@@ -144,14 +198,28 @@ function donut(data, colors, locale, animation) {
     color: colors,
     tooltip: { trigger: "item", renderMode: "richText", confine: true },
     legend: {
-      bottom: 0,
-      left: "center",
+      orient: "vertical",
+      right: 6,
+      top: "middle",
       itemWidth: 12,
       itemHeight: 8,
-      textStyle: { color: chartColor("--color-muted"), fontSize: 10 }
+      textStyle: { color: chartColor("--color-muted"), fontSize: 12 }
     },
     graphic: total
-      ? []
+      ? [
+          {
+            type: "text",
+            left: "28%",
+            top: "40%",
+            style: {
+              text: String(total),
+              fill: chartColor("--color-primary"),
+              fontSize: 30,
+              fontWeight: 600,
+              textAlign: "center"
+            }
+          }
+        ]
       : [
           {
             type: "text",
@@ -167,12 +235,18 @@ function donut(data, colors, locale, animation) {
     series: [
       {
         type: "pie",
-        radius: ["49%", "70%"],
-        center: ["50%", "44%"],
+        radius: ["49%", "74%"],
+        center: ["33%", "48%"],
         avoidLabelOverlap: true,
         itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 4 },
-        label: { color: chartColor("--color-muted"), show: total > 0, formatter: "{b}\n{c}" },
-        labelLine: { length: 10, length2: 8 },
+        label: {
+          color: "#fff",
+          position: "inside",
+          fontSize: 12,
+          show: total > 0,
+          formatter: "{d}%"
+        },
+        labelLine: { show: false },
         data
       }
     ]

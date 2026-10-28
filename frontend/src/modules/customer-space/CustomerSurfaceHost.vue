@@ -20,6 +20,7 @@ import { currentLocale, t } from "../../i18n";
 import { useWorkspaceTitle } from "../../components/workspace/useWorkspaceTitle";
 import BrandLockup from "../../components/brand/BrandLockup.vue";
 import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import LanguageSwitcher from "../../components/LanguageSwitcher.vue";
 const api = createCustomerApi({
   readToken: storedCustomerToken,
   t,
@@ -41,6 +42,7 @@ const runtime = useCustomerSurface({
 });
 const { user, checked, busy, error } = runtime;
 const credentials = reactive({ username: "", password: "", customerCode: "" });
+const showPassword = ref(false);
 const router = useRouter(),
   route = useRoute();
 const allowed = computed(() => canAccessRoute(route, "CUSTOMER"));
@@ -89,10 +91,24 @@ onUnmounted(() => {
 </script>
 <template>
   <main class="customer-surface" :class="{ 'is-authenticated': user }">
+    <section v-if="!user" class="customer-login-photo" :aria-label="t('maritime.loginBrandAria')">
+      <BrandLockup href="/" inverse company />
+      <div>
+        <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
+        <p>{{ t("maritime.loginHeroDescription") }}</p>
+      </div>
+    </section>
     <header>
-      <BrandLockup href="/" compact /><button v-if="user" type="button" @click="runtime.logout">
-        {{ t("customerSurface.logout") }}
-      </button>
+      <BrandLockup v-if="!user" class="customer-mobile-brand" href="/" compact />
+      <div v-else class="customer-surface-breadcrumb">
+        <RouterLink to="/">{{ t("maritime.returnHome") }}</RouterLink
+        ><span>/</span><strong>{{ t("customerSurface.shipments") }}</strong>
+      </div>
+      <div class="customer-surface-header-actions">
+        <LanguageSwitcher /><button v-if="user" type="button" @click="runtime.logout">
+          {{ t("customerSurface.logout") }}</button
+        ><RouterLink v-else to="/">{{ t("maritime.returnHome") }}</RouterLink>
+      </div>
     </header>
     <p v-if="!checked || busy" role="status">{{ t("customerSurface.checking") }}</p>
     <p v-if="error && user" role="alert">{{ error }}</p>
@@ -109,13 +125,26 @@ onUnmounted(() => {
         /></label>
         <label
           >{{ t("customerSurface.password")
-          }}<input
-            v-model="credentials.password"
-            :disabled="busy"
-            type="password"
-            autocomplete="current-password"
-            required
-        /></label>
+          }}<span class="customer-password-field"
+            ><input
+              v-model="credentials.password"
+              :disabled="busy"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              required /><button
+              class="customer-password-toggle"
+              type="button"
+              :disabled="busy"
+              :aria-label="showPassword ? t('login.hidePassword') : t('login.showPassword')"
+              :aria-pressed="showPassword"
+              @click="showPassword = !showPassword"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+                <path v-if="showPassword" d="m3 3 18 18" />
+              </svg></button></span
+        ></label>
         <label
           >{{ t("customerSurface.code")
           }}<input v-model="credentials.customerCode" :disabled="busy" required minlength="4"
@@ -125,10 +154,12 @@ onUnmounted(() => {
     >
     <section v-if="user" class="customer-surface-workspace">
       <nav :aria-label="t('customerSurface.nav')">
+        <BrandLockup class="customer-sidebar-brand" href="/" inverse company compact />
         <button
           v-for="module in modules"
           :key="module.id"
           type="button"
+          :class="{ 'is-active': route.path.startsWith(`/customer-workspace/${module.mount}`) }"
           @click="
             openModule(module.pages.find((page) => page.path === '')?.name || module.pages[0].name)
           "
@@ -137,7 +168,7 @@ onUnmounted(() => {
         </button>
       </nav>
       <div>
-        <p>{{ user.displayName || user.username }}</p>
+        <p class="customer-surface-user">{{ user.displayName || user.username }}</p>
         <RouterView v-if="allowed" :key="String(user.id)" />
         <p v-else role="alert">{{ t("customerSurface.denied") }}</p>
       </div>
@@ -372,3 +403,4 @@ onUnmounted(() => {
   }
 }
 </style>
+<style scoped src="./customerSurfaceComposition.css"></style>

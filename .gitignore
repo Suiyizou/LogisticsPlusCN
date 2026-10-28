@@ -22,3 +22,6 @@ output/playwright/
 .tmp/
 backups/
 carrier-agent-lab/.browser-states/
+
+frontend/public/pdfjs/
+output/ui-full-design-20261028/deprecated-*

@@ -70,6 +70,23 @@ test("mega groups reference each available service exactly once", () => {
   assert.equal(new Set(grouped).size, grouped.length);
 });
 
+test("editorial capability tables have complete bilingual content for every registered service", () => {
+  for (const locale of ["zh-CN", "en-US"]) {
+    const copy = getPublicCopy(locale);
+    assert.equal(copy.editorial.planningFeatures.length, 4);
+    for (const feature of copy.editorial.planningFeatures) assert.ok(feature.title && feature.body);
+    for (const service of publicServices.filter((item) => item.id !== "planning")) {
+      const bodies = copy.editorial.capabilityBodies[service.id];
+      assert.equal(
+        bodies.length,
+        copy.services[service.id].features.length,
+        locale + " / " + service.id
+      );
+      assert.ok(bodies.every((body) => typeof body === "string" && body.trim().length > 0));
+    }
+  }
+});
+
 test("registered service entry paths and access follow the actual assembled application routes", () => {
   for (const service of publicServices.filter(
     (item) => item.moduleId && item.access !== "context"

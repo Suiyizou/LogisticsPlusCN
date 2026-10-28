@@ -1,5 +1,6 @@
 <template>
   <aside class="app-sidebar">
+    <BrandLockup class="planner-sidebar-brand" href="/workbenches" compact inverse />
     <button
       class="sidebar-mobile-toggle"
       type="button"
@@ -69,6 +70,7 @@
   </aside>
 </template>
 <script setup lang="ts">
+import BrandLockup from "../brand/BrandLockup.vue";
 import {
   Box,
   DataAnalysis,

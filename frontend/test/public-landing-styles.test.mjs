@@ -20,6 +20,10 @@ function collectStyles(entry, readSource = read) {
     seen.add(path);
     const source = readSource(path);
     if (path.endsWith(".css")) {
+      postcss.parse(source).walkAtRules("import", (rule) => {
+        const dependency = rule.params.match(/^["'](\.\.?\/[^"']+)["']/)?.[1];
+        if (dependency) visit(resolve(dirname(path), dependency));
+      });
       styles.push(source);
       return;
     }
@@ -76,7 +80,7 @@ function assertLandingLayout(styles) {
   const layouts = landingLayout(styles);
   assert.equal(
     layouts.get(".landing-page .maritime-header")?.display,
-    "flex",
+    "grid",
     "Public header layout is reachable"
   );
   assert.equal(

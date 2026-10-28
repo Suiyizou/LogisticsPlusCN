@@ -495,11 +495,27 @@ test("file preview uses a same-origin preview endpoint and safe blob rendering",
     /function safeSameOriginFileUrl[\s\S]*?resolved\.origin !== window\.location\.origin[\s\S]*?!resolved\.pathname\.startsWith\("\/api\/"\)/
   );
   assert.match(appSource, /shipmentFilePath\(session, file\.id, "\/preview"\)/);
-  assert.match(appSource, /iframe\.setAttribute\("sandbox", ""\)/);
+  assert.match(appSource, /createPdfCanvasPreview\(\{[\s\S]*?data: new Uint8Array\(buffer\)/);
+  assert.doesNotMatch(appSource, /document\.createElement\("iframe"\)/);
+  assert.match(appSource, /filePreviewLifecycle\.begin\(\)/);
+  assert.match(appSource, /signal: previewRequest\.controller\.signal/);
 });
 
 test("batch work is submitted to Spring, polled, and cancelled as a background task", () => {
-  assert.doesNotMatch(indexSource, /id="batch-workspace-trigger"/);
+  assert.match(
+    indexSource,
+    /id="batch-workspace-trigger"[\s\S]*?href="\/customers\/shipments"[\s\S]*?data-platform-link/
+  );
+  assert.ok(
+    indexSource.indexOf('id="batch-workspace-trigger"') <
+      indexSource.indexOf('id="batch-workspace-dialog"'),
+    "the workbench entry must be outside the dormant dialog"
+  );
+  assert.doesNotMatch(
+    appSource,
+    /batchWorkspaceTrigger\?\.addEventListener\("click", openBatchWorkspace\)/
+  );
+  assert.match(appSource, /function openBatchWorkspace\(\)[\s\S]*?!canOpenBatchWorkspace\(\)/);
   assert.match(
     indexSource,
     /<dialog[^>]*id="batch-workspace-dialog"[\s\S]*?id="batch-import-panel"/

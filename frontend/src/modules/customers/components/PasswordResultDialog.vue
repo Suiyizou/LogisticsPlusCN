@@ -10,7 +10,7 @@
           @click.self="closePasswordResetResult"
         >
           <section
-            class="customer-code-dialog password-result-dialog workspace-modal--confirm"
+            class="business-comp-dialog customer-code-dialog password-result-dialog workspace-modal--confirm"
             ref="dialogElement"
             tabindex="-1"
             role="dialog"

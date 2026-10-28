@@ -60,7 +60,7 @@
               <el-select
                 v-model="detailForm.referenceType"
                 class="business-select"
-                popper-class="business-select-popper"
+                popper-class="business-comp-select business-select-popper"
               >
                 <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
                 <el-option

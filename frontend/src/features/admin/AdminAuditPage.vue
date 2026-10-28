@@ -62,6 +62,7 @@
         v-if="total"
         class="admin-pagination"
         background
+        :pager-count="5"
         layout="prev, pager, next, total"
         :current-page="page"
         :page-size="pageSize"

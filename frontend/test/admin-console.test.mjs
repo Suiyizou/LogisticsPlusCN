@@ -373,3 +373,120 @@ test("employee page reads ignore old-account responses and preserve selection af
   assert.equal(w.employeePage.value, 2);
   assert.equal(w.employees.value[0].id, 22);
 });
+
+test("overview recent audit always reads page zero without disturbing audit page three", async (t) => {
+  const h = harness(t),
+    w = h.console;
+  h.impl.fetchAudit = async ({ size }) => ({
+    items: [{ id: size === 5 ? "newest" : "page-three" }],
+    total: 70
+  });
+  w.apiAuditPage.value = 3;
+  assert.equal(await w.loadAudit(), true);
+  assert.deepEqual(w.apiAuditRows.value, [{ id: "page-three" }]);
+  assert.equal(await w.loadRecentAudit(), true);
+  assert.deepEqual(w.recentAuditRows.value, [{ id: "newest" }]);
+  assert.equal(w.recentAuditLoaded.value, true);
+  assert.equal(w.apiAuditPage.value, 3);
+  assert.equal(w.apiAuditPageSize.value, 20);
+  assert.equal(w.apiAuditTotal.value, 70);
+  assert.deepEqual(w.apiAuditRows.value, [{ id: "page-three" }]);
+  assert.deepEqual(
+    h.calls.filter((call) => call[0] === "fetchAudit").map((call) => call[1]),
+    [
+      { page: 2, size: 20 },
+      { page: 0, size: 5 }
+    ]
+  );
+  assert.equal(await w.refreshDashboard(false, false), true);
+  assert.deepEqual(
+    h.calls
+      .filter((call) => call[0] === "fetchAudit")
+      .slice(-2)
+      .map((call) => call[1]),
+    [
+      { page: 2, size: 20 },
+      { page: 0, size: 5 }
+    ]
+  );
+  assert.equal(w.apiAuditPage.value, 3);
+  assert.deepEqual(w.recentAuditRows.value, [{ id: "newest" }]);
+});
+
+test("recent-audit failure is distinct from loaded empty data and can be retried", async (t) => {
+  const h = harness(t),
+    w = h.console,
+    request = deferred();
+  w.apiAuditPage.value = 2;
+  h.impl.fetchAudit = () => request.promise;
+  const pending = w.loadRecentAudit();
+  assert.equal(w.recentAuditLoading.value, true);
+  assert.equal(w.recentAuditLoaded.value, false);
+  assert.equal(w.recentAuditError.value, "");
+  request.reject(Error("recent audit unavailable"));
+  await assert.rejects(pending, /recent audit unavailable/);
+  assert.equal(w.recentAuditLoading.value, false);
+  assert.equal(w.recentAuditLoaded.value, false);
+  assert.equal(w.recentAuditError.value, "recent audit unavailable");
+  assert.deepEqual(w.recentAuditRows.value, []);
+  assert.equal(w.apiAuditPage.value, 2);
+  h.impl.fetchAudit = async () => ({ items: [], total: 0 });
+  assert.equal(await w.loadRecentAudit(), true);
+  assert.equal(w.recentAuditLoaded.value, true);
+  assert.equal(w.recentAuditError.value, "");
+  assert.deepEqual(w.recentAuditRows.value, []);
+});
+
+test("recent-audit replies cannot publish after an identity change or replace its new cache", async (t) => {
+  const h = harness(t),
+    w = h.console,
+    request = deferred();
+  h.impl.fetchAudit = () => request.promise;
+  const stale = w.loadRecentAudit();
+  h.user.value = admin(2);
+  assert.equal(w.recentAuditLoading.value, false);
+  assert.equal(w.recentAuditLoaded.value, false);
+  assert.equal(w.recentAuditError.value, "");
+  h.impl.fetchAudit = async () => ({ items: [{ id: "new-admin" }], total: 1 });
+  await w.loadRecentAudit();
+  request.resolve({ items: [{ id: "departed-admin" }], total: 1 });
+  assert.equal(await stale, false);
+  assert.deepEqual(w.recentAuditRows.value, [{ id: "new-admin" }]);
+  assert.equal(w.recentAuditLoaded.value, true);
+  assert.equal(w.recentAuditLoading.value, false);
+});
+
+test("logout clears recent audit and a late failure cannot restore an error or old records", async (t) => {
+  const h = harness(t),
+    w = h.console,
+    request = deferred();
+  h.impl.fetchAudit = () => request.promise;
+  const pending = w.loadRecentAudit();
+  w.handleLogout();
+  request.reject(Error("old request failed"));
+  assert.equal(await pending, false);
+  assert.deepEqual(w.recentAuditRows.value, []);
+  assert.equal(w.recentAuditLoading.value, false);
+  assert.equal(w.recentAuditLoaded.value, false);
+  assert.equal(w.recentAuditError.value, "");
+  assert.equal(await w.loadRecentAudit(), false);
+});
+
+test("a superseded recent-audit read does not clear the latest loading or result state", async (t) => {
+  const h = harness(t),
+    w = h.console,
+    older = deferred(),
+    newer = deferred();
+  let count = 0;
+  h.impl.fetchAudit = () => (++count === 1 ? older.promise : newer.promise);
+  const first = w.loadRecentAudit(),
+    second = w.loadRecentAudit();
+  older.resolve({ items: [{ id: "old" }], total: 1 });
+  assert.equal(await first, false);
+  assert.equal(w.recentAuditLoading.value, true);
+  assert.equal(w.recentAuditLoaded.value, false);
+  newer.resolve({ items: [{ id: "current" }], total: 1 });
+  assert.equal(await second, true);
+  assert.deepEqual(w.recentAuditRows.value, [{ id: "current" }]);
+  assert.equal(w.recentAuditLoading.value, false);
+});

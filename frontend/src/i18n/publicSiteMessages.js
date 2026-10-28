@@ -1,6 +1,8 @@
+import { publicEditorialMessages } from "./publicEditorialMessages.js";
 export const publicSiteMessages = {
   "zh-CN": {
     publicSite: {
+      editorial: publicEditorialMessages["zh-CN"],
       navCapabilities: "平台能力",
       navOverview: "查看全部服务",
       navTracking: "货物追踪",
@@ -45,14 +47,14 @@ export const publicSiteMessages = {
       heroTrack: "追踪我的货物",
       heroExplore: "探索平台能力",
       homeSectionEyebrow: "ONE PLATFORM. CLEAR NEXT STEPS.",
-      homeSectionTitle: "围绕每一票货物，\n连接真正需要的工作。",
+      homeSectionTitle: "围绕每一票货物，连接日常工作",
       homeSectionDescription:
         "把运输查询、装载准备与客户协作串起来，让每一票货物都有更清楚的安排。",
-      homeFeatureOne: "先看清货物动态",
+      homeFeatureOne: "货物追踪",
       homeFeatureOneBody: "选择船司与单号，查询运输节点、预计时间及数据来源。",
-      homeFeatureTwo: "再做好装载准备",
+      homeFeatureTwo: "装箱规划",
       homeFeatureTwoBody: "整理货物尺寸、约束与箱型，查看三维方案和计算依据。",
-      homeFeatureThree: "让团队接上下一步",
+      homeFeatureThree: "业务协作",
       homeFeatureThreeBody: "客户、票单、交接与文件围绕同一业务关联，按权限协作。",
       homeStoryEyebrow: "FROM INFORMATION TO ACTION",
       homeStoryTitle: "进度看得见，\n协作更从容。",
@@ -438,6 +440,7 @@ export const publicSiteMessages = {
   },
   "en-US": {
     publicSite: {
+      editorial: publicEditorialMessages["en-US"],
       navCapabilities: "Platform",
       navOverview: "Explore all services",
       navTracking: "Cargo tracking",
@@ -482,16 +485,16 @@ export const publicSiteMessages = {
       heroTrack: "Track my shipment",
       heroExplore: "Explore the platform",
       homeSectionEyebrow: "ONE PLATFORM. CLEAR NEXT STEPS.",
-      homeSectionTitle: "The work around your cargo.\nConnected.",
+      homeSectionTitle: "Connect the everyday work around your cargo",
       homeSectionDescription:
         "Connect transport updates, load preparation and customer collaboration for a clearer plan around every shipment.",
-      homeFeatureOne: "See where cargo stands",
+      homeFeatureOne: "Shipment tracking",
       homeFeatureOneBody:
         "Choose a carrier and reference to view transport events, arrival estimates and sources.",
-      homeFeatureTwo: "Prepare the load",
+      homeFeatureTwo: "Load planning",
       homeFeatureTwoBody:
         "Bring together cargo dimensions, constraints and equipment to review a 3D plan.",
-      homeFeatureThree: "Connect the next handover",
+      homeFeatureThree: "Business collaboration",
       homeFeatureThreeBody:
         "Keep customers, shipments, files and handovers linked within account permissions.",
       homeStoryEyebrow: "FROM INFORMATION TO ACTION",

@@ -7,7 +7,7 @@
       width="min(640px, 94vw)"
       :close-on-click-modal="false"
       :close-on-press-escape="!creatingAgent"
-      class="square-dialog agent-create-dialog workspace-el-dialog"
+      class="square-dialog agent-create-dialog workspace-el-dialog business-comp-dialog"
       :show-close="!creatingAgent"
     >
       <div class="agent-create-intro">

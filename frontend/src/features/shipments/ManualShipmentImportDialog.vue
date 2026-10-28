@@ -61,7 +61,7 @@ function onFileDrop(event: DragEvent) {
         @keydown="onDialogKeydown"
       >
         <section
-          class="customer-code-dialog shipment-excel-import-dialog workspace-modal--wide"
+          class="business-comp-dialog customer-code-dialog shipment-excel-import-dialog workspace-modal--wide"
           ref="dialogElement"
           tabindex="-1"
           role="dialog"
@@ -114,7 +114,7 @@ function onFileDrop(event: DragEvent) {
                     >{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span
                   >
                   <el-select
-                    popper-class="business-select-popper workspace-select-popper"
+                    popper-class="business-comp-select business-select-popper workspace-select-popper"
                     v-model="workflow.shipmentExcelCustomerId"
                     filterable
                     :disabled="workflow.entryBusy || workflow.shipmentExcelImporting"

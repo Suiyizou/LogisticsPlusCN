@@ -2,11 +2,11 @@
 :deep(.el-table) {
   --el-table-header-bg-color: var(--color-surface-subtle);
   --el-table-row-hover-bg-color: var(--color-surface-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   font-size: 14px;
 }
 :deep(.el-table__cell) {
-  height: 52px;
+  height: var(--workspace-row-height);
   padding: 10px 0;
   font-size: 14px;
 }

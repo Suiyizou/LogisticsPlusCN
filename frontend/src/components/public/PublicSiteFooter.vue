@@ -3,9 +3,9 @@
     <div class="maritime-wrap">
       <div class="public-footer-top">
         <div>
-          <BrandLockup inverse />
-          <p>{{ t("publicSite.footerTagline") }}</p>
-          <span>{{ t("publicSite.footerLocation") }}</span>
+          <PublicBrand inverse compact />
+          <p>{{ t("publicSite.footerCompany") }}</p>
+          <span>{{ t("publicSite.editorial.companyEnglish") }}</span>
         </div>
         <nav :aria-label="t('publicSite.footerPlatform')">
           <h2>{{ t("publicSite.footerPlatform") }}</h2>
@@ -23,6 +23,10 @@
           ><a href="/services/booking">{{ t("publicSite.footerBooking") }}</a
           ><LanguageSwitcher />
         </nav>
+        <div class="public-footer-signoff">
+          <ServiceIcon name="globe" />
+          <p>{{ t("publicSite.footerTagline") }}</p>
+        </div>
       </div>
       <div class="public-footer-bottom">
         <span>© {{ new Date().getFullYear() }} {{ t("publicSite.footerCopyright") }}</span
@@ -32,7 +36,8 @@
   </footer>
 </template>
 <script setup lang="ts">
-import BrandLockup from "../brand/BrandLockup.vue";
+import PublicBrand from "./PublicBrand.vue";
+import ServiceIcon from "./ServiceIcon.vue";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
 import { t } from "../../i18n";
 withDefaults(defineProps<{ trackingPath?: string }>(), { trackingPath: "/tracking/" });

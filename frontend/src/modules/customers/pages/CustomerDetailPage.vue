@@ -80,7 +80,7 @@
                 <el-select
                   v-model="editForm.partyRole"
                   class="business-select"
-                  popper-class="business-select-popper"
+                  popper-class="business-comp-select business-select-popper"
                 >
                   <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                   <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />
@@ -122,7 +122,7 @@
       <el-select
         v-model="linkedCustomerIds"
         class="business-select"
-        popper-class="business-select-popper"
+        popper-class="business-comp-select business-select-popper"
         multiple
         filterable
         collapse-tags
@@ -180,7 +180,7 @@
                   <el-select
                     v-model="bindForm.carrier"
                     class="business-select"
-                    popper-class="business-select-popper"
+                    popper-class="business-comp-select business-select-popper"
                   >
                     <el-option
                       v-for="carrier in TRACKING_CARRIERS"
@@ -196,7 +196,7 @@
                   <el-select
                     v-model="bindForm.referenceType"
                     class="business-select"
-                    popper-class="business-select-popper"
+                    popper-class="business-comp-select business-select-popper"
                   >
                     <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
                     <el-option

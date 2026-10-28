@@ -19,7 +19,6 @@
             fetchpriority="high"
         /></picture>
         <div class="maritime-wrap maritime-hero__content">
-          <span class="maritime-eyebrow">{{ t("publicSite.homeEyebrow") }}</span>
           <h1>
             {{ t("publicSite.heroTitle") }}<br /><span>{{ t("publicSite.heroSecond") }}</span>
           </h1>
@@ -43,18 +42,18 @@
       <section class="maritime-about" data-public-reveal>
         <figure>
           <img
-            src="/brand/v2/collaboration-1280.webp"
-            :alt="t('publicSite.collaborationImageAlt')"
+            src="/brand/harbor.png"
+            :alt="t('publicSite.transportImageAlt')"
             width="1280"
             height="563"
             loading="lazy"
           />
         </figure>
         <div>
-          <span class="maritime-eyebrow">{{ t("publicSite.homeStoryEyebrow") }}</span>
-          <h2>{{ t("publicSite.homeStoryTitle") }}</h2>
-          <p>{{ t("publicSite.homeStoryDescription") }}</p>
-          <RouterLink class="maritime-text-link" to="/services/operations"
+          <span class="maritime-section-rule" aria-hidden="true"></span>
+          <h2>{{ t("publicSite.editorial.companyTitle") }}</h2>
+          <p>{{ t("publicSite.editorial.companyBody") }}</p>
+          <RouterLink class="maritime-button maritime-button--light" to="/services/operations"
             >{{ t("publicSite.homeStoryAction") }} <span aria-hidden="true">→</span></RouterLink
           >
         </div>

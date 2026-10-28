@@ -20,6 +20,7 @@ function harness(t) {
     revoked = [],
     errors = [],
     ids = [];
+  const downloads = [];
   const service = { fetch: async () => new Blob(["data"], { type: "text/plain" }) };
   const scope = effectScope();
   const workflow = scope.run(() =>
@@ -36,11 +37,15 @@ function harness(t) {
       },
       revokeObjectUrl: (url) => revoked.push(url),
       t: (key, params) => key + (params?.name ? ":" + params.name : ""),
-      handled: (error) => errors.push(error)
+      handled: (error) => errors.push(error),
+      downloadFile: async (file) => {
+        downloads.push(file);
+        return true;
+      }
     })
   );
   t.after(() => scope.stop());
-  return { workflow, user, urls, revoked, errors, ids, service, scope };
+  return { workflow, user, urls, revoked, errors, ids, service, scope, downloads };
 }
 test("file classification preserves PDF/images/text and rejects Office and unknown binary", () => {
   assert.equal(adminFilePreviewKind(" Invoice.PDF ", "application/octet-stream"), "pdf");
@@ -51,10 +56,7 @@ test("file classification preserves PDF/images/text and rejects Office and unkno
   assert.equal(adminFilePreviewKind("README", "text/plain"), "text");
   assert.equal(adminFilePreviewKind("README", "application/json; charset=utf-8"), "text");
 });
-for (const [name, kind] of [
-  ["cargo.pdf", "pdf"],
-  ["cargo.png", "image"]
-])
+for (const [name, kind] of [["cargo.png", "image"]])
   test("preview releases " + kind + " object URLs on replacement and close", async (t) => {
     const h = harness(t);
     await h.workflow.handlePreviewShipmentFile({ id: 0, originalFileName: name });
@@ -98,7 +100,7 @@ test("only the selected file can render, including late blob text decoding", asy
 for (const reason of ["switch-back", "role", "dispose"])
   test("preview clears private state and URLs on " + reason, async (t) => {
     const h = harness(t);
-    await h.workflow.handlePreviewShipmentFile({ id: 1, fileName: "private.pdf" });
+    await h.workflow.handlePreviewShipmentFile({ id: 1, fileName: "private.png" });
     const blob = deferred();
     h.service.fetch = () => blob.promise;
     const pending = h.workflow.handlePreviewShipmentFile({ id: 2, fileName: "late.pdf" });
@@ -112,6 +114,7 @@ for (const reason of ["switch-back", "role", "dispose"])
     assert.equal(await pending, false);
     assert.deepEqual(h.revoked, ["blob:0"]);
     assert.equal(h.workflow.filePreviewDialog.name, "");
+    assert.equal(h.workflow.filePreviewDialog.pdfBlob, null);
     assert.equal(h.workflow.filePreviewDialog.open, false);
     assert.equal(h.urls.length, 1);
   });
@@ -181,4 +184,32 @@ test("deleted/missing/unauthorized files cannot open and deleting only the selec
   h.user.value = { ...h.user.value, role: "CUSTOMER" };
   assert.equal(await h.workflow.handlePreviewShipmentFile({ id: 1 }), false);
   assert.deepEqual(h.ids, [0]);
+});
+
+test("PDF keeps only the authenticated Blob and clears it on close without browser object URLs", async (t) => {
+  const h = harness(t);
+  const blob = new Blob(["pdf bytes"], { type: "application/pdf" });
+  h.service.fetch = async () => blob;
+  await h.workflow.handlePreviewShipmentFile({ id: 4, fileName: "sample.pdf" });
+  assert.equal(h.workflow.filePreviewDialog.pdfBlob, blob);
+  assert.equal(h.workflow.filePreviewDialog.kind, "pdf");
+  assert.equal(h.workflow.filePreviewDialog.url, "");
+  assert.equal(h.workflow.filePreviewDialog.message, "");
+  assert.equal(h.urls.length, 0);
+  h.user.value = { ...h.user.value, id: 9 };
+  assert.equal(h.workflow.filePreviewDialog.pdfBlob, null);
+  assert.equal(h.workflow.filePreviewDialog.open, false);
+});
+
+test("PDF fallback download reuses the selected authenticated download action and cannot run after close or identity change", async (t) => {
+  const h = harness(t);
+  await h.workflow.handlePreviewShipmentFile({ id: 8, fileName: "private.pdf" });
+  assert.equal(await h.workflow.downloadPreviewFile(), true);
+  assert.equal(h.downloads[0].id, 8);
+  h.workflow.closeFilePreviewDialog();
+  assert.equal(await h.workflow.downloadPreviewFile(), false);
+  await h.workflow.handlePreviewShipmentFile({ id: 9, fileName: "other.pdf" });
+  h.user.value = { ...h.user.value, role: "BUSINESS" };
+  assert.equal(await h.workflow.downloadPreviewFile(), false);
+  assert.equal(h.downloads.length, 1);
 });

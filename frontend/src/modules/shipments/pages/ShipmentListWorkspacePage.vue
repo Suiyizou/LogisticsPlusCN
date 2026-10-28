@@ -21,7 +21,7 @@
           :title="t('customers.batchEditBusinessFieldsTitle')"
           width="min(1080px, 94vw)"
           append-to-body
-          class="batch-business-fields-dialog workspace-el-dialog"
+          class="batch-business-fields-dialog workspace-el-dialog business-comp-dialog"
         >
           <p class="batch-business-fields-hint">
             {{ t("customers.batchEditBusinessFieldsHint") }}
@@ -93,7 +93,7 @@
         width="min(1280px, 96vw)"
         append-to-body
         :destroy-on-close="false"
-        class="batch-track-task-dialog workspace-el-dialog"
+        class="batch-track-task-dialog workspace-el-dialog business-comp-dialog"
       >
         <div class="batch-track-task-dialog-body">
           <div class="batch-track-panel">
@@ -104,7 +104,7 @@
                     >{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span
                   >
                   <el-select
-                    popper-class="business-select-popper workspace-select-popper"
+                    popper-class="business-comp-select business-select-popper workspace-select-popper"
                     v-model="batchTrackCustomerId"
                     :disabled="batchTrackChecking"
                     filterable
@@ -129,7 +129,7 @@
                     v-model="batchTrackCarrier"
                     :disabled="batchTrackChecking"
                     class="business-select"
-                    popper-class="business-select-popper"
+                    popper-class="business-comp-select business-select-popper"
                   >
                     <el-option
                       v-for="carrier in TRACKING_CARRIERS"
@@ -142,7 +142,7 @@
                 <label>
                   <span>{{ t("customers.referenceType") }}</span>
                   <el-select
-                    popper-class="business-select-popper workspace-select-popper"
+                    popper-class="business-comp-select business-select-popper workspace-select-popper"
                     v-model="batchTrackReferenceType"
                     :disabled="batchTrackChecking"
                     class="business-select"
@@ -214,7 +214,7 @@
                     <el-select
                       v-model="batchTrackSelectedSheetName"
                       class="business-select"
-                      popper-class="business-select-popper"
+                      popper-class="business-comp-select business-select-popper"
                     >
                       <el-option
                         v-for="sheet in batchTrackSheets"
@@ -229,7 +229,7 @@
                     <el-select
                       v-model="batchTrackSelectedColumnIndex"
                       class="business-select"
-                      popper-class="business-select-popper"
+                      popper-class="business-comp-select business-select-popper"
                     >
                       <el-option
                         v-for="column in batchTrackSelectedSheet.columns"

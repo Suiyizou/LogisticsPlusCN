@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WorkspaceDialogTransition from "../../components/workspace/WorkspaceDialogTransition.vue";
+import PdfCanvasPreview from "../../components/pdf/PdfCanvasPreview.vue";
 import { ref } from "vue";
 import { useDialogFocus } from "../../composables/useDialogFocus.js";
 import type { AdminFilePreview, AdminFilePreviewPorts } from "../../types/adminFiles";
@@ -44,11 +45,13 @@ const { onDialogKeydown } = useDialogFocus({
             {{ filePreviewDialog.message }}
           </p>
           <div class="file-preview-render">
-            <iframe
-              v-if="filePreviewDialog.kind === 'pdf' && filePreviewDialog.url"
-              :src="filePreviewDialog.url"
-              :title="filePreviewDialog.name || t('admin.files.previewTitle')"
-            ></iframe>
+            <PdfCanvasPreview
+              v-if="filePreviewDialog.kind === 'pdf' && filePreviewDialog.pdfBlob"
+              :blob="filePreviewDialog.pdfBlob"
+              :is-open="() => filePreviewDialog.open"
+              :name="filePreviewDialog.name"
+              @download="workflow.downloadPreviewFile()"
+            />
             <img
               v-else-if="filePreviewDialog.kind === 'image' && filePreviewDialog.url"
               :src="filePreviewDialog.url"

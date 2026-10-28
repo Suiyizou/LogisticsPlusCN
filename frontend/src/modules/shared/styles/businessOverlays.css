@@ -1,0 +1,91 @@
+/* Only the business-owned dialogs and their teleported select menus opt in. */
+.business-comp-dialog {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgb(21 56 74 / 16%);
+  color: var(--color-foreground);
+  background: white;
+}
+.business-comp-dialog :is(h2, .el-dialog__title) {
+  margin-top: 0;
+  font-size: 24px;
+  line-height: 1.4;
+  color: var(--color-primary);
+  font-weight: 650;
+}
+.business-comp-dialog > p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-muted);
+}
+.business-comp-dialog :is(label, .el-form-item__label) {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.business-comp-dialog
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not(.el-select__input):not(.el-input__inner),
+    .el-input__wrapper,
+    .el-select__wrapper
+  ) {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.business-comp-dialog :is(small, .customer-field-rule, .customer-code-kicker) {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.business-comp-dialog :is(.el-button, .customer-dialog-actions button) {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: none;
+}
+.business-comp-dialog .el-table th.el-table__cell {
+  height: 48px;
+  font-size: 13px;
+}
+.business-comp-dialog .el-table td.el-table__cell {
+  height: 50px;
+  font-size: 14px;
+}
+.business-comp-select.el-popper {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 8px 24px rgb(21 56 74 / 12%);
+}
+.business-comp-select .el-select-dropdown__item {
+  min-height: 40px;
+  height: auto;
+  padding-block: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.business-comp-select .el-select-dropdown__item.is-selected {
+  background: #e8f2fa;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.business-comp-select .el-select-dropdown__item.is-hovering {
+  background: #f1f6fa;
+}
+.shipment-row-menu .el-dropdown-menu__item {
+  min-height: 40px;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+.shipment-row-menu .shipment-row-menu-danger:not(.is-disabled) {
+  color: var(--color-destructive);
+}
+@media (max-width: 760px) {
+  .business-comp-dialog {
+    padding: 22px;
+    max-width: calc(100vw - 24px);
+  }
+  .business-comp-dialog :is(h2, .el-dialog__title) {
+    font-size: 22px;
+  }
+}

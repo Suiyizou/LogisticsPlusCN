@@ -45,7 +45,7 @@
                 <p>{{ t("customers.myHandoverRequestsHint") }}</p>
               </div>
               <el-select
-                popper-class="business-select-popper workspace-select-popper"
+                popper-class="business-comp-select business-select-popper workspace-select-popper"
                 v-model="businessHandoverRequestStatus"
                 class="business-select handover-status-filter"
                 @change="changeBusinessHandoverRequestStatus"
@@ -149,7 +149,7 @@
                 multiple
                 filterable
                 class="business-select"
-                popper-class="business-select-popper"
+                popper-class="business-comp-select business-select-popper"
                 :placeholder="t('customers.handoverCustomersPlaceholder')"
               >
                 <el-option

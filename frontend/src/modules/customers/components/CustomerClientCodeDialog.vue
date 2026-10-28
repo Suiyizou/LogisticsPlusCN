@@ -10,7 +10,7 @@
           @click.self="closeClientCodeSupplement"
         >
           <section
-            class="customer-code-dialog customer-supplement-dialog workspace-modal--confirm"
+            class="business-comp-dialog customer-code-dialog customer-supplement-dialog workspace-modal--confirm"
             ref="dialogElement"
             tabindex="-1"
             role="dialog"

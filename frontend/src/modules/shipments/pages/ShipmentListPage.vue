@@ -2,7 +2,6 @@
   <section class="shipment-list-page" data-module="shipments">
     <WorkspacePageHeader
       :title="isOverseaAgent ? t('customers.shipmentOverview') : t('customers.availableShipments')"
-      :eyebrow="t('customers.trackingWorkspace')"
       :description="wt('shipmentWorkspaceHint')"
       ><template #actions
         ><div v-if="isManager" class="shipment-heading-actions">
@@ -32,7 +31,7 @@
           <el-select
             v-model="shipmentCustomerFilter"
             class="business-select shipment-customer-filter"
-            popper-class="business-select-popper shipment-filter-popper"
+            popper-class="business-comp-select business-select-popper shipment-filter-popper"
             :placeholder="t('customers.filterByCustomer')"
             clearable
             filterable
@@ -50,7 +49,7 @@
           <el-select
             v-model="shipmentBusinessFilter"
             class="business-select shipment-business-filter"
-            popper-class="business-select-popper shipment-filter-popper"
+            popper-class="business-comp-select business-select-popper shipment-filter-popper"
           >
             <el-option value="" :label="t('customers.businessFilterAll')" />
             <el-option value="COMPLETED" :label="t('customers.businessCompleted')" />
@@ -65,7 +64,7 @@
           <el-select
             v-model="shipmentTrackingChannel"
             class="business-select shipment-channel-select"
-            popper-class="business-select-popper shipment-filter-popper"
+            popper-class="business-comp-select business-select-popper shipment-filter-popper"
             :disabled="batchTrackRunning || batchTrackChecking || refreshingShipment"
           >
             <el-option :label="t('customers.trackingChannelAuto')" value="AUTO" />
@@ -89,58 +88,65 @@
           </el-button>
         </div>
       </div>
-      <div class="shipment-filter-summary" aria-live="polite">
+      <div
+        v-if="shipmentCustomerFilter || shipmentBusinessFilter"
+        class="shipment-filter-summary"
+        aria-live="polite"
+      >
         <el-button
           v-if="shipmentCustomerFilter || shipmentBusinessFilter"
           text
           @click="clearShipmentFilters"
           >{{ wt("clearFilters") }}</el-button
-        ><span>{{ wt("resultsCount", { count: shipmentTotal }) }}</span
-        ><strong v-if="selectedShipmentRows.length">{{
+        >
+      </div>
+    </section>
+    <Transition name="workspace-state"
+      ><div v-if="isManager && selectedShipmentRows.length" class="shipment-bulk-bar">
+        <strong class="shipment-selection-count" aria-live="polite">{{
           wt("selectedRows", { count: selectedShipmentRows.length })
         }}</strong>
-      </div>
-      <Transition name="workspace-state"
-        ><div v-if="isManager && selectedShipmentRows.length" class="shipment-bulk-bar">
-          <el-button
-            :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
-            @click="openBatchBusinessFieldsEditor"
-            >{{
-              t("customers.batchEditBusinessFields", {
-                count: selectedShipmentRows.length
-              })
-            }}</el-button
-          >
-          <el-button
-            class="shipment-bulk-danger"
-            :disabled="!selectedShipmentRows.length || batchDeletingShipments"
-            @click="batchDeleteSelectedShipments"
-            >{{
-              t("customers.batchDeleteSelected", {
-                count: selectedShipmentRows.length
-              })
-            }}</el-button
-          >
-          <el-button
-            :disabled="
-              !selectedShipmentRows.length ||
-              batchTrackRunning ||
-              batchTrackChecking ||
-              batchTrackFileParsing ||
-              refreshingShipment ||
-              batchDeletingShipments
-            "
-            @click="startRefreshSelectedShipments"
-            ><el-icon><Refresh /></el-icon
-            >{{
-              t("customers.batchRefreshSelected", {
-                count: selectedShipmentRows.length
-              })
-            }}</el-button
-          >
-        </div></Transition
-      >
-    </section>
+        <el-button
+          :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
+          @click="openBatchBusinessFieldsEditor"
+          >{{
+            t("customers.batchEditBusinessFields", {
+              count: selectedShipmentRows.length
+            })
+          }}</el-button
+        >
+        <el-button
+          class="shipment-bulk-danger"
+          :disabled="!selectedShipmentRows.length || batchDeletingShipments"
+          @click="batchDeleteSelectedShipments"
+          >{{
+            t("customers.batchDeleteSelected", {
+              count: selectedShipmentRows.length
+            })
+          }}</el-button
+        >
+        <el-button
+          :disabled="
+            !selectedShipmentRows.length ||
+            batchTrackRunning ||
+            batchTrackChecking ||
+            batchTrackFileParsing ||
+            refreshingShipment ||
+            batchDeletingShipments
+          "
+          @click="startRefreshSelectedShipments"
+          ><el-icon><Refresh /></el-icon
+          >{{
+            t("customers.batchRefreshSelected", {
+              count: selectedShipmentRows.length
+            })
+          }}</el-button
+        >
+        <el-button text class="shipment-selection-clear" @click="actions.clearShipmentSelection">{{
+          bwt("clearSelection")
+        }}</el-button>
+      </div></Transition
+    >
     <el-table
       :ref="actions.setTableRef"
       :data="displayedAvailableShipments"
@@ -152,19 +158,70 @@
       :class="{ 'is-page-switching': tablePageTransitioning }"
       @selection-change="handleShipmentSelectionChange"
     >
-      <el-table-column v-if="isManager" type="selection" width="48" align="center" />
+      <el-table-column v-if="isManager" type="selection" width="44" align="center" />
+      <el-table-column type="expand" width="36">
+        <template #default="{ row }">
+          <dl class="shipment-row-details">
+            <div>
+              <dt>{{ t("customers.boundUsers") }}</dt>
+              <dd>
+                <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
+                  <el-tag
+                    v-for="user in shipmentBoundUsers(row)"
+                    :key="user.id || `${user.name}-${user.role}`"
+                    size="small"
+                    effect="plain"
+                    >{{ boundUserLabel(user) }}</el-tag
+                  >
+                </div>
+                <span v-else>—</span>
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t("customers.remark") }}</dt>
+              <dd>
+                <div class="shipment-remark-cell">
+                  <div class="shipment-today-tags">
+                    <el-tag
+                      class="shipment-today-tag"
+                      :type="shipmentBusinessStateTagType(row)"
+                      effect="plain"
+                    >
+                      {{ shipmentBusinessStateLabel(row) }}
+                    </el-tag>
+                    <el-tag
+                      v-if="isCreatedToday(row)"
+                      class="shipment-today-tag is-created"
+                      type="danger"
+                      effect="plain"
+                    >
+                      {{ t("customers.todayNewBusiness") }}
+                    </el-tag>
+                  </div>
+                </div>
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t("customers.referenceType") }}</dt>
+              <dd>{{ referenceTypeLabel(row.referenceType) }}</dd>
+            </div>
+          </dl>
+        </template>
+      </el-table-column>
       <el-table-column
         type="index"
         :index="shipmentRowIndex"
         :label="t('customers.index')"
-        width="70"
+        width="44"
         align="center"
         header-align="center"
       />
-      <el-table-column :label="t('customers.referenceNo')" min-width="172">
+      <el-table-column :label="t('customers.referenceNo')" min-width="170">
         <template #default="{ row }">
           <div class="shipment-reference-cell">
-            <b>{{ row.referenceNo || row.shipmentId }}</b>
+            <b :title="row.referenceNo || row.shipmentId">{{
+              row.referenceNo || row.shipmentId
+            }}</b>
             <small class="shipment-reference-type">{{
               referenceTypeLabel(row.referenceType)
             }}</small>
@@ -173,42 +230,24 @@
       </el-table-column>
       <el-table-column
         :label="t('customers.carrier')"
-        width="98"
+        width="80"
         align="center"
         header-align="center"
       >
         <template #default="{ row }">{{ row.carrier || "—" }}</template>
       </el-table-column>
-      <el-table-column :label="t('customers.clientNoName')" min-width="150" show-overflow-tooltip>
+      <el-table-column :label="t('customers.clientNoName')" min-width="136" show-overflow-tooltip>
         <template #default="{ row }">{{ shipmentClientLabel(row) }}</template>
       </el-table-column>
-      <el-table-column :label="t('customers.boundUsers')" min-width="260">
-        <template #default="{ row }">
-          <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
-            <el-tag
-              v-for="user in shipmentBoundUsers(row).slice(0, 1)"
-              :key="user.id || `${user.name}-${user.role}`"
-              size="small"
-              effect="plain"
-              >{{ boundUserLabel(user) }}</el-tag
-            >
-            <el-tooltip
-              v-if="shipmentBoundUsers(row).length > 1"
-              :content="shipmentBoundUsers(row).map(boundUserLabel).join(', ')"
-              placement="top"
-            >
-              <el-tag size="small" type="info" effect="plain"
-                >+{{ shipmentBoundUsers(row).length - 1 }}</el-tag
-              >
-            </el-tooltip>
-          </div>
-          <span v-else>—</span>
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('customers.shipmentStatus')" min-width="205">
+      <el-table-column :label="t('customers.shipmentStatus')" min-width="176">
         <template #default="{ row }">
           <div class="shipment-status-stack">
-            <span><i class="shipment-status-dot"></i>{{ row.trackingStatus || "—" }}</span>
+            <el-tooltip :content="row.trackingStatus || '—'" placement="top"
+              ><span class="shipment-status-label" :title="row.trackingStatus || '—'"
+                ><i class="shipment-status-dot"></i
+                ><span>{{ row.trackingStatus || "—" }}</span></span
+              ></el-tooltip
+            >
             <el-tooltip
               v-if="hasRefreshIssue(row)"
               :content="refreshOutcomeTooltip(row)"
@@ -225,35 +264,18 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column :label="t('customers.remark')" width="200">
-        <template #default="{ row }">
-          <div class="shipment-remark-cell">
-            <div class="shipment-today-tags">
-              <el-tag
-                class="shipment-today-tag"
-                :type="shipmentBusinessStateTagType(row)"
-                effect="plain"
-              >
-                {{ shipmentBusinessStateLabel(row) }}
-              </el-tag>
-              <el-tag
-                v-if="isCreatedToday(row)"
-                class="shipment-today-tag is-created"
-                type="danger"
-                effect="plain"
-              >
-                {{ t("customers.todayNewBusiness") }}
-              </el-tag>
-            </div>
-          </div>
-        </template>
+      <el-table-column :label="t('customers.lastTrackedAt')" width="152">
+        <template #default="{ row }"
+          ><time
+            v-if="row.lastTrackedAt"
+            :datetime="row.lastTrackedAt"
+            :title="`${formatDateTime(row.lastTrackedAt)} · ${row.lastTrackedAt}`"
+            class="shipment-date-cell"
+            >{{ compactShipmentDate(row.lastTrackedAt) }}</time
+          ><span v-else>{{ t("customers.notTrackedYet") }}</span></template
+        >
       </el-table-column>
-      <el-table-column :label="t('customers.lastTrackedAt')" width="164">
-        <template #default="{ row }">{{
-          row.lastTrackedAt ? formatDateTime(row.lastTrackedAt) : t("customers.notTrackedYet")
-        }}</template>
-      </el-table-column>
-      <el-table-column :label="t('customers.actions')" :width="isManager ? 234 : 94" fixed="right">
+      <el-table-column :label="t('customers.actions')" :width="isManager ? 140 : 76" fixed="right">
         <template #default="{ row }">
           <div class="table-action-buttons table-action-buttons--single-line">
             <el-button size="small" text @click.stop="trackShipmentInWorkspace(row)">{{
@@ -263,40 +285,55 @@
               <el-button size="small" type="primary" plain @click.stop="editShipment(row)">{{
                 t("customers.edit")
               }}</el-button>
-              <el-button
-                size="small"
-                plain
-                :disabled="refreshingShipment"
-                @click.stop="updateShipmentTracking(row)"
-                >{{ t("customers.update") }}</el-button
+              <el-dropdown
+                trigger="click"
+                placement="bottom-end"
+                popper-class="business-comp-select shipment-row-menu"
+                @command="(command) => onRowCommand(command, row)"
               >
-              <el-button size="small" type="danger" text @click.stop="deleteShipmentRow(row)">{{
-                t("customers.delete")
-              }}</el-button>
+                <el-button size="small" text :aria-label="bwt('moreActions')" @click.stop>{{
+                  bwt("more")
+                }}</el-button>
+                <template #dropdown
+                  ><el-dropdown-menu>
+                    <el-dropdown-item command="update" :disabled="refreshingShipment">{{
+                      t("customers.update")
+                    }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" class="shipment-row-menu-danger">{{
+                      t("customers.delete")
+                    }}</el-dropdown-item>
+                  </el-dropdown-menu></template
+                >
+              </el-dropdown>
             </template>
           </div>
         </template>
       </el-table-column>
     </el-table>
-    <el-pagination
-      v-if="shipmentTotal > 0"
-      class="shipment-pagination unified-pagination"
-      background
-      layout="total, sizes, prev, pager, next, jumper"
-      :current-page="shipmentPage"
-      :page-size="shipmentPageSize"
-      :page-sizes="[10, 20, 50, 100]"
-      :total="shipmentTotal"
-      @current-change="changeShipmentPage"
-      @size-change="changeShipmentPageSize"
-    />
+    <footer class="shipment-list-footer">
+      <span aria-live="polite">{{ wt("resultsCount", { count: shipmentTotal }) }}</span>
+      <el-pagination
+        v-if="shipmentTotal > 0"
+        class="shipment-pagination unified-pagination"
+        background
+        layout="sizes, prev, pager, next, jumper"
+        :current-page="shipmentPage"
+        :page-size="shipmentPageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="shipmentTotal"
+        @current-change="changeShipmentPage"
+        @size-change="changeShipmentPageSize"
+      />
+    </footer>
   </section>
 </template>
 
 <script setup lang="ts">
 import { toRefs } from "vue";
+import { compactShipmentDate } from "../../../features/shipments/compactShipmentPresentation.js";
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
+import { bwt } from "../../shared/businessWorkspaceCopy";
 import { Operation, Plus, Upload, Refresh } from "@element-plus/icons-vue";
 
 // The host supplies one controlled workflow. This page owns no API calls or duplicate state.
@@ -361,6 +398,11 @@ const {
   isCreatedToday,
   formatDateTime
 } = props.workspace.formatters;
+function onRowCommand(command: unknown, row: unknown) {
+  if (!isManager.value) return;
+  if (command === "update" && !refreshingShipment.value) updateShipmentTracking(row);
+  if (command === "delete") deleteShipmentRow(row);
+}
 function clearShipmentFilters() {
   shipmentCustomerFilter.value = "";
   shipmentBusinessFilter.value = "";
@@ -897,3 +939,5 @@ function clearShipmentFilters() {
 </style>
 
 <style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+
+<style scoped src="../../../features/shipments/shipmentListComposition.css"></style>

@@ -170,6 +170,7 @@ export function createShipmentModulePages({
       startRefreshSelectedShipments,
       startRefreshAllShipments,
       handleShipmentSelectionChange,
+      clearShipmentSelection: () => shipmentTableRef.value?.clearSelection(),
       trackShipmentInWorkspace,
       editShipment,
       updateShipmentTracking,

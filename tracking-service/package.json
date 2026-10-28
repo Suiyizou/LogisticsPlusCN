@@ -10,11 +10,12 @@
     "track:playwright": "node scripts/cosco-playwright.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0 || >=24"
   },
   "dependencies": {
     "element-plus": "^2.14.3",
     "flag-icons": "^7.5.0",
+    "pdfjs-dist": "6.4.299",
     "playwright": "^1.61.1",
     "socks-proxy-agent": "^8.0.5",
     "undici": "^6.21.3",

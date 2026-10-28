@@ -9,7 +9,7 @@
           @keydown="onDialogKeydown"
         >
           <section
-            class="customer-code-dialog customer-credential-dialog workspace-modal--wide"
+            class="business-comp-dialog customer-code-dialog customer-credential-dialog workspace-modal--wide"
             ref="dialogElement"
             tabindex="-1"
             role="dialog"

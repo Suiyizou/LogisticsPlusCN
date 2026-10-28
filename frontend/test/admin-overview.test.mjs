@@ -70,7 +70,7 @@ test("admin charts preserve separate activity axes, ordering, unknown account st
   );
   assert.equal(options.activity.yAxis[0].name, "Business actions");
   assert.equal(options.activity.yAxis[1].name, "Management actions");
-  assert.deepEqual(options.operations.yAxis.data, ["Sign out device", "Create user"]);
+  assert.deepEqual(options.operations.xAxis.data, ["Sign out device", "Create user"]);
   assert.deepEqual(options.operations.series[0].data, [1, 3]);
   assert.equal(options.users.series[0].data[0].name, "Business");
   assert.equal(options.status.series[0].data[0].name, "PENDING");
@@ -90,7 +90,7 @@ test("empty and invalid chart collections clear previous data without a fake non
   assert.deepEqual(options.users.series[0].data, []);
   assert.equal(options.users.graphic[0].style.text, "暂无数据");
   assert.equal(options.status.series[0].label.show, false);
-  assert.deepEqual(options.operations.yAxis.data, ["暂无管理操作"]);
+  assert.deepEqual(options.operations.xAxis.data, ["暂无管理操作"]);
   assert.deepEqual(options.operations.series[0].data, [0]);
 });
 

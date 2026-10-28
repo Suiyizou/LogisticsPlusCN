@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adminNavigation } from "../src/features/admin/adminNavigation.js";
+import { adminNavigation, adminRouteTitle } from "../src/features/admin/adminNavigation.js";
 import {
   adminConsoleCopy,
   createAdminConsoleCopy
 } from "../src/features/admin/adminConsoleCopy.js";
+
+test("all ten admin browser titles use the same translated page title as the visible shell", () => {
+  for (const locale of ["zh-CN", "en-US"])
+    for (const page of adminNavigation(locale).pages) {
+      const key = `admin.${page.key}`;
+      assert.equal(adminRouteTitle(key, locale), page.title);
+      assert.notEqual(adminRouteTitle(key, locale), key);
+    }
+  assert.equal(adminRouteTitle("extension.custom", "en-US"), "");
+  assert.equal(adminRouteTitle("admin.overview", "zh-CN"), "企业系统总览");
+});
 
 test("console shell and login copy follows current language for presentation and asynchronous feedback", () => {
   let locale = "zh-CN";

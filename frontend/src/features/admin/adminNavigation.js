@@ -4,6 +4,15 @@ import { rawAdminPages, rawAdminNavGroups } from "../../modules/admin/definition
 import { platformModules } from "../../modules/registry.js";
 import { modulesForSurface } from "../../modules/moduleCatalog.js";
 export { rawAdminPages, rawAdminNavGroups } from "../../modules/admin/definitions.js";
+/** Resolve built-in route metadata through the same bilingual page titles as the admin shell.
+ * @param {string} titleKey @param {string} locale */
+export function adminRouteTitle(titleKey, locale) {
+  const page = rawAdminPages.find((entry) => titleKey === `admin.${entry.key}`);
+  if (!page) return "";
+  return locale === "en-US"
+    ? adminNavigationEnglish.pages[page.key]?.title || page.title
+    : page.title;
+}
 /** @param {string} locale
  * @param {(key: string) => string} translate
  * @param {import("../../types/moduleRegistry").BusinessModuleDefinition[]} modules */

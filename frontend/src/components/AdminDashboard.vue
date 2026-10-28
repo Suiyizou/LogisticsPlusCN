@@ -301,6 +301,7 @@ const filePresentation = createAdminFilePresentation({ t: fileText, roleText, fo
 const adminFilePreview = useAdminFilePreview({
   currentUser,
   fetchBlob: fetchAdminShipmentFileBlob,
+  downloadFile: (file) => adminFiles.handleDownloadShipmentFile(file),
   createObjectUrl: (blob) => URL.createObjectURL(blob),
   revokeObjectUrl: (url) => URL.revokeObjectURL(url),
   t: fileText,
@@ -520,9 +521,16 @@ const adminPageBindings = {
     props: {
       overview: unref(systemOverview),
       locale: unref(currentLocale),
-      busy: unref(loading)
+      busy: unref(loading),
+      recentAuditRows: unref(adminConsole.recentAuditRows),
+      auditLoading: unref(adminConsole.recentAuditLoading),
+      auditLoaded: unref(adminConsole.recentAuditLoaded),
+      auditError: unref(adminConsole.recentAuditError)
     },
-    events: {}
+    events: {
+      audit: () => selectAdminPage("audit"),
+      retryAudit: () => runAdminRead(adminConsole.loadRecentAudit)
+    }
   }),
   audit: () => ({
     props: {
@@ -764,12 +772,14 @@ function selectAdminPage(page, navigate = true) {
     !adminPages.value.some((item) => item.key === page)
   )
     return;
+  const previousPage = activeAdminPage.value;
   activeAdminPage.value = page;
   expandedAdminGroup.value =
     adminPages.value.find((item) => item.key === page)?.group || expandedAdminGroup.value;
   const routeName = adminPages.value.find((item) => item.key === page)?.routeName;
   if (navigate && routeName && adminRouter.hasRoute(routeName))
     void adminRouter.push({ name: routeName });
+  if (page === "overview" && previousPage !== page) void runAdminRead(adminConsole.loadRecentAudit);
   if (page === "files" && !adminFilesLoaded.value)
     void runAdminRead(loadAdminFileListsWithoutLoading);
   if (page === "announcements" && !announcementsLoaded.value)

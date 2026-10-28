@@ -10,7 +10,7 @@
           @click.self="closeCustomerTransfer"
         >
           <section
-            class="customer-code-dialog customer-transfer-dialog workspace-modal--form"
+            class="business-comp-dialog customer-code-dialog customer-transfer-dialog workspace-modal--form"
             ref="dialogElement"
             tabindex="-1"
             role="dialog"
@@ -26,7 +26,7 @@
               <label>
                 <span>{{ t("customers.targetAgent") }} <i class="required-star">*</i></span>
                 <el-select
-                  popper-class="business-select-popper workspace-select-popper"
+                  popper-class="business-comp-select business-select-popper workspace-select-popper"
                   v-model="transferForm.targetAgentId"
                   :disabled="transferringCustomers"
                   class="business-select"

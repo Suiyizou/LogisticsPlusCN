@@ -2,6 +2,14 @@
   <PublicSiteShell :current-user="currentUser">
     <main v-if="service && copy" ref="page" class="public-service-detail">
       <section class="public-detail-hero">
+        <figure class="public-detail-hero__image">
+          <img
+            :src="heroImage"
+            :alt="t('publicSite.' + service.image + 'ImageAlt')"
+            width="1280"
+            height="564"
+          />
+        </figure>
         <div class="maritime-wrap">
           <p class="public-breadcrumb">
             <a href="/">{{ t("publicSite.crumbHome") }}</a
@@ -11,32 +19,34 @@
           </p>
           <div class="public-detail-hero__grid">
             <div>
-              <span class="maritime-eyebrow">{{ service.id.toUpperCase() }} / LOGISTICSPLUSCN</span>
-              <h1>{{ copy.title }}</h1>
-              <p class="public-detail-tagline">{{ copy.summary }}</p>
+              <span class="maritime-eyebrow">{{
+                service.id === "planning" ? "LOAD PLANNING" : service.id.toUpperCase()
+              }}</span>
+              <h1>
+                {{
+                  service.id === "planning" ? t("publicSite.editorial.planningHero") : copy.summary
+                }}
+              </h1>
               <p class="public-lead">{{ copy.intro }}</p>
               <div class="public-detail-actions">
                 <a
-                  class="maritime-button maritime-button--primary"
+                  class="maritime-button maritime-button--navy"
                   :href="entry.href"
                   :target="entry.external ? '_blank' : undefined"
                   :rel="entry.external ? 'noopener noreferrer' : undefined"
                   >{{ entry.allowed ? copy.cta : t("publicSite.availableWorkspaces")
-                  }}<span aria-hidden="true">↗</span></a
-                ><span class="public-access">{{ accessLabel }}</span>
+                  }}<span aria-hidden="true">→</span></a
+                ><span class="public-access"><ServiceIcon name="user" />{{ accessLabel }}</span>
               </div>
             </div>
-            <figure>
-              <img
-                :src="heroImage"
-                :alt="t('publicSite.' + service.image + 'ImageAlt')"
-                width="1280"
-                height="564"
-              />
-            </figure>
           </div>
         </div>
       </section>
+      <PublicServiceWorkflow
+        :planning="service.layout === 'planning'"
+        :steps="workflowSteps"
+        :icons="[service.icon, 'equipment', 'document']"
+      />
       <div class="maritime-wrap public-detail-body">
         <div class="public-detail-primary">
           <section v-if="service.layout === 'tracking'" class="service-context" data-public-reveal>
@@ -53,43 +63,6 @@
                 <p>{{ t("publicSite." + key + "Body") }}</p>
               </article>
             </div>
-          </section>
-          <section
-            v-else-if="service.layout === 'planning'"
-            class="service-context"
-            data-public-reveal
-          >
-            <span class="maritime-eyebrow">LOAD PLANNING</span>
-            <h2>{{ t("publicSite.planningDiagram") }}</h2>
-            <div class="service-planning-diagram">
-              <div class="service-cargo-shapes" aria-hidden="true">
-                <i></i><i></i><i></i><i></i>
-              </div>
-              <svg viewBox="0 0 320 170" aria-hidden="true">
-                <path d="m35 66 164-41 91 37-165 43Z" fill="#b7c7cf" />
-                <path d="m35 66 90 39v60l-90-39Z" fill="#385c70" />
-                <path d="m125 105 165-43v61l-165 42Z" fill="#7192a3" />
-                <path
-                  d="m35 66 164-41 91 37v61l-165 42-90-39V66l90 39 165-43M125 105v60"
-                  fill="none"
-                  stroke="#15384a"
-                  stroke-width="2"
-                />
-                <path
-                  d="m145 100 0 57m20-62v57m20-63v58m20-62v57m20-63v57m20-62v57m20-63v58"
-                  stroke="#476b7e"
-                  stroke-width="2"
-                />
-              </svg>
-              <div class="service-workflow-labels">
-                <span>{{ t("publicSite.planningConfig") }}</span
-                ><span>{{ t("publicSite.planningCargo") }}</span
-                ><span>{{ t("publicSite.planningResult") }}</span>
-              </div>
-            </div>
-            <a class="maritime-text-link" href="/algorithm"
-              >{{ t("publicSite.planningAlgorithm") }} <span aria-hidden="true">→</span></a
-            >
           </section>
           <section
             v-else-if="service.layout === 'containers'"
@@ -258,37 +231,55 @@
               >{{ t("publicSite.bookingAction") }} <span aria-hidden="true">↗</span></a
             ><small>{{ t("publicSite.bookingNote") }}</small>
           </section>
-          <section class="public-service-steps" data-public-reveal>
-            <span class="maritime-eyebrow">GETTING STARTED</span>
-            <h2>{{ t("publicSite.serviceSteps") }}</h2>
-            <ol>
-              <li v-for="(step, index) in copy.steps" :key="step.title">
-                <span>{{ String(index + 1).padStart(2, "0") }}</span>
-                <div>
-                  <h3>{{ step.title }}</h3>
-                  <p>{{ step.body }}</p>
-                </div>
-              </li>
-            </ol>
+          <section class="public-capability-table" data-public-reveal>
+            <header class="public-editorial-heading">
+              <h2>{{ t("publicSite.editorial.capabilities") }}</h2>
+              <span></span>
+            </header>
+            <dl>
+              <div v-for="(feature, index) in capabilities" :key="feature.title">
+                <dt>
+                  <ServiceIcon
+                    :name="['box', 'equipment', service.icon, 'document'][index] || service.icon"
+                  /><strong>{{ feature.title }}</strong>
+                </dt>
+                <dd>{{ feature.body }}</dd>
+              </div>
+            </dl>
           </section>
         </div>
         <aside class="public-service-aside">
           <section>
-            <ServiceIcon :name="service.icon" />
-            <h2>{{ t("publicSite.serviceCapabilities") }}</h2>
-            <ul>
-              <li v-for="feature in copy.features" :key="feature">{{ feature }}</li>
-            </ul>
-            <h3>{{ t("publicSite.serviceAccess") }}</h3>
+            <header class="public-editorial-heading">
+              <h2>{{ t("publicSite.editorial.before") }}</h2>
+              <span></span>
+            </header>
             <p>{{ copy.scope }}</p>
+            <div class="public-service-readiness">
+              <article v-for="item in readiness" :key="item.title">
+                <ServiceIcon :name="item.icon" />
+                <div>
+                  <h3>{{ item.title }}</h3>
+                  <p>{{ item.body }}</p>
+                </div>
+              </article>
+            </div>
+            <a
+              class="maritime-button maritime-button--navy"
+              :href="entry.href"
+              :target="entry.external ? '_blank' : undefined"
+              :rel="entry.external ? 'noopener noreferrer' : undefined"
+              >{{ entry.allowed ? copy.cta : t("publicSite.availableWorkspaces") }}
+              <span aria-hidden="true">→</span></a
+            >
             <p v-if="!entry.allowed" class="public-permission-note">
               {{ t("publicSite.serviceNoAccess") }}
             </p>
           </section>
-          <section class="public-service-boundary">
-            <h3>{{ t("publicSite.serviceScope") }}</h3>
-            <p>{{ copy.boundary }}</p>
-          </section>
+          <p class="public-service-boundary">{{ copy.boundary }}</p>
+          <a v-if="service.layout === 'planning'" class="maritime-text-link" href="/algorithm"
+            >{{ t("publicSite.planningAlgorithm") }} <span aria-hidden="true">→</span></a
+          >
         </aside>
       </div>
       <section class="public-related" data-public-reveal>
@@ -335,6 +326,7 @@ import {
 import PublicSiteShell from "./PublicSiteShell.vue";
 import PublicTrackingDock from "./PublicTrackingDock.vue";
 import ServiceIcon from "./ServiceIcon.vue";
+import PublicServiceWorkflow from "./PublicServiceWorkflow.vue";
 import { usePublicReveal } from "./usePublicReveal.js";
 const props = defineProps<{ currentUser?: { role?: string } | null }>();
 const route = useRoute(),
@@ -366,9 +358,59 @@ const accessLabel = computed(() =>
 );
 const related = computed(() =>
   publicServices
-    .filter((item) => item.id !== service.value?.id && item.group === service.value?.group)
-    .slice(0, 3)
+    .filter((item) =>
+      service.value?.id === "planning"
+        ? ["transport", "containers"].includes(item.id)
+        : item.id !== service.value?.id && item.group === service.value?.group
+    )
+    .slice(0, 2)
 );
+const workflowSteps = computed(() =>
+  !copy.value
+    ? []
+    : service.value?.layout === "planning"
+      ? [copy.value.steps[1], copy.value.steps[0], copy.value.steps[2]]
+      : copy.value.steps
+);
+const capabilities = computed(() => {
+  if (!copy.value || !service.value) return [];
+  if (service.value.layout === "planning") return text.value.editorial.planningFeatures;
+  const bodies =
+    (text.value.editorial.capabilityBodies as Record<string, string[]>)[service.value.id] || [];
+  return copy.value.features.map((title: string, index: number) => ({
+    title,
+    body: bodies[index] || copy.value.intro
+  }));
+});
+const readiness = computed(() => {
+  if (!copy.value || !service.value) return [];
+  const access = {
+    icon: "user",
+    title: t("publicSite.editorial.accessTitle"),
+    body: copy.value.scope
+  };
+  if (service.value.layout === "planning")
+    return [
+      {
+        icon: "box",
+        title: t("publicSite.editorial.cargoSize"),
+        body: t("publicSite.editorial.cargoSizeBody")
+      },
+      {
+        icon: "equipment",
+        title: t("publicSite.editorial.cargoWeight"),
+        body: t("publicSite.editorial.cargoWeightBody")
+      },
+      access
+    ];
+  return copy.value.steps
+    .slice(0, 2)
+    .map((step: { title: string; body: string }, index: number) => ({
+      ...step,
+      icon: index ? "document" : service.value?.icon || "document"
+    }))
+    .concat([access]);
+});
 usePublicReveal(page);
 function title() {
   document.title = (copy.value?.title || t("publicSite.serviceNotFound")) + " | logisticspluscn";

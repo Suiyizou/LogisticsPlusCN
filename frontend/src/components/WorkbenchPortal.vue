@@ -4,21 +4,20 @@
       <BrandLockup href="/workbenches" compact inverse />
       <p class="portal-sidebar-label">{{ t("maritime.operations") }}</p>
       <nav :aria-label="t('portal.sectionAria')">
-        <RouterLink to="/workbenches" class="is-active" aria-current="page">{{
-          t("maritime.workspace")
-        }}</RouterLink>
-        <RouterLink to="/planner/config">{{ t("portal.planner.title") }}</RouterLink>
-        <a :href="trackingWorkbenchUrl" target="_blank" rel="noopener noreferrer">{{
-          t("portal.tracking.title")
-        }}</a>
-        <RouterLink
+        <RouterLink to="/workbenches" class="is-active" aria-current="page"
+          ><el-icon><Grid /></el-icon><span>{{ t("maritime.workspace") }}</span></RouterLink
+        ><RouterLink to="/planner/config"
+          ><el-icon><Box /></el-icon><span>{{ wt("workbenchPlannerTitle") }}</span></RouterLink
+        ><a :href="trackingWorkbenchUrl" target="_blank" rel="noopener noreferrer"
+          ><el-icon><Location /></el-icon><span>{{ wt("workbenchTrackingTitle") }}</span></a
+        ><RouterLink
           v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
           to="/customers"
-          >{{ t("portal.customerWorkspace") }}</RouterLink
+          ><el-icon><Document /></el-icon
+          ><span>{{ wt("workbenchCustomersTitle") }}</span></RouterLink
+        ><RouterLink v-if="currentUser?.role === 'ADMIN'" to="/admin"
+          ><el-icon><Setting /></el-icon><span>{{ t("portal.adminConsole") }}</span></RouterLink
         >
-        <RouterLink v-if="currentUser?.role === 'ADMIN'" to="/admin">{{
-          t("portal.adminConsole")
-        }}</RouterLink>
       </nav>
       <div class="portal-sidebar-user">
         <strong>{{ displayName }}</strong
@@ -90,17 +89,20 @@
     <section class="portal-content">
       <WorkspacePageHeader
         :title="t('portal.greeting', { name: displayName })"
-        eyebrow="OPERATIONS PORTAL"
         :description="t('portal.heroDescription')"
         ><template #meta
-          ><span class="portal-today">{{ todayText }}</span
-          ><WorkspaceStatus :label="roleLabel" /></template
-      ></WorkspacePageHeader>
+          ><span class="portal-today">{{ todayText }}</span></template
+        ></WorkspacePageHeader
+      >
 
       <button class="portal-task-row" type="button" @click="emit('open-announcements')">
         <span
           ><small>{{ t("customers.systemMessages") }}</small
-          ><strong>{{ systemMessageLabel }}</strong></span
+          ><strong>{{
+            announcementCount
+              ? wt("announcementSummary", { count: announcementCount })
+              : wt("noAnnouncements")
+          }}</strong></span
         >
         <b>{{ announcementCount }}</b>
         <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
@@ -115,146 +117,87 @@
           <p>{{ t("portal.sectionDescription") }}</p>
         </header>
 
-        <div
-          class="portal-card-grid"
-          :class="{
-            'has-customer-card': ['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)
-          }"
-        >
-          <RouterLink
-            class="portal-workbench-card portal-workbench-card--planner"
+        <div class="portal-card-grid">
+          <WorkbenchEntryCard
+            index="01"
+            kind="planner"
+            eyebrow="LOAD PLANNING"
+            :title="wt('workbenchPlannerTitle')"
+            :description="wt('workbenchPlannerDescription')"
+            :features="[
+              t('portal.planner.featurePacking'),
+              t('portal.planner.featureBalance'),
+              t('portal.planner.featureReport')
+            ]"
+            :action="wt('workbenchPlannerAction')"
             to="/planner/config"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <div class="portal-card-topline">
-              <span>01 / LOAD PLANNING</span>
-            </div>
-            <div class="portal-card-body">
-              <div class="portal-card-icon" aria-hidden="true">
-                <svg viewBox="0 0 88 88">
-                  <path class="icon-panel" d="m11 28 34-17 32 17v36L43 79 11 62z" />
-                  <path d="m11 28 32 17 34-17M43 45v34M27 36l33-17M22 54l10 5m4-2 10 5m4-2 10 5" />
-                </svg>
-              </div>
-              <div class="portal-card-copy">
-                <span class="portal-card-label">{{ t("portal.planner.label") }}</span>
-                <h3>{{ t("portal.planner.title") }}</h3>
-                <p>{{ t("portal.planner.description") }}</p>
-              </div>
-            </div>
-            <div class="portal-card-features">
-              <span>{{ t("portal.planner.featurePacking") }}</span>
-              <span>{{ t("portal.planner.featureBalance") }}</span>
-              <span>{{ t("portal.planner.featureReport") }}</span>
-            </div>
-            <div class="portal-card-action">
-              <span>{{ t("portal.enterWorkbench") }}</span>
-              <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
-            </div>
-          </RouterLink>
-
-          <a
-            class="portal-workbench-card portal-workbench-card--tracking"
+            new-tab
+          />
+          <WorkbenchEntryCard
+            index="02"
+            kind="tracking"
+            eyebrow="SHIPMENT VISIBILITY"
+            :title="wt('workbenchTrackingTitle')"
+            :description="wt('workbenchTrackingDescription')"
+            :features="[
+              t('portal.tracking.featureReferences'),
+              t('portal.tracking.featureRoute'),
+              t('portal.tracking.featureChannels')
+            ]"
+            :action="wt('workbenchTrackingAction')"
             :href="trackingWorkbenchUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <div class="portal-card-topline">
-              <span>02 / SHIPMENT VISIBILITY</span>
-            </div>
-            <div class="portal-card-body">
-              <div class="portal-card-icon" aria-hidden="true">
-                <svg viewBox="0 0 88 88">
-                  <circle class="icon-panel" cx="44" cy="44" r="32" />
-                  <path
-                    d="M19 48c12-15 22-21 33-14 8 5 10 13 17 8M44 12c-2 14 3 21 14 26M31 18c5 8 5 16-1 24s-7 16-1 25M17 59h54"
-                  />
-                  <circle cx="20" cy="48" r="4" />
-                  <circle cx="69" cy="42" r="4" />
-                </svg>
-              </div>
-              <div class="portal-card-copy">
-                <span class="portal-card-label">{{ t("portal.tracking.label") }}</span>
-                <h3>{{ t("portal.tracking.title") }}</h3>
-                <p>{{ t("portal.tracking.description") }}</p>
-              </div>
-            </div>
-            <div class="portal-card-features">
-              <span>{{ t("portal.tracking.featureReferences") }}</span>
-              <span>{{ t("portal.tracking.featureRoute") }}</span>
-              <span>{{ t("portal.tracking.featureChannels") }}</span>
-            </div>
-            <div class="portal-card-action">
-              <span>{{ t("portal.enterWorkbench") }}</span>
-              <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
-            </div>
-          </a>
-
-          <RouterLink
+            new-tab
+          />
+          <WorkbenchEntryCard
             v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
-            class="portal-workbench-card portal-workbench-card--customers"
+            index="03"
+            kind="customers"
+            eyebrow="CUSTOMER OPERATIONS"
+            :title="wt('workbenchCustomersTitle')"
+            :description="wt('workbenchCustomersDescription')"
+            :features="[wt('customerData'), wt('shipmentAccess'), wt('businessHandover')]"
+            :action="wt('workbenchCustomersAction')"
             to="/customers"
-          >
-            <div class="portal-card-topline">
-              <span>03 / CUSTOMER OPERATIONS</span>
-            </div>
-            <div class="portal-card-body">
-              <div class="portal-card-icon" aria-hidden="true">
-                <svg viewBox="0 0 88 88">
-                  <circle class="icon-panel" cx="34" cy="34" r="13" />
-                  <circle class="icon-panel" cx="59" cy="39" r="9" />
-                  <path
-                    d="M13 68c3-14 11-21 22-21s19 7 22 21M50 51c10 0 17 6 20 17M60 21v12m-6-6h12"
-                  />
-                </svg>
-              </div>
-              <div class="portal-card-copy">
-                <span class="portal-card-label">{{ t("portal.customers.label") }}</span>
-                <h3>{{ t("portal.customers.title") }}</h3>
-                <p>{{ t("portal.customers.description") }}</p>
-              </div>
-            </div>
-            <div class="portal-card-features">
-              <span>{{ t("portal.customers.featureCodes") }}</span>
-              <span>{{ t("portal.customers.featureRoles") }}</span>
-              <span>{{ t("portal.customers.featureBindings") }}</span>
-            </div>
-            <div class="portal-card-action">
-              <span>{{ t("portal.enterWorkbench") }}</span>
-              <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
-            </div>
-          </RouterLink>
-          <RouterLink
-            class="portal-workbench-card portal-workbench-card--booking"
+          />
+          <WorkbenchEntryCard
+            index="04"
+            kind="booking"
+            eyebrow="EXTERNAL BOOKING"
+            :title="wt('bookingTitle')"
+            :description="wt('bookingHint')"
+            :features="[wt('bookingAccess'), wt('bookingBoundary')]"
+            :action="wt('bookingAction')"
             to="/services/booking"
-          >
-            <div class="portal-card-topline"><span>04 / EXTERNAL BOOKING</span></div>
-            <div class="portal-card-body">
-              <div class="portal-card-icon" aria-hidden="true">
-                <svg viewBox="0 0 88 88">
-                  <path class="icon-panel" d="M18 18h52v52H18z" />
-                  <path d="M29 34h30M29 44h20M29 54h12M53 55l10 10m-10 0h10V55" />
-                </svg>
-              </div>
-              <div class="portal-card-copy">
-                <span class="portal-card-label">{{ wt("bookingLabel") }}</span>
-                <h3>{{ wt("bookingTitle") }}</h3>
-                <p>{{ wt("bookingHint") }}</p>
-              </div>
-            </div>
-            <div class="portal-card-features">
-              <span>{{ wt("bookingAccess") }}</span
-              ><span>{{ wt("bookingBoundary") }}</span>
-            </div>
-            <div class="portal-card-action">
-              <span>{{ wt("bookingAction") }}</span
-              ><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
-            </div>
-          </RouterLink>
+          />
         </div>
       </section>
 
+      <section class="portal-quick-links" :aria-label="wt('quickLinks')">
+        <h2>{{ wt("quickLinks") }}</h2>
+        <div>
+          <RouterLink
+            v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
+            to="/customers/directory"
+            ><strong>{{ t("portal.customers.title") }}</strong
+            ><small>{{ wt("customerDirectoryQuick") }}</small
+            ><span aria-hidden="true">›</span></RouterLink
+          ><RouterLink
+            v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
+            to="/customers/shipments"
+            ><strong>{{ wt("shipmentQuick") }}</strong
+            ><small>{{ wt("shipmentQuickHint") }}</small
+            ><span aria-hidden="true">›</span></RouterLink
+          ><RouterLink to="/containers"
+            ><strong>{{ wt("equipmentQuick") }}</strong
+            ><small>{{ wt("equipmentQuickHint") }}</small
+            ><span aria-hidden="true">›</span></RouterLink
+          ><RouterLink to="/algorithm"
+            ><strong>{{ wt("algorithmTitle") }}</strong
+            ><small>{{ wt("algorithmQuickHint") }}</small
+            ><span aria-hidden="true">›</span></RouterLink
+          >
+        </div>
+      </section>
       <footer class="portal-footer">
         <span>logisticspluscn · {{ currentYear }}</span>
         <span>{{ t("portal.footerHint") }}</span>
@@ -359,8 +302,9 @@
 <script setup>
 import { wt } from "./workspace/workspaceCopy";
 import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
-import WorkspaceStatus from "./workspace/WorkspaceStatus.vue";
+import WorkbenchEntryCard from "./workspace/WorkbenchEntryCard.vue";
 import BrandLockup from "./brand/BrandLockup.vue";
+import { Grid, Box, Location, Document, Setting } from "@element-plus/icons-vue";
 import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
@@ -677,7 +621,7 @@ async function submitPasswordChange() {
   align-items: center;
   gap: 24px;
   width: 100%;
-  margin: 28px 0 0;
+  margin: 16px 0 0;
   padding: 18px 22px;
   text-align: left;
   border: 1px solid var(--color-border);
@@ -701,7 +645,8 @@ async function submitPasswordChange() {
 }
 .portal-task-row > b {
   margin-left: auto;
-  font-size: 26px;
+  font-size: 20px;
+  line-height: 24px;
   font-weight: 500;
   color: var(--color-accent);
 }
@@ -712,7 +657,7 @@ async function submitPasswordChange() {
   stroke-width: 1.5;
 }
 .portal-workbench-section {
-  margin-top: 36px;
+  margin-top: 20px;
 }
 .portal-section-head {
   display: flex;
@@ -1052,3 +997,245 @@ async function submitPasswordChange() {
 </style>
 
 <style scoped src="./workspace/workspaceElementDialog.css"></style>
+
+<style scoped>
+.workbench-portal {
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+.portal-sidebar {
+  padding: 22px 14px;
+}
+.portal-header {
+  min-height: 64px;
+  padding: 0 28px;
+}
+.portal-content {
+  padding: 32px 28px 16px;
+  gap: 20px;
+}
+.portal-content :deep(.workspace-page-header) {
+  margin-bottom: 0;
+}
+.portal-content :deep(.workspace-page-header__title) {
+  font-size: 36px;
+}
+.portal-content :deep(.workspace-page-header__description) {
+  font-size: 16px;
+  line-height: 1.65;
+  margin-top: 8px;
+}
+.portal-content :deep(.workspace-page-header__meta) {
+  margin-top: 12px;
+}
+.portal-task-row {
+  min-height: 46px;
+  padding: 10px 16px;
+  border-color: var(--accent-line);
+  background: var(--color-accent-soft);
+  gap: 16px;
+}
+.portal-task-row > span {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.portal-task-row small {
+  color: var(--color-accent);
+  font-size: 14px;
+}
+.portal-task-row strong {
+  font-size: 14px;
+  font-weight: 400;
+}
+.portal-task-row > b {
+  margin-left: auto;
+  color: var(--color-accent);
+  background: transparent;
+}
+.portal-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.portal-section-head {
+  margin-bottom: 14px;
+}
+.portal-section-head h2 {
+  font-size: 24px;
+  margin: 3px 0 0;
+}
+.portal-section-head p {
+  display: none;
+}
+.portal-sidebar nav a.is-active {
+  background: var(--color-accent);
+  border-color: transparent;
+}
+.portal-quick-links {
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+.portal-quick-links h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.portal-quick-links > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.portal-quick-links a {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 6px 26px 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  color: var(--color-primary);
+}
+.portal-quick-links strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.portal-quick-links small {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.portal-quick-links a > span {
+  position: absolute;
+  right: 12px;
+  top: 18px;
+}
+.portal-quick-links a:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.portal-footer {
+  margin-top: 20px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+.portal-message-button > span,
+.portal-live-status,
+.portal-header .portal-admin-link {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .workbench-portal {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .portal-content {
+    padding: 24px;
+  }
+  .portal-quick-links > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 850px) {
+  .workbench-portal {
+    grid-template-columns: 1fr;
+  }
+  .portal-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .portal-content :deep(.workspace-page-header__title) {
+    font-size: 30px;
+  }
+}
+@media (max-width: 600px) {
+  .portal-content {
+    padding: 22px 16px;
+    gap: 18px;
+  }
+  .portal-header {
+    padding: 0 16px;
+  }
+  .portal-quick-links > div {
+    grid-template-columns: 1fr;
+  }
+  .portal-task-row > span {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .portal-content :deep(.workspace-page-header__description) {
+    font-size: 14px;
+  }
+}
+</style>
+
+<style scoped>
+.portal-sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 48px;
+  padding: 12px 18px;
+  border-radius: var(--radius-control);
+  font-size: 15px;
+}
+.portal-sidebar nav .el-icon {
+  font-size: 23px;
+  width: 24px;
+}
+.portal-sidebar-label {
+  display: none;
+}
+.portal-sidebar nav {
+  margin-top: 16px;
+  gap: 8px;
+}
+.portal-sidebar-user {
+  margin-top: auto;
+}
+</style>
+
+<style scoped>
+@media (max-width: 850px) {
+  .workbench-portal {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .portal-sidebar {
+    grid-row: auto;
+    display: block;
+    padding: 14px 16px;
+  }
+  .portal-sidebar nav {
+    display: flex;
+    overflow-x: auto;
+    margin-top: 12px;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  .portal-sidebar nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 13px;
+    min-height: 40px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .portal-sidebar nav .el-icon {
+    font-size: 18px;
+    width: 18px;
+  }
+  .portal-sidebar-user {
+    display: none;
+  }
+  .portal-header {
+    flex: none;
+    min-height: 56px;
+    padding: 10px 16px;
+  }
+  .portal-content {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+  }
+}
+</style>

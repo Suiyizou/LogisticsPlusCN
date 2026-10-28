@@ -1,7 +1,11 @@
 <template>
-  <main class="customer-access-page" data-i18n-ignore>
+  <main class="customer-access-page business-workspace-shell" data-i18n-ignore>
     <header class="customer-access-header">
-      <BrandLockup class="customer-access-brand" :href="roleHomePath" compact />
+      <div class="business-header-breadcrumb">
+        <RouterLink :to="roleHomePath">{{ t("customers.backWorkbench") }}</RouterLink>
+        <span aria-hidden="true">/</span>
+        <strong>{{ activeBusinessSectionLabel }}</strong>
+      </div>
       <div class="customer-access-header-actions">
         <LanguageSwitcher class="customer-access-language" />
         <button
@@ -144,6 +148,7 @@
 
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
+        <BrandLockup class="business-sidebar-brand" :href="roleHomePath" compact inverse company />
         <nav class="sidebar-nav">
           <button
             v-for="section in businessNavigation.sections.value"
@@ -187,6 +192,7 @@
 import { workspaceFeedbackKey } from "./workspace/workspaceFeedback";
 import { useDialogFocus } from "../composables/useDialogFocus.js";
 import BrandLockup from "./brand/BrandLockup.vue";
+import "../modules/shared/styles/businessOverlays.css";
 import { OFFICIAL_TRACKING_URLS } from "../services/trackingCarriers.js";
 import { createWorkspacePresentation } from "../features/presentation/createWorkspacePresentation.js";
 import { trackingWorkspaceLink } from "../features/navigation/trackingWorkspaceLink.js";
@@ -354,6 +360,10 @@ const { openPersonalProfile } = personalProfile;
 const prefersReducedMotion = useReducedMotion();
 
 const menuItem = ref(defaultBusinessSection(props.currentUser?.role));
+const activeBusinessSectionLabel = computed(() => {
+  const section = businessNavigation.sections.value.find((item) => item.id === menuItem.value);
+  return section ? t(section.labelKey) : t("customers.overview");
+});
 const subView = ref("list");
 
 const selectedShipmentId = ref("");
@@ -1492,3 +1502,5 @@ button:disabled {
   }
 }
 </style>
+
+<style scoped src="../modules/shared/styles/businessWorkspace.css"></style>

@@ -1,216 +1,262 @@
 .admin-console-shell {
   display: grid;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   grid-template-columns: 244px minmax(0, 1fr);
   min-height: 100vh;
   color: var(--color-foreground);
   background: var(--color-background);
 }
 .admin-console-sidebar {
+  min-width: 0;
+  max-width: 100%;
   position: sticky;
   top: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 26px;
-  padding: 26px 16px;
+  gap: 20px;
+  padding: 20px 10px 16px;
   overflow: auto;
   background: var(--color-primary);
-  color: #dce7ec;
-}
-.admin-console-brand {
-  min-height: 45px;
-  margin: 0 4px;
-}
-.admin-profile-card {
-  display: grid;
-  gap: 5px;
-  padding: 16px 12px;
-  border-top: 1px solid #ffffff20;
-  border-bottom: 1px solid #ffffff20;
   color: white;
 }
-.admin-profile-card span {
-  color: #a2bac7;
-  font-size: 12px;
-}
-.admin-profile-card strong {
-  font-size: 16px;
-  font-weight: 600;
-}
-.admin-profile-card small {
-  color: #a2bac7;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+.admin-console-brand {
+  min-height: 44px;
+  margin: 0 12px 8px;
 }
 .admin-console-nav {
+  min-width: 0;
+  max-width: 100%;
   display: grid;
-  gap: 14px;
+  align-content: start;
+  gap: 16px;
+  flex: 1;
 }
 .admin-nav-accordion {
   min-width: 0;
 }
 .admin-console-nav button {
-  display: grid;
-  align-items: center;
-  gap: 3px 8px;
   width: 100%;
-  min-height: 46px;
-  border: 0;
-  border-left: 3px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: #bfd1da;
   text-align: left;
+  border: 0;
   box-shadow: none;
   transform: none;
+  cursor: pointer;
 }
-.admin-console-nav .admin-nav-group-trigger {
-  grid-template-columns: 26px minmax(0, 1fr) 12px;
-  padding: 10px;
-  color: #b1c6d1;
+.admin-nav-group-trigger {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  background: transparent;
+  color: #9fb9c7;
+  font-size: 12px;
+}
+.admin-nav-group-trigger > span,
+.admin-nav-group-trigger > small {
+  display: none;
 }
 .admin-nav-group-trigger > b {
-  font-size: 12px;
-  font-weight: 500;
-}
-.admin-nav-group-trigger > span {
-  grid-row: 1/3;
-  font-size: 12px;
-  color: #7f9eaf;
-}
-.admin-nav-group-trigger > small {
-  grid-column: 2;
-  color: #8eaabb;
-  font-size: 12px;
+  font-weight: 400;
 }
 .admin-nav-group-trigger > i {
-  grid-column: 3;
-  grid-row: 1/3;
-  width: 6px;
-  height: 6px;
-  border-bottom: 1px solid currentColor;
+  margin-left: auto;
+  width: 5px;
+  height: 5px;
   border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
   transform: rotate(45deg);
-}
-.admin-nav-group-trigger[aria-expanded="true"] > i {
-  transform: rotate(225deg);
 }
 .admin-nav-children {
   display: grid;
   gap: 3px;
-  margin-top: 3px;
 }
-.admin-console-nav .admin-nav-child {
-  grid-template-columns: 26px minmax(0, 1fr);
-  min-height: 50px;
-  padding: 9px 10px;
+.admin-nav-child {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: #dce8ed;
+  font-size: 14px;
+  transition:
+    background var(--motion-fast),
+    color var(--motion-fast);
 }
-.admin-nav-child > span {
-  grid-row: 1/3;
-  color: #7f9eaf;
-  font-size: 12px;
+.admin-nav-child .el-icon {
+  width: 20px;
+  font-size: 20px;
 }
 .admin-nav-child > b {
-  font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
 }
 .admin-nav-child > small {
-  grid-column: 2;
-  color: #91abba;
-  font-size: 12px;
+  display: none;
 }
-.admin-console-nav button:hover {
+.admin-nav-child.active {
+  background: var(--color-accent);
   color: white;
-  background: #ffffff0c;
-  transform: none;
-  box-shadow: none;
 }
-.admin-console-nav button.active,
-.admin-console-nav button.active:hover {
-  color: white;
-  border-left-color: var(--color-accent);
-  background: #ffffff16;
-}
-.admin-console-nav button.active small {
-  color: #c2d6e1;
+.admin-nav-child:not(.active):hover {
+  background: #ffffff12;
 }
 .admin-console-nav button:disabled {
-  cursor: wait;
   opacity: 0.6;
+  cursor: wait;
+}
+.admin-profile-card {
+  order: 3;
+  display: grid;
+  gap: 5px;
+  margin: 0 12px;
+  padding: 16px 0 0;
+  border-top: 1px solid #ffffff30;
+}
+.admin-profile-card > span {
+  display: none;
+}
+.admin-profile-card strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.admin-profile-card small {
+  font-size: 12px;
+  color: #aac2ce;
+  overflow-wrap: anywhere;
 }
 .admin-console-main {
   min-width: 0;
-  padding: 0 28px 28px;
+  max-width: 100%;
+  padding: 0 24px 24px;
 }
-.admin-console-topbar {
+.admin-app-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 24px;
-  min-height: 122px;
-  margin: 0 -28px 28px;
-  padding: 24px 28px;
+  gap: 16px;
+  height: 56px;
+  margin: 0 -24px 24px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--color-border);
-  background: white;
+  background: var(--color-surface);
+  font-size: 14px;
 }
-.admin-console-topbar p {
-  margin: 0 0 5px;
+.admin-app-bar > a {
   color: var(--color-muted);
-  font-size: 12px;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
+  text-decoration: none;
 }
-.admin-console-topbar h1 {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+.admin-app-bar > strong {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-app-bar > span {
+  color: var(--color-muted);
+}
+.admin-app-bar-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+.admin-app-bar-actions > button {
+  border: 0;
+  background: none;
+  padding: 6px;
   color: var(--color-primary);
-}
-.admin-console-topbar > div > span {
-  display: block;
-  margin-top: 8px;
-  color: var(--color-muted);
   font-size: 12px;
+}
+.admin-system-message-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.admin-system-message-button .el-icon {
+  font-size: 20px;
+}
+.admin-system-message-button em {
+  position: absolute;
+  right: -7px;
+  top: 0;
+  min-width: 14px;
+  text-align: center;
+  font-size: 10px;
+  border-radius: 12px;
+  padding: 1px 3px;
+  background: var(--color-accent);
+  color: white;
+  font-style: normal;
+}
+.admin-app-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: var(--color-primary);
+  border-radius: 50%;
+  color: white;
+}
+.admin-app-account {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.admin-app-account strong {
+  font-weight: 500;
+}
+.admin-app-account small {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.admin-console-page-head {
+  min-height: 64px;
+  margin-bottom: 18px;
+  align-items: center;
+}
+.admin-console-page-head :deep(.workspace-page-header__eyebrow) {
+  display: none;
+}
+.admin-console-page-head :deep(.workspace-page-header__title) {
+  font-size: 32px;
+}
+.admin-console-page-head :deep(.workspace-page-header__description) {
+  margin-top: 6px;
+  font-size: 14px;
 }
 .admin-top-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 .admin-top-actions > button {
-  border-radius: var(--radius-control);
-  font-size: 12px;
-  font-weight: 500;
-  box-shadow: none;
-}
-.admin-system-message-button {
   display: flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.admin-system-message-button em {
-  padding: 2px 5px;
-  color: white;
-  background: var(--color-accent);
-  font-style: normal;
-  font-size: 12px;
-}
-.admin-message {
-  margin: 0 0 18px;
-  padding: 12px 16px;
-  border: 1px solid var(--color-border);
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-strong);
   background: white;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   font-size: 13px;
 }
+.admin-message {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: white;
+  font-size: 13px;
+}
 .admin-message.error {
-  border-color: #e7b7b0;
   background: var(--color-destructive-soft);
   color: var(--color-destructive);
+  border-color: var(--color-destructive);
 }
 .admin-login-shell {
   display: grid;
@@ -423,5 +469,101 @@
   .admin-nav-fold-enter-active,
   .admin-nav-fold-leave-active {
     transition: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .admin-console-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .admin-console-main {
+    padding: 0 20px 20px;
+  }
+  .admin-app-bar {
+    margin: 0 -20px 20px;
+    padding: 0 20px;
+  }
+  .admin-app-bar-actions {
+    gap: 10px;
+  }
+  .admin-app-account {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .admin-console-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-console-sidebar {
+    position: relative;
+    height: auto;
+    padding: 12px 16px;
+    gap: 8px;
+    overflow: visible;
+  }
+  .admin-console-brand {
+    display: none;
+  }
+  .admin-profile-card {
+    display: none;
+  }
+  .admin-console-nav {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+  }
+  .admin-nav-accordion {
+    flex: 0 0 auto;
+  }
+  .admin-nav-group-trigger {
+    display: none;
+  }
+  .admin-nav-children {
+    display: flex;
+    gap: 6px;
+  }
+  .admin-nav-child {
+    width: auto !important;
+    white-space: nowrap;
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .admin-nav-child .el-icon {
+    font-size: 16px;
+    width: 16px;
+  }
+  .admin-app-bar {
+    margin: 0 -16px 20px;
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .admin-app-bar > a,
+  .admin-app-bar > span,
+  .admin-app-avatar,
+  .admin-app-bar-actions > .admin-app-account {
+    display: none;
+  }
+  .admin-console-main {
+    padding: 0 16px 20px;
+  }
+  .admin-app-bar-actions {
+    gap: 10px;
+  }
+  .admin-console-page-head {
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .admin-console-page-head :deep(.workspace-page-header__title) {
+    font-size: 28px;
+  }
+  .admin-console-page-head :deep(.workspace-page-header__actions) {
+    width: auto;
+  }
+  .admin-console-nav button:focus-visible,
+  .admin-app-bar button:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
   }
 }

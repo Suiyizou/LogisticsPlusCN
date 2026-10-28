@@ -7,6 +7,7 @@ import { baseParse } from "@vue/compiler-dom";
 import { prepareDialogLeave } from "../src/components/workspace/dialogPresentation.js";
 import { updateSchedulePreviewRegistration } from "../src/modules/update-schedule-preview/module.js";
 import previewMessages from "../src/modules/update-schedule-preview/messages.js";
+import { workspaceRefinementMessages } from "../src/i18n/workspaceRefinementMessages.js";
 import { createApplicationRoutes } from "../src/modules/routes.js";
 import { canAccessRoute } from "../src/modules/registry.js";
 
@@ -17,6 +18,30 @@ const cls = (node) =>
 const directive = (node, name, arg) =>
   node.props?.find((p) => p.type === 7 && p.name === name && (!arg || p.arg?.content === arg))?.exp
     ?.content;
+test("PDF reader labels resolve through the shared workspace namespace in both languages", () => {
+  const reader = source("../src/components/pdf/PdfCanvasPreview.vue");
+  const keys = [...reader.matchAll(/wt\(["']([^"']+)["']/g)].map((match) => match[1]);
+  assert.ok(keys.length >= 8);
+  for (const locale of ["zh-CN", "en-US"]) {
+    for (const key of keys)
+      assert.ok(workspaceRefinementMessages[locale].workspaceV2[key], `${locale}: ${key}`);
+  }
+});
+test("admin refresh feedback follows current busy state without legacy text restoration", () => {
+  const ast = template("../src/features/admin/AdminConsoleShell.vue");
+  const refresh = find(ast, (node) => directive(node, "on", "click") === "refresh");
+  assert.equal(directive(refresh, "bind", "disabled"), "busy");
+  assert.ok(refresh.props.some((prop) => prop.type === 6 && prop.name === "data-i18n-ignore"));
+});
+test("planner breadcrumb follows step changes without restoring the cached config label", () => {
+  const ast = template("../src/App.vue");
+  const crumb = find(
+    ast,
+    (node) =>
+      node.tag === "el-breadcrumb-item" && directive(node, "if") === "activePage === 'planner'"
+  );
+  assert.ok(crumb.props.some((prop) => prop.type === 6 && prop.name === "data-i18n-ignore"));
+});
 function find(node, predicate) {
   if (predicate(node)) return node;
   for (const child of node.children || []) {
@@ -141,4 +166,11 @@ test("result summary status follows actual candidates and has a distinct empty s
     tag.props.some((prop) => prop.type === 6 && prop.name === "data-i18n-ignore"),
     "Vue-owned dynamic status must be excluded from legacy DOM text caching"
   );
+  for (const name of ["planner-result-summary-band", "result-summary-grid"]) {
+    const summary = find(ast, (node) => cls(node).split(/\s+/).includes(name));
+    assert.ok(
+      summary.props.some((prop) => prop.type === 6 && prop.name === "data-i18n-ignore"),
+      "Calculated metrics must not be restored to cached initial zero/dash values"
+    );
+  }
 });

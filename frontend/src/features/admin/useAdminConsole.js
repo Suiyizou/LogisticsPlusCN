@@ -13,6 +13,11 @@ export function useAdminConsole(ports) {
   const monitoring = ref(null);
   /** @type {import("vue").Ref<import("../../types/adminOverviewTypes").AdminAuditRecord[]>} */
   const apiAuditRows = ref([]);
+  /** @type {import("vue").Ref<import("../../types/adminOverviewTypes").AdminAuditRecord[]>} */
+  const recentAuditRows = ref([]);
+  const recentAuditLoading = ref(false),
+    recentAuditLoaded = ref(false),
+    recentAuditError = ref("");
   const apiAuditPage = ref(1),
     apiAuditPageSize = ref(20),
     apiAuditTotal = ref(0);
@@ -20,7 +25,7 @@ export function useAdminConsole(ports) {
     refreshing = ref(false),
     signingIn = ref(false);
   const busy = computed(() => reading.value > 0 || refreshing.value || signingIn.value);
-  let readVersions = { overview: 0, monitoring: 0, audit: 0 };
+  let readVersions = { overview: 0, monitoring: 0, audit: 0, recentAudit: 0 };
   let epoch = 0,
     disposed = false;
   const session = useAdminSessionGuard({ currentUser, invalidate });
@@ -28,7 +33,8 @@ export function useAdminConsole(ports) {
     readVersions = {
       overview: readVersions.overview + 1,
       monitoring: readVersions.monitoring + 1,
-      audit: readVersions.audit + 1
+      audit: readVersions.audit + 1,
+      recentAudit: readVersions.recentAudit + 1
     };
     reading.value = 0;
     refreshing.value = false;
@@ -36,6 +42,10 @@ export function useAdminConsole(ports) {
     systemOverview.value = null;
     monitoring.value = null;
     apiAuditRows.value = [];
+    recentAuditRows.value = [];
+    recentAuditLoading.value = false;
+    recentAuditLoaded.value = false;
+    recentAuditError.value = "";
     apiAuditPage.value = 1;
     apiAuditPageSize.value = 20;
     apiAuditTotal.value = 0;
@@ -111,6 +121,35 @@ export function useAdminConsole(ports) {
       }
     );
   }
+  // Overview owns a fixed first-page read; the audit list owns its separate pagination.
+  async function loadRecentAudit() {
+    const context = session.capture();
+    if (context === null) return false;
+    const version = readVersions.recentAudit + 1;
+    recentAuditRows.value = [];
+    recentAuditLoading.value = true;
+    recentAuditLoaded.value = false;
+    recentAuditError.value = "";
+    try {
+      return await read(
+        "recentAudit",
+        () => services.fetchAudit({ page: 0, size: 5 }),
+        (data) => {
+          recentAuditRows.value = Array.isArray(data.items) ? data.items.slice(0, 5) : [];
+          recentAuditLoaded.value = true;
+        }
+      );
+    } catch (error) {
+      if (session.current(context) && readVersions.recentAudit === version)
+        recentAuditError.value = translate(
+          adminErrorText(error, t("admin.employee.errorFallback"))
+        );
+      throw error;
+    } finally {
+      if (session.current(context) && readVersions.recentAudit === version)
+        recentAuditLoading.value = false;
+    }
+  }
   /** @param {unknown} error */
   async function report(error) {
     await feedback.error(translate(adminErrorText(error, t("admin.employee.errorFallback"))));
@@ -134,6 +173,7 @@ export function useAdminConsole(ports) {
         loadOverview(),
         loadMonitoring(),
         loadAudit(),
+        loadRecentAudit(),
         ...ports.refreshOther()
       ]);
       if (!session.current(context)) return false;
@@ -219,6 +259,11 @@ export function useAdminConsole(ports) {
     systemOverview,
     monitoring,
     apiAuditRows,
+    recentAuditRows,
+    recentAuditLoading,
+    recentAuditLoaded,
+    recentAuditError,
+    loadRecentAudit,
     apiAuditPage,
     apiAuditPageSize,
     apiAuditTotal,

@@ -52,11 +52,15 @@ import { fetchTodayAnnouncements, markAnnouncementRead } from "./services/announ
 import { clearSession, isSessionExpired, storedToken, storedUser } from "./services/authSession";
 import { currentLocale, elementPlusLocale, t } from "./i18n";
 import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
+import { adminRouteTitle } from "./features/admin/adminNavigation.js";
 
 const route = useRoute();
 useWorkspaceTitle(() => {
   currentLocale.value;
-  if (route.meta.titleKey) return t(String(route.meta.titleKey));
+  if (route.meta.titleKey) {
+    const key = String(route.meta.titleKey);
+    return adminRouteTitle(key, currentLocale.value) || t(key);
+  }
   return t(
     route.path.startsWith("/admin")
       ? "maritime.administration"

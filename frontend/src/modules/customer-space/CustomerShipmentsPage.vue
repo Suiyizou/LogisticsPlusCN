@@ -5,6 +5,10 @@ import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.
 import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { wt } from "../../components/workspace/workspaceCopy";
 import { useCustomerModuleApi } from "./customerContext.js";
+import {
+  compactShipmentDate,
+  compactShipmentId
+} from "../../features/shipments/compactShipmentPresentation.js";
 const api = useCustomerModuleApi();
 const { t } = useI18n();
 type Shipment = {
@@ -82,11 +86,27 @@ onScopeDispose(() => {
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.shipmentId">
-            <td>{{ row.shipmentId }}</td>
-            <td>{{ row.referenceNo || "—" }}</td>
+            <td>
+              <span class="customer-compact-id" :title="row.shipmentId">{{
+                compactShipmentId(row.shipmentId)
+              }}</span>
+            </td>
+            <td>
+              <span class="customer-compact-reference" :title="row.referenceNo || '—'">{{
+                row.referenceNo || "—"
+              }}</span>
+            </td>
             <td>{{ row.carrier || "—" }}</td>
-            <td>{{ row.trackingStatus || "—" }}</td>
-            <td>{{ row.updatedAt || "—" }}</td>
+            <td>
+              <span class="customer-compact-status" :title="row.trackingStatus || '—'">{{
+                row.trackingStatus || "—"
+              }}</span>
+            </td>
+            <td>
+              <time :datetime="row.updatedAt || undefined" :title="row.updatedAt || '—'">{{
+                compactShipmentDate(row.updatedAt)
+              }}</time>
+            </td>
           </tr>
           <tr v-if="!busy && !rows.length">
             <td colspan="5"><WorkspaceEmptyState :title="t('customerSurface.empty')" /></td>
@@ -117,6 +137,19 @@ section {
 }
 .table-scroll {
   overflow: auto;
+}
+.customer-compact-id,
+.customer-compact-reference,
+.customer-compact-status {
+  display: block;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.customer-compact-id {
+  max-width: 150px;
+  font-variant-numeric: tabular-nums;
 }
 table {
   border-collapse: collapse;

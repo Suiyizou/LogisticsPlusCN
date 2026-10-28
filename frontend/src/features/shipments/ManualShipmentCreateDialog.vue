@@ -31,7 +31,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
         @keydown="onDialogKeydown"
       >
         <section
-          class="customer-code-dialog customer-create-dialog manual-shipment-dialog workspace-modal--wide"
+          class="business-comp-dialog customer-code-dialog customer-create-dialog manual-shipment-dialog workspace-modal--wide"
           ref="dialogElement"
           tabindex="-1"
           role="dialog"
@@ -63,7 +63,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
                   <label>
                     <span>{{ t("customers.customer") }} <i class="required-star">*</i></span>
                     <el-select
-                      popper-class="business-select-popper workspace-select-popper"
+                      popper-class="business-comp-select business-select-popper workspace-select-popper"
                       v-model="workflow.shipmentCreateCustomerId"
                       filterable
                       :disabled="workflow.entryBusy || workflow.creatingShipment"
@@ -105,7 +105,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
                       v-model="workflow.shipmentCreateForm.carrier"
                       :disabled="workflow.entryBusy || workflow.creatingShipment"
                       class="business-select"
-                      popper-class="business-select-popper"
+                      popper-class="business-comp-select business-select-popper"
                     >
                       <el-option
                         v-for="carrier in TRACKING_CARRIERS"
@@ -121,7 +121,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
                       v-model="workflow.shipmentCreateForm.referenceType"
                       :disabled="workflow.entryBusy || workflow.creatingShipment"
                       class="business-select"
-                      popper-class="business-select-popper"
+                      popper-class="business-comp-select business-select-popper"
                     >
                       <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
                       <el-option

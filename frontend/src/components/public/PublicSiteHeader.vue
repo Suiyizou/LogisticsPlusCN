@@ -2,6 +2,7 @@
   <div
     ref="region"
     class="maritime-navigation"
+    :class="{ 'is-detail': route.path !== '/' }"
     @pointerenter="clearClose"
     @pointerleave="scheduleClose"
     @keydown.esc="escape"
@@ -14,7 +15,7 @@
       </div>
     </div>
     <header class="maritime-header maritime-wrap">
-      <BrandLockup href="/" />
+      <PublicBrand href="/" :company="route.path !== '/'" />
       <nav class="maritime-primary-nav" :aria-label="t('publicSite.navLabel')">
         <button
           ref="trigger"
@@ -33,9 +34,10 @@
         ><a href="/planner/config">{{ t("publicSite.navPlanning") }}</a>
       </nav>
       <div class="maritime-header__actions">
-        <LanguageSwitcher /><a class="maritime-button maritime-button--navy" href="/workbenches"
-          >{{ t(currentUser ? "publicSite.navOpen" : "publicSite.navLogin")
-          }}<span aria-hidden="true">↗</span></a
+        <LanguageSwitcher /><a
+          class="maritime-button maritime-button--primary"
+          href="/workbenches"
+          >{{ t("publicSite.navOpen") }}</a
         ><button
           type="button"
           ref="mobileTrigger"
@@ -63,7 +65,8 @@
 </template>
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, useId } from "vue";
-import BrandLockup from "../brand/BrandLockup.vue";
+import PublicBrand from "./PublicBrand.vue";
+import { useRoute } from "vue-router";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
 import PublicMegaMenu from "./PublicMegaMenu.vue";
 import { t } from "../../i18n";
@@ -74,6 +77,7 @@ defineProps<{
 }>();
 const open = ref(false),
   compact = ref(false);
+const route = useRoute();
 const region = ref<HTMLElement | null>(null),
   trigger = ref<HTMLButtonElement | null>(null);
 const mobileTrigger = ref<HTMLButtonElement | null>(null);

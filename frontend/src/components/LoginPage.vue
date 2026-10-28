@@ -5,16 +5,18 @@
     data-i18n-ignore
   >
     <section class="app-login-photo" :aria-label="t('maritime.loginBrandAria')">
-      <BrandLockup inverse />
+      <PublicBrand inverse company />
       <div>
-        <span class="app-login-eyebrow">{{ t("maritime.loginEyebrow") }}</span>
         <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
         <p>{{ t("maritime.loginHeroDescription") }}</p>
       </div>
     </section>
     <section class="app-login-side">
       <header class="app-login-top">
-        <a href="/">← {{ t("maritime.returnHome") }}</a
+        <PublicBrand class="app-login-mobile-brand" company compact /><a
+          class="app-login-back"
+          href="/"
+          >‹ {{ t("maritime.returnHome") }}</a
         ><LanguageSwitcher />
       </header>
       <form class="app-login-form" :aria-busy="loading" @submit.prevent="submit">
@@ -200,7 +202,7 @@
 
 <script setup>
 import { computed, reactive, ref } from "vue";
-import BrandLockup from "./brand/BrandLockup.vue";
+import PublicBrand from "./public/PublicBrand.vue";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { useI18n } from "vue-i18n";
 import { loginAdmin } from "../services/adminApi";

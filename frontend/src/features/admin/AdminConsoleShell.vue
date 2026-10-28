@@ -1,7 +1,22 @@
 <script setup lang="ts">
 import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import BrandLockup from "../../components/brand/BrandLockup.vue";
-import { useId } from "vue";
+import { useId, ref, watch } from "vue";
+import { useMediaQuery } from "../../composables/useMediaQuery.js";
+import LanguageSwitcher from "../../components/LanguageSwitcher.vue";
+import {
+  Bell,
+  Refresh,
+  User,
+  DataAnalysis,
+  Document,
+  OfficeBuilding,
+  Switch,
+  Files,
+  Monitor,
+  Folder,
+  Setting
+} from "@element-plus/icons-vue";
 import { RouterLink } from "vue-router";
 import type { WorkspaceUser } from "../../types/workspace";
 import type { AdminConsoleCopy, AdminNavGroup, AdminPageMeta } from "../../types/adminShell";
@@ -31,6 +46,36 @@ const emit = defineEmits<{
   "open-announcements": [];
 }>();
 const navId = useId();
+const isMobile = useMediaQuery("(max-width: 760px)");
+const expandedGroups = ref(new Set(props.navGroups.map((group) => group.key)));
+const navIcons = {
+  overview: DataAnalysis,
+  audit: Document,
+  employees: User,
+  platform: OfficeBuilding,
+  handovers: Switch,
+  tickets: Files,
+  devices: Monitor,
+  files: Folder,
+  announcements: Bell,
+  system: Setting
+};
+function toggleGroup(key: string) {
+  const next = new Set(expandedGroups.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedGroups.value = next;
+  emit("toggle", key);
+}
+watch(
+  () => props.activePage,
+  () => {
+    const group = props.navGroups.find((group) =>
+      group.children.some((item) => item.key === props.activePage)
+    );
+    if (group) expandedGroups.value = new Set([...expandedGroups.value, group.key]);
+  }
+);
 function refresh() {
   if (!props.busy) emit("refresh");
 }
@@ -60,9 +105,9 @@ function refresh() {
             class="admin-nav-group-trigger"
             :disabled="busy"
             type="button"
-            :aria-expanded="expandedGroup === group.key"
+            :aria-expanded="isMobile || expandedGroups.has(group.key)"
             :aria-controls="`${navId}-${group.key}`"
-            @click="emit('toggle', group.key)"
+            @click="toggleGroup(group.key)"
           >
             <span>{{ group.no }}</span>
             <b>{{ group.label }}</b>
@@ -71,7 +116,7 @@ function refresh() {
           </button>
           <Transition name="admin-nav-fold">
             <div
-              v-if="expandedGroup === group.key"
+              v-if="isMobile || expandedGroups.has(group.key)"
               :id="`${navId}-${group.key}`"
               class="admin-nav-children"
             >
@@ -85,7 +130,9 @@ function refresh() {
                 :aria-current="activePage === item.key ? 'page' : undefined"
                 @click="emit('select', item.key)"
               >
-                <span>{{ item.no }}</span>
+                <el-icon
+                  ><component :is="navIcons[item.key as keyof typeof navIcons] || Document"
+                /></el-icon>
                 <b>{{ item.label }}</b>
                 <small>{{ item.description }}</small>
               </button>
@@ -96,27 +143,36 @@ function refresh() {
     </aside>
 
     <main class="admin-console-main">
+      <header class="admin-app-bar">
+        <RouterLink to="/workbenches">{{ copy.switchWorkbench }}</RouterLink
+        ><span aria-hidden="true">/</span><strong>{{ meta.title }}</strong>
+        <div class="admin-app-bar-actions">
+          <LanguageSwitcher /><button
+            type="button"
+            class="admin-system-message-button"
+            :aria-label="systemMessages"
+            @click="emit('open-announcements')"
+          >
+            <el-icon><Bell /></el-icon
+            ><em v-if="announcementCount">{{ announcementCount }}</em></button
+          ><span class="admin-app-avatar"
+            ><el-icon><User /></el-icon></span
+          ><span class="admin-app-account"
+            ><strong>{{ displayName }}</strong
+            ><small>{{ copy.roleLabels[currentUser.role] || currentUser.role }}</small></span
+          ><button type="button" @click="emit('logout')">{{ copy.logout }}</button>
+        </div>
+      </header>
       <WorkspacePageHeader
-        class="admin-console-topbar"
+        class="admin-console-page-head"
         :title="meta.title"
         :eyebrow="meta.eyebrow"
         :description="meta.subtitle"
         ><template #actions
           ><div class="admin-top-actions">
-            <button
-              class="admin-system-message-button"
-              type="button"
-              @click="emit('open-announcements')"
-            >
-              {{ systemMessages }}
-              <em v-if="announcementCount > 0">{{
-                announcementCount > 99 ? "99+" : announcementCount
-              }}</em>
+            <button type="button" :disabled="busy" data-i18n-ignore @click="refresh">
+              <el-icon><Refresh /></el-icon>{{ busy ? copy.refreshing : copy.refresh }}
             </button>
-            <button type="button" :disabled="busy" @click="refresh">
-              {{ busy ? copy.refreshing : copy.refresh }}
-            </button>
-            <button type="button" @click="emit('logout')">{{ copy.logout }}</button>
           </div></template
         ></WorkspacePageHeader
       >

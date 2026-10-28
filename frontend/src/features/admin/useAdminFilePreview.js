@@ -15,15 +15,27 @@ export function useAdminFilePreview({
   createObjectUrl,
   revokeObjectUrl,
   t,
-  handled
+  handled,
+  downloadFile
 }) {
   /** @type {import("../../types/adminFiles").AdminFilePreviewState} */
-  const empty = { open: false, kind: "", name: "", url: "", text: "", message: "", isError: false };
+  const empty = {
+    open: false,
+    kind: "",
+    name: "",
+    url: "",
+    pdfBlob: null,
+    text: "",
+    message: "",
+    isError: false
+  };
   const filePreviewDialog = reactive({ ...empty });
   const reading = ref(false);
   let version = 0;
   /** @type {string | number | null} */
   let selectedId = null;
+  /** @type {import("../../types/adminFiles").AdminShipmentFile | null} */
+  let selectedFile = null;
   const session = useAdminSessionGuard({ currentUser, invalidate: closeFilePreviewDialog });
   function closeFilePreviewDialog() {
     version++;
@@ -31,6 +43,7 @@ export function useAdminFilePreview({
     Object.assign(filePreviewDialog, empty);
     reading.value = false;
     selectedId = null;
+    selectedFile = null;
   }
   /** @param {string | number} id */
   function closeDeletedFile(id) {
@@ -45,6 +58,7 @@ export function useAdminFilePreview({
     closeFilePreviewDialog();
     const request = version;
     selectedId = id;
+    selectedFile = { ...file };
     reading.value = true;
     Object.assign(filePreviewDialog, {
       open: true,
@@ -56,7 +70,11 @@ export function useAdminFilePreview({
       const blob = await fetchBlob(id);
       if (!current()) return false;
       const kind = adminFilePreviewKind(name, blob.type);
-      if (kind === "pdf" || kind === "image") {
+      if (kind === "pdf") {
+        filePreviewDialog.pdfBlob = blob;
+        filePreviewDialog.kind = kind;
+        filePreviewDialog.message = "";
+      } else if (kind === "image") {
         filePreviewDialog.url = createObjectUrl(blob);
         filePreviewDialog.kind = kind;
         filePreviewDialog.message = t("admin.files.previewDownloadTip");
@@ -94,6 +112,10 @@ export function useAdminFilePreview({
   return {
     filePreviewDialog,
     reading,
+    downloadPreviewFile: async () => {
+      if (session.capture() === null || !filePreviewDialog.open || !selectedFile) return false;
+      return downloadFile ? await downloadFile(selectedFile) : false;
+    },
     handlePreviewShipmentFile,
     closeFilePreviewDialog,
     closeDeletedFile

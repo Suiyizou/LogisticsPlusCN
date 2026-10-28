@@ -65,3 +65,52 @@ test("versioned real static CSS and modules revalidate, including their ETag 304
     assert.equal(unchanged.headers.get("cache-control"), "no-cache, must-revalidate");
   }
 });
+
+test("PDF.js serves only the pinned browser resources with correct MIME and unchanged CSP", async (context) => {
+  const router = createStaticRouter({
+    publicDir: fileURLToPath(new URL("../public/", import.meta.url))
+  });
+  const server = createServer((request, response) => {
+    void router.serveStatic(request, response).catch((error) => {
+      response.writeHead(error.status || 500);
+      response.end(error.message);
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => new Promise((resolve) => server.close(resolve)));
+  const origin = `http://127.0.0.1:${server.address().port}/vendor/pdfjs/6.4.299/`;
+  for (const [path, mime] of [
+    ["legacy/build/pdf.mjs", "text/javascript"],
+    ["legacy/build/pdf.worker.mjs", "text/javascript"],
+    ["cmaps/Adobe-GB1-UCS2.bcmap", "application/octet-stream"],
+    ["standard_fonts/LiberationSans-Regular.ttf", "font/ttf"],
+    ["wasm/openjpeg_nowasm_fallback.js", "text/javascript"],
+    ["wasm/jbig2_nowasm_fallback.js", "text/javascript"],
+    ["wasm/openjpeg.wasm", "application/wasm"],
+    ["iccs/CGATS001Compat-v2-micro.icc", "application/vnd.iccprofile"]
+  ]) {
+    const response = await fetch(origin + path);
+    assert.equal(response.status, 200, path);
+    assert.ok(response.headers.get("content-type").startsWith(mime), path);
+    assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.doesNotMatch(
+      response.headers.get("content-security-policy"),
+      /unsafe-eval|unsafe-inline/
+    );
+    await response.arrayBuffer();
+  }
+  for (const path of [
+    "../6.4.300/build/pdf.mjs",
+    "package.json",
+    "types/src/pdf.d.ts",
+    "web/pdf_viewer.mjs",
+    "wasm/quickjs-eval.js",
+    "cmaps/%2fpackage.json",
+    "standard_fonts/../../../package.json"
+  ]) {
+    const response = await fetch(origin + path);
+    assert.equal(response.status, 404, path);
+    await response.arrayBuffer();
+  }
+});

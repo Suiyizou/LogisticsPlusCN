@@ -206,9 +206,16 @@ test("module pages project production refs, UI setters and actions without copyi
   assert.equal(h.operations.list.shipmentCustomerFilter.value, "C");
   pages.detail.state.selectedCustomerIds = ["C"];
   assert.deepEqual(selectedCustomerIds.value, ["C"]);
-  const table = { clearSelection: () => {} };
+  let clearedSelection = 0;
+  const table = {
+    clearSelection: () => {
+      clearedSelection += 1;
+    }
+  };
   pages.list.actions.setTableRef(table);
   assert.equal(h.operations.list.shipmentTableRef.value.clearSelection, table.clearSelection);
+  pages.list.actions.clearShipmentSelection();
+  assert.equal(clearedSelection, 1, "the visible cancel-selection action uses the live table");
   const input = { tagName: "INPUT", value: "test" };
   pages.listDialogs.actions.setBatchFileInput(input);
   assert.equal(h.operations.batch.batchTrackFileInput.value.value, "test");

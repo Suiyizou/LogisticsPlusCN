@@ -99,6 +99,7 @@ export interface AdminFilePreviewPorts {
   revokeObjectUrl: (url: string) => void;
   t: AdminWorkflowPorts["t"];
   handled: (error: unknown) => void;
+  downloadFile?: (file: AdminShipmentFile) => Promise<unknown>;
 }
 
 export type AdminFilePreviewKind = "" | "pdf" | "image" | "text" | "fallback";
@@ -107,6 +108,7 @@ export interface AdminFilePreviewState {
   kind: AdminFilePreviewKind;
   name: string;
   url: string;
+  pdfBlob: Blob | null;
   text: string;
   message: string;
   isError: boolean;

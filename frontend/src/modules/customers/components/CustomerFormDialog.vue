@@ -9,7 +9,7 @@
           @keydown="onDialogKeydown"
         >
           <section
-            class="customer-code-dialog customer-create-dialog workspace-modal--form"
+            class="business-comp-dialog customer-code-dialog customer-create-dialog workspace-modal--form"
             ref="dialogElement"
             tabindex="-1"
             role="dialog"
@@ -79,7 +79,7 @@
                     v-model="createForm.partyRole"
                     :disabled="creating"
                     class="business-select"
-                    popper-class="business-select-popper"
+                    popper-class="business-comp-select business-select-popper"
                   >
                     <el-option value="SHIPPER" :label="t('customers.roleShipper')" />
                     <el-option value="CONSIGNEE" :label="t('customers.roleConsignee')" />

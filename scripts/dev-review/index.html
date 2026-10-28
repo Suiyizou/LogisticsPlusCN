@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>逐页检查 · logisticspluscn</title>
+    <link rel="stylesheet" href="/fonts/brand-fonts.css" />
+    <link rel="stylesheet" href="/hub.css" />
+    <script type="module" src="/hub.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#pages"
+        ><b>LP</b><span>logisticspluscn<small>本地逐页检查</small></span></a
+      >
+      <p class="sidebar-label">检查范围</p>
+      <nav id="groups" aria-label="检查分组"></nav>
+      <a class="design-nav" href="#designs">整页 UI 设计参照 <span>↗</span></a>
+      <p class="sidebar-note">开发专用索引<br />链接现有页面，不改变权限</p>
+    </aside>
+    <main id="pages">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">LOCAL REVIEW WORKSPACE</p>
+          <h1>逐页打开，逐项核对</h1>
+          <p>真实页面与整页设计分开查看。记录你已检查的页面、弹窗和异常，便于逐项改进。</p>
+        </div>
+        <button id="export" type="button">导出检查记录 ↓</button>
+      </header>
+      <section class="settings" aria-label="本地运行环境">
+        <label
+          >预览环境<select id="environment">
+            <option value="http://127.0.0.1:18088">SQL 隔离预览 · 18088</option>
+            <option value="http://127.0.0.1:51221">现有对照环境 · 51221</option>
+            <option value="custom">其他本地地址</option>
+          </select></label
+        >
+        <label class="base-field"
+          >页面地址<input
+            id="base-url"
+            type="url"
+            value="http://127.0.0.1:18088"
+            aria-describedby="environment-note"
+        /></label>
+        <a id="open-login" class="button" target="_blank" rel="noopener noreferrer"
+          >打开登录入口 ↗</a
+        >
+        <p id="environment-note">
+          在新标签正常登录所需账号。索引不读取登录凭据、不自动提交业务操作；环境是否就绪以实际页面为准。
+        </p>
+      </section>
+      <details class="records">
+        <summary>
+          真实记录入口 <span id="records-summary">未加载指定记录，可直接打开列表</span>
+        </summary>
+        <div>
+          <label>客户 ID<input id="customer-id" autocomplete="off" /></label
+          ><label>票单 ID<input id="shipment-id" autocomplete="off" /></label
+          ><label>追踪参考号<input id="tracking-number" autocomplete="off" /></label
+          ><label
+            >船司<select id="tracking-carrier">
+              <option>COSCO</option>
+              <option>CMA</option>
+              <option>MAERSK</option>
+              <option>HAPAG_LLOYD</option>
+              <option>MSC</option>
+              <option>OOCL</option>
+            </select></label
+          ><label
+            >类型<select id="tracking-type">
+              <option>BOOKING</option>
+              <option>CONTAINER</option>
+              <option>BILLOFLADING</option>
+            </select></label
+          ><button id="refresh-records" type="button">重载本地记录</button>
+        </div>
+        <p>
+          可由本地运行准备步骤提供有权限的真实 ID；没有 ID 时，详情卡片先打开对应列表。此区的 ID
+          只保留在当前页面内存中，不写入检查导出。
+        </p>
+      </details>
+      <section class="progress" aria-label="检查进度">
+        <div><b id="total">—</b><span>检查项（含说明）</span></div>
+        <div><b id="checked">0</b><span>正常态已查</span></div>
+        <div><b id="issues">0</b><span>发现问题</span></div>
+        <div><b id="pending">—</b><span>待查 / 缺数据或条件</span></div>
+      </section>
+      <p id="matrix-note" class="matrix-note">
+        45主视图与D01–D35条件组分别映射，不按入口数量宣称验收完成。
+      </p>
+      <div class="toolbar">
+        <label class="search"
+          >搜索页面、路径或操作<input
+            id="search"
+            type="search"
+            placeholder="例如：票单、弹窗、/admin/files" /></label
+        ><label
+          >角色<select id="role">
+            <option value="">所有适用角色</option>
+            <option value="PUBLIC">公开 / 未登录</option>
+            <option value="ADMIN">管理员</option>
+            <option value="BUSINESS">业务员</option>
+            <option value="OVERSEA_AGENT">内部海外代理</option>
+            <option value="EMPLOYEE">其他员工</option>
+            <option value="CUSTOMER">客户</option>
+            <option value="CUSTOMER_AGENT">兼容代理客户（CUSTOMER + OVERSEA_AGENT）</option>
+          </select></label
+        ><label
+          >入口类型<select id="kind">
+            <option value="">全部类型</option>
+            <option value="page">页面</option>
+            <option value="detail">详情</option>
+            <option value="modal">弹窗 / 抽屉</option>
+            <option value="tab">页内标签</option>
+            <option value="panel">展开区</option>
+            <option value="state">认证 / 状态</option>
+            <option value="compatibility">兼容链接</option>
+          </select></label
+        ><label
+          >检查状态<select id="status-filter">
+            <option value="">全部状态</option>
+            <option value="pending">待检查</option>
+            <option value="normal">已检查正常态</option>
+            <option value="abnormal">已检查异常态</option>
+            <option value="missing-data">缺数据</option>
+            <option value="missing-file">缺文件</option>
+            <option value="issue">有问题</option>
+            <option value="blocked">条件不足</option>
+            <option value="dormant">休眠 UI</option>
+          </select></label
+        ><label
+          >入口状态<select id="availability-filter">
+            <option value="">全部说明</option>
+            <option value="standard">现行入口</option>
+            <option value="preview">设计预览</option>
+            <option value="dormant">休眠 UI</option>
+            <option value="host-state">宿主内部状态</option>
+          </select></label
+        >
+      </div>
+      <p id="result-count" class="result-count" aria-live="polite">正在读取真实路由与检查项…</p>
+      <div id="items"></div>
+      <p id="empty" hidden>没有匹配的检查项。</p>
+      <section class="scope-note">
+        <h2>检查边界</h2>
+        <p>
+          列表、详情和页内弹窗分别记录可达、非空正常态、子视图、详情/弹窗、角色、桌面、窄屏及证据。没有记录标“缺数据”，有历史元数据但没有原附件标“缺文件”；休眠UI无打开按钮、不计可达，设计预览不冒充执行后端已接通。异常态检查不能替代有数据正常态。
+        </p>
+        <p id="disabled-modules"></p>
+        <p>
+          建议各项核对 1440 桌面与 375
+          手机、中英语言、键盘焦点、下拉可读性、加载/空/错误反馈。检查结果保存在本检查索引自己的浏览器存储中；打开页面不会自动标记通过。
+        </p>
+      </section>
+      <section id="designs" class="designs">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">FULL-PAGE UI COMPOSITIONS</p>
+            <h2>整页设计参照</h2>
+          </div>
+          <button id="refresh-designs" type="button">刷新设计图</button>
+        </div>
+        <p>此处显示完整界面的设计构图，用于比较布局、排版和控件；图片不是实际可操作的业务页面。</p>
+        <div id="design-gallery"></div>
+      </section>
+      <footer>本地开发工具 · 不随前端产品构建发布 · 不保存账号凭据</footer>
+    </main>
+  </body>
+</html>

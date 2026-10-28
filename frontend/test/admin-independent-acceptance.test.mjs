@@ -119,7 +119,14 @@ test("independent acceptance: administrator initialization starts all owned read
     h.impl[name] = () => waits[name].promise;
   }
   const refreshing = h.console.refreshDashboard(false, false);
-  assert.equal(h.calls.length, 6);
+  assert.equal(h.calls.length, 7);
+  assert.deepEqual(
+    h.calls.filter((call) => call[0] === "fetchAudit").map((call) => call[1]),
+    [
+      { page: 0, size: 20 },
+      { page: 0, size: 5 }
+    ]
+  );
   assert.equal(h.console.busy.value, true);
   assert.equal(h.business.busy.value, true);
   assert.equal(await h.business.handleDeletePlatformCustomer({ customerId: 0 }), false);
@@ -134,6 +141,8 @@ test("independent acceptance: administrator initialization starts all owned read
   assert.equal(await refreshing, false);
   assert.equal(h.console.systemOverview.value, null);
   assert.deepEqual(h.console.apiAuditRows.value, []);
+  assert.deepEqual(h.console.recentAuditRows.value, []);
+  assert.equal(h.console.recentAuditLoading.value, false);
   assert.deepEqual(h.business.platformCustomers.value, []);
   assert.deepEqual(h.business.adminTickets.value, []);
   assert.equal(h.console.busy.value, false);

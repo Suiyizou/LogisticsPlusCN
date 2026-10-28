@@ -7,7 +7,7 @@
       width="min(940px, 94vw)"
       :close-on-click-modal="false"
       :close-on-press-escape="!importingAgents"
-      class="square-dialog agent-batch-dialog workspace-el-dialog"
+      class="square-dialog agent-batch-dialog workspace-el-dialog business-comp-dialog"
       :show-close="!importingAgents"
     >
       <div class="agent-batch-intro">

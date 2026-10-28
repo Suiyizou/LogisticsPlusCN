@@ -29,13 +29,16 @@
         :current-user="currentUser"
         @logout="handleLogout"
       />
-      <div v-else class="app-shell" :class="{ 'is-page-leaving': pageLeaving }">
+      <div
+        v-else
+        class="app-shell"
+        :class="{ 'is-page-leaving': pageLeaving, 'is-sidebar-collapsed': sidebarCollapsed }"
+      >
         <header class="topbar">
-          <BrandLockup href="/workbenches" compact />
           <el-breadcrumb separator="/" class="top-breadcrumb">
             <el-breadcrumb-item>工作台</el-breadcrumb-item>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="activePage === 'planner'">{{
+            <el-breadcrumb-item v-if="activePage === 'planner'" data-i18n-ignore>{{
               activePlannerStepLabel
             }}</el-breadcrumb-item>
           </el-breadcrumb>
@@ -753,92 +756,117 @@
 
                   <section v-else key="results-view" class="planner-section">
                     <WorkspacePageHeader
+                      class="planner-results-head"
                       :title="wt('resultsTitle')"
                       :description="wt('resultsHint')"
                     />
                     <section class="panel result-summary-panel">
-                      <WorkspacePageHeader compact class="section-head"
-                        ><template #title>{{ wt("calculationSummary") }}</template
-                        ><template #eyebrow>Calculation Summary</template
-                        ><template #actions
-                          ><el-tag :type="resultSummary.statusTone" data-i18n-ignore effect="light">
-                            {{ resultSummary.statusText }}
-                          </el-tag></template
-                        ></WorkspacePageHeader
-                      >
-                      <div class="result-summary-grid">
-                        <div class="summary-card success">
-                          <span>{{ tr("绿色合格") }}</span>
-                          <b>{{ resultSummary.green }}</b>
-                          <small>{{ tr("可直接输出") }}</small>
+                      <div class="planner-result-summary-band" data-i18n-ignore>
+                        <div>
+                          <span>{{ wt("compliantPlans") }}</span
+                          ><strong
+                            >{{ resultSummary.green }}<small>{{ wt("plansUnit") }}</small></strong
+                          >
                         </div>
-                        <div class="summary-card warning">
-                          <span>{{ tr("黄色预警") }}</span>
-                          <b>{{ resultSummary.yellow }}</b>
-                          <small>{{ tr("允许微调") }}</small>
+                        <div>
+                          <span>{{ ui("result.currentPlanBoxes") }}</span
+                          ><strong
+                            >{{ selectedEvaluation?.boxes || "—"
+                            }}<small>{{ wt("boxesUnit") }}</small></strong
+                          >
                         </div>
-                        <div class="summary-card warning">
-                          <span>{{ ui("result.estimatedCandidates") }}</span>
-                          <b>{{ resultSummary.estimated }}</b>
-                          <small>{{ ui("result.verificationIncomplete") }}</small>
+                        <div>
+                          <span>{{ wt("spaceUtilization") }}</span
+                          ><strong
+                            >{{
+                              selectedEvaluation
+                                ? fmt(evaluationAverageFill(selectedEvaluation), 1)
+                                : "—"
+                            }}<small>%</small></strong
+                          >
                         </div>
-                        <div class="summary-card danger">
-                          <span>{{ tr("红色拦截") }}</span>
-                          <b>{{ resultSummary.red }}</b>
-                          <small>{{ tr("不可输出") }}</small>
+                        <div>
+                          <span>{{ wt("totalWeight") }}</span
+                          ><strong>{{ fmt(cargoTotalWeightKg, 0) }}<small>kg</small></strong>
                         </div>
-                        <div class="summary-card muted">
-                          <span>{{ tr("不可装") }}</span>
-                          <b>{{ resultSummary.oversize }}</b>
-                          <small>{{ tr("尺寸/承载失败") }}</small>
-                        </div>
-                        <div class="summary-card primary">
-                          <span>{{ ui("result.currentPlanBoxes") }}</span>
-                          <b>{{ resultSummary.boxesText }}</b>
-                          <small>{{ trPlanSummary(resultSummary.containerName) }}</small>
-                        </div>
-                        <div class="summary-card freight">
-                          <span>{{ resultSummary.freightLabel }}</span>
-                          <b>{{ resultSummary.freightText }}</b>
-                          <small>{{ ui("result.freightFormula") }}</small>
+                        <div>
+                          <span>{{ wt("planStatus") }}</span
+                          ><el-tag :type="resultSummary.statusTone" data-i18n-ignore>{{
+                            resultSummary.statusText
+                          }}</el-tag>
                         </div>
                       </div>
-                      <details class="planner-explanation-disclosure">
-                        <summary>{{ ui("result.optimizationTitle") }}</summary>
-                        <div v-if="resultOptimizationRows.length" class="optimization-explainer">
-                          <div class="optimization-head">
-                            <span>{{ ui("result.optimizationEyebrow") }}</span>
-                            <strong>{{ ui("result.optimizationTitle") }}</strong>
-                            <small>{{ ui("result.optimizationBasis") }}</small>
+                      <details class="planner-result-details">
+                        <summary>{{ wt("verificationAndCost") }}</summary>
+                        <div class="result-summary-grid" data-i18n-ignore>
+                          <div class="summary-card success">
+                            <span>{{ tr("绿色合格") }}</span>
+                            <b>{{ resultSummary.green }}</b>
+                            <small>{{ tr("可直接输出") }}</small>
                           </div>
-                          <div class="optimization-list">
-                            <div
-                              v-for="row in resultOptimizationRows"
-                              :key="row.key"
-                              class="optimization-row"
-                            >
-                              <span>{{ row.label }}</span>
-                              <b>{{ row.value }}</b>
-                              <small>{{ row.detail }}</small>
-                            </div>
+                          <div class="summary-card warning">
+                            <span>{{ tr("黄色预警") }}</span>
+                            <b>{{ resultSummary.yellow }}</b>
+                            <small>{{ tr("允许微调") }}</small>
                           </div>
-                          <div v-if="resultMixedHoldRows.length" class="optimization-holds">
-                            <div v-for="row in resultMixedHoldRows" :key="row.key">
-                              <span>{{ row.label }}</span>
-                              <b>{{ row.value }}</b>
-                              <small>{{ row.detail }}</small>
-                            </div>
+                          <div class="summary-card warning">
+                            <span>{{ ui("result.estimatedCandidates") }}</span>
+                            <b>{{ resultSummary.estimated }}</b>
+                            <small>{{ ui("result.verificationIncomplete") }}</small>
+                          </div>
+                          <div class="summary-card danger">
+                            <span>{{ tr("红色拦截") }}</span>
+                            <b>{{ resultSummary.red }}</b>
+                            <small>{{ tr("不可输出") }}</small>
+                          </div>
+                          <div class="summary-card muted">
+                            <span>{{ tr("不可装") }}</span>
+                            <b>{{ resultSummary.oversize }}</b>
+                            <small>{{ tr("尺寸/承载失败") }}</small>
+                          </div>
+                          <div class="summary-card primary">
+                            <span>{{ ui("result.currentPlanBoxes") }}</span>
+                            <b>{{ resultSummary.boxesText }}</b>
+                            <small>{{ trPlanSummary(resultSummary.containerName) }}</small>
+                          </div>
+                          <div class="summary-card freight">
+                            <span>{{ resultSummary.freightLabel }}</span>
+                            <b>{{ resultSummary.freightText }}</b>
+                            <small>{{ ui("result.freightFormula") }}</small>
                           </div>
                         </div>
+                        <details class="planner-explanation-disclosure">
+                          <summary>{{ ui("result.optimizationTitle") }}</summary>
+                          <div v-if="resultOptimizationRows.length" class="optimization-explainer">
+                            <div class="optimization-head">
+                              <span>{{ ui("result.optimizationEyebrow") }}</span>
+                              <strong>{{ ui("result.optimizationTitle") }}</strong>
+                              <small>{{ ui("result.optimizationBasis") }}</small>
+                            </div>
+                            <div class="optimization-list">
+                              <div
+                                v-for="row in resultOptimizationRows"
+                                :key="row.key"
+                                class="optimization-row"
+                              >
+                                <span>{{ row.label }}</span>
+                                <b>{{ row.value }}</b>
+                                <small>{{ row.detail }}</small>
+                              </div>
+                            </div>
+                            <div v-if="resultMixedHoldRows.length" class="optimization-holds">
+                              <div v-for="row in resultMixedHoldRows" :key="row.key">
+                                <span>{{ row.label }}</span>
+                                <b>{{ row.value }}</b>
+                                <small>{{ row.detail }}</small>
+                              </div>
+                            </div>
+                          </div>
+                        </details>
                       </details>
                     </section>
                     <section class="panel visual-panel">
-                      <WorkspacePageHeader compact class="section-head"
-                        ><template #title>
-                          {{ trContainerName(selectedContainer?.name || "请选择箱型") }} ·
-                          {{ wt("holdNumber", { index: selectedBoxIndex }) }} </template
-                        ><template #eyebrow>Interactive 3D Packing</template></WorkspacePageHeader
-                      >
+                      <h2 class="sr-only">{{ wt("visualization") }}</h2>
                       <ContainerScene
                         :container="selectedContainer"
                         :placements="selectedPlacements"
@@ -900,101 +928,144 @@
                           </div></template
                         ></WorkspacePageHeader
                       >
-                      <div class="container-grid">
-                        <el-button
-                          v-for="evaluation in sortedEvaluations"
-                          :key="evaluation.container.id"
-                          :class="{
-                            active: selectedContainerId === evaluation.container.id,
-                            best: result?.bestContainerId === evaluation.container.id,
-                            'balance-blocked': evaluation.fitStatus === 'balance-blocked',
-                            unavailable: evaluation.fitStatus === 'oversize'
-                          }"
-                          class="container-card"
-                          text
-                          :title="evaluationHint(evaluation)"
-                          @click="selectContainer(evaluation.container.id)"
-                        >
-                          <span class="container-icon">{{
-                            containerIcon(evaluation.container.name)
-                          }}</span>
-                          <mark
-                            v-if="result?.bestContainerId === evaluation.container.id"
-                            class="container-recommend-mark"
-                            >{{ ui("result.currentBestMark") }}</mark
-                          >
-                          <strong>{{ evaluationCardTitle(evaluation) }}</strong>
-                          <small>{{ evaluationCardSubtitle(evaluation) }}</small>
-                          <em class="freight-cost">{{ evaluationFreightText(evaluation) }}</em>
-                          <small class="utilization-line">{{
-                            evaluationCardMetric(evaluation)
-                          }}</small>
-                          <b
-                            v-if="evaluationCardStatus(evaluation)"
-                            :class="['fit-status', evaluation.fitStatus || 'fit']"
-                            >{{ evaluationCardStatus(evaluation) }}</b
-                          >
-                        </el-button>
+                      <div class="planner-comparison-scroll">
+                        <table class="planner-comparison-table">
+                          <thead>
+                            <tr>
+                              <th>{{ wt("equipmentQuick") }}</th>
+                              <th>{{ wt("equipmentDimensions") }}</th>
+                              <th>{{ wt("equipmentPayload") }}</th>
+                              <th>{{ wt("boxesUnit") }}</th>
+                              <th>{{ wt("spaceUtilization") }}</th>
+                              <th>{{ wt("referencePrice") }}</th>
+                              <th>{{ wt("planStatus") }}</th>
+                              <th>{{ wt("auditAction") }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr
+                              v-for="evaluation in sortedEvaluations"
+                              :key="evaluation.container.id"
+                              :class="{
+                                'is-current': selectedContainerId === evaluation.container.id
+                              }"
+                              :title="evaluationHint(evaluation)"
+                            >
+                              <td>
+                                <strong>{{ evaluationCardTitle(evaluation) }}</strong
+                                ><small>{{ evaluationCardSubtitle(evaluation) }}</small>
+                              </td>
+                              <td>
+                                {{ evaluation.container.lengthCm }} ×
+                                {{ evaluation.container.widthCm }} ×
+                                {{ evaluation.container.heightCm }} cm
+                              </td>
+                              <td>{{ fmt(evaluation.container.payloadKg || 0, 0) }} kg</td>
+                              <td>{{ evaluation.boxes || "—" }}</td>
+                              <td>{{ fmt(evaluationAverageFill(evaluation), 1) }}%</td>
+                              <td>{{ evaluationFreightText(evaluation) }}</td>
+                              <td>
+                                {{ tr(evaluationFitText(evaluation))
+                                }}<small v-if="evaluationCardStatus(evaluation)">{{
+                                  evaluationCardStatus(evaluation)
+                                }}</small>
+                              </td>
+                              <td>
+                                <el-button
+                                  size="small"
+                                  :type="
+                                    selectedContainerId === evaluation.container.id
+                                      ? 'primary'
+                                      : 'default'
+                                  "
+                                  :aria-pressed="selectedContainerId === evaluation.container.id"
+                                  @click="selectContainer(evaluation.container.id)"
+                                  >{{
+                                    wt(
+                                      selectedContainerId === evaluation.container.id
+                                        ? "currentPlan"
+                                        : "selectPlan"
+                                    )
+                                  }}</el-button
+                                >
+                              </td>
+                            </tr>
+                            <tr v-if="!sortedEvaluations.length">
+                              <td colspan="8">{{ wt("resultNone") }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
                     </section>
 
                     <section class="panel decision-flow-panel">
-                      <WorkspacePageHeader compact class="section-head"
-                        ><template #title>{{ t("decisionFlow.title") }}</template
-                        ><template #eyebrow>{{
-                          t("decisionFlow.eyebrow")
-                        }}</template></WorkspacePageHeader
-                      >
-                      <div class="packing-progress-card">
-                        <div class="packing-progress-main">
-                          <span>{{ packingProgressState.kicker }}</span>
-                          <div class="packing-progress-title">
-                            <strong>{{ packingProgressState.title }}</strong>
-                            <b>{{ packingProgressState.percentText }}</b>
-                          </div>
-                          <div class="packing-progress-timer">
-                            <small>{{ packingProgressState.timerText }}</small>
-                            <em v-if="packingProgressState.slowHint">{{
-                              packingProgressState.slowHint
-                            }}</em>
-                          </div>
-                        </div>
-                        <el-progress
-                          :percentage="packingProgressState.percent"
-                          :stroke-width="12"
-                          :show-text="false"
-                        />
-                        <div
-                          class="packing-progress-track"
-                          :aria-label="t('decisionFlow.progressTitle')"
+                      <details class="planner-decision-details" :open="loading">
+                        <summary class="packing-status-band" data-i18n-ignore>
+                          <strong>{{ packingProgressState.title }}</strong
+                          ><span>{{ packingProgressState.timerText }}</span
+                          ><el-progress
+                            :percentage="packingProgressState.percent"
+                            :stroke-width="7"
+                            :show-text="false"
+                          /><b>{{ packingProgressState.percentText }}</b>
+                        </summary>
+                        <WorkspacePageHeader compact class="section-head"
+                          ><template #title>{{ t("decisionFlow.title") }}</template
+                          ><template #eyebrow>{{
+                            t("decisionFlow.eyebrow")
+                          }}</template></WorkspacePageHeader
                         >
-                          <div
-                            v-for="stage in packingProgressState.stages"
-                            :key="stage.key"
-                            :class="['packing-progress-stage', stage.status]"
-                          >
-                            <i></i>
-                            <span>{{ stage.label }}</span>
-                          </div>
-                        </div>
-                        <div
-                          class="packing-progress-live"
-                          :aria-label="t('decisionFlow.broadcast')"
-                        >
-                          <Transition name="decision-line-slide" mode="out-in">
-                            <div :key="packingProgressState.liveKey" class="decision-live-line">
-                              <span class="decision-live-kicker">{{
-                                packingProgressState.liveKicker
-                              }}</span>
-                              <strong class="decision-live-phase">{{
-                                packingProgressState.phaseLabel
-                              }}</strong>
-                              <p>{{ packingProgressState.liveText }}</p>
-                              <small>{{ packingProgressState.liveMeta }}</small>
+                        <div class="packing-progress-card">
+                          <div class="packing-progress-main">
+                            <span>{{ packingProgressState.kicker }}</span>
+                            <div class="packing-progress-title">
+                              <strong>{{ packingProgressState.title }}</strong>
+                              <b>{{ packingProgressState.percentText }}</b>
                             </div>
-                          </Transition>
+                            <div class="packing-progress-timer">
+                              <small>{{ packingProgressState.timerText }}</small>
+                              <em v-if="packingProgressState.slowHint">{{
+                                packingProgressState.slowHint
+                              }}</em>
+                            </div>
+                          </div>
+                          <el-progress
+                            :percentage="packingProgressState.percent"
+                            :stroke-width="12"
+                            :show-text="false"
+                          />
+                          <div
+                            class="packing-progress-track"
+                            :aria-label="t('decisionFlow.progressTitle')"
+                          >
+                            <div
+                              v-for="stage in packingProgressState.stages"
+                              :key="stage.key"
+                              :class="['packing-progress-stage', stage.status]"
+                            >
+                              <i></i>
+                              <span>{{ stage.label }}</span>
+                            </div>
+                          </div>
+                          <div
+                            class="packing-progress-live"
+                            :aria-label="t('decisionFlow.broadcast')"
+                          >
+                            <Transition name="decision-line-slide" mode="out-in">
+                              <div :key="packingProgressState.liveKey" class="decision-live-line">
+                                <span class="decision-live-kicker">{{
+                                  packingProgressState.liveKicker
+                                }}</span>
+                                <strong class="decision-live-phase">{{
+                                  packingProgressState.phaseLabel
+                                }}</strong>
+                                <p>{{ packingProgressState.liveText }}</p>
+                                <small>{{ packingProgressState.liveMeta }}</small>
+                              </div>
+                            </Transition>
+                          </div>
                         </div>
-                      </div>
+                      </details>
                     </section>
                   </section>
                 </Transition>
@@ -1222,7 +1293,6 @@ import { wt } from "./components/workspace/workspaceCopy";
 import { useDialogFocus } from "./composables/useDialogFocus.js";
 import WorkspaceDialogTransition from "./components/workspace/WorkspaceDialogTransition.vue";
 import "./components/workspace/workspaceMotion.css";
-import BrandLockup from "./components/brand/BrandLockup.vue";
 import PlannerSidebar from "./components/workspace/PlannerSidebar.vue";
 import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
 import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
@@ -1479,7 +1549,7 @@ const fileImporting = ref(false);
 const quickImportMode = ref("append");
 const switchingBox = ref(false);
 const sceneRendering = ref(false);
-const showRemaining = ref(true);
+const showRemaining = ref(false);
 const showMassBalance = ref(true);
 const cargoModalOpen = ref(false);
 const containerModalOpen = ref(false);
@@ -1569,6 +1639,9 @@ const resultSummary = computed(() => {
     { green: 0, yellow: 0, estimated: 0, red: 0, oversize: 0 }
   );
   const best = evaluations.find((evaluation) => evaluation?.fitStatus === "fit") || null;
+  const currentCounts = { green: 0, yellow: 0, estimated: 0, red: 0, oversize: 0 };
+  if (selectedEvaluation.value) currentCounts[evaluationBalanceLevel(selectedEvaluation.value)] = 1;
+  const currentStatus = planSummaryStatus(currentCounts);
   const boxes = Number(best?.boxes || 0);
   return {
     ...counts,
@@ -1581,8 +1654,8 @@ const resultSummary = computed(() => {
           ? evaluationFreightLabel(best)
           : ui("result.bestFreight"),
     freightText: best ? evaluationFreightAmountText(best) : "-",
-    statusTone: planSummaryStatus(counts).tone,
-    statusText: wt(planSummaryStatus(counts).labelKey)
+    statusTone: currentStatus.tone,
+    statusText: wt(currentStatus.labelKey)
   };
 });
 const resultOptimizationRows = computed(() => buildResultOptimizationRows(sortedEvaluations.value));

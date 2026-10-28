@@ -6,7 +6,7 @@
       :title="t('customers.businessHandoverDialogTitle')"
       width="min(620px, 92vw)"
       append-to-body
-      class="business-handover-dialog workspace-el-dialog"
+      class="business-handover-dialog workspace-el-dialog business-comp-dialog"
       :show-close="!submittingBusinessHandover"
       :close-on-click-modal="!submittingBusinessHandover"
       :close-on-press-escape="!submittingBusinessHandover"
@@ -26,7 +26,7 @@
             v-model="businessHandoverForm.customerIds"
             :disabled="submittingBusinessHandover"
             class="business-select"
-            popper-class="business-select-popper"
+            popper-class="business-comp-select business-select-popper"
             multiple
             filterable
             collapse-tags

@@ -4,6 +4,9 @@ import {
   isPublicTrackingRouteUnavailable
 } from "./tracking-response.mjs";
 import { localReturnPath } from "./local-return-path.mjs";
+import { createFilePreviewLifecycle } from "./file-preview-lifecycle.mjs";
+import { createPdfCanvasPreview, pdfPreviewErrorKey } from "./pdf-canvas-preview.mjs";
+const filePreviewLifecycle = createFilePreviewLifecycle();
 import {
   installTrackingPresentation,
   refreshTrackingControls,
@@ -136,6 +139,8 @@ const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
 const batchWorkspaceDialog = document.querySelector("#batch-workspace-dialog");
+const batchWorkspaceTrigger = document.querySelector("#batch-workspace-trigger");
+const batchLegacyNotice = document.querySelector("#batch-legacy-notice");
 const batchWorkspaceClose = document.querySelector("#batch-workspace-close");
 const batchColumnPreview = document.querySelector("#batch-column-preview");
 const batchPreviewFileName = document.querySelector("#batch-preview-file-name");
@@ -594,6 +599,21 @@ const MESSAGES = {
       "Shipment files will be available after this shipment is saved by the platform.",
     "files.kicker": "SHIPMENT DOCUMENTS",
     "files.title": "Shipment files",
+    "files.relatedTitle": "Related files",
+    "files.columnName": "File name",
+    "files.columnUploaded": "Uploaded",
+    "files.columnActions": "Actions",
+    "files.moreActions": "File access and more actions",
+    "files.pdfPrevious": "Previous page",
+    "files.pdfNext": "Next page",
+    "files.pdfPage": "Page {page} / {total}",
+    "files.pdfFit": "Fit width",
+    "files.pdfLoading": "Rendering PDF…",
+    "files.pdfReady": "PDF preview is ready. You can also download the original file.",
+    "files.pdfPassword": "This PDF requires a password. Download the original file to open it.",
+    "files.pdfInvalid": "The PDF is damaged or unreadable. Download the original file to check it.",
+    "files.pdfUnavailable":
+      "The PDF could not be displayed. Download the original file to view it.",
     "files.close": "Close shipment files",
     "files.loginTitle": "Sign in to manage shipment files",
     "files.loginDescription": "Shipment documents are available to authenticated enterprise users.",
@@ -695,7 +715,7 @@ const MESSAGES = {
     "query.number": "Shipment No.",
     "query.numberPlaceholder": "Enter shipment reference",
     "query.enterNumber": "Enter a shipment number first.",
-    "query.submit": "Track shipment",
+    "query.submit": "Track",
     "query.loading": "Tracking…",
     "wait.history": "Retrieving your shipment records…",
     "wait.tracking": "Retrieving the latest shipment data…",
@@ -719,6 +739,10 @@ const MESSAGES = {
     "batch.emptyTitle": "No imported queue",
     "batch.emptyDescription": "Choose a spreadsheet to begin batch tracking.",
     "batch.workspaceOpen": "Batch tracking",
+    "batch.workspaceNavigate": "Batch tracking in workbench",
+    "batch.workspaceOpening": "Opening the shipment workbench…",
+    "batch.legacyNotice":
+      "This device has older batch records. They will not resume or transfer automatically. Open the workbench to select your file and start a new batch.",
     "batch.workspaceClose": "Close batch tracking",
     "batch.file": "Imported file",
     "batch.success": "Succeeded",
@@ -1197,6 +1221,20 @@ const MESSAGES = {
     "files.unavailable": "平台保存这票货物后即可管理票单文件。",
     "files.kicker": "货物文档",
     "files.title": "票单文件",
+    "files.relatedTitle": "相关文件",
+    "files.columnName": "文件名",
+    "files.columnUploaded": "上传时间",
+    "files.columnActions": "操作",
+    "files.moreActions": "文件权限与更多操作",
+    "files.pdfPrevious": "上一页",
+    "files.pdfNext": "下一页",
+    "files.pdfPage": "第 {page} / {total} 页",
+    "files.pdfFit": "适应宽度",
+    "files.pdfLoading": "正在绘制PDF…",
+    "files.pdfReady": "PDF预览已就绪，也可下载原文件查看。",
+    "files.pdfPassword": "此PDF需要密码，请下载原文件后打开。",
+    "files.pdfInvalid": "此PDF已损坏或无法读取，请下载原文件核对。",
+    "files.pdfUnavailable": "暂时无法显示此PDF，请下载原文件查看。",
     "files.close": "关闭票单文件",
     "files.loginTitle": "登录后管理货物文件",
     "files.loginDescription": "货物明细、账单和寄运文件仅向已登录企业用户开放。",
@@ -1289,7 +1327,7 @@ const MESSAGES = {
     "query.number": "运输单号",
     "query.numberPlaceholder": "请输入货运参考号",
     "query.enterNumber": "请先输入运输单号。",
-    "query.submit": "查询运输信息",
+    "query.submit": "查询",
     "query.loading": "查询中…",
     "wait.history": "正在获取货运记录…",
     "wait.tracking": "正在获取最新货物信息…",
@@ -1312,6 +1350,10 @@ const MESSAGES = {
     "batch.emptyTitle": "尚未导入查询队列",
     "batch.emptyDescription": "请选择表格文件开始批量货物查询。",
     "batch.workspaceOpen": "批量追踪",
+    "batch.workspaceNavigate": "前往工作台批量追踪",
+    "batch.workspaceOpening": "正在打开票单工作台…",
+    "batch.legacyNotice":
+      "此设备保留有旧版批量记录，不会自动继续或迁移。请前往工作台，重新选择文件并开始批量追踪。",
     "batch.workspaceClose": "关闭批量追踪",
     "batch.file": "导入文件",
     "batch.success": "成功",
@@ -1814,6 +1856,14 @@ function formatLocalDateTime(value) {
   }).format(date);
 }
 
+function formatCompactLocalDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function readPlatformSession() {
   let token = "";
   let user = null;
@@ -1942,6 +1992,7 @@ function clearSensitiveRelatedFilesDom() {
 }
 
 function resetRelatedFilesSessionState({ expiredKind = "" } = {}) {
+  closeFilePreviewDialog();
   relatedFilesRequestSequence += 1;
   relatedFileCommentsRequestSequence += 1;
   relatedFilesItems = [];
@@ -2439,6 +2490,7 @@ function renderTrackingAccount(session = readFileSession()) {
   const isCustomer = session.kind === "CUSTOMER";
   document.body.classList.toggle("is-customer-session", isCustomer);
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
+  renderBatchWorkspaceAccess(session);
   renderOverseaAgentWorkspace(session);
   trackingAccount.hidden = !authenticated;
   if (signInButton) {
@@ -2993,6 +3045,7 @@ function createRelatedFileItem(file) {
   extension.textContent = String(file.extension || "FILE")
     .slice(0, 5)
     .toUpperCase();
+  extension.dataset.extension = extension.textContent;
 
   const content = document.createElement("div");
   content.className = "related-file-content";
@@ -3000,16 +3053,29 @@ function createRelatedFileItem(file) {
   name.textContent = file.originalFileName;
   name.title = file.originalFileName;
   const metadata = document.createElement("span");
-  metadata.textContent = [
-    file.uploaderDisplayName || t("files.unknownUploader"),
-    file.uploadedAt ? formatLocalDateTime(file.uploadedAt) : t("files.unknownDate"),
-    formatFileSize(file.sizeBytes)
-  ].join(" · ");
+  metadata.textContent = formatFileSize(file.sizeBytes);
   const badges = document.createElement("div");
   badges.className = "related-file-badges";
   const category = document.createElement("span");
+  category.className = "related-file-category";
   category.textContent = fileCategoryLabel(file.category);
-  badges.append(category);
+  const categoryCell = document.createElement("div");
+  categoryCell.className = "related-file-category-cell";
+  categoryCell.append(category);
+  const uploaded = document.createElement("div");
+  uploaded.className = "related-file-uploaded";
+  const uploadedAt = document.createElement("time");
+  uploadedAt.textContent = file.uploadedAt
+    ? formatCompactLocalDateTime(file.uploadedAt)
+    : t("files.unknownDate");
+  uploadedAt.title = file.uploadedAt
+    ? `${formatLocalDateTime(file.uploadedAt)} · ${file.uploadedAt}`
+    : t("files.unknownDate");
+  if (file.uploadedAt) uploadedAt.dateTime = file.uploadedAt;
+  const uploader = document.createElement("small");
+  uploader.textContent = file.uploaderDisplayName || t("files.unknownUploader");
+  uploader.title = uploader.textContent;
+  uploaded.append(uploadedAt, uploader);
 
   const sharing = document.createElement("span");
   sharing.className = "related-file-sharing is-role-set";
@@ -3108,7 +3174,7 @@ function createRelatedFileItem(file) {
     editor.append(picker);
     badges.append(editor);
   }
-  content.append(name, metadata, badges);
+  content.append(name, metadata);
 
   const actions = document.createElement("div");
   actions.className = "related-file-actions";
@@ -3120,15 +3186,33 @@ function createRelatedFileItem(file) {
       void downloadRelatedFile(file, event.currentTarget);
     })
   );
+  const options = document.createElement("details");
+  options.className = "related-file-options";
+  const optionsTrigger = document.createElement("summary");
+  optionsTrigger.textContent = "···";
+  optionsTrigger.setAttribute("aria-label", t("files.moreActions"));
+  const optionsContent = document.createElement("div");
+  optionsContent.className = "related-file-options-menu";
+  optionsContent.append(badges);
   if (file.canDelete) {
-    actions.append(
+    optionsContent.append(
       relatedFileActionButton("files.delete", "related-file-delete", () => {
         void deleteRelatedFile(file);
       })
     );
   }
+  options.append(optionsTrigger, optionsContent);
+  options.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !options.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const openDetails = event.target.closest?.("details[open]") ?? options;
+    openDetails.open = false;
+    openDetails.querySelector("summary")?.focus();
+  });
+  actions.append(options);
 
-  item.append(extension, content, actions);
+  item.append(extension, content, categoryCell, uploaded, actions);
   return item;
 }
 
@@ -3320,6 +3404,9 @@ function renderRelatedFilesDrawer() {
         : "";
   relatedFilesCount.textContent = String(relatedFilesItems.length);
   relatedFilesCount.hidden = !hasItems;
+  document.querySelector("#related-files-list-count").textContent = `(${relatedFilesItems.length})`;
+  document.querySelector("#related-files-table-head").hidden =
+    relatedFilesLoadingState || Boolean(relatedFilesErrorText) || !hasItems;
 
   relatedFilesAuthRequired.hidden = authenticated;
   const customerSessionExpired = !authenticated && relatedFilesExpiredSessionKind === "CUSTOMER";
@@ -3406,7 +3493,7 @@ function closeRelatedFilesDrawer({ immediate = false } = {}) {
     relatedFilesBackdrop.hidden = true;
     relatedFilesDrawer.hidden = true;
     relatedFilesCloseTimer = null;
-  }, 220);
+  }, 270);
 }
 
 async function loadRelatedFiles() {
@@ -3664,6 +3751,8 @@ const filePreviewCancel = document.querySelector("#file-preview-cancel");
 const filePreviewDownload = document.querySelector("#file-preview-download");
 let filePreviewObjectUrls = [];
 let currentPreviewFile = null;
+let filePreviewPdf = null;
+const filePreviewButtonRequests = new WeakMap();
 
 function getFileExtension(fileName) {
   const name = String(fileName || "")
@@ -3676,6 +3765,8 @@ function getFileExtension(fileName) {
 }
 
 function clearFilePreviewContent() {
+  filePreviewPdf?.dispose();
+  filePreviewPdf = null;
   filePreviewContent.replaceChildren();
   filePreviewMessage.hidden = true;
   filePreviewMessage.textContent = "";
@@ -3703,6 +3794,7 @@ function setFilePreviewMessage(text, isError = false) {
 }
 
 function closeFilePreviewDialog() {
+  filePreviewLifecycle.invalidate();
   if (typeof filePreviewDialog?.close === "function") {
     filePreviewDialog.close();
   }
@@ -3914,15 +4006,6 @@ function renderFilePreviewWord(text) {
 function renderFilePreviewBlob(blob, extension, contentType = "") {
   const url = URL.createObjectURL(blob);
   filePreviewObjectUrls.push(url);
-  if (PREVIEW_PDF_EXTENSIONS.has(extension) || contentType === "application/pdf") {
-    const iframe = document.createElement("iframe");
-    iframe.src = url;
-    iframe.title = filePreviewName.textContent || t("files.previewTitle");
-    iframe.setAttribute("sandbox", "");
-    iframe.referrerPolicy = "no-referrer";
-    filePreviewContent.replaceChildren(iframe);
-    return;
-  }
   if (PREVIEW_IMAGE_EXTENSIONS.has(extension) && contentType !== "image/svg+xml") {
     const img = document.createElement("img");
     img.src = url;
@@ -3968,7 +4051,7 @@ function safeSameOriginFileUrl(candidate, fallback) {
   }
 }
 
-async function fetchRelatedFilePreview(file, session) {
+async function fetchRelatedFilePreview(file, session, { signal, isCurrent = () => true } = {}) {
   const previewPath = safeSameOriginFileUrl(
     file.previewUrl,
     shipmentFilePath(session, file.id, "/preview")
@@ -3976,17 +4059,21 @@ async function fetchRelatedFilePreview(file, session) {
   let response = await fetch(previewPath, {
     headers: { ...fileAuthHeaders(session) },
     credentials: "same-origin",
-    redirect: "error"
+    redirect: "error",
+    signal
   });
+  if (!isCurrent()) throw new DOMException("Preview superseded", "AbortError");
   if ([404, 405].includes(response.status)) {
     response = await fetch(
       safeSameOriginFileUrl("", shipmentFilePath(session, file.id, "/download")),
       {
         headers: { ...fileAuthHeaders(session) },
         credentials: "same-origin",
-        redirect: "error"
+        redirect: "error",
+        signal
       }
     );
+    if (!isCurrent()) throw new DOMException("Preview superseded", "AbortError");
   }
   return response;
 }
@@ -3996,7 +4083,13 @@ async function previewRelatedFile(file, button) {
   synchronizeRelatedFilesSession(session);
   if (!file?.id || !session.token) return;
   const sessionFingerprint = relatedFilesSessionFingerprint;
+  const previewRequest = filePreviewLifecycle.begin();
+  const isCurrent = () =>
+    filePreviewLifecycle.isCurrent(previewRequest) &&
+    filePreviewDialog.open &&
+    isCurrentRelatedFilesSession(sessionFingerprint);
   const previousLabel = button.textContent;
+  filePreviewButtonRequests.set(button, previewRequest);
   button.disabled = true;
   button.textContent = t("files.previewing");
   clearFilePreviewContent();
@@ -4006,16 +4099,22 @@ async function previewRelatedFile(file, button) {
     filePreviewDialog.showModal();
   }
   setFilePreviewMessage(t("files.previewing"));
+  let previewIsPdf = false;
   try {
-    const response = await fetchRelatedFilePreview(file, session);
+    const response = await fetchRelatedFilePreview(file, session, {
+      signal: previewRequest.controller.signal,
+      isCurrent
+    });
+    if (!isCurrent()) return;
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       closeFilePreviewDialog();
       return;
     }
-    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!isCurrent()) return;
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
+      if (!isCurrent()) return;
       throw new Error(
         response.status === 403
           ? session.kind === "CUSTOMER"
@@ -4031,16 +4130,40 @@ async function previewRelatedFile(file, button) {
       .toLowerCase();
     const previewMode = String(file.previewMode || "").toUpperCase();
     const blob = await response.blob();
-    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!isCurrent()) return;
 
     clearFilePreviewContent();
 
     if (
       previewMode === "PDF" ||
-      previewMode === "IMAGE" ||
       contentType === "application/pdf" ||
+      PREVIEW_PDF_EXTENSIONS.has(extension)
+    ) {
+      previewIsPdf = true;
+      const buffer = await blob.arrayBuffer();
+      if (!isCurrent()) return;
+      filePreviewPdf = createPdfCanvasPreview({
+        container: filePreviewContent,
+        data: new Uint8Array(buffer),
+        t,
+        isCurrent,
+        onError: (error) => {
+          if (isCurrent()) setFilePreviewMessage(t(pdfPreviewErrorKey(error)), true);
+        },
+        onRendered: () => {
+          if (isCurrent()) setFilePreviewMessage(t("files.pdfReady"));
+        }
+      });
+      filePreviewLifecycle.attach(previewRequest, filePreviewPdf.dispose);
+      await filePreviewPdf.ready;
+      if (!isCurrent()) return;
+      setFilePreviewMessage(t("files.pdfReady"));
+      return;
+    }
+
+    if (
+      previewMode === "IMAGE" ||
       (contentType.startsWith("image/") && contentType !== "image/svg+xml") ||
-      PREVIEW_PDF_EXTENSIONS.has(extension) ||
       PREVIEW_IMAGE_EXTENSIONS.has(extension)
     ) {
       renderFilePreviewBlob(blob, extension, contentType);
@@ -4050,6 +4173,7 @@ async function previewRelatedFile(file, button) {
 
     if (previewMode === "MARKDOWN" || ["md", "markdown"].includes(extension)) {
       const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (!isCurrent()) return;
       if (tooLarge || text == null) {
         renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
       } else {
@@ -4061,6 +4185,7 @@ async function previewRelatedFile(file, button) {
 
     if (previewMode === "CSV" || extension === "csv") {
       const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (!isCurrent()) return;
       if (tooLarge || text == null) {
         renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
       } else {
@@ -4072,6 +4197,7 @@ async function previewRelatedFile(file, button) {
 
     if (previewMode === "SPREADSHEET" || ["xlsx", "xls"].includes(extension)) {
       const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (!isCurrent()) return;
       if (tooLarge || text == null) {
         renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
       } else {
@@ -4083,6 +4209,7 @@ async function previewRelatedFile(file, button) {
 
     if (previewMode === "WORD" || ["doc", "docx"].includes(extension)) {
       const { text, tooLarge } = await readBlobAsText(blob, { force: true });
+      if (!isCurrent()) return;
       if (tooLarge || text == null) {
         renderFilePreviewFallback(tooLarge ? "files.previewTooLarge" : "files.previewNotSupported");
       } else {
@@ -4098,6 +4225,7 @@ async function previewRelatedFile(file, button) {
       /(?:json|xml|javascript|yaml|csv)/i.test(contentType);
     if (responseIsText || PREVIEW_TEXT_EXTENSIONS.has(extension)) {
       const { text, tooLarge } = await readBlobAsText(blob, { force: responseIsText });
+      if (!isCurrent()) return;
       if (tooLarge) {
         renderFilePreviewFallback("files.previewTooLarge");
         setFilePreviewMessage(t("files.previewDownloadTip"));
@@ -4119,6 +4247,7 @@ async function previewRelatedFile(file, button) {
     }
 
     const { text, tooLarge } = await readBlobAsText(blob);
+    if (!isCurrent()) return;
     if (tooLarge) {
       renderFilePreviewFallback("files.previewTooLarge");
       setFilePreviewMessage(t("files.previewDownloadTip"));
@@ -4130,15 +4259,21 @@ async function previewRelatedFile(file, button) {
       setFilePreviewMessage(t("files.previewDownloadTip"));
     }
   } catch (error) {
-    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!isCurrent()) return;
     clearFilePreviewContent();
     renderFilePreviewFallback("files.previewNotSupported");
     setFilePreviewMessage(
-      t("files.previewFailed", { message: error?.message || t("error.generic") }),
+      previewIsPdf
+        ? t(pdfPreviewErrorKey(error))
+        : t("files.previewFailed", { message: error?.message || t("error.generic") }),
       true
     );
   } finally {
-    if (isCurrentRelatedFilesSession(sessionFingerprint)) {
+    if (
+      filePreviewButtonRequests.get(button) === previewRequest &&
+      isCurrentRelatedFilesSession(sessionFingerprint)
+    ) {
+      filePreviewButtonRequests.delete(button);
       button.disabled = false;
       button.textContent = previousLabel;
     }
@@ -4157,11 +4292,18 @@ if (filePreviewDownload) {
   });
 }
 if (filePreviewDialog) {
+  filePreviewDialog.addEventListener("close", () => {
+    if (filePreviewDialog.open) return;
+    filePreviewLifecycle.invalidate();
+    currentPreviewFile = null;
+    clearFilePreviewContent();
+  });
   filePreviewDialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     closeFilePreviewDialog();
   });
 }
+window.addEventListener("pagehide", closeFilePreviewDialog);
 
 async function deleteRelatedFile(file) {
   const confirmationSession = fileSessionFingerprint(readFileSession());
@@ -5128,7 +5270,9 @@ function clearSystemWaitType(type) {
   renderSystemWait();
 }
 
-function showPlatformRouteWait() {
+function showPlatformRouteWait(messageKey = "wait.home") {
+  const message = document.querySelector("#platform-route-message");
+  if (message) message.textContent = t(messageKey);
   platformRouteOverlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("is-page-leaving");
   appShell.inert = true;
@@ -5632,8 +5776,19 @@ function renderBatchPreviewColumns(sheet = activeBatchPreviewSheet()) {
   renderBatchPreviewTable(sheet);
 }
 
+function canOpenBatchWorkspace(session = readFileSession()) {
+  return Boolean(session.token && canManageFileVisibility(session));
+}
+
+function renderBatchWorkspaceAccess(session = readFileSession()) {
+  const allowed = canOpenBatchWorkspace(session);
+  if (batchWorkspaceTrigger) batchWorkspaceTrigger.hidden = !allowed;
+  if (batchLegacyNotice) batchLegacyNotice.hidden = !allowed || !batchState?.items?.length;
+  if (!allowed) closeBatchWorkspace();
+}
+
 function openBatchWorkspace() {
-  if (!batchWorkspaceDialog || batchWorkspaceDialog.open) return;
+  if (!canOpenBatchWorkspace() || !batchWorkspaceDialog || batchWorkspaceDialog.open) return;
   renderBatchState();
   batchWorkspaceDialog.showModal();
   requestAnimationFrame(() => {
@@ -6628,18 +6783,26 @@ function renderResult(payload) {
   elements["result-number"].textContent = valueOrDash(
     snapshot.tracking.originalNumber ?? summary.billOfLading ?? snapshot.tracking.number
   );
+  elements["result-number"].title = elements["result-number"].textContent;
   renderPrimaryFacts(snapshot);
 
   const bookingNumbers = bookingNumbersForSnapshot(snapshot);
   elements["summary-booking-number"].textContent =
     bookingNumbers.length > 0 ? bookingNumbers.join(", ") : "—";
-  elements["summary-booking-reference"].hidden = bookingNumbers.length === 0;
+  elements["summary-booking-number"].title = elements["summary-booking-number"].textContent;
+  elements["summary-booking-reference"].hidden =
+    bookingNumbers.length === 0 ||
+    (bookingNumbers.length === 1 &&
+      String(bookingNumbers[0]).trim().toUpperCase() ===
+        elements["result-number"].textContent.trim().toUpperCase());
   elements["summary-origin-name"].textContent = valueOrDash(
     [summary.origin?.name, summary.origin?.countryCode].filter(Boolean).join(", ")
   );
   elements["summary-destination-name"].textContent = valueOrDash(
     [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
   );
+  elements["summary-origin-name"].title = elements["summary-origin-name"].textContent;
+  elements["summary-destination-name"].title = elements["summary-destination-name"].textContent;
   const summaryLatestDetail = [latest?.location, formatDateTime(latest?.occurredAt)]
     .filter((value) => value && value !== "—")
     .join(" · ");
@@ -6680,7 +6843,9 @@ function renderResult(payload) {
   elements["cache-status"].title = payload.databaseStoredAt
     ? t("cache.savedAt", { time: formatLocalDateTime(payload.databaseStoredAt) })
     : "";
-  elements["fetched-at"].textContent = formatLocalDateTime(snapshot.fetchedAt);
+  elements["fetched-at"].textContent = formatCompactLocalDateTime(snapshot.fetchedAt);
+  elements["fetched-at"].title =
+    `${formatLocalDateTime(snapshot.fetchedAt)} · ${snapshot.fetchedAt || "—"}`;
 
   const departureRecord = firstTimedRecord(keyTimes.actualDeparture, keyTimes.estimatedDeparture);
   const arrivalRecord = firstTimedRecord(
@@ -8947,12 +9112,12 @@ batchWorkspaceDialog?.addEventListener("click", (event) => {
 });
 
 batchSelectButton?.addEventListener("click", () => {
-  if (!batchRunning) batchFileInput?.click();
+  if (canOpenBatchWorkspace() && !batchRunning) batchFileInput?.click();
 });
 
 batchFileInput?.addEventListener("change", async () => {
   const file = batchFileInput.files?.[0];
-  if (!file || batchRunning) return;
+  if (!file || batchRunning || !canOpenBatchWorkspace()) return;
 
   batchSelectButton.disabled = true;
   batchSelectButton.setAttribute("aria-busy", "true");
@@ -8995,6 +9160,10 @@ batchPreviewCancel?.addEventListener("click", () => {
 });
 
 batchPreviewConfirm?.addEventListener("click", async () => {
+  if (!canOpenBatchWorkspace()) {
+    closeBatchWorkspace();
+    return;
+  }
   const file = pendingBatchFile;
   const sheet = activeBatchPreviewSheet();
   const columnIndex = Number(batchPreviewColumn.value);
@@ -9133,6 +9302,9 @@ trackingAccountLogoutButton.addEventListener("click", async () => {
   }
 });
 document.addEventListener("click", (event) => {
+  document.querySelectorAll(".related-file-options[open]").forEach((options) => {
+    if (!options.contains(event.target)) options.open = false;
+  });
   if (trackingAccountMenuOpen && !trackingAccount.contains(event.target)) {
     setTrackingAccountMenuOpen(false);
   }
@@ -9204,7 +9376,7 @@ document.querySelectorAll("[data-view-target]").forEach((link) => {
   });
 });
 
-document.querySelectorAll("[data-home-link]").forEach((link) => {
+document.querySelectorAll("[data-home-link], [data-platform-link]").forEach((link) => {
   link.addEventListener("click", (event) => {
     if (
       event.defaultPrevented ||
@@ -9217,8 +9389,11 @@ document.querySelectorAll("[data-home-link]").forEach((link) => {
       return;
 
     event.preventDefault();
+    if (link === batchWorkspaceTrigger && !canOpenBatchWorkspace()) return;
     if (document.body.classList.contains("is-page-leaving")) return;
-    showPlatformRouteWait();
+    showPlatformRouteWait(
+      link.hasAttribute("data-platform-link") ? "batch.workspaceOpening" : "wait.home"
+    );
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.setTimeout(() => window.location.assign(link.href), reduceMotion ? 0 : 180);
     window.setTimeout(hidePlatformRouteWait, 6000);
@@ -9592,9 +9767,8 @@ batchState = restoreBatchState();
 if (batchState) persistBatchState();
 historyLoadingState = ["INTERNAL", "CUSTOMER"].includes(readFileSession().kind);
 applyLanguage(currentLanguage, { persist: false });
-if (batchState?.taskId && ["running", "stopping", "paused"].includes(batchState.status)) {
-  window.setTimeout(() => void runBatchQueue(), 0);
-}
+// Legacy device queues are preserved for reference, never resumed automatically.
+// All current imports use the workbench's customer/publish/conflict workflow.
 
 async function initializeTrackingPage() {
   const initialQuery = trackingQueryFromLocation();

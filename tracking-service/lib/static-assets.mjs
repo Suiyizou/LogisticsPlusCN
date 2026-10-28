@@ -12,6 +12,11 @@ export const MIME_TYPES = Object.freeze({
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".bcmap": "application/octet-stream",
+  ".pfb": "application/octet-stream",
+  ".ttf": "font/ttf",
+  ".icc": "application/vnd.iccprofile",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml"
 });
