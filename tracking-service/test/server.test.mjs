@@ -89,7 +89,8 @@ test("exposes a multi-carrier adapter registry", () => {
     carriers.map(({ code, enabled }) => ({ code, enabled })),
     [
       { code: "COSCO", enabled: true },
-      { code: "CMA", enabled: true }
+      { code: "CMA", enabled: true },
+      ...["MAERSK", "HAPAG_LLOYD", "MSC", "OOCL"].map((code) => ({ code, enabled: true }))
     ]
   );
 });

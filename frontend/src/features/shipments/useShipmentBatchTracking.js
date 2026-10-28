@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
+import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 import {
   buildShipmentBatchItems,
   parseShipmentBatchWorkbook
@@ -45,6 +46,11 @@ export function useShipmentBatchTracking({
   const batchTrackDropzoneActive = ref(false);
   const batchTrackFileParsing = ref(false);
   const batchTrackCarrier = ref("COSCO");
+  const batchTrackReferenceType = ref("BOOKING");
+  watch(batchTrackCarrier, (carrier) => {
+    if (!supportsShipmentReference(carrier, batchTrackReferenceType.value))
+      batchTrackReferenceType.value = "BOOKING";
+  }, { flush: "sync" });
   /** @type {import("vue").Ref<HTMLInputElement | null>} */
   const batchTrackFileInput = ref(null);
   const batchTrackFileName = ref("");
@@ -114,7 +120,8 @@ export function useShipmentBatchTracking({
     buildShipmentBatchItems(
       batchTrackSelectedSheet.value,
       batchTrackSelectedColumnIndex.value,
-      batchTrackCarrier.value
+      batchTrackCarrier.value,
+      batchTrackReferenceType.value
     )
   );
   const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => item.displayNumber));
@@ -180,7 +187,7 @@ export function useShipmentBatchTracking({
   async function confirmExistingBatchBookings(items) {
     const shipments = items.map((item) => ({
       carrier: item.carrier,
-      referenceType: "BOOKING",
+      referenceType: item.type || "BOOKING",
       referenceNo: item.number
     }));
     const response = await inspectBusinessShipmentImportConflicts(shipments);
@@ -358,6 +365,7 @@ export function useShipmentBatchTracking({
     batchTrackDropzoneActive,
     batchTrackFileParsing,
     batchTrackCarrier,
+    batchTrackReferenceType,
     batchTrackRunning,
     batchTrackChecking,
     batchTrackResults,

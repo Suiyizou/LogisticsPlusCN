@@ -47,7 +47,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class ShipmentTrackingService {
   private static final List<String> SUPPORTED_TYPES = List.of("BILLOFLADING", "BOOKING", "CONTAINER");
   private static final List<String> SUPPORTED_CHANNELS = List.of(
-      "AUTO", "NETWORK", "PLAYWRIGHT", "PROXY"
+      "AUTO", "NETWORK", "PLAYWRIGHT", "PROXY", "AGENT"
   );
 
   private final JdbcTemplate jdbcTemplate;
@@ -162,7 +162,8 @@ public class ShipmentTrackingService {
 
     ShipmentImportDetails details = input.importedDetails();
     String type = normalizeCode(input.type(), "BOOKING");
-    if (!"BOOKING".equals(type)) {
+    if (!"BOOKING".equals(type)
+        && !TrackingCarriers.supportsReference(normalizeCode(input.carrier(), ""), type)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "BOOKING_REFERENCE_REQUIRED",
@@ -180,7 +181,8 @@ public class ShipmentTrackingService {
     }
     String prefix = cleanImported(details == null ? null : details.carrierPrefix(), 8);
     String requestedCarrier = cleanImported(input.carrier(), 32);
-    String carrier = normalizeCode(prefix != null ? prefix : requestedCarrier, "UNSUPPORTED");
+    String carrier = normalizeCode(TrackingCarriers.CODES.contains(normalizeCode(requestedCarrier, ""))
+        ? requestedCarrier : prefix != null ? prefix : requestedCarrier, "UNSUPPORTED");
     if (!carrier.matches("[A-Z0-9_-]{2,32}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier code format is invalid");
     }
@@ -440,7 +442,7 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
     NormalizedTrackRequest request = normalize(input);
-    if (!"BOOKING".equals(request.type())) {
+    if (!TrackingCarriers.supportsReference(request.carrier(), request.type())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Customers can only open assigned shipments by booking number"
@@ -1036,7 +1038,7 @@ public class ShipmentTrackingService {
           "Shipment has no booking or bill-of-lading reference to refresh"
       );
     }
-    if (!List.of("COSCO", "CMA").contains(
+    if (!TrackingCarriers.CODES.contains(
         String.valueOf(shipment.carrier()).toUpperCase(Locale.ROOT)
     )) {
       throw new ApiException(
@@ -1370,6 +1372,9 @@ public class ShipmentTrackingService {
       boolean trustedAutomaticRefresh
   ) {
     NormalizedTrackRequest request = normalize(input);
+    if (TrackingCarriers.browserAgentCarrier(request.carrier()) && user == null && !trustedAutomaticRefresh) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Please sign in to use multi-carrier tracking");
+    }
     ShipmentImportDetails importedDetails = normalizeImportedDetails(input, request, user);
     boolean proxyChannel = "PROXY".equals(request.channel());
     if (proxyChannel && (user == null || !user.canManageShipmentFiles())) {
@@ -3078,7 +3083,7 @@ public class ShipmentTrackingService {
   private NormalizedTrackRequest normalize(ShipmentTrackRequest input) {
     if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Tracking request is required");
     String carrier = normalizeCode(input.carrier(), "COSCO");
-    if (!List.of("COSCO", "CMA").contains(carrier)) {
+    if (!TrackingCarriers.CODES.contains(carrier)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported carrier");
     }
     String channel = normalizeCode(input.channel(), "AUTO");
@@ -3090,7 +3095,7 @@ public class ShipmentTrackingService {
     if (!SUPPORTED_TYPES.contains(type)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported shipment number type");
     }
-    if ("BILLOFLADING".equals(type)) {
+    if ("BILLOFLADING".equals(type) && !TrackingCarriers.browserAgentCarrier(carrier)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "BOOKING_REFERENCE_REQUIRED",

@@ -9,3 +9,6 @@ backend/target
 *.log
 deployed-*.html
 deployed-*.js
+**/.browser-states
+**/.pi-agent
+**/artifacts

@@ -24,7 +24,7 @@ test("missing supported tracking numbers open overview without fabricating a bil
   const link = new URL(
     trackingWorkspaceLink({
       returnTo: "/customers/directory",
-      shipment: { carrier: "MSC", referenceType: "BILLOFLADING", referenceNo: "unsupported-bill" }
+      shipment: { carrier: "UNKNOWN", referenceType: "BILLOFLADING", referenceNo: "unsupported-bill" }
     }),
     "http://localhost"
   );
@@ -34,6 +34,17 @@ test("missing supported tracking numbers open overview without fabricating a bil
   for (const returnTo of ["", "https://external.invalid/", "//external.invalid/"]) {
     assert.throws(() => trackingWorkspaceLink({ returnTo }), /local resolved path/);
   }
+});
+
+test("new carrier bill links retain their carrier and bill query identity", () => {
+  const link = new URL(trackingWorkspaceLink({
+    returnTo: "/customers/shipments",
+    shipment: { carrier: "MSC", referenceType: "BILLOFLADING", referenceNo: "MEDU123456789" }
+  }), "http://localhost");
+  assert.equal(link.hash, "#tracking");
+  assert.equal(link.searchParams.get("carrier"), "MSC");
+  assert.equal(link.searchParams.get("type"), "BILLOFLADING");
+  assert.equal(link.searchParams.get("number"), "MEDU123456789");
 });
 
 test("tracking return route follows moved workspace and module mounts, not an old hardcoded root", async (context) => {

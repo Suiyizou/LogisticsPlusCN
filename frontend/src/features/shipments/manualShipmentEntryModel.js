@@ -241,7 +241,7 @@ export function shipmentImportIdentity(shipment) {
   const carrier = String(shipment?.carrier || "COSCO")
     .trim()
     .toUpperCase();
-  const referenceType = "BOOKING";
+  const referenceType = String(shipment?.referenceType || "BOOKING").toUpperCase();
   let referenceNo = String(shipment?.referenceNo || shipment?.bookingNumber || "")
     .replace(/\s+/g, "")
     .trim()

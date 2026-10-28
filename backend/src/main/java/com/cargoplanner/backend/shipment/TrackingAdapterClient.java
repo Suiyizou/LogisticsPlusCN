@@ -22,6 +22,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class TrackingAdapterClient {
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private final RestClient restClient;
+  private final RestClient agentRestClient;
 
   public TrackingAdapterClient(ShipmentTrackingProperties properties) {
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
@@ -35,6 +36,10 @@ public class TrackingAdapterClient {
       builder.defaultHeader("X-Tracking-Adapter-Key", adapterKey.trim());
     }
     this.restClient = builder.build();
+    SimpleClientHttpRequestFactory agentFactory = new SimpleClientHttpRequestFactory();
+    agentFactory.setConnectTimeout(validDuration(properties.getConnectTimeout(), Duration.ofSeconds(5)));
+    agentFactory.setReadTimeout(validDuration(properties.getAgentReadTimeout(), Duration.ofSeconds(480)));
+    this.agentRestClient = builder.clone().requestFactory(agentFactory).build();
   }
 
   public JsonNode track(NormalizedTrackRequest request) {
@@ -57,7 +62,9 @@ public class TrackingAdapterClient {
     Map<String, Object> body = requestBody(request);
     if (forceRefresh) body.put("forceRefresh", true);
     try {
-      RestClient.RequestBodySpec requestSpec = restClient.post().uri("/api/track");
+      RestClient selectedClient = TrackingCarriers.browserAgentCarrier(request.carrier())
+          ? agentRestClient : restClient;
+      RestClient.RequestBodySpec requestSpec = selectedClient.post().uri("/api/track");
       if (credentials != null) {
         requestSpec.header("X-CMA-Session-Cookie", credentials.sessionCookie());
         if (credentials.userAgent() != null && !credentials.userAgent().isBlank()) {

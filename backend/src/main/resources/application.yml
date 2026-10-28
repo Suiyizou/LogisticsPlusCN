@@ -65,6 +65,7 @@ app:
     cache-ttl: ${APP_TRACKING_CACHE_TTL:15m}
     connect-timeout: ${APP_TRACKING_CONNECT_TIMEOUT:5s}
     read-timeout: ${APP_TRACKING_READ_TIMEOUT:90s}
+    agent-read-timeout: ${APP_TRACKING_AGENT_READ_TIMEOUT:480s}
     auto-refresh:
       enabled: ${APP_TRACKING_AUTO_REFRESH_ENABLED:false}
       supplemental-retry-enabled: ${APP_TRACKING_SUPPLEMENTAL_RETRY_ENABLED:true}

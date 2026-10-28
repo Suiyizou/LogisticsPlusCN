@@ -11,6 +11,7 @@ public class ShipmentTrackingProperties {
   private Duration cacheTtl = Duration.ofMinutes(15);
   private Duration connectTimeout = Duration.ofSeconds(5);
   private Duration readTimeout = Duration.ofSeconds(90);
+  private Duration agentReadTimeout = Duration.ofSeconds(480);
   private String adapterKey = "";
 
   public String getAdapterBaseUrl() {
@@ -47,6 +48,14 @@ public class ShipmentTrackingProperties {
 
   public String getAdapterKey() {
     return adapterKey;
+  }
+
+  public Duration getAgentReadTimeout() {
+    return agentReadTimeout;
+  }
+
+  public void setAgentReadTimeout(Duration agentReadTimeout) {
+    this.agentReadTimeout = agentReadTimeout;
   }
 
   public void setAdapterKey(String adapterKey) {

@@ -34,7 +34,7 @@ public class ShipmentLookupService {
     }
     String carrier = ShipmentReferences.normalizeCode(request.carrier(), "COSCO");
     String type = ShipmentReferences.normalizeCode(request.referenceType(), "BOOKING");
-    if (!"BOOKING".equals(type)) {
+    if (!com.cargoplanner.backend.shipment.TrackingCarriers.supportsReference(carrier, type)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Shipment binding must use the booking number"

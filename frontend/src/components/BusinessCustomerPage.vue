@@ -112,7 +112,9 @@
             {{ refreshTrackingResponse.number }}</b
           >
         </div>
-        <div v-if="!refreshTrackingResponse.hasDetails">
+        <a v-if="['TRACKING_HUMAN_REQUIRED', 'TRACKING_PAGE_UNAVAILABLE', 'TRACKING_AGENT_FAILED'].includes(refreshTrackingResponse.code) && OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]"
+          :href="OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]" target="_blank" rel="noopener noreferrer">{{ t('customers.verifyAtCarrier') }}</a>
+        <div v-if="refreshTrackingResponse.ok && !refreshTrackingResponse.hasDetails">
           <span>{{ t("customers.updateTrackingNoDetails") }}</span
           ><b>{{ t("customers.updateTrackingNumberInvalidOrEmpty") }}</b>
         </div>
@@ -161,6 +163,7 @@
 </template>
 
 <script setup>
+import { OFFICIAL_TRACKING_URLS } from "../services/trackingCarriers.js";
 import { createWorkspacePresentation } from "../features/presentation/createWorkspacePresentation.js";
 import { trackingWorkspaceLink } from "../features/navigation/trackingWorkspaceLink.js";
 import { useWorkspaceFeedback } from "../features/shared/useWorkspaceFeedback.js";

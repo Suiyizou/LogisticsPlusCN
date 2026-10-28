@@ -61,6 +61,51 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
+  void humanVerificationPausesAutomaticRefreshInsteadOfSpendingMoreAgentRuns() {
+    insertShipment(1, "00000000-0000-0000-0000-000000000001", "In transit");
+    jdbcTemplate.update("UPDATE cp_shipments SET carrier_code = 'MSC' WHERE id = 1");
+    jdbcTemplate.update("UPDATE cp_shipment_references SET carrier_code = 'MSC' WHERE shipment_id = 1");
+    insertDueJob(1, NOW.minusSeconds(1));
+    when(trackingService.refreshAutomatically("MSC", "BOOKING", "BK1")).thenThrow(
+        new com.cargoplanner.backend.common.ApiException(
+            org.springframework.http.HttpStatus.CONFLICT, "TRACKING_HUMAN_REQUIRED", "Carrier verification required"
+        )
+    );
+    assertThat(service.refreshDueShipments()).isEqualTo(1);
+    assertThat(service.refreshDueShipments()).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT terminal_status FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", String.class
+    )).isEqualTo("HUMAN_REQUIRED");
+    verify(trackingService, times(1)).refreshAutomatically("MSC", "BOOKING", "BK1");
+  }
+
+  @Test
+  void discoversAndRefreshesNewCarriersUsingTheirPrimaryBillReference() {
+    int index = 1;
+    for (String carrier : List.of("MAERSK", "HAPAG_LLOYD", "MSC", "OOCL")) {
+      String publicId = String.format("00000000-0000-0000-0000-%012d", index);
+      insertShipment(index, publicId, "In transit");
+      jdbcTemplate.update("UPDATE cp_shipments SET carrier_code = ? WHERE id = ?", carrier, index);
+      jdbcTemplate.update(
+          "UPDATE cp_shipment_references SET carrier_code = ?, reference_type = 'BILLOFLADING' WHERE shipment_id = ?",
+          carrier, index
+      );
+      ObjectNode response = objectMapper.createObjectNode();
+      response.putObject("snapshot").putObject("summary").putObject("latestEvent").put("name", "In transit");
+      when(trackingService.refreshAutomatically(carrier, "BILLOFLADING", "BK" + index)).thenReturn(response);
+      index++;
+    }
+    assertThat(service.registerMissingJobs(NOW)).isEqualTo(4);
+    jdbcTemplate.update("UPDATE cp_tracking_refresh_jobs SET next_attempt_at = ?", Timestamp.from(NOW.minusSeconds(1)));
+    assertThat(service.refreshDueShipments()).isEqualTo(4);
+    index = 1;
+    for (String carrier : List.of("MAERSK", "HAPAG_LLOYD", "MSC", "OOCL")) {
+      verify(trackingService).refreshAutomatically(carrier, "BILLOFLADING", "BK" + index);
+      index++;
+    }
+  }
+
+  @Test
   void keepsScheduledRefreshDisabledByDefault() {
     assertThat(new ShipmentAutoRefreshProperties().isEnabled()).isFalse();
     assertThat(new ShipmentAutoRefreshProperties().isSupplementalRetryEnabled()).isTrue();

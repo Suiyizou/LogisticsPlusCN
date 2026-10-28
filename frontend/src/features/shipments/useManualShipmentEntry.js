@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
+import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 import {
   buildManualShipmentImportResultWorkbook,
   buildManualShipmentImportTemplate,
@@ -42,6 +43,10 @@ export function useManualShipmentEntry({
   entryWriteBusy = ref(false)
 }) {
   const model = createManualShipmentEntryModel(t);
+  watch(() => model.shipmentCreateForm.carrier, (carrier) => {
+    if (!supportsShipmentReference(carrier, model.shipmentCreateForm.referenceType))
+      model.shipmentCreateForm.referenceType = "BOOKING";
+  }, { flush: "sync" });
   const shipmentCreateDialogOpen = ref(false);
   const shipmentCreateCustomerId = ref("");
   const shipmentCreatePublishToCustomer = ref(true);

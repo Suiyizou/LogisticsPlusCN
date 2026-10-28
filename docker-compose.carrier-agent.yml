@@ -1,0 +1,72 @@
+services:
+  carrier-agent:
+    build:
+      context: ./carrier-agent-lab
+      dockerfile: Dockerfile
+    image: cargo-platform-carrier-agent:0.1.0
+    container_name: cargo-platform-carrier-agent
+    environment:
+      TRACKING_HOST: 0.0.0.0
+      TRACKING_PORT: 4317
+      TRACKING_MAX_CONCURRENCY: ${TRACKING_AGENT_MAX_CONCURRENCY:-1}
+      TRACKING_QUEUE_LIMIT: ${TRACKING_AGENT_QUEUE_LIMIT:-5}
+      TRACKING_RUN_TIMEOUT_MS: ${TRACKING_AGENT_RUN_TIMEOUT_MS:-420000}
+      TRACKING_MAX_AGENT_TURNS: ${TRACKING_AGENT_MAX_TURNS:-24}
+      TRACKING_BROWSER_HEADLESS: "true"
+      TRACKING_BROWSER_ALLOW_HEADED: "false"
+      TRACKING_BROWSER_CHANNEL: chromium
+      CARRIER_BROWSER_STATE_DIR: /run/carrier-browser-states
+      TRACKING_BROWSER_TIMEOUT_MS: ${TRACKING_AGENT_BROWSER_TIMEOUT_MS:-45000}
+      TRACKING_ARTIFACT_TTL_HOURS: ${TRACKING_AGENT_ARTIFACT_TTL_HOURS:-24}
+      TRACKING_NAVIGATION_POLICY: official-only
+      TRACKING_REQUIRE_VISION: "true"
+      TRACKING_ENABLE_DEMO: ${TRACKING_AGENT_ENABLE_DEMO:-true}
+      PI_AGENT_DIR: /home/pwuser/.pi/agent
+      PI_PROVIDER: ${PI_PROVIDER:-deepseek}
+      PI_MODEL: ${PI_MODEL:-deepseek-v4-flash-vision-exp}
+      TZ: Asia/Shanghai
+    expose:
+      - "4317"
+    volumes:
+      - ${PI_AGENT_HOST_DIR:-./carrier-agent-lab/.pi-agent}:/home/pwuser/.pi/agent:ro
+      - ${CARRIER_BROWSER_STATE_HOST_DIR:-./carrier-agent-lab/.browser-states}:/run/carrier-browser-states:ro
+    init: true
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4317/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - app
+
+  backend:
+    environment:
+      APP_CARRIER_AGENT_BASE_URL: ${APP_CARRIER_AGENT_BASE_URL:-http://carrier-agent:4317}
+      APP_TRACKING_AGENT_READ_TIMEOUT: 480s
+      APP_TRACKING_AUTO_REFRESH_LEASE_DURATION: 10m
+    depends_on:
+      carrier-agent:
+        condition: service_healthy
+
+  tracking:
+    environment:
+      CARRIER_AGENT_BASE_URL: http://carrier-agent:4317
+      CARRIER_AGENT_TIMEOUT_MS: ${CARRIER_AGENT_TIMEOUT_MS:-450000}
+      MAERSK_TRACKING_API_URL: ${MAERSK_TRACKING_API_URL:-}
+      MAERSK_TRACKING_API_KEY: ${MAERSK_TRACKING_API_KEY:-}
+      MAERSK_TRACKING_API_KEY_HEADER: ${MAERSK_TRACKING_API_KEY_HEADER:-Consumer-Key}
+      HAPAG_LLOYD_TRACKING_API_URL: ${HAPAG_LLOYD_TRACKING_API_URL:-}
+      HAPAG_LLOYD_TRACKING_API_KEY: ${HAPAG_LLOYD_TRACKING_API_KEY:-}
+      HAPAG_LLOYD_TRACKING_API_KEY_HEADER: ${HAPAG_LLOYD_TRACKING_API_KEY_HEADER:-API-Key}
+      MSC_TRACKING_API_URL: ${MSC_TRACKING_API_URL:-}
+      MSC_TRACKING_API_KEY: ${MSC_TRACKING_API_KEY:-}
+      MSC_TRACKING_API_KEY_HEADER: ${MSC_TRACKING_API_KEY_HEADER:-Ocp-Apim-Subscription-Key}
+      OOCL_TRACKING_API_URL: ${OOCL_TRACKING_API_URL:-}
+      OOCL_TRACKING_API_KEY: ${OOCL_TRACKING_API_KEY:-}
+      OOCL_TRACKING_API_KEY_HEADER: ${OOCL_TRACKING_API_KEY_HEADER:-API-Key}
+    depends_on:
+      carrier-agent:
+        condition: service_healthy

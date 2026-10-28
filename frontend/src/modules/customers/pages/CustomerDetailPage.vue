@@ -185,8 +185,7 @@
                     class="business-select"
                     popper-class="business-select-popper"
                   >
-                    <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-                    <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                    <el-option v-for="carrier in TRACKING_CARRIERS" :key="carrier.code" :value="carrier.code" :label="carrier.name" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -198,6 +197,7 @@
                     popper-class="business-select-popper"
                   >
                     <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+<el-option v-if="supportsShipmentReference(bindForm.carrier, 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -401,6 +401,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";

@@ -359,9 +359,9 @@ export function useShipmentDetail({
         ok: resp.ok,
         code: data?.code || data?.diagnostic?.code || (resp.ok ? "SUCCESS" : data?.error) || "-",
         message:
-          data?.warning || data?.diagnostic?.code === "UPSTREAM_EMPTY"
+          data?.diagnostic?.code === "UPSTREAM_EMPTY"
             ? t("customers.refreshReturnedNoData")
-            : data?.message ||
+            : data?.warning || data?.message ||
               data?.diagnostic?.message ||
               (resp.ok ? t("customers.updateTrackingSuccessDefault") : resp.statusText) ||
               "-",

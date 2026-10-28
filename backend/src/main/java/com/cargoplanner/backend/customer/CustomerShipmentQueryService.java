@@ -380,7 +380,7 @@ public class CustomerShipmentQueryService {
           ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
-        WHERE s.carrier_code IN ('COSCO', 'CMA')
+        WHERE s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
           AND REPLACE(UPPER(COALESCE(s.tracking_status, '')), '_', ' ')
                 NOT LIKE '%EMPTY RETURNED%'
         """;
@@ -420,7 +420,7 @@ public class CustomerShipmentQueryService {
           ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
-        WHERE s.carrier_code IN ('COSCO', 'CMA')
+        WHERE s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
           AND s.public_id IN (%s)
         """.formatted(placeholders);
     List<Object> parameters = new ArrayList<>(shipmentIds);

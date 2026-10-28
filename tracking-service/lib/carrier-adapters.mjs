@@ -1,4 +1,5 @@
 import { HttpError } from "./http-utils.mjs";
+import { MULTI_CARRIER_CATALOG } from "./multi-carrier-catalog.mjs";
 
 /** 船司/查询类型/通道的注册与归一化。从 server.mjs 下沉，入口只组装。 */
 
@@ -63,12 +64,19 @@ export const CARRIER_ADAPTERS = Object.freeze({
     defaultChannel: "PLAYWRIGHT",
     enabled: true,
     source: "CMA_SERVER_RENDERED_HTML"
-  }
+  },
+  ...Object.fromEntries(Object.values(MULTI_CARRIER_CATALOG).map((carrier) => [carrier.code, {
+    code: carrier.code, name: carrier.name, channel: "AUTO",
+    channels: ["AUTO", "NETWORK", "AGENT"], defaultChannel: "AUTO",
+    enabled: true, source: "CARRIER_BROWSER_AGENT"
+  }]))
 });
 
 export function normalizeTrackingRequest(input) {
   const requestedType = String(input?.type ?? "BOOKING").toUpperCase();
-  const type = requestedType === "BILLOFLADING" ? "BOOKING" : requestedType;
+  const carrier = String(input?.carrier ?? "COSCO").trim().toUpperCase();
+  const type = requestedType === "BILLOFLADING" && !MULTI_CARRIER_CATALOG[carrier]
+    ? "BOOKING" : requestedType;
   const typeConfig = TRACKING_TYPES[type];
 
   if (!typeConfig) {
@@ -80,7 +88,7 @@ export function normalizeTrackingRequest(input) {
     .replace(/\s+/g, "")
     .toUpperCase();
   const number =
-    type === "BOOKING" && /^COSU[0-9]{6,20}$/.test(normalizedNumber)
+    carrier === "COSCO" && type === "BOOKING" && /^COSU[0-9]{6,20}$/.test(normalizedNumber)
       ? normalizedNumber.slice(4)
       : normalizedNumber;
 

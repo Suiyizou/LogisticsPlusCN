@@ -1,0 +1,7 @@
+{
+  "mode": "normal-browser-with-authorized-state",
+  "carrier": "MAERSK",
+  "status": "FOUND",
+  "containers": 1,
+  "evidenceCount": 6
+}

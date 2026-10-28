@@ -53,7 +53,7 @@ test("manual and daily update classifications use local calendar boundaries", ()
   assert.equal(shipmentBusinessState({}, now), "MANUAL_REQUIRED");
 });
 
-test("tracking reference uses explicit bookings and only converts numeric COSCO bill references", () => {
+test("tracking reference keeps supported carrier bills and only converts numeric COSCO bills", () => {
   const row = Object.freeze({
     carrier: "cosco",
     bookingNumber: " B123 ",
@@ -66,7 +66,7 @@ test("tracking reference uses explicit bookings and only converts numeric COSCO 
     number: "123456789"
   });
   for (const record of [
-    { carrier: "MSC", referenceType: "BILLOFLADING", referenceNo: "123456789" },
+    { carrier: "UNKNOWN", referenceType: "BILLOFLADING", referenceNo: "123456789" },
     { carrier: "COSCO", referenceType: "BILLOFLADING", referenceNo: "COSU1234567" },
     { referenceType: "CONTAINER", referenceNo: "COSU1234567" }
   ]) {
@@ -76,6 +76,11 @@ test("tracking reference uses explicit bookings and only converts numeric COSCO 
     type: "BOOKING",
     number: "987654321"
   });
+  for (const carrier of ["MAERSK", "HAPAG_LLOYD", "MSC", "OOCL"]) {
+    assert.deepEqual(preferredTrackingReference({ carrier, referenceType: "BILLOFLADING", referenceNo: "TEST-BILL-123" }), {
+      type: "BILLOFLADING", number: "TEST-BILL-123"
+    });
+  }
 });
 
 test("bound user records retain source priority, roles and identity deduplication", () => {

@@ -70,6 +70,7 @@
                 popper-class="business-select-popper"
               >
                 <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+<el-option v-if="supportsShipmentReference(selectedShipment?.carrier || '', 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
               </el-select>
             </el-form-item>
             <el-form-item :label="t('customers.referenceNo')">
@@ -255,6 +256,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";

@@ -1264,7 +1264,8 @@ public class ShipmentBatchTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row " + (index + 1) + " is empty");
     }
     String type = clean(request.type(), 24, "BOOKING").toUpperCase(Locale.ROOT);
-    if (!"BOOKING".equals(type)) {
+    String requestedCarrier = clean(request.carrier(), 32, "").toUpperCase(Locale.ROOT);
+    if (!"BOOKING".equals(type) && !TrackingCarriers.supportsReference(requestedCarrier, type)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Shipment row " + (index + 1) + " must use a booking number"
@@ -1288,7 +1289,7 @@ public class ShipmentBatchTrackingService {
           "Shipment row " + (index + 1) + " has no shipment number"
       );
     }
-    boolean supportedCarrier = carrier != null && List.of("COSCO", "CMA").contains(carrier);
+    boolean supportedCarrier = carrier != null && TrackingCarriers.CODES.contains(carrier);
     boolean manualOnly = Boolean.TRUE.equals(request.manualOnly()) || !supportedCarrier;
     ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
         clean(request.id(), 120, "row-" + (index + 1)),
@@ -1313,8 +1314,7 @@ public class ShipmentBatchTrackingService {
         type,
         compact(clean(request.number(), 128, null))
     );
-    if (!List.of("COSCO", "CMA").contains(carrier)
-        || !"BOOKING".equals(type)
+    if (!TrackingCarriers.supportsReference(carrier, type)
         || number.isBlank()) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,

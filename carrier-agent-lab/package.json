@@ -1,0 +1,30 @@
+{
+  "name": "carrier-agent-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal pi-agent shipment tracking browser preview",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/src/server.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/config.test.ts test/router.test.ts test/contracts.test.ts test/run-events.test.ts test/demo.test.ts test/run-manager.test.ts test/browser-session.test.ts test/not-found-validation.test.ts test/prefix-evidence-validation.test.ts test/runtime-agent-dir.test.ts test/server.test.ts test/skill.test.ts test/final-screenshot.test.ts",
+    "test:browser": "node --import tsx --test test/browser-session.test.ts",
+    "smoke:agent": "tsx scripts/agent-fixture-smoke.ts",
+    "smoke:sites": "tsx scripts/site-smoke.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "playwright": "1.62.1",
+    "typebox": "1.3.14"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3"
+  }
+}

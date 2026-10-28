@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { TRACKING_CARRIERS, supportsShipmentReference } from "../../services/trackingCarriers.js";
 import { ref } from "vue";
 import type { ManualShipmentCreateWorkflow } from "../../types/featureComponents";
 import { useI18n } from "vue-i18n";
@@ -101,8 +102,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
                     class="business-select"
                     popper-class="business-select-popper"
                   >
-                    <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-                    <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                    <el-option v-for="carrier in TRACKING_CARRIERS" :key="carrier.code" :value="carrier.code" :label="carrier.name" />
                   </el-select>
                 </label>
                 <label>
@@ -114,6 +114,7 @@ const onDialogKeydown = (event: KeyboardEvent) => handleDialogKeydown(event);
                     popper-class="business-select-popper"
                   >
                     <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+<el-option v-if="supportsShipmentReference(workflow.shipmentCreateForm.carrier, 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
                   </el-select>
                 </label>
                 <label>

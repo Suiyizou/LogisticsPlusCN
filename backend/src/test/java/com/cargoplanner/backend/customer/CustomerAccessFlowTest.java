@@ -44,6 +44,35 @@ class CustomerAccessFlowTest {
   private MockHttpServletRequest httpRequest;
 
   @Test
+  void newCarrierBillsCanBeCreatedListedAndBoundWithoutChangingTheirIdentity() {
+    Map<String, Object> customer = customerService.create(
+        new CreateCustomerRequest("multi-carrier-customer", "FixturePass!23", "Multi Carrier", "SHIPPER", "MULTI01"),
+        business, "127.0.0.1"
+    );
+    String customerId = (String) customer.get("id");
+    for (String carrier : List.of("MAERSK", "HAPAG_LLOYD", "MSC", "OOCL")) {
+      String reference = carrier.replace("_", "") + "123456789";
+      Map<String, Object> created = customerService.createShipment(
+          new CreateBusinessShipmentRequest(carrier, "BILLOFLADING", reference, "Booking confirmed", null),
+          business, "127.0.0.1"
+      );
+      Map<String, Object> bound = customerService.bindShipment(
+          customerId, new CustomerShipmentBindingRequest(null, carrier, "BILLOFLADING", reference),
+          business, "127.0.0.1"
+      );
+      assertThat(bound.get("shipmentId")).isEqualTo(created.get("shipmentId"));
+      assertThat(bound.get("publicationStatus")).isEqualTo("DRAFT");
+      @SuppressWarnings("unchecked")
+      List<Map<String, Object>> items = (List<Map<String, Object>>) customerService.listAvailableShipments(business).get("items");
+      assertThat(items).anySatisfy(item -> assertThat(item)
+          .containsEntry("shipmentId", created.get("shipmentId"))
+          .containsEntry("carrier", carrier)
+          .containsEntry("referenceType", "BILLOFLADING")
+          .containsEntry("referenceNo", reference));
+    }
+  }
+
+  @Test
   void customerDirectoryHttpResponseMatchesExistingCustomerMetadata() throws Exception {
     String firstId = (String) customerService.create(
         new CreateCustomerRequest("directory-one", "SecurePass!23", "Directory One", "SHIPPER"),

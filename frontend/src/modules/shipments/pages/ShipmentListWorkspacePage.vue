@@ -130,8 +130,14 @@
                     class="business-select"
                     popper-class="business-select-popper"
                   >
-                    <el-option value="COSCO" :label="t('customers.carrierCOSCO')" />
-                    <el-option value="CMA" :label="t('customers.carrierCMA')" />
+                    <el-option v-for="carrier in TRACKING_CARRIERS" :key="carrier.code" :value="carrier.code" :label="carrier.name" />
+                  </el-select>
+                </label>
+                <label>
+                  <span>{{ t("customers.referenceType") }}</span>
+                  <el-select v-model="batchTrackReferenceType" :disabled="batchTrackChecking" class="business-select">
+                    <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
+                    <el-option v-if="supportsShipmentReference(batchTrackCarrier, 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
                   </el-select>
                 </label>
                 <el-checkbox
@@ -468,6 +474,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -482,6 +489,7 @@ const {
   batchSavingBusinessFields,
   batchTrackCancelRequested,
   batchTrackCarrier,
+  batchTrackReferenceType,
   batchTrackChecking,
   batchTrackCustomerId,
   batchTrackDialogOpen,

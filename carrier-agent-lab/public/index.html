@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>船司货踪 Agent 预览</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <a class="back-link" href="/workbenches">← 返回工作台</a>
+        <p class="eyebrow">INTEGRATED PREVIEW</p>
+        <h1>船司货踪 Agent 预览</h1>
+        <p>用于系统内验证非 COSCO 船司查询。Agent 结合 DOM 快照、视觉截图与真实浏览器操作，结果按统一结构返回。</p>
+      </header>
+
+      <section class="panel">
+        <form id="tracking-form">
+          <label>
+            船司
+            <select id="carrier" name="carrier">
+              <option value="AUTO">自动判断</option>
+              <option value="MAERSK">Maersk</option>
+              <option value="OOCL">OOCL</option>
+              <option value="CMA">CMA CGM</option>
+              <option value="COSCO">COSCO（转现有通道）</option>
+              <option value="HAPAG_LLOYD">Hapag-Lloyd</option>
+              <option value="MSC">MSC</option>
+              <option value="MATSON">Matson</option>
+              <option value="ONE">ONE</option>
+              <option value="HMM">HMM</option>
+              <option value="EVERGREEN">Evergreen</option>
+              <option value="YANG_MING">Yang Ming</option>
+              <option value="WAN_HAI">Wan Hai</option>
+              <option value="ZIM">ZIM</option>
+              <option value="OTHER">其他船司</option>
+            </select>
+          </label>
+          <label>
+            票号类型
+            <select id="reference-type" name="referenceType">
+              <option value="BILL_OF_LADING" selected>提单号</option>
+              <option value="BOOKING">订舱号</option>
+              <option value="CONTAINER">箱号</option>
+              <option value="AUTO">自动识别</option>
+            </select>
+          </label>
+          <label class="wide">
+            订舱号 / 提单号 / 箱号
+            <input id="reference" name="reference" autocomplete="off" placeholder="输入业务票号" required minlength="4" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._/-]{3,39}" />
+          </label>
+          <label id="custom-url-row" class="wide" hidden>
+            其他船司名称
+            <input id="carrier-name" name="carrierName" placeholder="例如 Evergreen Marine" />
+            <span>已确认的船司官方公开货踪网址（必填）</span>
+            <input id="custom-url" name="customUrl" type="url" placeholder="https://carrier.example/track" />
+          </label>
+          <div class="actions wide">
+            <button id="submit" type="submit">启动 Agent 查询</button>
+            <button id="cancel" type="button" class="secondary" disabled>取消</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="workspace">
+        <article class="panel status-panel">
+          <div class="panel-heading">
+            <h2>执行状态</h2>
+            <span id="state" class="badge">IDLE</span>
+          </div>
+          <ol id="events" class="events"><li>等待查询任务</li></ol>
+        </article>
+        <article class="panel result-panel">
+          <div class="panel-heading"><h2>结构化结果</h2><span>schema v1.0</span></div>
+          <pre id="result">尚无结果</pre>
+        </article>
+      </section>
+
+      <footer>验证码、登录或无法可靠确认的页面会返回 HUMAN_REQUIRED，不会伪造货踪结果。</footer>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

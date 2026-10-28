@@ -1,4 +1,5 @@
 import { isToday } from "../shared/businessDates.js";
+import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 
 // Presentation rules consume explicit records; no access to component state or browser services.
 
@@ -48,7 +49,9 @@ export function preferredTrackingReference(row) {
   ) {
     return { type: "BOOKING", number: numericCoscoReference };
   }
-  return { type: "BOOKING", number: originalType === "BOOKING" ? originalNumber : "" };
+  return originalType === "BOOKING" || supportsShipmentReference(carrier, originalType)
+    ? { type: originalType, number: originalNumber }
+    : { type: "BOOKING", number: "" };
 }
 
 export function needsManualSupplement(shipment) {

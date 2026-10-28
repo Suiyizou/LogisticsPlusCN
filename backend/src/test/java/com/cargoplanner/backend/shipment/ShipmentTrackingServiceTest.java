@@ -103,6 +103,40 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void newCarrierTrackingRequiresAnAuthenticatedWorkspace() {
+    assertThatThrownBy(() -> service.track(
+        new ShipmentTrackRequest("MAERSK", "AUTO", "BILLOFLADING", "TEST-BL-10001", false), null
+    )).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN));
+  }
+
+  @Test
+  void persistsAndReusesAllNewCarrierSnapshotsWithTheirBillIdentities() throws Exception {
+    for (String carrier : List.of("MAERSK", "HAPAG_LLOYD", "MSC", "OOCL")) {
+      String number = "TEST-BL-10001";
+      NormalizedTrackRequest request = new NormalizedTrackRequest(carrier, "AUTO", "BILLOFLADING", number);
+      ObjectNode upstream = (ObjectNode) objectMapper.readTree("""
+          {"snapshot":{"channel":"AGENT","fetchedAt":"2026-07-16T10:00:00Z",
+          "tracking":{"type":"BILLOFLADING","number":"TEST-BL-10001"},
+          "summary":{"billOfLading":"TEST-BL-10001","latestEvent":{"name":"Loaded on board"}},
+          "containers":[{"number":"MSKU1234567"}]},
+          "strategy":{"requested":"AUTO","used":"AGENT"}}
+          """);
+      upstream.withObject("snapshot").putObject("provider").put("code", carrier);
+      when(adapterClient.track(request)).thenReturn(upstream);
+      ShipmentTrackRequest input = new ShipmentTrackRequest(carrier, "AUTO", "BILLOFLADING", number, false);
+      assertThat(service.track(input, business).path("cacheSource").asText()).isEqualTo("LIVE");
+      assertThat(service.track(input, business).path("snapshot").path("provider").path("code").asText())
+          .isEqualTo(carrier);
+      verify(adapterClient, times(1)).track(request);
+    }
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_shipments", Integer.class)).isEqualTo(4);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_shipment_references WHERE reference_type = 'BILLOFLADING' AND primary_reference = TRUE",
+        Integer.class
+    )).isEqualTo(4);
+  }
+
+  @Test
   void marksTheProductionConstructorForSpringInjection() {
     var autowiredConstructors = Arrays.stream(ShipmentTrackingService.class.getDeclaredConstructors())
         .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))

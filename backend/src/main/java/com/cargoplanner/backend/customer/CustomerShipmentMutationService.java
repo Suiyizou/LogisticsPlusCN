@@ -45,7 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class CustomerShipmentMutationService {
-  private static final List<String> CARRIERS = List.of("COSCO", "CMA");
+  private static final List<String> CARRIERS = com.cargoplanner.backend.shipment.TrackingCarriers.CODES;
 
   private final JdbcTemplate jdbcTemplate;
   private final ObjectMapper objectMapper;
@@ -91,7 +91,7 @@ public class CustomerShipmentMutationService {
     accessGuard.requireManager(actor);
     if (request == null) throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment is required");
     String carrier = normalizeCarrier(request.carrier());
-    String referenceType = normalizeReferenceType(request.referenceType());
+    String referenceType = normalizeReferenceType(request.referenceType(), carrier);
     String referenceNo = normalizeShipmentReference(carrier, referenceType, request.referenceNo());
     assertReferenceIdentityAvailable(carrier, referenceType, referenceNo, null);
     String trackingStatus = normalizeTrackingStatus(request.trackingStatus(), null);
@@ -164,7 +164,7 @@ public class CustomerShipmentMutationService {
     for (CreateBusinessShipmentRequest shipment : shipments) {
       if (shipment == null) continue;
       String carrier = normalizeCarrier(shipment.carrier());
-      String referenceType = normalizeReferenceType(shipment.referenceType());
+      String referenceType = normalizeReferenceType(shipment.referenceType(), carrier);
       String referenceNo = normalizeShipmentReference(
           carrier, referenceType, shipment.referenceNo()
       );
@@ -221,7 +221,7 @@ public class CustomerShipmentMutationService {
     }
     CreateBusinessShipmentRequest shipmentRequest = request.shipment();
     String carrier = normalizeCarrier(shipmentRequest.carrier());
-    String referenceType = normalizeReferenceType(shipmentRequest.referenceType());
+    String referenceType = normalizeReferenceType(shipmentRequest.referenceType(), carrier);
     String referenceNo = normalizeShipmentReference(
         carrier, referenceType, shipmentRequest.referenceNo()
     );
@@ -917,7 +917,7 @@ public class CustomerShipmentMutationService {
 
     String referenceType = request.referenceType() == null
         ? existing.referenceType()
-        : normalizeReferenceType(request.referenceType());
+        : normalizeReferenceType(request.referenceType(), shipment.carrier());
     String referenceNo = request.referenceNo() == null
         ? existing.referenceNo()
         : normalizeShipmentReference(shipment.carrier(), referenceType, request.referenceNo());
@@ -1271,8 +1271,12 @@ public class CustomerShipmentMutationService {
   }
 
   private String normalizeReferenceType(String value) {
+    return normalizeReferenceType(value, "COSCO");
+  }
+
+  private String normalizeReferenceType(String value, String carrier) {
     String normalized = inputRules.normalizeCode(value, "BOOKING");
-    if (!"BOOKING".equals(normalized)) {
+    if (!com.cargoplanner.backend.shipment.TrackingCarriers.supportsReference(carrier, normalized)) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "New and updated shipments must use the booking number; the bill of lading is supplementary data only"

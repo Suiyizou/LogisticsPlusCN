@@ -91,6 +91,7 @@ function sendTrackingError(response, error) {
       ? error.details
       : error?.code || error?.retryAfterMs
         ? {
+            ...error?.details,
             code: error?.code ?? undefined,
             retryAfterMs: error?.retryAfterMs ?? undefined
           }

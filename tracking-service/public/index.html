@@ -97,7 +97,7 @@
 
         <div class="sidebar-foot">
           <span data-i18n="sidebar.architecture">UNIFIED ADAPTER</span>
-          <strong>COSCO · CMA READY</strong>
+          <strong>COSCO · CMA · MAERSK · HAPAG · MSC · OOCL</strong>
         </div>
       </aside>
 
@@ -519,6 +519,10 @@
                   <select id="carrier-select" name="carrier">
                     <option value="COSCO">COSCO SHIPPING</option>
                     <option value="CMA">CMA CGM</option>
+                    <option value="MAERSK">Maersk</option>
+                    <option value="HAPAG_LLOYD">Hapag-Lloyd</option>
+                    <option value="MSC">MSC</option>
+                    <option value="OOCL">OOCL</option>
                   </select>
                 </div>
                 <div class="field channel-field internal-query-channel">
@@ -528,12 +532,14 @@
                     <option value="NETWORK" data-i18n="channel.network">Channel 1 · Network interface</option>
                     <option value="PLAYWRIGHT" data-i18n="channel.playwright">Channel 2 · Playwright browser</option>
                     <option value="PROXY" data-i18n="channel.proxy">Proxy · Alternate outbound IP</option>
+                    <option value="AGENT">AI Agent</option>
                   </select>
                 </div>
                 <div class="field type-field">
                   <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
                    <select id="tracking-type" name="type">
                     <option value="BOOKING" data-i18n="type.booking">Booking number</option>
+                    <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
                     <option value="CONTAINER" data-i18n="type.container">Container number</option>
                   </select>
                 </div>

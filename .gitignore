@@ -21,3 +21,4 @@ docker/proxy-pool/providers/
 output/playwright/
 .tmp/
 backups/
+carrier-agent-lab/.browser-states/

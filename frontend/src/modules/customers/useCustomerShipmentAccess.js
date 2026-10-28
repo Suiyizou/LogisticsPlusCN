@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, reactive, ref, watch } from "vue";
+import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 
 /** Customer-side ticket associations and publication, with a fixed mutation target. */
 export function useCustomerShipmentAccess({
@@ -26,6 +27,9 @@ export function useCustomerShipmentAccess({
     referenceType: "BOOKING",
     referenceNo: ""
   });
+  watch(() => bindForm.carrier, (carrier) => {
+    if (!supportsShipmentReference(carrier, bindForm.referenceType)) bindForm.referenceType = "BOOKING";
+  }, { flush: "sync" });
   let disposed = false,
     version = 0;
   watch(

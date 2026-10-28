@@ -8,11 +8,14 @@ import {
   normalizeTrackingRequest
 } from "../lib/carrier-adapters.mjs";
 import { HttpError, secureTextEquals } from "../lib/http-utils.mjs";
+import { MULTI_CARRIER_CATALOG } from "../lib/multi-carrier-catalog.mjs";
+import { createMultiCarrierTracker } from "../lib/multi-carrier-tracking.mjs";
 export function createDefaultCarrierAdapters({
   cosco,
   adapterKey = "",
   fetchCma = fetchCmaTracking,
-  closeCma = closeCmaPlaywrightBrowser
+  closeCma = closeCmaPlaywrightBrowser,
+  trackMulti = createMultiCarrierTracker()
 }) {
   function authorizeProxy(headers) {
     const expected = String(adapterKey ?? "").trim();
@@ -49,7 +52,7 @@ export function createDefaultCarrierAdapters({
       const queryChannel = normalizeQueryChannel(channel ?? input.channel ?? "AUTO");
       authorizeCoscoChannel(queryChannel, headers);
       return {
-        tracking: normalizeTrackingRequest(input),
+        tracking: normalizeTrackingRequest({ ...input, carrier: "COSCO" }),
         channel: queryChannel,
         // AUTO can fall back to private proxy routes. Neither cached results nor
         // in-flight work may cross that authorization boundary; never retain the key.
@@ -80,7 +83,7 @@ export function createDefaultCarrierAdapters({
         userAgent: String(headers["x-cma-browser-user-agent"] ?? "").trim()
       };
       return {
-        tracking: normalizeTrackingRequest(input),
+        tracking: normalizeTrackingRequest({ ...input, carrier: "CMA" }),
         channel: normalizeQueryChannel("PLAYWRIGHT"),
         credentials,
         cacheScope: createHash("sha256").update(JSON.stringify(credentials)).digest("hex")
@@ -92,5 +95,32 @@ export function createDefaultCarrierAdapters({
     health: () => ({ status: "on-demand", carrier: "CMA" }),
     dispose: closeCma
   };
-  return createCarrierAdapterRegistry([coscoAdapter, cmaAdapter]);
+  const multiAdapters = Object.values(MULTI_CARRIER_CATALOG).map(({ code }) => ({
+    ...CARRIER_ADAPTERS[code],
+    capabilities: {
+      types: ["BOOKING", "BILLOFLADING", "CONTAINER"],
+      channels: ["AUTO", "NETWORK", "AGENT"], defaultChannel: "AUTO"
+    },
+    prepare(input, { channel, headers }) {
+      if (!String(adapterKey ?? "").trim())
+        throw new HttpError(503, "Multi-carrier tracking authorization is not configured", {
+          code: "TRACKING_ACCESS_NOT_CONFIGURED"
+        });
+      if (!hasProxyAuthorization(headers))
+        throw new HttpError(403, "Multi-carrier tracking requires business authorization", {
+          code: "TRACKING_FORBIDDEN"
+        });
+      let selected = String(channel ?? input.channel ?? "AUTO").trim().toUpperCase();
+      if (selected === "PLAYWRIGHT") selected = "AGENT";
+      if (!["AUTO", "NETWORK", "AGENT"].includes(selected))
+        throw new HttpError(400, "Unsupported carrier tracking channel");
+      return {
+        tracking: normalizeTrackingRequest({ ...input, carrier: code }),
+        channel: { code: selected }, cacheScope: "business-authorized"
+      };
+    },
+    track: (prepared, options) => trackMulti(code, prepared.tracking, prepared.channel.code, options),
+    health: () => ({ status: "on-demand", carrier: code })
+  }));
+  return createCarrierAdapterRegistry([coscoAdapter, cmaAdapter, ...multiAdapters]);
 }

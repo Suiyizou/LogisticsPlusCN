@@ -1,3 +1,5 @@
+import { TRACKING_CARRIERS, supportsShipmentReference } from "./trackingCarriers.js";
+
 const TRACKING_HEADER_ALIASES = new Set([
   "BOOKING",
   "BOOKINGNO",
@@ -73,7 +75,7 @@ export function prepareSheet(name, sourceRows) {
   };
 }
 
-export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarrier = "COSCO") {
+export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarrier = "COSCO", referenceType = "BOOKING") {
   if (!sheet || !Number.isInteger(Number(selectedColumnIndex))) return [];
   const columnIndex = Number(selectedColumnIndex);
   const headers = sheet.headers || [];
@@ -100,13 +102,15 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
     );
     const bookingNumber = extractManualReference(selectedValue, carrier);
     if (!bookingNumber) continue;
-    const supportedCarrier = ["COSCO", "CMA"].includes(carrier);
+    const supportedCarrier = TRACKING_CARRIERS.some((item) => item.code === carrier);
+    const type = referenceType === "BILLOFLADING" && supportsShipmentReference(carrier, referenceType)
+      ? "BILLOFLADING" : "BOOKING";
     let volume = valueAt(row, fieldIndexes.volume);
     if (normalizeHeader(volume) === "VOLUME") volume = "";
     const item = {
       id: `${sheet.name}-row-${rowIndex + 1}`,
       carrier: carrier || null,
-      type: "BOOKING",
+      type,
       number: bookingNumber,
       displayNumber: bookingNumber,
       manualOnly: !supportedCarrier,
@@ -123,7 +127,7 @@ export function buildShipmentBatchItems(sheet, selectedColumnIndex, defaultCarri
         clientNameCode
       }
     };
-    const identity = `${carrier}|${bookingNumber}`;
+    const identity = `${carrier}|${type}|${bookingNumber}`;
     const existing = itemsByBooking.get(identity);
     if (!existing) {
       itemsByBooking.set(identity, item);
@@ -140,6 +144,10 @@ function normalizeCarrier(value) {
   const normalized = normalizeHeader(value);
   if (normalized === "COSCO" || normalized === "COSCOSHIPPING") return "COSCO";
   if (normalized === "CMA" || normalized === "CMACGM") return "CMA";
+  const known = TRACKING_CARRIERS.find((carrier) =>
+    normalizeHeader(carrier.code) === normalized || normalizeHeader(carrier.name) === normalized
+  );
+  if (known) return known.code;
   return normalized;
 }
 

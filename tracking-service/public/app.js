@@ -5,6 +5,8 @@ import {
 } from "./tracking-response.mjs";
 import { localReturnPath } from "./local-return-path.mjs";
 
+import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
+
 const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
@@ -310,6 +312,7 @@ const DOCUMENT_TYPES = Object.freeze([
 ]);
 
 const CARRIERS = Object.freeze({
+  ...Object.fromEntries(Object.values(MULTI_CARRIER_CATALOG).map(({ code, name }) => [code, { code, name, enabled: true, source: "OFFICIAL API / BROWSER AGENT" }])),
   COSCO: {
     code: "COSCO",
     name: "COSCO SHIPPING",
@@ -325,6 +328,7 @@ const CARRIERS = Object.freeze({
 });
 
 const CHANNELS = Object.freeze({
+  AGENT: { code: "AGENT", labelKey: "channel.agent", sourceKey: "source.agent" },
   AUTO: {
     code: "AUTO",
     labelKey: "channel.auto",
@@ -753,6 +757,7 @@ const MESSAGES = {
       "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
     "query.helper":
       "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
+    "query.multiCarrierHelper": "Uses your configured official API first, otherwise the tracking Agent. Website verification may require manual action.",
     "query.cmaHelper":
       "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
     "cmaSession.kicker": "CMA ACCESS SESSION",
@@ -780,6 +785,8 @@ const MESSAGES = {
     "cmaSession.saveFailed": "Could not save the CMA session: {message}",
     "cmaSession.clearConfirm": "Clear the saved CMA DataDome session?",
     "channel.auto": "Automatic · API first, DOM fallback",
+    "channel.agent": "AI browser Agent",
+    "source.agent": "OFFICIAL WEBSITE · AI AGENT",
     "channel.network": "Channel 1 · Network interface",
     "channel.playwright": "Channel 2 · Playwright browser",
     "channel.proxy": "Proxy · Alternate outbound IP",
@@ -1322,6 +1329,7 @@ const MESSAGES = {
     "batch.detailUnavailable": "该任务暂时没有可查看的已保存结果。",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
     "query.helper": "自动模式优先调用网络接口，失败后才启用 Playwright 浏览器托底。",
+    "query.multiCarrierHelper": "优先使用已配置的船司 DCSA 接口，否则由浏览器 Agent 查询；遇到官网验证时需人工接管。",
     "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
     "cmaSession.kicker": "CMA 访问会话",
     "cmaSession.title": "DataDome 会话",
@@ -1345,6 +1353,8 @@ const MESSAGES = {
     "cmaSession.saveFailed": "无法保存 CMA 会话：{message}",
     "cmaSession.clearConfirm": "确定清除已保存的 CMA DataDome 会话吗？",
     "channel.auto": "自动 · 接口优先，DOM 托底",
+    "channel.agent": "AI 浏览器助手",
+    "source.agent": "船司官网 · AI 助手",
     "channel.network": "通道一 · 网络接口",
     "channel.playwright": "通道二 · Playwright 浏览器",
     "channel.proxy": "代理通道 · 更换出口 IP",
@@ -4204,7 +4214,7 @@ function normalizeQuery(query) {
     channel: String(query.channel ?? "AUTO")
       .trim()
       .toUpperCase(),
-    type: requestedType === "CONTAINER" ? "CONTAINER" : "BOOKING",
+    type: requestedType === "CONTAINER" ? "CONTAINER" : requestedType === "BILLOFLADING" && MULTI_CARRIER_CATALOG[String(query.carrier).toUpperCase()] ? "BILLOFLADING" : "BOOKING",
     number: String(query.number ?? "")
       .trim()
       .replace(/\s+/g, "")
@@ -5087,7 +5097,7 @@ function restoreBatchState() {
       .map((item, index) => {
         if (item?.type !== "BOOKING") return null;
         const type = "BOOKING";
-        const carrier = ["COSCO", "CMA"].includes(item?.carrier) ? item.carrier : null;
+        const carrier = SUPPORTED_CARRIER_CODES.includes(item?.carrier) ? item.carrier : null;
         const number = String(item?.number ?? "")
           .trim()
           .replace(/\s+/g, "")
@@ -5582,7 +5592,7 @@ function hideBatchColumnPreview({ clearFile = true } = {}) {
 }
 
 function startImportedBatch(fileName, imported) {
-  const selectedCarrier = ["COSCO", "CMA"].includes(carrierSelect.value)
+  const selectedCarrier = SUPPORTED_CARRIER_CODES.includes(carrierSelect.value)
     ? carrierSelect.value
     : "COSCO";
   const items = Array.isArray(imported?.items)
@@ -7419,8 +7429,8 @@ function isRefreshableOverseaAgentShipment(item) {
   if (!item?.shipmentId || !item?.referenceNo) return false;
   const carrier = String(item.carrier || "").toUpperCase();
   const referenceType = String(item.referenceType || "").toUpperCase();
-  if (!["COSCO", "CMA"].includes(carrier)) return false;
-  if (referenceType !== "BOOKING") return false;
+  if (!SUPPORTED_CARRIER_CODES.includes(carrier)) return false;
+  if (referenceType !== "BOOKING" && !(MULTI_CARRIER_CATALOG[carrier] && referenceType === "BILLOFLADING")) return false;
   return !isHistoryFinished(item);
 }
 
@@ -8195,10 +8205,17 @@ function updateCarrierUI({ resetResult = false } = {}) {
     if (cmaSelected) channelSelect.value = "PLAYWRIGHT";
     else if (channelSelect.disabled) channelSelect.value = "AUTO";
     channelSelect.disabled = cmaSelected;
+    for (const option of channelSelect.options) {
+      option.hidden = carrier.code === "COSCO" ? option.value === "AGENT" : cmaSelected ? option.value !== "PLAYWRIGHT" : !["AUTO", "NETWORK", "AGENT"].includes(option.value);
+    }
+    if (channelSelect.selectedOptions[0]?.hidden) channelSelect.value = "AUTO";
   }
+  const billOption = trackingType?.querySelector('option[value="BILLOFLADING"]');
+  if (billOption) billOption.hidden = ["COSCO", "CMA"].includes(carrier.code);
+  if (billOption?.hidden && trackingType.value === "BILLOFLADING") trackingType.value = "BOOKING";
   const channel = CHANNELS[channelSelect?.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
-  queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : "query.helper");
+  queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : MULTI_CARRIER_CATALOG[carrier.code] ? "query.multiCarrierHelper" : "query.helper");
   if (carrierNotice) {
     carrierNotice.hidden = carrier.enabled;
     carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
