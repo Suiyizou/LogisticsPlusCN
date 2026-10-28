@@ -84,7 +84,7 @@ function harness({ phase = "fetch", lateStatus = 200 } = {}) {
         ? pending.promise
         : Promise.resolve(response(file.id, file.id === "A" ? lateStatus : 200));
     },
-    createPdfCanvasPreview({ data, isCurrent }) {
+    createPdfCanvasPreview({ data, isCurrent: _isCurrent }) {
       const id = String.fromCharCode(data[0]);
       rendered.push(id);
       return {
