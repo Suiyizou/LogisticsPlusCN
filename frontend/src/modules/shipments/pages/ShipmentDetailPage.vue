@@ -70,7 +70,11 @@
                 popper-class="business-select-popper"
               >
                 <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-<el-option v-if="supportsShipmentReference(selectedShipment?.carrier || '', 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                <el-option
+                  v-if="supportsShipmentReference(selectedShipment?.carrier || '', 'BILLOFLADING')"
+                  value="BILLOFLADING"
+                  :label="t('customers.referenceBill')"
+                />
               </el-select>
             </el-form-item>
             <el-form-item :label="t('customers.referenceNo')">
@@ -256,7 +260,10 @@
   </section>
 </template>
 <script setup lang="ts">
-import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
+import {
+  TRACKING_CARRIERS,
+  supportsShipmentReference
+} from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -338,8 +345,8 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   gap: 6px;
   margin-bottom: 16px;
   padding: 6px 12px;
-  border: 1px solid #dce1e8;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   color: #5a6d80;
   background: #fff;
   font-size: 12px;
@@ -348,13 +355,13 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .back-button:hover {
   background: #f0f4f8;
-  color: #1e40af;
+  color: var(--color-primary);
 }
 .main-card {
   margin-bottom: 16px;
   border: 1px solid #dce3ec;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(15, 29, 46, 0.06);
+  border-radius: 4px;
+  box-shadow: none;
 }
 .main-card :deep(.el-card__header) {
   padding: 16px 20px;
@@ -380,7 +387,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .main-card-title {
   margin: 4px 0;
   font-size: 22px;
-  color: #0f1d2e;
+  color: var(--color-primary);
   letter-spacing: -0.02em;
 }
 .main-card-subtitle {
@@ -403,7 +410,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .section-label {
   font-size: 14px;
   font-weight: 700;
-  color: #1a2d42;
+  color: var(--color-foreground);
   margin: 0;
 }
 .profile-section {
@@ -415,7 +422,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .pending-matches-card {
   margin-top: 16px;
   border: 1px solid #e0e7f0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fafbfd;
 }
 .pending-matches-card :deep(.el-card__header) {
@@ -431,7 +438,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .pending-matches-header b {
   font-size: 13px;
-  color: #1a2d42;
+  color: var(--color-foreground);
 }
 .pending-matches-header small {
   display: block;
@@ -456,7 +463,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   overflow-y: auto;
   padding: 8px 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fafbfd;
 }
 .customer-checkbox-group :deep(.el-checkbox) {
@@ -474,7 +481,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .checkbox-label b {
   font-size: 12px;
-  color: #1a2d42;
+  color: var(--color-foreground);
 }
 .checkbox-label small {
   color: #7d93ae;
@@ -500,7 +507,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   justify-content: space-between;
   padding: 8px 10px;
   border: 1px solid #e0e7f0;
-  border-radius: 8px;
+  border-radius: 4px;
   margin-bottom: 4px;
   background: #f9fafb;
 }
@@ -510,7 +517,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .bound-customer-row b {
   font-size: 12px;
-  color: #1a2d42;
+  color: var(--color-foreground);
 }
 .bound-customer-row small {
   color: #7d93ae;
@@ -532,7 +539,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   align-items: center;
   padding: 3px 10px;
   border: 1px solid #d3dde9;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #ffffff;
   color: #4a5d75;
   font-size: 11px;
@@ -552,13 +559,13 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   gap: 8px;
 }
 .shipment-detail-fields .el-input {
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .shipment-detail-fields .el-form-item {
   margin-bottom: 0;
   padding: 8px 10px;
   border: 1px solid #e1e8f0;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #ffffff;
 }
 .shipment-detail-fields :deep(.el-form-item__label) {

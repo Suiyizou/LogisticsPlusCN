@@ -90,7 +90,7 @@ const { onDialogKeydown } = useDialogFocus({
   gap: 12px;
   padding: 11px 12px;
   border: 1px solid #dce6ef;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #f7fafc;
 }
 .password-result-grid dt {

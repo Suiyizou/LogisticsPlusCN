@@ -21,16 +21,20 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
   /** @type {ChartOption} */
   const activity = {
     ...animation,
-    color: ["#2f80d1", "#e49a32"],
+    color: [chartColor("--color-primary"), chartColor("--color-accent")],
     tooltip: { trigger: "axis", renderMode: "richText", confine: true },
-    legend: { bottom: 0, itemWidth: 18, textStyle: { color: "#61758b", fontSize: 11 } },
+    legend: {
+      bottom: 0,
+      itemWidth: 18,
+      textStyle: { color: chartColor("--color-muted"), fontSize: 11 }
+    },
     grid: { left: 58, right: 58, top: 36, bottom: 48 },
     xAxis: {
       type: "category",
       boundaryGap: false,
       data: trend.map((day) => formatAdminOverviewDate(day.date)),
-      axisLine: { lineStyle: { color: "#ccd8e5" } },
-      axisLabel: { color: "#6c8197" }
+      axisLine: { lineStyle: { color: chartColor("--color-border") } },
+      axisLabel: { color: chartColor("--color-muted") }
     },
     yAxis: [
       {
@@ -38,17 +42,17 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         name: copy.businessActions,
         position: "left",
         minInterval: 1,
-        nameTextStyle: { color: "#2f80d1", fontSize: 10 },
-        axisLabel: { color: "#6c8197" },
-        splitLine: { lineStyle: { color: "#edf2f7" } }
+        nameTextStyle: { color: chartColor("--color-primary"), fontSize: 10 },
+        axisLabel: { color: chartColor("--color-muted") },
+        splitLine: { lineStyle: { color: chartColor("--color-border") } }
       },
       {
         type: "value",
         name: copy.managementActions,
         position: "right",
         minInterval: 1,
-        nameTextStyle: { color: "#e49a32", fontSize: 10 },
-        axisLabel: { color: "#8c7654" },
+        nameTextStyle: { color: chartColor("--color-accent"), fontSize: 10 },
+        axisLabel: { color: chartColor("--color-muted") },
         splitLine: { show: false }
       }
     ],
@@ -59,7 +63,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         smooth: true,
         symbolSize: 7,
         yAxisIndex: 0,
-        areaStyle: { color: "rgba(47,128,209,.10)" },
+        areaStyle: { color: chartColor("--color-primary"), opacity: 0.08 },
         data: trend.map((day) => adminCount(day.businessActions))
       },
       {
@@ -78,7 +82,12 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
       name: copy.roles[item.code] || item.code,
       value: adminCount(item.value)
     })),
-    ["#2f80d1", "#48a8cf", "#7a6bd1", "#42a878"],
+    [
+      chartColor("--color-primary"),
+      chartColor("--color-quiet"),
+      chartColor("--color-accent"),
+      chartColor("--color-success")
+    ],
     locale,
     animation
   );
@@ -88,14 +97,14 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         item.code === "ACTIVE" ? copy.active : item.code === "DISABLED" ? copy.disabled : item.code,
       value: adminCount(item.value)
     })),
-    ["#35a477", "#c8d2dd"],
+    [chartColor("--color-success"), chartColor("--color-border-strong")],
     locale,
     animation
   );
   /** @type {ChartOption} */
   const operations = {
     ...animation,
-    color: ["#4f8ecf"],
+    color: [chartColor("--color-primary")],
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -106,21 +115,21 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
     xAxis: {
       type: "value",
       minInterval: 1,
-      splitLine: { lineStyle: { color: "#edf2f7" } },
-      axisLabel: { color: "#8495a7" }
+      splitLine: { lineStyle: { color: chartColor("--color-border") } },
+      axisLabel: { color: chartColor("--color-quiet") }
     },
     yAxis: {
       type: "category",
       data: displayOperations.map((item) => presentation.action(item.code)),
       axisTick: { show: false },
       axisLine: { show: false },
-      axisLabel: { color: "#536b82", fontSize: 11 }
+      axisLabel: { color: chartColor("--color-muted"), fontSize: 11 }
     },
     series: [
       {
         type: "bar",
         barMaxWidth: 22,
-        itemStyle: { borderRadius: [0, 5, 5, 0] },
+        itemStyle: { borderRadius: [0, 2, 2, 0] },
         data: displayOperations.map((item) => adminCount(item.value))
       }
     ]
@@ -139,7 +148,7 @@ function donut(data, colors, locale, animation) {
       left: "center",
       itemWidth: 12,
       itemHeight: 8,
-      textStyle: { color: "#61758b", fontSize: 10 }
+      textStyle: { color: chartColor("--color-muted"), fontSize: 10 }
     },
     graphic: total
       ? []
@@ -150,7 +159,7 @@ function donut(data, colors, locale, animation) {
             top: "40%",
             style: {
               text: adminOverviewEmptyMessages[locale === "en-US" ? "en-US" : "zh-CN"],
-              fill: "#8495a7",
+              fill: chartColor("--color-quiet"),
               fontSize: 13
             }
           }
@@ -162,10 +171,20 @@ function donut(data, colors, locale, animation) {
         center: ["50%", "44%"],
         avoidLabelOverlap: true,
         itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 4 },
-        label: { color: "#536b82", show: total > 0, formatter: "{b}\n{c}" },
+        label: { color: chartColor("--color-muted"), show: total > 0, formatter: "{b}\n{c}" },
         labelLine: { length: 10, length2: 8 },
         data
       }
     ]
   };
+}
+
+/** Read the shared theme at render time so chart palettes follow the active application theme.
+ * @param {string} name
+ * @returns {string}
+ */
+function chartColor(name) {
+  if (typeof document === "undefined" || typeof getComputedStyle === "undefined")
+    return "currentColor";
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "currentColor";
 }

@@ -7,29 +7,24 @@
       role="status"
       aria-live="polite"
       :aria-label="message"
+      :aria-busy="visible"
     >
-      <div class="system-wait-card">
-        <div class="system-wait-mark" aria-hidden="true">
-          <i></i><i></i><i></i>
-        </div>
-        <strong>DrewesLogistics</strong>
-        <span>{{ message }}</span>
-        <b aria-hidden="true"><i></i></b>
-      </div>
+      <section class="system-wait-card">
+        <BrandLockup />
+        <span class="system-wait-spinner" aria-hidden="true"></span>
+        <h2>{{ message }}</h2>
+        <p>{{ t("maritime.waitingHint") }}</p>
+      </section>
     </div>
   </Transition>
 </template>
-
 <script setup lang="ts">
-withDefaults(defineProps<{
-  visible: boolean;
-  message: string;
-  contained?: boolean;
-}>(), {
+import BrandLockup from "./brand/BrandLockup.vue";
+import { t } from "../i18n";
+withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolean }>(), {
   contained: false
 });
 </script>
-
 <style scoped>
 .system-wait-overlay {
   position: fixed;
@@ -38,136 +33,72 @@ withDefaults(defineProps<{
   display: grid;
   place-items: center;
   padding: 24px;
-  color: #fff;
-  background:
-    radial-gradient(circle at 50% 44%, rgba(38, 146, 236, 0.22), transparent 24%),
-    #061725;
+  color: var(--color-foreground);
+  background: var(--color-background);
 }
-
 .system-wait-overlay.is-contained {
   position: absolute;
   z-index: 20;
-  color: #10283e;
-  background:
-    radial-gradient(circle at 50% 43%, rgba(38, 146, 236, 0.16), transparent 28%),
-    rgba(245, 250, 254, 0.94);
-  backdrop-filter: blur(5px);
+  background: rgb(242 245 246 / 97%);
 }
-
 .system-wait-card {
-  display: grid;
-  place-items: center;
+  width: min(520px, 100%);
+  padding: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: white;
 }
-
-.system-wait-mark {
-  position: relative;
-  width: 68px;
-  height: 68px;
-  margin-bottom: 22px;
-  border: 1px solid rgba(85, 186, 255, 0.28);
-  border-radius: 16px;
-  background: rgba(8, 35, 55, 0.62);
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.22),
-    inset 0 0 26px rgba(54, 160, 239, 0.08);
-  perspective: 180px;
-}
-
-.system-wait-mark i {
-  position: absolute;
-  top: 19px;
-  width: 10px;
+.system-wait-spinner {
+  width: 30px;
   height: 30px;
-  border: 2px solid #55baff;
-  border-radius: 2px;
-  transform: skewY(-20deg);
-  transform-origin: left center;
-  animation: system-wait-panel 1.35s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  margin: 38px 0 24px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: wait-spin 0.9s linear infinite;
 }
-
-.system-wait-mark i:nth-child(1) { left: 17px; }
-.system-wait-mark i:nth-child(2) { left: 29px; animation-delay: 0.12s; }
-.system-wait-mark i:nth-child(3) { left: 41px; animation-delay: 0.24s; }
-
-.is-contained .system-wait-mark {
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow:
-    0 18px 46px rgba(28, 77, 112, 0.14),
-    inset 0 0 24px rgba(54, 160, 239, 0.06);
+.system-wait-card h2 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.4;
 }
-
-.system-wait-card strong {
-  max-width: min(82vw, 520px);
-  font-size: clamp(20px, 2.4vw, 29px);
-  letter-spacing: 0.035em;
-  line-height: 1.1;
+.system-wait-card p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-muted);
+  margin: 12px 0 0;
 }
-
-.system-wait-card > span {
-  margin-top: 10px;
-  color: rgba(221, 239, 252, 0.67);
-  font-size: 11px;
-}
-
-.is-contained .system-wait-card > span {
-  color: #668096;
-}
-
-.system-wait-card > b {
-  width: 180px;
-  height: 2px;
-  margin-top: 22px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.is-contained .system-wait-card > b {
-  background: rgba(11, 104, 210, 0.12);
-}
-
-.system-wait-card > b i {
-  display: block;
-  width: 48%;
-  height: 100%;
-  background: #46baff;
-  animation: system-wait-progress 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
 .system-wait-enter-active,
 .system-wait-leave-active {
-  transition: opacity 0.18s ease;
+  transition: opacity 180ms ease;
 }
-
 .system-wait-enter-from,
 .system-wait-leave-to {
   opacity: 0;
 }
-
-@keyframes system-wait-panel {
-  0%, 18% {
-    opacity: 0.42;
-    transform: skewY(-20deg) rotateY(0);
-  }
-  48% {
-    opacity: 1;
-    transform: skewY(-20deg) rotateY(-54deg);
-  }
-  82%, 100% {
-    opacity: 0.42;
-    transform: skewY(-20deg) rotateY(0);
+@keyframes wait-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
-
-@keyframes system-wait-progress {
-  from { transform: translateX(-110%); }
-  to { transform: translateX(320%); }
+@media (max-width: 600px) {
+  .system-wait-card {
+    padding: 32px 22px;
+  }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .system-wait-mark i,
-  .system-wait-card > b i {
+  .system-wait-spinner {
     animation: none;
+    border-right-color: var(--color-accent);
+  }
+  .system-wait-enter-active,
+  .system-wait-leave-active {
+    transition: none;
   }
 }
 </style>

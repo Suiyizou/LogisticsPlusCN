@@ -1,11 +1,12 @@
+import { chartToken } from "../../features/overview/chartTheme.js";
 import { localDateKey } from "../../features/shared/businessDates.js";
 
 const palette = {
-  blue: "#4389d5",
-  amber: "#e0a23a",
-  green: "#35a77a",
-  purple: "#7c6fd1",
-  cyan: "#2da5ba"
+  blue: "--color-primary",
+  amber: "--color-accent",
+  green: "--color-success",
+  purple: "--color-warning",
+  cyan: "--color-quiet"
 };
 const array = (value) =>
   Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
@@ -188,7 +189,7 @@ export function buildOverviewModel({
     today: kpis.map((item) => ({
       name: item.label,
       value: item.value,
-      itemStyle: { color: palette[item.tone] }
+      itemStyle: { color: chartToken(palette[item.tone]) }
     })),
     status: Array.from(statusCounts, ([name, value]) => ({ name, value })).sort(
       (a, b) => b.value - a.value

@@ -181,10 +181,8 @@ const { agentBatchRowClass } = workspace.formatters;
   margin-bottom: 18px;
   padding: 15px;
   border: 1px solid #d6e5f2;
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(72, 167, 215, 0.13), transparent 40%),
-    linear-gradient(135deg, #f2f8ff, #fbfdff);
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 .agent-batch-intro {
   justify-content: space-between;
@@ -209,10 +207,9 @@ const { agentBatchRowClass } = workspace.formatters;
   min-height: 148px;
   padding: 22px;
   border: 1px dashed #abc8df;
-  border-radius: 13px;
+  border-radius: 4px;
   color: #58758e;
-  background:
-    radial-gradient(circle at 50% -25%, rgba(61, 139, 201, 0.13), transparent 54%), #f8fbfe;
+  background: var(--color-surface-subtle);
   place-items: center;
   gap: 7px;
   cursor: pointer;
@@ -238,7 +235,7 @@ const { agentBatchRowClass } = workspace.formatters;
   display: grid;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #2f78b4;
   background: #e5f2fd;
   place-items: center;
@@ -263,7 +260,7 @@ const { agentBatchRowClass } = workspace.formatters;
   min-height: 62px;
   padding: 10px 12px;
   border: 1px solid #dce6ef;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #f7fafc;
   align-content: center;
   gap: 2px;
@@ -309,7 +306,7 @@ const { agentBatchRowClass } = workspace.formatters;
 }
 .agent-row-errors span {
   padding: 4px 6px;
-  border-radius: 5px;
+  border-radius: 4px;
   color: #9c3d4b;
   background: #fff0f2;
   font-size: 9px;

@@ -388,20 +388,20 @@ const {
   min-height: 44px;
   padding-inline: 20px;
   font-weight: 750;
-  box-shadow: 0 8px 18px rgba(3, 105, 161, 0.18);
+  box-shadow: none;
 }
 .batch-track-primary-action:hover,
 .batch-track-primary-action:focus-visible {
-  box-shadow: 0 10px 22px rgba(3, 105, 161, 0.24);
+  box-shadow: none;
 }
 .shipment-command-surface {
   display: grid;
   margin-bottom: 14px;
   padding: 14px 16px;
   border: 1px solid #dbe4ed;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 4px 16px rgba(24, 50, 75, 0.045);
+  box-shadow: none;
   gap: 12px;
 }
 .shipment-filter-bar,
@@ -462,19 +462,19 @@ const {
 .shipment-toolbar-control :deep(.el-select__wrapper) {
   min-height: 40px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c8d6e5 inset;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-toolbar-control :deep(.el-select__input) {
   min-height: 0 !important;
   padding: 0 !important;
   border: 0 !important;
   background: transparent !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .shipment-toolbar-control :deep(.el-select__wrapper:hover) {
-  box-shadow: 0 0 0 1px #6fa7d5 inset;
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 .shipment-bound-user-tags {
   display: flex;
@@ -555,7 +555,7 @@ const {
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-updated) {
   background: #16b86a;
-  box-shadow: 0 4px 10px rgba(18, 132, 78, 0.18);
+  box-shadow: none;
 }
 .shipment-today-tags :deep(.shipment-today-tag.is-pending) {
   color: #9a5a05;
@@ -624,9 +624,9 @@ const {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c7d5e4 inset;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
@@ -642,8 +642,10 @@ const {
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
-  background: #287ccb;
-  box-shadow: 0 5px 12px rgba(40, 124, 203, 0.22);
+  background: var(--color-primary);
+  box-shadow: none;
+
+  color: var(--color-on-primary);
 }
 .shipment-pagination :deep(.el-pagination__total) {
   margin-right: 8px;
@@ -727,5 +729,9 @@ const {
   .shipment-toolbar-control > .shipment-channel-select.el-select {
     width: 100%;
   }
+}
+.shipment-toolbar-control :deep(.el-select__wrapper.is-focused),
+.shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
 </style>

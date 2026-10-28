@@ -40,15 +40,15 @@
 }
 
 .admin-page-pane .admin-panel {
-  border-color: #d7e3ef;
+  border-color: var(--color-border);
   padding: 20px 22px 22px;
   background: #fff;
-  box-shadow: 0 8px 24px rgb(25 65 100 / 6%);
+  box-shadow: none;
 }
 
 .admin-page-pane .admin-panel:hover {
   border-color: #c8d8e7;
-  box-shadow: 0 10px 28px rgb(25 65 100 / 8%);
+  box-shadow: none;
   transform: none;
 }
 
@@ -56,7 +56,7 @@
   min-height: 48px;
   margin-bottom: 16px;
   padding: 0 2px 14px;
-  border-bottom: 1px solid #e5edf5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .admin-table-wrap {
@@ -64,8 +64,8 @@
   min-width: 0;
   overflow-x: auto;
   border: 0;
-  border-top: 1px solid #dce6f0;
-  border-bottom: 1px solid #dce6f0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   background: #fff;
 }
 
@@ -79,7 +79,7 @@
 
 .admin-table-wrap :deep(.el-table__header th) {
   color: #344e68;
-  background: #f3f7fb !important;
+  background: var(--color-surface-subtle) !important;
   font-size: 12px;
   letter-spacing: 0.02em;
 }
@@ -91,7 +91,7 @@
 .admin-inline-actions > button,
 .admin-top-actions > button,
 .table-actions > button {
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 700;
   transition:
     transform 0.18s ease,
@@ -103,7 +103,7 @@
 .admin-top-actions > button:hover:not(:disabled),
 .table-actions > button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 7px 16px rgb(47 128 209 / 12%);
+  box-shadow: none;
 }
 
 @media (max-width: 680px) {

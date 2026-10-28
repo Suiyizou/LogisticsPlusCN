@@ -2,6 +2,10 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/modules/**/*.vue",
+    "src/components/workspace/**/*.vue",
+    "src/components/brand/**/*.vue",
+    "src/components/public/**/*.vue",
+    "src/components/PublicLandingPage.vue",
     "src/modules/**/module.js",
     "src/modules/moduleCatalog.js",
     "src/features/shipments/ManualShipmentCreateDialog.vue",

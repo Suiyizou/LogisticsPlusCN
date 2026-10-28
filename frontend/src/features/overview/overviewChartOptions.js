@@ -1,3 +1,5 @@
+import { chartToken } from "./chartTheme.js";
+
 function overviewChartAnimation(reducedMotion) {
   return {
     animation: !reducedMotion,
@@ -7,28 +9,28 @@ function overviewChartAnimation(reducedMotion) {
     animationEasingUpdate: "cubicOut"
   };
 }
-
 function overviewChartTextStyle() {
+  return { color: chartToken("--color-muted"), fontFamily: chartToken("--font-ui") };
+}
+function tooltipStyle() {
   return {
-    color: "#667d91",
-    fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif'
+    confine: true,
+    backgroundColor: chartToken("--color-primary"),
+    borderWidth: 0,
+    textStyle: { color: chartToken("--color-on-primary"), fontSize: 11 }
   };
 }
-
 export function overviewTrendOption(data, t, reducedMotion = false) {
-  const createdName = t("customers.todayNewBusiness");
-  const updatedName = t("customers.todayUpdatedBusiness");
+  const createdName = t("customers.todayNewBusiness"),
+    updatedName = t("customers.todayUpdatedBusiness");
   return {
     ...overviewChartAnimation(reducedMotion),
-    color: ["#4389d5", "#e0a23a"],
+    color: [chartToken("--color-primary"), chartToken("--color-accent")],
     textStyle: overviewChartTextStyle(),
     tooltip: {
+      ...tooltipStyle(),
       trigger: "axis",
-      confine: true,
-      backgroundColor: "rgba(21, 42, 61, .94)",
-      borderWidth: 0,
-      textStyle: { color: "#fff", fontSize: 11 },
-      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(67, 137, 213, .07)" } }
+      axisPointer: { type: "line", lineStyle: { color: chartToken("--color-border-strong") } }
     },
     legend: {
       top: 2,
@@ -36,24 +38,24 @@ export function overviewTrendOption(data, t, reducedMotion = false) {
       itemWidth: 14,
       itemHeight: 8,
       itemGap: 16,
-      textStyle: { color: "#6f8497", fontSize: 10 }
+      textStyle: { color: chartToken("--color-muted"), fontSize: 10 }
     },
     grid: { top: 42, right: 20, bottom: 12, left: 12, containLabel: true },
     xAxis: {
       type: "category",
       boundaryGap: true,
       data: data.map((day) => day.label),
-      axisLine: { lineStyle: { color: "#dfe8f0" } },
+      axisLine: { lineStyle: { color: chartToken("--color-border") } },
       axisTick: { show: false },
-      axisLabel: { color: "#7b8fa2", fontSize: 10, margin: 12 }
+      axisLabel: { color: chartToken("--color-muted"), fontSize: 10, margin: 12 }
     },
     yAxis: {
       type: "value",
       minInterval: 1,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: "#8da0b1", fontSize: 9 },
-      splitLine: { lineStyle: { color: "#edf2f6", type: "dashed" } }
+      axisLabel: { color: chartToken("--color-muted"), fontSize: 9 },
+      splitLine: { lineStyle: { color: chartToken("--color-border"), type: "dashed" } }
     },
     series: [
       {
@@ -61,21 +63,8 @@ export function overviewTrendOption(data, t, reducedMotion = false) {
         type: "bar",
         barMaxWidth: 28,
         data: data.map((day) => day.created),
-        itemStyle: {
-          borderRadius: [7, 7, 2, 2],
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "#72b7ec" },
-              { offset: 1, color: "#397ec1" }
-            ]
-          }
-        },
-        emphasis: { itemStyle: { shadowBlur: 10, shadowColor: "rgba(57, 126, 193, .28)" } }
+        itemStyle: { borderRadius: [2, 2, 0, 0], color: chartToken("--color-primary") },
+        emphasis: { itemStyle: { opacity: 0.85 } }
       },
       {
         name: updatedName,
@@ -84,30 +73,28 @@ export function overviewTrendOption(data, t, reducedMotion = false) {
         symbol: "circle",
         symbolSize: 7,
         data: data.map((day) => day.updated),
-        lineStyle: { width: 3, color: "#e0a23a" },
-        itemStyle: { color: "#fff", borderColor: "#e0a23a", borderWidth: 3 },
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(224, 162, 58, .20)" },
-              { offset: 1, color: "rgba(224, 162, 58, 0)" }
-            ]
-          }
+        lineStyle: { width: 2, color: chartToken("--color-accent") },
+        itemStyle: {
+          color: chartToken("--color-surface"),
+          borderColor: chartToken("--color-accent"),
+          borderWidth: 2
         }
       }
     ]
   };
 }
-
 export function overviewDonutOption(data, total, seriesName, t, reducedMotion = false) {
   return {
     ...overviewChartAnimation(reducedMotion),
-    color: ["#4389d5", "#35a77a", "#e0a23a", "#7c6fd1", "#2da5ba", "#e66d75", "#8aa2b6"],
+    color: [
+      "--color-primary",
+      "--color-accent",
+      "--color-success",
+      "--color-warning",
+      "--color-quiet",
+      "--color-destructive",
+      "--color-muted"
+    ].map(chartToken),
     textStyle: overviewChartTextStyle(),
     title: {
       text: String(total),
@@ -115,17 +102,10 @@ export function overviewDonutOption(data, total, seriesName, t, reducedMotion = 
       left: "34%",
       top: "35%",
       textAlign: "center",
-      textStyle: { color: "#1f425d", fontSize: 24, fontWeight: 760 },
-      subtextStyle: { color: "#8ba0b2", fontSize: 9, lineHeight: 18 }
+      textStyle: { color: chartToken("--color-primary"), fontSize: 24, fontWeight: 500 },
+      subtextStyle: { color: chartToken("--color-muted"), fontSize: 9, lineHeight: 18 }
     },
-    tooltip: {
-      trigger: "item",
-      confine: true,
-      backgroundColor: "rgba(21, 42, 61, .94)",
-      borderWidth: 0,
-      textStyle: { color: "#fff", fontSize: 11 },
-      formatter: "{b}<br/>{c} · {d}%"
-    },
+    tooltip: { ...tooltipStyle(), trigger: "item", formatter: "{b}<br/>{c} · {d}%" },
     legend: {
       type: "scroll",
       orient: "vertical",
@@ -136,8 +116,13 @@ export function overviewDonutOption(data, total, seriesName, t, reducedMotion = 
       itemHeight: 9,
       itemGap: 11,
       pageIconSize: 9,
-      pageTextStyle: { color: "#8396a8", fontSize: 9 },
-      textStyle: { color: "#647b8f", fontSize: 9, width: 112, overflow: "truncate" }
+      pageTextStyle: { color: chartToken("--color-muted"), fontSize: 9 },
+      textStyle: {
+        color: chartToken("--color-muted"),
+        fontSize: 9,
+        width: 112,
+        overflow: "truncate"
+      }
     },
     series: [
       {
@@ -147,18 +132,10 @@ export function overviewDonutOption(data, total, seriesName, t, reducedMotion = 
         radius: ["52%", "72%"],
         minAngle: 4,
         avoidLabelOverlap: true,
-        itemStyle: {
-          borderColor: "#fff",
-          borderWidth: 3,
-          borderRadius: 5
-        },
+        itemStyle: { borderColor: chartToken("--color-surface"), borderWidth: 2, borderRadius: 0 },
         label: { show: false },
         labelLine: { show: false },
-        emphasis: {
-          scaleSize: 7,
-          label: { show: false },
-          itemStyle: { shadowBlur: 16, shadowColor: "rgba(32, 65, 92, .18)" }
-        },
+        emphasis: { scaleSize: 4, label: { show: false } },
         data
       }
     ],
@@ -181,20 +158,12 @@ export function overviewDonutOption(data, total, seriesName, t, reducedMotion = 
     ]
   };
 }
-
 export function overviewResourcesOption(resources, t, reducedMotion = false) {
   const data = [...resources].reverse();
   return {
     ...overviewChartAnimation(reducedMotion),
     textStyle: overviewChartTextStyle(),
-    tooltip: {
-      trigger: "axis",
-      confine: true,
-      axisPointer: { type: "shadow" },
-      backgroundColor: "rgba(21, 42, 61, .94)",
-      borderWidth: 0,
-      textStyle: { color: "#fff", fontSize: 11 }
-    },
+    tooltip: { ...tooltipStyle(), trigger: "axis", axisPointer: { type: "line" } },
     grid: { top: 12, right: 42, bottom: 10, left: 8, containLabel: true },
     xAxis: {
       type: "value",
@@ -202,7 +171,7 @@ export function overviewResourcesOption(resources, t, reducedMotion = false) {
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: { show: false },
-      splitLine: { lineStyle: { color: "#edf2f6", type: "dashed" } }
+      splitLine: { lineStyle: { color: chartToken("--color-border"), type: "dashed" } }
     },
     yAxis: {
       type: "category",
@@ -210,7 +179,7 @@ export function overviewResourcesOption(resources, t, reducedMotion = false) {
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: {
-        color: "#627b90",
+        color: chartToken("--color-muted"),
         fontSize: 10,
         width: 108,
         overflow: "truncate",
@@ -223,29 +192,16 @@ export function overviewResourcesOption(resources, t, reducedMotion = false) {
         type: "bar",
         barWidth: 18,
         showBackground: true,
-        backgroundStyle: { color: "#f0f4f8", borderRadius: 9 },
+        backgroundStyle: { color: chartToken("--color-surface-subtle"), borderRadius: 2 },
         label: {
           show: true,
           position: "right",
           distance: 8,
-          color: "#2a536f",
+          color: chartToken("--color-primary"),
           fontSize: 10,
-          fontWeight: 760
+          fontWeight: 500
         },
-        itemStyle: {
-          borderRadius: 9,
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 1,
-            y2: 0,
-            colorStops: [
-              { offset: 0, color: "#337fbe" },
-              { offset: 1, color: "#60b8ca" }
-            ]
-          }
-        },
+        itemStyle: { borderRadius: 2, color: chartToken("--color-primary") },
         data: data.map((item) => item.value)
       }
     ]

@@ -1,5 +1,5 @@
 import { createApp } from "vue";
-import { i18n } from "./i18n";
+import { i18n, t } from "./i18n";
 
 async function mountApplication() {
   const hasLegacyRouteHash =
@@ -10,10 +10,7 @@ async function mountApplication() {
   let installSurface = () => {};
 
   if (isPublicLanding) {
-    const [{ default: LandingEntry }] = await Promise.all([
-      import("./LandingEntry.vue"),
-      import("./landing.css")
-    ]);
+    const { default: LandingEntry } = await import("./LandingEntry.vue");
     RootComponent = LandingEntry;
   } else {
     const [{ default: ApplicationEntry }, { installLegacyDomI18n }, { router }] = await Promise.all(
@@ -42,4 +39,15 @@ async function mountApplication() {
   app.mount("#app");
 }
 
-mountApplication();
+mountApplication().catch(() => {
+  const card = document.querySelector(".boot-card");
+  if (!card) return;
+  const message = card.querySelector("p");
+  if (message) message.textContent = t("app.pageLoadFailedHint");
+  card.setAttribute("role", "alert");
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = t("app.retry");
+  retry.addEventListener("click", () => window.location.reload());
+  card.append(retry);
+});

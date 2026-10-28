@@ -109,7 +109,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-transfer-hint {
   display: block;
-  color: #64748b;
+  color: var(--color-muted);
   line-height: 1.6;
   margin-top: -4px;
 }

@@ -27,193 +27,20 @@ export const messages = {
       retry: "重新加载"
     },
     landing: {
-      metaTitle: "DrewesLogistics · 德鲁威斯（上海）供应链管理有限公司",
-      brandAria: "返回 DrewesLogistics 首页",
-      loader: {
-        aria: "DrewesLogistics 平台正在加载",
-        copy: "正在连接全球货运工作流",
-        skip: "跳过动画"
-      },
+      metaTitle: "logisticspluscn · 上海罗加国际货物运输代理有限公司",
+      brandAria: "返回 logisticspluscn 首页",
       nav: {
         aria: "主页导航",
-        home: "首页",
-        capabilities: "平台能力",
-        features: "平台功能",
-        tracking: "Cargo Tracking",
-        roadmap: "建设路线",
-        about: "关于德鲁威斯"
-      },
-      status: {
-        available: "已上线",
-        public: "公开查询",
-        publicFree: "公开免费",
-        planned: "规划中"
+        home: "首页"
       },
       entry: {
         enter: "登录平台",
-        open: "进入平台",
-        admin: "进入总后台"
-      },
-      hero: {
-        explore: "查看平台能力",
-        signalEyebrow: "运输信号",
-        signalStatus: "全球链路运行中",
-        paginationAria: "首屏内容切换",
-        goToSlide: "切换到第 {index} 页",
-        previous: "上一页",
-        next: "下一页",
-        slides: {
-          platform: {
-            kicker: "货代数字化运营平台",
-            title: "让每一票货物，从计划到交付，全程清晰可见。",
-            description:
-              "DrewesLogistics 将智能装箱与货物追踪组织在统一入口，并为船期订舱和企业 ERP 接入保留持续扩展的空间。"
-          },
-          planning: {
-            kicker: "已上线 · 智能装箱",
-            title: "把装箱经验，转化为可查看、可调整的方案。",
-            description: "根据货物与箱型数据辅助制定装载方案，直观呈现空间利用、重心与业务约束。",
-            action: "进入装箱工作台"
-          },
-          tracking: {
-            kicker: "公开服务 · Cargo Tracking",
-            title: "从参考号到关键节点，快速掌握货物动态。",
-            description: "无需登录即可进入货物追踪，按订舱号或箱号查询承运人运输节点。",
-            action: "立即查询货物"
-          }
-        }
-      },
-      capabilities: {
-        aria: "DrewesLogistics 平台能力",
-        planning: {
-          title: "智能装箱",
-          description: "从货物与箱型数据生成三维装载方案，辅助校验空间、载荷与业务约束。",
-          action: "登录后使用"
-        },
-        tracking: {
-          title: "货物追踪",
-          description: "汇集承运人运输节点，公开查询当前状态、关键时间与路线详情。",
-          action: "免登录查询"
-        },
-        booking: {
-          title: "船期与订舱",
-          description: "计划接入船期查询与订舱辅助，减少跨平台查找和重复录入。",
-          action: "查看建设路线"
-        },
-        erp: {
-          title: "企业 ERP 接入",
-          description: "计划通过标准接口连接订单、货物与运输数据，形成连贯业务流。",
-          action: "查看建设路线"
-        },
-        summary: {
-          current: "当前能力",
-          currentDetail: "装箱与追踪已可使用",
-          tracking: "公共追踪",
-          trackingDetail: "无需登录，直接查询"
-        }
-      },
-      statement: {
-        eyebrow: "一个入口 · 清晰边界",
-        title: "连接正在使用的业务工具，也为下一阶段留足空间。",
-        description:
-          "DrewesLogistics 保留各模块清晰的业务边界，通过统一品牌入口组织装箱与追踪能力。货物追踪面向客户公开，企业工作台与管理能力继续由登录权限保护。",
-        track: "公开查询货物",
-        metricOnline: "项能力已上线",
-        metricPublic: "项公开查询服务",
-        metricRoadmap: "项平台能力布局"
-      },
-      company: {
-        eyebrow: "COMPANY PROFILE · 上海",
-        internationalName: "DREWES (SHANGHAI) SUPPLY CHAIN MANAGEMENT CO., LTD.",
-        legalName: "德鲁威斯（上海）供应链管理有限公司",
-        description:
-          "德鲁威斯（上海）供应链管理有限公司成立于 2023 年 3 月 16 日，注册于上海市虹口区，业务围绕供应链管理、国际与国内货运代理，以及船舶和运输设备相关服务展开。",
-        detail:
-          "经营范围包括供应链管理服务、国际货物运输代理、海上／航空／陆路国际货运代理、报检业务、国际船舶代理、国内货运代理、运输设备与船舶租赁、集装箱销售及无船承运业务。",
-        incorporatedLabel: "成立日期",
-        typeLabel: "企业类型",
-        typeValue: "有限责任公司（自然人独资）",
-        industryLabel: "所属行业",
-        industryValue: "商务服务业",
-        platformAction: "查看平台能力",
-        creditCodeLabel: "统一社会信用代码",
-        sourceNote:
-          "企业基础信息与经营范围依据用户提供的公开工商登记截图整理；登记信息可能发生变更，请以国家企业信用信息公示系统最新记录为准。",
-        operationsEyebrow: "SHANGHAI OPERATIONS",
-        operationsTitle: "运输协同台",
-        operationsOrigin: "上海执行",
-        operationsHub: "节点协同",
-        operationsGlobal: "全球交付",
-        operationsStatus: "多式联运链路",
-        servicesEyebrow: "PRIMARY BUSINESS",
-        servicesTitle: "围绕供应链与货运代理，连接每一个关键环节。",
-        servicesDescription:
-          "从工商登记经营范围中提炼六项主要业务，清晰呈现企业当前登记的服务边界。",
-        services: {
-          oceanAir: {
-            title: "供应链管理服务",
-            description: "围绕货物流转与运输资源，组织供应链环节协同。"
-          },
-          groundRail: {
-            title: "海上国际货运代理",
-            description: "承接海上国际货物运输代理及相关节点衔接。"
-          },
-          project: {
-            title: "航空与陆路国际货运代理",
-            description: "衔接航空、陆路国际货运代理与多运输方式协同。"
-          },
-          warehouse: {
-            title: "国际船舶代理与无船承运",
-            description: "开展国际船舶代理及无船承运相关业务。"
-          },
-          compliance: {
-            title: "国内货运代理与报检",
-            description: "提供国内货运代理并衔接报检业务。"
-          },
-          technology: {
-            title: "租赁与集装箱服务",
-            description: "涵盖运输设备、船舶租赁与集装箱销售。"
-          }
-        }
-      },
-      roadmap: {
-        eyebrow: "建设路线",
-        title: "从独立工具，逐步走向连贯的货代工作流。",
-        description:
-          "先稳定现有装箱与追踪能力，再按真实业务价值接入船期、订舱和 ERP 数据，不提前承诺尚未上线的功能。",
-        currentLabel: "当前阶段",
-        currentTitle: "智能装箱 · 货物追踪",
-        currentDescription: "装箱工作台需登录使用；Cargo Tracking 作为公开查询入口直接开放。",
-        nextLabel: "下一阶段",
-        nextTitle: "船期订舱 · ERP 接入",
-        nextDescription: "围绕订单与运输数据逐步连接企业内部和外部服务。",
-        viewWorkspaces: "查看现有工作台"
-      },
-      cta: {
-        eyebrow: "START WITH DrewesLogistics",
-        title: "从一次查询开始，看见更连贯的货运协作。",
-        description: "公开追踪无需登录；进入装箱工作台或总后台时，平台会验证企业账号与权限。",
-        publicTracking: "打开 Cargo Tracking"
+        open: "进入工作台",
+        admin: "进入管理控制台"
       },
       transition: {
         copy: "正在进入业务工作台",
-        returnHome: "正在返回 DrewesLogistics 首页"
-      },
-      footer: {
-        tagline: "面向货代业务的模块化数字运营平台",
-        signIn: "企业登录",
-        quickLinks: "快速入口",
-        registrationTitle: "企业登记信息",
-        termLabel: "营业期限",
-        termValue: "无固定期限",
-        contactTitle: "登记与地址",
-        registeredAddressLabel: "工商注册地址",
-        registeredAddress: "上海市虹口区海宁路 137 号 7 层（集中登记地）",
-        authorityLabel: "登记机关",
-        authority: "虹口区市场监督管理局",
-        disclaimer: "企业登记信息可能发生变更，请以国家企业信用信息公示系统最新记录为准。",
-        copyright: "© 2026 德鲁威斯（上海）供应链管理有限公司",
-        platform: "Cargo Operations Suite"
+        returnHome: "正在返回 logisticspluscn 首页"
       }
     },
     login: {
@@ -266,7 +93,7 @@ export const messages = {
       roleEmployee: "企业员工",
       roleBusiness: "业务员",
       greeting: "你好，{name}。选择今天的工作台",
-      heroDescription: "装箱决策与货物追踪现已整合到同一业务平台，通过统一登录入口快速切换。",
+      heroDescription: "规划货物装载、跟进运输进度，与团队协同处理每日业务。",
       availableWorkbenches: "可用工作台",
       sharedIdentity: "统一登录入口",
       operationCoverage: "业务持续可用",
@@ -275,14 +102,14 @@ export const messages = {
       sectionAria: "可用工作台",
       sectionEyebrow: "SELECT A WORKBENCH",
       sectionTitle: "进入业务工作台",
-      sectionDescription: "各业务工作台共享统一入口与登录状态，同时保持清晰的业务边界。",
+      sectionDescription: "根据当前任务选择装箱规划、运输追踪或客户业务协同。",
       ready: "就绪",
       connected: "已接入",
       enterWorkbench: "进入工作台",
       switchWorkbench: "切换工作台",
       entering: "正在进入工作台入口",
       enteringAdmin: "正在进入总管理后台",
-      footerHint: "一个仓库 · 统一入口 · 清晰业务边界",
+      footerHint: "货物规划 · 运输追踪 · 业务协同",
       planner: {
         label: "装箱决策",
         title: "货代装箱规划工作台",
@@ -596,205 +423,20 @@ export const messages = {
       retry: "Reload"
     },
     landing: {
-      metaTitle: "DrewesLogistics · Drewes (Shanghai) Supply Chain Management Co., Ltd.",
-      brandAria: "Return to the DrewesLogistics home page",
-      loader: {
-        aria: "DrewesLogistics platform is loading",
-        copy: "Connecting the global freight workflow",
-        skip: "Skip intro"
-      },
+      metaTitle: "logisticspluscn · Shanghai Luojia International Freight Forwarding Co., Ltd.",
+      brandAria: "Return to logisticspluscn home",
       nav: {
-        aria: "Home page navigation",
-        home: "Home",
-        capabilities: "Capabilities",
-        features: "Platform features",
-        tracking: "Cargo Tracking",
-        roadmap: "Roadmap",
-        about: "Company profile"
-      },
-      status: {
-        available: "Available",
-        public: "Public",
-        publicFree: "Free & public",
-        planned: "Planned"
+        aria: "Main navigation",
+        home: "Home"
       },
       entry: {
         enter: "Sign in",
-        open: "Enter platform",
-        admin: "Admin console"
-      },
-      hero: {
-        explore: "Explore capabilities",
-        signalEyebrow: "Transport signal",
-        signalStatus: "Global route active",
-        paginationAria: "Hero content navigation",
-        goToSlide: "Go to slide {index}",
-        previous: "Previous slide",
-        next: "Next slide",
-        slides: {
-          platform: {
-            kicker: "Digital operations for freight forwarders",
-            title: "Make every shipment clear—from planning to delivery.",
-            description:
-              "DrewesLogistics brings smart load planning and shipment visibility into one entrance, with room to grow into schedules, booking, and ERP connectivity."
-          },
-          planning: {
-            kicker: "Available · Smart load planning",
-            title: "Turn loading experience into a plan teams can see and refine.",
-            description:
-              "Build loading plans from cargo and container data, with clear views of space, balance, and operational constraints.",
-            action: "Open load planning"
-          },
-          tracking: {
-            kicker: "Public service · Cargo Tracking",
-            title: "Move from a reference number to the milestones that matter.",
-            description:
-              "Open shipment tracking without signing in and query carrier milestones by booking or container number.",
-            action: "Track cargo now"
-          }
-        }
-      },
-      capabilities: {
-        aria: "DrewesLogistics platform capabilities",
-        planning: {
-          title: "Smart Load Planning",
-          description:
-            "Build 3D loading plans from cargo and container data, then review space, balance, and operating constraints.",
-          action: "Sign in to use"
-        },
-        tracking: {
-          title: "Shipment Visibility",
-          description:
-            "Bring carrier milestones together in a public view of current status, key dates, and route details.",
-          action: "Track without signing in"
-        },
-        booking: {
-          title: "Schedules & Booking",
-          description:
-            "Planned schedule search and booking assistance will reduce cross-platform lookup and repeated entry.",
-          action: "View the roadmap"
-        },
-        erp: {
-          title: "ERP Connectivity",
-          description:
-            "Planned standard interfaces will connect order, cargo, and shipment data into a continuous workflow.",
-          action: "View the roadmap"
-        },
-        summary: {
-          current: "Current capability",
-          currentDetail: "Planning and tracking are ready",
-          tracking: "Public tracking",
-          trackingDetail: "Open directly without signing in"
-        }
-      },
-      statement: {
-        eyebrow: "One entrance · Clear boundaries",
-        title: "Connect the tools in use today while leaving room for what comes next.",
-        description:
-          "DrewesLogistics keeps each module focused while presenting planning and tracking through one branded entrance. Cargo Tracking is public; enterprise workspaces and administration remain protected by sign-in and role checks.",
-        track: "Track cargo publicly",
-        metricOnline: "capabilities available",
-        metricPublic: "public query service",
-        metricRoadmap: "capabilities in scope"
-      },
-      company: {
-        eyebrow: "COMPANY PROFILE · SHANGHAI",
-        internationalName: "德鲁威斯（上海）供应链管理有限公司",
-        legalName: "Drewes (Shanghai) Supply Chain Management Co., Ltd.",
-        description:
-          "Registered on March 16, 2023 in Hongkou District, Shanghai, the company focuses on supply chain management, international and domestic freight forwarding, ship agency, and transport equipment services.",
-        detail:
-          "Its registered scope includes supply chain management; international, ocean, air, and road freight forwarding; inspection declaration; international ship agency; domestic freight forwarding; equipment and vessel leasing; container sales; and NVOCC services.",
-        incorporatedLabel: "Incorporated",
-        typeLabel: "Entity type",
-        typeValue: "Limited liability company (sole natural-person ownership)",
-        industryLabel: "Registered industry",
-        industryValue: "Business services",
-        platformAction: "Explore platform capabilities",
-        creditCodeLabel: "Unified social credit code",
-        sourceNote:
-          "Company details and scope are based on the public registration snapshot supplied by the user. Refer to the latest national enterprise credit record for changes.",
-        operationsEyebrow: "SHANGHAI OPERATIONS",
-        operationsTitle: "Transport coordination desk",
-        operationsOrigin: "Shanghai execution",
-        operationsHub: "Node coordination",
-        operationsGlobal: "Global delivery",
-        operationsStatus: "Multimodal route",
-        servicesEyebrow: "PRIMARY BUSINESS",
-        servicesTitle: "Connecting the critical steps across supply chain and freight forwarding.",
-        servicesDescription:
-          "Six primary activities distilled from the registered business scope, presented with clear service boundaries.",
-        services: {
-          oceanAir: {
-            title: "Supply chain management",
-            description:
-              "Coordinate supply-chain activities around cargo flow and transport resources."
-          },
-          groundRail: {
-            title: "Ocean freight forwarding",
-            description: "Provide ocean international freight forwarding and related coordination."
-          },
-          project: {
-            title: "Air & road freight forwarding",
-            description: "Connect international air and road forwarding across transport modes."
-          },
-          warehouse: {
-            title: "Ship agency & NVOCC",
-            description: "Cover international ship agency and NVOCC services."
-          },
-          compliance: {
-            title: "Domestic forwarding & inspection",
-            description: "Provide domestic freight forwarding and inspection declaration support."
-          },
-          technology: {
-            title: "Leasing & container services",
-            description: "Cover transport equipment and vessel leasing, plus container sales."
-          }
-        }
-      },
-      roadmap: {
-        eyebrow: "Product roadmap",
-        title: "From focused tools to a connected freight workflow.",
-        description:
-          "We strengthen planning and tracking first, then connect schedules, booking, and ERP data according to real operating value—without promising unfinished features early.",
-        currentLabel: "Current",
-        currentTitle: "Load Planning · Shipment Tracking",
-        currentDescription:
-          "Load planning requires enterprise sign-in; Cargo Tracking is open as a public query service.",
-        nextLabel: "Next",
-        nextTitle: "Schedules & Booking · ERP",
-        nextDescription:
-          "Connect internal and external services around order and shipment data in practical stages.",
-        viewWorkspaces: "View current workspaces"
-      },
-      cta: {
-        eyebrow: "START WITH DrewesLogistics",
-        title: "Start with one query and see a more connected freight operation.",
-        description:
-          "Public tracking needs no sign-in. Enterprise accounts and role checks protect load planning and administration.",
-        publicTracking: "Open Cargo Tracking"
+        open: "Open workspace",
+        admin: "Open administration"
       },
       transition: {
-        copy: "Opening the operations workspace",
-        returnHome: "Returning to the DrewesLogistics home page"
-      },
-      footer: {
-        tagline: "A modular digital operations platform for freight forwarders",
-        signIn: "Enterprise sign in",
-        quickLinks: "Quick links",
-        registrationTitle: "Registration details",
-        termLabel: "Operating term",
-        termValue: "No fixed term",
-        contactTitle: "Registration & address",
-        registeredAddressLabel: "Registered address",
-        registeredAddress:
-          "7F, No. 137 Haining Road, Hongkou District, Shanghai (centralized registration address)",
-        authorityLabel: "Registration authority",
-        authority: "Hongkou District Market Supervision Administration",
-        disclaimer:
-          "Registration details may change. Refer to the latest National Enterprise Credit Information Publicity System record.",
-        copyright: "© 2026 德鲁威斯（上海）供应链管理有限公司",
-        platform: "Cargo Operations Suite"
+        copy: "Opening your workspace",
+        returnHome: "Returning to logisticspluscn home"
       }
     },
     login: {
@@ -849,7 +491,7 @@ export const messages = {
       roleBusiness: "Business operator",
       greeting: "Hello, {name}. Choose today's workbench",
       heroDescription:
-        "Load planning and shipment tracking now live in one business platform with a shared sign-in and fast workbench switching.",
+        "Plan cargo loads, follow shipment progress and coordinate everyday operations with your team.",
       availableWorkbenches: "Workbenches",
       sharedIdentity: "Unified sign-in",
       operationCoverage: "Operational access",
@@ -859,14 +501,14 @@ export const messages = {
       sectionEyebrow: "SELECT A WORKBENCH",
       sectionTitle: "Enter a business workbench",
       sectionDescription:
-        "Each business workbench shares one entry point and sign-in while keeping clear operational boundaries.",
+        "Choose load planning, shipment tracking or customer operations for the task at hand.",
       ready: "Ready",
       connected: "Connected",
       enterWorkbench: "Enter workbench",
       switchWorkbench: "Switch workbench",
       entering: "Opening workbench portal",
       enteringAdmin: "Opening administration console",
-      footerHint: "One repository · One entry · Clear boundaries",
+      footerHint: "Load planning · Shipment tracking · Business collaboration",
       planner: {
         label: "Load planning",
         title: "Cargo load planning workbench",
@@ -2824,7 +2466,7 @@ messages["en-US"].admin.console = {
 
 Object.assign(messages["zh-CN"].customers, {
   overview: "总览",
-  overviewHint: "汇总客户、票单与海外代理，并从左侧进入具体业务。",
+  overviewHint: "查看今日业务与运输动态，安排接下来的工作。",
   personalInfo: "个人信息",
   overseaAgentManagement: "海外代理",
   overseaAgentManagementHint: "由唯一业务员统一创建、维护和停用海外代理账号。",
@@ -2857,8 +2499,7 @@ Object.assign(messages["zh-CN"].customers, {
 
 Object.assign(messages["en-US"].customers, {
   overview: "Overview",
-  overviewHint:
-    "Review customers, shipments, and overseas agents, then enter a workflow from the sidebar.",
+  overviewHint: "Review today's work and shipment activity, then plan your next steps.",
   personalInfo: "Personal information",
   overseaAgentManagement: "Overseas agents",
   overseaAgentManagementHint:
@@ -2923,11 +2564,11 @@ Object.assign(messages["zh-CN"].customers, {
   systemMessages: "系统消息",
   overviewKicker: "业务数据脉搏",
   overviewSevenDayTrend: "近 7 日业务趋势",
-  overviewTrendHint: "基于当前账号可访问的票单创建与更新时间",
+  overviewTrendHint: "近七日新增与更新票单的变化",
   overviewTodayCompositionTitle: "今日业务构成",
-  overviewTodayCompositionHint: "新增、更新、文件、留言与客户登录的实时构成",
+  overviewTodayCompositionHint: "今日票单、文件、留言与客户互动概览",
   overviewResourceTitle: "业务资源",
-  overviewDataSource: "实时接口优先，缺失字段按可见数据降级",
+  overviewDataSource: "当前账号可查看的业务资源",
   overviewShipmentStatusTitle: "票单状态分布",
   overviewShipmentStatusHint: "按当前可见票单的最新追踪状态汇总",
   overviewNoData: "当前暂无可展示的数据",
@@ -2935,15 +2576,15 @@ Object.assign(messages["zh-CN"].customers, {
   overviewTotal: "合计",
   activeCustomers: "正常客户",
   todayNewBusiness: "今日新增业务",
-  todayNewBusinessHint: "严格按 createdAt 统计",
+  todayNewBusinessHint: "今天创建的业务票单",
   todayUpdatedBusiness: "今日更新业务",
-  todayUpdatedBusinessHint: "按 updatedAt 且排除初次创建",
+  todayUpdatedBusinessHint: "今天更新的既有票单",
   todayFiles: "今日文件",
-  todayFilesHint: "统计接口返回的今日上传文件",
+  todayFilesHint: "今天上传的业务文件",
   todayMessages: "今日留言",
-  todayMessagesHint: "统计接口返回的今日业务留言",
+  todayMessagesHint: "今天新增的业务留言",
   todayCustomerLogins: "今日客户登录",
-  todayCustomerLoginsHint: "统计可见客户的最近登录时间",
+  todayCustomerLoginsHint: "最近一次登录发生在今天的客户",
   overviewPartialData: "数据量较大，趋势图展示前 {count}/{total} 张票单。",
   overviewLoadFailed: "实时概览加载失败，当前展示已加载列表的降级统计。",
   batchCreateAgents: "Excel 批量新增",
@@ -2983,12 +2624,11 @@ Object.assign(messages["en-US"].customers, {
   systemMessages: "Messages",
   overviewKicker: "Business pulse",
   overviewSevenDayTrend: "7-day business trend",
-  overviewTrendHint: "Based on creation and update timestamps visible to this account",
+  overviewTrendHint: "New and updated shipments over the past seven days",
   overviewTodayCompositionTitle: "Today's activity mix",
-  overviewTodayCompositionHint:
-    "Live mix of new, updated, file, message, and customer sign-in activity",
+  overviewTodayCompositionHint: "Today's shipments, files, messages and customer activity",
   overviewResourceTitle: "Business resources",
-  overviewDataSource: "Live APIs first; unavailable fields fall back to visible data",
+  overviewDataSource: "Business resources available to your account",
   overviewShipmentStatusTitle: "Shipment status mix",
   overviewShipmentStatusHint: "Grouped by the latest tracking status of visible shipments",
   overviewNoData: "No data is available to display",
@@ -2996,15 +2636,15 @@ Object.assign(messages["en-US"].customers, {
   overviewTotal: "Total",
   activeCustomers: "Active customers",
   todayNewBusiness: "New today",
-  todayNewBusinessHint: "Strictly counted from createdAt",
+  todayNewBusinessHint: "Shipments created today",
   todayUpdatedBusiness: "Updated today",
-  todayUpdatedBusinessHint: "Uses updatedAt and excludes initial creation",
+  todayUpdatedBusinessHint: "Existing shipments updated today",
   todayFiles: "Files today",
-  todayFilesHint: "Files uploaded today when supplied by the API",
+  todayFilesHint: "Business files uploaded today",
   todayMessages: "Messages today",
-  todayMessagesHint: "Business messages created today when supplied by the API",
+  todayMessagesHint: "Business messages added today",
   todayCustomerLogins: "Customer sign-ins",
-  todayCustomerLoginsHint: "Visible customers whose latest sign-in is today",
+  todayCustomerLoginsHint: "Customers whose most recent sign-in was today",
   overviewPartialData: "Large dataset: the chart shows the first {count} of {total} shipments.",
   overviewLoadFailed: "The live overview could not load; visible list data is shown as a fallback.",
   batchCreateAgents: "Excel batch create",
@@ -3273,4 +2913,149 @@ Object.assign(messages["en-US"].customers, {
     "Delete overseas agent \u201c{name}\u201d? Sign-in access will be revoked, the account cannot be restored, and historical business records will be retained.",
   agentDeleted: "Overseas-agent account deleted.",
   deleteAgentFailed: "Could not delete the overseas-agent account."
+});
+
+messages["zh-CN"].maritime = {
+  expand: "展开",
+  collapse: "收起",
+  planningInventory: "{cargos} 类货物 · {containers} 个箱型",
+  brand: "logisticspluscn",
+  company: "上海罗加国际货物运输代理有限公司",
+  brandTagline: "CONNECTING YOUR CARGO",
+  homeAria: "返回 logisticspluscn 首页",
+  location: "中国 · 上海",
+  workspace: "工作台",
+  operations: "业务工作台",
+  planning: "装箱规划",
+  administration: "管理控制台",
+  tracking: "货物追踪",
+  tools: "业务工具",
+  loginAction: "客户与员工登录",
+  heroEyebrow: "LOGISTICSPLUSCN / CARGO OPERATIONS",
+  heroTitle: "连接每一程。",
+  heroTitleSecond: "交付每一份信任。",
+  heroDescription: "让货物状态清晰，让跨境协作有序。",
+  heroDescriptionSecond: "从装箱规划到运输追踪，为每一次交付做好准备。",
+  trackAction: "追踪我的货物",
+  imageCaption: "PORT OPERATIONS / 生成港口影像用于品牌氛围示意",
+  imageAlt: "港口装卸作业生成影像示意",
+  trackEyebrow: "TRACK & TRACE",
+  trackTitle: "货物到哪里了？",
+  carrier: "船公司",
+  referenceType: "单号类型",
+  bookingNumber: "订舱号",
+  containerNumber: "集装箱号",
+  billOfLading: "提单号",
+  referenceLabel: "查询单号",
+  referencePlaceholder: "输入所选类型的单号",
+  search: "查询",
+  toolsEyebrow: "BUILT AROUND YOUR SHIPMENT",
+  toolsTitle: "让复杂的运输，\n有清晰的下一步。",
+  toolsDescription: "把查询、规划与协作连接起来。客户了解进度，业务团队掌握细节。",
+  visibilityTitle: "货物运输追踪",
+  visibilityDescription: "按船司和单号查询运输节点、预计抵达时间及承运人来源，为沟通提供依据。",
+  visibilityAction: "查询运输进度",
+  planningTitle: "装箱与空间规划",
+  planningDescription: "从货物明细开始，对比箱型、检查三维装载结果，为执行团队准备清晰方案。",
+  planningAction: "开始装箱规划",
+  collaborationTitle: "业务协作工作台",
+  collaborationDescription: "按账号权限处理票单、客户交接与业务更新，组织每天需要完成的工作。",
+  collaborationAction: "进入业务工作台",
+  aboutEyebrow: "FROM ORIGIN TO DESTINATION",
+  aboutTitle: "专注货物，",
+  aboutTitleSecond: "也关注每一次协作。",
+  aboutDescription: "公开查询与企业工作台共享清晰的信息语言。让每一个角色，都知道接下来该做什么。",
+  portalAction: "访问客户与员工门户",
+  footerTagline: "从起运，到交付。每一步，都有依据。",
+  returnHome: "返回官网",
+  loginBrandAria: "logisticspluscn 企业门户",
+  loginEyebrow: "YOUR CARGO. CONNECTED.",
+  loginHero: "每一次交接，",
+  loginHeroSecond: "都从清晰开始。",
+  loginHeroDescription: "一个工作空间，连接运输中的每一个角色。",
+  waitingHint: "请稍候，页面将在准备完成后继续。",
+  errorHome: "返回官网"
+};
+
+messages["en-US"].maritime = {
+  expand: "Expand",
+  collapse: "Collapse",
+  planningInventory: "{cargos} cargo types · {containers} container types",
+  brand: "logisticspluscn",
+  company: "Shanghai Luojia International Freight Forwarding Co., Ltd.",
+  brandTagline: "CONNECTING YOUR CARGO",
+  homeAria: "Return to logisticspluscn home",
+  location: "Shanghai · China",
+  workspace: "Workspace",
+  operations: "Operations workspace",
+  planning: "Load planning",
+  administration: "Administration",
+  tracking: "Cargo tracking",
+  tools: "Business tools",
+  loginAction: "Customer & staff sign-in",
+  heroEyebrow: "LOGISTICSPLUSCN / CARGO OPERATIONS",
+  heroTitle: "Every journey, connected.",
+  heroTitleSecond: "Every delivery, with care.",
+  heroDescription: "Clear shipment updates. Connected cross-border teams.",
+  heroDescriptionSecond: "Prepare every delivery with load planning and cargo tracking.",
+  trackAction: "Track my shipment",
+  imageCaption: "PORT OPERATIONS / AI-generated harbor image for brand illustration",
+  imageAlt: "AI-generated illustration of harbor cargo operations",
+  trackEyebrow: "TRACK & TRACE",
+  trackTitle: "Where is my shipment?",
+  carrier: "Shipping line",
+  referenceType: "Reference type",
+  bookingNumber: "Booking",
+  containerNumber: "Container",
+  billOfLading: "Bill of lading",
+  referenceLabel: "Reference number",
+  referencePlaceholder: "Enter the selected reference number",
+  search: "Track",
+  toolsEyebrow: "BUILT AROUND YOUR SHIPMENT",
+  toolsTitle: "A clear next step.\nFor every shipment.",
+  toolsDescription:
+    "Connect tracking, planning and collaboration. Keep customers informed and operations in view.",
+  visibilityTitle: "Cargo tracking",
+  visibilityDescription:
+    "Choose a shipping line and reference to view transport events, arrival estimates and carrier sources.",
+  visibilityAction: "View shipment progress",
+  planningTitle: "Load & space planning",
+  planningDescription:
+    "Start with cargo details, compare container types and review 3D load plans before execution.",
+  planningAction: "Start load planning",
+  collaborationTitle: "Operations workspace",
+  collaborationDescription:
+    "Manage shipments, customer handovers and business updates within your account permissions.",
+  collaborationAction: "Open your workspace",
+  aboutEyebrow: "FROM ORIGIN TO DESTINATION",
+  aboutTitle: "Focused on your cargo.",
+  aboutTitleSecond: "Connected with your team.",
+  aboutDescription:
+    "Public tracking and enterprise workspaces share a clear information language, so every role can see the next step.",
+  portalAction: "Visit the customer & staff portal",
+  footerTagline: "From origin to delivery. Every step, informed.",
+  returnHome: "Back to website",
+  loginBrandAria: "logisticspluscn enterprise portal",
+  loginEyebrow: "YOUR CARGO. CONNECTED.",
+  loginHero: "Every handover",
+  loginHeroSecond: "starts with clarity.",
+  loginHeroDescription: "One workspace connecting the people behind every shipment.",
+  waitingHint: "Please wait. This page will continue when it is ready.",
+  errorHome: "Back to website"
+};
+
+Object.assign(messages["zh-CN"].login, {
+  formTitle: "欢迎回来",
+  formDescription: "登录后，继续处理您的货运与业务协作。",
+  customerTitle: "客户登录",
+  customerDescription: "使用客户账号、密码及用户码访问您的货物。",
+  accountNotice: "账号与密码由企业管理员管理"
+});
+Object.assign(messages["en-US"].login, {
+  formTitle: "Welcome back",
+  formDescription: "Sign in to continue your shipment and operations work.",
+  customerTitle: "Customer sign-in",
+  customerDescription:
+    "Use your customer account, password and user code to access your shipments.",
+  accountNotice: "Accounts and passwords are managed by your administrator"
 });

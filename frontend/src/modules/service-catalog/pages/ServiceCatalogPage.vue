@@ -129,7 +129,7 @@ onMounted(refresh);
   min-width: 0;
   background: var(--surface-card, #fff);
   border: 1px solid #dbe4ed;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 header,
 .search,

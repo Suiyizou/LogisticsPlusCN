@@ -199,13 +199,17 @@ defineExpose({ resize: group.resize });
 .business-chart-card {
   min-width: 0;
   padding: 17px 18px 14px;
-  border: 1px solid #dbe6ef;
-  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 10px 30px rgba(33, 64, 92, 0.065);
+  box-shadow: none;
   overflow: hidden;
 }
 .business-chart-card > header {
+  min-height: 48px;
+  padding-bottom: 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -216,11 +220,11 @@ defineExpose({ resize: group.resize });
   gap: 3px;
 }
 .business-chart-card header b {
-  color: #203d57;
+  color: var(--color-primary);
   font-size: 13px;
 }
 .business-chart-card header small {
-  color: #8a9daf;
+  color: var(--color-muted);
   font-size: 9px;
   line-height: 1.5;
 }
@@ -248,7 +252,7 @@ defineExpose({ resize: group.resize });
   margin-top: 4px;
 }
 .business-chart-empty :deep(.el-empty__description p) {
-  color: #91a3b3;
+  color: var(--color-muted);
   font-size: 10px;
 }
 .business-chart-body :deep(.el-loading-mask) {

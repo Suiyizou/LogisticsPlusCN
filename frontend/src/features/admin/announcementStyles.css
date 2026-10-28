@@ -4,7 +4,7 @@
   padding: 0 9px;
   align-items: center;
   border: 1px solid #bfcee0;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #4d6782;
   background: #f5f8fc;
   font-size: 11px;
@@ -15,7 +15,7 @@
   width: min(1160px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
   overflow: auto;
-  border-radius: 16px;
+  border-radius: 4px;
   background: #f7faff;
 }
 
@@ -48,7 +48,7 @@
 .announcement-fields textarea {
   width: 100%;
   border: 1px solid #bed0e2;
-  border-radius: 9px;
+  border-radius: 4px;
   outline: none;
   color: #18324c;
   background: #fff;
@@ -74,13 +74,13 @@
 .announcement-fields input:focus,
 .announcement-fields textarea:focus {
   border-color: #4c9bde;
-  box-shadow: 0 0 0 3px rgb(47 128 209 / 11%);
+  box-shadow: none;
 }
 
 .announcement-fields :deep(.el-select__wrapper) {
   min-height: 42px;
-  border-radius: 9px;
-  box-shadow: 0 0 0 1px #bed0e2 inset;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 
 .announcement-image-field {
@@ -109,9 +109,9 @@
   gap: 12px;
   align-items: center;
   border: 1px dashed #86b6df;
-  border-radius: 11px;
+  border-radius: 4px;
   color: #315e82;
-  background: linear-gradient(135deg, #f5faff, #edf7ff);
+  background: var(--color-surface-subtle);
   cursor: pointer;
   text-align: left;
   transition:
@@ -122,7 +122,7 @@
 
 .announcement-image-field.is-dragging .announcement-image-dropzone,
 .announcement-image-dropzone:hover:not(:disabled) {
-  border-color: #2f80d1;
+  border-color: var(--color-primary);
   background: #e8f5ff;
   transform: translateY(-1px);
 }
@@ -132,7 +132,7 @@
   width: 64px;
   height: 64px;
   border: 1px solid #c7dbea;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fff;
 }
 
@@ -143,7 +143,7 @@
 .announcement-image-drop-icon {
   display: grid;
   place-items: center;
-  color: #2f80d1;
+  color: var(--color-primary);
   font-size: 29px;
   font-weight: 300;
 }
@@ -169,7 +169,7 @@
 .announcement-image-dropzone em {
   padding: 7px 10px;
   border: 1px solid #9dc3e3;
-  border-radius: 7px;
+  border-radius: 4px;
   color: #256b9f;
   background: #fff;
   font-size: 12px;
@@ -252,7 +252,7 @@
   padding: 0 7px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #365b7b;
   background: transparent;
   font-size: 11px;
@@ -301,9 +301,9 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   border: 1px solid #c8d8e7;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 12px 26px rgb(29 66 101 / 17%);
+  box-shadow: none;
 }
 
 .announcement-toolbar-palette div button {
@@ -346,7 +346,7 @@
 
 .announcement-rich-editor:focus {
   border-color: #4c9bde;
-  box-shadow: 0 0 0 3px rgb(47 128 209 / 11%);
+  box-shadow: none;
 }
 
 .announcement-rich-editor:empty::before {
@@ -381,7 +381,7 @@
   max-width: 100%;
   max-height: 260px;
   margin: 10px 0;
-  border-radius: 9px;
+  border-radius: 4px;
   object-fit: contain;
 }
 
@@ -389,7 +389,7 @@
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #f0bcc1;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #b43d48;
   background: #fff4f5;
   font-size: 12px;
@@ -401,8 +401,8 @@
   min-width: 0;
   padding: 15px;
   border: 1px solid #d9e6f2;
-  border-radius: 13px;
-  background: radial-gradient(circle at 90% 0, rgb(94 176 229 / 13%), transparent 34%), #eef4fa;
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 
 .announcement-preview-heading,
@@ -430,9 +430,9 @@
   overflow: hidden;
   padding: 22px;
   border: 1px solid #d4e0ec;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 14px 34px rgb(35 77 116 / 9%);
+  box-shadow: none;
 }
 
 .announcement-preview-card > img {
@@ -501,7 +501,7 @@
   max-width: 100%;
   max-height: 320px;
   margin: 14px auto;
-  border-radius: 9px;
+  border-radius: 4px;
   object-fit: contain;
 }
 
@@ -516,7 +516,7 @@
 .announcement-markdown-preview :deep(pre) {
   overflow: auto;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #e9f4ff;
   background: #13283b;
 }
@@ -524,7 +524,7 @@
 .announcement-markdown-preview :deep(code) {
   padding: 2px 5px;
   border-radius: 4px;
-  background: #eef3f8;
+  background: var(--color-background);
   font-family: Consolas, "Courier New", monospace;
 }
 
@@ -544,7 +544,7 @@
   width: min(780px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
   overflow: auto;
-  border-radius: 16px;
+  border-radius: 4px;
 }
 
 .announcement-preview-dialog-body {

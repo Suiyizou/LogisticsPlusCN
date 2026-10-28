@@ -377,7 +377,7 @@ const compact = useMediaQuery("(max-width: 680px)");
 .list-page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #0f1d2e;
+  color: var(--color-primary);
   letter-spacing: -0.02em;
 }
 .business-overview-kicker {
@@ -398,7 +398,7 @@ const compact = useMediaQuery("(max-width: 680px)");
   margin: 0 0 14px;
   padding: 10px 12px;
   border: 1px solid #cddfec;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #46657f;
   background: #f4f9fc;
 }
@@ -429,9 +429,9 @@ const compact = useMediaQuery("(max-width: 680px)");
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c7d5e4 inset;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
@@ -447,8 +447,10 @@ const compact = useMediaQuery("(max-width: 680px)");
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
-  background: #287ccb;
-  box-shadow: 0 5px 12px rgba(40, 124, 203, 0.22);
+  background: var(--color-primary);
+  box-shadow: none;
+
+  color: var(--color-on-primary);
 }
 .shipment-pagination :deep(.el-pagination__total) {
   margin-right: 8px;
@@ -465,9 +467,9 @@ const compact = useMediaQuery("(max-width: 680px)");
   margin: 0 0 26px;
   padding: 0;
   border: 1px solid #dbe5ee;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(21, 48, 72, 0.04);
+  box-shadow: none;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   list-style: none;
 }
@@ -534,10 +536,10 @@ const compact = useMediaQuery("(max-width: 680px)");
   width: 168px !important;
 }
 .business-handover-table {
-  border-radius: 12px;
+  border-radius: 4px;
 }
 .business-handover-request-table {
-  border-radius: 12px;
+  border-radius: 4px;
 }
 .handover-request-id {
   color: #145f8b;
@@ -592,10 +594,10 @@ const compact = useMediaQuery("(max-width: 680px)");
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #fff;
-  background: linear-gradient(135deg, #2878bc, #56b9d2);
-  box-shadow: 0 7px 16px rgba(40, 120, 188, 0.18);
+  background: var(--color-primary);
+  box-shadow: none;
   font-size: 14px;
   font-weight: 850;
   place-items: center;

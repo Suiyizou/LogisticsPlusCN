@@ -5,14 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="A unified multi-carrier shipment tracking workspace"
+      content="Shipment tracking by Shanghai Luojia International Freight Forwarding Co., Ltd. · logisticspluscn"
       data-i18n-content="meta.description"
     />
-    <title>Shipment Track</title>
-    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <title>logisticspluscn · Shipment tracking</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="./icon-192.png" type="image/png" sizes="192x192" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./site.webmanifest" />
     <link rel="stylesheet" href="./vendor/element-plus.css" />
     <link rel="stylesheet" href="./styles.css" />
@@ -25,11 +22,14 @@
 
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="brand" href="#overview" data-view-target="overview" aria-label="Shipment Track">
-          <span class="brand-mark brand-mark--logo"><img src="./favicon.svg" alt="" /></span>
+        <a class="brand" href="#overview" data-view-target="overview" aria-label="logisticspluscn">
+          <span class="brand-mark brand-mark--logo" aria-hidden="true">LP</span>
           <span class="brand-copy">
-            <strong>Shipment Track</strong>
-            <small data-i18n="brand.subtitle">Carrier intelligence desk</small>
+            <strong>logisticspluscn</strong>
+            <small data-i18n="brand.subtitle">Ocean freight · Shipment tracking</small>
+            <small class="brand-company" data-i18n="brand.company"
+              >Shanghai Luojia International Freight Forwarding Co., Ltd.</small
+            >
           </span>
         </a>
 
@@ -48,7 +48,12 @@
           </a>
           <a class="nav-item is-active" href="#overview" data-view-target="overview">
             <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg>
+              <svg viewBox="0 0 24 24">
+                <rect x="4" y="4" width="6" height="6" rx="1" />
+                <rect x="14" y="4" width="6" height="6" rx="1" />
+                <rect x="4" y="14" width="6" height="6" rx="1" />
+                <rect x="14" y="14" width="6" height="6" rx="1" />
+              </svg>
             </span>
             <span id="overview-nav-label" data-i18n="nav.overview">Overview</span>
           </a>
@@ -66,19 +71,35 @@
           </a>
           <a class="nav-item" id="tracking-nav-item" href="#tracking" data-view-target="tracking">
             <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 17c3-6 5-9 8-9s4 4 8-1" /><circle cx="4" cy="17" r="2" /><circle cx="20" cy="7" r="2" /></svg>
+              <svg viewBox="0 0 24 24">
+                <path d="M4 17c3-6 5-9 8-9s4 4 8-1" />
+                <circle cx="4" cy="17" r="2" />
+                <circle cx="20" cy="7" r="2" />
+              </svg>
             </span>
             <span data-i18n="nav.tracking">Shipment tracking</span>
           </a>
           <a class="nav-item customer-profile-nav" href="#profile" data-view-target="profile">
             <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M5 20c1-5 3.5-7 7-7s6 2 7 7" /></svg>
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M5 20c1-5 3.5-7 7-7s6 2 7 7" />
+              </svg>
             </span>
             <span data-i18n="nav.profile">Personal information</span>
           </a>
 
-          <p class="nav-title internal-carrier-navigation" data-i18n="nav.carriers" hidden>Carrier adapters</p>
-          <div class="carrier-nav-item internal-carrier-navigation is-current" id="cosco-nav-status" role="button" tabindex="0" data-carrier-select="COSCO" hidden>
+          <p class="nav-title internal-carrier-navigation" data-i18n="nav.carriers" hidden>
+            Carrier adapters
+          </p>
+          <div
+            class="carrier-nav-item internal-carrier-navigation is-current"
+            id="cosco-nav-status"
+            role="button"
+            tabindex="0"
+            data-carrier-select="COSCO"
+            hidden
+          >
             <span class="carrier-monogram cosco">CO</span>
             <span>
               COSCO
@@ -86,7 +107,14 @@
             </span>
             <i></i>
           </div>
-          <div class="carrier-nav-item internal-carrier-navigation is-connected" id="cma-nav-status" role="button" tabindex="0" data-carrier-select="CMA" hidden>
+          <div
+            class="carrier-nav-item internal-carrier-navigation is-connected"
+            id="cma-nav-status"
+            role="button"
+            tabindex="0"
+            data-carrier-select="CMA"
+            hidden
+          >
             <span class="carrier-monogram cma">CM</span>
             <span>
               CMA CGM
@@ -96,7 +124,7 @@
         </nav>
 
         <div class="sidebar-foot">
-          <span data-i18n="sidebar.architecture">UNIFIED ADAPTER</span>
+          <span data-i18n="sidebar.architecture">OCEAN FREIGHT NETWORK</span>
           <strong>COSCO · CMA · MAERSK · HAPAG · MSC · OOCL</strong>
         </div>
       </aside>
@@ -144,24 +172,42 @@
                 aria-expanded="false"
                 data-i18n-aria-label="account.menu"
               >
-                <span class="tracking-account-mark" id="tracking-account-mark" aria-hidden="true">U</span>
+                <span class="tracking-account-mark" id="tracking-account-mark" aria-hidden="true"
+                  >U</span
+                >
                 <span class="tracking-account-copy">
                   <strong id="tracking-account-name"></strong>
                   <small id="tracking-account-role"></small>
                 </span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
               </button>
-              <div class="tracking-account-menu" id="tracking-account-menu" role="menu" aria-hidden="true">
+              <div
+                class="tracking-account-menu"
+                id="tracking-account-menu"
+                role="menu"
+                aria-hidden="true"
+              >
                 <a href="/" role="menuitem" data-home-link>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-5v-6H9v6H4z" /></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m4 11 8-7 8 7v9h-5v-6H9v6H4z" />
+                  </svg>
                   <span data-i18n="account.home">Platform home</span>
                 </a>
-                <a id="account-workbench-link" href="/workbenches" role="menuitem" data-workbench-link>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v4H3zM3 11h18v10H3z" /></svg>
+                <a
+                  id="account-workbench-link"
+                  href="/workbenches"
+                  role="menuitem"
+                  data-workbench-link
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 5h18v4H3zM3 11h18v10H3z" />
+                  </svg>
                   <span data-i18n="account.workbench">Workbench</span>
                 </a>
                 <button id="tracking-account-logout" type="button" role="menuitem">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9" /></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M10 5H5v14h5M14 8l4 4-4 4M18 12H9" />
+                  </svg>
                   <span data-i18n="account.signOut">Sign out</span>
                 </button>
               </div>
@@ -173,22 +219,37 @@
           <section class="app-view" id="overview-view" data-view="overview">
             <section class="overview-hero">
               <div class="hero-copy">
-                <p class="kicker" id="overview-kicker" data-i18n="overview.kicker">SHIPMENT DASHBOARD</p>
+                <p class="kicker" id="overview-kicker" data-i18n="overview.kicker">
+                  SHIPMENT DASHBOARD
+                </p>
                 <div class="welcome-message" id="welcome-message" hidden>
                   <span data-i18n="welcome.greeting">Welcome</span>
                   <strong id="welcome-username"></strong>
                   <span data-i18n="welcome.subtitle">, welcome to the tracking platform.</span>
                 </div>
-                <h1 id="overview-title" data-i18n="overview.title">Your shipments, moving in plain sight.</h1>
+                <h1 id="overview-title" data-i18n="overview.title">
+                  Your shipments, moving in plain sight.
+                </h1>
                 <p id="overview-description" data-i18n="overview.description">
-                  See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.
+                  See ports, sailing dates and arrival status at a glance, then expand any shipment
+                  for its latest movement.
                 </p>
-                <button class="primary-action el-button el-button--primary" type="button" id="start-tracking-button">
-                  <span id="start-tracking-label" data-i18n="overview.startTracking">Track a shipment</span>
+                <button
+                  class="primary-action el-button el-button--primary"
+                  type="button"
+                  id="start-tracking-button"
+                >
+                  <span id="start-tracking-label" data-i18n="overview.startTracking"
+                    >Track a shipment</span
+                  >
                   <b>↗</b>
                 </button>
               </div>
-              <aside class="hero-operations-summary" data-i18n-aria-label="overview.summaryLabel" aria-label="Shipment overview summary">
+              <aside
+                class="hero-operations-summary"
+                data-i18n-aria-label="overview.summaryLabel"
+                aria-label="Shipment overview summary"
+              >
                 <header>
                   <span>
                     <small data-i18n="overview.summaryKicker">ACCOUNT VISIBILITY</small>
@@ -215,7 +276,9 @@
                 </dl>
                 <p>
                   <span data-i18n="overview.defaultView">Default view</span>
-                  <strong data-i18n="overview.defaultViewValue">Unfinished business · ETA descending</strong>
+                  <strong data-i18n="overview.defaultViewValue"
+                    >Unfinished business · ETA descending</strong
+                  >
                 </p>
               </aside>
             </section>
@@ -226,7 +289,9 @@
                   <span class="panel-icon">↺</span>
                   <span>
                     <strong id="history-title" data-i18n="history.title">Tracked shipments</strong>
-                    <small id="history-subtitle" data-i18n="history.subtitle">Latest shipment snapshots stored in the database</small>
+                    <small id="history-subtitle" data-i18n="history.subtitle"
+                      >Shipment movements and arrival dates for your account</small
+                    >
                   </span>
                 </div>
                 <div class="history-heading-actions">
@@ -240,24 +305,46 @@
                     <span aria-hidden="true">★</span>
                     <b data-i18n="agent.followingOnly">Following only</b>
                   </button>
-                  <label class="history-customer-filter history-business-scope" id="history-business-scope-wrap">
+                  <label
+                    class="history-customer-filter history-business-scope"
+                    id="history-business-scope-wrap"
+                  >
                     <span data-i18n="history.businessScope">Business scope</span>
-                    <select id="history-business-scope" data-i18n-aria-label="history.businessScopeLabel" aria-label="Filter shipments by business status">
-                      <option value="unfinished" selected data-i18n="history.unfinishedOnly">Unfinished business only</option>
+                    <select
+                      id="history-business-scope"
+                      data-i18n-aria-label="history.businessScopeLabel"
+                      aria-label="Filter shipments by business status"
+                    >
+                      <option value="unfinished" selected data-i18n="history.unfinishedOnly">
+                        Unfinished business only
+                      </option>
                       <option value="all" data-i18n="history.allBusiness">Show all business</option>
                     </select>
                   </label>
                   <label class="history-customer-filter" id="history-customer-filter-wrap" hidden>
                     <span data-i18n="history.customerFilter">Customer</span>
-                    <select id="history-customer-filter" data-i18n-aria-label="history.customerFilterLabel" aria-label="Filter shipments by customer">
+                    <select
+                      id="history-customer-filter"
+                      data-i18n-aria-label="history.customerFilterLabel"
+                      aria-label="Filter shipments by customer"
+                    >
                       <option value="" data-i18n="history.allCustomers">All customers</option>
                     </select>
                   </label>
-                  <label class="history-customer-filter history-eta-sort" id="history-eta-sort-wrap">
+                  <label
+                    class="history-customer-filter history-eta-sort"
+                    id="history-eta-sort-wrap"
+                  >
                     <span data-i18n="history.etaSort">ETA order</span>
-                    <select id="history-eta-sort" data-i18n-aria-label="history.etaSortLabel" aria-label="Sort shipments by ETA">
+                    <select
+                      id="history-eta-sort"
+                      data-i18n-aria-label="history.etaSortLabel"
+                      aria-label="Sort shipments by ETA"
+                    >
                       <option value="asc" data-i18n="history.etaAscending">ETA ascending</option>
-                      <option value="desc" selected data-i18n="history.etaDescending">ETA descending</option>
+                      <option value="desc" selected data-i18n="history.etaDescending">
+                        ETA descending
+                      </option>
                     </select>
                   </label>
                   <div class="history-search">
@@ -277,23 +364,37 @@
                       data-i18n-aria-label="history.searchClear"
                       aria-label="Clear search"
                       hidden
-                    >×</button>
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div class="history-loading" id="history-loading" role="status" aria-live="polite" hidden>
+              <div
+                class="history-loading"
+                id="history-loading"
+                role="status"
+                aria-live="polite"
+                hidden
+              >
                 <span class="history-loading-spinner" aria-hidden="true"></span>
                 <span>
                   <strong data-i18n="history.loadingTitle">Retrieving shipment list</strong>
-                  <small data-i18n="history.loadingDescription">Loading the latest records from the database…</small>
+                  <small data-i18n="history.loadingDescription"
+                    >Loading the latest records from the database…</small
+                  >
                 </span>
               </div>
 
               <div class="history-empty" id="history-empty">
                 <span>⌁</span>
-                <strong id="history-empty-title" data-i18n="history.emptyTitle">No shipment history yet</strong>
-                <p id="history-empty-description" data-i18n="history.emptyDescription">Your successful searches will appear here.</p>
+                <strong id="history-empty-title" data-i18n="history.emptyTitle"
+                  >No shipment history yet</strong
+                >
+                <p id="history-empty-description" data-i18n="history.emptyDescription">
+                  Your successful searches will appear here.
+                </p>
               </div>
 
               <div class="shipment-list-wrap" id="history-table-wrap" hidden>
@@ -306,12 +407,20 @@
                 aria-label="Shipment pages"
                 hidden
               >
-                <button id="history-page-previous" type="button" data-i18n="history.previousPage">Previous</button>
+                <button id="history-page-previous" type="button" data-i18n="history.previousPage">
+                  Previous
+                </button>
                 <span id="history-page-info"></span>
-                <button id="history-page-next" type="button" data-i18n="history.nextPage">Next</button>
+                <button id="history-page-next" type="button" data-i18n="history.nextPage">
+                  Next
+                </button>
                 <label>
                   <span data-i18n="history.pageSize">Per page</span>
-                  <select id="history-page-size" data-i18n-aria-label="history.pageSize" aria-label="Shipments per page">
+                  <select
+                    id="history-page-size"
+                    data-i18n-aria-label="history.pageSize"
+                    aria-label="Shipments per page"
+                  >
                     <option value="10">10</option>
                     <option value="20">20</option>
                     <option value="50" selected>50</option>
@@ -368,7 +477,9 @@
                       data-i18n-aria-label="history.searchClear"
                       aria-label="Clear search"
                       hidden
-                    >×</button>
+                    >
+                      ×
+                    </button>
                   </div>
                   <button
                     class="agent-management-refresh-all"
@@ -403,7 +514,8 @@
                   class="agent-management-selected-count"
                   id="agent-management-selected-count"
                   aria-live="polite"
-                >0 selected</span>
+                  >0 selected</span
+                >
                 <span
                   class="agent-management-bulk-status"
                   id="agent-management-bulk-status"
@@ -413,21 +525,35 @@
                 ></span>
               </div>
 
-              <div class="history-loading" id="agent-management-loading" role="status" aria-live="polite" hidden>
+              <div
+                class="history-loading"
+                id="agent-management-loading"
+                role="status"
+                aria-live="polite"
+                hidden
+              >
                 <span class="history-loading-spinner" aria-hidden="true"></span>
                 <span>
                   <strong data-i18n="history.loadingTitle">Retrieving shipment list</strong>
-                  <small data-i18n="history.loadingDescription">Loading the latest records from the database…</small>
+                  <small data-i18n="history.loadingDescription"
+                    >Loading the latest records from the database…</small
+                  >
                 </span>
               </div>
 
               <div class="history-empty" id="agent-management-empty">
                 <span>⌁</span>
                 <strong data-i18n="agent.managementEmptyTitle">No assigned shipments</strong>
-                <p data-i18n="agent.managementEmptyDescription">Authorized customer shipments will appear here.</p>
+                <p data-i18n="agent.managementEmptyDescription">
+                  Authorized customer shipments will appear here.
+                </p>
               </div>
 
-              <div class="shipment-list-wrap is-agent-management" id="agent-management-table-wrap" hidden>
+              <div
+                class="shipment-list-wrap is-agent-management"
+                id="agent-management-table-wrap"
+                hidden
+              >
                 <div class="agent-shipment-table-head" id="agent-shipment-table-head">
                   <span class="agent-shipment-select-heading">
                     <input
@@ -460,9 +586,17 @@
                 aria-label="Shipment management pages"
                 hidden
               >
-                <button id="agent-management-page-previous" type="button" data-i18n="history.previousPage">Previous</button>
+                <button
+                  id="agent-management-page-previous"
+                  type="button"
+                  data-i18n="history.previousPage"
+                >
+                  Previous
+                </button>
                 <span id="agent-management-page-info"></span>
-                <button id="agent-management-page-next" type="button" data-i18n="history.nextPage">Next</button>
+                <button id="agent-management-page-next" type="button" data-i18n="history.nextPage">
+                  Next
+                </button>
                 <label>
                   <span data-i18n="history.pageSize">Per page</span>
                   <select id="agent-management-page-size">
@@ -476,14 +610,23 @@
             </section>
           </section>
 
-          <section class="app-view customer-profile-view" id="profile-view" data-view="profile" hidden>
+          <section
+            class="app-view customer-profile-view"
+            id="profile-view"
+            data-view="profile"
+            hidden
+          >
             <section class="customer-profile-hero">
               <div>
                 <p class="kicker" data-i18n="profile.kicker">CUSTOMER PROFILE</p>
                 <h1 data-i18n="profile.title">Personal information</h1>
-                <p data-i18n="profile.description">Review the identity and shipment access assigned by your service representative.</p>
+                <p data-i18n="profile.description">
+                  Review the identity and shipment access assigned by your service representative.
+                </p>
               </div>
-              <span class="customer-profile-avatar" id="customer-profile-avatar" aria-hidden="true">C</span>
+              <span class="customer-profile-avatar" id="customer-profile-avatar" aria-hidden="true"
+                >C</span
+              >
             </section>
             <section class="customer-profile-card">
               <header>
@@ -494,20 +637,35 @@
                 <span data-i18n="profile.active">Active</span>
               </header>
               <dl>
-                <div><dt data-i18n="profile.username">Login account</dt><dd id="customer-profile-username">—</dd></div>
-                <div><dt data-i18n="profile.code">Customer code</dt><dd id="customer-profile-code">—</dd></div>
-                <div><dt data-i18n="profile.role">Freight identity</dt><dd id="customer-profile-role">—</dd></div>
+                <div>
+                  <dt data-i18n="profile.username">Login account</dt>
+                  <dd id="customer-profile-username">—</dd>
+                </div>
+                <div>
+                  <dt data-i18n="profile.code">Customer code</dt>
+                  <dd id="customer-profile-code">—</dd>
+                </div>
+                <div>
+                  <dt data-i18n="profile.role">Freight identity</dt>
+                  <dd id="customer-profile-role">—</dd>
+                </div>
               </dl>
-              <p data-i18n="profile.help">To change account information or reset credentials, contact your service representative.</p>
+              <p data-i18n="profile.help">
+                To change account information or reset credentials, contact your service
+                representative.
+              </p>
             </section>
           </section>
 
           <section class="app-view" id="tracking-view" data-view="tracking" hidden>
             <section class="page-heading">
               <div>
-                <p class="kicker" data-i18n="tracking.kicker">SHIPMENT INTELLIGENCE</p>
+                <p class="kicker" data-i18n="tracking.kicker">OCEAN FREIGHT TRACKING</p>
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
-                <p data-i18n="tracking.description">Query carrier sources and shape them into one consistent snapshot.</p>
+                <p data-i18n="tracking.description">
+                  Follow your shipment from origin to destination. Select the carrier and enter your
+                  shipment reference.
+                </p>
               </div>
               <span class="source-tag" id="source-tag" hidden>COSCO · CHANNEL 1 · NETWORK</span>
             </section>
@@ -528,16 +686,24 @@
                 <div class="field channel-field internal-query-channel">
                   <label for="channel-select" data-i18n="query.channel">Query channel</label>
                   <select id="channel-select" name="channel">
-                    <option value="AUTO" data-i18n="channel.auto">Automatic · API first, DOM fallback</option>
-                    <option value="NETWORK" data-i18n="channel.network">Channel 1 · Network interface</option>
-                    <option value="PLAYWRIGHT" data-i18n="channel.playwright">Channel 2 · Playwright browser</option>
-                    <option value="PROXY" data-i18n="channel.proxy">Proxy · Alternate outbound IP</option>
+                    <option value="AUTO" data-i18n="channel.auto">
+                      Automatic · API first, DOM fallback
+                    </option>
+                    <option value="NETWORK" data-i18n="channel.network">
+                      Channel 1 · Network interface
+                    </option>
+                    <option value="PLAYWRIGHT" data-i18n="channel.playwright">
+                      Channel 2 · Playwright browser
+                    </option>
+                    <option value="PROXY" data-i18n="channel.proxy">
+                      Proxy · Alternate outbound IP
+                    </option>
                     <option value="AGENT">AI Agent</option>
                   </select>
                 </div>
                 <div class="field type-field">
                   <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
-                   <select id="tracking-type" name="type">
+                  <select id="tracking-type" name="type">
                     <option value="BOOKING" data-i18n="type.booking">Booking number</option>
                     <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
                     <option value="CONTAINER" data-i18n="type.container">Container number</option>
@@ -548,7 +714,8 @@
                   <input
                     id="tracking-number"
                     name="number"
-                    placeholder="-ABCD1234567"
+                    placeholder="Enter shipment reference"
+                    data-i18n-placeholder="query.numberPlaceholder"
                     maxlength="35"
                     autocomplete="off"
                     spellcheck="false"
@@ -560,132 +727,191 @@
                 </button>
               </form>
               <div class="query-foot" hidden>
-                <p id="query-helper" data-i18n="query.helper">Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.</p>
+                <p id="query-helper" data-i18n="query.helper">
+                  Automatic mode calls the network interface first and uses the Playwright browser
+                  only as a fallback.
+                </p>
               </div>
             </section>
 
-            <dialog class="batch-workspace-dialog" id="batch-workspace-dialog" aria-labelledby="batch-workspace-title">
-            <section class="panel batch-import-panel" id="batch-import-panel">
-              <div class="panel-header batch-import-heading">
-                <div>
-                  <span class="panel-icon">☰</span>
-                  <span>
-                    <strong id="batch-workspace-title" data-i18n="batch.title">Batch tracking import</strong>
-                    <small data-i18n="batch.subtitle">Import an Excel or CSV list and query shipments one at a time</small>
-                  </span>
-                </div>
-                <div class="batch-workspace-heading-actions">
-                  <span class="batch-local-badge" data-i18n="batch.localBadge">This device only</span>
-                  <button
-                    class="batch-workspace-close"
-                    id="batch-workspace-close"
-                    type="button"
-                    data-i18n-aria-label="batch.workspaceClose"
-                    aria-label="Close batch tracking"
-                  >×</button>
-                </div>
-              </div>
-              <div class="batch-import-body">
-                <div class="batch-import-intro">
-                  <input id="batch-file-input" type="file" accept=".xlsx,.xls,.csv" hidden />
-                  <button type="button" class="batch-select-button" id="batch-select-button">
-                    <span>+</span>
-                    <span data-i18n="batch.selectFile">Select Excel / CSV</span>
-                  </button>
-                  <p data-i18n="batch.columns">
-                    Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO No., ETD, ETA, Volume and Client Code are imported as supplementary information.
-                  </p>
-                  <small data-i18n="batch.localNotice">Queue and result status are stored only in this browser on this device.</small>
-                  <div class="batch-import-actions">
-                    <button type="button" id="batch-resume-button" data-i18n="batch.resume">Continue pending queries</button>
-                    <button type="button" id="batch-stop-button" data-i18n="batch.stop">Stop current task</button>
-                    <button type="button" id="batch-clear-button" data-i18n="batch.clear">Clear imported queue</button>
+            <dialog
+              class="batch-workspace-dialog"
+              id="batch-workspace-dialog"
+              aria-labelledby="batch-workspace-title"
+            >
+              <section class="panel batch-import-panel" id="batch-import-panel">
+                <div class="panel-header batch-import-heading">
+                  <div>
+                    <span class="panel-icon">☰</span>
+                    <span>
+                      <strong id="batch-workspace-title" data-i18n="batch.title"
+                        >Batch tracking import</strong
+                      >
+                      <small data-i18n="batch.subtitle"
+                        >Import an Excel or CSV list and query shipments one at a time</small
+                      >
+                    </span>
+                  </div>
+                  <div class="batch-workspace-heading-actions">
+                    <span class="batch-local-badge" data-i18n="batch.localBadge"
+                      >This device only</span
+                    >
+                    <button
+                      class="batch-workspace-close"
+                      id="batch-workspace-close"
+                      type="button"
+                      data-i18n-aria-label="batch.workspaceClose"
+                      aria-label="Close batch tracking"
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
-                <div class="batch-import-dashboard">
-                  <div class="batch-import-empty" id="batch-import-empty">
-                    <span>☰</span>
-                    <strong data-i18n="batch.emptyTitle">No imported queue</strong>
-                    <p data-i18n="batch.emptyDescription">Choose a spreadsheet to begin batch tracking.</p>
+                <div class="batch-import-body">
+                  <div class="batch-import-intro">
+                    <input id="batch-file-input" type="file" accept=".xlsx,.xls,.csv" hidden />
+                    <button type="button" class="batch-select-button" id="batch-select-button">
+                      <span>+</span>
+                      <span data-i18n="batch.selectFile">Select Excel / CSV</span>
+                    </button>
+                    <p data-i18n="batch.columns">
+                      Recognizes M/B/L No. and Booking columns. Job Number, Vessel/Voy, POL, POD, PO
+                      No., ETD, ETA, Volume and Client Code are imported as supplementary
+                      information.
+                    </p>
+                    <small data-i18n="batch.localNotice"
+                      >Queue and result status are stored only in this browser on this
+                      device.</small
+                    >
+                    <div class="batch-import-actions">
+                      <button type="button" id="batch-resume-button" data-i18n="batch.resume">
+                        Continue pending queries
+                      </button>
+                      <button type="button" id="batch-stop-button" data-i18n="batch.stop">
+                        Stop current task
+                      </button>
+                      <button type="button" id="batch-clear-button" data-i18n="batch.clear">
+                        Clear imported queue
+                      </button>
+                    </div>
                   </div>
-                  <div class="batch-import-summary" id="batch-import-summary" hidden>
-                    <div class="batch-summary-head">
-                      <div>
-                        <small data-i18n="batch.file">Imported file</small>
-                        <strong id="batch-file-name">—</strong>
+                  <div class="batch-import-dashboard">
+                    <div class="batch-import-empty" id="batch-import-empty">
+                      <span>☰</span>
+                      <strong data-i18n="batch.emptyTitle">No imported queue</strong>
+                      <p data-i18n="batch.emptyDescription">
+                        Choose a spreadsheet to begin batch tracking.
+                      </p>
+                    </div>
+                    <div class="batch-import-summary" id="batch-import-summary" hidden>
+                      <div class="batch-summary-head">
+                        <div>
+                          <small data-i18n="batch.file">Imported file</small>
+                          <strong id="batch-file-name">—</strong>
+                        </div>
+                        <b id="batch-progress-label">0 / 0</b>
                       </div>
-                      <b id="batch-progress-label">0 / 0</b>
+                      <div
+                        class="batch-progress-track"
+                        id="batch-progress-track"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuenow="0"
+                        aria-valuemax="0"
+                      >
+                        <i></i>
+                      </div>
+                      <div class="batch-metrics">
+                        <span>
+                          <b id="batch-success-count">0</b>
+                          <small data-i18n="batch.success">Succeeded</small>
+                        </span>
+                        <span>
+                          <b id="batch-core-count">0</b>
+                          <small data-i18n="batch.core">Core saved</small>
+                        </span>
+                        <span>
+                          <b id="batch-failed-count">0</b>
+                          <small data-i18n="batch.failed">Failed</small>
+                        </span>
+                        <span>
+                          <b id="batch-manual-count">0</b>
+                          <small data-i18n="batch.manual">Manual entry</small>
+                        </span>
+                        <span>
+                          <b id="batch-pending-count">0</b>
+                          <small data-i18n="batch.pending">Pending</small>
+                        </span>
+                      </div>
+                      <p class="batch-status-text" id="batch-status-text"></p>
+                      <div
+                        class="batch-result-list"
+                        id="batch-result-list"
+                        role="list"
+                        aria-label="Imported shipment queue"
+                      ></div>
                     </div>
-                    <div class="batch-progress-track" id="batch-progress-track" role="progressbar" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0">
-                      <i></i>
-                    </div>
-                    <div class="batch-metrics">
-                      <span>
-                        <b id="batch-success-count">0</b>
-                        <small data-i18n="batch.success">Succeeded</small>
-                      </span>
-                      <span>
-                        <b id="batch-core-count">0</b>
-                        <small data-i18n="batch.core">Core saved</small>
-                      </span>
-                      <span>
-                        <b id="batch-failed-count">0</b>
-                        <small data-i18n="batch.failed">Failed</small>
-                      </span>
-                      <span>
-                        <b id="batch-manual-count">0</b>
-                        <small data-i18n="batch.manual">Manual entry</small>
-                      </span>
-                      <span>
-                        <b id="batch-pending-count">0</b>
-                        <small data-i18n="batch.pending">Pending</small>
-                      </span>
-                    </div>
-                    <p class="batch-status-text" id="batch-status-text"></p>
-                    <div class="batch-result-list" id="batch-result-list" role="list" aria-label="Imported shipment queue"></div>
                   </div>
                 </div>
-              </div>
-              <section class="batch-column-preview" id="batch-column-preview" hidden aria-live="polite">
-                <header>
-                  <div>
-                    <strong data-i18n="batch.previewTitle">Confirm the tracking column</strong>
-                    <p data-i18n="batch.previewDescription">Review the spreadsheet and choose the one column that contains the shipment numbers.</p>
+                <section
+                  class="batch-column-preview"
+                  id="batch-column-preview"
+                  hidden
+                  aria-live="polite"
+                >
+                  <header>
+                    <div>
+                      <strong data-i18n="batch.previewTitle">Confirm the tracking column</strong>
+                      <p data-i18n="batch.previewDescription">
+                        Review the spreadsheet and choose the one column that contains the shipment
+                        numbers.
+                      </p>
+                    </div>
+                    <span id="batch-preview-file-name">—</span>
+                  </header>
+                  <div class="batch-column-preview-controls">
+                    <label>
+                      <span data-i18n="batch.previewSheet">Worksheet</span>
+                      <select id="batch-preview-sheet"></select>
+                    </label>
+                    <label>
+                      <span data-i18n="batch.previewColumn">Track column</span>
+                      <select id="batch-preview-column"></select>
+                    </label>
+                    <label>
+                      <span data-i18n="batch.previewType">Number type</span>
+                      <select id="batch-preview-type" disabled>
+                        <option value="BOOKING" data-i18n="type.booking">Booking number</option>
+                      </select>
+                    </label>
                   </div>
-                  <span id="batch-preview-file-name">—</span>
-                </header>
-                <div class="batch-column-preview-controls">
-                  <label>
-                    <span data-i18n="batch.previewSheet">Worksheet</span>
-                    <select id="batch-preview-sheet"></select>
-                  </label>
-                  <label>
-                    <span data-i18n="batch.previewColumn">Track column</span>
-                    <select id="batch-preview-column"></select>
-                  </label>
-                  <label>
-                    <span data-i18n="batch.previewType">Number type</span>
-                    <select id="batch-preview-type" disabled>
-                      <option value="BOOKING" data-i18n="type.booking">Booking number</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="batch-column-preview-table-wrap">
-                  <table class="batch-column-preview-table">
-                    <thead id="batch-preview-table-head"></thead>
-                    <tbody id="batch-preview-table-body"></tbody>
-                  </table>
-                </div>
-                <footer>
-                  <small data-i18n="batch.previewRows">The first rows are shown only for confirmation; your selected column is the final source.</small>
-                  <div>
-                    <button type="button" id="batch-preview-cancel" data-i18n="common.cancel">Cancel</button>
-                    <button type="button" id="batch-preview-confirm" data-i18n="batch.previewConfirm">Use this column and start</button>
+                  <div class="batch-column-preview-table-wrap">
+                    <table class="batch-column-preview-table">
+                      <thead id="batch-preview-table-head"></thead>
+                      <tbody id="batch-preview-table-body"></tbody>
+                    </table>
                   </div>
-                </footer>
+                  <footer>
+                    <small data-i18n="batch.previewRows"
+                      >The first rows are shown only for confirmation; your selected column is the
+                      final source.</small
+                    >
+                    <div>
+                      <button type="button" id="batch-preview-cancel" data-i18n="common.cancel">
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        id="batch-preview-confirm"
+                        data-i18n="batch.previewConfirm"
+                      >
+                        Use this column and start
+                      </button>
+                    </div>
+                  </footer>
+                </section>
+                <p class="batch-import-message" id="batch-import-message" hidden></p>
               </section>
-              <p class="batch-import-message" id="batch-import-message" hidden></p>
-            </section>
             </dialog>
 
             <section class="cma-session-panel" id="cma-session-panel" hidden>
@@ -693,29 +919,70 @@
                 <div>
                   <p class="kicker" data-i18n="cmaSession.kicker">CMA ACCESS SESSION</p>
                   <h2 data-i18n="cmaSession.title">DataDome session</h2>
-                  <p data-i18n="cmaSession.description">Business users and administrators can save the CMA browser session here. It is encrypted by the backend and never returned; a successful query is still required to verify it.</p>
+                  <p data-i18n="cmaSession.description">
+                    Business users and administrators can save the CMA browser session here. It is
+                    encrypted by the backend and never returned; a successful query is still
+                    required to verify it.
+                  </p>
                 </div>
-                <span class="cma-session-status" id="cma-session-status" data-state="unknown" data-i18n="cmaSession.checking">Checking…</span>
+                <span
+                  class="cma-session-status"
+                  id="cma-session-status"
+                  data-state="unknown"
+                  data-i18n="cmaSession.checking"
+                  >Checking…</span
+                >
               </div>
               <div class="cma-session-permission" id="cma-session-permission" hidden>
-                <p data-i18n="cmaSession.permission">Only signed-in business users or administrators can maintain this session.</p>
+                <p data-i18n="cmaSession.permission">
+                  Only signed-in business users or administrators can maintain this session.
+                </p>
               </div>
               <form class="cma-session-form" id="cma-session-form" hidden>
                 <div class="field cma-cookie-field">
-                  <label for="cma-session-cookie" data-i18n="cmaSession.cookie">DataDome value or Cookie header</label>
-                  <input id="cma-session-cookie" name="sessionCookie" type="password" maxlength="8192" autocomplete="new-password" spellcheck="false" placeholder="datadome=…" />
-                  <small data-i18n="cmaSession.cookieHelp">Paste only the datadome value, or the complete CMA request Cookie header. The saved value is never shown again.</small>
+                  <label for="cma-session-cookie" data-i18n="cmaSession.cookie"
+                    >DataDome value or Cookie header</label
+                  >
+                  <input
+                    id="cma-session-cookie"
+                    name="sessionCookie"
+                    type="password"
+                    maxlength="8192"
+                    autocomplete="new-password"
+                    spellcheck="false"
+                    placeholder="datadome=…"
+                  />
+                  <small data-i18n="cmaSession.cookieHelp"
+                    >Paste only the datadome value, or the complete CMA request Cookie header. The
+                    saved value is never shown again.</small
+                  >
                 </div>
                 <div class="field cma-user-agent-field">
-                  <label for="cma-session-user-agent" data-i18n="cmaSession.userAgent">Browser User-Agent</label>
-                  <input id="cma-session-user-agent" name="userAgent" maxlength="512" spellcheck="false" />
-                  <small data-i18n="cmaSession.userAgentHelp">Filled from this browser because DataDome may bind the session to it.</small>
+                  <label for="cma-session-user-agent" data-i18n="cmaSession.userAgent"
+                    >Browser User-Agent</label
+                  >
+                  <input
+                    id="cma-session-user-agent"
+                    name="userAgent"
+                    maxlength="512"
+                    spellcheck="false"
+                  />
+                  <small data-i18n="cmaSession.userAgentHelp"
+                    >Filled from this browser because DataDome may bind the session to it.</small
+                  >
                 </div>
                 <div class="cma-session-actions">
                   <button type="submit" class="el-button el-button--primary" id="cma-session-save">
                     <span data-i18n="cmaSession.save">Save encrypted session</span>
                   </button>
-                  <button type="button" class="el-button" id="cma-session-clear" data-i18n="cmaSession.clear">Clear session</button>
+                  <button
+                    type="button"
+                    class="el-button"
+                    id="cma-session-clear"
+                    data-i18n="cmaSession.clear"
+                  >
+                    Clear session
+                  </button>
                 </div>
                 <p class="cma-session-message" id="cma-session-message" hidden></p>
               </form>
@@ -733,7 +1000,9 @@
               <div class="empty-icon">↗</div>
               <div>
                 <strong data-i18n="empty.title">Ready when you are</strong>
-                <p data-i18n="empty.description">Enter a bill, booking or container number to begin.</p>
+                <p data-i18n="empty.description">
+                  Enter a bill, booking or container number to begin.
+                </p>
               </div>
             </section>
 
@@ -760,7 +1029,9 @@
                     disabled
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M8.5 12.5 13.8 7a3.2 3.2 0 0 1 4.6 4.5l-7.1 7.2a5 5 0 0 1-7.1-7.1l7.2-7.2" />
+                      <path
+                        d="M8.5 12.5 13.8 7a3.2 3.2 0 0 1 4.6 4.5l-7.1 7.2a5 5 0 0 1-7.1-7.1l7.2-7.2"
+                      />
                     </svg>
                     <span data-i18n="files.trigger">Shipment files</span>
                     <b id="related-files-count" hidden>0</b>
@@ -800,7 +1071,11 @@
                     </div>
                   </div>
 
-                  <section class="journey-overview" id="journey-overview" aria-label="Journey progress">
+                  <section
+                    class="journey-overview"
+                    id="journey-overview"
+                    aria-label="Journey progress"
+                  >
                     <div class="journey-stage-summary">
                       <span class="journey-pulse"><i></i></span>
                       <span>
@@ -814,10 +1089,18 @@
                   <div class="summary-services" id="summary-services">
                     <small data-i18n="summary.services">Selected services</small>
                     <div>
-                      <span id="summary-service-sea"><i>✓</i><b data-i18n="summary.sea">Ocean</b></span>
-                      <span id="summary-service-inland"><i>✓</i><b data-i18n="summary.inland">Inland</b></span>
-                      <span id="summary-service-customs"><i>✓</i><b data-i18n="summary.customs">Customs</b></span>
-                      <span id="summary-service-warehouse"><i>✓</i><b data-i18n="summary.warehouse">Warehouse</b></span>
+                      <span id="summary-service-sea"
+                        ><i>✓</i><b data-i18n="summary.sea">Ocean</b></span
+                      >
+                      <span id="summary-service-inland"
+                        ><i>✓</i><b data-i18n="summary.inland">Inland</b></span
+                      >
+                      <span id="summary-service-customs"
+                        ><i>✓</i><b data-i18n="summary.customs">Customs</b></span
+                      >
+                      <span id="summary-service-warehouse"
+                        ><i>✓</i><b data-i18n="summary.warehouse">Warehouse</b></span
+                      >
                     </div>
                   </div>
                 </div>
@@ -827,7 +1110,9 @@
                 <article class="metric-card departure-card" id="departure-metric-card">
                   <div class="metric-head">
                     <span class="metric-icon">↗</span>
-                    <p id="departure-metric-label" data-i18n="metrics.actualDeparture">Actual departure</p>
+                    <p id="departure-metric-label" data-i18n="metrics.actualDeparture">
+                      Actual departure
+                    </p>
                   </div>
                   <strong id="actual-departure">—</strong>
                   <span id="actual-departure-location">Not provided</span>
@@ -835,7 +1120,9 @@
                 <article class="metric-card arrival-card" id="arrival-metric-card">
                   <div class="metric-head">
                     <span class="metric-icon">↘</span>
-                    <p id="arrival-metric-label" data-i18n="metrics.actualArrival">Actual arrival</p>
+                    <p id="arrival-metric-label" data-i18n="metrics.actualArrival">
+                      Actual arrival
+                    </p>
                   </div>
                   <strong id="actual-arrival">—</strong>
                   <span id="actual-arrival-location">Not provided</span>
@@ -875,7 +1162,10 @@
                   <div class="route-summary">
                     <div>
                       <small data-i18n="route.origin">Origin</small>
-                      <span class="location-name"><b class="flag-icon" id="origin-flag"></b><strong id="origin-name">—</strong></span>
+                      <span class="location-name"
+                        ><b class="flag-icon" id="origin-flag"></b
+                        ><strong id="origin-name">—</strong></span
+                      >
                       <span id="origin-code">—</span>
                     </div>
                     <div
@@ -890,7 +1180,10 @@
                     </div>
                     <div>
                       <small data-i18n="route.destination">Destination</small>
-                      <span class="location-name"><b class="flag-icon" id="destination-flag"></b><strong id="destination-name">—</strong></span>
+                      <span class="location-name"
+                        ><b class="flag-icon" id="destination-flag"></b
+                        ><strong id="destination-name">—</strong></span
+                      >
                       <span id="destination-code">—</span>
                     </div>
                   </div>
@@ -901,9 +1194,16 @@
                   <div class="panel-header">
                     <div>
                       <span class="panel-icon">#</span>
-                      <strong data-i18n="references.title">Booking information &amp; references</strong>
+                      <strong data-i18n="references.title"
+                        >Booking information &amp; references</strong
+                      >
                     </div>
-                    <button type="button" class="panel-edit-button" id="edit-business-references" data-i18n="business.edit">
+                    <button
+                      type="button"
+                      class="panel-edit-button"
+                      id="edit-business-references"
+                      data-i18n="business.edit"
+                    >
                       Edit business references
                     </button>
                   </div>
@@ -961,9 +1261,13 @@
                         <th data-i18n="routing.loadPort">Load port</th>
                         <th data-i18n="routing.dischargePort">Discharge port</th>
                         <th data-i18n="routing.estimatedDeparture">Est. departure</th>
-                        <th class="actual-column" data-i18n="routing.actualDeparture">Actual departure</th>
+                        <th class="actual-column" data-i18n="routing.actualDeparture">
+                          Actual departure
+                        </th>
                         <th data-i18n="routing.estimatedArrival">Est. arrival</th>
-                        <th class="actual-column" data-i18n="routing.actualArrival">Actual arrival</th>
+                        <th class="actual-column" data-i18n="routing.actualArrival">
+                          Actual arrival
+                        </th>
                         <th data-i18n="routing.masterBill">Master bill</th>
                       </tr>
                     </thead>
@@ -1051,9 +1355,15 @@
       <section class="related-files-auth" id="related-files-auth-required" hidden>
         <span class="related-files-auth-icon" aria-hidden="true">↗</span>
         <div>
-          <strong id="related-files-auth-title" data-i18n="files.loginTitle">Sign in to manage shipment files</strong>
-          <p id="related-files-auth-description" data-i18n="files.loginDescription">Shipment documents are available to authenticated enterprise users.</p>
-          <a id="related-files-auth-link" href="/workbenches" data-i18n="files.loginAction">Sign in to the platform</a>
+          <strong id="related-files-auth-title" data-i18n="files.loginTitle"
+            >Sign in to manage shipment files</strong
+          >
+          <p id="related-files-auth-description" data-i18n="files.loginDescription">
+            Shipment documents are available to authenticated enterprise users.
+          </p>
+          <a id="related-files-auth-link" href="/workbenches" data-i18n="files.loginAction"
+            >Sign in to the platform</a
+          >
         </div>
       </section>
 
@@ -1067,7 +1377,9 @@
           <span aria-hidden="true">!</span>
           <strong data-i18n="files.errorTitle">Files could not be loaded</strong>
           <p id="related-files-error-message"></p>
-          <button id="related-files-retry-button" type="button" data-i18n="files.retry">Try again</button>
+          <button id="related-files-retry-button" type="button" data-i18n="files.retry">
+            Try again
+          </button>
         </div>
 
         <div class="related-files-state related-files-empty" id="related-files-empty" hidden>
@@ -1077,7 +1389,9 @@
             </svg>
           </span>
           <strong data-i18n="files.emptyTitle">No related files yet</strong>
-          <p data-i18n="files.emptyDescription">Upload cargo details, invoices or shipping documents for this shipment.</p>
+          <p data-i18n="files.emptyDescription">
+            Upload cargo details, invoices or shipping documents for this shipment.
+          </p>
         </div>
 
         <ul class="related-files-list" id="related-files-list" aria-live="polite"></ul>
@@ -1087,7 +1401,9 @@
         <header>
           <span>
             <strong data-i18n="files.commentsTitle">File messages</strong>
-            <small data-i18n="files.commentsDescription">Messages shared with people who can access this shipment.</small>
+            <small data-i18n="files.commentsDescription"
+              >Messages shared with people who can access this shipment.</small
+            >
           </span>
           <span class="related-file-comments-count" id="related-file-comments-count">0</span>
         </header>
@@ -1095,10 +1411,22 @@
           <span aria-hidden="true"></span>
           <small data-i18n="files.commentsLoading">Loading messages…</small>
         </div>
-        <p class="related-file-comments-empty" id="related-file-comments-empty" data-i18n="files.commentsEmpty">No messages yet.</p>
-        <ul class="related-file-comments-list" id="related-file-comments-list" aria-live="polite"></ul>
+        <p
+          class="related-file-comments-empty"
+          id="related-file-comments-empty"
+          data-i18n="files.commentsEmpty"
+        >
+          No messages yet.
+        </p>
+        <ul
+          class="related-file-comments-list"
+          id="related-file-comments-list"
+          aria-live="polite"
+        ></ul>
         <form class="related-file-comment-form" id="related-file-comment-form">
-          <label for="related-file-comment-input" data-i18n="files.commentLabel">Add a message</label>
+          <label for="related-file-comment-input" data-i18n="files.commentLabel"
+            >Add a message</label
+          >
           <div>
             <textarea
               id="related-file-comment-input"
@@ -1107,7 +1435,9 @@
               data-i18n-placeholder="files.commentPlaceholder"
               placeholder="Leave a note about the shipment documents"
             ></textarea>
-            <button id="related-file-comment-send" type="submit" data-i18n="files.commentSend">Send</button>
+            <button id="related-file-comment-send" type="submit" data-i18n="files.commentSend">
+              Send
+            </button>
           </div>
           <p id="related-file-comment-message" role="status" aria-live="polite" hidden></p>
         </form>
@@ -1117,7 +1447,9 @@
         <div class="related-files-upload-heading">
           <div>
             <strong data-i18n="files.uploadTitle">Add files</strong>
-            <span data-i18n="files.uploadDescription">Files are linked to this shipment record.</span>
+            <span data-i18n="files.uploadDescription"
+              >Files are linked to this shipment record.</span
+            >
           </div>
           <span id="related-files-user-name"></span>
         </div>
@@ -1133,28 +1465,101 @@
                 aria-haspopup="listbox"
                 aria-expanded="false"
               >
-                <span id="related-files-category-label" data-i18n="documents.type.exportCivPl">CIV and PL</span>
+                <span id="related-files-category-label" data-i18n="documents.type.exportCivPl"
+                  >CIV and PL</span
+                >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
               </button>
-              <div class="related-files-custom-select-menu" id="related-files-category-menu" role="listbox" aria-hidden="true">
-                <button type="button" role="option" data-category-value="EXPORT_CIV_PL" data-i18n="documents.type.exportCivPl">CIV and PL</button>
-                <button type="button" role="option" data-category-value="HOUSE_BILL" data-i18n="documents.type.houseBill">House Bill of Lading</button>
-                <button type="button" role="option" data-category-value="MASTER_BILL" data-i18n="documents.type.masterBill">MB/L</button>
-                <button type="button" role="option" data-category-value="ARRIVAL_NOTICE" data-i18n="documents.type.arrivalNotice">Arrival Notice</button>
-                <button type="button" role="option" data-category-value="DELIVERY_ORDER" data-i18n="documents.type.deliveryOrder">Delivery Order</button>
-                <button type="button" role="option" data-category-value="POD" data-i18n="documents.type.pod">POD</button>
-                <button type="button" role="option" data-category-value="DUTY_SUMMARY" data-i18n="documents.type.dutySummary">Duty Summary</button>
-                <button type="button" role="option" data-category-value="IMPORT_CIV_PL" data-i18n="documents.type.importCivPl">Import CIV and PL</button>
+              <div
+                class="related-files-custom-select-menu"
+                id="related-files-category-menu"
+                role="listbox"
+                aria-hidden="true"
+              >
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="EXPORT_CIV_PL"
+                  data-i18n="documents.type.exportCivPl"
+                >
+                  CIV and PL
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="HOUSE_BILL"
+                  data-i18n="documents.type.houseBill"
+                >
+                  House Bill of Lading
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="MASTER_BILL"
+                  data-i18n="documents.type.masterBill"
+                >
+                  MB/L
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="ARRIVAL_NOTICE"
+                  data-i18n="documents.type.arrivalNotice"
+                >
+                  Arrival Notice
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="DELIVERY_ORDER"
+                  data-i18n="documents.type.deliveryOrder"
+                >
+                  Delivery Order
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="POD"
+                  data-i18n="documents.type.pod"
+                >
+                  POD
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="DUTY_SUMMARY"
+                  data-i18n="documents.type.dutySummary"
+                >
+                  Duty Summary
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  data-category-value="IMPORT_CIV_PL"
+                  data-i18n="documents.type.importCivPl"
+                >
+                  Import CIV and PL
+                </button>
               </div>
               <input id="related-files-category" type="hidden" value="EXPORT_CIV_PL" />
             </div>
           </div>
-          <fieldset class="related-files-option-field related-files-visibility-field" id="related-files-upload-visibility-field" hidden>
+          <fieldset
+            class="related-files-option-field related-files-visibility-field"
+            id="related-files-upload-visibility-field"
+            hidden
+          >
             <legend data-i18n="files.visibility">Visible to</legend>
             <details class="visibility-role-picker" id="related-files-upload-visibility">
-              <summary id="related-files-upload-visibility-summary" data-i18n="files.visibilityAllRoles">All shipment roles</summary>
+              <summary
+                id="related-files-upload-visibility-summary"
+                data-i18n="files.visibilityAllRoles"
+              >
+                All shipment roles
+              </summary>
               <div class="visibility-role-menu">
                 <label>
+                  <!-- prettier-ignore -->
                   <input type="checkbox" value="OVERSEA_AGENT" data-related-files-upload-role checked />
                   <span data-i18n="files.visibilityOverseaAgent">Overseas agent</span>
                 </label>
@@ -1168,9 +1573,15 @@
                 </label>
               </div>
             </details>
-            <small id="related-files-upload-visibility-hint" data-i18n="files.visibilityRequired">Select at least one role.</small>
+            <small id="related-files-upload-visibility-hint" data-i18n="files.visibilityRequired"
+              >Select at least one role.</small
+            >
           </fieldset>
-          <label class="related-files-target-customer" id="related-files-target-customer-field" hidden>
+          <label
+            class="related-files-target-customer"
+            id="related-files-target-customer-field"
+            hidden
+          >
             <span data-i18n="files.targetCustomer">Share with customer</span>
             <select
               id="related-files-target-customer"
@@ -1211,8 +1622,21 @@
             <span data-i18n="files.upload">Upload</span>
           </button>
         </div>
-        <p class="related-files-selection" id="related-files-selection" data-i18n="files.noSelection" data-state="empty">No files selected.</p>
-        <p class="related-files-upload-message" id="related-files-upload-message" role="status" aria-live="polite" hidden></p>
+        <p
+          class="related-files-selection"
+          id="related-files-selection"
+          data-i18n="files.noSelection"
+          data-state="empty"
+        >
+          No files selected.
+        </p>
+        <p
+          class="related-files-upload-message"
+          id="related-files-upload-message"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
       </footer>
     </aside>
 
@@ -1228,19 +1652,29 @@
           </span>
           <span>
             <small>SYSTEM MESSAGE</small>
-            <strong id="system-announcement-title" data-i18n="announcement.title">System announcements</strong>
+            <strong id="system-announcement-title" data-i18n="announcement.title"
+              >System announcements</strong
+            >
           </span>
           <button
             type="button"
             id="system-announcement-close"
             data-i18n-aria-label="announcement.close"
             aria-label="Close announcements"
-          >×</button>
+          >
+            ×
+          </button>
         </header>
         <div class="system-announcement-body" id="system-announcement-body"></div>
         <footer>
-          <span data-i18n="announcement.todayOnly">Only announcements effective today are shown.</span>
-          <button type="button" id="system-announcement-acknowledge" data-i18n="announcement.acknowledge">
+          <span data-i18n="announcement.todayOnly"
+            >Only announcements effective today are shown.</span
+          >
+          <button
+            type="button"
+            id="system-announcement-acknowledge"
+            data-i18n="announcement.acknowledge"
+          >
             Got it
           </button>
         </footer>
@@ -1264,7 +1698,9 @@
         <span class="system-wait-complete" aria-hidden="true">
           <svg viewBox="0 0 32 32"><path d="m8 16.5 5 5L24 10.5" /></svg>
         </span>
-        <span class="system-wait-message" id="system-wait-message" data-i18n="wait.tracking">Retrieving the latest shipment data…</span>
+        <span class="system-wait-message" id="system-wait-message" data-i18n="wait.tracking"
+          >Retrieving the latest shipment data…</span
+        >
       </div>
     </div>
 
@@ -1277,9 +1713,11 @@
       aria-hidden="true"
     >
       <div class="platform-route-content">
-        <div class="platform-route-mark" aria-hidden="true"><img src="./favicon.svg" alt="" /></div>
-        <strong>DrewesLogistics</strong>
-        <span id="platform-route-message" data-i18n="wait.home">Returning to the DrewesLogistics home page…</span>
+        <div class="platform-route-mark" aria-hidden="true">LP</div>
+        <strong>logisticspluscn</strong>
+        <span id="platform-route-message" data-i18n="wait.home"
+          >Returning to the logisticspluscn home page…</span
+        >
         <b aria-hidden="true"></b>
       </div>
     </div>
@@ -1301,12 +1739,18 @@
             id="agent-update-task-close"
             aria-label="Close"
             disabled
-          >×</button>
+          >
+            ×
+          </button>
         </header>
         <div class="agent-update-task-body">
           <section class="agent-update-task-summary">
             <div class="agent-update-task-headline">
-              <span class="agent-update-task-spinner" id="agent-update-task-spinner" aria-hidden="true"></span>
+              <span
+                class="agent-update-task-spinner"
+                id="agent-update-task-spinner"
+                aria-hidden="true"
+              ></span>
               <span>
                 <strong id="agent-update-task-state">Updating shipments…</strong>
                 <small id="agent-update-task-progress-label">0 of 0 processed</small>
@@ -1353,14 +1797,26 @@
             class="agent-update-task-close-action"
             id="agent-update-task-close-action"
             disabled
-          >Close</button>
+          >
+            Close
+          </button>
         </footer>
       </section>
     </dialog>
 
     <div class="document-drawer-layer" id="document-drawer-layer" hidden>
-      <button class="document-drawer-backdrop" id="document-drawer-backdrop" type="button" aria-label="Close document drawer"></button>
-      <aside class="document-drawer" id="document-drawer" aria-hidden="true" aria-labelledby="document-drawer-title">
+      <button
+        class="document-drawer-backdrop"
+        id="document-drawer-backdrop"
+        type="button"
+        aria-label="Close document drawer"
+      ></button>
+      <aside
+        class="document-drawer"
+        id="document-drawer"
+        aria-hidden="true"
+        aria-labelledby="document-drawer-title"
+      >
         <header>
           <span>
             <small data-i18n="documents.kicker">SHIPMENT FILES</small>
@@ -1370,7 +1826,8 @@
           <button type="button" id="close-document-drawer" aria-label="Close">×</button>
         </header>
         <p class="document-drawer-intro" data-i18n="documents.intro">
-          One primary file is retained for each topic. Add, edit or delete the file and its visibility metadata here.
+          One primary file is retained for each topic. Add, edit or delete the file and its
+          visibility metadata here.
         </p>
         <div class="document-list" id="document-list"></div>
       </aside>
@@ -1383,25 +1840,56 @@
             <small data-i18n="business.kicker">BUSINESS REFERENCES</small>
             <strong data-i18n="business.dialogTitle">Edit shipment identifiers</strong>
           </span>
-          <button type="button" class="dialog-close" data-dialog-close="business-reference-dialog" aria-label="Close">×</button>
+          <button
+            type="button"
+            class="dialog-close"
+            data-dialog-close="business-reference-dialog"
+            aria-label="Close"
+          >
+            ×
+          </button>
         </header>
         <div class="supplement-form-grid">
           <label>
             <span data-i18n="business.clientCode">Client name code</span>
-            <input id="business-client-code-input" name="clientNameCode" maxlength="40" autocomplete="off" />
+            <input
+              id="business-client-code-input"
+              name="clientNameCode"
+              maxlength="40"
+              autocomplete="off"
+            />
           </label>
           <label>
             <span data-i18n="business.clientPo">Client PO number</span>
-            <input id="business-client-po-input" name="clientPoNumber" maxlength="80" autocomplete="off" />
+            <input
+              id="business-client-po-input"
+              name="clientPoNumber"
+              maxlength="80"
+              autocomplete="off"
+            />
           </label>
           <label>
             <span data-i18n="business.forwarderJob">Forwarder job number</span>
-            <input id="business-forwarder-job-input" name="forwarderJobNumber" maxlength="80" autocomplete="off" />
+            <input
+              id="business-forwarder-job-input"
+              name="forwarderJobNumber"
+              maxlength="80"
+              autocomplete="off"
+            />
           </label>
         </div>
         <footer>
-          <button type="button" class="secondary-dialog-button" data-dialog-close="business-reference-dialog" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+          <button
+            type="button"
+            class="secondary-dialog-button"
+            data-dialog-close="business-reference-dialog"
+            data-i18n="common.cancel"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">
+            Save
+          </button>
         </footer>
       </form>
     </dialog>
@@ -1413,7 +1901,14 @@
             <small data-i18n="documents.kicker">SHIPMENT FILES</small>
             <strong id="document-editor-title" data-i18n="documents.add">Add file</strong>
           </span>
-          <button type="button" class="dialog-close" data-dialog-close="document-editor-dialog" aria-label="Close">×</button>
+          <button
+            type="button"
+            class="dialog-close"
+            data-dialog-close="document-editor-dialog"
+            aria-label="Close"
+          >
+            ×
+          </button>
         </header>
         <input type="hidden" id="document-type-input" name="documentType" />
         <div class="document-editor-topic" id="document-editor-topic">—</div>
@@ -1433,8 +1928,17 @@
           </label>
         </div>
         <footer>
-          <button type="button" class="secondary-dialog-button" data-dialog-close="document-editor-dialog" data-i18n="common.cancel">Cancel</button>
-          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">Save</button>
+          <button
+            type="button"
+            class="secondary-dialog-button"
+            data-dialog-close="document-editor-dialog"
+            data-i18n="common.cancel"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="primary-dialog-button" value="save" data-i18n="common.save">
+            Save
+          </button>
         </footer>
       </form>
     </dialog>
@@ -1445,15 +1949,31 @@
           <small data-i18n="files.previewTitle">File preview</small>
           <strong id="file-preview-name">—</strong>
         </span>
-        <button type="button" class="dialog-close" id="file-preview-close" aria-label="Close">×</button>
+        <button type="button" class="dialog-close" id="file-preview-close" aria-label="Close">
+          ×
+        </button>
       </header>
       <div class="file-preview-body" id="file-preview-body">
         <p class="file-preview-message" id="file-preview-message" hidden></p>
         <div class="file-preview-content" id="file-preview-content"></div>
       </div>
       <footer>
-        <button type="button" class="primary-dialog-button" id="file-preview-download" data-i18n="files.download">Download</button>
-        <button type="button" class="secondary-dialog-button" id="file-preview-cancel" data-i18n="common.cancel">Cancel</button>
+        <button
+          type="button"
+          class="primary-dialog-button"
+          id="file-preview-download"
+          data-i18n="files.download"
+        >
+          Download
+        </button>
+        <button
+          type="button"
+          class="secondary-dialog-button"
+          id="file-preview-cancel"
+          data-i18n="common.cancel"
+        >
+          Cancel
+        </button>
       </footer>
     </dialog>
   </body>

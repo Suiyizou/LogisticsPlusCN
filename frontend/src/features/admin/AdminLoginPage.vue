@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandLockup from "../../components/brand/BrandLockup.vue";
 import { RouterLink } from "vue-router";
 import type { AdminConsoleCopy, AdminLoginForm } from "../../types/adminShell";
 const props = defineProps<{
@@ -28,7 +29,7 @@ function submit() {
   <section :aria-busy="busy" class="admin-login-shell">
     <div class="admin-login-brand">
       <RouterLink class="admin-back-link" to="/workbenches">{{ copy.switchWorkbench }}</RouterLink>
-      <span class="brand-mark"><img src="/favicon.svg" alt="" /></span>
+      <BrandLockup href="/" inverse company />
       <p>Admin Console</p>
       <h1>{{ copy.loginHeading }}</h1>
       <strong>{{ copy.loginDescription }}</strong>

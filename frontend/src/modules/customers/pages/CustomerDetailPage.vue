@@ -185,7 +185,12 @@
                     class="business-select"
                     popper-class="business-select-popper"
                   >
-                    <el-option v-for="carrier in TRACKING_CARRIERS" :key="carrier.code" :value="carrier.code" :label="carrier.name" />
+                    <el-option
+                      v-for="carrier in TRACKING_CARRIERS"
+                      :key="carrier.code"
+                      :value="carrier.code"
+                      :label="carrier.name"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -197,7 +202,11 @@
                     popper-class="business-select-popper"
                   >
                     <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-<el-option v-if="supportsShipmentReference(bindForm.carrier, 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                    <el-option
+                      v-if="supportsShipmentReference(bindForm.carrier, 'BILLOFLADING')"
+                      value="BILLOFLADING"
+                      :label="t('customers.referenceBill')"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -401,7 +410,10 @@
   </section>
 </template>
 <script setup lang="ts">
-import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
+import {
+  TRACKING_CARRIERS,
+  supportsShipmentReference
+} from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -498,8 +510,8 @@ function updateBindMode(value: string | number | boolean | undefined) {
   gap: 6px;
   margin-bottom: 16px;
   padding: 6px 12px;
-  border: 1px solid #dce1e8;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   color: #5a6d80;
   background: #fff;
   font-size: 12px;
@@ -508,13 +520,13 @@ function updateBindMode(value: string | number | boolean | undefined) {
 }
 .back-button:hover {
   background: #f0f4f8;
-  color: #1e40af;
+  color: var(--color-primary);
 }
 .main-card {
   margin-bottom: 16px;
   border: 1px solid #dce3ec;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(15, 29, 46, 0.06);
+  border-radius: 4px;
+  box-shadow: none;
 }
 .main-card :deep(.el-card__header) {
   padding: 16px 20px;
@@ -555,9 +567,9 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c7d5e4 inset;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
@@ -573,8 +585,10 @@ function updateBindMode(value: string | number | boolean | undefined) {
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
-  background: #287ccb;
-  box-shadow: 0 5px 12px rgba(40, 124, 203, 0.22);
+  background: var(--color-primary);
+  box-shadow: none;
+
+  color: var(--color-on-primary);
 }
 .shipment-pagination :deep(.el-pagination__total) {
   margin-right: 8px;
@@ -597,7 +611,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .main-card-title {
   margin: 4px 0;
   font-size: 22px;
-  color: #0f1d2e;
+  color: var(--color-primary);
   letter-spacing: -0.02em;
 }
 .main-card-subtitle {
@@ -620,7 +634,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .section-label {
   font-size: 14px;
   font-weight: 700;
-  color: #1a2d42;
+  color: var(--color-foreground);
   margin: 0;
 }
 .profile-section {
@@ -643,7 +657,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .bind-form-card {
   margin-bottom: 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fafbfd;
 }
 .bind-form-card :deep(.el-card__body) {
@@ -665,7 +679,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .candidate-card {
   margin-bottom: 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fafbfd;
 }
 .candidate-card :deep(.el-card__header) {
@@ -682,7 +696,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 }
 .candidate-header b {
   font-size: 13px;
-  color: #1a2d42;
+  color: var(--color-foreground);
 }
 .candidate-header small {
   display: block;
@@ -707,13 +721,13 @@ function updateBindMode(value: string | number | boolean | undefined) {
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid #e4eaf1;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   font-size: 11px;
 }
 .candidate-row--bound {
   border-color: #d7e7fa;
-  background: #f8fbff;
+  background: var(--color-surface-subtle);
 }
 .candidate-status-cell {
   display: grid;
@@ -816,5 +830,8 @@ function updateBindMode(value: string | number | boolean | undefined) {
     opacity: 0.35;
     transform: scale(0.75);
   }
+}
+.shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
 </style>

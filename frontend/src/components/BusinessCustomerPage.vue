@@ -1,13 +1,7 @@
 <template>
   <main class="customer-access-page" data-i18n-ignore>
     <header class="customer-access-header">
-      <RouterLink class="customer-access-brand" :to="roleHomePath">
-        <img src="/favicon.svg" alt="" />
-        <span>
-          <strong>DrewesLogistics</strong>
-          <small>{{ t("customers.productLine") }}</small>
-        </span>
-      </RouterLink>
+      <BrandLockup class="customer-access-brand" :href="roleHomePath" compact />
       <div class="customer-access-header-actions">
         <LanguageSwitcher class="customer-access-language" />
         <span class="customer-access-party-pill">{{ t("customers.internalPartyAgent") }}</span>
@@ -26,9 +20,7 @@
           >
             <span
               ><b>{{ displayName }}</b
-              ><small>{{
-                isManager ? t("customers.businessOperator") : t("customers.overseaAgentEmployee")
-              }}</small></span
+              ><small>{{ personalRoleLabel }}</small></span
             >
             <i aria-hidden="true">&#x2304;</i>
           </button>
@@ -112,8 +104,20 @@
             {{ refreshTrackingResponse.number }}</b
           >
         </div>
-        <a v-if="['TRACKING_HUMAN_REQUIRED', 'TRACKING_PAGE_UNAVAILABLE', 'TRACKING_AGENT_FAILED'].includes(refreshTrackingResponse.code) && OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]"
-          :href="OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]" target="_blank" rel="noopener noreferrer">{{ t('customers.verifyAtCarrier') }}</a>
+        <a
+          v-if="
+            [
+              'TRACKING_HUMAN_REQUIRED',
+              'TRACKING_PAGE_UNAVAILABLE',
+              'TRACKING_AGENT_FAILED'
+            ].includes(refreshTrackingResponse.code) &&
+            OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]
+          "
+          :href="OFFICIAL_TRACKING_URLS[refreshTrackingResponse.carrier]"
+          target="_blank"
+          rel="noopener noreferrer"
+          >{{ t("customers.verifyAtCarrier") }}</a
+        >
         <div v-if="refreshTrackingResponse.ok && !refreshTrackingResponse.hasDetails">
           <span>{{ t("customers.updateTrackingNoDetails") }}</span
           ><b>{{ t("customers.updateTrackingNumberInvalidOrEmpty") }}</b>
@@ -163,6 +167,7 @@
 </template>
 
 <script setup>
+import BrandLockup from "./brand/BrandLockup.vue";
 import { OFFICIAL_TRACKING_URLS } from "../services/trackingCarriers.js";
 import { createWorkspacePresentation } from "../features/presentation/createWorkspacePresentation.js";
 import { trackingWorkspaceLink } from "../features/navigation/trackingWorkspaceLink.js";
@@ -718,8 +723,8 @@ function openShipmentSupplement(shipment) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: #1a2d42;
-  background: #f0f3f7;
+  color: var(--color-foreground);
+  background: var(--color-background);
 }
 .customer-access-header {
   position: sticky;
@@ -731,31 +736,12 @@ function openShipmentSupplement(shipment) {
   min-height: 64px;
   padding: 0 clamp(24px, 3vw, 48px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #0f1d2e;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  background: var(--color-primary);
+  box-shadow: none;
 }
 .customer-access-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #e8edf3;
+  color: var(--color-primary);
   text-decoration: none;
-}
-.customer-access-brand img {
-  width: 34px;
-  height: 34px;
-}
-.customer-access-brand span {
-  display: grid;
-  gap: 1px;
-}
-.customer-access-brand strong {
-  font-size: 16px;
-  color: #fff;
-}
-.customer-access-brand small {
-  color: #8899b0;
-  font-size: 10px;
 }
 .customer-access-header-actions {
   display: flex;
@@ -765,7 +751,7 @@ function openShipmentSupplement(shipment) {
 .customer-access-party-pill {
   padding: 5px 10px;
   border: 1px solid rgba(100, 150, 210, 0.35);
-  border-radius: 999px;
+  border-radius: 2px;
   color: #a0c4e8;
   background: rgba(255, 255, 255, 0.06);
   font-size: 10px;
@@ -807,7 +793,7 @@ function openShipmentSupplement(shipment) {
   margin-top: 8px;
   padding: 8px 18px;
   border: 1px solid #c9d6e8;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #ffffff;
   color: #3a4d65;
   font-size: 13px;
@@ -823,10 +809,10 @@ function openShipmentSupplement(shipment) {
   z-index: 2001;
   width: 360px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #ffffff;
-  box-shadow: 0 8px 30px rgba(15, 29, 46, 0.14);
-  border-left: 4px solid #2563eb;
+  box-shadow: none;
+  border-left: 4px solid var(--color-primary);
 }
 .shipment-response-toast.is-error {
   border-left-color: #dc2626;
@@ -848,7 +834,7 @@ function openShipmentSupplement(shipment) {
   margin-bottom: 10px;
   font-size: 14px;
   font-weight: 700;
-  color: #0f1d2e;
+  color: var(--color-primary);
 }
 .shipment-response-body > div {
   display: flex;
@@ -866,7 +852,7 @@ function openShipmentSupplement(shipment) {
 }
 .shipment-response-body b {
   font-weight: 600;
-  color: #1a2d42;
+  color: var(--color-foreground);
   text-align: right;
   word-break: break-word;
   max-width: 60%;
@@ -875,7 +861,7 @@ function openShipmentSupplement(shipment) {
   width: 40px;
   height: 40px;
   border: 3px solid #e0e6f0;
-  border-top-color: #2563eb;
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: shipment-updating-spin 0.8s linear infinite;
 }
@@ -895,7 +881,7 @@ function openShipmentSupplement(shipment) {
   min-height: 44px;
   padding: 6px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border-radius: 4px;
   color: #dce4ef;
   background: rgba(255, 255, 255, 0.05);
   text-align: left;
@@ -933,15 +919,15 @@ function openShipmentSupplement(shipment) {
   min-width: 168px;
   padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 4px;
   background: #152a40;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
 }
 .customer-account-menu a,
 .customer-account-menu button {
   padding: 9px 12px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #c8d6e5;
   background: transparent;
   text-align: left;
@@ -961,7 +947,7 @@ function openShipmentSupplement(shipment) {
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  border-radius: 4px;
   color: #d7e7f5;
   background: rgba(255, 255, 255, 0.06);
   align-items: center;
@@ -984,10 +970,10 @@ function openShipmentSupplement(shipment) {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #fff;
   background: #ef596f;
-  box-shadow: 0 0 0 3px rgba(239, 89, 111, 0.14);
+  box-shadow: none;
   place-items: center;
   font-size: 9px;
   font-style: normal;
@@ -1003,8 +989,8 @@ function openShipmentSupplement(shipment) {
   flex: 0 0 180px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #f5f7fa 0%, #eceff4 100%);
-  border-right: 1px solid #dce1e8;
+  background: var(--color-surface-subtle);
+  border-right: 1px solid var(--color-border);
   overflow: hidden;
   padding: 12px 0;
 }
@@ -1024,7 +1010,7 @@ function openShipmentSupplement(shipment) {
   min-height: 44px;
   padding: 10px 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #5a6d80;
   background: transparent;
   font-size: 13px;
@@ -1034,12 +1020,12 @@ function openShipmentSupplement(shipment) {
   text-align: left;
 }
 .sidebar-nav button:hover {
-  color: #1e40af;
-  background: #e0e7ff;
+  color: var(--color-primary);
+  background: var(--color-surface-subtle);
 }
 .sidebar-nav button.active {
-  color: #1e40af;
-  background: #e0e7ff;
+  color: var(--color-primary);
+  background: var(--color-surface-subtle);
   font-weight: 800;
 }
 .sidebar-profile-card {
@@ -1049,10 +1035,10 @@ function openShipmentSupplement(shipment) {
   margin: auto 8px 0;
   padding: 10px;
   border: 1px solid #d4deea;
-  border-radius: 11px;
+  border-radius: 4px;
   color: #25415d;
   background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 10px 24px rgba(38, 70, 102, 0.08);
+  box-shadow: none;
   grid-template-columns: 34px minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
@@ -1065,17 +1051,17 @@ function openShipmentSupplement(shipment) {
 }
 .sidebar-profile-card:hover {
   border-color: #9cc4e7;
-  box-shadow: 0 14px 30px rgba(38, 100, 154, 0.13);
+  box-shadow: none;
   transform: translateY(-2px);
 }
 .sidebar-profile-avatar {
   display: grid;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: 4px;
   color: #fff;
-  background: linear-gradient(135deg, #226fb5, #55b9d0);
-  box-shadow: 0 7px 16px rgba(34, 111, 181, 0.22);
+  background: var(--color-surface-subtle);
+  box-shadow: none;
   place-items: center;
   font-size: 13px;
   font-weight: 850;
@@ -1107,7 +1093,7 @@ function openShipmentSupplement(shipment) {
   min-height: 0;
   overflow-y: auto;
   padding: 24px 28px 30px;
-  background: #f0f3f7;
+  background: var(--color-background);
 }
 /* Vue applies the host scope to routed module roots; keep their shared gutter here. */
 .workspace-view {
@@ -1134,10 +1120,10 @@ function openShipmentSupplement(shipment) {
   transform: translateX(-50%);
   padding: 10px 18px;
   border: 1px solid #a9dfca;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #146a4c;
   background: #effbf6;
-  box-shadow: 0 12px 32px rgba(18, 94, 68, 0.14);
+  box-shadow: none;
   font-weight: 750;
   font-size: 13px;
 }
@@ -1245,6 +1231,189 @@ button:disabled {
   .system-message-button:hover,
   .sidebar-profile-card:hover {
     transform: none;
+  }
+}
+
+/* A single operations shell surrounds the existing routed workflows. */
+.customer-access-page {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+.customer-access-header {
+  min-height: 72px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--color-border);
+  background: #fff;
+  box-shadow: none;
+}
+.customer-access-header-actions {
+  gap: 10px;
+}
+.customer-access-party-pill {
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.customer-access-header .system-message-button {
+  min-height: 36px;
+  border-color: var(--color-border);
+  border-radius: 2px;
+  color: var(--color-primary);
+  background: white;
+  box-shadow: none;
+}
+.customer-access-header .customer-account-trigger {
+  min-width: 136px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: white;
+  color: var(--color-primary);
+}
+.customer-access-header .customer-account-trigger b {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.customer-access-header .customer-account-trigger small {
+  color: var(--color-muted);
+}
+.customer-access-header .customer-account-trigger:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-subtle);
+}
+.workspace-sidebar {
+  width: 224px;
+  flex: 0 0 224px;
+  padding: 26px 0 16px;
+  border: 0;
+  background: var(--color-primary);
+}
+.sidebar-nav {
+  gap: 5px;
+  padding: 0 14px;
+}
+.sidebar-nav button {
+  min-height: 44px;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #bfd1db;
+  font-size: 12px;
+  font-weight: 500;
+}
+.sidebar-nav button:hover {
+  color: white;
+  background: #ffffff0b;
+}
+.sidebar-nav button.active {
+  color: white;
+  border-left-color: var(--color-accent);
+  background: #ffffff14;
+  font-weight: 600;
+}
+.sidebar-profile-card {
+  width: calc(100% - 28px);
+  margin: 20px 14px 0;
+  padding: 18px 8px 4px;
+  border: 0;
+  border-top: 1px solid #ffffff25;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+.sidebar-profile-card:hover {
+  border-color: #ffffff35;
+  background: #ffffff08;
+  transform: none;
+  box-shadow: none;
+}
+.sidebar-profile-avatar {
+  border: 1px solid #ffffff35;
+  border-radius: 2px;
+  background: transparent;
+  color: #d5e3eb;
+  box-shadow: none;
+}
+.sidebar-profile-copy b {
+  font-size: 12px;
+  font-weight: 500;
+}
+.sidebar-profile-copy small {
+  color: #9fb9c8;
+  font-size: 10px;
+}
+.workspace-main {
+  padding: 28px 30px 32px;
+  background: var(--color-background);
+}
+.shipment-updating-overlay {
+  backdrop-filter: none;
+}
+.shipment-response-toast,
+.customer-toast,
+.customer-account-menu {
+  border-radius: 3px;
+}
+@media (max-width: 1100px) {
+  .workspace-sidebar {
+    width: 200px;
+    flex-basis: 200px;
+  }
+  .customer-access-header {
+    padding: 0 22px;
+  }
+  .workspace-main {
+    padding: 24px;
+  }
+}
+@media (max-width: 760px) {
+  .customer-access-header {
+    padding: 14px 16px;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .customer-access-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .customer-access-party-pill {
+    display: none;
+  }
+  .workspace-layout {
+    flex-direction: column;
+  }
+  .workspace-sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+  }
+  .sidebar-nav {
+    flex-direction: row;
+    overflow: auto;
+    padding: 0;
+    gap: 4px;
+  }
+  .sidebar-nav button {
+    width: auto;
+    flex: none;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  .sidebar-profile-card {
+    display: none;
+  }
+  .workspace-main {
+    padding: 20px 16px;
+  }
+  .shipment-response-toast {
+    right: 12px;
+    width: min(360px, calc(100vw - 24px));
   }
 }
 </style>

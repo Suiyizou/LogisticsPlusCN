@@ -124,7 +124,7 @@ onMounted(() => {
 .list-page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #0f1d2e;
+  color: var(--color-primary);
   letter-spacing: -0.02em;
 }
 .list-page-actions {
@@ -168,10 +168,10 @@ onMounted(() => {
   min-width: 0;
   min-height: 132px;
   padding: 15px;
-  border: 1px solid #d9e5ef;
-  border-radius: 15px;
-  background: radial-gradient(circle at 100% 0%, rgba(75, 139, 199, 0.14), transparent 44%), #fff;
-  box-shadow: 0 10px 30px rgba(33, 64, 92, 0.075);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
+  box-shadow: none;
   align-content: space-between;
   overflow: hidden;
   transition:
@@ -192,7 +192,7 @@ onMounted(() => {
   animation-delay: 180ms;
 }
 .business-kpi-card:hover {
-  box-shadow: 0 16px 34px rgba(33, 78, 119, 0.13);
+  box-shadow: none;
   transform: translateY(-2px);
 }
 .business-kpi-card::before {
@@ -223,12 +223,12 @@ onMounted(() => {
   flex: 0 0 34px;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #347fc0;
   background: #eaf4fc;
   place-items: center;
   font-size: 17px;
-  box-shadow: inset 0 0 0 1px rgba(52, 127, 192, 0.08);
+  box-shadow: none;
 }
 .business-kpi-card__value {
   display: grid;
@@ -255,7 +255,7 @@ onMounted(() => {
   background: #3dad80;
 }
 .business-kpi-card.is-purple::before {
-  background: #7c6fd1;
+  background: var(--color-primary);
 }
 .business-kpi-card.is-cyan::before {
   background: #35a8bd;
@@ -280,7 +280,7 @@ onMounted(() => {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #f0dfb7;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #916d28;
   background: #fff8e7;
   font-size: 10px;
@@ -329,6 +329,60 @@ onMounted(() => {
   .business-kpi-card {
     animation: none;
     transition: none;
+  }
+}
+
+.business-kpi-grid {
+  gap: 0;
+  border: 1px solid var(--color-border);
+  background: #fff;
+}
+.business-kpi-card {
+  min-height: 132px;
+  padding: 20px;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  border-radius: 0;
+  background: white;
+  animation: none;
+}
+.business-kpi-card:last-child {
+  border-right: 0;
+}
+.business-kpi-card::before {
+  display: none;
+}
+.business-kpi-card:hover {
+  transform: none;
+}
+.business-kpi-card__icon,
+.business-kpi-card.is-amber .business-kpi-card__icon,
+.business-kpi-card.is-green .business-kpi-card__icon,
+.business-kpi-card.is-purple .business-kpi-card__icon,
+.business-kpi-card.is-cyan .business-kpi-card__icon {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  border-radius: 0;
+  color: var(--color-primary);
+  background: var(--color-surface-subtle);
+  font-size: 14px;
+}
+.business-kpi-card__top > span:last-child {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.business-kpi-card__value > b {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+.business-overview-kicker {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+@media (max-width: 900px) {
+  .business-kpi-card {
+    border-bottom: 1px solid var(--color-border);
   }
 }
 </style>

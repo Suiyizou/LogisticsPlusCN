@@ -4,33 +4,29 @@
     :class="{ 'is-customer-mode': loginMode === 'customer' }"
     data-i18n-ignore
   >
-    <div class="app-login-backdrop" aria-hidden="true">
-      <span class="app-login-backdrop-grid"></span>
-      <span class="app-login-backdrop-orb app-login-backdrop-orb--one"></span>
-      <span class="app-login-backdrop-orb app-login-backdrop-orb--two"></span>
-    </div>
-
-    <header class="app-login-page-header">
-      <div class="app-login-brand">
-        <div class="app-login-logo" aria-hidden="true">
-          <svg viewBox="0 0 44 44" role="presentation">
-            <path d="M8 13.5 22 6l14 7.5v17L22 38 8 30.5z" />
-            <path d="m8 13.5 14 8 14-8M22 21.5V38" />
-            <path d="m14 10.3 14 8M16 34.8v-9.2m12 9.2v-9.2" />
-          </svg>
-        </div>
-        <div class="app-login-brand-lockup">
-          <strong>Drewes<span>Logistics</span></strong>
-        </div>
+    <section class="app-login-photo" :aria-label="t('maritime.loginBrandAria')">
+      <BrandLockup inverse />
+      <div>
+        <span class="app-login-eyebrow">{{ t("maritime.loginEyebrow") }}</span>
+        <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
+        <p>{{ t("maritime.loginHeroDescription") }}</p>
       </div>
-    </header>
-
-    <section class="app-login-content">
+      <small>{{ t("maritime.imageCaption") }}</small>
+    </section>
+    <section class="app-login-side">
+      <header class="app-login-top">
+        <a href="/">← {{ t("maritime.returnHome") }}</a
+        ><LanguageSwitcher />
+      </header>
       <form class="app-login-form" @submit.prevent="submit">
         <div class="app-login-form-intro">
           <div class="app-login-title">
             <h1>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h1>
-            <p>{{ t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription") }}</p>
+            <p>
+              {{
+                t(loginMode === "employee" ? "login.formDescription" : "login.customerDescription")
+              }}
+            </p>
           </div>
         </div>
 
@@ -95,10 +91,14 @@
               @click="showPassword = !showPassword"
             >
               <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                <path
+                  d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                />
               </svg>
               <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" />
+                <path
+                  d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4"
+                />
               </svg>
             </button>
           </div>
@@ -145,10 +145,14 @@
               @click="showPassword = !showPassword"
             >
               <svg v-if="!showPassword" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                <path
+                  d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                />
               </svg>
               <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4" />
+                <path
+                  d="m4 4 16 16M9.5 6.5A8 8 0 0 1 12 6c5.7 0 9 6 9 6a14 14 0 0 1-2.1 3M14.5 17.5A8 8 0 0 1 12 18c-5.7 0-9-6-9-6a14 14 0 0 1 2.1-3M10 10a3 3 0 0 0 4 4"
+                />
               </svg>
             </button>
           </div>
@@ -187,16 +191,18 @@
           </svg>
         </button>
       </form>
+      <footer class="app-login-page-footer">
+        <span>© {{ new Date().getFullYear() }} logisticspluscn</span
+        ><span>{{ t("login.accountNotice") }}</span>
+      </footer>
     </section>
-
-    <footer class="app-login-page-footer">
-      <span>© 2026 DrewesLogistics</span>
-    </footer>
   </main>
 </template>
 
 <script setup>
 import { computed, reactive, ref } from "vue";
+import BrandLockup from "./brand/BrandLockup.vue";
+import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { useI18n } from "vue-i18n";
 import { loginAdmin } from "../services/adminApi";
 import { markApiErrorHandled } from "../services/apiClient";
@@ -258,9 +264,10 @@ async function submit() {
     emit("logged-in", response.user);
   } catch (error) {
     markApiErrorHandled(error);
-    message.value = loginMode.value === "customer"
-      ? t("login.customerErrorFallback")
-      : error.message || t("login.errorFallback");
+    message.value =
+      loginMode.value === "customer"
+        ? t("login.customerErrorFallback")
+        : error.message || t("login.errorFallback");
   } finally {
     loading.value = false;
   }

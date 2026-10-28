@@ -331,9 +331,7 @@ const { onDialogKeydown } = useDialogFocus({
   max-height: min(92vh, 980px);
   padding: 26px 28px 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 94% 0%, rgba(71, 151, 226, 0.12), transparent 28%),
-    linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  background: var(--color-surface-subtle);
 }
 .customer-batch-dialog::before {
   position: absolute;
@@ -341,8 +339,8 @@ const { onDialogKeydown } = useDialogFocus({
   left: 28px;
   right: 28px;
   height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #2e7cca, #55c7d9, #2e7cca);
+  border-radius: 2px;
+  background: var(--color-surface-subtle);
   background-size: 200% 100%;
   content: "";
   animation: customer-batch-shimmer 3.5s linear infinite;
@@ -351,7 +349,7 @@ const { onDialogKeydown } = useDialogFocus({
   display: grid;
   padding: 14px;
   border: 1px solid #dbe6f0;
-  border-radius: 12px;
+  border-radius: 4px;
   background: #f8fbfe;
   gap: 12px;
 }
@@ -380,7 +378,7 @@ const { onDialogKeydown } = useDialogFocus({
   min-width: 0;
   padding: 10px;
   border: 1px solid #e2eaf2;
-  border-radius: 9px;
+  border-radius: 4px;
   background: #fff;
   gap: 9px;
   transition:
@@ -403,7 +401,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-import-rules article:hover {
   border-color: #9bc5e8;
-  box-shadow: 0 10px 24px rgba(35, 105, 167, 0.1);
+  box-shadow: none;
   transform: translateY(-2px);
 }
 .customer-import-rules article > strong {
@@ -411,7 +409,7 @@ const { onDialogKeydown } = useDialogFocus({
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: #3479ba;
   background: #eaf4ff;
   place-items: center;
@@ -441,7 +439,7 @@ const { onDialogKeydown } = useDialogFocus({
   min-height: 34px;
   padding: 6px 10px;
   border: 1px solid #d4e0ed;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #6c8196;
   background: #fff;
   font-size: 11px;
@@ -470,21 +468,19 @@ const { onDialogKeydown } = useDialogFocus({
   min-height: 120px;
   padding: 10px;
   border: 1px solid #cfdeec;
-  border-radius: 8px;
+  border-radius: 4px;
   resize: vertical;
   font: inherit;
   font-size: 12px;
-  background: linear-gradient(180deg, #fff, #fbfdff);
-  box-shadow: 0 8px 22px rgba(39, 91, 138, 0.05);
+  background: var(--color-surface-subtle);
+  box-shadow: none;
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease;
 }
 .customer-batch-textarea textarea:focus {
   border-color: #438fd2;
-  box-shadow:
-    0 0 0 3px rgba(67, 143, 210, 0.12),
-    0 12px 28px rgba(39, 91, 138, 0.08);
+  box-shadow: none;
   outline: none;
 }
 .customer-batch-textarea small {
@@ -501,7 +497,7 @@ const { onDialogKeydown } = useDialogFocus({
   place-items: center;
   padding: 28px 16px;
   border: 2px dashed #c8d6e2;
-  border-radius: 12px;
+  border-radius: 4px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -517,14 +513,14 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-excel-dropzone.is-dragover {
   border-color: #5b8def;
-  background: #eef4ff;
+  background: var(--color-surface-subtle);
   transform: scale(1.02);
 }
 .customer-excel-dropzone input {
   display: none;
 }
 .customer-excel-dropzone b {
-  color: #1a2d42;
+  color: var(--color-foreground);
   font-size: 13px;
 }
 .customer-excel-dropzone small {
@@ -535,7 +531,7 @@ const { onDialogKeydown } = useDialogFocus({
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid #cfdeec;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #3a5572;
   background: #fff;
   font-size: 11px;
@@ -602,7 +598,7 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-ready {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #237356;
   background: #eaf8f2;
   font-size: 9px;
@@ -615,7 +611,7 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-validation-pill {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 999px;
+  border-radius: 2px;
   font-size: 9px;
   font-weight: 750;
   white-space: nowrap;
@@ -637,7 +633,7 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-issues > span {
   display: block;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 9px;
   line-height: 1.5;
 }

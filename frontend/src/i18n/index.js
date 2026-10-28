@@ -61,7 +61,7 @@ export function setLocale(locale) {
   currentLocale.value = next;
   i18n.global.locale.value = next;
   document.documentElement.lang = next;
-  document.title = i18n.global.t("app.name");
+  document.title = i18n.global.t("maritime.brand");
   try {
     localStorage.setItem(STORAGE_KEY, next);
   } catch {

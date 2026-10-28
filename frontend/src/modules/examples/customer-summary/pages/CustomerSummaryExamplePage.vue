@@ -50,7 +50,7 @@ onMounted(refresh);
   min-width: 0;
   padding: 24px;
   border: 1px solid #dbe4ed;
-  border-radius: 12px;
+  border-radius: 4px;
   background: white;
 }
 header {

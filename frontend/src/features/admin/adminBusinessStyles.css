@@ -34,7 +34,7 @@
   min-height: 24px;
   padding: 0 8px;
   align-items: center;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #7b5715;
   background: #fff4d8;
   font-size: 11px;
@@ -130,7 +130,7 @@
 
 .admin-row-action.danger:hover:not(:disabled) {
   border-color: #d76d77;
-  box-shadow: 0 7px 18px rgb(196 69 80 / 12%);
+  box-shadow: none;
 }
 
 .admin-row-action.danger:disabled {
@@ -163,7 +163,7 @@
   min-height: 30px;
   padding: 0 11px;
   border: 1px solid #bdd1e5;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #27648e;
   font-size: 13px;
   font-weight: 700;
@@ -171,8 +171,8 @@
   white-space: nowrap;
 }
 .admin-inline-link.primary {
-  border-color: #2f80d1;
-  background: #2f80d1;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: #fff;
 }
 @media (max-width: 680px) {

@@ -253,7 +253,7 @@ function selectCustomerRow(row: unknown) {
 .list-page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #0f1d2e;
+  color: var(--color-primary);
   letter-spacing: -0.02em;
 }
 .list-page-actions {
@@ -280,8 +280,8 @@ function selectCustomerRow(row: unknown) {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  color: #1e40af;
+  border-radius: 4px;
+  color: var(--color-primary);
   background: #bfdbfe;
   font-weight: 800;
   font-size: 11px;
@@ -344,9 +344,9 @@ function selectCustomerRow(row: unknown) {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 0 0 1px #c7d5e4 inset;
+  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
@@ -362,8 +362,10 @@ function selectCustomerRow(row: unknown) {
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
-  background: #287ccb;
-  box-shadow: 0 5px 12px rgba(40, 124, 203, 0.22);
+  background: var(--color-primary);
+  box-shadow: none;
+
+  color: var(--color-on-primary);
 }
 .shipment-pagination :deep(.el-pagination__total) {
   margin-right: 8px;

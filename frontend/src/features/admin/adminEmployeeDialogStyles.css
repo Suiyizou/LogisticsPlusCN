@@ -19,7 +19,7 @@
   overflow-wrap: anywhere;
   padding: 18px 20px;
   border: 1px solid #bcd7ee;
-  border-radius: 14px;
+  border-radius: 4px;
   background: #eef7ff;
   color: #092b49;
   font:
@@ -45,7 +45,7 @@
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #fecaca;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #fff1f2;
   color: #b42318;
   font-size: 13px;
@@ -56,9 +56,9 @@
 .temporary-password-modal {
   width: min(600px, calc(100vw - 40px));
   border-color: #d5e0ea;
-  border-radius: 14px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 24px 64px rgb(15 32 51 / 24%);
+  box-shadow: none;
 }
 
 .reset-password-modal > header,
@@ -76,7 +76,7 @@
   padding: 0;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #5e7185;
   background: transparent;
   font-size: 23px;
@@ -132,7 +132,7 @@
   height: 42px;
   flex: 0 0 42px;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #176eaa;
   background: #eaf4fb;
 }
@@ -195,7 +195,7 @@
 }
 
 .temporary-password-content code {
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .employee-modal {

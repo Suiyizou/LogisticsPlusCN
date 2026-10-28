@@ -1,6 +1,6 @@
 .admin-health-pill {
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #e6f6ed;
   color: #047857;
   font-weight: 800;
@@ -22,8 +22,8 @@
   align-items: center;
   padding: 12px;
   border: 1px solid #d7e1ee;
-  border-radius: 6px;
-  background: #f8fbff;
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 
 .admin-toggle-row input[type="checkbox"] {
@@ -44,7 +44,7 @@
 
 .admin-operation-grid button {
   min-height: 72px;
-  background: #f8fbff;
+  background: var(--color-surface-subtle);
 }
 
 .admin-setting-list {
@@ -58,13 +58,13 @@
   gap: 16px;
   padding: 12px;
   border: 1px solid #e1eaf5;
-  border-radius: 6px;
-  background: #f8fbff;
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
   color: #40546b;
 }
 
 .admin-setting-list b {
-  color: #132033;
+  color: var(--color-foreground);
 }
 
 .admin-system-page {
@@ -118,15 +118,15 @@
 
 .admin-panel {
   padding: 20px 22px 22px;
-  border-color: #d7e3ef;
+  border-color: var(--color-border);
   background: #fff;
-  box-shadow: 0 8px 24px rgb(25 65 100 / 6%);
+  box-shadow: none;
 }
 .admin-panel-head {
   min-height: 48px;
   margin-bottom: 16px;
   padding: 0 2px 14px;
-  border-bottom: 1px solid #e5edf5;
+  border-bottom: 1px solid var(--color-border);
 }
 @media (max-width: 680px) {
   .admin-panel {

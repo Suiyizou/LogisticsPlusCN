@@ -130,14 +130,27 @@
                     class="business-select"
                     popper-class="business-select-popper"
                   >
-                    <el-option v-for="carrier in TRACKING_CARRIERS" :key="carrier.code" :value="carrier.code" :label="carrier.name" />
+                    <el-option
+                      v-for="carrier in TRACKING_CARRIERS"
+                      :key="carrier.code"
+                      :value="carrier.code"
+                      :label="carrier.name"
+                    />
                   </el-select>
                 </label>
                 <label>
                   <span>{{ t("customers.referenceType") }}</span>
-                  <el-select v-model="batchTrackReferenceType" :disabled="batchTrackChecking" class="business-select">
+                  <el-select
+                    v-model="batchTrackReferenceType"
+                    :disabled="batchTrackChecking"
+                    class="business-select"
+                  >
                     <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                    <el-option v-if="supportsShipmentReference(batchTrackCarrier, 'BILLOFLADING')" value="BILLOFLADING" :label="t('customers.referenceBill')" />
+                    <el-option
+                      v-if="supportsShipmentReference(batchTrackCarrier, 'BILLOFLADING')"
+                      value="BILLOFLADING"
+                      :label="t('customers.referenceBill')"
+                    />
                   </el-select>
                 </label>
                 <el-checkbox
@@ -474,7 +487,10 @@
   </section>
 </template>
 <script setup lang="ts">
-import { TRACKING_CARRIERS, supportsShipmentReference } from "../../../services/trackingCarriers.js";
+import {
+  TRACKING_CARRIERS,
+  supportsShipmentReference
+} from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -578,7 +594,7 @@ const {
 }
 .batch-track-panel {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 4px;
   border: 1px solid #e2e8f0;
   padding: 20px;
   height: 100%;
@@ -602,9 +618,9 @@ const {
   max-height: none;
   overflow-y: auto;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--color-background);
   display: flex;
   flex-direction: column;
 }
@@ -624,7 +640,7 @@ const {
 }
 .batch-track-close-hint {
   margin: 12px 0 0;
-  color: #64748b;
+  color: var(--color-muted);
   font-size: 12px;
   text-align: right;
 }
@@ -659,8 +675,8 @@ const {
   gap: 10px;
   padding: 12px;
   border: 1px solid #d7e3f2;
-  border-radius: 12px;
-  background: #f8fbff;
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 .batch-track-preview-controls {
   display: grid;
@@ -727,8 +743,8 @@ const {
 }
 .batch-track-result-row.stopped {
   border-left: 3px solid #94a3b8;
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--color-background);
+  color: var(--color-muted);
 }
 .batch-track-result-row.retry_wait {
   border-left: 3px solid #f59e0b;
@@ -747,7 +763,7 @@ const {
   padding: 14px 16px;
   border: 1px solid #d9e2ef;
   border-radius: 0;
-  background: #f8fafc;
+  background: var(--color-background);
 }
 .assignment-customer-row > label {
   display: grid;
@@ -785,16 +801,16 @@ const {
 .customer-access-primary {
   min-height: 40px;
   border: 1px solid #1a4f80;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #fff;
-  background: linear-gradient(135deg, #1a4f80, #2e7cc4);
-  box-shadow: 0 8px 20px rgba(15, 50, 90, 0.18);
+  background: var(--color-primary);
+  box-shadow: none;
   font-weight: 800;
   font-size: 12px;
   cursor: pointer;
 }
 .customer-access-primary:hover {
-  box-shadow: 0 10px 26px rgba(15, 50, 90, 0.28);
+  box-shadow: none;
 }
 .batch-business-fields-hint {
   margin: -4px 0 12px;
@@ -853,7 +869,7 @@ const {
   place-items: center;
   padding: 28px 16px;
   border: 2px dashed #c8d6e2;
-  border-radius: 12px;
+  border-radius: 4px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -869,14 +885,14 @@ const {
 }
 .customer-excel-dropzone.is-dragover {
   border-color: #5b8def;
-  background: #eef4ff;
+  background: var(--color-surface-subtle);
   transform: scale(1.02);
 }
 .customer-excel-dropzone input {
   display: none;
 }
 .customer-excel-dropzone b {
-  color: #1a2d42;
+  color: var(--color-foreground);
   font-size: 13px;
 }
 .customer-excel-dropzone small {
@@ -887,7 +903,7 @@ const {
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid #cfdeec;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #3a5572;
   background: #fff;
   font-size: 11px;
@@ -940,14 +956,14 @@ const {
   padding: 12px 14px;
   background: #f5f8fb;
   border: 1px solid #dfe7f0;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .batch-track-progress {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #fff;
   border: 1px solid #e2e8f0;
   font-size: 12px;
@@ -975,7 +991,7 @@ const {
   top: 72px;
   z-index: 1;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #334155;
   background: #e8eef6;
   font-size: 12px;
@@ -991,7 +1007,7 @@ const {
   align-items: stretch;
   gap: 4px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 12px;
   background: #fff;
 }
@@ -1012,7 +1028,7 @@ const {
 }
 .batch-track-result-row.cancelled {
   border-left: 3px solid #94a3b8;
-  background: #f8fafc;
+  background: var(--color-background);
 }
 .batch-track-result-row.pending {
   border-left: 3px solid #94a3b8;
@@ -1041,7 +1057,7 @@ const {
 .batch-track-error-details {
   margin-top: 3px;
   border: 1px solid #fecdd3;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #fff8f9;
 }
 .batch-track-error-details summary {
@@ -1079,14 +1095,14 @@ const {
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid #d9e2ec;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #5f7187;
-  background: #f8fafc;
+  background: var(--color-background);
 }
 .batch-track-subtask i {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #94a3b8;
 }
 .batch-track-subtask b {
@@ -1108,7 +1124,7 @@ const {
 }
 .batch-track-subtask.running {
   border-color: #bfdbfe;
-  color: #2563eb;
+  color: var(--color-primary);
   background: #eff6ff;
 }
 .batch-track-subtask.running i {
@@ -1152,7 +1168,7 @@ const {
   flex: 0 0 24px;
   width: 24px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #475569;
   background: #e2e8f0;
   font-size: 10px;

@@ -139,9 +139,7 @@ const { onDialogKeydown } = useDialogFocus({
   max-height: min(92vh, 980px);
   padding: 26px 28px 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 94% 0%, rgba(71, 151, 226, 0.12), transparent 28%),
-    linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  background: var(--color-surface-subtle);
 }
 .customer-credential-dialog .customer-credential-body {
   max-height: calc(min(92vh, 980px) - 174px);
@@ -151,7 +149,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-credential-table {
   border: 1px solid #e0e7f0;
-  border-radius: 10px;
+  border-radius: 4px;
   max-height: 460px;
   overflow: auto;
 }
@@ -194,7 +192,7 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-credential-row i {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 999px;
+  border-radius: 2px;
   font-style: normal;
   font-size: 9px;
   font-weight: 800;
@@ -211,7 +209,7 @@ const { onDialogKeydown } = useDialogFocus({
   display: flex;
   margin: 0 12px 10px;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: #7b5360;
   background: #fff0f2;
   line-height: 1.6;

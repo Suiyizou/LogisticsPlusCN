@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandLockup from "../../components/brand/BrandLockup.vue";
 import { useId } from "vue";
 import { RouterLink } from "vue-router";
 import type { WorkspaceUser } from "../../types/workspace";
@@ -36,13 +37,7 @@ function refresh() {
 <template>
   <section class="admin-console-shell" :class="{ 'is-table-page-switching': transitioning }">
     <aside class="admin-console-sidebar">
-      <RouterLink class="admin-console-brand" to="/workbenches">
-        <span class="brand-mark"><img src="/favicon.svg" alt="" /></span>
-        <div>
-          <p>Browser / Server</p>
-          <strong>{{ copy.adminTitle }}</strong>
-        </div>
-      </RouterLink>
+      <BrandLockup class="admin-console-brand" href="/workbenches" compact inverse />
 
       <div class="admin-profile-card">
         <span>{{ copy.currentAdmin }}</span>

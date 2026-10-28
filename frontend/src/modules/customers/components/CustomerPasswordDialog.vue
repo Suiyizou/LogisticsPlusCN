@@ -70,7 +70,7 @@ const { onDialogKeydown } = useDialogFocus({
   gap: 8px !important;
   padding: 14px;
   border: 1px solid #d6e3ee;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #5c7186;
   background: #f6f9fc;
 }

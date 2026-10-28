@@ -1,25 +1,14 @@
 <template>
   <Teleport to="body">
     <Transition name="global-api-notice">
-      <aside
-        v-if="notice"
-        class="global-api-error-notice"
-        role="alert"
-        aria-live="assertive"
-      >
+      <aside v-if="notice" class="global-api-error-notice" role="alert" aria-live="assertive">
         <div class="global-api-error-icon" aria-hidden="true">!</div>
         <div class="global-api-error-content">
           <strong>{{ t("app.requestFailed") }}</strong>
           <p>{{ notice.message }}</p>
           <small v-if="notice.meta">{{ notice.meta }}</small>
         </div>
-        <button
-          type="button"
-          :aria-label="t('app.dismissError')"
-          @click="dismiss"
-        >
-          ×
-        </button>
+        <button type="button" :aria-label="t('app.dismissError')" @click="dismiss">×</button>
       </aside>
     </Transition>
   </Teleport>
@@ -84,11 +73,11 @@ function dismiss() {
   gap: 12px;
   width: min(430px, calc(100vw - 32px));
   padding: 15px 14px;
-  border: 1px solid #ffc4c4;
-  border-radius: 10px;
-  background: #fffafa;
-  box-shadow: 0 16px 44px rgb(68 19 19 / 22%);
-  color: #7f1d1d;
+  border: 1px solid var(--color-destructive);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-destructive);
 }
 
 .global-api-error-icon {
@@ -96,8 +85,8 @@ function dismiss() {
   width: 26px;
   height: 26px;
   place-items: center;
-  border-radius: 999px;
-  background: #ef4444;
+  border-radius: var(--radius-control);
+  background: var(--color-destructive);
   color: #fff;
   font-weight: 900;
 }
@@ -109,14 +98,14 @@ function dismiss() {
 .global-api-error-content strong {
   display: block;
   margin-bottom: 4px;
-  color: #991b1b;
+  color: var(--color-destructive);
   font-size: 14px;
 }
 
 .global-api-error-content p {
   margin: 0;
   overflow-wrap: anywhere;
-  color: #4b1d1d;
+  color: var(--color-foreground);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -124,7 +113,7 @@ function dismiss() {
 .global-api-error-content small {
   display: block;
   margin-top: 5px;
-  color: #a14c4c;
+  color: var(--color-muted);
   font-size: 11px;
 }
 
@@ -132,7 +121,7 @@ function dismiss() {
   align-self: start;
   border: 0;
   background: transparent;
-  color: #9f4a4a;
+  color: var(--color-destructive);
   cursor: pointer;
   font-size: 21px;
   line-height: 1;
@@ -140,7 +129,9 @@ function dismiss() {
 
 .global-api-notice-enter-active,
 .global-api-notice-leave-active {
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .global-api-notice-enter-from,

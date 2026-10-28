@@ -1,180 +1,106 @@
-/*
- * Drewes Logistics unified UI layer.
- * Source of truth: /design-system/drewes-logistics-operations/MASTER.md
- */
-:root {
-  color-scheme: light;
-  --color-primary: #0f172a;
-  --color-on-primary: #ffffff;
-  --color-secondary: #334155;
-  --color-accent: #0369a1;
-  --color-accent-hover: #075985;
-  --color-accent-soft: #eaf5fb;
-  --color-background: #f8fafc;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f5f8fb;
-  --color-foreground: #0f172a;
-  --color-muted: #64748b;
-  --color-quiet: #8492a6;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
-  --color-success: #047857;
-  --color-success-soft: #ecfdf5;
-  --color-warning: #b45309;
-  --color-warning-soft: #fffbeb;
-  --color-destructive: #b91c1c;
-  --color-destructive-soft: #fff1f2;
-  --color-ring: #0369a1;
-
-  --font-ui: "Fira Sans", "Segoe UI Variable", "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --font-data: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-
-  --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-dialog: 16px;
-  --radius-pill: 999px;
-
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-card: 0 8px 24px rgba(15, 23, 42, 0.065);
-  --shadow-card-hover: 0 12px 30px rgba(15, 23, 42, 0.09);
-  --shadow-overlay: 0 24px 64px rgba(15, 23, 42, 0.2);
-
-  --motion-fast: 160ms;
-  --motion-normal: 220ms;
-  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
-
-  --layer-base: 0;
-  --layer-sticky: 20;
-  --layer-dropdown: 40;
-  --layer-overlay: 80;
-  --layer-toast: 100;
-
-  /* Bridge the existing application and Element Plus tokens. */
-  --app-font-family: var(--font-ui);
-  --app-bg: var(--color-background);
-  --app-primary: var(--color-accent);
-  --app-primary-hover: var(--color-accent-hover);
-  --app-primary-dark: #064e73;
-  --app-border: var(--color-border);
-  --app-card-radius: var(--radius-card);
-  --app-control-radius: var(--radius-control);
-  --app-card-shadow: var(--shadow-card);
-  --app-card-shadow-hover: var(--shadow-card-hover);
-
-  --el-color-primary: var(--color-accent);
-  --el-color-primary-dark-2: #064e73;
-  --el-color-primary-light-3: #4f91b7;
-  --el-color-primary-light-5: #81b4d0;
-  --el-color-primary-light-7: #b8d8e8;
-  --el-color-primary-light-8: #d4e8f2;
-  --el-color-primary-light-9: var(--color-accent-soft);
-  --el-color-success: var(--color-success);
-  --el-color-warning: var(--color-warning);
-  --el-color-danger: var(--color-destructive);
-  --el-bg-color-page: var(--color-background);
-  --el-bg-color: var(--color-surface);
-  --el-fill-color-light: var(--color-surface-subtle);
-  --el-border-color: var(--color-border-strong);
-  --el-border-color-light: var(--color-border);
-  --el-text-color-primary: var(--color-foreground);
-  --el-text-color-regular: var(--color-secondary);
-  --el-text-color-secondary: var(--color-muted);
-  --el-font-family: var(--font-ui);
-  --el-border-radius-base: var(--radius-control);
-  --el-border-radius-small: 6px;
-}
+@import "./brand-tokens.css";
 html {
   min-width: 320px;
   background: var(--color-background);
   scroll-behavior: smooth;
 }
-
 body {
   min-width: 320px;
-  background: var(--color-background);
   color: var(--color-foreground);
+  background: var(--color-background);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
-
 button,
 input,
 select,
 textarea {
   font: inherit;
 }
-
 :where(a, button, [role="button"], input, select, textarea, summary) {
   touch-action: manipulation;
 }
-
 :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
-  outline: 3px solid rgba(3, 105, 161, 0.25);
-  outline-offset: 2px;
+  outline: 3px solid var(--color-ring);
+  outline-offset: 3px;
 }
-
 :where(button, [role="button"], a[href]):not([aria-disabled="true"]) {
   cursor: pointer;
 }
-
-:where(
-  .el-button,
-  .el-input__wrapper,
-  .el-select__wrapper,
-  .el-textarea__inner,
-  .el-menu-item,
-  .el-sub-menu__title,
-  .el-card,
-  .el-dialog,
-  .portal-workbench-card,
-  .sidebar-nav button,
-  .admin-console-nav button
-) {
-  transition-duration: var(--motion-fast);
-  transition-timing-function: var(--motion-ease);
+:where(button, .el-button):disabled,
+.el-button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
 }
-
-/* Typography: compact for operational density, with stable figures in data UI. */
 :where(h1, h2, h3, h4, strong, b) {
-  color: var(--color-foreground);
+  color: inherit;
 }
-
-:where(
-  .el-table,
-  .admin-table,
-  .stats-grid,
-  .admin-metrics,
-  .shipment-pagination,
-  .portal-hero-meta,
-  .customer-credential-list
-) {
-  font-variant-numeric: tabular-nums;
+.maritime-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-primary);
+  text-decoration: none;
+  white-space: nowrap;
 }
-
-:where(.page-heading, .list-page-header, .admin-console-topbar, .panel-header) p,
-:where(.page-heading, .list-page-header, .admin-console-topbar, .panel-header) small {
+.maritime-brand__mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 37px;
+  height: 38px;
+  border: 2px solid currentColor;
+  transform: skew(-9deg);
+  color: var(--color-accent);
+  font-size: 20px;
+  letter-spacing: -1px;
+  font-weight: 700;
+  line-height: 1;
+}
+.maritime-brand__wordmark {
+  font-size: 22px;
+  letter-spacing: -0.7px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.maritime-brand__wordmark small {
+  display: block;
+  margin-top: -1px;
   color: var(--color-muted);
+  font-size: 9px;
+  letter-spacing: 2.3px;
+  font-weight: 400;
+  white-space: normal;
+  max-width: 330px;
 }
-
-/* Global surfaces and elevation. */
-.app-shell,
-.customer-access-page,
-.admin-console-shell,
-.workbench-portal {
-  background: var(--color-background);
+.maritime-brand.is-compact {
+  gap: 9px;
 }
-
+.maritime-brand.is-compact .maritime-brand__wordmark {
+  font-size: 17px;
+}
+.maritime-brand.is-compact .maritime-brand__mark {
+  width: 30px;
+  height: 32px;
+  font-size: 16px;
+}
+.maritime-brand.is-compact small {
+  font-size: 8px;
+  letter-spacing: 1.2px;
+}
+.maritime-brand.is-inverse {
+  color: white;
+}
+.maritime-brand.is-inverse .maritime-brand__mark {
+  color: white;
+}
+.maritime-brand.is-inverse small {
+  color: #b9cbd4;
+}
 :where(
   .el-card,
   .planner-step-card,
@@ -189,269 +115,118 @@ textarea {
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
-
-:where(.el-card, .planner-card, .admin-panel, .admin-metrics > div):hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-card-hover);
+:where(.el-table, .admin-table, .stats-grid, .admin-metrics, .shipment-pagination) {
+  font-variant-numeric: tabular-nums;
 }
-
-/* Navigation language: dark brand bar, calm light workspace navigation. */
-.portal-header,
-.customer-access-page.customer-access-page .customer-access-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.98);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-
-.customer-access-page.customer-access-page .customer-access-brand strong,
-.customer-access-page.customer-access-page .customer-account-trigger b {
-  color: var(--color-on-primary);
-}
-
-.customer-access-page.customer-access-page .customer-access-brand small,
-.customer-access-page.customer-access-page .customer-account-trigger small {
-  color: #cbd5e1;
-}
-
-.customer-access-page.customer-access-page .workspace-sidebar,
-.app-sidebar {
-  border-right-color: var(--color-border);
-  background: var(--color-surface);
-  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.035);
-}
-
-.customer-access-page.customer-access-page .sidebar-nav button {
-  min-height: 42px;
-  border-radius: var(--radius-control);
-  color: var(--color-secondary);
-}
-
-.customer-access-page.customer-access-page .sidebar-nav button:hover {
-  border-color: #b8d8e8;
-  background: #f1f8fc;
-  color: var(--color-accent-hover);
-}
-
-.customer-access-page.customer-access-page .sidebar-nav button.active {
-  border-color: #b8d8e8;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
-  box-shadow: inset 3px 0 0 var(--color-accent);
-}
-
-.side-menu .el-menu-item.is-active,
-.side-nav a.active {
-  border-color: #b8d8e8;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
-  box-shadow: inset 3px 0 0 var(--color-accent);
-}
-
-.topbar,
-.admin-console-topbar {
-  border-bottom-color: var(--color-border);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
-}
-
-/* Controls and feedback. */
 .el-button {
   min-height: 38px;
-  padding-inline: 16px;
   border-radius: var(--radius-control);
-  font-weight: 650;
+  font-weight: 600;
 }
-
-.el-button--primary:not(.is-plain):not(.is-link):not(.is-text),
-button:not(.el-button).primary,
-button:not(.el-button).active,
-.customer-access-page.customer-access-page .customer-access-primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
+/* Shared solid primary treatment; plain, link, text and disabled keep their own states. */
+.el-button--primary:not(.is-plain):not(.is-link):not(.is-text):not(.is-disabled),
+button:not(.el-button).primary:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: var(--color-on-primary);
-  box-shadow: 0 6px 14px rgba(3, 105, 161, 0.18);
-}
-
-.el-button--primary:not(.is-plain):not(.is-link):not(.is-text):hover,
-button:not(.el-button).primary:hover,
-button:not(.el-button).active:hover,
-.customer-access-page.customer-access-page .customer-access-primary:hover {
-  border-color: var(--color-accent-hover);
-  background: var(--color-accent-hover);
-  box-shadow: 0 8px 18px rgba(3, 105, 161, 0.22);
-}
-
-.el-button.is-disabled,
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
   box-shadow: none;
-  transform: none;
 }
-
+.el-button--primary:not(.is-plain):not(.is-link):not(.is-text):not(.is-disabled):hover,
+button:not(.el-button).primary:not(:disabled):hover {
+  border-color: var(--app-primary-hover);
+  background: var(--app-primary-hover);
+  color: var(--color-on-primary);
+}
 :where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
-  padding-inline: 14px;
   border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
-
-:where(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner):hover {
-  box-shadow: 0 0 0 1px #8fbfd8 inset;
-}
-
 .el-input__wrapper.is-focus,
 .el-select__wrapper.is-focused,
 .el-textarea__inner:focus {
-  box-shadow:
-    0 0 0 1px var(--color-ring) inset,
-    0 0 0 3px rgba(3, 105, 161, 0.14);
+  box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
-
-.el-tag {
-  min-height: 26px;
-  padding-inline: 9px;
-  border-radius: 6px;
-  font-weight: 650;
-}
-
+.el-tag,
 .el-alert {
   border-radius: var(--radius-control);
 }
-
-/* Tables use one visual rhythm across planning, business, and admin surfaces. */
-.customer-access-page .el-table,
-.admin-console-shell .el-table,
-.standard-information-table,
-.admin-table-wrap {
+.el-table {
+  --el-table-header-bg-color: var(--color-surface-subtle);
   --el-table-border-color: var(--color-border);
-  --el-table-header-bg-color: #f3f6f9;
-  --el-table-row-hover-bg-color: #f2f8fc;
-  border-color: var(--color-border);
-  border-radius: var(--radius-card) !important;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  --el-table-row-hover-bg-color: var(--color-surface-subtle);
 }
-
-.customer-access-page .el-table__inner-wrapper,
-.admin-console-shell .el-table__inner-wrapper,
-.standard-information-table .el-table__inner-wrapper {
-  border-radius: var(--radius-card) !important;
-}
-
-.customer-access-page .el-table th.el-table__cell,
-.admin-console-shell .el-table th.el-table__cell,
-.standard-information-table th.el-table__cell,
-.admin-table th {
-  background: #f3f6f9;
-  color: var(--color-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.customer-access-page .el-table td.el-table__cell,
-.admin-console-shell .el-table td.el-table__cell,
-.standard-information-table td.el-table__cell,
-.admin-table td {
-  border-bottom-color: var(--color-border);
-  color: var(--color-secondary);
-}
-
-.customer-access-page .el-table .cell,
-.admin-console-shell .el-table .cell,
-.standard-information-table .cell {
-  padding-inline: 14px;
-}
-
-.customer-access-page .el-table__row:hover > td.el-table__cell,
-.admin-console-shell .el-table__row:hover > td.el-table__cell {
-  background: #f2f8fc;
-}
-
-/* Dialog and popover hierarchy. */
 .el-overlay {
-  background-color: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(3px);
+  background: rgb(21 56 74 / 45%);
 }
-
-.customer-access-page .el-dialog,
-.admin-console-shell .el-dialog,
-.square-dialog,
 .el-dialog {
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog) !important;
   box-shadow: var(--shadow-overlay);
 }
-
 .el-dialog__header {
-  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-3);
 }
-
 .el-dialog__footer {
-  padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
 }
-
-.el-popper,
-.el-dropdown__popper,
-.el-select__popper {
+:where(.el-popper, .el-dropdown__popper, .el-select__popper) {
   border-color: var(--color-border);
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-overlay);
 }
-
-/* Public landing and login keep their identity but inherit accessible interaction states. */
-.landing-page,
-.app-login-shell {
-  font-family: var(--font-ui);
+.language-switcher {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  background: white;
 }
-
-.landing-page :where(a, button):focus-visible,
-.app-login-shell :where(a, button, input):focus-visible {
-  outline-color: rgba(56, 189, 248, 0.72);
+.language-switcher button {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }
-
-.app-login-form-panel,
-.app-login-form-card {
-  border-color: rgba(226, 232, 240, 0.92);
+.language-switcher button.active {
+  color: white;
+  background: var(--color-primary);
 }
-
-/* Mobile/touch density and overflow guards. */
 @media (max-width: 768px) {
-  body {
-    font-size: 16px;
-  }
-
   :where(button, [role="button"], .el-button, input, select, textarea) {
     min-height: 44px;
   }
-
   .el-dialog {
     width: calc(100vw - 24px) !important;
     max-width: calc(100vw - 24px);
     margin: 12px auto;
   }
-
-  .customer-access-page .el-table,
-  .admin-console-shell .el-table,
-  .admin-table-wrap {
-    max-width: 100%;
+  .maritime-brand__wordmark {
+    font-size: 19px;
+  }
+  .maritime-brand__wordmark small {
+    font-size: 8px;
+    letter-spacing: 1.5px;
   }
 }
-
 @media (pointer: coarse) {
   :where(button, [role="button"], .el-button, a.nav-item, input, select, textarea) {
     min-height: 44px;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-
   *,
   *::before,
   *::after {

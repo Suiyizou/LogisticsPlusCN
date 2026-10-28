@@ -115,20 +115,18 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
   margin-bottom: 18px;
   padding: 15px;
   border: 1px solid #d6e5f2;
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(72, 167, 215, 0.13), transparent 40%),
-    linear-gradient(135deg, #f2f8ff, #fbfdff);
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 .agent-create-intro > span {
   display: grid;
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #fff;
-  background: linear-gradient(135deg, #2878bc, #56b9d2);
-  box-shadow: 0 9px 20px rgba(40, 120, 188, 0.2);
+  background: var(--color-primary);
+  box-shadow: none;
   place-items: center;
 }
 .agent-create-intro > div {
@@ -171,7 +169,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
 .agent-password-rules span {
   display: inline-flex;
   padding: 6px 8px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: #8a6270;
   background: #fff3f5;
   align-items: center;

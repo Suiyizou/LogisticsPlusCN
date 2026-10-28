@@ -2,7 +2,7 @@
   <el-config-provider :locale="elementPlusLocale">
     <PublicLandingPage v-if="activePage === 'landing'" :current-user="currentUser" />
     <template v-else>
-      <LanguageSwitcher v-if="!authChecked || !currentUser" class="global-language-switcher" />
+      <LanguageSwitcher v-if="!authChecked" class="global-language-switcher" />
       <LoginPage v-if="authChecked && !currentUser" @logged-in="handleLoggedIn" />
       <SystemWaitOverlay v-else-if="!authChecked" :visible="true" :message="t('app.loadingAuth')" />
       <AdminDashboard
@@ -31,13 +31,7 @@
       />
       <div v-else class="app-shell" :class="{ 'is-page-leaving': pageLeaving }">
         <header class="topbar">
-          <div class="brand">
-            <span class="brand-mark"><img src="/favicon.svg" alt="" /></span>
-            <div>
-              <p>Browser / Server</p>
-              <h1>货代装箱体积规划系统</h1>
-            </div>
-          </div>
+          <BrandLockup href="/workbenches" compact />
           <el-breadcrumb separator="/" class="top-breadcrumb">
             <el-breadcrumb-item>工作台</el-breadcrumb-item>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
@@ -53,7 +47,7 @@
               @click="handleReturnHome"
             >
               <el-icon><House /></el-icon>
-              <span>DrewesLogistics {{ t("landing.nav.home") }}</span>
+              <span>{{ t("landing.nav.home") }}</span>
             </a>
             <LanguageSwitcher class="topbar-language-switcher" />
             <el-tag effect="plain" type="primary">{{ pageTitle }}</el-tag>
@@ -65,63 +59,15 @@
         </header>
 
         <div class="app-body" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-          <aside class="app-sidebar">
-            <el-button
-              class="sidebar-toggle"
-              :icon="sidebarCollapsed ? Expand : Fold"
-              @click="sidebarCollapsed = !sidebarCollapsed"
-            >
-              <span>{{ sidebarCollapsed ? "展开" : "收起" }}</span>
-            </el-button>
-
-            <div class="side-user-card">
-              <span>当前工作区</span>
-              <strong>{{ userDisplayName }}</strong>
-              <small>{{ cargos.length }} 类货物 · {{ containers.length }} 个箱型</small>
-            </div>
-
-            <el-menu
-              class="side-menu"
-              :collapse="sidebarCollapsed"
-              :default-active="activeMenuIndex"
-              background-color="transparent"
-              text-color="#24415f"
-              active-text-color="#165DFF"
-              :collapse-transition="false"
-              @select="handleMenuSelect"
-            >
-              <el-menu-item index="/workbenches">
-                <el-icon><Grid /></el-icon>
-                <span>{{ t("portal.switchWorkbench") }}</span>
-              </el-menu-item>
-              <el-menu-item index="/home">
-                <el-icon><House /></el-icon>
-                <span>工作台首页</span>
-              </el-menu-item>
-              <el-sub-menu index="/planner">
-                <template #title>
-                  <el-icon><Box /></el-icon>
-                  <span>装箱计算</span>
-                </template>
-                <el-menu-item index="/planner/config">
-                  <el-icon><Setting /></el-icon>
-                  <span>01 配置与货物管理</span>
-                </el-menu-item>
-                <el-menu-item index="/planner/results" :disabled="!cargos.length">
-                  <el-icon><DataAnalysis /></el-icon>
-                  <span>02 计算方案</span>
-                </el-menu-item>
-              </el-sub-menu>
-              <el-menu-item index="/algorithm">
-                <el-icon><Document /></el-icon>
-                <span>算法说明</span>
-              </el-menu-item>
-              <el-menu-item index="/containers">
-                <el-icon><DataAnalysis /></el-icon>
-                <span>箱型资料</span>
-              </el-menu-item>
-            </el-menu>
-          </aside>
+          <PlannerSidebar
+            :collapsed="sidebarCollapsed"
+            :display-name="userDisplayName"
+            :cargo-count="cargos.length"
+            :container-count="containers.length"
+            :active-index="activeMenuIndex"
+            @toggle="sidebarCollapsed = !sidebarCollapsed"
+            @select="handleMenuSelect"
+          />
 
           <section class="workspace">
             <Transition name="page-switch" mode="out-in">
@@ -1247,6 +1193,9 @@
 </template>
 
 <script setup lang="ts">
+import BrandLockup from "./components/brand/BrandLockup.vue";
+import PlannerSidebar from "./components/workspace/PlannerSidebar.vue";
+import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
 import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
@@ -1438,6 +1387,7 @@ const pageTitleRaw = computed(
     })[activePage.value] || "工作台"
 );
 const pageTitle = computed(() => tr(pageTitleRaw.value));
+useWorkspaceTitle(() => pageTitle.value);
 const userDisplayName = computed(() => {
   profileVersion.value;
   return currentUser.value?.displayName || currentUser.value?.username || "操作员";

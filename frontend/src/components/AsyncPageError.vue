@@ -1,21 +1,23 @@
 <template>
   <main class="async-page-error" role="alert">
     <section>
-      <strong>{{ t("app.pageLoadFailed") }}</strong>
+      <BrandLockup />
+      <h1>{{ t("app.pageLoadFailed") }}</h1>
       <p>{{ t("app.pageLoadFailedHint") }}</p>
-      <button type="button" @click="reload">{{ t("app.retry") }}</button>
+      <div>
+        <button type="button" @click="reload">{{ t("app.retry") }}</button
+        ><a href="/">{{ t("maritime.errorHome") }}</a>
+      </div>
     </section>
   </main>
 </template>
-
 <script setup>
 import { useI18n } from "vue-i18n";
-
+import BrandLockup from "./brand/BrandLockup.vue";
 defineOptions({ inheritAttrs: false });
 const { t } = useI18n();
 const reload = () => window.location.reload();
 </script>
-
 <style scoped>
 .async-page-error {
   position: fixed;
@@ -24,39 +26,45 @@ const reload = () => window.location.reload();
   display: grid;
   place-items: center;
   padding: 24px;
-  color: #173854;
-  background: #f4f9fd;
+  color: var(--color-foreground);
+  background: var(--color-background);
 }
-
 .async-page-error section {
-  width: min(420px, 100%);
-  padding: 30px;
-  border: 1px solid #d7e5f0;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 20px 60px rgba(35, 81, 119, 0.12);
+  width: min(500px, 100%);
+  padding: 38px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: white;
   text-align: center;
 }
-
-.async-page-error strong {
-  font-size: 20px;
+.async-page-error h1 {
+  font-size: 24px;
+  margin: 32px 0 0;
+  font-weight: 600;
 }
-
 .async-page-error p {
-  margin: 10px 0 22px;
-  color: #6c8295;
+  margin: 12px 0 26px;
+  color: var(--color-muted);
   font-size: 13px;
   line-height: 1.7;
 }
-
+.async-page-error section > div {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+}
 .async-page-error button {
-  min-height: 40px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 9px;
-  color: #fff;
-  background: #1679d3;
-  cursor: pointer;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  color: white;
+  background: var(--color-primary);
   font: inherit;
+}
+.async-page-error a {
+  color: var(--color-secondary);
+  font-size: 13px;
 }
 </style>

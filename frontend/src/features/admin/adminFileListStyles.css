@@ -9,7 +9,7 @@
 
 .admin-table-wrap :deep(.cell > small) {
   margin-top: 4px;
-  color: #657a93;
+  color: var(--color-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -31,26 +31,24 @@
   align-items: center;
   min-height: 92px;
   padding: 15px 17px;
-  border: 1px solid #d4dfeb;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
   background: #fff;
   color: #40546b;
   text-align: left;
-  box-shadow: 0 8px 24px rgba(20, 34, 52, 0.05);
+  box-shadow: none;
 }
 
 .admin-file-scope-tabs button:hover,
 .admin-file-scope-tabs button.active,
 .admin-file-scope-tabs button.active:hover {
   border-color: #72aee8;
-  background: linear-gradient(135deg, #f7fbff 0%, #eef7ff 100%);
-  box-shadow: 0 12px 28px rgba(31, 111, 181, 0.1);
+  background: var(--color-surface-subtle);
+  box-shadow: none;
 }
 
 .admin-file-scope-tabs button.active {
-  box-shadow:
-    inset 3px 0 #1478d4,
-    0 12px 28px rgba(31, 111, 181, 0.1);
+  box-shadow: none;
 }
 
 .admin-file-scope-tabs span {
@@ -66,7 +64,7 @@
 }
 
 .admin-file-scope-tabs small {
-  color: #657a93;
+  color: var(--color-muted);
   line-height: 1.45;
 }
 
@@ -87,7 +85,7 @@
   display: inline-flex;
   padding: 4px 8px;
   border: 1px solid #8bbce9;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #eff7ff;
   color: #1765a7;
   font-size: 12px;

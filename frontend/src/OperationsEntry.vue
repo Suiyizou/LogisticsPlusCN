@@ -1,6 +1,6 @@
 <template>
   <el-config-provider :locale="elementPlusLocale">
-    <LanguageSwitcher v-if="!authChecked || !currentUser" class="global-language-switcher" />
+    <LanguageSwitcher v-if="!authChecked" class="global-language-switcher" />
     <LoginPage v-if="authChecked && !currentUser" @logged-in="handleLoggedIn" />
     <SystemWaitOverlay v-else-if="!authChecked" :visible="true" :message="t('app.loadingAuth')" />
     <RouterView v-else-if="authorizedPage" v-slot="{ Component }">
@@ -49,9 +49,21 @@ import { markApiErrorHandled } from "./services/apiClient";
 import { fetchAdminMe, logoutAdmin } from "./services/adminApi";
 import { fetchTodayAnnouncements, markAnnouncementRead } from "./services/announcementApi";
 import { clearSession, isSessionExpired, storedToken, storedUser } from "./services/authSession";
-import { elementPlusLocale, t } from "./i18n";
+import { currentLocale, elementPlusLocale, t } from "./i18n";
+import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
 
 const route = useRoute();
+useWorkspaceTitle(() => {
+  currentLocale.value;
+  if (route.meta.titleKey) return t(String(route.meta.titleKey));
+  return t(
+    route.path.startsWith("/admin")
+      ? "maritime.administration"
+      : route.path.startsWith("/customers")
+        ? "maritime.operations"
+        : "maritime.workspace"
+  );
+});
 const router = useRouter();
 const authChecked = ref(false);
 const currentUser = ref(storedUser());

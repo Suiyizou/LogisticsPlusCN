@@ -15,7 +15,9 @@ import {
 import { createCustomerApi } from "./customerApi.js";
 import { customerApiKey } from "./customerContext.js";
 import { useCustomerSurface } from "./useCustomerSurface.js";
-import { t } from "../../i18n";
+import { currentLocale, t } from "../../i18n";
+import { useWorkspaceTitle } from "../../components/workspace/useWorkspaceTitle";
+import BrandLockup from "../../components/brand/BrandLockup.vue";
 const api = createCustomerApi({
   readToken: storedCustomerToken,
   t,
@@ -40,6 +42,10 @@ const credentials = reactive({ username: "", password: "", customerCode: "" });
 const router = useRouter(),
   route = useRoute();
 const allowed = computed(() => canAccessRoute(route, "CUSTOMER"));
+useWorkspaceTitle(() => {
+  currentLocale.value;
+  return t(String(route.meta.titleKey || "customerSurface.login"));
+});
 const modules = computed(() =>
   modulesForSurface(configuredPlatformModules, "customer", "CUSTOMER")
 );
@@ -80,10 +86,9 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <main class="customer-surface">
+  <main class="customer-surface" :class="{ 'is-authenticated': user }">
     <header>
-      <RouterLink to="/">{{ t("customerSurface.brand") }}</RouterLink
-      ><button v-if="user" type="button" @click="runtime.logout">
+      <BrandLockup href="/" compact /><button v-if="user" type="button" @click="runtime.logout">
         {{ t("customerSurface.logout") }}
       </button>
     </header>
@@ -158,9 +163,9 @@ onUnmounted(() => {
   margin: 64px auto;
   padding: 32px;
   border: 1px solid var(--color-border, #dce6ee);
-  border-radius: 14px;
+  border-radius: 4px;
   background: #fff;
-  box-shadow: 0 12px 40px #17354c08;
+  box-shadow: none;
 }
 .customer-surface label {
   display: grid;
@@ -173,7 +178,7 @@ onUnmounted(() => {
   box-sizing: border-box;
   padding: 12px;
   border: 1px solid #bccbd7;
-  border-radius: 7px;
+  border-radius: 4px;
   background: #fff;
   color: inherit;
   font: inherit;
@@ -182,8 +187,8 @@ onUnmounted(() => {
   padding: 10px 16px;
   cursor: pointer;
   border: 1px solid #c9dbe6;
-  border-radius: 8px;
-  color: var(--color-accent, #0369a1);
+  border-radius: 4px;
+  color: var(--color-accent, var(--color-accent));
   background: #fff;
   font: inherit;
   font-weight: 600;
@@ -193,7 +198,7 @@ onUnmounted(() => {
   cursor: default;
 }
 .customer-surface button[type="submit"] {
-  background: var(--color-accent, #0369a1);
+  background: var(--color-accent, var(--color-accent));
   color: #fff;
   width: 100%;
 }
@@ -212,7 +217,7 @@ onUnmounted(() => {
   min-width: 0;
   padding: 24px;
   border: 1px solid var(--color-border, #dce6ee);
-  border-radius: 14px;
+  border-radius: 4px;
   background: #fff;
 }
 .customer-surface-workspace > div > p {
@@ -236,6 +241,92 @@ onUnmounted(() => {
   }
   .customer-surface > header a {
     font-size: 17px;
+  }
+}
+
+.customer-surface {
+  max-width: none;
+  min-height: 100vh;
+  padding: 0;
+  background: var(--color-background);
+}
+.customer-surface > header {
+  min-height: 72px;
+  padding: 14px 30px;
+  border-bottom: 1px solid var(--color-border);
+  background: white;
+}
+.customer-surface > p {
+  margin: 16px 30px;
+}
+.customer-surface form {
+  margin: 64px auto;
+  width: min(440px, calc(100% - 36px));
+  border-radius: 3px;
+  box-shadow: none;
+  padding: 36px;
+}
+.customer-surface form h1 {
+  color: var(--color-primary);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+.customer-surface form > p {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.customer-surface label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+.customer-surface input,
+.customer-surface button {
+  border-radius: 2px;
+}
+.customer-surface-workspace {
+  grid-template-columns: 224px minmax(0, 1fr);
+  min-height: calc(100vh - 72px);
+  gap: 0;
+  margin: 0;
+}
+.customer-surface nav {
+  padding: 28px 16px;
+  background: var(--color-primary);
+}
+.customer-surface nav button {
+  border: 0;
+  border-left: 3px solid var(--color-accent);
+  background: #ffffff14;
+  color: white;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+}
+.customer-surface-workspace > div {
+  padding: 28px 32px;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-background);
+}
+.customer-surface-workspace > div > p {
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .customer-surface > header {
+    padding: 16px;
+  }
+  .customer-surface-workspace {
+    grid-template-columns: 1fr;
+  }
+  .customer-surface nav {
+    padding: 12px 16px;
+  }
+  .customer-surface-workspace > div {
+    padding: 22px 16px;
   }
 }
 </style>

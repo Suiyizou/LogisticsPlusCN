@@ -27,10 +27,8 @@
   width: 34px;
   height: 34px;
   border: 1px solid #b9daf4;
-  border-radius: 9px;
-  background:
-    linear-gradient(145deg, rgb(55 155 213 / 18%), rgb(96 125 218 / 8%)),
-    linear-gradient(135deg, transparent 48%, #55a9da 49% 53%, transparent 54%);
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
 }
 
 .announcement-visibility {
@@ -39,7 +37,7 @@
   padding: 0 9px;
   align-items: center;
   border: 1px solid #bfcee0;
-  border-radius: 999px;
+  border-radius: 2px;
   color: #4d6782;
   background: #f5f8fc;
   font-size: 11px;

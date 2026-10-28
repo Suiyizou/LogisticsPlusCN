@@ -312,7 +312,12 @@ const DOCUMENT_TYPES = Object.freeze([
 ]);
 
 const CARRIERS = Object.freeze({
-  ...Object.fromEntries(Object.values(MULTI_CARRIER_CATALOG).map(({ code, name }) => [code, { code, name, enabled: true, source: "OFFICIAL API / BROWSER AGENT" }])),
+  ...Object.fromEntries(
+    Object.values(MULTI_CARRIER_CATALOG).map(({ code, name }) => [
+      code,
+      { code, name, enabled: true, source: "OFFICIAL API / BROWSER AGENT" }
+    ])
+  ),
   COSCO: {
     code: "COSCO",
     name: "COSCO SHIPPING",
@@ -359,9 +364,11 @@ const TYPE_KEYS = Object.freeze({
 
 const MESSAGES = {
   en: {
-    "meta.title": "Shipment Track · Carrier Intelligence",
-    "meta.description": "A unified multi-carrier shipment tracking workspace",
-    "brand.subtitle": "Carrier intelligence desk",
+    "meta.title": "logisticspluscn · Shipment tracking",
+    "meta.description":
+      "Shipment tracking by Shanghai Luojia International Freight Forwarding Co., Ltd. · logisticspluscn",
+    "brand.subtitle": "Ocean freight · Shipment tracking",
+    "brand.company": "Shanghai Luojia International Freight Forwarding Co., Ltd.",
     "nav.ariaLabel": "Primary navigation",
     "nav.workspace": "Workspace",
     "nav.portal": "Open workbenches",
@@ -391,13 +398,17 @@ const MESSAGES = {
     "carrier.cmaConnected": "Connected · HTML/PDF",
     "carrier.cmaOption": "CMA CGM · CONNECTED",
     "carrier.cmaNotice": "CMA CGM uses its server-rendered HTML tracking page.",
-    "sidebar.architecture": "UNIFIED ADAPTER",
+    "sidebar.architecture": "OCEAN FREIGHT NETWORK",
     "breadcrumb.workspace": "Workspace",
     "overview.kicker": "SHIPMENT DASHBOARD",
     "overview.title": "Your shipments, moving in plain sight.",
     "overview.description":
       "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
+    "overview.guestKicker": "OCEAN FREIGHT TRACKING",
+    "overview.guestTitle": "Follow your shipment, from port to port.",
+    "overview.guestDescription":
+      "Select a carrier and enter your shipment reference to check its progress. Sign in to view the shipment records assigned to your account.",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
     "overview.agentTitle": "Your customer shipments, moving in plain sight.",
     "overview.agentDescription":
@@ -428,17 +439,22 @@ const MESSAGES = {
     "workbench.checkFailed": "Channel check failed: {message}",
     "workbench.latency": "{time} ms",
     "history.title": "Tracked shipments",
-    "history.subtitle": "Latest shipment snapshots stored in the database",
+    "history.subtitle": "Shipment movements and arrival dates for your account",
     "history.agentTitle": "My shipments",
     "history.agentSubtitle":
       "Authorized shipments across linked customers; filter by customer code to update tracking",
     "history.accountTitle": "My shipments",
     "history.accountSubtitle": "Shipments bound to the current account",
     "history.loadingTitle": "Retrieving shipment list",
-    "history.loadingDescription": "Loading the latest records from the database…",
+    "history.loadingDescription": "Loading your latest shipment records…",
     "history.loadFailedTitle": "Shipment list could not be loaded",
     "history.loadFailedDescription":
       "The server could not return your shipments. Please retry shortly.",
+    "history.guestTitle": "Your shipment records",
+    "history.guestSubtitle": "Sign in to view the shipments assigned to your account.",
+    "history.guestEmptyTitle": "Sign in to view shipment records",
+    "history.guestEmptyDescription":
+      "Use Sign in above to access your shipment list, or choose Track a shipment to check a shipment reference directly.",
     "history.emptyTitle": "No shipment history yet",
     "history.emptyDescription": "Your successful searches will appear here.",
     "history.accountEmptyTitle": "No shipments are bound to this account yet",
@@ -541,9 +557,10 @@ const MESSAGES = {
     "history.expand": "Expand shipment {number}",
     "history.collapse": "Collapse shipment {number}",
     "history.noTimeline": "No confirmed movement events yet.",
-    "tracking.kicker": "SHIPMENT INTELLIGENCE",
+    "tracking.kicker": "OCEAN FREIGHT TRACKING",
     "tracking.title": "Shipment tracking",
-    "tracking.description": "Query carrier sources and shape them into one consistent snapshot.",
+    "tracking.description":
+      "Follow your shipment from origin to destination. Select the carrier and enter your shipment reference.",
     "account.menu": "Open account menu",
     "account.home": "Platform home",
     "account.workbench": "Workbench",
@@ -671,13 +688,14 @@ const MESSAGES = {
     "query.channel": "Query channel",
     "query.type": "Shipment number type",
     "query.number": "Shipment No.",
+    "query.numberPlaceholder": "Enter shipment reference",
     "query.enterNumber": "Enter a shipment number first.",
     "query.submit": "Track shipment",
     "query.loading": "Tracking…",
-    "wait.history": "Retrieving the shipment record from the database…",
+    "wait.history": "Retrieving your shipment records…",
     "wait.tracking": "Retrieving the latest shipment data…",
     "wait.channels": "Checking carrier channels…",
-    "wait.home": "Returning to the DrewesLogistics home page…",
+    "wait.home": "Returning to the logisticspluscn home page…",
     "wait.batch": "Processing the imported shipment queue…",
     "wait.complete": "Request completed",
     "batch.title": "Batch tracking import",
@@ -736,7 +754,7 @@ const MESSAGES = {
     "batch.itemPending": "Pending",
     "batch.itemRunning": "Querying",
     "batch.itemSuccess": "Succeeded",
-    "batch.itemDatabase": "Reused database snapshot",
+    "batch.itemDatabase": "Used saved shipment record",
     "batch.itemCached": "Reused device cache",
     "batch.itemFailed": "Failed",
     "batch.itemCoreSaved": "Core saved · waiting for container pass",
@@ -757,7 +775,8 @@ const MESSAGES = {
       "Clear the imported queue and its status from this device? Saved shipment snapshots are kept.",
     "query.helper":
       "Automatic mode calls the network interface first and uses the Playwright browser only as a fallback.",
-    "query.multiCarrierHelper": "Uses your configured official API first, otherwise the tracking Agent. Website verification may require manual action.",
+    "query.multiCarrierHelper":
+      "Uses your configured official API first, otherwise the tracking Agent. Website verification may require manual action.",
     "query.cmaHelper":
       "CMA queries use the Playwright browser with the encrypted server-side DataDome session.",
     "cmaSession.kicker": "CMA ACCESS SESSION",
@@ -940,7 +959,7 @@ const MESSAGES = {
     "common.save": "Save",
     "cache.live": "Live result",
     "cache.server": "Server cache",
-    "cache.database": "Database snapshot",
+    "cache.database": "Saved shipment record",
     "cache.savedAt": "Updated {time}",
     "status.available": "Channel 1 network available",
     "status.unavailable": "Channel 1 network unavailable",
@@ -957,9 +976,10 @@ const MESSAGES = {
     "status.error": "Error: {message}"
   },
   zh: {
-    "meta.title": "Shipment Track · 船司货运工作台",
-    "meta.description": "统一的多船司货运跟踪工作台",
-    "brand.subtitle": "船司数据工作台",
+    "meta.title": "logisticspluscn · 货物追踪",
+    "meta.description": "上海罗加国际货物运输代理有限公司 · 多船司货物追踪",
+    "brand.subtitle": "国际海运 · 货物追踪",
+    "brand.company": "上海罗加国际货物运输代理有限公司",
     "nav.ariaLabel": "主导航",
     "nav.workspace": "工作区",
     "nav.portal": "进入业务工作台",
@@ -987,12 +1007,16 @@ const MESSAGES = {
     "carrier.cmaConnected": "已接入 · HTML/PDF",
     "carrier.cmaOption": "CMA CGM · 已接入",
     "carrier.cmaNotice": "CMA CGM 使用服务端渲染 HTML 查询通道。",
-    "sidebar.architecture": "统一适配层",
+    "sidebar.architecture": "海运服务网络",
     "breadcrumb.workspace": "工作台",
     "overview.kicker": "运输看板",
     "overview.title": "每一票货物，进度一眼可见。",
     "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
+    "overview.guestKicker": "国际海运 / 货物追踪",
+    "overview.guestTitle": "从起运港到目的港，掌握运输进度。",
+    "overview.guestDescription":
+      "选择船公司并输入货运参考号，即可查询运输进度。登录后可查看分配给您账户的票单记录。",
     "overview.agentKicker": "海外代理业务台",
     "overview.agentTitle": "客户票单动态，一页尽览。",
     "overview.agentDescription":
@@ -1021,15 +1045,20 @@ const MESSAGES = {
     "workbench.checkFailed": "通道检测失败：{message}",
     "workbench.latency": "{time} 毫秒",
     "history.title": "运输任务",
-    "history.subtitle": "数据库保存的最新货运快照",
+    "history.subtitle": "查看账户内货物的运输进展与到港日期",
     "history.agentTitle": "我的票单",
     "history.agentSubtitle": "汇总关联客户的授权票单；按客户码筛选后可更新对应客户业务",
     "history.accountTitle": "我的票单",
     "history.accountSubtitle": "绑定到当前账户的票单",
     "history.loadingTitle": "正在获取票单列表",
-    "history.loadingDescription": "正在从数据库读取最新票单，请稍候…",
+    "history.loadingDescription": "正在读取最新票单，请稍候…",
     "history.loadFailedTitle": "票单列表加载失败",
     "history.loadFailedDescription": "服务器暂时无法返回您的票单，请稍后重试。",
+    "history.guestTitle": "票单记录",
+    "history.guestSubtitle": "登录后可查看分配给您账户的票单。",
+    "history.guestEmptyTitle": "登录查看票单记录",
+    "history.guestEmptyDescription":
+      "点击上方“登录”查看您的票单列表，或选择“查询一票货物”，直接输入货运参考号查询运输进度。",
     "history.emptyTitle": "还没有查询记录",
     "history.emptyDescription": "成功查询的货物会显示在这里。",
     "history.accountEmptyTitle": "当前账户还没有绑定票单",
@@ -1129,9 +1158,10 @@ const MESSAGES = {
     "history.expand": "展开运输任务 {number}",
     "history.collapse": "收起运输任务 {number}",
     "history.noTimeline": "船司尚未提供已确认的运输动态。",
-    "tracking.kicker": "货运信息",
+    "tracking.kicker": "国际海运 / 货物追踪",
     "tracking.title": "货物跟踪",
-    "tracking.description": "查询船司数据源，并转换为统一的运输状态快照。",
+    "tracking.description":
+      "从起运港到目的港，掌握货物运输进展。请选择船公司，并输入对应的货运参考号。",
     "account.menu": "打开账户菜单",
     "account.home": "返回平台首页",
     "account.workbench": "返回工作台",
@@ -1250,13 +1280,14 @@ const MESSAGES = {
     "query.channel": "查询通道",
     "query.type": "运输单号类型",
     "query.number": "运输单号",
+    "query.numberPlaceholder": "请输入货运参考号",
     "query.enterNumber": "请先输入运输单号。",
     "query.submit": "查询运输信息",
     "query.loading": "查询中…",
-    "wait.history": "正在从数据库获取票单记录…",
+    "wait.history": "正在获取货运记录…",
     "wait.tracking": "正在获取最新货物信息…",
     "wait.channels": "正在检测船司查询通道…",
-    "wait.home": "正在返回 DrewesLogistics 首页…",
+    "wait.home": "正在返回 logisticspluscn 首页…",
     "wait.batch": "正在逐条处理导入的货物队列…",
     "wait.complete": "请求已完成",
     "batch.title": "批量导入查询",
@@ -1310,7 +1341,7 @@ const MESSAGES = {
     "batch.itemPending": "待处理",
     "batch.itemRunning": "查询中",
     "batch.itemSuccess": "成功",
-    "batch.itemDatabase": "已复用数据库快照",
+    "batch.itemDatabase": "已使用保存的货运记录",
     "batch.itemCached": "复用本设备缓存",
     "batch.itemFailed": "失败",
     "batch.itemCoreSaved": "主票已保存 · 等待箱级补全",
@@ -1329,7 +1360,8 @@ const MESSAGES = {
     "batch.detailUnavailable": "该任务暂时没有可查看的已保存结果。",
     "batch.confirmClear": "确定清除此设备上的导入队列和处理状态吗？已保存的货物快照会保留。",
     "query.helper": "自动模式优先调用网络接口，失败后才启用 Playwright 浏览器托底。",
-    "query.multiCarrierHelper": "优先使用已配置的船司 DCSA 接口，否则由浏览器 Agent 查询；遇到官网验证时需人工接管。",
+    "query.multiCarrierHelper":
+      "优先使用已配置的船司 DCSA 接口，否则由浏览器 Agent 查询；遇到官网验证时需人工接管。",
     "query.cmaHelper": "CMA 查询固定使用 Playwright 浏览器和服务端加密保存的 DataDome 会话。",
     "cmaSession.kicker": "CMA 访问会话",
     "cmaSession.title": "DataDome 会话",
@@ -1502,7 +1534,7 @@ const MESSAGES = {
     "common.save": "保存",
     "cache.live": "实时查询",
     "cache.server": "服务端缓存",
-    "cache.database": "数据库快照",
+    "cache.database": "已保存的货运记录",
     "cache.savedAt": "更新于 {time}",
     "status.available": "通道一网络接口可用",
     "status.unavailable": "通道一网络接口异常",
@@ -2491,15 +2523,26 @@ function activeViewTranslationKey(view = activeView, session = readFileSession()
 
 function renderOverseaAgentWorkspace(session = readFileSession()) {
   const managed = isOverseaAgentSession(session);
+  const guest = !session.token || !["INTERNAL", "CUSTOMER"].includes(session.kind);
   document.body.classList.toggle("is-oversea-agent-session", managed);
   if (trackingNavItem) trackingNavItem.hidden = managed;
   if (agentShipmentsNavItem) agentShipmentsNavItem.hidden = !managed;
   setLocalizedElement("overview-nav-label", "nav.overview");
-  setLocalizedElement("overview-kicker", managed ? "overview.agentKicker" : "overview.kicker");
-  setLocalizedElement("overview-title", managed ? "overview.agentTitle" : "overview.title");
+  setLocalizedElement(
+    "overview-kicker",
+    managed ? "overview.agentKicker" : guest ? "overview.guestKicker" : "overview.kicker"
+  );
+  setLocalizedElement(
+    "overview-title",
+    managed ? "overview.agentTitle" : guest ? "overview.guestTitle" : "overview.title"
+  );
   setLocalizedElement(
     "overview-description",
-    managed ? "overview.agentDescription" : "overview.description"
+    managed
+      ? "overview.agentDescription"
+      : guest
+        ? "overview.guestDescription"
+        : "overview.description"
   );
   setLocalizedElement(
     "start-tracking-label",
@@ -4214,7 +4257,13 @@ function normalizeQuery(query) {
     channel: String(query.channel ?? "AUTO")
       .trim()
       .toUpperCase(),
-    type: requestedType === "CONTAINER" ? "CONTAINER" : requestedType === "BILLOFLADING" && MULTI_CARRIER_CATALOG[String(query.carrier).toUpperCase()] ? "BILLOFLADING" : "BOOKING",
+    type:
+      requestedType === "CONTAINER"
+        ? "CONTAINER"
+        : requestedType === "BILLOFLADING" &&
+            MULTI_CARRIER_CATALOG[String(query.carrier).toUpperCase()]
+          ? "BILLOFLADING"
+          : "BOOKING",
     number: String(query.number ?? "")
       .trim()
       .replace(/\s+/g, "")
@@ -7430,7 +7479,11 @@ function isRefreshableOverseaAgentShipment(item) {
   const carrier = String(item.carrier || "").toUpperCase();
   const referenceType = String(item.referenceType || "").toUpperCase();
   if (!SUPPORTED_CARRIER_CODES.includes(carrier)) return false;
-  if (referenceType !== "BOOKING" && !(MULTI_CARRIER_CATALOG[carrier] && referenceType === "BILLOFLADING")) return false;
+  if (
+    referenceType !== "BOOKING" &&
+    !(MULTI_CARRIER_CATALOG[carrier] && referenceType === "BILLOFLADING")
+  )
+    return false;
   return !isHistoryFinished(item);
 }
 
@@ -7742,7 +7795,7 @@ function renderHistory() {
     normalizedSearch && allHistory.length > 0 && history.length === 0
   );
   const unfinishedHasNoResults = Boolean(
-    !normalizedSearch && historyBusinessScope === "unfinished" && historyTotal === 0
+    accountBound && !normalizedSearch && historyBusinessScope === "unfinished" && historyTotal === 0
   );
 
   if (overviewTotalCount) overviewTotalCount.textContent = String(historyAllTotal);
@@ -7750,14 +7803,18 @@ function renderHistory() {
   if (overviewVisibleCount) overviewVisibleCount.textContent = String(history.length);
 
   historyTitle.textContent = t(
-    agentManagement ? "history.agentTitle" : accountBound ? "history.accountTitle" : "history.title"
+    agentManagement
+      ? "history.agentTitle"
+      : accountBound
+        ? "history.accountTitle"
+        : "history.guestTitle"
   );
   historySubtitle.textContent = t(
     agentManagement
       ? "history.agentSubtitle"
       : accountBound
         ? "history.accountSubtitle"
-        : "history.subtitle"
+        : "history.guestSubtitle"
   );
   if (historyFollowingFilter) {
     historyFollowingFilter.hidden = !agentManagement;
@@ -7771,30 +7828,34 @@ function renderHistory() {
     }
   }
   historyEmptyTitle.textContent = t(
-    historyLoadFailed
-      ? "history.loadFailedTitle"
-      : searchHasNoResults
-        ? "history.searchEmptyTitle"
-        : unfinishedHasNoResults
-          ? "history.unfinishedEmptyTitle"
-          : agentManagement
-            ? "agent.emptyTitle"
-            : accountBound
-              ? "history.accountEmptyTitle"
-              : "history.emptyTitle"
+    !accountBound
+      ? "history.guestEmptyTitle"
+      : historyLoadFailed
+        ? "history.loadFailedTitle"
+        : searchHasNoResults
+          ? "history.searchEmptyTitle"
+          : unfinishedHasNoResults
+            ? "history.unfinishedEmptyTitle"
+            : agentManagement
+              ? "agent.emptyTitle"
+              : accountBound
+                ? "history.accountEmptyTitle"
+                : "history.emptyTitle"
   );
   historyEmptyDescription.textContent = t(
-    historyLoadFailed
-      ? "history.loadFailedDescription"
-      : searchHasNoResults
-        ? "history.searchEmptyDescription"
-        : unfinishedHasNoResults
-          ? "history.unfinishedEmptyDescription"
-          : agentManagement
-            ? "agent.emptyDescription"
-            : accountBound
-              ? "history.accountEmptyDescription"
-              : "history.emptyDescription"
+    !accountBound
+      ? "history.guestEmptyDescription"
+      : historyLoadFailed
+        ? "history.loadFailedDescription"
+        : searchHasNoResults
+          ? "history.searchEmptyDescription"
+          : unfinishedHasNoResults
+            ? "history.unfinishedEmptyDescription"
+            : agentManagement
+              ? "agent.emptyDescription"
+              : accountBound
+                ? "history.accountEmptyDescription"
+                : "history.emptyDescription"
   );
   historyLoading.hidden = !historyLoadingState;
   historyEmpty.hidden = historyLoadingState || history.length > 0;
@@ -8206,7 +8267,12 @@ function updateCarrierUI({ resetResult = false } = {}) {
     else if (channelSelect.disabled) channelSelect.value = "AUTO";
     channelSelect.disabled = cmaSelected;
     for (const option of channelSelect.options) {
-      option.hidden = carrier.code === "COSCO" ? option.value === "AGENT" : cmaSelected ? option.value !== "PLAYWRIGHT" : !["AUTO", "NETWORK", "AGENT"].includes(option.value);
+      option.hidden =
+        carrier.code === "COSCO"
+          ? option.value === "AGENT"
+          : cmaSelected
+            ? option.value !== "PLAYWRIGHT"
+            : !["AUTO", "NETWORK", "AGENT"].includes(option.value);
     }
     if (channelSelect.selectedOptions[0]?.hidden) channelSelect.value = "AUTO";
   }
@@ -8215,7 +8281,13 @@ function updateCarrierUI({ resetResult = false } = {}) {
   if (billOption?.hidden && trackingType.value === "BILLOFLADING") trackingType.value = "BOOKING";
   const channel = CHANNELS[channelSelect?.value] ?? CHANNELS.NETWORK;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
-  queryHelper.textContent = t(cmaSelected ? "query.cmaHelper" : MULTI_CARRIER_CATALOG[carrier.code] ? "query.multiCarrierHelper" : "query.helper");
+  queryHelper.textContent = t(
+    cmaSelected
+      ? "query.cmaHelper"
+      : MULTI_CARRIER_CATALOG[carrier.code]
+        ? "query.multiCarrierHelper"
+        : "query.helper"
+  );
   if (carrierNotice) {
     carrierNotice.hidden = carrier.enabled;
     carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
