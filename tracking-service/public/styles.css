@@ -128,7 +128,7 @@ a {
 .brand-copy small {
   margin-top: 1px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .sidebar nav {
@@ -138,7 +138,7 @@ a {
 .nav-title {
   margin: 20px 11px 8px;
   color: var(--quiet);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -200,7 +200,7 @@ a {
 .carrier-nav-item small {
   margin-top: 2px;
   color: var(--quiet);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .carrier-nav-item.is-current {
@@ -233,7 +233,7 @@ a {
   border: 1px solid #c7c9c5;
   border-radius: 9px;
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
 }
@@ -259,13 +259,13 @@ a {
 
 .sidebar-foot span {
   color: var(--quiet);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.16em;
 }
 
 .sidebar-foot strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .workspace {
@@ -403,14 +403,14 @@ a {
 }
 
 .tracking-account-copy strong {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.3;
 }
 
 .tracking-account-copy small {
   margin-top: 1px;
   color: #74879b;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .tracking-account-trigger > svg {
@@ -470,7 +470,7 @@ a {
   align-items: center;
   text-decoration: none;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transition:
     color 150ms ease,
@@ -575,7 +575,7 @@ a {
 .kicker {
   margin: 0 0 6px;
   color: #555a57;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.19em;
 }
@@ -753,7 +753,7 @@ a {
   grid-column: 1 / -1;
   color: var(--quiet);
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -884,7 +884,7 @@ a {
 .panel-header > span,
 .panel-header small {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .panel-icon {
@@ -913,7 +913,7 @@ a {
   color: var(--coral);
   background: transparent;
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1006,7 +1006,7 @@ a {
   border: 2px solid #fff;
   border-radius: 999px;
   background: #f06449;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .system-announcement-dialog {
@@ -1109,7 +1109,7 @@ a {
   align-items: center;
   gap: 8px;
   color: #758c9d;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .system-announcement-card-meta span,
@@ -1231,7 +1231,7 @@ a {
 .system-announcement-panel > footer span {
   margin-right: auto;
   color: #7890a2;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 #system-announcement-acknowledge {
@@ -1302,7 +1302,7 @@ a {
 }
 
 .history-loading small {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .table-scroll {
@@ -1325,7 +1325,7 @@ td {
 th {
   color: #565b58;
   background: #fafaf8;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.015em;
 }
@@ -1375,7 +1375,7 @@ tbody tr:hover {
 
 .history-reference small {
   color: var(--quiet);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .carrier-pill {
@@ -1387,7 +1387,7 @@ tbody tr:hover {
   background: #f1f1ee;
   border-radius: 999px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -1397,7 +1397,7 @@ tbody tr:hover {
   color: var(--ink);
   background: #fff;
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   transition:
     border-color 160ms ease,
@@ -1434,7 +1434,7 @@ tbody tr:hover {
   background: #f1f1ee;
   border: 1px solid #d5d6d2;
   border-radius: 9px 9px 9px 3px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.08em;
 }
@@ -1562,7 +1562,7 @@ tbody tr:hover {
   color: var(--muted);
   align-items: center;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .query-foot p {
@@ -1684,7 +1684,7 @@ tbody tr:hover {
   background: var(--ink);
   border-radius: 14px 14px 14px 5px;
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
   box-shadow: var(--shadow-soft);
@@ -1692,7 +1692,7 @@ tbody tr:hover {
 
 .result-type {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .result-titlebar h2 {
@@ -1752,7 +1752,7 @@ tbody tr:hover {
 
 .journey-stage-summary small {
   color: var(--quiet);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1767,7 +1767,7 @@ tbody tr:hover {
 .journey-stage-summary em {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -1831,7 +1831,7 @@ tbody tr:hover {
   color: var(--quiet);
   align-items: center;
   flex-direction: column;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2038,7 +2038,7 @@ tbody tr:hover {
 .metric-card > span:last-child {
   margin-top: 8px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .primary-grid {
@@ -2074,7 +2074,7 @@ tbody tr:hover {
 .route-summary small,
 .route-summary > div > span:last-child {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .location-name {
@@ -2169,7 +2169,7 @@ tbody tr:hover {
 
 .route-node small {
   color: #555a57;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.05em;
 }
@@ -2213,7 +2213,7 @@ tbody tr:hover {
   left: 3px;
   color: #ffdc45;
   content: "★";
-  font-size: 7px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -2248,14 +2248,14 @@ tbody tr:hover {
   max-width: 180px;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   white-space: normal;
 }
 
 .route-node time {
   margin-top: 14px;
   color: #505552;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -2277,7 +2277,7 @@ tbody tr:hover {
 
 .reference-core dt {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .reference-core dd {
@@ -2311,11 +2311,11 @@ tbody tr:hover {
 
 .reference-row span {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .reference-row strong {
-  font-size: 11.5px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -2367,7 +2367,7 @@ tbody tr:hover {
 
 .raw-panel summary small {
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.08em;
 }
@@ -2383,7 +2383,7 @@ tbody tr:hover {
   color: var(--ink);
   background: #eeeeeb;
   border-radius: 6px;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .raw-panel pre {
@@ -3080,7 +3080,7 @@ body {
 .shipment-field-label {
   margin-bottom: 3px;
   color: #7a8ca4;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -3100,7 +3100,7 @@ body {
 .shipment-current-status > small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -3157,7 +3157,7 @@ body {
 
 .shipment-date-labels b {
   color: #52708f;
-  font-size: 9.5px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -3165,7 +3165,7 @@ body {
 .shipment-date-labels small {
   margin-top: 3px;
   color: #173a64;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
 }
@@ -3266,14 +3266,14 @@ body {
 
 .shipment-detail-facts dt {
   color: #71849c;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 780;
 }
 
 .shipment-detail-facts dd {
   margin: 4px 0 0;
   color: #173a64;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 760;
   overflow-wrap: anywhere;
 }
@@ -3282,7 +3282,7 @@ body {
   display: block;
   margin-bottom: 8px;
   color: #254b76;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -3331,7 +3331,7 @@ body {
 
 .shipment-mini-timeline strong {
   color: #183d68;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
 }
 
@@ -3339,7 +3339,7 @@ body {
 .shipment-mini-timeline > p {
   margin: 2px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -3486,7 +3486,7 @@ body {
   color: #ffffff;
   background: #1677ff;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .panel-edit-button {
@@ -3494,7 +3494,7 @@ body {
   color: #1769c2;
   background: #edf6ff;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -3517,7 +3517,7 @@ body {
 
 .business-reference-grid dt {
   color: #71849c;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -3540,7 +3540,7 @@ body {
 
 .tracking-events-panel .panel-header small {
   color: #8191a7;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -3559,7 +3559,7 @@ body {
   color: #1769c2;
   background: #edf6ff;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
 }
@@ -3596,7 +3596,7 @@ body {
   color: #13714f;
   background: #e8f8f1;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -3646,7 +3646,7 @@ body {
 .container-milestone-timeline small {
   margin-top: 4px;
   color: #76889f;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -3715,7 +3715,7 @@ body {
 .document-drawer > header small,
 .supplement-dialog header small {
   color: #1677ff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.1em;
 }
@@ -3779,7 +3779,7 @@ body {
 
 .document-item-heading span {
   color: #8391a4;
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -3801,14 +3801,14 @@ body {
 
 .document-item dt {
   color: #8493a6;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 750;
 }
 
 .document-item dd {
   margin: 3px 0 0;
   color: #405a78;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -3823,13 +3823,13 @@ body {
 .document-item-actions small {
   margin-right: auto;
   color: #8a98aa;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .document-item-actions button {
   padding: 6px 10px;
   border-radius: 6px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -3886,7 +3886,7 @@ body {
   display: grid;
   gap: 7px;
   color: #516780;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -3910,7 +3910,7 @@ body {
 
 .supplement-form-grid label > small {
   color: #8493a6;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 550;
 }
 
@@ -3985,7 +3985,7 @@ body {
 
 .file-preview-dialog > header small {
   color: #195c9e;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4243,7 +4243,7 @@ body {
 .flag-icon.flag-code {
   color: #52657d;
   background: #eef2f6;
-  font-size: 7px;
+  font-size: 12px;
 }
 
 .actual-time.pending-time {
@@ -4343,7 +4343,7 @@ body {
   }
 
   .shipment-date-labels small {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .shipment-detail-facts {
@@ -4390,7 +4390,7 @@ body {
   }
 
   .stat-card small {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .stat-card strong {
@@ -4532,7 +4532,7 @@ body {
 
 .result-primary-fact small {
   color: #68819e;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -4575,7 +4575,7 @@ body {
 
 .route-summary small,
 .route-summary > div > span:last-child {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .location-name strong {
@@ -4741,7 +4741,7 @@ body {
 
 .route-node small {
   color: #4e6987;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .route-node strong {
@@ -4753,7 +4753,7 @@ body {
 
 .route-node > span:not(.route-dot) {
   color: #526d8a;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1.35;
 }
@@ -4761,14 +4761,14 @@ body {
 .route-node time {
   margin-top: 12px;
   color: #173e6a;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .reference-core dt,
 .reference-row span {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .reference-core dd {
@@ -4894,13 +4894,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  html {
+    scroll-behavior: auto;
   }
 }
 
@@ -4956,7 +4951,7 @@ body {
   color: #60758b;
   background: #f5f8fb;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -4978,7 +4973,7 @@ body {
   display: block;
   margin-top: 5px;
   color: #8592a5;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -5118,7 +5113,7 @@ body {
 
 .workbench-heading small {
   color: #6c829c;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.13em;
 }
@@ -5143,7 +5138,7 @@ body {
   background: #eef6ff;
   border-radius: 8px;
   flex: 0 0 auto;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.08em;
 }
@@ -5176,7 +5171,7 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 8px 18px rgba(23, 105, 210, 0.2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
   transition:
@@ -5228,7 +5223,7 @@ body {
   background: #eaf3ff;
   border-radius: 9px;
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -5244,7 +5239,7 @@ body {
 
 .probe-copy small {
   color: #7a8ea6;
-  font-size: 8.5px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.075em;
 }
@@ -5275,14 +5270,14 @@ body {
 
 .probe-result b {
   color: #61758e;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .probe-result small {
   margin-top: 2px;
   color: #8797aa;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .channel-probe[data-status="available"] {
@@ -5324,7 +5319,7 @@ body {
   margin: 0;
   padding: 0 20px 14px;
   color: #778ba3;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .adapter-workbench > .carrier-notice {
@@ -5401,7 +5396,7 @@ body {
 }
 
 .route-node small {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.09em;
 }
 
@@ -5627,7 +5622,7 @@ body {
 
 .brand-copy small {
   color: #9eb8d4;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .sidebar nav {
@@ -5637,7 +5632,7 @@ body {
 .nav-title {
   margin: 18px 10px 7px;
   color: #7896b5;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
@@ -5697,7 +5692,7 @@ body {
 
 .sidebar-foot strong {
   color: #e3effb;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .workspace {
@@ -5733,7 +5728,7 @@ body {
   color: #66758c;
   background: #ffffff;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .language-switch {
@@ -5746,7 +5741,7 @@ body {
   min-width: 38px;
   padding: 5px 8px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .language-switch button.is-active {
@@ -5793,7 +5788,7 @@ body {
 .kicker {
   margin-bottom: 8px;
   color: var(--el-color-primary);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
@@ -5916,7 +5911,7 @@ body {
 
 .field label {
   color: #4f6078;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -5985,7 +5980,7 @@ body {
 .adapter-workbench > .carrier-notice {
   padding: 0 18px 14px;
   color: #8794a7;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .overview-stats,
@@ -6015,7 +6010,7 @@ body {
 
 .stat-card small {
   color: #8190a5;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .stat-card strong {
@@ -6069,7 +6064,7 @@ body {
   height: 30px;
   padding: 0 9px;
   color: var(--el-color-primary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .history-empty {
@@ -6136,7 +6131,7 @@ body {
   color: #1768d8;
   background: #eff6ff;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .query-panel {
@@ -6166,7 +6161,7 @@ body {
   min-height: 24px;
   padding-top: 8px;
   color: #8592a5;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .empty-state {
@@ -6316,7 +6311,7 @@ body {
 
 .route-node time {
   color: #345276;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .references-panel {
@@ -6349,7 +6344,7 @@ td {
 th {
   color: #607089;
   background: #f6f8fb;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.025em;
 }
 
@@ -6592,11 +6587,11 @@ body {
 
 .brand-copy small,
 .carrier-nav-item small {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .nav-title {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .nav-item,
@@ -6606,7 +6601,7 @@ body {
 
 .sidebar-foot span,
 .sidebar-foot strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .breadcrumbs,
@@ -6630,7 +6625,7 @@ body {
 }
 
 .workbench-heading small {
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .workbench-heading strong {
@@ -6649,7 +6644,7 @@ body {
 }
 
 .workbench-policy span {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -6657,7 +6652,7 @@ body {
   padding-left: 8px;
   border-left: 1px solid #bfd8f7;
   color: #17835c;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .workbench-controls {
@@ -6669,7 +6664,7 @@ body {
 }
 
 .probe-copy small {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .probe-copy strong {
@@ -6683,7 +6678,7 @@ body {
 .probe-result small,
 .workbench-foot,
 .adapter-workbench > .carrier-notice {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .panel-header strong {
@@ -6752,7 +6747,7 @@ body {
 }
 
 .source-tag {
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .result-type,
@@ -6761,7 +6756,7 @@ body {
 }
 
 .result-primary-fact small {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .result-primary-fact strong {
@@ -6769,7 +6764,7 @@ body {
 }
 
 .journey-stage-summary small {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .journey-stage-summary strong {
@@ -6839,7 +6834,7 @@ body {
 }
 
 th {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 td {
@@ -6847,7 +6842,7 @@ td {
 }
 
 .shipment-field-label {
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .shipment-identity > strong {
@@ -6865,7 +6860,7 @@ td {
 }
 
 .shipment-date-labels b {
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .shipment-date-labels small {
@@ -6878,7 +6873,7 @@ td {
 
 .shipment-detail-facts dt,
 .shipment-detail-title {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .shipment-detail-facts dd,
@@ -6889,7 +6884,7 @@ td {
 
 .shipment-mini-timeline small,
 .shipment-mini-timeline > p {
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 /* CSS-only ocean map: no decorative image dependency. */
@@ -6982,7 +6977,7 @@ td {
   gap: 5px;
   color: #194a7e;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .map-port i {
@@ -7074,7 +7069,7 @@ td {
   bottom: 15px;
   left: 0;
   color: #527398;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.035em;
   text-align: center;
@@ -7205,7 +7200,7 @@ td {
 
 .extra-information dt {
   color: #71839a;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -7332,7 +7327,7 @@ td {
   background: #1677e8;
   border-radius: 999px;
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .shipment-summary-grid {
@@ -7518,7 +7513,7 @@ td {
   background: #ffffff;
   border-radius: 50%;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -7741,7 +7736,7 @@ body.is-page-leaving .ambient {
   color: #3b6e9e !important;
   background: #f1f8ff;
   border-radius: 999px;
-  font-size: 10px !important;
+  font-size: 12px !important;
   font-weight: 750;
 }
 
@@ -7809,7 +7804,7 @@ body.is-page-leaving .ambient {
   max-width: 390px;
   margin-top: 9px;
   color: #8392a5;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -7829,7 +7824,7 @@ body.is-page-leaving .ambient {
   background: #ffffff;
   border-radius: 7px;
   font: inherit;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -7864,7 +7859,7 @@ body.is-page-leaving .ambient {
   background: #f2f8ff;
   border-radius: 11px;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -7875,7 +7870,7 @@ body.is-page-leaving .ambient {
 
 .batch-import-empty p {
   margin: 5px 0 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .batch-summary-head {
@@ -7892,7 +7887,7 @@ body.is-page-leaving .ambient {
 
 .batch-summary-head small {
   color: #8a98aa;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7955,14 +7950,14 @@ body.is-page-leaving .ambient {
 
 .batch-metrics small {
   color: #738398;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .batch-status-text {
   min-height: 18px;
   margin: 10px 0 6px;
   color: #48627d;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .batch-result-list {
@@ -8020,20 +8015,20 @@ body.is-page-leaving .ambient {
 
 .batch-result-item > span:first-child small {
   color: #8997a8;
-  font-size: 8.5px;
+  font-size: 12px;
 }
 
 .batch-result-item > span:first-child strong {
   margin-top: 2px;
   color: #244260;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .batch-result-item > span:first-child em {
   display: block;
   margin-top: 2px;
   color: #64809d;
-  font-size: 8.5px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 600;
 }
@@ -8043,7 +8038,7 @@ body.is-page-leaving .ambient {
   gap: 6px;
   color: #728297;
   align-items: center;
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 .batch-result-item > span:last-child i {
@@ -8093,7 +8088,7 @@ body.is-page-leaving .ambient {
 .batch-subtask-details {
   margin: 0 4px 2px 16px;
   color: #64809d;
-  font-size: 8.5px;
+  font-size: 12px;
 }
 
 .batch-subtask-details > summary {
@@ -8120,7 +8115,7 @@ body.is-page-leaving .ambient {
   color: #5f748c;
   align-items: center;
   justify-content: space-between;
-  font-size: 8.5px;
+  font-size: 12px;
 }
 
 .batch-subtask-item span {
@@ -8132,7 +8127,7 @@ body.is-page-leaving .ambient {
 .batch-subtask-item b {
   flex: 0 0 auto;
   color: #8796a8;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .batch-subtask-item.is-running b,
@@ -8154,7 +8149,7 @@ body.is-page-leaving .ambient {
   border-top: 1px solid #dbe8f5;
   color: #3f678c;
   background: #f4f9fe;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .batch-import-message[data-variant="warning"] {
@@ -8410,7 +8405,7 @@ body.is-page-leaving .ambient {
 .platform-route-content > span {
   margin-top: 9px;
   color: rgba(221, 239, 252, 0.65);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .platform-route-content > b {
@@ -8681,7 +8676,7 @@ body.related-files-open {
 .related-files-drawer-header p {
   margin-bottom: 7px;
   color: #1885e8;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.16em;
 }
@@ -8767,7 +8762,7 @@ body.related-files-open {
 .related-files-customer-session small {
   margin-bottom: 3px;
   color: #60809f;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -8786,7 +8781,7 @@ body.related-files-open {
   color: #087c69;
   background: #dcf7ef;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -8797,7 +8792,7 @@ body.related-files-open {
   color: #286384;
   background: rgba(255, 255, 255, 0.86);
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -8902,7 +8897,7 @@ body.related-files-open {
 
 .related-file-comments > header small {
   color: #7a8ea3;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .related-file-comments-count {
@@ -8911,7 +8906,7 @@ body.related-files-open {
   color: #176bb8;
   background: #eaf5ff;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -8939,7 +8934,7 @@ body.related-files-open {
   color: #ffffff;
   background: #1677d2;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -8956,18 +8951,18 @@ body.related-files-open {
 
 .related-file-comment-item strong {
   color: #1e405e;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .related-file-comment-item time {
   color: #91a0b0;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .related-file-comment-item div > p:last-child {
   margin-top: 4px;
   color: #536b82;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -8993,7 +8988,7 @@ body.related-files-open {
 .related-file-comments-empty {
   margin: 12px 0 0;
   color: #8a9aaa;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .related-file-comment-form {
@@ -9004,7 +8999,7 @@ body.related-files-open {
   display: block;
   margin-bottom: 5px;
   color: #60778e;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -9022,7 +9017,7 @@ body.related-files-open {
   color: #24445f;
   background: #ffffff;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -9031,7 +9026,7 @@ body.related-files-open {
   border: 1px solid #1677d2;
   color: #ffffff;
   background: #1677d2;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -9043,7 +9038,7 @@ body.related-files-open {
 .related-file-comment-form > p {
   margin: 7px 0 0;
   color: #16835c;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .related-file-comment-form > p[data-variant="error"] {
@@ -9164,7 +9159,7 @@ body.related-files-open {
   background: linear-gradient(155deg, #e7f4ff, #f7fbff);
   border-radius: 10px;
   place-items: center;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
 }
@@ -9189,7 +9184,7 @@ body.related-files-open {
 .related-file-content > span {
   margin-top: 5px;
   color: #8493a7;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -9210,7 +9205,7 @@ body.related-files-open {
   color: #52728f;
   background: #f6faff;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 12px;
   line-height: 22px;
 }
 
@@ -9256,7 +9251,7 @@ body.related-files-open {
 .related-file-sharing-hint {
   width: 100%;
   color: #b26420;
-  font-size: 9.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -9279,7 +9274,7 @@ body.related-files-open {
   color: #176bb8;
   background: #ffffff;
   border-radius: 7px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -9319,7 +9314,7 @@ body.related-files-open {
 .related-files-upload-heading span {
   margin-top: 4px;
   color: #8595a8;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .related-files-upload-heading > span {
@@ -9342,7 +9337,7 @@ body.related-files-open {
   display: block;
   margin-bottom: 5px;
   color: #6c8096;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -9355,7 +9350,7 @@ body.related-files-open {
   background: #f9fcff;
   border-radius: 8px;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .related-files-upload-options select:disabled {
@@ -9385,7 +9380,7 @@ body.related-files-open {
   align-items: center;
   justify-content: space-between;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   transition:
     border-color 170ms ease,
     box-shadow 170ms ease,
@@ -9458,7 +9453,7 @@ body.related-files-open {
   border-radius: 6px;
   text-align: left;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   transition:
     color 140ms ease,
     background 140ms ease;
@@ -9482,7 +9477,7 @@ body.related-files-open {
   color: #9b5e1c;
   background: #fffaf1;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -9503,7 +9498,7 @@ body.related-files-open {
   padding: 0 14px;
   border-radius: 8px;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -9546,7 +9541,7 @@ body.related-files-open {
 .related-files-upload-message {
   margin: 9px 0 0;
   color: #7f91a6;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -9573,7 +9568,7 @@ body.related-files-open {
   border-radius: 5px;
   content: "✓";
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .related-files-upload-message:not([hidden]) {
@@ -9929,7 +9924,7 @@ body.is-customer-session .metric-card,
   border-radius: 999px;
   color: #227357;
   background: #eff9f5;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 .customer-profile-card dl {
@@ -9948,7 +9943,7 @@ body.is-customer-session .metric-card,
 .customer-profile-card dt {
   margin-bottom: 7px;
   color: #73899b;
-  font-size: 11px;
+  font-size: 12px;
 }
 .customer-profile-card dd {
   overflow: hidden;
@@ -10019,7 +10014,7 @@ body.is-embedded .content {
   margin: 0 0 7px;
   padding: 0;
   color: #637b91;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 760;
 }
 
@@ -10027,7 +10022,7 @@ body.is-embedded .content {
   display: block;
   margin-top: 6px;
   color: #a33a3a;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .related-files-visibility-field > small[hidden] {
@@ -10199,7 +10194,7 @@ body.is-embedded .content {
   border-radius: 7px;
   color: #27658f;
   background: #eaf4fb;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10220,7 +10215,7 @@ body.is-embedded .content {
 
 .batch-column-preview-controls label > span {
   color: #5f778d;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 780;
 }
 
@@ -10247,7 +10242,7 @@ body.is-embedded .content {
   min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .batch-column-preview-table th,
@@ -10364,7 +10359,7 @@ body.is-embedded .content {
   min-width: 210px;
   gap: 3px;
   color: #526d89;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -10612,7 +10607,7 @@ body.is-embedded .content {
 }
 
 .batch-workspace-dialog .batch-result-item > span:first-child small {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .batch-workspace-dialog .batch-result-item > span:first-child strong {
@@ -10621,7 +10616,7 @@ body.is-embedded .content {
 
 .batch-workspace-dialog .batch-result-item > span:first-child em,
 .batch-workspace-dialog .batch-result-item > span:last-child {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .batch-result-error {
@@ -10631,14 +10626,14 @@ body.is-embedded .content {
   border-radius: 0 7px 7px 0;
   color: #a8424a;
   background: #fff5f6;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .batch-workspace-dialog .batch-subtask-details {
   margin: 0 8px 4px 18px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .batch-workspace-dialog .batch-subtask-details > summary {
@@ -10661,7 +10656,7 @@ body.is-embedded .content {
   gap: 16px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .batch-workspace-dialog .batch-subtask-item > span {
@@ -10674,18 +10669,18 @@ body.is-embedded .content {
 
 .batch-workspace-dialog .batch-subtask-item strong {
   color: #49657f;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .batch-workspace-dialog .batch-subtask-item small {
   color: #7b8ea2;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .batch-workspace-dialog .batch-subtask-item > b {
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .batch-workspace-dialog.is-previewing .batch-import-body {
@@ -10962,7 +10957,7 @@ body.is-customer-session .nav-item.is-active {
   justify-content: center;
   gap: 6px;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
@@ -10996,7 +10991,7 @@ body.is-customer-session .nav-item.is-active {
 
 .agent-last-update {
   color: #6d849a;
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -11070,7 +11065,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 }
 
 .agent-management-toolbar .history-customer-filter > span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .agent-management-toolbar .history-customer-filter select {
@@ -11425,7 +11420,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-panel > header small {
   color: #2a77ce;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -11484,7 +11479,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-headline small {
   color: #70859a;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .agent-update-task-spinner {
@@ -11544,7 +11539,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-counters small {
   color: #7a8da0;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .agent-update-task-counters strong {
@@ -11573,7 +11568,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-current span {
   color: #778b9e;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .agent-update-task-current strong {
@@ -11585,7 +11580,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 .agent-update-task-hint {
   margin: 12px 0 0;
   color: #7b8fa2;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -11622,7 +11617,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-result small {
   color: #91a1b0;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .agent-update-task-result strong {
@@ -11633,7 +11628,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 
 .agent-update-task-result em {
   color: #b0524c;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -11642,7 +11637,7 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
 .agent-update-task-result > b {
   flex: 0 0 auto;
   color: #8090a0;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .agent-update-task-result.is-running {

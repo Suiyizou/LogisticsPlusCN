@@ -121,7 +121,7 @@ test("production catalog supplies every built-in view without importing a page",
   assert.equal(businessModuleCatalog.modules, businessModules);
   assert.equal(
     businessModules.length,
-    6 +
+    7 +
       generatedModuleRegistrations.filter(
         ({ module }) => (module.surface || "business") === "business"
       ).length

@@ -16,7 +16,10 @@ export const MIME_TYPES = Object.freeze({
   ".svg": "image/svg+xml"
 });
 const COMPRESSIBLE_EXTENSIONS = new Set([".css", ".html", ".js", ".mjs", ".json", ".svg"]);
-const HASHED_ASSET_PATTERN = /[.-][a-z0-9_-]{8,}\.(?:css|gif|ico|jpe?g|js|json|png|svg|woff2?)$/i;
+// Plain names such as design-system.css are mutable source assets, not hashes.
+// Recognize only an explicit hexadecimal digest suffix; unknown build formats
+// safely revalidate rather than keeping stale application code for a year.
+const HASHED_ASSET_PATTERN = /[.-][a-f0-9]{8,64}\.(?:css|gif|ico|jpe?g|js|json|png|svg|woff2?)$/i;
 const STATIC_COMPRESSION_CACHE_LIMIT = 64;
 const compressWithBrotli = promisify(brotliCompress);
 const compressWithGzip = promisify(gzip);

@@ -4,11 +4,13 @@
       <strong>{{ title }}</strong>
       <span>{{ note }}</span>
     </div>
-    <canvas ref="canvas" width="520" height="280"></canvas>
+    <canvas ref="canvas" width="520" height="280" role="img" :aria-label="title"></canvas>
   </div>
 </template>
 
 <script setup>
+import { currentLocale } from "../i18n";
+import { wt } from "./workspace/workspaceCopy";
 import { onMounted, ref, watch } from "vue";
 
 const props = defineProps({
@@ -22,7 +24,9 @@ const props = defineProps({
 const canvas = ref(null);
 
 onMounted(draw);
-watch(() => [props.container, props.placements, props.mode], draw, { deep: true });
+watch(() => [props.container, props.placements, props.mode, currentLocale.value], draw, {
+  deep: true
+});
 
 function draw() {
   if (!canvas.value || !props.container) return;
@@ -62,8 +66,18 @@ function draw() {
     ctx.fillStyle = hexToRgba(item.color || "#4e8fd0", 0.72);
     ctx.strokeStyle = hexToRgba("#163a5f", 0.45);
     ctx.lineWidth = 1;
-    ctx.fillRect(ox + rect.x * scale, oy + dims.h * scale - (rect.y + rect.h) * scale, rect.w * scale, rect.h * scale);
-    ctx.strokeRect(ox + rect.x * scale, oy + dims.h * scale - (rect.y + rect.h) * scale, rect.w * scale, rect.h * scale);
+    ctx.fillRect(
+      ox + rect.x * scale,
+      oy + dims.h * scale - (rect.y + rect.h) * scale,
+      rect.w * scale,
+      rect.h * scale
+    );
+    ctx.strokeRect(
+      ox + rect.x * scale,
+      oy + dims.h * scale - (rect.y + rect.h) * scale,
+      rect.w * scale,
+      rect.h * scale
+    );
   });
 
   ctx.strokeStyle = "#2d6ea8";
@@ -71,30 +85,94 @@ function draw() {
   ctx.strokeRect(ox, oy, dims.w * scale, dims.h * scale);
   ctx.fillStyle = "#2d5f93";
   ctx.font = "12px Microsoft YaHei, Arial";
-  ctx.fillText(dims.xLabel, ox + dims.w * scale / 2 - 32, oy - 10);
+  ctx.fillText(dims.xLabel, ox + (dims.w * scale) / 2 - 32, oy - 10);
   ctx.save();
-  ctx.translate(ox - 14, oy + dims.h * scale / 2 + 32);
+  ctx.translate(ox - 14, oy + (dims.h * scale) / 2 + 32);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText(dims.yLabel, 0, 0);
   ctx.restore();
 }
 
 function getProjection(c) {
-  if (props.mode === "front") return { w: c.lengthCm, h: c.heightCm, xLabel: `长 ${c.lengthCm} cm`, yLabel: `高 ${c.heightCm} cm` };
-  if (props.mode === "side") return { w: c.widthCm, h: c.heightCm, xLabel: `宽 ${c.widthCm} cm`, yLabel: `高 ${c.heightCm} cm` };
-  return { w: c.lengthCm, h: c.widthCm, xLabel: `长 ${c.lengthCm} cm`, yLabel: `宽 ${c.widthCm} cm` };
+  if (props.mode === "front")
+    return {
+      w: c.lengthCm,
+      h: c.heightCm,
+      xLabel: wt("lengthCm", { value: c.lengthCm }),
+      yLabel: wt("heightCm", { value: c.heightCm })
+    };
+  if (props.mode === "side")
+    return {
+      w: c.widthCm,
+      h: c.heightCm,
+      xLabel: wt("widthCm", { value: c.widthCm }),
+      yLabel: wt("heightCm", { value: c.heightCm })
+    };
+  return {
+    w: c.lengthCm,
+    h: c.widthCm,
+    xLabel: wt("lengthCm", { value: c.lengthCm }),
+    yLabel: wt("widthCm", { value: c.widthCm })
+  };
 }
 
 function projectItem(item) {
-  if (props.mode === "front") return { x: item.xCm, y: item.zCm, w: item.lengthCm, h: item.heightCm };
+  if (props.mode === "front")
+    return { x: item.xCm, y: item.zCm, w: item.lengthCm, h: item.heightCm };
   if (props.mode === "side") return { x: item.yCm, y: item.zCm, w: item.widthCm, h: item.heightCm };
   return { x: item.xCm, y: item.yCm, w: item.lengthCm, h: item.widthCm };
 }
 
 function hexToRgba(hex, alpha) {
   const raw = hex.replace("#", "");
-  const full = raw.length === 3 ? raw.split("").map((x) => x + x).join("") : raw;
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((x) => x + x)
+          .join("")
+      : raw;
   const num = parseInt(full, 16);
   return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
 }
 </script>
+
+<style scoped>
+.projection-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+.projection-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.projection-title strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.projection-title span {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+canvas {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-control);
+}
+@media (max-width: 600px) {
+  .projection-card {
+    padding: 16px;
+  }
+  .projection-title {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+</style>

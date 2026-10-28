@@ -2,23 +2,26 @@
   <div data-i18n-ignore data-module="agents">
     <div class="workspace-view">
       <div class="list-page list-page-full">
-        <div class="list-page-header">
-          <div>
-            <h2>{{ t("customers.overseaAgentManagement") }}</h2>
-            <p>{{ t("customers.overseaAgentManagementHint") }}</p>
-          </div>
-          <div class="list-page-actions">
-            <el-button @click="loadTransferAgents"
-              ><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button
-            >
-            <el-button type="primary" plain :disabled="agentWriteBusy" @click="openAgentBatchImport"
-              ><el-icon><Upload /></el-icon>{{ t("customers.batchCreateAgents") }}</el-button
-            >
-            <el-button type="primary" :disabled="agentWriteBusy" @click="openAgentCreateDialog"
-              ><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button
-            >
-          </div>
-        </div>
+        <WorkspacePageHeader class="list-page-header" :description="wt('agentHint')"
+          ><template #title>{{ t("customers.overseaAgentManagement") }}</template
+          ><template #actions
+            ><div class="list-page-actions">
+              <el-button @click="loadTransferAgents"
+                ><el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}</el-button
+              >
+              <el-button
+                type="primary"
+                plain
+                :disabled="agentWriteBusy"
+                @click="openAgentBatchImport"
+                ><el-icon><Upload /></el-icon>{{ t("customers.batchCreateAgents") }}</el-button
+              >
+              <el-button type="primary" :disabled="agentWriteBusy" @click="openAgentCreateDialog"
+                ><el-icon><Plus /></el-icon>{{ t("customers.createOverseaAgent") }}</el-button
+              >
+            </div></template
+          ></WorkspacePageHeader
+        >
         <el-table
           :data="paginatedTransferAgents"
           border
@@ -106,6 +109,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -239,21 +244,21 @@ const compact = useMediaQuery("(max-width: 680px)");
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-pagination :deep(.btn-prev),
 .shipment-pagination :deep(.btn-next),
 .shipment-pagination :deep(.el-pager li) {
   min-width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: var(--radius-control) !important;
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
@@ -324,3 +329,5 @@ const compact = useMediaQuery("(max-width: 680px)");
   box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

@@ -139,13 +139,14 @@ function focusHarness(t) {
       contains: (item) => [dialog, first, last, disabled].includes(item),
       querySelectorAll: () => [first, disabled, last]
     });
+    const dialogRef = shallowRef(dialog);
     const open = ref(false),
       busy = ref(false),
       scope = effectScope();
     scopes.push(scope);
     const controls = scope.run(() =>
       useDialogFocus({
-        dialogElement: shallowRef(dialog),
+        dialogElement: dialogRef,
         isOpen: () => open.value,
         isBusy: () => busy.value,
         close: () => {
@@ -153,7 +154,7 @@ function focusHarness(t) {
         }
       })
     );
-    return { open, busy, scope, dialog, first, last, ...controls };
+    return { open, busy, scope, dialog, dialogRef, first, last, ...controls };
   }
   function key(key, shiftKey = false) {
     return {
@@ -253,4 +254,18 @@ test("opening a dialog preserves focus already assigned to its primary action", 
   assert.equal(h.document.activeElement, m.last);
   m.onDialogKeydown(h.key("Tab"));
   assert.equal(h.document.activeElement, m.first);
+});
+
+test("a leaving dialog restores its opener after Vue has cleared the template ref", async (t) => {
+  const h = focusHarness(t),
+    opener = h.element(),
+    m = h.modal();
+  opener.focus();
+  m.open.value = true;
+  await settle();
+  m.last.focus();
+  m.open.value = false;
+  m.dialogRef.value = null;
+  await settle();
+  assert.equal(h.document.activeElement, opener);
 });

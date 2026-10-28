@@ -1,0 +1,58 @@
+.workspace-dialog-enter-active,
+.workspace-dialog-leave-active {
+  transition: opacity 180ms ease;
+}
+.workspace-dialog-enter-active :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog) {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 220ms ease;
+}
+.workspace-dialog-leave-active :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog) {
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+}
+.workspace-dialog-enter-from,
+.workspace-dialog-leave-to {
+  opacity: 0;
+}
+.workspace-dialog-enter-from :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog),
+.workspace-dialog-leave-to :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog) {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
+.workspace-state-enter-active,
+.workspace-state-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+.workspace-state-enter-from,
+.workspace-state-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-dialog-enter-active,
+  .workspace-dialog-leave-active,
+  .workspace-dialog-enter-active :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog),
+  .workspace-dialog-leave-active :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog),
+  .workspace-state-enter-active,
+  .workspace-state-leave-active {
+    transition: opacity 80ms linear;
+  }
+  .workspace-dialog-enter-from :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog),
+  .workspace-dialog-leave-to :is(.modal, .customer-code-dialog, .shipment-excel-import-dialog),
+  .workspace-state-enter-from,
+  .workspace-state-leave-to {
+    transform: none;
+  }
+}
+
+.workspace-dialog-leave-active {
+  pointer-events: none;
+}
+.workspace-dialog-enter-active :is(.modal, .customer-code-dialog),
+.workspace-dialog-leave-active :is(.modal, .customer-code-dialog) {
+  animation: none !important;
+}

@@ -1,290 +1,299 @@
 <template>
   <div data-i18n-ignore>
     <Teleport to="body"
-      ><div
-        v-if="batchImportDialogOpen"
-        class="customer-code-overlay"
-        role="presentation"
-        @keydown="onDialogKeydown"
-      >
-        <section
-          class="customer-code-dialog customer-batch-dialog"
-          ref="dialogElement"
-          tabindex="-1"
-          role="dialog"
-          :aria-busy="importingCustomers"
-          aria-modal="true"
-          :aria-label="t('customers.batchImport')"
+      ><WorkspaceDialogTransition
+        ><div
+          v-if="batchImportDialogOpen"
+          class="customer-code-overlay"
+          role="presentation"
+          @keydown="onDialogKeydown"
         >
-          <header class="customer-batch-heading">
-            <div>
-              <span class="customer-code-kicker">{{
-                t("customers.dialogKickerProvisioning")
-              }}</span>
-              <h2>{{ t("customers.batchImport") }}</h2>
-              <p>{{ t("customers.batchImportDescription") }}</p>
-            </div>
-            <button
-              class="customer-template-button"
-              type="button"
-              @click="downloadCustomerImportTemplate"
-            >
-              {{ t("customers.downloadCustomerTemplate") }}
-            </button>
-          </header>
-
-          <div class="customer-batch-body">
-            <section class="customer-import-rules" :aria-label="t('customers.importRulesTitle')">
-              <header>
-                <b>{{ t("customers.importRulesTitle") }}</b>
-                <small>{{ t("customers.importRulesHint") }}</small>
-              </header>
+          <section
+            class="customer-code-dialog customer-batch-dialog workspace-modal--wide"
+            ref="dialogElement"
+            tabindex="-1"
+            role="dialog"
+            :aria-busy="importingCustomers"
+            aria-modal="true"
+            :aria-label="t('customers.batchImport')"
+          >
+            <header class="customer-batch-heading">
               <div>
-                <article>
-                  <strong>01</strong
-                  ><span
-                    ><b>{{ t("customers.usernameRuleTitle") }}</b
-                    ><small>{{ t("customers.usernameRule") }}</small></span
-                  >
-                </article>
-                <article>
-                  <strong>02</strong
-                  ><span
-                    ><b>{{ t("customers.passwordRuleTitle") }}</b
-                    ><small>{{ t("customers.passwordRule") }}</small></span
-                  >
-                </article>
-                <article>
-                  <strong>03</strong
-                  ><span
-                    ><b>{{ t("customers.clientCodeRuleTitle") }}</b
-                    ><small>{{ t("customers.clientCodeRule") }}</small></span
-                  >
-                </article>
-                <article>
-                  <strong>04</strong
-                  ><span
-                    ><b>{{ t("customers.displayNameRuleTitle") }}</b
-                    ><small>{{ t("customers.displayNameRule") }}</small></span
-                  >
-                </article>
-                <article>
-                  <strong>05</strong
-                  ><span
-                    ><b>{{ t("customers.roleRuleTitle") }}</b
-                    ><small>{{ t("customers.roleRule") }}</small></span
-                  >
-                </article>
+                <span class="customer-code-kicker">{{
+                  t("customers.dialogKickerProvisioning")
+                }}</span>
+                <h2>{{ t("customers.batchImport") }}</h2>
+                <p>{{ t("customers.batchImportDescription") }}</p>
               </div>
-            </section>
+              <button
+                class="customer-template-button"
+                type="button"
+                @click="downloadCustomerImportTemplate"
+              >
+                {{ t("customers.downloadCustomerTemplate") }}
+              </button>
+            </header>
 
-            <div class="customer-batch-tabs">
-              <button
-                type="button"
-                :class="{ 'is-active': batchImportMode === 'quick' }"
-                :disabled="importingCustomers"
-                @click="selectCustomerBatchMode('quick')"
+            <div class="customer-batch-body">
+              <section class="customer-import-rules" :aria-label="t('customers.importRulesTitle')">
+                <header>
+                  <b>{{ t("customers.importRulesTitle") }}</b>
+                  <small>{{ t("customers.importRulesHint") }}</small>
+                </header>
+                <div>
+                  <article>
+                    <strong>01</strong
+                    ><span
+                      ><b>{{ t("customers.usernameRuleTitle") }}</b
+                      ><small>{{ t("customers.usernameRule") }}</small></span
+                    >
+                  </article>
+                  <article>
+                    <strong>02</strong
+                    ><span
+                      ><b>{{ t("customers.passwordRuleTitle") }}</b
+                      ><small>{{ t("customers.passwordRule") }}</small></span
+                    >
+                  </article>
+                  <article>
+                    <strong>03</strong
+                    ><span
+                      ><b>{{ t("customers.clientCodeRuleTitle") }}</b
+                      ><small>{{ t("customers.clientCodeRule") }}</small></span
+                    >
+                  </article>
+                  <article>
+                    <strong>04</strong
+                    ><span
+                      ><b>{{ t("customers.displayNameRuleTitle") }}</b
+                      ><small>{{ t("customers.displayNameRule") }}</small></span
+                    >
+                  </article>
+                  <article>
+                    <strong>05</strong
+                    ><span
+                      ><b>{{ t("customers.roleRuleTitle") }}</b
+                      ><small>{{ t("customers.roleRule") }}</small></span
+                    >
+                  </article>
+                </div>
+              </section>
+
+              <div class="customer-batch-tabs">
+                <button
+                  type="button"
+                  :class="{ 'is-active': batchImportMode === 'quick' }"
+                  :disabled="importingCustomers"
+                  @click="selectCustomerBatchMode('quick')"
+                >
+                  {{ t("customers.quickImport") }}
+                </button>
+                <button
+                  type="button"
+                  :class="{ 'is-active': batchImportMode === 'excel' }"
+                  :disabled="importingCustomers"
+                  @click="selectCustomerBatchMode('excel')"
+                >
+                  {{ t("customers.excelImport") }}
+                </button>
+              </div>
+
+              <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
+                <span>{{ t("customers.quickImportNames") }}</span>
+                <textarea
+                  v-model="quickImportText"
+                  :disabled="importingCustomers"
+                  :placeholder="t('customers.quickImportPlaceholder')"
+                ></textarea>
+                <small>{{ t("customers.quickImportHint") }}</small>
+              </label>
+              <div
+                role="button"
+                tabindex="0"
+                @keydown.enter.prevent="batchFileInput?.click()"
+                @keydown.space.prevent="batchFileInput?.click()"
+                v-else
+                v-loading="customerFileParsing"
+                :element-loading-text="t('app.loadingPage')"
+                class="customer-excel-dropzone customer-import-dropzone"
+                :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
+                @dragover.prevent="batchDropzoneActive = true"
+                @dragleave.prevent="batchDropzoneActive = false"
+                @drop.prevent="handleBatchDrop"
+                @click="batchFileInput?.click()"
               >
-                {{ t("customers.quickImport") }}
-              </button>
-              <button
-                type="button"
-                :class="{ 'is-active': batchImportMode === 'excel' }"
-                :disabled="importingCustomers"
-                @click="selectCustomerBatchMode('excel')"
+                <input
+                  :ref="actions.setFileInput"
+                  :disabled="importingCustomers"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  @change="handleCustomerWorkbook"
+                  style="display: none"
+                />
+                <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
+                <small>{{
+                  batchFileName
+                    ? t("customers.rowsReady", { count: activeCustomerBatchPreview.total })
+                    : t("customers.excelColumnsHint")
+                }}</small>
+                <button type="button" @click.stop="batchFileInput?.click()">
+                  {{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}
+                </button>
+              </div>
+
+              <div v-if="batchPreviewError" class="customer-import-file-error" role="alert">
+                <b>{{ t("customers.fileLevelError") }}</b>
+                <span>{{ batchPreviewError }}</span>
+              </div>
+              <div
+                v-for="problem in activeCustomerBatchPreview.globalErrors"
+                :key="`${problem.code}-${problem.value || ''}`"
+                class="customer-import-file-error"
+                role="alert"
               >
-                {{ t("customers.excelImport") }}
-              </button>
+                <b>{{ t("customers.fileLevelError") }}</b>
+                <span>{{ customerImportIssueText(problem) }}</span>
+              </div>
+
+              <template v-if="activeCustomerBatchPreview.total">
+                <div class="customer-import-summary">
+                  <span
+                    ><b>{{ activeCustomerBatchPreview.total }}</b
+                    ><small>{{ t("customers.importTotalRows") }}</small></span
+                  >
+                  <span class="is-valid"
+                    ><b>{{ activeCustomerBatchPreview.valid }}</b
+                    ><small>{{ t("customers.importValidRows") }}</small></span
+                  >
+                  <span class="is-invalid"
+                    ><b>{{ activeCustomerBatchPreview.invalid }}</b
+                    ><small>{{ t("customers.importInvalidRows") }}</small></span
+                  >
+                  <span class="is-warning"
+                    ><b>{{ activeCustomerBatchPreview.warningCount }}</b
+                    ><small>{{ t("customers.importWarningRows") }}</small></span
+                  >
+                </div>
+
+                <div class="customer-import-preview">
+                  <el-table
+                    :data="activeCustomerBatchPreview.rows"
+                    border
+                    max-height="440"
+                    class="standard-information-table customer-import-preview-table"
+                  >
+                    <el-table-column :label="t('customers.excelRow')" width="82">
+                      <template #default="{ row }"
+                        ><b>#{{ row.rowNumber }}</b></template
+                      >
+                    </el-table-column>
+                    <el-table-column :label="t('customers.createAccount')" min-width="145">
+                      <template #default="{ row }"
+                        ><b>{{ row.username || "—" }}</b></template
+                      >
+                    </el-table-column>
+                    <el-table-column
+                      prop="displayName"
+                      :label="t('customers.createDisplayName')"
+                      min-width="150"
+                    />
+                    <el-table-column :label="t('customers.initialPassword')" min-width="160">
+                      <template #default="{ row }">
+                        <span
+                          class="customer-import-value-pill"
+                          :class="{ 'is-generated': !row.passwordProvided }"
+                        >
+                          {{
+                            row.passwordProvided
+                              ? t("customers.passwordProvided", { count: row.password.length })
+                              : t("customers.systemGenerated")
+                          }}
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('customers.clientCode')" min-width="135">
+                      <template #default="{ row }">{{
+                        row.clientCode || t("customers.systemGenerated")
+                      }}</template>
+                    </el-table-column>
+                    <el-table-column :label="t('customers.createPartyRole')" min-width="140">
+                      <template #default="{ row }">{{
+                        customerPartyRoleLabel(row.partyRole)
+                      }}</template>
+                    </el-table-column>
+                    <el-table-column :label="t('customers.validationMessage')" min-width="300">
+                      <template #default="{ row }">
+                        <span
+                          v-if="row.errors.length"
+                          class="customer-import-validation-pill is-error"
+                        >
+                          {{ t("customers.validationErrorCount", { count: row.errors.length }) }}
+                        </span>
+                        <span
+                          v-else-if="row.warnings.length"
+                          class="customer-import-validation-pill is-warning"
+                        >
+                          {{
+                            t("customers.validationWarningCount", { count: row.warnings.length })
+                          }}
+                        </span>
+                        <span v-else class="customer-import-ready">{{
+                          t("customers.importReady")
+                        }}</span>
+                        <div
+                          v-if="row.errors.length || row.warnings.length"
+                          class="customer-import-issues"
+                        >
+                          <span
+                            v-for="problem in row.errors"
+                            :key="`error-${problem.field}-${problem.code}`"
+                            class="is-error"
+                          >
+                            <b>{{ customerImportFieldLabel(problem.field) }}</b
+                            >{{ customerImportIssueText(problem) }}
+                          </span>
+                          <span
+                            v-for="problem in row.warnings"
+                            :key="`warning-${problem.field}-${problem.code}`"
+                            class="is-warning"
+                          >
+                            <b>{{ customerImportFieldLabel(problem.field) }}</b
+                            >{{ customerImportIssueText(problem) }}
+                          </span>
+                        </div>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </template>
             </div>
 
-            <label v-if="batchImportMode === 'quick'" class="customer-batch-textarea">
-              <span>{{ t("customers.quickImportNames") }}</span>
-              <textarea
-                v-model="quickImportText"
-                :disabled="importingCustomers"
-                :placeholder="t('customers.quickImportPlaceholder')"
-              ></textarea>
-              <small>{{ t("customers.quickImportHint") }}</small>
-            </label>
-            <div
-              v-else
-              v-loading="customerFileParsing"
-              :element-loading-text="t('app.loadingPage')"
-              class="customer-excel-dropzone customer-import-dropzone"
-              :class="{ 'has-file': batchFileName, 'is-dragover': batchDropzoneActive }"
-              @dragover.prevent="batchDropzoneActive = true"
-              @dragleave.prevent="batchDropzoneActive = false"
-              @drop.prevent="handleBatchDrop"
-              @click="batchFileInput?.click()"
-            >
-              <input
-                :ref="actions.setFileInput"
-                :disabled="importingCustomers"
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                @change="handleCustomerWorkbook"
-                style="display: none"
-              />
-              <b>{{ batchFileName || t("customers.chooseExcel") }}</b>
-              <small>{{
-                batchFileName
-                  ? t("customers.rowsReady", { count: activeCustomerBatchPreview.total })
-                  : t("customers.excelColumnsHint")
+            <footer class="customer-dialog-actions customer-batch-actions">
+              <small v-if="activeCustomerBatchPreview.invalid">{{
+                t("customers.fixInvalidRowsBeforeImport")
               }}</small>
-              <button type="button" @click.stop="batchFileInput?.click()">
-                {{ batchFileName ? t("customers.replaceFile") : t("customers.chooseFile") }}
+              <button type="button" @click="closeBatchImport">{{ t("customers.cancel") }}</button>
+              <button
+                class="customer-access-primary"
+                type="button"
+                :disabled="!canSubmitCustomerBatchImport"
+                @click="submitBatchImport"
+              >
+                {{
+                  importingCustomers
+                    ? t("customers.importing")
+                    : t("customers.confirmImportCount", { count: activeCustomerBatchPreview.valid })
+                }}
               </button>
-            </div>
-
-            <div v-if="batchPreviewError" class="customer-import-file-error" role="alert">
-              <b>{{ t("customers.fileLevelError") }}</b>
-              <span>{{ batchPreviewError }}</span>
-            </div>
-            <div
-              v-for="problem in activeCustomerBatchPreview.globalErrors"
-              :key="`${problem.code}-${problem.value || ''}`"
-              class="customer-import-file-error"
-              role="alert"
-            >
-              <b>{{ t("customers.fileLevelError") }}</b>
-              <span>{{ customerImportIssueText(problem) }}</span>
-            </div>
-
-            <template v-if="activeCustomerBatchPreview.total">
-              <div class="customer-import-summary">
-                <span
-                  ><b>{{ activeCustomerBatchPreview.total }}</b
-                  ><small>{{ t("customers.importTotalRows") }}</small></span
-                >
-                <span class="is-valid"
-                  ><b>{{ activeCustomerBatchPreview.valid }}</b
-                  ><small>{{ t("customers.importValidRows") }}</small></span
-                >
-                <span class="is-invalid"
-                  ><b>{{ activeCustomerBatchPreview.invalid }}</b
-                  ><small>{{ t("customers.importInvalidRows") }}</small></span
-                >
-                <span class="is-warning"
-                  ><b>{{ activeCustomerBatchPreview.warningCount }}</b
-                  ><small>{{ t("customers.importWarningRows") }}</small></span
-                >
-              </div>
-
-              <div class="customer-import-preview">
-                <el-table
-                  :data="activeCustomerBatchPreview.rows"
-                  border
-                  max-height="440"
-                  class="standard-information-table customer-import-preview-table"
-                >
-                  <el-table-column :label="t('customers.excelRow')" width="82">
-                    <template #default="{ row }"
-                      ><b>#{{ row.rowNumber }}</b></template
-                    >
-                  </el-table-column>
-                  <el-table-column :label="t('customers.createAccount')" min-width="145">
-                    <template #default="{ row }"
-                      ><b>{{ row.username || "—" }}</b></template
-                    >
-                  </el-table-column>
-                  <el-table-column
-                    prop="displayName"
-                    :label="t('customers.createDisplayName')"
-                    min-width="150"
-                  />
-                  <el-table-column :label="t('customers.initialPassword')" min-width="160">
-                    <template #default="{ row }">
-                      <span
-                        class="customer-import-value-pill"
-                        :class="{ 'is-generated': !row.passwordProvided }"
-                      >
-                        {{
-                          row.passwordProvided
-                            ? t("customers.passwordProvided", { count: row.password.length })
-                            : t("customers.systemGenerated")
-                        }}
-                      </span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.clientCode')" min-width="135">
-                    <template #default="{ row }">{{
-                      row.clientCode || t("customers.systemGenerated")
-                    }}</template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.createPartyRole')" min-width="140">
-                    <template #default="{ row }">{{
-                      customerPartyRoleLabel(row.partyRole)
-                    }}</template>
-                  </el-table-column>
-                  <el-table-column :label="t('customers.validationMessage')" min-width="300">
-                    <template #default="{ row }">
-                      <span
-                        v-if="row.errors.length"
-                        class="customer-import-validation-pill is-error"
-                      >
-                        {{ t("customers.validationErrorCount", { count: row.errors.length }) }}
-                      </span>
-                      <span
-                        v-else-if="row.warnings.length"
-                        class="customer-import-validation-pill is-warning"
-                      >
-                        {{ t("customers.validationWarningCount", { count: row.warnings.length }) }}
-                      </span>
-                      <span v-else class="customer-import-ready">{{
-                        t("customers.importReady")
-                      }}</span>
-                      <div
-                        v-if="row.errors.length || row.warnings.length"
-                        class="customer-import-issues"
-                      >
-                        <span
-                          v-for="problem in row.errors"
-                          :key="`error-${problem.field}-${problem.code}`"
-                          class="is-error"
-                        >
-                          <b>{{ customerImportFieldLabel(problem.field) }}</b
-                          >{{ customerImportIssueText(problem) }}
-                        </span>
-                        <span
-                          v-for="problem in row.warnings"
-                          :key="`warning-${problem.field}-${problem.code}`"
-                          class="is-warning"
-                        >
-                          <b>{{ customerImportFieldLabel(problem.field) }}</b
-                          >{{ customerImportIssueText(problem) }}
-                        </span>
-                      </div>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-            </template>
-          </div>
-
-          <footer class="customer-dialog-actions customer-batch-actions">
-            <small v-if="activeCustomerBatchPreview.invalid">{{
-              t("customers.fixInvalidRowsBeforeImport")
-            }}</small>
-            <button type="button" @click="closeBatchImport">{{ t("customers.cancel") }}</button>
-            <button
-              class="customer-access-primary"
-              type="button"
-              :disabled="!canSubmitCustomerBatchImport"
-              @click="submitBatchImport"
-            >
-              {{
-                importingCustomers
-                  ? t("customers.importing")
-                  : t("customers.confirmImportCount", { count: activeCustomerBatchPreview.valid })
-              }}
-            </button>
-          </footer>
-        </section>
-      </div></Teleport
+            </footer>
+          </section>
+        </div></WorkspaceDialogTransition
+      ></Teleport
     >
   </div>
 </template>
 <script setup lang="ts">
+import WorkspaceDialogTransition from "../../../components/workspace/WorkspaceDialogTransition.vue";
 import { toRefs, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -339,7 +348,7 @@ const { onDialogKeydown } = useDialogFocus({
   left: 28px;
   right: 28px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-dialog);
   background: var(--color-surface-subtle);
   background-size: 200% 100%;
   content: "";
@@ -349,7 +358,7 @@ const { onDialogKeydown } = useDialogFocus({
   display: grid;
   padding: 14px;
   border: 1px solid #dbe6f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #f8fbfe;
   gap: 12px;
 }
@@ -365,7 +374,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-import-rules > header small {
   color: #73899e;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-import-rules > div {
   display: grid;
@@ -378,7 +387,7 @@ const { onDialogKeydown } = useDialogFocus({
   min-width: 0;
   padding: 10px;
   border: 1px solid #e2eaf2;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   gap: 9px;
   transition:
@@ -409,11 +418,11 @@ const { onDialogKeydown } = useDialogFocus({
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #3479ba;
   background: #eaf4ff;
   place-items: center;
-  font-size: 9px;
+  font-size: 12px;
 }
 .customer-import-rules article > span {
   display: grid;
@@ -422,11 +431,11 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-import-rules article b {
   color: #294b68;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-import-rules article small {
   color: #72879b;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.55;
 }
 .customer-batch-tabs {
@@ -439,11 +448,11 @@ const { onDialogKeydown } = useDialogFocus({
   min-height: 34px;
   padding: 6px 10px;
   border: 1px solid #d4e0ed;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #6c8196;
   background: #fff;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition:
     color 160ms ease,
@@ -468,7 +477,7 @@ const { onDialogKeydown } = useDialogFocus({
   min-height: 120px;
   padding: 10px;
   border: 1px solid #cfdeec;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   resize: vertical;
   font: inherit;
   font-size: 12px;
@@ -485,7 +494,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-batch-textarea small {
   color: #889aaf;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-import-dropzone {
   min-height: 116px;
@@ -497,7 +506,7 @@ const { onDialogKeydown } = useDialogFocus({
   place-items: center;
   padding: 28px 16px;
   border: 2px dashed #c8d6e2;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -525,17 +534,17 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-excel-dropzone small {
   color: #889aaf;
-  font-size: 11px;
+  font-size: 12px;
 }
 .customer-excel-dropzone button {
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid #cfdeec;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   color: #3a5572;
   background: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 .customer-import-preview {
@@ -556,7 +565,7 @@ const { onDialogKeydown } = useDialogFocus({
   padding: 10px 11px;
   border-bottom: 1px solid #e8eef4;
   color: #405c74;
-  font-size: 10px;
+  font-size: 12px;
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -567,7 +576,7 @@ const { onDialogKeydown } = useDialogFocus({
   z-index: 2;
   color: #49647c;
   background: #f4f7fa;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 .customer-import-preview th:nth-child(1) {
@@ -598,11 +607,11 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-ready {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: #237356;
   background: #eaf8f2;
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-import-value-pill.is-generated {
   color: #7f5d18;
@@ -611,9 +620,9 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-validation-pill {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 2px;
-  font-size: 9px;
-  font-weight: 750;
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 .customer-import-validation-pill.is-error {
@@ -633,8 +642,8 @@ const { onDialogKeydown } = useDialogFocus({
 .customer-import-issues > span {
   display: block;
   padding: 6px 8px;
-  border-radius: 4px;
-  font-size: 9px;
+  border-radius: var(--radius-control);
+  font-size: 12px;
   line-height: 1.5;
 }
 .customer-import-issues > .is-error {
@@ -695,3 +704,5 @@ const { onDialogKeydown } = useDialogFocus({
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceDialogStyles.css"></style>

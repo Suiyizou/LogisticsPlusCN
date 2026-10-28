@@ -127,7 +127,7 @@ onUnmounted(() => mobileQuery?.removeEventListener("change", updateViewport));
     margin: 0;
     padding: 8px 12px;
     border: 1px solid #ffffff30;
-    border-radius: 2px;
+    border-radius: var(--radius-control);
     color: white;
     background: transparent;
   }
@@ -137,7 +137,7 @@ onUnmounted(() => mobileQuery?.removeEventListener("change", updateViewport));
   }
   .sidebar-mobile-toggle span {
     margin-left: auto;
-    font-size: 11px;
+    font-size: 12px;
     color: #c0d3de;
   }
 }

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
 import type { AdminEmployee, AdminWorkflowPorts } from "../../types/adminWorkflows";
@@ -35,21 +37,21 @@ function lastLogin(value: string | null | undefined) {
 <template>
   <section class="admin-page-pane">
     <article class="admin-panel admin-employee-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Account List</p>
-          <h2>{{ t("adminWorkflow.employeeHeading") }}</h2>
-        </div>
-        <div class="admin-inline-actions">
-          <span>{{ t("admin.console.accountCount", { count: total }) }}</span>
-          <button class="primary" type="button" :disabled="busy" @click="emit('create')">
-            {{ t("adminWorkflow.newEmployee") }}
-          </button>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ t("adminWorkflow.refresh") }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ t("adminWorkflow.employeeHeading") }}</template
+        ><template #eyebrow>Account List</template
+        ><template #actions
+          ><div class="admin-inline-actions">
+            <span>{{ t("admin.console.accountCount", { count: total }) }}</span>
+            <button class="primary" type="button" :disabled="busy" @click="emit('create')">
+              {{ t("adminWorkflow.newEmployee") }}
+            </button>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ t("adminWorkflow.refresh") }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table :data="rows" row-key="id" stripe class="standard-information-table">
           <EmployeeColumn
@@ -120,7 +122,9 @@ function lastLogin(value: string | null | undefined) {
               </div>
             </template>
           </EmployeeColumn>
-          <template #empty>{{ t("admin.employee.empty") }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ t("admin.employee.empty") }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -147,3 +151,5 @@ function lastLogin(value: string | null | undefined) {
   white-space: nowrap;
 }
 </style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

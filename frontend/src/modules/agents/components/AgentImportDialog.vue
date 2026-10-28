@@ -7,7 +7,7 @@
       width="min(940px, 94vw)"
       :close-on-click-modal="false"
       :close-on-press-escape="!importingAgents"
-      class="square-dialog agent-batch-dialog"
+      class="square-dialog agent-batch-dialog workspace-el-dialog"
       :show-close="!importingAgents"
     >
       <div class="agent-batch-intro">
@@ -21,6 +21,10 @@
         </el-button>
       </div>
       <div
+        role="button"
+        tabindex="0"
+        @keydown.enter.prevent="agentBatchFileInput?.click()"
+        @keydown.space.prevent="agentBatchFileInput?.click()"
         v-loading="parsingAgentFile"
         class="agent-import-dropzone"
         :class="{ 'has-file': agentBatchFileName, 'is-dragover': agentBatchDropzoneActive }"
@@ -181,7 +185,7 @@ const { agentBatchRowClass } = workspace.formatters;
   margin-bottom: 18px;
   padding: 15px;
   border: 1px solid #d6e5f2;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
 }
 .agent-batch-intro {
@@ -200,14 +204,14 @@ const { agentBatchRowClass } = workspace.formatters;
 .agent-batch-intro p {
   margin: 0;
   color: #73899d;
-  font-size: 10px;
+  font-size: 12px;
 }
 .agent-import-dropzone {
   display: grid;
   min-height: 148px;
   padding: 22px;
   border: 1px dashed #abc8df;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   color: #58758e;
   background: var(--color-surface-subtle);
   place-items: center;
@@ -235,7 +239,7 @@ const { agentBatchRowClass } = workspace.formatters;
   display: grid;
   width: 38px;
   height: 38px;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   color: #2f78b4;
   background: #e5f2fd;
   place-items: center;
@@ -247,7 +251,7 @@ const { agentBatchRowClass } = workspace.formatters;
 }
 .agent-import-dropzone small {
   color: #8498aa;
-  font-size: 9px;
+  font-size: 12px;
 }
 .agent-batch-summary {
   display: grid;
@@ -260,7 +264,7 @@ const { agentBatchRowClass } = workspace.formatters;
   min-height: 62px;
   padding: 10px 12px;
   border: 1px solid #dce6ef;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #f7fafc;
   align-content: center;
   gap: 2px;
@@ -271,7 +275,7 @@ const { agentBatchRowClass } = workspace.formatters;
 }
 .agent-batch-summary small {
   color: #8397aa;
-  font-size: 9px;
+  font-size: 12px;
 }
 .agent-batch-summary .is-valid {
   border-color: #bde3d2;
@@ -296,7 +300,7 @@ const { agentBatchRowClass } = workspace.formatters;
 }
 .agent-password-mask {
   color: #667f94;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--font-ui);
   letter-spacing: 0.08em;
 }
 .agent-row-errors {
@@ -306,10 +310,10 @@ const { agentBatchRowClass } = workspace.formatters;
 }
 .agent-row-errors span {
   padding: 4px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #9c3d4b;
   background: #fff0f2;
-  font-size: 9px;
+  font-size: 12px;
 }
 @media (max-width: 680px) {
   .agent-batch-intro {
@@ -321,3 +325,5 @@ const { agentBatchRowClass } = workspace.formatters;
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

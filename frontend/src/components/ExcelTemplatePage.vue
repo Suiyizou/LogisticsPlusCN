@@ -1,9 +1,10 @@
 <template>
   <section class="algorithm-page excel-template-page" data-i18n-ignore>
-    <div class="page-title">
-      <p>{{ ui("excel.importCargoEyebrow") }}</p>
-      <h2>{{ ui("excel.importCargoTitle") }}</h2>
-    </div>
+    <WorkspacePageHeader
+      :title="ui('excel.importCargoTitle')"
+      :eyebrow="ui('excel.importCargoEyebrow')"
+      :description="wt('importCargoHint')"
+    />
 
     <div class="excel-import-mode-switch" role="tablist" :aria-label="ui('excel.importModeChoice')">
       <el-button
@@ -413,7 +414,10 @@
 
             <div class="recognition-import-row">
               <el-form-item :label="ui('excel.importMode')">
-                <el-select v-model="importMode">
+                <el-select
+                  popper-class="business-select-popper workspace-select-popper"
+                  v-model="importMode"
+                >
                   <el-option :label="ui('excel.replaceCargo')" value="replace" />
                   <el-option :label="ui('excel.appendCargo')" value="append" />
                 </el-select>
@@ -507,6 +511,7 @@
       <p v-else class="excel-ok">{{ ui("excel.allRowsValid") }}</p>
       <div class="excel-preview-compact-controls">
         <el-select
+          popper-class="business-select-popper workspace-select-popper"
           v-if="workbook?.sheets?.length > 1"
           v-model="selectedSheetName"
           :aria-label="ui('excel.worksheet')"
@@ -519,7 +524,11 @@
             :value="sheet.name"
           />
         </el-select>
-        <el-select v-model="importMode" :aria-label="ui('excel.importMode')">
+        <el-select
+          popper-class="business-select-popper workspace-select-popper"
+          v-model="importMode"
+          :aria-label="ui('excel.importMode')"
+        >
           <el-option :label="ui('excel.replaceCargo')" value="replace" />
           <el-option :label="ui('excel.appendCargo')" value="append" />
         </el-select>
@@ -612,7 +621,7 @@
 
     <el-dialog
       v-model="sourcePreviewOpen"
-      class="planner-dialog source-workbook-dialog"
+      class="v2-import-dialog planner-dialog source-workbook-dialog workspace-el-dialog"
       width="min(1180px, calc(100vw - 32px))"
       destroy-on-close
     >
@@ -623,7 +632,10 @@
         </div>
       </template>
       <div class="source-preview-toolbar">
-        <el-select v-model="sourcePreviewSheetName">
+        <el-select
+          popper-class="business-select-popper workspace-select-popper"
+          v-model="sourcePreviewSheetName"
+        >
           <el-option
             v-for="sheet in sourcePreviewWorkbook?.sheets || []"
             :key="sheet.name"
@@ -663,7 +675,7 @@
 
     <el-dialog
       v-model="workspaceFilesOpen"
-      class="planner-dialog workspace-files-dialog"
+      class="v2-import-dialog planner-dialog workspace-files-dialog workspace-el-dialog"
       width="min(1080px, calc(100vw - 32px))"
       destroy-on-close
     >
@@ -741,8 +753,8 @@
     <el-dialog
       v-if="recognitionReviewDialogOpen"
       :model-value="true"
-      class="planner-dialog recognition-review-dialog"
-      width="min(1680px, 94vw)"
+      class="v2-import-dialog planner-dialog recognition-review-dialog workspace-el-dialog"
+      width="min(1280px, calc(100vw - 32px))"
       align-center
       destroy-on-close
       @close="closeRecognitionReviewDialog"
@@ -982,7 +994,7 @@
     <el-dialog
       v-if="suggestionRow"
       :model-value="true"
-      class="planner-dialog"
+      class="v2-import-dialog planner-dialog workspace-el-dialog"
       width="720px"
       align-center
       destroy-on-close
@@ -1056,7 +1068,10 @@
           />
         </el-form-item>
         <el-form-item :label="ui('cargo.packageType')">
-          <el-select v-model="suggestionForm.type">
+          <el-select
+            popper-class="business-select-popper workspace-select-popper"
+            v-model="suggestionForm.type"
+          >
             <el-option :label="ui('cargo.normal')" value="normal" />
             <el-option :label="ui('cargo.pallet')" value="pallet" />
           </el-select>
@@ -1085,7 +1100,7 @@
     <el-dialog
       v-if="recognitionEditIndex >= 0"
       :model-value="true"
-      class="planner-dialog"
+      class="v2-import-dialog planner-dialog workspace-el-dialog"
       width="720px"
       align-center
       destroy-on-close
@@ -1156,6 +1171,7 @@
         </el-form-item>
         <el-form-item :label="ui('cargo.packageType')">
           <el-select
+            popper-class="business-select-popper workspace-select-popper"
             v-model="recognitionEditForm.type"
             :disabled="recognitionEditIssueCode === 'PALLET_DIMENSIONS_MISSING'"
           >
@@ -1191,6 +1207,8 @@
 </template>
 
 <script setup>
+import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
+import { wt } from "./workspace/workspaceCopy";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { EditPen, UploadFilled } from "@element-plus/icons-vue";
 import { aggregateCargos, validateCargo } from "../services/excelImport";
@@ -3430,3 +3448,117 @@ function cargoKey(cargo, index = "") {
   return `${index}-${packingIdentityKey(cargo)}-${cargo.name}-${cargo.lengthCm}-${cargo.widthCm}-${cargo.heightCm}-${cargo.quantity}-${cargo.weightKg}-${cargo.type}-${Boolean(cargo.nonStack)}-${Boolean(cargo.keepUpright)}`;
 }
 </script>
+
+<style scoped>
+.excel-template-page {
+  gap: 24px;
+}
+.excel-import-mode-switch {
+  display: flex;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.excel-import-mode-switch .el-button {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+.excel-import-card {
+  border-radius: var(--radius-card);
+}
+.excel-import-hero strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+.excel-import-hero p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+.excel-drop-zone {
+  border-radius: var(--radius-card);
+}
+.excel-drop-copy strong {
+  font-size: 18px;
+}
+.excel-drop-copy span {
+  font-size: 13px;
+}
+.excel-summary-grid span {
+  font-size: 12px;
+}
+.excel-summary-grid strong {
+  font-weight: 500;
+}
+.excel-workspace-layout {
+  gap: 24px;
+}
+.template-table {
+  font-size: 14px;
+}
+.template-table th {
+  font-size: 13px;
+}
+.template-table td {
+  min-height: 48px;
+  padding-block: 12px;
+}
+.import-file-queue {
+  border-radius: var(--radius-card);
+}
+.import-file-queue-item {
+  border-radius: var(--radius-control);
+  font-size: 14px;
+}
+.recognition-review-notice,
+.recognition-review-issue,
+.workspace-file-row small {
+  font-size: 13px;
+  line-height: 1.7;
+}
+:global(.v2-import-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 40px);
+  border-radius: var(--radius-dialog);
+  overflow: hidden;
+}
+:global(.v2-import-dialog .el-dialog__header),
+:global(.v2-import-dialog .el-dialog__footer) {
+  flex: none;
+}
+:global(.v2-import-dialog .el-dialog__body) {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 760px) {
+  .excel-workspace-layout {
+    grid-template-columns: 1fr;
+  }
+  .excel-import-hero {
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+  .excel-import-actions {
+    flex-wrap: wrap;
+  }
+  .excel-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recognition-review-three-lines {
+    grid-template-columns: 1fr;
+  }
+  .workspace-file-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .workspace-file-actions {
+    flex-wrap: wrap;
+  }
+}
+</style>
+
+<style scoped src="./workspace/workspaceElementDialog.css"></style>

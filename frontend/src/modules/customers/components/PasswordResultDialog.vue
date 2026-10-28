@@ -1,57 +1,66 @@
 <template>
   <div data-i18n-ignore>
     <Teleport to="body"
-      ><div
-        v-if="passwordResetResult.open"
-        class="customer-code-overlay"
-        role="presentation"
-        @keydown="onDialogKeydown"
-        @click.self="closePasswordResetResult"
-      >
-        <section
-          class="customer-code-dialog password-result-dialog"
-          ref="dialogElement"
-          tabindex="-1"
-          role="dialog"
-          :aria-busy="false"
-          aria-modal="true"
-          :aria-label="t('customers.passwordResetResultTitle')"
+      ><WorkspaceDialogTransition
+        ><div
+          v-if="passwordResetResult.open"
+          class="customer-code-overlay"
+          role="presentation"
+          @keydown="onDialogKeydown"
+          @click.self="closePasswordResetResult"
         >
-          <span class="customer-code-kicker">{{ t("customers.dialogKickerSecureReset") }}</span>
-          <h2>{{ t("customers.passwordResetResultTitle") }}</h2>
-          <p>{{ t("customers.passwordResetResultHint") }}</p>
-          <dl class="password-result-grid">
-            <div>
-              <dt>{{ t("customers.username") }}</dt>
-              <dd>{{ passwordResetResult.username }}</dd>
+          <section
+            class="customer-code-dialog password-result-dialog workspace-modal--confirm"
+            ref="dialogElement"
+            tabindex="-1"
+            role="dialog"
+            :aria-busy="false"
+            aria-modal="true"
+            :aria-label="t('customers.passwordResetResultTitle')"
+          >
+            <span class="customer-code-kicker">{{ t("customers.dialogKickerSecureReset") }}</span>
+            <h2>{{ t("customers.passwordResetResultTitle") }}</h2>
+            <p>{{ t("customers.passwordResetResultHint") }}</p>
+            <dl class="password-result-grid">
+              <div>
+                <dt>{{ t("customers.username") }}</dt>
+                <dd>{{ passwordResetResult.username }}</dd>
+              </div>
+              <div>
+                <dt>{{ t("customers.newPassword") }}</dt>
+                <dd>
+                  <code>{{ passwordResetResult.password }}</code>
+                </dd>
+              </div>
+            </dl>
+            <div class="customer-dialog-actions">
+              <button
+                type="button"
+                :disabled="passwordResetResult.copying"
+                @click="copyPasswordResetResult"
+              >
+                {{
+                  passwordResetResult.copied
+                    ? t("customers.copied")
+                    : t("customers.copyCredentials")
+                }}
+              </button>
+              <button
+                class="customer-access-primary"
+                type="button"
+                @click="closePasswordResetResult"
+              >
+                {{ t("customers.close") }}
+              </button>
             </div>
-            <div>
-              <dt>{{ t("customers.newPassword") }}</dt>
-              <dd>
-                <code>{{ passwordResetResult.password }}</code>
-              </dd>
-            </div>
-          </dl>
-          <div class="customer-dialog-actions">
-            <button
-              type="button"
-              :disabled="passwordResetResult.copying"
-              @click="copyPasswordResetResult"
-            >
-              {{
-                passwordResetResult.copied ? t("customers.copied") : t("customers.copyCredentials")
-              }}
-            </button>
-            <button class="customer-access-primary" type="button" @click="closePasswordResetResult">
-              {{ t("customers.close") }}
-            </button>
-          </div>
-        </section>
-      </div></Teleport
+          </section>
+        </div></WorkspaceDialogTransition
+      ></Teleport
     >
   </div>
 </template>
 <script setup lang="ts">
+import WorkspaceDialogTransition from "../../../components/workspace/WorkspaceDialogTransition.vue";
 import { toRefs, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -90,17 +99,19 @@ const { onDialogKeydown } = useDialogFocus({
   gap: 12px;
   padding: 11px 12px;
   border: 1px solid #dce6ef;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #f7fafc;
 }
 .password-result-grid dt {
   color: #657b90;
-  font-weight: 700;
+  font-weight: 600;
 }
 .password-result-grid dd {
   margin: 0;
   color: #17314a;
-  font-weight: 800;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceDialogStyles.css"></style>

@@ -88,7 +88,7 @@ function dismiss() {
   border-radius: var(--radius-control);
   background: var(--color-destructive);
   color: #fff;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .global-api-error-content {
@@ -114,11 +114,14 @@ function dismiss() {
   display: block;
   margin-top: 5px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .global-api-error-notice button {
   align-self: start;
+  width: 36px;
+  min-height: 36px;
+  padding: 4px;
   border: 0;
   background: transparent;
   color: var(--color-destructive);
@@ -138,5 +141,15 @@ function dismiss() {
 .global-api-notice-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-api-notice-enter-active,
+  .global-api-notice-leave-active {
+    transition: opacity 80ms linear;
+  }
+  .global-api-notice-enter-from,
+  .global-api-notice-leave-to {
+    transform: none;
+  }
 }
 </style>

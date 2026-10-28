@@ -4,6 +4,11 @@ import {
   isPublicTrackingRouteUnavailable
 } from "./tracking-response.mjs";
 import { localReturnPath } from "./local-return-path.mjs";
+import {
+  installTrackingPresentation,
+  refreshTrackingControls,
+  requestTrackingConfirmation
+} from "./tracking-presentation.mjs?v=maritime-v2-20261028-r3";
 
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 
@@ -956,6 +961,8 @@ const MESSAGES = {
       "The database stores the unified snapshot only, not the carrier's raw payload.",
     "common.notProvided": "Not provided",
     "common.cancel": "Cancel",
+    "common.confirmTitle": "Confirm action",
+    "common.confirm": "Continue",
     "common.save": "Save",
     "cache.live": "Live result",
     "cache.server": "Server cache",
@@ -1531,6 +1538,8 @@ const MESSAGES = {
     "raw.cacheNotice": "数据库仅保存统一快照，不保存船司原始报文。",
     "common.notProvided": "上游未提供",
     "common.cancel": "取消",
+    "common.confirmTitle": "请确认操作",
+    "common.confirm": "继续",
     "common.save": "保存",
     "cache.live": "实时查询",
     "cache.server": "服务端缓存",
@@ -3365,6 +3374,8 @@ function openRelatedFilesDrawer() {
   relatedFilesButton.setAttribute("aria-expanded", "true");
   document.body.classList.add("related-files-open");
   requestAnimationFrame(() => {
+    // A previously closed drawer is inert until its observer runs.
+    relatedFilesDrawer.inert = false;
     relatedFilesBackdrop.classList.add("is-open");
     relatedFilesDrawer.classList.add("is-open");
     relatedFilesDrawer.focus({ preventScroll: true });
@@ -4153,31 +4164,40 @@ if (filePreviewDialog) {
 }
 
 async function deleteRelatedFile(file) {
+  const confirmationSession = fileSessionFingerprint(readFileSession());
+  const confirmationShipment = relatedFilesShipmentId;
   if (
     !file?.id ||
     !file.canDelete ||
-    !window.confirm(t("files.confirmDelete", { name: file.originalFileName }))
+    !(await confirmTrackingAction(t("files.confirmDelete", { name: file.originalFileName })))
   ) {
-    return;
+    return false;
   }
   const session = readFileSession();
+  if (
+    confirmationSession !== fileSessionFingerprint(session) ||
+    confirmationShipment !== relatedFilesShipmentId
+  )
+    return false;
   synchronizeRelatedFilesSession(session);
-  if (!session.token) return;
+  if (!session.token) return false;
   const sessionFingerprint = relatedFilesSessionFingerprint;
   try {
     await requestRelatedFilesApi(shipmentFilePath(session, file.id), { method: "DELETE", session });
-    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return false;
     relatedFilesItems = relatedFilesItems.filter((item) => item.id !== file.id);
     setRelatedFilesUploadMessage();
     renderRelatedFilesDrawer();
+    return true;
   } catch (error) {
-    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return;
+    if (!isCurrentRelatedFilesSession(sessionFingerprint)) return false;
     if (error?.status !== 401) {
       setRelatedFilesUploadMessage(
         t("files.deleteFailed", { message: error?.message || t("error.generic") }),
         "error"
       );
     }
+    return false;
   }
 }
 
@@ -4572,6 +4592,22 @@ function populateSelect(select, values, labeler, selectedValue) {
   select.disabled = values.length === 1;
 }
 
+function confirmTrackingAction(message, { danger = true, confirmKey = "common.confirm" } = {}) {
+  return requestTrackingConfirmation({
+    title: t("common.confirmTitle"),
+    message,
+    confirmLabel: t(confirmKey),
+    cancelLabel: t("common.cancel"),
+    danger
+  });
+}
+
+function setDocumentEditorMessage(message = "") {
+  const notice = document.querySelector("#document-editor-message");
+  notice.textContent = message;
+  notice.hidden = !message;
+}
+
 function openDocumentEditor(code) {
   if (!currentPayload?.snapshot) return;
   const definition = documentDefinition(code);
@@ -4589,6 +4625,7 @@ function openDocumentEditor(code) {
     ? t("documents.currentFile", { name: existing.fileName })
     : "";
   fileInput.value = "";
+  setDocumentEditorMessage();
   populateSelect(
     document.querySelector("#document-uploader-input"),
     definition.uploaders,
@@ -4688,14 +4725,18 @@ function renderDocumentDrawer(snapshot = currentPayload?.snapshot) {
       deleteButton.textContent = t("documents.delete");
       deleteButton.addEventListener("click", async () => {
         if (existing.relatedFile) {
-          await deleteRelatedFile(existing.relatedFile);
+          if (!(await deleteRelatedFile(existing.relatedFile))) return;
           const nextMetadata = { ...documentMetadataForSnapshot(snapshot) };
           delete nextMetadata[definition.code];
           writeSupplementaryRecord(DOCUMENT_METADATA_PREFIX, snapshot, nextMetadata);
           renderDocumentDrawer(snapshot);
           return;
         }
-        if (!window.confirm(t("documents.confirmDelete", { name: existing.fileName }))) return;
+        if (
+          !(await confirmTrackingAction(t("documents.confirmDelete", { name: existing.fileName })))
+        )
+          return;
+        if (currentPayload?.snapshot !== snapshot) return;
         const nextMetadata = { ...documentMetadataForSnapshot(snapshot) };
         delete nextMetadata[definition.code];
         writeSupplementaryRecord(DOCUMENT_METADATA_PREFIX, snapshot, nextMetadata);
@@ -7153,9 +7194,22 @@ async function setOverseaAgentShipmentFollowing(entry, following) {
   }
 }
 
-async function refreshOverseaAgentShipment(entry, { render = true, reportError = true } = {}) {
-  const session = readFileSession();
-  if (!isOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing) return false;
+function isCurrentOverseaAgentSession(session) {
+  const current = readFileSession();
+  return Boolean(
+    session?.token &&
+    isOverseaAgentSession(session) &&
+    isOverseaAgentSession(current) &&
+    fileSessionFingerprint(session) === fileSessionFingerprint(current)
+  );
+}
+
+async function refreshOverseaAgentShipment(
+  entry,
+  { render = true, reportError = true, session = readFileSession() } = {}
+) {
+  if (!isCurrentOverseaAgentSession(session) || !entry?.shipmentId || entry.refreshing)
+    return false;
   entry.refreshing = true;
   entry.refreshError = "";
   clearError();
@@ -7173,6 +7227,7 @@ async function refreshOverseaAgentShipment(entry, { render = true, reportError =
       }
     );
     const payload = await response.json().catch(() => ({}));
+    if (!isCurrentOverseaAgentSession(session)) return false;
     if (response.status === 401) {
       entry.refreshError = trackingResponseMessage(payload, response);
       clearFileSession(session, { expired: true });
@@ -7186,6 +7241,7 @@ async function refreshOverseaAgentShipment(entry, { render = true, reportError =
     }
     updated = true;
   } catch (error) {
+    if (!isCurrentOverseaAgentSession(session)) return false;
     entry.refreshError = error?.message || t("error.generic");
     if (reportError) {
       showError(
@@ -7196,7 +7252,7 @@ async function refreshOverseaAgentShipment(entry, { render = true, reportError =
     }
   } finally {
     entry.refreshing = false;
-    if (render) renderHistory();
+    if (render && isCurrentOverseaAgentSession(session)) renderHistory();
   }
   return updated;
 }
@@ -7487,13 +7543,13 @@ function isRefreshableOverseaAgentShipment(item) {
   return !isHistoryFinished(item);
 }
 
-async function loadAllRefreshableOverseaAgentShipments() {
-  const session = readFileSession();
-  if (!isOverseaAgentSession(session) || !session.token) return [];
+async function loadAllRefreshableOverseaAgentShipments(session = readFileSession()) {
+  if (!isCurrentOverseaAgentSession(session)) return [];
   const entries = [];
   let page = 1;
   let totalPages = 1;
   do {
+    if (!isCurrentOverseaAgentSession(session)) return [];
     const query = new URLSearchParams({
       page: String(page),
       pageSize: "100",
@@ -7504,6 +7560,7 @@ async function loadAllRefreshableOverseaAgentShipments() {
       headers: { "X-Customer-Token": session.token }
     });
     const payload = await response.json().catch(() => ({}));
+    if (!isCurrentOverseaAgentSession(session)) return [];
     if (response.status === 401) {
       clearFileSession(session, { expired: true });
       return [];
@@ -7658,8 +7715,12 @@ function closeAgentUpdateTaskDialog() {
 
 async function performOverseaAgentShipmentRefresh(
   entries,
-  { alreadyBusy = false, mode = "selected" } = {}
+  { alreadyBusy = false, mode = "selected", session = readFileSession() } = {}
 ) {
+  if (!isCurrentOverseaAgentSession(session)) {
+    if (alreadyBusy) resetAgentBulkRefreshBusy();
+    return;
+  }
   if ((agentBulkUpdating && !alreadyBusy) || entries.length === 0) return;
   agentBulkUpdating = true;
   agentBulkUpdateMode = mode;
@@ -7673,7 +7734,7 @@ async function performOverseaAgentShipmentRefresh(
   let interrupted = false;
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
-    if (!isOverseaAgentSession()) {
+    if (!isCurrentOverseaAgentSession(session)) {
       interrupted = true;
       for (let remaining = index; remaining < entries.length; remaining += 1) {
         const taskItem = agentUpdateTask?.items[remaining];
@@ -7692,8 +7753,10 @@ async function performOverseaAgentShipmentRefresh(
     renderHistory();
     const updated = await refreshOverseaAgentShipment(entry, {
       render: false,
-      reportError: false
+      reportError: false,
+      session
     });
+    if (!isCurrentOverseaAgentSession(session)) interrupted = true;
     if (updated) {
       success += 1;
       if (taskItem) taskItem.status = "SUCCEEDED";
@@ -7721,19 +7784,30 @@ async function performOverseaAgentShipmentRefresh(
   }
   renderAgentUpdateTaskDialog();
   agentManagementSelectedKeys.clear();
-  await loadCustomerAssignedHistory();
+  if (isCurrentOverseaAgentSession(session)) await loadCustomerAssignedHistory();
+  else renderHistory();
 }
 
 async function refreshSelectedOverseaAgentShipments() {
   if (agentBulkUpdating) return;
+  const session = readFileSession();
+  if (!isCurrentOverseaAgentSession(session)) return;
   const selectedEntries = filteredAgentManagementHistory(readHistory()).filter((entry) =>
     agentManagementSelectedKeys.has(historyShipmentKey(entry))
   );
-  await performOverseaAgentShipmentRefresh(selectedEntries, { mode: "selected" });
+  await performOverseaAgentShipmentRefresh(selectedEntries, { mode: "selected", session });
+}
+
+function resetAgentBulkRefreshBusy() {
+  agentBulkUpdating = false;
+  agentBulkUpdateMode = "";
+  renderHistory();
 }
 
 async function refreshAllOverseaAgentShipments() {
   if (agentBulkUpdating) return;
+  const session = readFileSession();
+  if (!isCurrentOverseaAgentSession(session)) return;
   agentBulkUpdating = true;
   agentBulkUpdateMode = "all";
   agentBulkUpdateResult = null;
@@ -7741,27 +7815,34 @@ async function refreshAllOverseaAgentShipments() {
   clearError();
   renderHistory();
   try {
-    const entries = await loadAllRefreshableOverseaAgentShipments();
-    if (entries.length === 0) {
-      showError(t("agent.noRefreshableShipments"), "warning");
-      agentBulkUpdating = false;
-      agentBulkUpdateMode = "";
-      renderHistory();
+    const entries = await loadAllRefreshableOverseaAgentShipments(session);
+    if (!isCurrentOverseaAgentSession(session)) {
+      resetAgentBulkRefreshBusy();
       return;
     }
-    if (!window.confirm(t("agent.refreshAllConfirm", { count: entries.length }))) {
-      agentBulkUpdating = false;
-      agentBulkUpdateMode = "";
-      renderHistory();
+    if (entries.length === 0) {
+      showError(t("agent.noRefreshableShipments"), "warning");
+      resetAgentBulkRefreshBusy();
+      return;
+    }
+    if (
+      !(await confirmTrackingAction(t("agent.refreshAllConfirm", { count: entries.length }), {
+        danger: false,
+        confirmKey: "agent.refreshAll"
+      })) ||
+      !isCurrentOverseaAgentSession(session)
+    ) {
+      resetAgentBulkRefreshBusy();
       return;
     }
     await performOverseaAgentShipmentRefresh(entries, {
       alreadyBusy: true,
-      mode: "all"
+      mode: "all",
+      session
     });
   } catch (error) {
-    agentBulkUpdating = false;
-    agentBulkUpdateMode = "";
+    resetAgentBulkRefreshBusy();
+    if (!isCurrentOverseaAgentSession(session)) return;
     showError(
       t("agent.updateFailed", {
         message: error?.message || t("error.generic")
@@ -8121,11 +8202,11 @@ function setCmaSessionMessage(message = "", variant = "info") {
 
 function renderCmaSessionPanel() {
   const selected = carrierSelect.value === "CMA";
-  cmaSessionPanel.hidden = !selected;
-  if (!selected) return;
-
   const session = readFileSession();
   const canManage = canManageFileVisibility(session);
+  cmaSessionPanel.hidden = !selected || !canManage;
+  if (!selected) return;
+
   cmaSessionPermission.hidden = canManage;
   cmaSessionForm.hidden = !canManage;
   if (!canManage) {
@@ -8230,7 +8311,12 @@ async function saveCmaSession() {
 async function clearCmaSession() {
   const session = readFileSession();
   if (!canManageFileVisibility(session) || cmaSessionLoading) return;
-  if (!window.confirm(t("cmaSession.clearConfirm"))) return;
+  if (!(await confirmTrackingAction(t("cmaSession.clearConfirm")))) return;
+  if (
+    fileSessionFingerprint(session) !== fileSessionFingerprint(readFileSession()) ||
+    cmaSessionLoading
+  )
+    return;
   cmaSessionLoading = true;
   renderCmaSessionPanel();
   try {
@@ -8300,6 +8386,7 @@ function updateCarrierUI({ resetResult = false } = {}) {
     checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
   }
   setLoading(loading);
+  refreshTrackingControls();
 
   if (
     resetResult &&
@@ -8970,8 +9057,9 @@ batchStopButton?.addEventListener("click", async () => {
   }
 });
 
-batchClearButton?.addEventListener("click", () => {
-  if (batchRunning || !window.confirm(t("batch.confirmClear"))) return;
+batchClearButton?.addEventListener("click", async () => {
+  if (batchRunning || !(await confirmTrackingAction(t("batch.confirmClear")))) return;
+  if (batchRunning) return;
   batchState = null;
   batchImportNotice = null;
   hideBatchColumnPreview();
@@ -9375,7 +9463,8 @@ documentEditorForm.addEventListener("submit", async (event) => {
   const file = document.querySelector("#document-file-input").files?.[0] ?? null;
 
   if (!file && !existing) {
-    window.alert(t("documents.chooseFile"));
+    setDocumentEditorMessage(t("documents.chooseFile"));
+    document.querySelector("#document-file-input").focus();
     return;
   }
 
@@ -9396,7 +9485,9 @@ documentEditorForm.addEventListener("submit", async (event) => {
       });
       await loadRelatedFiles();
     } catch (error) {
-      window.alert(t("files.uploadFailed", { message: error?.message || t("error.generic") }));
+      setDocumentEditorMessage(
+        t("files.uploadFailed", { message: error?.message || t("error.generic") })
+      );
       return;
     }
   }
@@ -9562,3 +9653,6 @@ void refreshChannelStatus();
 setInterval(() => {
   void refreshChannelStatus();
 }, 60_000);
+
+// Progressive controls preserve the native form values and original change listeners.
+installTrackingPresentation();

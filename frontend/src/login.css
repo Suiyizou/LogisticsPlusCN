@@ -18,7 +18,7 @@
   gap: 70px;
   position: relative;
   padding: 45px;
-  background: var(--color-primary) url("/brand/harbor.png") 60% center / cover;
+  background: var(--color-primary) url("/brand/v2/maritime-1280.webp") 66% center / cover;
   color: white;
 }
 .app-login-shell .app-login-photo::before {
@@ -42,7 +42,7 @@
 .app-login-shell .app-login-eyebrow {
   display: block;
   margin-bottom: 20px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 2px;
   color: #d7e3e8;
 }
@@ -55,7 +55,7 @@
 }
 .app-login-shell .app-login-photo > small {
   color: #d2e0e7;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1px;
 }
 .app-login-shell .app-login-side {
@@ -83,13 +83,13 @@
   color: var(--color-accent);
 }
 .app-login-shell .app-login-form {
-  width: min(390px, 100%);
+  width: min(420px, 100%);
   margin: auto;
   padding: 60px 0;
 }
 .app-login-shell .app-login-title h1 {
   margin: 0 0 15px;
-  font-size: 35px;
+  font-size: 36px;
   line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.8px;
@@ -97,7 +97,7 @@
 .app-login-shell .app-login-title p {
   margin: 0;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.7;
 }
 .app-login-shell .app-login-route-switch {
@@ -269,7 +269,7 @@
   justify-content: space-between;
   gap: 20px;
   color: var(--color-quiet);
-  font-size: 10px;
+  font-size: 12px;
 }
 @keyframes auth-spin {
   to {

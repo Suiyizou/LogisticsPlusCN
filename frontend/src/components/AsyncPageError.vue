@@ -14,9 +14,11 @@
 <script setup>
 import { useI18n } from "vue-i18n";
 import BrandLockup from "./brand/BrandLockup.vue";
+import { retryFailedPage } from "../public/retryNavigation.js";
 defineOptions({ inheritAttrs: false });
+const props = defineProps({ retryPath: { type: String, default: null } });
 const { t } = useI18n();
-const reload = () => window.location.reload();
+const reload = () => retryFailedPage(props.retryPath);
 </script>
 <style scoped>
 .async-page-error {
@@ -38,14 +40,14 @@ const reload = () => window.location.reload();
   text-align: center;
 }
 .async-page-error h1 {
-  font-size: 24px;
+  font-size: 26px;
   margin: 32px 0 0;
   font-weight: 600;
 }
 .async-page-error p {
   margin: 12px 0 26px;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.7;
 }
 .async-page-error section > div {

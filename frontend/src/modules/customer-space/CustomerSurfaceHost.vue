@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../../components/workspace/workspaceMotion.css";
 import { computed, onMounted, onUnmounted, provide, reactive, readonly, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { configuredPlatformModules } from "../configuredRegistry.js";
@@ -18,6 +19,7 @@ import { useCustomerSurface } from "./useCustomerSurface.js";
 import { currentLocale, t } from "../../i18n";
 import { useWorkspaceTitle } from "../../components/workspace/useWorkspaceTitle";
 import BrandLockup from "../../components/brand/BrandLockup.vue";
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 const api = createCustomerApi({
   readToken: storedCustomerToken,
   t,
@@ -93,28 +95,34 @@ onUnmounted(() => {
       </button>
     </header>
     <p v-if="!checked || busy" role="status">{{ t("customerSurface.checking") }}</p>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <form v-if="checked && !user" @submit.prevent="login">
-      <h1>{{ t("customerSurface.login") }}</h1>
-      <p>{{ t("customerSurface.loginIntro") }}</p>
-      <label
-        >{{ t("customerSurface.account")
-        }}<input v-model="credentials.username" autocomplete="username" required
-      /></label>
-      <label
-        >{{ t("customerSurface.password")
-        }}<input
-          v-model="credentials.password"
-          type="password"
-          autocomplete="current-password"
-          required
-      /></label>
-      <label
-        >{{ t("customerSurface.code")
-        }}<input v-model="credentials.customerCode" required minlength="4"
-      /></label>
-      <button :disabled="busy" type="submit">{{ t("customerSurface.submit") }}</button>
-    </form>
+    <p v-if="error && user" role="alert">{{ error }}</p>
+    <Transition name="workspace-state" appear
+      ><form v-if="checked && !user" :aria-busy="busy" @submit.prevent="login">
+        <WorkspacePageHeader
+          :title="t('customerSurface.login')"
+          :description="t('customerSurface.loginIntro')"
+        />
+        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+        <label
+          >{{ t("customerSurface.account")
+          }}<input v-model="credentials.username" :disabled="busy" autocomplete="username" required
+        /></label>
+        <label
+          >{{ t("customerSurface.password")
+          }}<input
+            v-model="credentials.password"
+            :disabled="busy"
+            type="password"
+            autocomplete="current-password"
+            required
+        /></label>
+        <label
+          >{{ t("customerSurface.code")
+          }}<input v-model="credentials.customerCode" :disabled="busy" required minlength="4"
+        /></label>
+        <button :disabled="busy" type="submit">{{ t("customerSurface.submit") }}</button>
+      </form></Transition
+    >
     <section v-if="user" class="customer-surface-workspace">
       <nav :aria-label="t('customerSurface.nav')">
         <button
@@ -155,7 +163,7 @@ onUnmounted(() => {
   color: inherit;
   text-decoration: none;
   font-size: 20px;
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: -0.4px;
 }
 .customer-surface form {
@@ -163,7 +171,7 @@ onUnmounted(() => {
   margin: 64px auto;
   padding: 32px;
   border: 1px solid var(--color-border, #dce6ee);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: none;
 }
@@ -178,7 +186,7 @@ onUnmounted(() => {
   box-sizing: border-box;
   padding: 12px;
   border: 1px solid #bccbd7;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   color: inherit;
   font: inherit;
@@ -187,7 +195,7 @@ onUnmounted(() => {
   padding: 10px 16px;
   cursor: pointer;
   border: 1px solid #c9dbe6;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: var(--color-accent, var(--color-accent));
   background: #fff;
   font: inherit;
@@ -217,7 +225,7 @@ onUnmounted(() => {
   min-width: 0;
   padding: 24px;
   border: 1px solid var(--color-border, #dce6ee);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
 }
 .customer-surface-workspace > div > p {
@@ -262,7 +270,7 @@ onUnmounted(() => {
 .customer-surface form {
   margin: 64px auto;
   width: min(440px, calc(100% - 36px));
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   box-shadow: none;
   padding: 36px;
 }
@@ -284,7 +292,7 @@ onUnmounted(() => {
 }
 .customer-surface input,
 .customer-surface button {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
 }
 .customer-surface-workspace {
   grid-template-columns: 224px minmax(0, 1fr);
@@ -327,6 +335,40 @@ onUnmounted(() => {
   }
   .customer-surface-workspace > div {
     padding: 22px 16px;
+  }
+}
+
+.customer-surface form {
+  width: min(520px, calc(100% - 32px));
+  padding: 32px;
+  border-radius: var(--radius-card);
+}
+.customer-surface label {
+  font-size: 14px;
+  gap: 10px;
+  margin: 22px 0;
+}
+.customer-surface input {
+  min-height: 46px;
+  font-size: 15px;
+  border-radius: var(--radius-control);
+}
+.customer-surface button[type="submit"] {
+  min-height: 46px;
+  font-size: 15px;
+  border-radius: var(--radius-control);
+}
+.customer-surface-workspace > div > p {
+  font-size: 14px;
+}
+.customer-surface nav button {
+  font-size: 14px;
+  border-radius: var(--radius-control);
+}
+@media (max-width: 600px) {
+  .customer-surface form {
+    margin: 32px auto;
+    padding: 24px;
   }
 }
 </style>

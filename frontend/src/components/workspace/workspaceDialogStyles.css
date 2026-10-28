@@ -1,0 +1,189 @@
+/* Modal geometry and surface treatment; each workflow retains its focus and cancel rules. */
+.modal-backdrop,
+.customer-code-overlay {
+  padding: 24px;
+  overflow-y: auto;
+  backdrop-filter: none;
+  background: rgb(12 30 42 / 48%);
+  animation: none;
+}
+.modal,
+.customer-code-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 48px);
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  padding: 28px;
+  gap: 16px;
+  animation: none;
+}
+.modal.workspace-modal--wide,
+.customer-code-dialog.workspace-modal--wide {
+  width: min(960px, calc(100vw - 32px));
+}
+.modal.workspace-modal--confirm,
+.customer-code-dialog.workspace-modal--confirm {
+  width: min(480px, calc(100vw - 32px));
+}
+.modal h2,
+.customer-code-dialog h2 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-primary);
+}
+.modal p,
+.customer-code-dialog p,
+.modal small,
+.customer-code-dialog small {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.customer-code-kicker {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.customer-dialog-form label > span,
+.admin-form-grid label > span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-foreground);
+}
+.customer-dialog-form input,
+.customer-dialog-form textarea,
+.admin-form-grid input {
+  font-size: 15px;
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+.customer-access-primary {
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-control);
+}
+.customer-access-primary:hover {
+  background: var(--app-primary-hover);
+  box-shadow: none;
+}
+.customer-dialog-actions,
+.modal-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.customer-dialog-actions button,
+.modal-actions button {
+  flex: 0 1 auto;
+  min-height: 42px;
+  min-width: 96px;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-control);
+}
+.customer-dialog-actions .customer-access-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}
+.customer-dialog-form,
+.employee-dialog-form,
+.announcement-editor-form {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.customer-dialog-form fieldset {
+  min-width: 0;
+}
+.customer-dialog-form :deep(.el-select) {
+  width: 100%;
+}
+@media (max-width: 680px) {
+  .modal-backdrop,
+  .customer-code-overlay {
+    padding: 16px;
+    align-items: center;
+  }
+  .modal,
+  .customer-code-dialog {
+    padding: 20px;
+    max-height: calc(100dvh - 32px);
+  }
+  .modal h2,
+  .customer-code-dialog h2 {
+    font-size: 22px;
+  }
+  .customer-dialog-actions button,
+  .modal-actions button {
+    flex: 1 1 auto;
+  }
+  .customer-dialog-form,
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .modal header {
+    gap: 14px;
+  }
+  .customer-code-dialog > div {
+    flex-wrap: wrap;
+  }
+}
+
+.modal.reset-password-modal,
+.modal.temporary-password-modal {
+  width: min(480px, calc(100vw - 32px));
+}
+.modal.announcement-editor-modal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.announcement-editor-form {
+  flex: 1;
+  padding: 0;
+}
+.announcement-editor-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+}
+.announcement-editor-form .modal-actions {
+  padding-bottom: 0;
+}
+.modal.file-preview-modal {
+  width: min(1100px, calc(100vw - 32px));
+}
+.file-preview-content-wrapper {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+.file-preview-render {
+  min-height: 300px;
+}
+@media (max-width: 800px) {
+  .announcement-editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .file-preview-render {
+    min-height: 240px;
+  }
+}

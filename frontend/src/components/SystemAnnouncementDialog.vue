@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    class="system-announcement-dialog"
+    class="system-announcement-dialog workspace-el-dialog"
     width="min(1080px, calc(100vw - 48px))"
     append-to-body
     destroy-on-close
@@ -55,7 +55,9 @@
         <div class="system-announcement-reading">
           <div class="system-announcement-meta">
             <span>{{ audienceText(activeItem.audience) }}</span>
-            <time>{{ dateText(activeItem.displayDate || activeItem.publishedAt || activeItem.createdAt) }}</time>
+            <time>{{
+              dateText(activeItem.displayDate || activeItem.publishedAt || activeItem.createdAt)
+            }}</time>
             <em v-if="!activeItem.read">{{ copy.unread }}</em>
           </div>
           <h3>{{ activeItem.title || copy.untitled }}</h3>
@@ -123,7 +125,7 @@ const copy = computed(() => ({
   all: t("portal.announcementAll")
 }));
 
-const items = computed(() => Array.isArray(props.announcements) ? props.announcements : []);
+const items = computed(() => (Array.isArray(props.announcements) ? props.announcements : []));
 const activeItem = computed(() => items.value[activeIndex.value] || null);
 
 watch(
@@ -131,7 +133,8 @@ watch(
   ([visible, length]) => {
     if (visible) {
       const firstUnread = items.value.findIndex((item) => !item?.read);
-      activeIndex.value = firstUnread >= 0 ? firstUnread : Math.min(activeIndex.value, Math.max(0, length - 1));
+      activeIndex.value =
+        firstUnread >= 0 ? firstUnread : Math.min(activeIndex.value, Math.max(0, length - 1));
     }
   },
   { immediate: true }
@@ -178,10 +181,15 @@ function safeUrl(value, { image = false } = {}) {
       /\/(?:tracking\/)?api\/public\/announcement-images\/([a-f0-9]{32}\.(?:jpe?g|png|gif))$/i
     );
     if (image && storedImage) {
-      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin).href;
+      return new URL(`/api/public/announcement-images/${storedImage[1]}`, window.location.origin)
+        .href;
     }
     if (resolved.protocol === "https:" || resolved.protocol === "http:") return resolved.href;
-    if (image && resolved.protocol === "data:" && /^data:image\/(?:png|jpe?g|gif|webp);/i.test(raw)) {
+    if (
+      image &&
+      resolved.protocol === "data:" &&
+      /^data:image\/(?:png|jpe?g|gif|webp);/i.test(raw)
+    ) {
       return raw;
     }
   } catch {
@@ -222,14 +230,18 @@ function renderInline(value) {
 }
 
 function renderMarkdown(markdown) {
-  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  const lines = String(markdown || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
   const blocks = [];
   let list = [];
   let listType = "";
 
   const flushList = () => {
     if (!list.length) return;
-    blocks.push(`<${listType}>${list.map((item) => `<li>${renderInline(item)}</li>`).join("")}</${listType}>`);
+    blocks.push(
+      `<${listType}>${list.map((item) => `<li>${renderInline(item)}</li>`).join("")}</${listType}>`
+    );
     list = [];
     listType = "";
   };
@@ -316,7 +328,7 @@ function renderMarkdown(markdown) {
   height: 44px;
   flex: 0 0 44px;
   place-items: center;
-  border-radius: 13px;
+  border-radius: var(--radius-control);
   background: rgba(255, 255, 255, 0.13);
 }
 
@@ -338,8 +350,8 @@ function renderMarkdown(markdown) {
   display: block;
   margin-bottom: 5px;
   color: #b7deee;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.08em;
 }
@@ -348,7 +360,7 @@ function renderMarkdown(markdown) {
   margin: 0;
   color: #fff;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.015em;
 }
@@ -361,11 +373,13 @@ function renderMarkdown(markdown) {
   flex: 0 0 44px;
   color: #e7f4f9;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--radius-control);
   background: transparent;
   cursor: pointer;
   place-items: center;
-  transition: color 160ms ease, background-color 160ms ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .system-announcement-close:hover {
@@ -407,10 +421,12 @@ function renderMarkdown(markdown) {
   color: #526d80;
   text-align: left;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: transparent;
   cursor: pointer;
-  transition: color 160ms ease, background-color 160ms ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .system-announcement-list button::before {
@@ -445,7 +461,11 @@ function renderMarkdown(markdown) {
 
 .system-announcement-list span {
   color: #7795a8;
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    700 11px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
 }
 
 .system-announcement-list b {
@@ -493,7 +513,7 @@ function renderMarkdown(markdown) {
   padding: 5px 10px;
   border-radius: 999px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .system-announcement-meta span {
@@ -527,7 +547,7 @@ function renderMarkdown(markdown) {
   max-height: min(380px, 42vh);
   margin-bottom: 24px;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: #f2f6f8;
 }
 
@@ -565,7 +585,7 @@ function renderMarkdown(markdown) {
   max-height: min(520px, 56vh);
   margin: 20px 0;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .system-announcement-markdown :deep(a) {
@@ -576,7 +596,7 @@ function renderMarkdown(markdown) {
 }
 
 .system-announcement-markdown :deep(a:focus-visible) {
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   outline: 3px solid rgba(17, 111, 167, 0.24);
   outline-offset: 2px;
 }
@@ -591,7 +611,7 @@ function renderMarkdown(markdown) {
 .system-announcement-markdown :deep(code) {
   padding: 2px 6px;
   color: #74436c;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #f4eff4;
 }
 
@@ -657,7 +677,7 @@ function renderMarkdown(markdown) {
 .system-announcement-footer :deep(.el-button) {
   min-width: 112px;
   min-height: 40px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-weight: 650;
 }
 
@@ -667,7 +687,7 @@ function renderMarkdown(markdown) {
     max-height: calc(100vh - 24px);
     max-height: calc(100dvh - 24px);
     margin: 12px auto 0;
-    border-radius: 16px;
+    border-radius: var(--radius-dialog);
   }
 
   .system-announcement-head {
@@ -679,7 +699,7 @@ function renderMarkdown(markdown) {
     width: 40px;
     height: 40px;
     flex-basis: 40px;
-    border-radius: 11px;
+    border-radius: var(--radius-control);
   }
 
   .system-announcement-head h2 {
@@ -742,7 +762,7 @@ function renderMarkdown(markdown) {
   }
 
   .system-announcement-head small {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .system-announcement-content {
@@ -764,7 +784,7 @@ function renderMarkdown(markdown) {
   }
 
   .system-announcement-footer span {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .system-announcement-footer :deep(.el-button) {
@@ -779,3 +799,5 @@ function renderMarkdown(markdown) {
   }
 }
 </style>
+
+<style scoped src="./workspace/workspaceElementDialog.css"></style>

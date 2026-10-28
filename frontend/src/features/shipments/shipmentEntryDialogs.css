@@ -22,7 +22,7 @@
   min-width: 0;
   overflow: hidden;
   color: #18324b;
-  font-weight: 700;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -70,7 +70,7 @@
   width: min(520px, 100%);
   padding: 30px;
   border: 1px solid rgba(180, 200, 220, 0.5);
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
   background: #fff;
   box-shadow: 0 24px 64px rgba(6, 24, 44, 0.28);
   animation: operations-dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -89,8 +89,8 @@
 }
 .customer-code-kicker {
   color: #4086d2;
-  font-size: 10px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 
@@ -105,11 +105,11 @@
 .customer-access-primary {
   min-height: 40px;
   border: 1px solid #1a4f80;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #fff;
-  background: linear-gradient(135deg, #1a4f80, #2e7cc4);
+  background: var(--color-primary);
   box-shadow: 0 8px 20px rgba(15, 50, 90, 0.18);
-  font-weight: 800;
+  font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
@@ -127,8 +127,8 @@
 }
 .customer-dialog-form label > span {
   color: #435d76;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-dialog-form input,
 .customer-dialog-form select,
@@ -136,7 +136,7 @@
   width: 100%;
   padding: 9px 11px;
   border: 1px solid #cfdeec;
-  border-radius: 8px;
+  border-radius: var(--radius-dialog);
   color: #183652;
   background: #fbfdff;
   font-size: 13px;
@@ -164,10 +164,10 @@
   flex: 1;
   min-height: 38px;
   border: 1px solid #cfdeec;
-  border-radius: 8px;
+  border-radius: var(--radius-dialog);
   color: #3a5572;
   background: #fff;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
@@ -198,17 +198,17 @@
 .manual-required-hint {
   padding: 10px 12px;
   border: 1px solid #f1d59b;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   color: #895b14 !important;
   background: #fff9eb;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .manual-entry-section {
   display: grid;
   padding: 16px;
   border: 1px solid #dbe6f0;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: #f9fbfd;
   gap: 14px;
 }
@@ -232,11 +232,11 @@
   display: inline-grid;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   color: #2474c8;
   background: #eaf4ff;
   place-items: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .manual-entry-section-head strong {
@@ -246,7 +246,7 @@
 
 .manual-entry-section-head > small {
   color: #7a8ea2;
-  font-size: 10px;
+  font-size: 12px;
   text-align: right;
 }
 
@@ -275,7 +275,7 @@
   display: grid;
   padding: 13px;
   border: 1px solid #d9e5f0;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background: #fff;
   gap: 12px;
 }
@@ -302,8 +302,8 @@
 
 .manual-repeat-card > header small {
   color: #3f83c5;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.08em;
 }
 
@@ -312,12 +312,12 @@
   min-height: 30px;
   padding: 0 11px;
   border: 1px solid #bfd4e8;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   color: #276da8;
   background: #f4f9ff;
   font: inherit;
-  font-size: 10px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -339,8 +339,8 @@
 
 .manual-service-field > span {
   color: #435d76;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .manual-service-field > div {
@@ -354,7 +354,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid #d2dfeb;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: #fff;
   align-items: center;
   gap: 7px !important;
@@ -370,7 +370,7 @@
 
 .manual-service-choice > span {
   color: #3a5873 !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
 }
 
 .manual-compact-list {
@@ -382,7 +382,7 @@
   display: grid;
   padding: 10px 12px;
   border: 1px solid #dbe6f0;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: #fff;
   grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.35fr) auto;
   align-items: end;
@@ -392,17 +392,17 @@
 .manual-empty-copy {
   padding: 14px;
   border: 1px dashed #cad9e8;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   color: #8193a6 !important;
   background: #fff;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .manual-shipment-note {
   padding: 14px;
   border: 1px solid #dbe6f0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: #f9fbfd;
 }
 
@@ -472,7 +472,7 @@
   min-height: 40px;
   padding: 0;
   border: 1px solid #d7e1eb;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #526b82;
   background: #fff;
   cursor: pointer;
@@ -515,7 +515,7 @@
 .shipment-excel-customer-row > label > span {
   color: #435d76;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .shipment-excel-customer-row :deep(.el-checkbox) {
@@ -527,7 +527,7 @@
   min-height: 150px;
   border-width: 1px;
   border-color: #a9bfd1;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: #f8fbfd;
 }
 
@@ -542,7 +542,7 @@
   display: grid;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: #126b9f;
   background: #e7f3f9;
   font-size: 20px;
@@ -561,7 +561,7 @@
   padding: 12px 16px;
   border: 0;
   border-left: 3px solid #9bb0c2;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: #f7f9fb;
   align-content: center;
   gap: 3px;
@@ -574,8 +574,8 @@
 
 .shipment-excel-import-summary small {
   color: #7b90a5;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .shipment-excel-import-summary .is-valid {
@@ -609,7 +609,7 @@
   padding: 13px 16px;
   border: 0;
   border-left: 3px solid #d46a73;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #9c3f49;
   background: #fff7f7;
   font-size: 12px;
@@ -624,7 +624,7 @@
 .shipment-excel-import-table-wrap {
   max-height: 420px;
   border: 1px solid #dce5ee;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   overflow: hidden;
 }
 
@@ -632,7 +632,7 @@
   width: 100%;
   border-collapse: collapse;
   background: #fff;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .shipment-excel-import-table :deep(th) {
@@ -666,8 +666,8 @@
   display: inline-flex;
   padding: 3px 7px;
   border-radius: 999px;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -716,7 +716,7 @@
   display: grid;
   padding: 14px 16px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: #f8fbfe;
   gap: 13px;
 }
@@ -739,7 +739,7 @@
   min-width: 0;
   padding: 9px 11px;
   border: 1px solid #dce5ee;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: #fff;
   gap: 2px;
 }
@@ -777,7 +777,7 @@
 
 .shipment-excel-import-result-list small {
   color: #7b90a5;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .shipment-excel-import-actions {
@@ -803,7 +803,7 @@
   place-items: center;
   padding: 28px 16px;
   border: 2px dashed #c8d6e2;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -831,17 +831,17 @@
 }
 .customer-excel-dropzone small {
   color: #889aaf;
-  font-size: 11px;
+  font-size: 12px;
 }
 .customer-excel-dropzone button {
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid #cfdeec;
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   color: #3a5572;
   background: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -972,5 +972,132 @@
   }
   .customer-code-dialog * {
     transition: none;
+  }
+}
+
+.shipment-excel-import-dialog.workspace-modal--wide {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(960px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-dialog);
+}
+.shipment-excel-import-heading {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+.shipment-excel-import-heading h2 {
+  font-size: 26px;
+  font-weight: 600;
+}
+.shipment-excel-import-heading p {
+  font-size: 13px;
+}
+.shipment-excel-import-body {
+  min-height: 0;
+  padding: 22px 28px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.shipment-import-workflow {
+  margin: 0 0 22px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.shipment-excel-import-actions {
+  margin: 0;
+  padding: 18px 28px;
+  border-top: 1px solid var(--color-border);
+}
+.shipment-excel-import-summary {
+  gap: 12px;
+}
+.shipment-excel-import-summary > span {
+  border-radius: var(--radius-control);
+}
+.shipment-excel-import-summary small {
+  font-size: 12px;
+}
+.shipment-excel-import-dialog :deep(.el-table__cell) {
+  height: 48px;
+  font-size: 14px;
+}
+.shipment-excel-import-dialog :deep(.el-table__header .cell) {
+  font-size: 13px;
+  font-weight: 500;
+}
+.shipment-excel-import-errors,
+.shipment-excel-import-row-errors {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.assignment-customer-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 18px;
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.manual-entry-grid {
+  gap: 18px 20px;
+}
+.manual-entry-section-head strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.manual-entry-section-head > small {
+  font-size: 12px;
+}
+.manual-entry-section-head > span > b {
+  color: var(--color-primary);
+  background: var(--color-surface);
+}
+.manual-shipment-dialog.workspace-modal--wide {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-dialog);
+}
+.manual-required-hint {
+  font-size: 13px;
+}
+.manual-shipment-form .customer-dialog-actions {
+  margin-bottom: 0;
+  padding-bottom: 18px;
+}
+@media (max-width: 680px) {
+  .shipment-excel-import-heading {
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+  .shipment-excel-import-heading h2 {
+    font-size: 23px;
+  }
+  .shipment-excel-import-body {
+    padding: 18px;
+  }
+  .shipment-excel-import-actions {
+    padding: 16px 18px;
+  }
+  .assignment-customer-row {
+    grid-template-columns: 1fr;
+  }
+  .manual-entry-grid {
+    grid-template-columns: 1fr;
+  }
+  .manual-entry-section-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .manual-shipment-dialog.workspace-modal--wide {
+    padding: 20px 20px 0;
+    max-height: calc(100dvh - 32px);
+  }
+  .shipment-excel-import-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -1,9 +1,21 @@
 <template>
   <section class="module-page" data-module="customers">
     <div class="list-page list-page-full">
-      <div class="list-page-header">
-        <h2>{{ t("customers.directoryTitle") }}</h2>
-        <div v-if="isManager" class="list-page-actions">
+      <WorkspacePageHeader class="list-page-header" :description="wt('directoryHint')"
+        ><template #title>{{ t("customers.directoryTitle") }}</template
+        ><template #actions
+          ><div v-if="isManager" class="list-page-actions">
+            <el-button type="primary" @click="openCreateCustomer"
+              ><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button
+            >
+            <el-button @click="openBatchImport"
+              ><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button
+            >
+          </div></template
+        ></WorkspacePageHeader
+      >
+      <section class="customer-directory-toolbar">
+        <div v-if="isManager" class="customer-directory-search">
           <el-input
             v-model="customerSearch"
             :placeholder="t('customers.searchCustomerPlaceholder')"
@@ -11,36 +23,39 @@
             clearable
             style="width: 240px"
           />
-          <el-button type="primary" @click="openCreateCustomer"
-            ><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button
-          >
-          <el-button @click="openBatchImport"
-            ><el-icon><Upload /></el-icon>{{ t("customers.batchImport") }}</el-button
-          >
-          <el-button
-            type="success"
-            plain
-            :disabled="!selectedCustomerRows.length"
-            @click="openCustomerTransfer(selectedCustomerRows[0], true)"
-            >{{
-              t("customers.transferSelected", {
-                count: selectedCustomerRows.length
-              })
-            }}</el-button
-          >
-          <el-button
-            type="danger"
-            plain
-            :disabled="!selectedCustomerRows.length || mutatingCustomer"
-            @click="deleteSelectedCustomers"
-            >{{
-              t("customers.deleteSelectedCustomers", {
-                count: selectedCustomerRows.length
-              })
-            }}</el-button
-          >
         </div>
-      </div>
+        <span>{{ wt("resultsCount", { count: filteredCustomers.length }) }}</span
+        ><Transition name="workspace-state"
+          ><div
+            v-if="isManager && selectedCustomerRows.length"
+            class="customer-directory-selection"
+          >
+            <strong>{{ wt("selectedRows", { count: selectedCustomerRows.length }) }}</strong
+            ><el-button
+              type="success"
+              plain
+              :disabled="!selectedCustomerRows.length"
+              @click="openCustomerTransfer(selectedCustomerRows[0], true)"
+              >{{
+                t("customers.transferSelected", {
+                  count: selectedCustomerRows.length
+                })
+              }}</el-button
+            >
+            <el-button
+              type="danger"
+              plain
+              :disabled="!selectedCustomerRows.length || mutatingCustomer"
+              @click="deleteSelectedCustomers"
+              >{{
+                t("customers.deleteSelectedCustomers", {
+                  count: selectedCustomerRows.length
+                })
+              }}</el-button
+            >
+          </div></Transition
+        >
+      </section>
       <el-table
         :ref="actions.setTableRef"
         :data="paginatedCustomers"
@@ -117,9 +132,6 @@
                 t("customers.detail")
               }}</el-button>
               <template v-if="isManager">
-                <el-button size="small" type="primary" plain @click.stop="openEditCustomer(row)">{{
-                  t("customers.edit")
-                }}</el-button>
                 <el-button
                   size="small"
                   type="success"
@@ -128,6 +140,10 @@
                   @click.stop="openCustomerTransfer(row)"
                   >{{ t("customers.assignAgentShort") }}</el-button
                 >
+                <el-button size="small" type="primary" plain @click.stop="openEditCustomer(row)">{{
+                  t("customers.edit")
+                }}</el-button>
+
                 <el-button size="small" type="warning" plain @click.stop="openResetPassword(row)">{{
                   t("customers.resetPassword")
                 }}</el-button>
@@ -150,6 +166,8 @@
   </section>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { toRefs } from "vue";
 import type { CustomerRecord } from "../../../types/businessRecords";
 import { useMediaQuery } from "../../../composables/useMediaQuery.js";
@@ -280,11 +298,11 @@ function selectCustomerRow(row: unknown) {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: #bfdbfe;
-  font-weight: 800;
-  font-size: 11px;
+  font-weight: 600;
+  font-size: 12px;
 }
 .customer-name-cell {
   display: flex;
@@ -298,7 +316,7 @@ function selectCustomerRow(row: unknown) {
 }
 .customer-name-cell small {
   color: #6b7e96;
-  font-size: 11px;
+  font-size: 12px;
 }
 .table-action-buttons {
   display: flex;
@@ -344,21 +362,21 @@ function selectCustomerRow(row: unknown) {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-pagination :deep(.btn-prev),
 .shipment-pagination :deep(.btn-next),
 .shipment-pagination :deep(.el-pager li) {
   min-width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: var(--radius-control) !important;
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
@@ -426,4 +444,57 @@ function selectCustomerRow(row: unknown) {
   white-space: nowrap;
   word-break: keep-all;
 }
+.customer-directory-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.customer-directory-search {
+  flex: 1;
+  min-width: 220px;
+  max-width: 420px;
+}
+.customer-directory-search > .el-input {
+  width: 100% !important;
+}
+.customer-directory-toolbar > span {
+  margin-left: auto;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.customer-directory-selection {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.customer-directory-selection strong {
+  margin-right: auto;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.customer-directory-selection .el-button {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .customer-directory-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .customer-directory-toolbar > span {
+    margin-left: 0;
+  }
+}
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

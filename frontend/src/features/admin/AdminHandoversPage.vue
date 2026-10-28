@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { computed } from "vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
@@ -32,33 +34,34 @@ function changeStatus(value: unknown) {
 <template>
   <section class="admin-page-pane" :aria-busy="busy">
     <article class="admin-panel admin-handover-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Business Handover Records</p>
-          <h2>{{ handoverCopy.title }}</h2>
-        </div>
-        <div class="admin-inline-actions admin-handover-toolbar">
-          <span>{{ handoverCopy.summary.replace("{count}", String(total)) }}</span>
-          <label class="admin-handover-status-filter">
-            <span>{{ handoverCopy.statusFilter }}</span>
-            <el-select
-              :model-value="status"
-              :placeholder="handoverCopy.all"
-              :disabled="busy"
-              :aria-label="handoverCopy.statusFilter"
-              @change="changeStatus"
-            >
-              <el-option value="" :label="handoverCopy.all" />
-              <el-option value="PENDING" :label="handoverCopy.pending" />
-              <el-option value="APPROVED" :label="handoverCopy.approved" />
-              <el-option value="REJECTED" :label="handoverCopy.rejected" />
-            </el-select>
-          </label>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ handoverCopy.refresh }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ handoverCopy.title }}</template
+        ><template #eyebrow>Business Handover Records</template
+        ><template #actions
+          ><div class="admin-inline-actions admin-handover-toolbar">
+            <span>{{ handoverCopy.summary.replace("{count}", String(total)) }}</span>
+            <label class="admin-handover-status-filter">
+              <span>{{ handoverCopy.statusFilter }}</span>
+              <el-select
+                popper-class="business-select-popper workspace-select-popper"
+                :model-value="status"
+                :placeholder="handoverCopy.all"
+                :disabled="busy"
+                :aria-label="handoverCopy.statusFilter"
+                @change="changeStatus"
+              >
+                <el-option value="" :label="handoverCopy.all" />
+                <el-option value="PENDING" :label="handoverCopy.pending" />
+                <el-option value="APPROVED" :label="handoverCopy.approved" />
+                <el-option value="REJECTED" :label="handoverCopy.rejected" />
+              </el-select>
+            </label>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ handoverCopy.refresh }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table
           :data="rows"
@@ -133,7 +136,9 @@ function changeStatus(value: unknown) {
               </div>
             </template>
           </BusinessColumn>
-          <template #empty>{{ handoverCopy.empty }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ handoverCopy.empty }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -154,3 +159,5 @@ function changeStatus(value: unknown) {
 </template>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./adminBusinessStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

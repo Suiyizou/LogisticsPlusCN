@@ -1,14 +1,27 @@
 <template>
-  <section class="container-reference-page">
-    <el-card class="planner-page-head" shadow="never">
-      <div class="page-heading">
-        <p>{{ tr("Container Reference") }}</p>
-        <h2>{{ ui('container.referenceTitle') }}</h2>
-      </div>
-      <RouterLink to="/planner/config">
-        <el-button type="primary" plain>{{ ui('container.backToConfig') }}</el-button>
-      </RouterLink>
-    </el-card>
+  <section class="container-reference-page equipment-catalog">
+    <WorkspacePageHeader
+      :title="ui('container.referenceTitle')"
+      :eyebrow="tr('Container Reference')"
+      :description="wt('equipmentHint')"
+      ><template #actions
+        ><RouterLink to="/planner/config"
+          ><el-button type="primary">{{ ui("container.backToConfig") }}</el-button></RouterLink
+        ></template
+      ></WorkspacePageHeader
+    >
+    <div class="equipment-filters" role="group" :aria-label="ui('container.referenceTitle')">
+      <button
+        v-for="filter in equipmentFilters"
+        :key="filter.value"
+        type="button"
+        :aria-pressed="equipmentFilter === filter.value"
+        :class="{ active: equipmentFilter === filter.value }"
+        @click="equipmentFilter = filter.value"
+      >
+        {{ filter.label }}<span>{{ filter.count }}</span>
+      </button>
+    </div>
 
     <el-alert
       class="container-source-alert"
@@ -39,20 +52,30 @@
                 {{ priorityText(container.usagePriority) }}
               </el-tag>
               <el-tag v-if="container.packingEligible === false" type="info" effect="plain">
-                {{ ui('container.referenceOnly') }}
+                {{ ui("container.referenceOnly") }}
               </el-tag>
               <h3>{{ tr(container.name) }}</h3>
             </div>
             <el-tag v-if="container.ignoreHeightLimit" type="warning" effect="plain">
-              {{ ui('container.flatRackHeightLimitTag', { value: formatNumber(container.heightLimitCm || container.heightCm) }) }}
+              {{
+                ui("container.flatRackHeightLimitTag", {
+                  value: formatNumber(container.heightLimitCm || container.heightCm)
+                })
+              }}
             </el-tag>
           </div>
 
           <dl class="container-reference-specs">
-            <div><dt>{{ ui('container.calcSize') }}</dt><dd>{{ dimensionText(container) }}</dd></div>
-            <div><dt>{{ ui('container.maxPayload') }}</dt><dd>{{ payloadText(container) }}</dd></div>
+            <div>
+              <dt>{{ ui("container.calcSize") }}</dt>
+              <dd>{{ dimensionText(container) }}</dd>
+            </div>
+            <div>
+              <dt>{{ ui("container.maxPayload") }}</dt>
+              <dd>{{ payloadText(container) }}</dd>
+            </div>
             <div class="container-reference-price">
-              <dt>{{ ui('container.referencePrice') }}</dt>
+              <dt>{{ ui("container.referencePrice") }}</dt>
               <dd>{{ priceText(container) }}</dd>
               <el-link
                 v-if="container.referencePriceSourceUrl"
@@ -64,12 +87,19 @@
               >
                 {{ priceSourceText(container) }}
               </el-link>
-              <small v-if="container.referencePriceBasis">{{ sourceText(container.referencePriceBasis, '') }}</small>
+              <small v-if="container.referencePriceBasis">{{
+                sourceText(container.referencePriceBasis, "")
+              }}</small>
             </div>
-            <div><dt>{{ ui('container.dimensionBasis') }}</dt><dd>{{ sourceText(container.dimensionBasis, ui('container.manualDimensions')) }}</dd></div>
+            <div>
+              <dt>{{ ui("container.dimensionBasis") }}</dt>
+              <dd>{{ sourceText(container.dimensionBasis, ui("container.manualDimensions")) }}</dd>
+            </div>
           </dl>
 
-          <p class="container-reference-note">{{ sourceText(container.dimensionNote, ui('container.customNote')) }}</p>
+          <p class="container-reference-note">
+            {{ sourceText(container.dimensionNote, ui("container.customNote")) }}
+          </p>
           <el-link
             v-if="container.dimensionSourceUrl"
             type="primary"
@@ -79,7 +109,9 @@
           >
             {{ tr(container.dimensionSource) }}
           </el-link>
-          <span v-else class="container-reference-custom-source">{{ sourceText(container.dimensionSource, ui('container.userDefinedDimensions')) }}</span>
+          <span v-else class="container-reference-custom-source">{{
+            sourceText(container.dimensionSource, ui("container.userDefinedDimensions"))
+          }}</span>
         </div>
       </article>
     </div>
@@ -87,7 +119,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
+import { wt } from "./workspace/workspaceCopy";
 import { currentLocale } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
@@ -96,11 +130,37 @@ const props = defineProps({
   containers: { type: Array, default: () => [] }
 });
 
-const referenceRows = computed(() => (props.containers as any[]).map((container) => ({
-  ...container,
-  visualKind: container.visualKind || inferVisualKind(container),
-  usagePriority: container.usagePriority || inferPriority(container)
-})));
+const allReferenceRows = computed(() =>
+  (props.containers as any[]).map((container) => ({
+    ...container,
+    visualKind: container.visualKind || inferVisualKind(container),
+    usagePriority: container.usagePriority || inferPriority(container)
+  }))
+);
+
+const equipmentFilter = ref("all");
+const referenceRows = computed(() =>
+  allReferenceRows.value.filter(
+    (row) =>
+      equipmentFilter.value === "all" ||
+      (equipmentFilter.value === "common"
+        ? row.usagePriority === "common"
+        : row.usagePriority !== "common")
+  )
+);
+const equipmentFilters = computed(() => [
+  { value: "all", label: wt("allEquipment"), count: allReferenceRows.value.length },
+  {
+    value: "common",
+    label: wt("commonEquipment"),
+    count: allReferenceRows.value.filter((row) => row.usagePriority === "common").length
+  },
+  {
+    value: "special",
+    label: wt("specialEquipment"),
+    count: allReferenceRows.value.filter((row) => row.usagePriority !== "common").length
+  }
+]);
 
 function inferVisualKind(container: any) {
   const text = `${container?.id || ""} ${container?.name || ""}`.toLowerCase();
@@ -131,9 +191,10 @@ function containerIcon(name: string) {
 }
 
 function dimensionText(container: any) {
-  const dimensions = [container.lengthCm, container.widthCm, container.heightCm]
-    .map((value) => Number(value || 0));
-  if (dimensions.every((value) => !(value > 0))) return ui('container.dimensionsNotApplicable');
+  const dimensions = [container.lengthCm, container.widthCm, container.heightCm].map((value) =>
+    Number(value || 0)
+  );
+  if (dimensions.every((value) => !(value > 0))) return ui("container.dimensionsNotApplicable");
   return `${dimensions.map(formatNumber).join(" × ")} cm`;
 }
 
@@ -145,7 +206,7 @@ function payloadText(container: any) {
 
 function priceText(container: any) {
   const value = referencePriceValue(container);
-  if (!value) return ui('container.priceMissing');
+  if (!value) return ui("container.priceMissing");
   return `${referenceCurrency(container)} ${formatMoney(value)}`;
 }
 
@@ -160,7 +221,7 @@ function referenceCurrency(container: any) {
 }
 
 function priceSourceText(container: any) {
-  return sourceText(container.referencePriceSource, ui('container.referencePriceSourceFallback'));
+  return sourceText(container.referencePriceSource, ui("container.referencePriceSourceFallback"));
 }
 
 function formatNumber(value: unknown) {
@@ -178,11 +239,13 @@ function formatMoney(value: number) {
 }
 
 function priorityText(value: string) {
-  return {
-    common: ui('container.priority.common'),
-    limited: ui('container.priority.limited'),
-    special: ui('container.priority.special')
-  }[value] || ui('container.priority.custom');
+  return (
+    {
+      common: ui("container.priority.common"),
+      limited: ui("container.priority.limited"),
+      special: ui("container.priority.special")
+    }[value] || ui("container.priority.custom")
+  );
 }
 
 function sourceText(value: unknown, fallback: string) {
@@ -198,10 +261,83 @@ function ui(key, params) {
 }
 
 function priorityTagType(value: string) {
-  return {
-    common: "success",
-    limited: "warning",
-    special: "info"
-  }[value] || "primary";
+  return (
+    {
+      common: "success",
+      limited: "warning",
+      special: "info"
+    }[value] || "primary"
+  );
 }
 </script>
+
+<style scoped>
+.equipment-catalog {
+  gap: 20px;
+}
+.equipment-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.equipment-filters button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 42px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: 14px;
+}
+.equipment-filters button.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.equipment-filters span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.equipment-catalog .container-reference-card {
+  border-radius: var(--radius-card);
+  transition: border-color 180ms ease;
+}
+.equipment-catalog .container-reference-card:hover {
+  border-color: var(--color-border-strong);
+}
+.equipment-catalog .container-reference-head h3 {
+  font-size: 20px;
+}
+.equipment-catalog .container-reference-specs dt {
+  font-size: 12px;
+}
+.equipment-catalog .container-reference-specs dd {
+  font-size: 14px;
+}
+.equipment-catalog .container-reference-note {
+  font-size: 13px;
+}
+.equipment-catalog .container-reference-price small,
+.equipment-catalog .container-reference-price .el-link {
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .equipment-catalog .container-reference-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .equipment-catalog .container-reference-grid {
+    grid-template-columns: 1fr;
+  }
+  .equipment-filters {
+    gap: 8px;
+  }
+  .equipment-filters button {
+    padding-inline: 12px;
+  }
+}
+</style>

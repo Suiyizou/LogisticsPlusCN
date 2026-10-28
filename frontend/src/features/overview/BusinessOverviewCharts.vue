@@ -200,7 +200,7 @@ defineExpose({ resize: group.resize });
   min-width: 0;
   padding: 17px 18px 14px;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   background: #fff;
   box-shadow: none;
   overflow: hidden;
@@ -221,11 +221,12 @@ defineExpose({ resize: group.resize });
 }
 .business-chart-card header b {
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: 600;
 }
 .business-chart-card header small {
   color: var(--color-muted);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .business-chart-body {
@@ -253,7 +254,7 @@ defineExpose({ resize: group.resize });
 }
 .business-chart-empty :deep(.el-empty__description p) {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .business-chart-body :deep(.el-loading-mask) {
   background: rgba(255, 255, 255, 0.82);

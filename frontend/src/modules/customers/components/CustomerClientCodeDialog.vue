@@ -1,56 +1,63 @@
 <template>
   <div data-i18n-ignore>
     <Teleport to="body"
-      ><div
-        v-if="clientCodeDialogOpen"
-        class="customer-code-overlay"
-        role="presentation"
-        @keydown="onDialogKeydown"
-        @click.self="closeClientCodeSupplement"
-      >
-        <section
-          class="customer-code-dialog customer-supplement-dialog"
-          ref="dialogElement"
-          tabindex="-1"
-          role="dialog"
-          :aria-busy="mutatingCustomer"
-          aria-modal="true"
-          :aria-label="t('customers.manualSupplement')"
+      ><WorkspaceDialogTransition
+        ><div
+          v-if="clientCodeDialogOpen"
+          class="customer-code-overlay"
+          role="presentation"
+          @keydown="onDialogKeydown"
+          @click.self="closeClientCodeSupplement"
         >
-          <span class="customer-code-kicker">BUSINESS MATCHING KEY</span>
-          <h2>{{ t("customers.supplementClientCode") }}</h2>
-          <p>{{ t("customers.supplementClientCodeHint") }}</p>
-          <form class="customer-dialog-form" @submit.prevent="saveClientCodeSupplement">
-            <fieldset :disabled="mutatingCustomer" class="customer-dialog-fields">
-              <label>
-                <span>{{ t("customers.clientCode") }}</span>
-                <input
-                  v-model.trim="clientCodeSupplement"
-                  minlength="6"
-                  maxlength="10"
-                  pattern="[A-Za-z0-9._\-]{6,10}"
-                  :title="t('customers.clientCodeRule')"
-                  :placeholder="t('customers.clientCodePlaceholder')"
-                  required
-                />
-                <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
-              </label>
-              <div class="customer-dialog-actions">
-                <button type="button" @click="closeClientCodeSupplement">
-                  {{ t("customers.cancel") }}
-                </button>
-                <button class="customer-access-primary" type="submit" :disabled="mutatingCustomer">
-                  {{ t("customers.saveSupplement") }}
-                </button>
-              </div>
-            </fieldset>
-          </form>
-        </section>
-      </div></Teleport
+          <section
+            class="customer-code-dialog customer-supplement-dialog workspace-modal--confirm"
+            ref="dialogElement"
+            tabindex="-1"
+            role="dialog"
+            :aria-busy="mutatingCustomer"
+            aria-modal="true"
+            :aria-label="t('customers.manualSupplement')"
+          >
+            <span class="customer-code-kicker">BUSINESS MATCHING KEY</span>
+            <h2>{{ t("customers.supplementClientCode") }}</h2>
+            <p>{{ t("customers.supplementClientCodeHint") }}</p>
+            <form class="customer-dialog-form" @submit.prevent="saveClientCodeSupplement">
+              <fieldset :disabled="mutatingCustomer" class="customer-dialog-fields">
+                <label>
+                  <span>{{ t("customers.clientCode") }}</span>
+                  <input
+                    v-model.trim="clientCodeSupplement"
+                    minlength="6"
+                    maxlength="10"
+                    pattern="[A-Za-z0-9._\-]{6,10}"
+                    :title="t('customers.clientCodeRule')"
+                    :placeholder="t('customers.clientCodePlaceholder')"
+                    required
+                  />
+                  <small class="customer-field-rule">{{ t("customers.clientCodeRule") }}</small>
+                </label>
+                <div class="customer-dialog-actions">
+                  <button type="button" @click="closeClientCodeSupplement">
+                    {{ t("customers.cancel") }}
+                  </button>
+                  <button
+                    class="customer-access-primary"
+                    type="submit"
+                    :disabled="mutatingCustomer"
+                  >
+                    {{ t("customers.saveSupplement") }}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          </section>
+        </div></WorkspaceDialogTransition
+      ></Teleport
     >
   </div>
 </template>
 <script setup lang="ts">
+import WorkspaceDialogTransition from "../../../components/workspace/WorkspaceDialogTransition.vue";
 import { toRefs, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -70,3 +77,5 @@ const { onDialogKeydown } = useDialogFocus({
 </script>
 <style scoped src="../../shared/styles/businessDialogs.css"></style>
 <style scoped></style>
+
+<style scoped src="../../../components/workspace/workspaceDialogStyles.css"></style>

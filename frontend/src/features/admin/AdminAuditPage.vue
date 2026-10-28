@@ -1,18 +1,18 @@
 <template>
   <section :aria-busy="busy" class="admin-page-pane">
     <article class="admin-panel admin-audit-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>System Operation Trail</p>
-          <h2>{{ ui("admin.audit.apiTitle") }}</h2>
-        </div>
-        <div class="admin-inline-actions">
-          <span>{{ t("admin.console.recordCount", { count: total }) }}</span>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ t("admin.console.refreshAudit") }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ ui("admin.audit.apiTitle") }}</template
+        ><template #eyebrow>System Operation Trail</template
+        ><template #actions
+          ><div class="admin-inline-actions">
+            <span>{{ t("admin.console.recordCount", { count: total }) }}</span>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ t("admin.console.refreshAudit") }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table
           :data="rows"
@@ -53,7 +53,9 @@
               <b>{{ row.ipAddress || "-" }}</b>
             </template>
           </AuditColumn>
-          <template #empty>{{ ui("admin.audit.empty") }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ ui("admin.audit.empty") }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -71,6 +73,8 @@
   </section>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
 import type { AdminAuditRecord } from "../../types/adminOverviewTypes";
@@ -111,3 +115,5 @@ function changePage(page: number) {
 </script>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./adminAuditStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

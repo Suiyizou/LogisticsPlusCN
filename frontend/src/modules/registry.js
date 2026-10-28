@@ -1,3 +1,4 @@
+import { updateSchedulePreviewRegistration } from "./update-schedule-preview/module.js";
 import { generatedModuleRegistrations } from "./generatedRegistrations.js";
 import { adminRegistrations } from "./admin/module.js";
 import { customerWorkspaceRegistration } from "./customer-space/module.js";
@@ -14,6 +15,7 @@ export { validateModules } from "./moduleCatalog.js";
 // Generated contributions use the same registration protocol as built-in modules.
 const registrations = [
   overviewRegistration,
+  updateSchedulePreviewRegistration,
   customerRegistration,
   handoverRegistration,
   shipmentRegistration,

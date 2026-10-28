@@ -32,7 +32,7 @@
   min-height: 92px;
   padding: 15px 17px;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   color: #40546b;
   text-align: left;
@@ -53,7 +53,7 @@
 
 .admin-file-scope-tabs span {
   color: #174777;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .admin-file-scope-tabs b {
@@ -85,11 +85,11 @@
   display: inline-flex;
   padding: 4px 8px;
   border: 1px solid #8bbce9;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: #eff7ff;
   color: #1765a7;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -121,5 +121,44 @@
   .admin-inline-actions > button,
   .table-actions > button {
     transition: none;
+  }
+}
+
+.admin-file-scope-tabs {
+  margin-bottom: 24px;
+  gap: 16px;
+}
+.admin-file-scope-tabs button {
+  border-radius: var(--radius-card);
+  padding: 20px;
+  min-height: 104px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.admin-file-scope-tabs button.active {
+  border-color: var(--color-primary);
+  background: var(--color-surface-subtle);
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
+}
+.admin-file-scope-tabs span {
+  color: var(--color-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+.admin-file-scope-tabs b {
+  color: var(--color-primary);
+  font-size: 28px;
+  font-weight: 500;
+}
+.admin-file-scope-tabs small {
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .admin-file-scope-tabs {
+    grid-template-columns: 1fr;
+  }
+  .admin-file-scope-tabs button {
+    min-height: 88px;
   }
 }

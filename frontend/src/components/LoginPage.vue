@@ -11,14 +11,13 @@
         <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
         <p>{{ t("maritime.loginHeroDescription") }}</p>
       </div>
-      <small>{{ t("maritime.imageCaption") }}</small>
     </section>
     <section class="app-login-side">
       <header class="app-login-top">
         <a href="/">← {{ t("maritime.returnHome") }}</a
         ><LanguageSwitcher />
       </header>
-      <form class="app-login-form" @submit.prevent="submit">
+      <form class="app-login-form" :aria-busy="loading" @submit.prevent="submit">
         <div class="app-login-form-intro">
           <div class="app-login-title">
             <h1>{{ t(loginMode === "employee" ? "login.formTitle" : "login.customerTitle") }}</h1>

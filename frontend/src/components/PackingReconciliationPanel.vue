@@ -1,52 +1,56 @@
 <template>
-  <section v-if="review.visible" class="packing-reconciliation" aria-live="polite">
-    <header>
-      <h3>{{ ui("excel.packingCheckTitle") }}</h3>
-      <span>{{ ui("excel.packingCheckBasis") }}</span>
-    </header>
-    <div class="packing-check-metrics">
-      <div v-for="metric in metrics" :key="metric.field">
-        <span>{{ ui(metric.label) }}</span>
-        <strong
-          >{{ display(metric.actual) }} <small>{{ metric.unit }}</small></strong
-        >
-        <small v-if="metric.expected != null">{{
-          ui("excel.sourceTotal", { value: display(metric.expected) })
-        }}</small>
+  <Transition name="workspace-state"
+    ><section v-if="review.visible" class="packing-reconciliation" aria-live="polite">
+      <header>
+        <h3>{{ ui("excel.packingCheckTitle") }}</h3>
+        <span>{{ ui("excel.packingCheckBasis") }}</span>
+      </header>
+      <div class="packing-check-metrics">
+        <div v-for="metric in metrics" :key="metric.field">
+          <span>{{ ui(metric.label) }}</span>
+          <strong
+            >{{ display(metric.actual) }} <small>{{ metric.unit }}</small></strong
+          >
+          <small v-if="metric.expected != null">{{
+            ui("excel.sourceTotal", { value: display(metric.expected) })
+          }}</small>
+        </div>
       </div>
-    </div>
-    <p v-if="review.declaredVolumeM3 != null" class="packing-source-volume">
-      {{ ui("excel.declaredVolume", { value: display(review.declaredVolumeM3) }) }}
-    </p>
-    <div v-if="review.blockingIssues.length" class="packing-check-blocked" role="alert">
-      <strong>{{ ui("excel.packingCheckBlocked") }}</strong>
-      <ul>
-        <li v-for="(issue, index) in review.blockingIssues" :key="index">{{ issueText(issue) }}</li>
-      </ul>
-    </div>
-    <div v-if="review.requiresVolumeConfirmation" class="packing-volume-review">
-      <p>{{ ui("excel.volumeDifferenceReview") }}</p>
-      <label
-        ><input
-          type="checkbox"
-          :checked="volumeConfirmed"
-          @change="$emit('update:volumeConfirmed', $event.target.checked)"
-        />{{ ui("excel.confirmVolumeDifference") }}</label
+      <p v-if="review.declaredVolumeM3 != null" class="packing-source-volume">
+        {{ ui("excel.declaredVolume", { value: display(review.declaredVolumeM3) }) }}
+      </p>
+      <div v-if="review.blockingIssues.length" class="packing-check-blocked" role="alert">
+        <strong>{{ ui("excel.packingCheckBlocked") }}</strong>
+        <ul>
+          <li v-for="(issue, index) in review.blockingIssues" :key="index">
+            {{ issueText(issue) }}
+          </li>
+        </ul>
+      </div>
+      <div v-if="review.requiresVolumeConfirmation" class="packing-volume-review">
+        <p>{{ ui("excel.volumeDifferenceReview") }}</p>
+        <label
+          ><input
+            type="checkbox"
+            :checked="volumeConfirmed"
+            @change="$emit('update:volumeConfirmed', $event.target.checked)"
+          />{{ ui("excel.confirmVolumeDifference") }}</label
+        >
+      </div>
+      <p
+        v-if="!review.blockingIssues.length && !review.requiresVolumeConfirmation"
+        class="packing-check-matched"
       >
-    </div>
-    <p
-      v-if="!review.blockingIssues.length && !review.requiresVolumeConfirmation"
-      class="packing-check-matched"
-    >
-      {{
-        ui(
-          review.actual.innerQuantity == null
-            ? "excel.packingCheckMatchedWithoutContents"
-            : "excel.packingCheckMatched"
-        )
-      }}
-    </p>
-  </section>
+        {{
+          ui(
+            review.actual.innerQuantity == null
+              ? "excel.packingCheckMatchedWithoutContents"
+              : "excel.packingCheckMatched"
+          )
+        }}
+      </p>
+    </section></Transition
+  >
 </template>
 
 <script setup>
@@ -178,6 +182,57 @@ function issueText(issue) {
 @media (max-width: 700px) {
   .packing-check-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.packing-reconciliation {
+  padding: 24px;
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.packing-reconciliation h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.packing-check-metrics {
+  gap: 20px;
+  padding: 18px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+.packing-check-metrics strong {
+  font-size: 26px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.packing-check-blocked,
+.packing-volume-review {
+  padding: 16px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.packing-check-blocked {
+  border-left: 3px solid var(--color-destructive);
+}
+.packing-volume-review {
+  border-left: 3px solid var(--color-warning);
+}
+.packing-volume-review label {
+  gap: 12px;
+}
+.packing-volume-review input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+@media (max-width: 600px) {
+  .packing-reconciliation {
+    padding: 18px;
+  }
+  .packing-check-metrics {
+    gap: 18px;
   }
 }
 </style>

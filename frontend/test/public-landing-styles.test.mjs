@@ -100,9 +100,7 @@ for (const entry of ["LandingEntry.vue", "App.vue"]) {
 test("legacy entry regression guard fails when public landing loses its stylesheet dependency", () => {
   const styles = collectStyles("App.vue", (path) => {
     const source = read(path);
-    return path.endsWith("PublicLandingPage.vue")
-      ? source.replace(/import\s+["']\.\.\/maritime-public\.css["'];?/, "")
-      : source;
+    return source.replace(/import\s+["'](?:\.\.\/)+maritime-public\.css["'];?/g, "");
   });
   assert.throws(() => assertLandingLayout(styles), /Public header layout is reachable/);
 });

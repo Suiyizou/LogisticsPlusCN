@@ -88,17 +88,14 @@
     </header>
 
     <section class="portal-content">
-      <div class="portal-hero">
-        <div class="portal-hero-copy">
-          <div class="portal-kicker">
-            <span>OPERATIONS PORTAL</span>
-            <i aria-hidden="true"></i>
-            <small>{{ todayText }}</small>
-          </div>
-          <h1>{{ t("portal.greeting", { name: displayName }) }}</h1>
-          <p>{{ t("portal.heroDescription") }}</p>
-        </div>
-      </div>
+      <WorkspacePageHeader
+        :title="t('portal.greeting', { name: displayName })"
+        eyebrow="OPERATIONS PORTAL"
+        :description="t('portal.heroDescription')"
+        ><template #meta
+          ><span class="portal-today">{{ todayText }}</span
+          ><WorkspaceStatus :label="roleLabel" /></template
+      ></WorkspacePageHeader>
 
       <button class="portal-task-row" type="button" @click="emit('open-announcements')">
         <span
@@ -228,6 +225,33 @@
               <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
             </div>
           </RouterLink>
+          <RouterLink
+            class="portal-workbench-card portal-workbench-card--booking"
+            to="/services/booking"
+          >
+            <div class="portal-card-topline"><span>04 / EXTERNAL BOOKING</span></div>
+            <div class="portal-card-body">
+              <div class="portal-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 88 88">
+                  <path class="icon-panel" d="M18 18h52v52H18z" />
+                  <path d="M29 34h30M29 44h20M29 54h12M53 55l10 10m-10 0h10V55" />
+                </svg>
+              </div>
+              <div class="portal-card-copy">
+                <span class="portal-card-label">{{ wt("bookingLabel") }}</span>
+                <h3>{{ wt("bookingTitle") }}</h3>
+                <p>{{ wt("bookingHint") }}</p>
+              </div>
+            </div>
+            <div class="portal-card-features">
+              <span>{{ wt("bookingAccess") }}</span
+              ><span>{{ wt("bookingBoundary") }}</span>
+            </div>
+            <div class="portal-card-action">
+              <span>{{ wt("bookingAction") }}</span
+              ><svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
+            </div>
+          </RouterLink>
         </div>
       </section>
 
@@ -239,9 +263,9 @@
 
     <el-dialog
       v-model="profileDialogOpen"
-      class="portal-password-dialog"
+      class="portal-password-dialog workspace-el-dialog"
       :title="t('portal.personalInfoTitle')"
-      width="560px"
+      width="min(640px, calc(100vw - 32px))"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
     >
@@ -275,9 +299,9 @@
 
     <el-dialog
       v-model="passwordDialogOpen"
-      class="portal-password-dialog"
+      class="portal-password-dialog workspace-el-dialog"
       :title="t('portal.changePasswordTitle')"
-      width="520px"
+      width="min(520px, calc(100vw - 32px))"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
       destroy-on-close
@@ -333,6 +357,9 @@
 </template>
 
 <script setup>
+import { wt } from "./workspace/workspaceCopy";
+import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
+import WorkspaceStatus from "./workspace/WorkspaceStatus.vue";
 import BrandLockup from "./brand/BrandLockup.vue";
 import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
@@ -471,7 +498,7 @@ async function submitPasswordChange() {
 }
 .portal-sidebar-label {
   margin: 12px 12px -20px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.5px;
   color: #9fb6c2;
 }
@@ -510,7 +537,7 @@ async function submitPasswordChange() {
 }
 .portal-sidebar-user small {
   color: #a6bdc9;
-  font-size: 11px;
+  font-size: 12px;
 }
 .portal-header {
   display: flex;
@@ -532,7 +559,7 @@ async function submitPasswordChange() {
   gap: 10px;
 }
 .portal-live-status {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-muted);
   white-space: nowrap;
 }
@@ -553,7 +580,7 @@ async function submitPasswordChange() {
   min-height: 36px;
   padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: #fff;
   text-decoration: none;
@@ -577,7 +604,7 @@ async function submitPasswordChange() {
   background: var(--color-accent);
   color: white;
   padding: 1px 5px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .portal-avatar {
   display: grid;
@@ -598,7 +625,7 @@ async function submitPasswordChange() {
 }
 .portal-user-copy small {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .portal-account-chevron {
   width: 12px;
@@ -618,7 +645,7 @@ async function submitPasswordChange() {
   align-items: center;
   gap: 18px;
   margin-bottom: 14px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.5px;
   color: var(--color-muted);
@@ -629,7 +656,7 @@ async function submitPasswordChange() {
   background: #b9c9d1;
 }
 .portal-kicker small {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 .portal-hero-copy h1 {
@@ -656,7 +683,7 @@ async function submitPasswordChange() {
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-accent);
   background: #fff;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   box-shadow: none;
 }
 .portal-task-row > span {
@@ -665,7 +692,7 @@ async function submitPasswordChange() {
 }
 .portal-task-row small {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .portal-task-row strong {
   color: var(--color-primary);
@@ -697,7 +724,7 @@ async function submitPasswordChange() {
 .portal-section-head span,
 .portal-card-label {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.3px;
 }
 .portal-section-head h2 {
@@ -718,7 +745,7 @@ async function submitPasswordChange() {
   gap: 18px;
 }
 .portal-card-grid.has-customer-card {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .portal-workbench-card {
   display: flex;
@@ -726,7 +753,7 @@ async function submitPasswordChange() {
   min-width: 0;
   padding: 24px;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-card);
   background: #fff;
   color: inherit;
   text-decoration: none;
@@ -742,7 +769,7 @@ async function submitPasswordChange() {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 1px;
   color: var(--color-muted);
 }
@@ -751,7 +778,7 @@ async function submitPasswordChange() {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 .portal-card-body {
@@ -779,7 +806,7 @@ async function submitPasswordChange() {
   fill-opacity: 0.04;
 }
 .portal-card-label {
-  font-size: 9px;
+  font-size: 12px;
 }
 .portal-card-copy h3 {
   margin: 8px 0 12px;
@@ -803,7 +830,7 @@ async function submitPasswordChange() {
 .portal-card-features span {
   padding: 4px 7px;
   border: 1px solid var(--color-border);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-muted);
 }
 .portal-card-action {
@@ -830,17 +857,17 @@ async function submitPasswordChange() {
   margin-top: 32px;
   padding-top: 20px;
   border-top: 1px solid var(--color-border);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--color-muted);
 }
 .portal-password-form {
   margin-top: 16px;
 }
 :global(.portal-password-dialog) {
-  border-radius: 4px;
+  border-radius: var(--radius-dialog);
 }
 :global(.portal-account-popper.el-popper) {
-  border-radius: 3px;
+  border-radius: var(--radius-dialog);
 }
 :global(.portal-account-popper .portal-account-menu-logout) {
   color: var(--el-color-danger);
@@ -869,7 +896,7 @@ async function submitPasswordChange() {
     flex: 0 0 48px;
   }
   .portal-card-topline {
-    font-size: 10px;
+    font-size: 12px;
   }
 }
 @media (max-width: 760px) {
@@ -893,7 +920,7 @@ async function submitPasswordChange() {
     border-bottom: 2px solid transparent;
     min-height: 40px;
     padding: 8px 10px;
-    font-size: 11px;
+    font-size: 12px;
   }
   .portal-sidebar-label,
   .portal-sidebar-user {
@@ -940,7 +967,7 @@ async function submitPasswordChange() {
   }
   .portal-kicker {
     gap: 10px;
-    font-size: 9px;
+    font-size: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -948,4 +975,80 @@ async function submitPasswordChange() {
     transition: none !important;
   }
 }
+
+.portal-content {
+  padding-top: 32px;
+}
+.portal-today {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.portal-workbench-card {
+  border-radius: var(--radius-card);
+  padding: 24px;
+}
+.portal-card-topline {
+  letter-spacing: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.portal-card-body {
+  gap: 20px;
+}
+.portal-card-copy h3 {
+  font-size: 24px;
+  line-height: 1.4;
+}
+.portal-card-copy p {
+  font-size: 14px;
+  line-height: 1.75;
+}
+.portal-card-features span {
+  font-size: 12px;
+  padding: 6px 9px;
+  border-radius: var(--radius-control);
+}
+.portal-card-action {
+  font-size: 14px;
+}
+.portal-workbench-card:hover {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+.portal-task-row {
+  border-radius: var(--radius-card);
+}
+.portal-task-row small {
+  font-size: 12px;
+}
+.portal-task-row strong {
+  font-size: 14px;
+}
+.portal-header-title,
+.portal-live-status,
+.portal-admin-link,
+.portal-message-button {
+  font-size: 13px;
+}
+.portal-user-copy strong {
+  font-size: 14px;
+}
+.portal-user-copy small {
+  font-size: 12px;
+}
+.portal-sidebar nav a {
+  font-size: 14px;
+}
+.portal-sidebar-label {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-workbench-card:hover {
+    transform: none;
+  }
+}
 </style>
+
+<style scoped src="./workspace/workspaceElementDialog.css"></style>

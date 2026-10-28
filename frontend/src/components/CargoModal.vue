@@ -1,11 +1,12 @@
 <template>
   <el-dialog
-    :model-value="true"
-    class="planner-dialog"
-    width="640px"
+    :model-value="dialogVisible"
+    @update:model-value="dialogVisible = $event"
+    class="planner-dialog workspace-el-dialog"
+    width="min(640px, calc(100vw - 32px))"
     align-center
     destroy-on-close
-    @close="$emit('close')"
+    @closed="emit('close')"
   >
     <template #header>
       <div class="dialog-title">
@@ -13,58 +14,113 @@
         <h2>{{ model.id ? "编辑货物" : "新增货物" }}</h2>
       </div>
     </template>
-    <el-form :model="model" label-position="top" class="element-form-grid">
-      <el-form-item class="span-2" label="名称" required>
-        <el-input v-model.trim="model.name" placeholder="例如：纸箱 A" clearable />
-      </el-form-item>
-      <el-form-item class="span-2" label="型号/规格">
-        <el-input v-model.trim="model.model" placeholder="可选，例如：100 / 200 / A款" clearable />
-      </el-form-item>
-      <el-form-item label="长 cm" required>
-        <el-input-number v-model="model.lengthCm" :min="1" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="宽 cm" required>
-        <el-input-number v-model="model.widthCm" :min="1" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="高 cm" required>
-        <el-input-number v-model="model.heightCm" :min="1" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="数量" required>
-        <el-input-number v-model="model.quantity" :min="1" :step="1" :precision="0" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="单重 kg" required>
-        <el-input-number v-model="model.weightKg" :min="0" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item :label="ui('cargo.packageType')">
-        <el-select v-model="packageType">
-          <el-option :label="ui('cargo.normal')" value="normal" />
-          <el-option :label="ui('cargo.pallet')" value="pallet" />
-        </el-select>
-      </el-form-item>
-      <el-form-item class="span-2" :label="ui('cargo.constraints')">
-        <el-checkbox-group v-model="handlingConstraints" class="cargo-constraint-options">
-          <el-checkbox value="nonStack">{{ ui('cargo.nonstack') }}</el-checkbox>
-          <el-checkbox value="keepUpright">{{ ui('cargo.upright') }}</el-checkbox>
-        </el-checkbox-group>
-        <small class="cargo-constraint-help">{{ ui('cargo.constraintsHelp') }}</small>
-      </el-form-item>
-      <el-form-item class="span-2" label="颜色设置">
-        <div class="element-color-row">
-          <el-color-picker v-model="colorValue" />
-          <el-tag effect="plain">{{ model.color ? "已自定义颜色" : "系统自动推荐颜色" }}</el-tag>
-          <el-button :icon="RefreshLeft" @click="useAutoColor">使用系统推荐色</el-button>
+    <el-form :model="model" label-position="top" class="planner-entry-form"
+      ><fieldset class="planner-entry-section">
+        <legend>{{ wt("cargoIdentity") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item class="span-2" label="名称" required>
+            <el-input v-model.trim="model.name" placeholder="例如：纸箱 A" clearable />
+          </el-form-item>
+          <el-form-item class="span-2" label="型号/规格">
+            <el-input
+              v-model.trim="model.model"
+              :placeholder="wt('cargoModelPlaceholder')"
+              clearable
+            />
+          </el-form-item>
         </div>
-      </el-form-item>
-    </el-form>
+      </fieldset>
+      <fieldset class="planner-entry-section">
+        <legend>{{ wt("cargoMeasurements") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item label="长 cm" required>
+            <el-input-number
+              v-model="model.lengthCm"
+              :min="1"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="宽 cm" required>
+            <el-input-number
+              v-model="model.widthCm"
+              :min="1"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="高 cm" required>
+            <el-input-number
+              v-model="model.heightCm"
+              :min="1"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="数量" required>
+            <el-input-number
+              v-model="model.quantity"
+              :min="1"
+              :step="1"
+              :precision="0"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="单重 kg" required>
+            <el-input-number
+              v-model="model.weightKg"
+              :min="0"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+        </div>
+      </fieldset>
+      <fieldset class="planner-entry-section">
+        <legend>{{ wt("cargoHandling") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item :label="ui('cargo.packageType')">
+            <el-select
+              popper-class="business-select-popper workspace-select-popper"
+              v-model="packageType"
+            >
+              <el-option :label="ui('cargo.normal')" value="normal" />
+              <el-option :label="ui('cargo.pallet')" value="pallet" />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="span-2" :label="ui('cargo.constraints')">
+            <el-checkbox-group v-model="handlingConstraints" class="cargo-constraint-options">
+              <el-checkbox value="nonStack">{{ ui("cargo.nonstack") }}</el-checkbox>
+              <el-checkbox value="keepUpright">{{ ui("cargo.upright") }}</el-checkbox>
+            </el-checkbox-group>
+            <small class="cargo-constraint-help">{{ ui("cargo.constraintsHelp") }}</small>
+          </el-form-item>
+          <el-form-item class="span-2" label="颜色设置">
+            <div class="element-color-row">
+              <el-color-picker v-model="colorValue" />
+              <el-tag effect="plain">{{
+                model.color ? wt("customColor") : wt("automaticColor")
+              }}</el-tag>
+              <el-button :icon="RefreshLeft" @click="useAutoColor">使用系统推荐色</el-button>
+            </div>
+          </el-form-item>
+        </div>
+      </fieldset></el-form
+    >
     <template #footer>
-      <el-button @click="$emit('close')">取消</el-button>
+      <el-button @click="dialogVisible = false">{{ wt("cancel") }}</el-button>
       <el-button type="primary" @click="submit">{{ model.id ? "保存修改" : "添加货物" }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
-import { computed, reactive, watch } from "vue";
+import { wt } from "./workspace/workspaceCopy";
+import { computed, reactive, watch, ref } from "vue";
 import { RefreshLeft } from "@element-plus/icons-vue";
 import { uid } from "../utils/format";
 import { cargoConstraintFlags, cargoHandlingUnitType } from "../utils/cargoConstraints";
@@ -73,6 +129,7 @@ import { translateUiText } from "../i18n/uiText";
 
 const props = defineProps({ cargo: { type: Object, default: null } });
 const emit = defineEmits(["close", "save"]);
+const dialogVisible = ref(true);
 
 function ui(key, params) {
   return translateUiText(key, currentLocale.value, params);
@@ -96,10 +153,8 @@ const packageType = computed({
   }
 });
 const handlingConstraints = computed({
-  get: () => [
-    model.nonStack ? "nonStack" : "",
-    model.keepUpright ? "keepUpright" : ""
-  ].filter(Boolean),
+  get: () =>
+    [model.nonStack ? "nonStack" : "", model.keepUpright ? "keepUpright" : ""].filter(Boolean),
   set: (values) => {
     model.nonStack = values.includes("nonStack");
     model.keepUpright = values.includes("keepUpright");
@@ -158,7 +213,8 @@ function submit() {
     type,
     nonStack: Boolean(model.nonStack),
     keepUpright: Boolean(model.keepUpright),
-    packageInfo: type === "pallet" ? palletPackageInfo(model.packageInfo) : (model.packageInfo || null),
+    packageInfo:
+      type === "pallet" ? palletPackageInfo(model.packageInfo) : model.packageInfo || null,
     id: model.id || uid("cargo")
   });
 }
@@ -179,3 +235,7 @@ function submit() {
   line-height: 1.5;
 }
 </style>
+
+<style scoped src="./workspace/plannerEntryForm.css"></style>
+
+<style scoped src="./workspace/workspaceElementDialog.css"></style>

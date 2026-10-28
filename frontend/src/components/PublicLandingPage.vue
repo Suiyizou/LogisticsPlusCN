@@ -1,68 +1,83 @@
 <template>
-  <div class="landing-page" :lang="currentLocale">
-    <PublicSiteHeader :tracking-path="trackingPath" :entry-label="entryLabel" />
-    <main>
+  <PublicSiteShell :current-user="currentUser">
+    <main ref="page">
       <section id="landing-top" class="maritime-hero">
-        <div class="maritime-wrap">
-          <span class="maritime-eyebrow">{{ t("maritime.heroEyebrow") }}</span>
-          <h1>{{ t("maritime.heroTitle") }}<br />{{ t("maritime.heroTitleSecond") }}</h1>
-          <p>{{ t("maritime.heroDescription") }}<br />{{ t("maritime.heroDescriptionSecond") }}</p>
+        <picture class="maritime-hero__image"
+          ><source
+            type="image/webp"
+            srcset="
+              /brand/v2/maritime-640.webp   640w,
+              /brand/v2/maritime-1280.webp 1280w,
+              /brand/v2/maritime-1920.webp 1920w
+            "
+            sizes="100vw" />
+          <img
+            src="/brand/v2/maritime.png"
+            :alt="t('publicSite.transportImageAlt')"
+            width="1888"
+            height="833"
+            fetchpriority="high"
+        /></picture>
+        <div class="maritime-wrap maritime-hero__content">
+          <span class="maritime-eyebrow">{{ t("publicSite.homeEyebrow") }}</span>
+          <h1>
+            {{ t("publicSite.heroTitle") }}<br /><span>{{ t("publicSite.heroSecond") }}</span>
+          </h1>
+          <p>
+            {{ t("publicSite.heroDescription") }}<br />{{ t("publicSite.heroDescriptionSecond") }}
+          </p>
           <div class="maritime-hero__actions">
             <a class="maritime-button maritime-button--primary" :href="trackingPath"
-              >{{ t("maritime.trackAction") }} <span aria-hidden="true">→</span></a
-            ><a class="maritime-button maritime-button--outline" href="/workbenches"
-              >{{ entryLabel }} <span aria-hidden="true">↗</span></a
+              >{{ t("publicSite.heroTrack") }} <span aria-hidden="true">→</span></a
+            ><RouterLink class="maritime-button maritime-button--outline" to="/services"
+              >{{ t("publicSite.heroExplore") }} <span aria-hidden="true">↗</span></RouterLink
             >
           </div>
         </div>
-        <small class="maritime-hero__caption">{{ t("maritime.imageCaption") }}</small>
       </section>
       <div class="maritime-wrap">
         <PublicTrackingDock :tracking-path="trackingPath" /><PublicToolsSection
           :tracking-path="trackingPath"
         />
       </div>
-      <section class="maritime-about">
-        <img src="/brand/harbor.png" :alt="t('maritime.imageAlt')" loading="lazy" />
+      <section class="maritime-about" data-public-reveal>
+        <figure>
+          <img
+            src="/brand/v2/collaboration-1280.webp"
+            :alt="t('publicSite.collaborationImageAlt')"
+            width="1280"
+            height="563"
+            loading="lazy"
+          />
+        </figure>
         <div>
-          <span class="maritime-eyebrow">{{ t("maritime.aboutEyebrow") }}</span>
-          <h2>{{ t("maritime.aboutTitle") }}<br />{{ t("maritime.aboutTitleSecond") }}</h2>
-          <p>{{ t("maritime.aboutDescription") }}</p>
-          <a class="maritime-text-link" href="/workbenches"
-            >{{ t("maritime.portalAction") }} <span aria-hidden="true">↗</span></a
+          <span class="maritime-eyebrow">{{ t("publicSite.homeStoryEyebrow") }}</span>
+          <h2>{{ t("publicSite.homeStoryTitle") }}</h2>
+          <p>{{ t("publicSite.homeStoryDescription") }}</p>
+          <RouterLink class="maritime-text-link" to="/services/operations"
+            >{{ t("publicSite.homeStoryAction") }} <span aria-hidden="true">→</span></RouterLink
           >
         </div>
       </section>
     </main>
-    <footer class="maritime-footer">
-      <div class="maritime-wrap">
-        <BrandLockup /><LanguageSwitcher /><span>{{ t("maritime.footerTagline") }}</span
-        ><span>{{ t("maritime.company") }}<br />© {{ year }} logisticspluscn</span>
-      </div>
-    </footer>
-  </div>
+  </PublicSiteShell>
 </template>
 <script setup lang="ts">
 import "../maritime-public.css";
-import { computed, onMounted, watch } from "vue";
-import PublicSiteHeader from "./public/PublicSiteHeader.vue";
+import { onMounted, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
+import PublicSiteShell from "./public/PublicSiteShell.vue";
 import PublicTrackingDock from "./public/PublicTrackingDock.vue";
 import PublicToolsSection from "./public/PublicToolsSection.vue";
-import BrandLockup from "./brand/BrandLockup.vue";
-import LanguageSwitcher from "./LanguageSwitcher.vue";
+import { usePublicReveal } from "./public/usePublicReveal.js";
 import { currentLocale, t } from "../i18n";
-const props = defineProps<{
-  currentUser?: { role?: string; username?: string; displayName?: string } | null;
-}>();
+defineProps<{ currentUser?: { role?: string; username?: string; displayName?: string } | null }>();
 const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
-const year = new Date().getFullYear();
-const entryLabel = computed(() => {
-  currentLocale.value;
-  return t(props.currentUser ? "landing.entry.open" : "maritime.loginAction");
-});
-const updateTitle = () => {
+const page = ref<HTMLElement | null>(null);
+usePublicReveal(page);
+function title() {
   document.title = t("landing.metaTitle");
-};
-onMounted(updateTitle);
-watch(currentLocale, updateTitle);
+}
+onMounted(title);
+watch(currentLocale, title);
 </script>

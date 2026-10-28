@@ -1,14 +1,13 @@
 <template>
   <section class="reference-module" data-module="service-catalog">
-    <header>
-      <div>
-        <h2>{{ t("serviceCatalog.title") }}</h2>
-        <p>{{ t("serviceCatalog.description") }}</p>
-      </div>
-      <el-button type="primary" :disabled="saving" @click="open()">{{
-        t("serviceCatalog.create")
-      }}</el-button>
-    </header>
+    <WorkspacePageHeader class="" :description="wt('serviceHint')"
+      ><template #title>{{ t("serviceCatalog.title") }}</template
+      ><template #actions
+        ><el-button type="primary" :disabled="saving" @click="open()">{{
+          t("serviceCatalog.create")
+        }}</el-button></template
+      ></WorkspacePageHeader
+    >
     <form class="search" @submit.prevent="search">
       <el-input
         v-model="query"
@@ -57,6 +56,7 @@
       @update:current-page="changePage($event - 1)"
     />
     <el-dialog
+      class="workspace-el-dialog"
       :model-value="visible"
       @update:model-value="setDialogOpen"
       :title="t(editing ? 'serviceCatalog.edit' : 'serviceCatalog.create')"
@@ -91,6 +91,8 @@
   </section>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { fields } from "../../../generated/service-catalog-model";
@@ -129,7 +131,7 @@ onMounted(refresh);
   min-width: 0;
   background: var(--surface-card, #fff);
   border: 1px solid #dbe4ed;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 header,
 .search,
@@ -170,3 +172,7 @@ footer {
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+
+<style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

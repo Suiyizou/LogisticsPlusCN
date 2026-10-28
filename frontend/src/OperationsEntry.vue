@@ -26,6 +26,7 @@
 </template>
 
 <script setup>
+import "./components/workspace/workspaceMotion.css";
 import {
   computed,
   defineAsyncComponent,

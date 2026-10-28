@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { computed } from "vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
@@ -30,20 +32,20 @@ const emit = defineEmits<{
 <template>
   <section class="admin-page-pane" :aria-busy="busy">
     <article class="admin-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Customer Management</p>
-          <h2>{{ platformCopy.customerTitle }}</h2>
-        </div>
-        <div class="admin-inline-actions">
-          <span>{{
-            platformCopy.summary(info?.customerCount ?? 0, info?.assignedCustomerCount ?? 0)
-          }}</span>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ platformCopy.refresh }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ platformCopy.customerTitle }}</template
+        ><template #eyebrow>Customer Management</template
+        ><template #actions
+          ><div class="admin-inline-actions">
+            <span>{{
+              platformCopy.summary(info?.customerCount ?? 0, info?.assignedCustomerCount ?? 0)
+            }}</span>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ platformCopy.refresh }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table
           :data="rows"
@@ -114,7 +116,9 @@ const emit = defineEmits<{
               </div>
             </template>
           </BusinessColumn>
-          <template #empty>{{ platformCopy.empty }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ platformCopy.empty }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -133,3 +137,5 @@ const emit = defineEmits<{
 </template>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./adminBusinessStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

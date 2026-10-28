@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onScopeDispose, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
+import { wt } from "../../components/workspace/workspaceCopy";
 import { useCustomerModuleApi } from "./customerContext.js";
 const api = useCustomerModuleApi();
 const { t } = useI18n();
@@ -50,18 +53,23 @@ onScopeDispose(() => {
 });
 </script>
 <template>
-  <section>
-    <header>
-      <h1>{{ t("customerSurface.shipments") }}</h1>
-      <button type="button" :disabled="busy" @click="refresh()">
-        {{ t("customerSurface.refresh") }}
-      </button>
-    </header>
-    <p>{{ t("customerSurface.intro") }}</p>
-    <a href="/tracking/">{{ t("customerSurface.tracking") }}</a>
-    <p v-if="busy" role="status">{{ t("customerSurface.loading") }}</p>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <div class="table-scroll">
+  <section class="customer-assigned-page" :aria-busy="busy">
+    <WorkspacePageHeader
+      :title="t('customerSurface.shipments')"
+      :description="wt('customerSpaceHint')"
+      ><template #actions
+        ><a class="customer-tracking-link" href="/tracking/">{{ t("customerSurface.tracking") }}</a
+        ><el-button :loading="busy" @click="refresh()">{{
+          t("customerSurface.refresh")
+        }}</el-button></template
+      ><template #meta
+        ><span>{{ t("customerSurface.summary", { page, total }) }}</span></template
+      ></WorkspacePageHeader
+    >
+    <Transition name="workspace-state"
+      ><el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert"
+    /></Transition>
+    <div class="table-scroll" v-loading="busy">
       <table>
         <thead>
           <tr>
@@ -81,7 +89,7 @@ onScopeDispose(() => {
             <td>{{ row.updatedAt || "—" }}</td>
           </tr>
           <tr v-if="!busy && !rows.length">
-            <td colspan="5">{{ t("customerSurface.empty") }}</td>
+            <td colspan="5"><WorkspaceEmptyState :title="t('customerSurface.empty')" /></td>
           </tr>
         </tbody>
       </table>
@@ -124,5 +132,58 @@ td {
 }
 button {
   padding: 8px 12px;
+}
+
+.customer-assigned-page {
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+.customer-tracking-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 14px;
+}
+.table-scroll {
+  margin-top: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+table {
+  margin: 0;
+}
+th {
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+td {
+  height: 52px;
+  font-size: 14px;
+}
+tbody tr:hover {
+  background: var(--color-surface-subtle);
+}
+footer {
+  margin-top: 22px;
+  font-size: 13px;
+  color: var(--color-muted);
+  flex-wrap: wrap;
+}
+@media (max-width: 680px) {
+  .customer-assigned-page {
+    padding: 18px;
+  }
+  footer {
+    justify-content: flex-start;
+  }
 }
 </style>

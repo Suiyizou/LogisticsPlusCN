@@ -1,34 +1,32 @@
 <template>
   <section class="shipment-list-page" data-module="shipments">
-    <header class="shipment-page-heading">
-      <div>
-        <span class="business-overview-kicker">{{ t("customers.trackingWorkspace") }}</span>
-        <h2>
-          {{ isOverseaAgent ? t("customers.shipmentOverview") : t("customers.availableShipments") }}
-        </h2>
-        <p>{{ t("customers.availableShipmentsHint") }}</p>
-      </div>
-      <div v-if="isManager" class="shipment-heading-actions">
-        <el-button
-          type="primary"
-          class="batch-track-primary-action"
-          :disabled="
-            savingShipment || loadingShipmentDetail || refreshingShipment || deletingShipment
-          "
-          @click="toggleBatchTrackPanel"
-        >
-          <el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}
-        </el-button>
-        <el-button plain v-if="isManager" :disabled="entryBusy" @click="openShipmentCreateDialog">
-          <el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}
-        </el-button>
-        <el-button plain :disabled="entryBusy" @click="openShipmentExcelImport">
-          <el-icon><Upload /></el-icon>{{ t("customers.shipmentExcelImport") }}
-        </el-button>
-      </div>
-    </header>
+    <WorkspacePageHeader
+      :title="isOverseaAgent ? t('customers.shipmentOverview') : t('customers.availableShipments')"
+      :eyebrow="t('customers.trackingWorkspace')"
+      :description="wt('shipmentWorkspaceHint')"
+      ><template #actions
+        ><div v-if="isManager" class="shipment-heading-actions">
+          <el-button
+            type="primary"
+            class="batch-track-primary-action"
+            :disabled="
+              savingShipment || loadingShipmentDetail || refreshingShipment || deletingShipment
+            "
+            @click="toggleBatchTrackPanel"
+          >
+            <el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}
+          </el-button>
+          <el-button plain v-if="isManager" :disabled="entryBusy" @click="openShipmentCreateDialog">
+            <el-icon><Plus /></el-icon>{{ t("customers.createShipment") }}
+          </el-button>
+          <el-button plain :disabled="entryBusy" @click="openShipmentExcelImport">
+            <el-icon><Upload /></el-icon>{{ t("customers.shipmentExcelImport") }}
+          </el-button>
+        </div></template
+      ></WorkspacePageHeader
+    >
     <section class="shipment-command-surface">
-      <div class="shipment-filter-bar">
+      <div class="shipment-filter-bar" :class="{ 'has-customer-filter': isManager }">
         <label v-if="isManager" class="shipment-toolbar-control">
           <span>{{ t("customers.customerFilterLabel") }}</span>
           <el-select
@@ -74,57 +72,74 @@
             <el-option :label="t('customers.trackingChannelProxy')" value="PROXY" />
           </el-select>
         </label>
-        <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments">
-          <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
-        </el-button>
+
+        <div class="shipment-filter-actions">
+          <el-button @click="loadAvailableShipments" :disabled="loadingAvailableShipments">
+            <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
+          </el-button>
+          <el-button
+            v-if="isManager"
+            type="primary"
+            :disabled="
+              batchTrackRunning || batchTrackChecking || batchTrackFileParsing || refreshingShipment
+            "
+            @click="startRefreshAllShipments"
+          >
+            <el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}
+          </el-button>
+        </div>
       </div>
-      <div v-if="isManager" class="shipment-bulk-bar">
+      <div class="shipment-filter-summary" aria-live="polite">
         <el-button
-          :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
-          @click="openBatchBusinessFieldsEditor"
-          >{{
-            t("customers.batchEditBusinessFields", {
-              count: selectedShipmentRows.length
-            })
-          }}</el-button
-        >
-        <el-button
-          class="shipment-bulk-danger"
-          :disabled="!selectedShipmentRows.length || batchDeletingShipments"
-          @click="batchDeleteSelectedShipments"
-          >{{
-            t("customers.batchDeleteSelected", {
-              count: selectedShipmentRows.length
-            })
-          }}</el-button
-        >
-        <el-button
-          :disabled="
-            !selectedShipmentRows.length ||
-            batchTrackRunning ||
-            batchTrackChecking ||
-            batchTrackFileParsing ||
-            refreshingShipment ||
-            batchDeletingShipments
-          "
-          @click="startRefreshSelectedShipments"
-          ><el-icon><Refresh /></el-icon
-          >{{
-            t("customers.batchRefreshSelected", {
-              count: selectedShipmentRows.length
-            })
-          }}</el-button
-        >
-        <el-button
-          type="primary"
-          :disabled="
-            batchTrackRunning || batchTrackChecking || batchTrackFileParsing || refreshingShipment
-          "
-          @click="startRefreshAllShipments"
-        >
-          <el-icon><Refresh /></el-icon>{{ t("customers.refreshAllActive") }}
-        </el-button>
+          v-if="shipmentCustomerFilter || shipmentBusinessFilter"
+          text
+          @click="clearShipmentFilters"
+          >{{ wt("clearFilters") }}</el-button
+        ><span>{{ wt("resultsCount", { count: shipmentTotal }) }}</span
+        ><strong v-if="selectedShipmentRows.length">{{
+          wt("selectedRows", { count: selectedShipmentRows.length })
+        }}</strong>
       </div>
+      <Transition name="workspace-state"
+        ><div v-if="isManager && selectedShipmentRows.length" class="shipment-bulk-bar">
+          <el-button
+            :disabled="!selectedShipmentRows.length || batchSavingBusinessFields"
+            @click="openBatchBusinessFieldsEditor"
+            >{{
+              t("customers.batchEditBusinessFields", {
+                count: selectedShipmentRows.length
+              })
+            }}</el-button
+          >
+          <el-button
+            class="shipment-bulk-danger"
+            :disabled="!selectedShipmentRows.length || batchDeletingShipments"
+            @click="batchDeleteSelectedShipments"
+            >{{
+              t("customers.batchDeleteSelected", {
+                count: selectedShipmentRows.length
+              })
+            }}</el-button
+          >
+          <el-button
+            :disabled="
+              !selectedShipmentRows.length ||
+              batchTrackRunning ||
+              batchTrackChecking ||
+              batchTrackFileParsing ||
+              refreshingShipment ||
+              batchDeletingShipments
+            "
+            @click="startRefreshSelectedShipments"
+            ><el-icon><Refresh /></el-icon
+            >{{
+              t("customers.batchRefreshSelected", {
+                count: selectedShipmentRows.length
+              })
+            }}</el-button
+          >
+        </div></Transition
+      >
     </section>
     <el-table
       :ref="actions.setTableRef"
@@ -280,6 +295,8 @@
 
 <script setup lang="ts">
 import { toRefs } from "vue";
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { Operation, Plus, Upload, Refresh } from "@element-plus/icons-vue";
 
 // The host supplies one controlled workflow. This page owns no API calls or duplicate state.
@@ -344,6 +361,10 @@ const {
   isCreatedToday,
   formatDateTime
 } = props.workspace.formatters;
+function clearShipmentFilters() {
+  shipmentCustomerFilter.value = "";
+  shipmentBusinessFilter.value = "";
+}
 </script>
 
 <style scoped>
@@ -387,7 +408,7 @@ const {
 .batch-track-primary-action {
   min-height: 44px;
   padding-inline: 20px;
-  font-weight: 750;
+  font-weight: 600;
   box-shadow: none;
 }
 .batch-track-primary-action:hover,
@@ -399,7 +420,7 @@ const {
   margin-bottom: 14px;
   padding: 14px 16px;
   border: 1px solid #dbe4ed;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: none;
   gap: 12px;
@@ -442,7 +463,7 @@ const {
   gap: 6px;
   color: #526b82;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 .shipment-toolbar-control > span {
@@ -457,12 +478,12 @@ const {
 .shipment-toolbar-control :deep(.el-select__selected-item),
 .shipment-toolbar-control :deep(.el-select__placeholder) {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-toolbar-control :deep(.el-select__wrapper) {
   min-height: 40px;
   padding: 0 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
@@ -516,8 +537,8 @@ const {
   display: block;
   margin-bottom: 5px;
   color: #3982be;
-  font-size: 9px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -542,9 +563,9 @@ const {
 .shipment-today-tags :deep(.el-tag) {
   height: 25px;
   padding-inline: 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.01em;
   box-shadow: none;
 }
@@ -599,7 +620,7 @@ const {
 .shipment-reference-type {
   flex: 0 0 auto;
   color: #74879b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -624,21 +645,21 @@ const {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-pagination :deep(.btn-prev),
 .shipment-pagination :deep(.btn-next),
 .shipment-pagination :deep(.el-pager li) {
   min-width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: var(--radius-control) !important;
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
@@ -734,4 +755,145 @@ const {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper.is-focused) {
   box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
+
+.shipment-command-surface {
+  padding: 20px;
+  border-radius: var(--radius-card);
+}
+.shipment-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+.shipment-toolbar-control {
+  flex: 1 1 180px;
+  max-width: 300px;
+  font-weight: 500;
+}
+.shipment-toolbar-control > span {
+  font-size: 13px;
+}
+.shipment-toolbar-control :deep(.el-select) {
+  width: 100%;
+}
+.shipment-toolbar-control :deep(.el-select__wrapper) {
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  font-weight: 400;
+}
+.shipment-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 16px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.shipment-filter-summary strong {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+.shipment-bulk-bar {
+  padding: 16px 0 0;
+  margin-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.shipment-list-table {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.shipment-list-table :deep(.el-table__cell) {
+  height: 52px;
+  font-size: 14px;
+}
+.shipment-list-table :deep(.el-table__header .cell) {
+  font-size: 13px;
+  font-weight: 500;
+}
+.shipment-reference-cell b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.shipment-reference-cell small {
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .shipment-command-surface {
+    padding: 16px;
+  }
+  .shipment-toolbar-control {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .shipment-heading-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .shipment-heading-actions .el-button {
+    flex: 1 1 auto;
+  }
+  .shipment-bulk-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+.shipment-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto;
+  gap: 20px;
+  align-items: end;
+}
+.shipment-filter-bar.has-customer-filter {
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+}
+.shipment-filter-bar .shipment-toolbar-control {
+  max-width: none;
+  width: 100%;
+}
+.shipment-filter-bar .shipment-toolbar-control > .business-select {
+  width: 100%;
+}
+.shipment-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 0;
+}
+.shipment-filter-actions .el-button {
+  margin: 0;
+  white-space: nowrap;
+}
+.shipment-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.shipment-bulk-bar .el-button {
+  margin: 0;
+}
+@media (max-width: 1100px) {
+  .shipment-filter-bar,
+  .shipment-filter-bar.has-customer-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shipment-filter-actions {
+    grid-column: 1/-1;
+    justify-content: flex-end;
+  }
+}
+@media (max-width: 600px) {
+  .shipment-filter-bar,
+  .shipment-filter-bar.has-customer-filter {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .shipment-filter-actions {
+    justify-content: flex-start;
+  }
+}
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

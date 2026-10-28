@@ -1,4 +1,5 @@
 import { businessModules, validateModules } from "./registry.js";
+import { createPublicServiceRoutes } from "../public/routes.js";
 
 // Components are supplied by the composition root, so the registry can be tested without a browser.
 export function createApplicationRoutes(
@@ -77,6 +78,7 @@ export function createApplicationRoutes(
   const customerPages = surfacePages("customer");
   if (customerPages.length && !views.customer) throw Error("Missing customer surface host");
   const routes = [
+    ...createPublicServiceRoutes(),
     ...(customerPages.length
       ? [
           {

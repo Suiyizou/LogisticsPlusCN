@@ -1,11 +1,12 @@
 <template>
   <el-dialog
-    :model-value="true"
-    class="planner-dialog"
-    width="520px"
+    :model-value="dialogVisible"
+    @update:model-value="dialogVisible = $event"
+    class="planner-dialog workspace-el-dialog"
+    width="min(640px, calc(100vw - 32px))"
     align-center
     destroy-on-close
-    @close="$emit('close')"
+    @closed="emit('close')"
   >
     <template #header>
       <div class="dialog-title">
@@ -13,59 +14,128 @@
         <h2>{{ isEdit ? "编辑箱型尺寸" : "添加自定义箱型" }}</h2>
       </div>
     </template>
-    <el-form :model="model" label-position="top" class="element-form-grid">
-      <el-form-item class="span-2" label="箱型名称" required>
-        <el-input v-model.trim="model.name" placeholder="例如：客户定制柜" clearable />
-      </el-form-item>
-      <el-form-item label="长 cm" required>
-        <el-input-number v-model="model.lengthCm" :min="1" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="宽 cm" required>
-        <el-input-number v-model="model.widthCm" :min="1" :step="0.1" :precision="1" controls-position="right" />
-      </el-form-item>
-      <el-form-item :label="usesLoadHeightLimit ? ui('container.heightLimitCm') : ui('container.heightCm')" required>
-        <el-input-number v-model="model.heightCm" :min="1" :step="usesLoadHeightLimit ? 1 : 0.1" :precision="usesLoadHeightLimit ? 0 : 1" controls-position="right" />
-      </el-form-item>
-      <el-form-item label="载重 kg" required>
-        <el-input-number v-model="model.payloadKg" :min="1" :step="1" :precision="0" controls-position="right" />
-      </el-form-item>
-      <el-form-item class="span-2 container-price-editor" :label="`${ui('container.referencePrice')} USD`">
-        <div class="container-price-edit-row">
-          <el-input-number v-model="model.referencePrice" :min="0" :step="100" :precision="0" controls-position="right" />
-          <el-button v-if="defaultContainer" :disabled="priceIsDefault" @click="restoreDefaultPrice">
-            {{ ui('container.restoreDefaultPrice') }}
-          </el-button>
+    <el-form :model="model" label-position="top" class="planner-entry-form"
+      ><fieldset class="planner-entry-section">
+        <legend>{{ wt("equipmentIdentity") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item class="span-2" label="箱型名称" required>
+            <el-input v-model.trim="model.name" placeholder="例如：客户定制柜" clearable />
+          </el-form-item>
         </div>
-        <small v-if="defaultContainer">{{ ui('container.defaultPriceHint', { value: defaultPriceText }) }}</small>
-        <small>{{ ui('container.priceOptionalHint') }}</small>
-      </el-form-item>
-      <el-form-item label="使用属性">
-        <el-select v-model="model.usagePriority" placeholder="选择使用属性">
-          <el-option label="常用箱型" value="common" />
-          <el-option label="少量使用" value="limited" />
-          <el-option label="特殊设备" value="special" />
-        </el-select>
-      </el-form-item>
-      <el-form-item v-if="!flatRackModel" class="span-2">
-        <el-checkbox v-model="model.ignoreHeightLimit">{{ ui('container.useCustomHeightLimit') }}</el-checkbox>
-        <small class="form-help">{{ ui('container.heightLimitHelp') }}</small>
-      </el-form-item>
-    </el-form>
+      </fieldset>
+      <fieldset class="planner-entry-section">
+        <legend>{{ wt("equipmentSize") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item label="长 cm" required>
+            <el-input-number
+              v-model="model.lengthCm"
+              :min="1"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="宽 cm" required>
+            <el-input-number
+              v-model="model.widthCm"
+              :min="1"
+              :step="0.1"
+              :precision="1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item
+            :label="usesLoadHeightLimit ? ui('container.heightLimitCm') : ui('container.heightCm')"
+            required
+          >
+            <el-input-number
+              v-model="model.heightCm"
+              :min="1"
+              :step="usesLoadHeightLimit ? 1 : 0.1"
+              :precision="usesLoadHeightLimit ? 0 : 1"
+              controls-position="right"
+            />
+          </el-form-item>
+          <el-form-item label="载重 kg" required>
+            <el-input-number
+              v-model="model.payloadKg"
+              :min="1"
+              :step="1"
+              :precision="0"
+              controls-position="right"
+            />
+          </el-form-item>
+        </div>
+      </fieldset>
+      <fieldset class="planner-entry-section">
+        <legend>{{ wt("equipmentSettings") }}</legend>
+        <div class="element-form-grid">
+          <el-form-item
+            class="span-2 container-price-editor"
+            :label="`${ui('container.referencePrice')} USD`"
+          >
+            <div class="container-price-edit-row">
+              <el-input-number
+                v-model="model.referencePrice"
+                :min="0"
+                :step="100"
+                :precision="0"
+                controls-position="right"
+              />
+              <el-button
+                v-if="defaultContainer"
+                :disabled="priceIsDefault"
+                @click="restoreDefaultPrice"
+              >
+                {{ ui("container.restoreDefaultPrice") }}
+              </el-button>
+            </div>
+            <small v-if="defaultContainer">{{
+              ui("container.defaultPriceHint", { value: defaultPriceText })
+            }}</small>
+            <small>{{ ui("container.priceOptionalHint") }}</small>
+          </el-form-item>
+          <el-form-item label="使用属性">
+            <el-select
+              popper-class="business-select-popper workspace-select-popper"
+              v-model="model.usagePriority"
+              :placeholder="wt('chooseUsage')"
+            >
+              <el-option label="常用箱型" value="common" />
+              <el-option label="少量使用" value="limited" />
+              <el-option label="特殊设备" value="special" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="!flatRackModel" class="span-2">
+            <el-checkbox v-model="model.ignoreHeightLimit">{{
+              ui("container.useCustomHeightLimit")
+            }}</el-checkbox>
+            <small class="form-help">{{ ui("container.heightLimitHelp") }}</small>
+          </el-form-item>
+        </div>
+      </fieldset></el-form
+    >
     <template #footer>
-      <el-button @click="$emit('close')">取消</el-button>
+      <el-button @click="dialogVisible = false">{{ wt("cancel") }}</el-button>
       <el-button type="primary" @click="submit">{{ isEdit ? "保存尺寸" : "加入对比" }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
-import { computed, reactive } from "vue";
+import { wt } from "./workspace/workspaceCopy";
+import { computed, reactive, ref } from "vue";
 import { currentLocale } from "../i18n";
 import { translateUiText } from "../i18n/uiText";
-import { defaultContainerForId, effectiveContainerHeight, isFlatRackContainer } from "../services/localData";
+import {
+  defaultContainerForId,
+  effectiveContainerHeight,
+  isFlatRackContainer
+} from "../services/localData";
 import { uid } from "../utils/format";
 
 const emit = defineEmits(["close", "save"]);
+const dialogVisible = ref(true);
 const props = defineProps({
   container: { type: Object, default: null }
 });
@@ -95,7 +165,8 @@ const model = reactive({
   payloadKg: Number(props.container?.payloadKg || 28000),
   usagePriority: props.container?.usagePriority || "common",
   visualKind: props.container?.visualKind || "",
-  ignoreHeightLimit: Boolean(props.container?.ignoreHeightLimit) || isFlatRackContainer(props.container || {}),
+  ignoreHeightLimit:
+    Boolean(props.container?.ignoreHeightLimit) || isFlatRackContainer(props.container || {}),
   costFactor: props.container?.costFactor,
   referencePrice: props.container?.referencePrice ?? null,
   referenceCurrency: props.container?.referenceCurrency || "USD",
@@ -128,8 +199,9 @@ function submit() {
   if (!String(model.name || "").trim()) return;
   const referencePrice = Number(model.referencePrice || 0);
   const defaultPrice = Number(defaultContainer.value?.referencePrice || 0);
-  const priceEdited = Boolean(defaultContainer.value)
-    && (!(referencePrice > 0) || Math.abs(referencePrice - defaultPrice) >= 0.01);
+  const priceEdited =
+    Boolean(defaultContainer.value) &&
+    (!(referencePrice > 0) || Math.abs(referencePrice - defaultPrice) >= 0.01);
   const heightCm = Math.max(1, Number(model.heightCm || 1));
   const ignoreHeightLimit = flatRackModel.value || Boolean(model.ignoreHeightLimit);
   emit("save", {
@@ -148,3 +220,7 @@ function ui(key, params) {
   return translateUiText(key, currentLocale.value, params);
 }
 </script>
+
+<style scoped src="./workspace/plannerEntryForm.css"></style>
+
+<style scoped src="./workspace/workspaceElementDialog.css"></style>

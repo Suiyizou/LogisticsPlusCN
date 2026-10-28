@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { computed } from "vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
@@ -23,24 +25,24 @@ const emit = defineEmits<{ refresh: []; page: [page: number] }>();
 <template>
   <section class="admin-page-pane" :aria-busy="busy">
     <article class="admin-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Shipment Management</p>
-          <h2>{{ ticketCopy.title }}</h2>
-        </div>
-        <div class="admin-inline-actions">
-          <span>{{ ticketCopy.total.replace("{count}", String(total)) }}</span>
-          <RouterLink
-            class="admin-inline-link primary"
-            :to="{ path: '/customers', query: { section: 'shipments' } }"
-          >
-            {{ ticketCopy.openFullManagement }}
-          </RouterLink>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ ticketCopy.refresh }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ ticketCopy.title }}</template
+        ><template #eyebrow>Shipment Management</template
+        ><template #actions
+          ><div class="admin-inline-actions">
+            <span>{{ ticketCopy.total.replace("{count}", String(total)) }}</span>
+            <RouterLink
+              class="admin-inline-link primary"
+              :to="{ path: '/customers', query: { section: 'shipments' } }"
+            >
+              {{ ticketCopy.openFullManagement }}
+            </RouterLink>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ ticketCopy.refresh }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table :data="rows" row-key="shipmentId" stripe class="standard-information-table">
           <BusinessColumn :label="ticketCopy.referenceNo" min-width="170" show-overflow-tooltip>
@@ -86,7 +88,9 @@ const emit = defineEmits<{ refresh: []; page: [page: number] }>();
               </RouterLink>
             </template>
           </BusinessColumn>
-          <template #empty>{{ ticketCopy.empty }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ ticketCopy.empty }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -105,3 +109,5 @@ const emit = defineEmits<{ refresh: []; page: [page: number] }>();
 </template>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./adminBusinessStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

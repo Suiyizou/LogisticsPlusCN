@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import BrandLockup from "../../components/brand/BrandLockup.vue";
 import { RouterLink } from "vue-router";
 import type { AdminConsoleCopy, AdminLoginForm } from "../../types/adminShell";
@@ -39,10 +40,7 @@ function submit() {
     </div>
 
     <form class="admin-login-card" @submit.prevent="submit">
-      <div class="admin-login-title">
-        <span>{{ copy.loginTitle }}</span>
-        <strong>{{ copy.loginEntry }}</strong>
-      </div>
+      <WorkspacePageHeader :title="copy.loginEntry" :eyebrow="copy.loginTitle" />
       <label>
         <span>{{ copy.username }}</span>
         <input

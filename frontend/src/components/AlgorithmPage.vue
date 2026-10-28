@@ -1,13 +1,14 @@
 <template>
   <section class="algorithm-page">
-    <div class="page-title">
-      <p>{{ ui('algorithm.eyebrow') }}</p>
-      <h2>{{ ui('algorithm.title') }}</h2>
-    </div>
+    <WorkspacePageHeader
+      :title="ui('algorithm.title')"
+      :eyebrow="ui('algorithm.eyebrow')"
+      :description="wt('readingHint')"
+    />
 
     <div class="algorithm-note trace-card">
-      <strong>{{ ui('algorithm.whereRuns') }}</strong>
-      <p>{{ ui('algorithm.whereRunsText') }}</p>
+      <strong>{{ ui("algorithm.whereRuns") }}</strong>
+      <p>{{ ui("algorithm.whereRunsText") }}</p>
     </div>
 
     <div class="algorithm-visual-guide">
@@ -33,64 +34,112 @@
 
     <div class="algorithm-grid">
       <article>
-        <strong>{{ ui('algorithm.step.expand') }}</strong>
-        <p>{{ ui('algorithm.step.expandText') }}</p>
+        <strong>{{ ui("algorithm.step.expand") }}</strong>
+        <p>{{ ui("algorithm.step.expandText") }}</p>
       </article>
       <article>
-        <strong>{{ ui('algorithm.step.sort') }}</strong>
-        <p>{{ ui('algorithm.step.sortText') }}</p>
+        <strong>{{ ui("algorithm.step.sort") }}</strong>
+        <p>{{ ui("algorithm.step.sortText") }}</p>
       </article>
       <article>
-        <strong>{{ ui('algorithm.step.rotation') }}</strong>
-        <p>{{ ui('algorithm.step.rotationText') }}</p>
+        <strong>{{ ui("algorithm.step.rotation") }}</strong>
+        <p>{{ ui("algorithm.step.rotationText") }}</p>
       </article>
       <article>
-        <strong>{{ ui('algorithm.step.points') }}</strong>
-        <p>{{ ui('algorithm.step.pointsText') }}</p>
+        <strong>{{ ui("algorithm.step.points") }}</strong>
+        <p>{{ ui("algorithm.step.pointsText") }}</p>
       </article>
       <article>
-        <strong>{{ ui('algorithm.step.support') }}</strong>
+        <strong>{{ ui("algorithm.step.support") }}</strong>
         <p>{{ t("planner.supportConstraintNote") }}</p>
       </article>
       <article>
-        <strong>{{ ui('algorithm.step.recommend') }}</strong>
-        <p>{{ ui('algorithm.step.recommendText') }}</p>
+        <strong>{{ ui("algorithm.step.recommend") }}</strong>
+        <p>{{ ui("algorithm.step.recommendText") }}</p>
       </article>
     </div>
 
     <div class="trace-grid">
-      <article class="algorithm-note">
-        <strong>{{ ui('algorithm.coreFormulas') }}</strong>
+      <details class="algorithm-note algorithm-formulas" open>
+        <summary>{{ ui("algorithm.coreFormulas") }}</summary>
         <ul class="formula-list">
           <li v-for="formula in formulas" :key="formula">{{ tr(formula) }}</li>
         </ul>
-      </article>
+      </details>
 
       <article class="algorithm-note">
-        <strong>{{ ui('algorithm.currentTrace') }}</strong>
+        <strong>{{ ui("algorithm.currentTrace") }}</strong>
         <div v-if="trace" class="trace-metrics">
-          <div><span>{{ ui('algorithm.selectedContainer') }}</span><b>{{ tr(trace.current.containerName) }}</b></div>
-          <div><span>{{ ui('algorithm.calculationMode') }}</span><b>{{ tr(trace.mode) }}</b></div>
-          <div><span>{{ ui('algorithm.cargoExpansion') }}</span><b>{{ traceUnitCount }} {{ ui('unit.piece') }}</b></div>
-          <div><span>{{ ui('algorithm.plannedUtilization') }}</span><b>{{ trace.parameters.utilizationPercent }}%</b></div>
-          <div><span>{{ ui('algorithm.horizontalGap') }}</span><b>{{ trace.parameters.globalGapCm }} cm</b></div>
-          <div><span>{{ t("planner.supportRatioTrace") }}</span><b>{{ trace.supportRatioPercent }}% / {{ trace.nonStackSupportRatioPercent || 98.5 }}%</b></div>
-          <div><span>{{ ui('algorithm.firstBoxStrategy') }}</span><b>{{ tr(trace.selectedStrategy || "-") }}</b></div>
-          <div><span>{{ ui('algorithm.firstBoxLoaded') }}</span><b>{{ trace.firstBox.placedCount }} / {{ traceUnitCount }} {{ ui('unit.piece') }}</b></div>
-          <div><span>{{ ui('algorithm.containerVolume') }}</span><b>{{ fmt(trace.current.containerVolumeM3) }} m³</b></div>
-          <div><span>{{ ui('algorithm.usableVolume') }}</span><b>{{ fmt(trace.current.usableVolumeM3) }} m³</b></div>
-          <div><span>{{ ui('algorithm.firstBoxOccupiedVolume') }}</span><b>{{ fmt(trace.current.firstBoxOccupiedVolumeM3) }} m³</b></div>
-          <div><span>{{ ui('algorithm.firstBoxSpaceUsed') }}</span><b>{{ fmt(trace.current.firstBoxFillPercent, 1) }}%</b></div>
-          <div><span>{{ ui('algorithm.geometryBoxes') }}</span><b>{{ trace.current.geometryBoxes }}</b></div>
-          <div><span>{{ ui('algorithm.weightBoxes') }}</span><b>{{ trace.current.weightBoxes }}</b></div>
-          <div><span>{{ ui('algorithm.finalBoxes') }}</span><b>{{ trace.current.finalBoxes }}</b></div>
+          <div>
+            <span>{{ ui("algorithm.selectedContainer") }}</span
+            ><b>{{ tr(trace.current.containerName) }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.calculationMode") }}</span
+            ><b>{{ tr(trace.mode) }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.cargoExpansion") }}</span
+            ><b>{{ traceUnitCount }} {{ ui("unit.piece") }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.plannedUtilization") }}</span
+            ><b>{{ trace.parameters.utilizationPercent }}%</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.horizontalGap") }}</span
+            ><b>{{ trace.parameters.globalGapCm }} cm</b>
+          </div>
+          <div>
+            <span>{{ t("planner.supportRatioTrace") }}</span
+            ><b
+              >{{ trace.supportRatioPercent }}% /
+              {{ trace.nonStackSupportRatioPercent || 98.5 }}%</b
+            >
+          </div>
+          <div>
+            <span>{{ ui("algorithm.firstBoxStrategy") }}</span
+            ><b>{{ tr(trace.selectedStrategy || "-") }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.firstBoxLoaded") }}</span
+            ><b>{{ trace.firstBox.placedCount }} / {{ traceUnitCount }} {{ ui("unit.piece") }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.containerVolume") }}</span
+            ><b>{{ fmt(trace.current.containerVolumeM3) }} m³</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.usableVolume") }}</span
+            ><b>{{ fmt(trace.current.usableVolumeM3) }} m³</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.firstBoxOccupiedVolume") }}</span
+            ><b>{{ fmt(trace.current.firstBoxOccupiedVolumeM3) }} m³</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.firstBoxSpaceUsed") }}</span
+            ><b>{{ fmt(trace.current.firstBoxFillPercent, 1) }}%</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.geometryBoxes") }}</span
+            ><b>{{ trace.current.geometryBoxes }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.weightBoxes") }}</span
+            ><b>{{ trace.current.weightBoxes }}</b>
+          </div>
+          <div>
+            <span>{{ ui("algorithm.finalBoxes") }}</span
+            ><b>{{ trace.current.finalBoxes }}</b>
+          </div>
         </div>
-        <p v-else>{{ ui('algorithm.noTrace') }}</p>
+        <p v-else>{{ ui("algorithm.noTrace") }}</p>
       </article>
     </div>
 
     <div v-if="trace" class="algorithm-note">
-      <strong>{{ ui('algorithm.workerFlow') }}</strong>
+      <strong>{{ ui("algorithm.workerFlow") }}</strong>
       <ol class="trace-list">
         <li v-for="step in trace.pipeline" :key="step">{{ tr(step) }}</li>
       </ol>
@@ -102,6 +151,8 @@
 </template>
 
 <script setup>
+import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
+import { wt } from "./workspace/workspaceCopy";
 import { computed } from "vue";
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
@@ -126,12 +177,15 @@ const fallbackFormulas = [
 ];
 
 const trace = computed(() => props.evaluation?.trace || null);
-const formulas = computed(() => trace.value?.formulas?.length ? trace.value.formulas : fallbackFormulas);
-const traceUnitCount = computed(() =>
-  trace.value?.parameters?.unitCount
-  ?? trace.value?.parameters?.physicalUnitCount
-  ?? trace.value?.parameters?.solverUnitCount
-  ?? 0
+const formulas = computed(() =>
+  trace.value?.formulas?.length ? trace.value.formulas : fallbackFormulas
+);
+const traceUnitCount = computed(
+  () =>
+    trace.value?.parameters?.unitCount ??
+    trace.value?.parameters?.physicalUnitCount ??
+    trace.value?.parameters?.solverUnitCount ??
+    0
 );
 const guideLanes = computed(() => {
   currentLocale.value;
@@ -204,3 +258,90 @@ function ui(key, params) {
   return translateUiText(key, currentLocale.value, params);
 }
 </script>
+
+<style scoped>
+.algorithm-page {
+  display: grid;
+  gap: 24px;
+}
+.algorithm-note,
+.algorithm-visual-guide,
+.algorithm-grid > article {
+  border-radius: var(--radius-card);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: none;
+}
+.algorithm-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.algorithm-grid > article {
+  padding: 24px;
+}
+.algorithm-grid > article strong,
+.algorithm-note > strong,
+.algorithm-formulas summary {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.algorithm-grid p,
+.algorithm-note p,
+.algorithm-guide-lane p,
+.algorithm-guide-strategies p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--color-muted);
+}
+.algorithm-formulas summary {
+  cursor: pointer;
+  padding-bottom: 16px;
+}
+.formula-list li {
+  font-size: 14px;
+  line-height: 1.8;
+  padding: 10px 0;
+}
+.trace-metrics {
+  gap: 0;
+}
+.trace-metrics > div {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.trace-metrics span {
+  font-size: 13px;
+}
+.trace-metrics b {
+  font-size: 14px;
+  font-weight: 500;
+}
+.algorithm-guide-lanes {
+  gap: 16px;
+}
+.algorithm-guide-lane {
+  padding: 20px;
+}
+.algorithm-guide-lane strong {
+  font-size: 16px;
+}
+@media (max-width: 1000px) {
+  .algorithm-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .algorithm-grid,
+  .trace-grid {
+    grid-template-columns: 1fr;
+  }
+  .algorithm-grid > article,
+  .algorithm-note {
+    padding: 20px;
+  }
+  .algorithm-guide-lanes {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -5,29 +5,50 @@
         <el-button :icon="Refresh" @click="setView('iso')">{{ tr("视角复位") }}</el-button>
         <el-segmented v-model="viewMode" :options="viewModeOptions" size="default" />
         <el-button-group>
-          <el-button :type="activeView === 'front' ? 'primary' : 'default'" @click="setView('front')">{{ tr("正视") }}</el-button>
-          <el-button :type="activeView === 'side' ? 'primary' : 'default'" @click="setView('side')">{{ tr("侧视") }}</el-button>
-          <el-button :type="activeView === 'top' ? 'primary' : 'default'" @click="setView('top')">{{ tr("俯视") }}</el-button>
-          <el-button :type="activeView === 'iso' ? 'primary' : 'default'" @click="setView('iso')">{{ tr("轴测") }}</el-button>
+          <el-button
+            :type="activeView === 'front' ? 'primary' : 'default'"
+            @click="setView('front')"
+            >{{ t("sceneOptions.viewFront") }}</el-button
+          >
+          <el-button
+            :type="activeView === 'side' ? 'primary' : 'default'"
+            @click="setView('side')"
+            >{{ t("sceneOptions.viewSide") }}</el-button
+          >
+          <el-button :type="activeView === 'top' ? 'primary' : 'default'" @click="setView('top')">{{
+            t("sceneOptions.viewTop")
+          }}</el-button>
+          <el-button :type="activeView === 'iso' ? 'primary' : 'default'" @click="setView('iso')">{{
+            t("sceneOptions.viewIso")
+          }}</el-button>
         </el-button-group>
       </div>
       <div class="toolbar-right">
         <el-switch v-model="sliceEnabled" :active-text="tr('剖切')" :inactive-text="tr('剖切')" />
-        <el-popover placement="bottom-end" trigger="click" width="360" popper-class="visual-options-popper">
+        <el-popover
+          placement="bottom-end"
+          trigger="click"
+          width="360"
+          popper-class="visual-options-popper"
+        >
           <template #reference>
             <el-button :icon="Setting">{{ tr("显示选项") }}</el-button>
           </template>
           <div class="visual-option-grid">
             <el-checkbox v-model="showLabels">{{ tr("货号标签") }}</el-checkbox>
             <el-checkbox v-model="remainingModel">{{ tr("剩余空间") }}</el-checkbox>
-            <el-checkbox v-model="showRemainingLabels" :disabled="!remainingModel">{{ t("sceneOptions.remainingBlockLabels") }}</el-checkbox>
+            <el-checkbox v-model="showRemainingLabels" :disabled="!remainingModel">{{
+              t("sceneOptions.remainingBlockLabels")
+            }}</el-checkbox>
             <el-checkbox v-model="massModel">{{ tr("重心偏载") }}</el-checkbox>
             <el-checkbox v-model="showGrid">{{ tr("底部网格") }}</el-checkbox>
             <el-checkbox v-model="showShell">{{ tr("箱体外壳") }}</el-checkbox>
             <el-checkbox v-model="showCenter">{{ tr("几何中心") }}</el-checkbox>
             <el-checkbox v-model="translucentCargo">{{ tr("半透明货物") }}</el-checkbox>
             <el-checkbox v-model="showHeatmap">{{ tr("重量热力") }}</el-checkbox>
-            <el-checkbox v-model="showClearanceEnvelope">{{ t("sceneOptions.clearanceEnvelope") }}</el-checkbox>
+            <el-checkbox v-model="showClearanceEnvelope">{{
+              t("sceneOptions.clearanceEnvelope")
+            }}</el-checkbox>
             <el-checkbox v-model="showAxes">{{ t("sceneOptions.showAxes") }}</el-checkbox>
             <div class="visual-option-control">
               <span>{{ t("sceneOptions.axisScale") }}</span>
@@ -50,21 +71,27 @@
       </div>
     </el-card>
 
-    <el-card v-if="sliceEnabled" class="slice-control-card" shadow="never">
-      <div class="slice-control-row">
-        <span>{{ tr("剖切方向") }}</span>
-        <el-radio-group v-model="sliceAxis" size="small">
-          <el-radio-button value="z">{{ tr("Z 高度") }}</el-radio-button>
-          <el-radio-button value="x">{{ tr("X 前后") }}</el-radio-button>
-          <el-radio-button value="y">{{ tr("Y 左右") }}</el-radio-button>
-        </el-radio-group>
-        <el-slider v-model="slicePercent" :min="0" :max="100" :step="1" />
-        <el-tag effect="plain">{{ sliceLabel }}</el-tag>
-      </div>
-    </el-card>
+    <Transition name="workspace-state"
+      ><el-card v-if="sliceEnabled" class="slice-control-card" shadow="never">
+        <div class="slice-control-row">
+          <span>{{ tr("剖切方向") }}</span>
+          <el-radio-group v-model="sliceAxis" size="small">
+            <el-radio-button value="z">{{ tr("Z 高度") }}</el-radio-button>
+            <el-radio-button value="x">{{ tr("X 前后") }}</el-radio-button>
+            <el-radio-button value="y">{{ tr("Y 左右") }}</el-radio-button>
+          </el-radio-group>
+          <el-slider v-model="slicePercent" :min="0" :max="100" :step="1" />
+          <el-tag effect="plain">{{ sliceLabel }}</el-tag>
+        </div>
+      </el-card></Transition
+    >
 
     <div class="packing-visual-layout">
-      <div class="packing-canvas-panel" @pointermove="handlePointerMove" @pointerleave="handlePointerLeave">
+      <div
+        class="packing-canvas-panel"
+        @pointermove="handlePointerMove"
+        @pointerleave="handlePointerLeave"
+      >
         <div ref="canvasHost" class="packing-scene-canvas"></div>
         <SystemWaitOverlay
           v-if="visualBusy"
@@ -84,52 +111,113 @@
           <template v-if="tooltip.item.kind === 'remaining-space'">
             <div class="tooltip-title-row">
               <strong>{{ tooltip.item.label }} · {{ t("sceneOptions.remainingBlockName") }}</strong>
-              <el-tag size="small" type="primary" effect="light">{{ t("sceneOptions.geometricClearance") }}</el-tag>
+              <el-tag size="small" type="primary" effect="light">{{
+                t("sceneOptions.geometricClearance")
+              }}</el-tag>
             </div>
             <span class="tooltip-primary-metric">{{ formatVolume(tooltip.item.volumeM3) }}</span>
-            <span>{{ t("sceneOptions.blockDimensions") }} {{ formatDimension(tooltip.item.lengthCm) }} × {{ formatDimension(tooltip.item.widthCm) }} × {{ formatDimension(tooltip.item.heightCm) }} cm</span>
-            <span>{{ t("sceneOptions.blockCoordinateRanges", {
-              x1: formatDimension(tooltip.item.xCm),
-              x2: formatDimension(tooltip.item.x2Cm ?? tooltip.item.xCm + tooltip.item.lengthCm),
-              y1: formatDimension(tooltip.item.yCm),
-              y2: formatDimension(tooltip.item.y2Cm ?? tooltip.item.yCm + tooltip.item.widthCm),
-              z1: formatDimension(tooltip.item.zCm),
-              z2: formatDimension(tooltip.item.z2Cm ?? tooltip.item.zCm + tooltip.item.heightCm)
-            }) }}</span>
-            <span>{{ t("sceneOptions.blockFreeShare", { value: formatPercent(tooltip.item.percentOfFree) }) }}</span>
+            <span
+              >{{ t("sceneOptions.blockDimensions") }}
+              {{ formatDimension(tooltip.item.lengthCm) }} ×
+              {{ formatDimension(tooltip.item.widthCm) }} ×
+              {{ formatDimension(tooltip.item.heightCm) }} cm</span
+            >
+            <span>{{
+              t("sceneOptions.blockCoordinateRanges", {
+                x1: formatDimension(tooltip.item.xCm),
+                x2: formatDimension(tooltip.item.x2Cm ?? tooltip.item.xCm + tooltip.item.lengthCm),
+                y1: formatDimension(tooltip.item.yCm),
+                y2: formatDimension(tooltip.item.y2Cm ?? tooltip.item.yCm + tooltip.item.widthCm),
+                z1: formatDimension(tooltip.item.zCm),
+                z2: formatDimension(tooltip.item.z2Cm ?? tooltip.item.zCm + tooltip.item.heightCm)
+              })
+            }}</span>
+            <span>{{
+              t("sceneOptions.blockFreeShare", { value: formatPercent(tooltip.item.percentOfFree) })
+            }}</span>
           </template>
           <template v-else>
             <strong>#{{ tooltip.item.displayNo }} {{ tooltip.item.name }}</strong>
-            <span>{{ t("sceneOptions.physicalOuterSize") }} {{ formatDimension(tooltip.item.physicalLengthCm) }} × {{ formatDimension(tooltip.item.physicalWidthCm) }} × {{ formatDimension(tooltip.item.physicalHeightCm) }} cm</span>
-            <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedEnvelopeSize") }} {{ formatDimension(tooltip.item.lengthCm) }} × {{ formatDimension(tooltip.item.widthCm) }} × {{ formatDimension(tooltip.item.heightCm) }} cm</span>
-            <span v-if="tooltip.item.horizontalGapCm > 0">{{ t("sceneOptions.horizontalGapDetail", { gap: formatDimension(tooltip.item.horizontalGapCm), side: formatDimension(tooltip.item.clearancePerSideCm) }) }}</span>
-            <span>{{ tr("数量") }} {{ tooltip.item.quantity }} {{ tr("件") }} · {{ tr("重量") }} {{ formatWeight(tooltip.item.weightKg) }}</span>
+            <span
+              >{{ t("sceneOptions.physicalOuterSize") }}
+              {{ formatDimension(tooltip.item.physicalLengthCm) }} ×
+              {{ formatDimension(tooltip.item.physicalWidthCm) }} ×
+              {{ formatDimension(tooltip.item.physicalHeightCm) }} cm</span
+            >
+            <span v-if="tooltip.item.hasClearance"
+              >{{ t("sceneOptions.reservedEnvelopeSize") }}
+              {{ formatDimension(tooltip.item.lengthCm) }} ×
+              {{ formatDimension(tooltip.item.widthCm) }} ×
+              {{ formatDimension(tooltip.item.heightCm) }} cm</span
+            >
+            <span v-if="tooltip.item.horizontalGapCm > 0">{{
+              t("sceneOptions.horizontalGapDetail", {
+                gap: formatDimension(tooltip.item.horizontalGapCm),
+                side: formatDimension(tooltip.item.clearancePerSideCm)
+              })
+            }}</span>
+            <span
+              >{{ wt("quantity") }} {{ tooltip.item.quantity }} {{ wt("pieces") }} ·
+              {{ wt("weight") }} {{ formatWeight(tooltip.item.weightKg) }}</span
+            >
             <span class="tooltip-constraint-tags">
               <el-tag
                 size="small"
                 :type="tooltip.item.nonStack ? 'warning' : 'success'"
                 effect="light"
               >
-                {{ t(tooltip.item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing") }}
+                {{
+                  t(
+                    tooltip.item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing"
+                  )
+                }}
               </el-tag>
               <el-tag v-if="tooltip.item.keepUpright" size="small" type="primary" effect="plain">
                 {{ t("sceneOptions.keepUpright") }}
               </el-tag>
             </span>
-            <span>{{ tr(tooltip.item.orientationLabel || tooltip.item.bottomFaceDetail || "按算法输出坐标摆放") }}</span>
-            <span>{{ t("sceneOptions.physicalCoordinates") }} X{{ formatDimension(tooltip.item.physicalXCm) }} / Y{{ formatDimension(tooltip.item.physicalYCm) }} / Z{{ formatDimension(tooltip.item.physicalZCm) }} cm</span>
-            <span v-if="tooltip.item.hasClearance">{{ t("sceneOptions.reservedCoordinates") }} X{{ formatDimension(tooltip.item.xCm) }} / Y{{ formatDimension(tooltip.item.yCm) }} / Z{{ formatDimension(tooltip.item.zCm) }} cm</span>
+            <span>{{
+              tr(
+                tooltip.item.orientationLabel ||
+                  tooltip.item.bottomFaceDetail ||
+                  wt("algorithmCoordinates")
+              )
+            }}</span>
+            <span
+              >{{ t("sceneOptions.physicalCoordinates") }} X{{
+                formatDimension(tooltip.item.physicalXCm)
+              }}
+              / Y{{ formatDimension(tooltip.item.physicalYCm) }} / Z{{
+                formatDimension(tooltip.item.physicalZCm)
+              }}
+              cm</span
+            >
+            <span v-if="tooltip.item.hasClearance"
+              >{{ t("sceneOptions.reservedCoordinates") }} X{{
+                formatDimension(tooltip.item.xCm)
+              }}
+              / Y{{ formatDimension(tooltip.item.yCm) }} / Z{{
+                formatDimension(tooltip.item.zCm)
+              }}
+              cm</span
+            >
           </template>
         </div>
       </div>
 
       <aside class="packing-info-panel">
-        <el-card v-if="remainingModel && remainingAnalysis?.conservationOk" class="info-panel-card remaining-analysis-card" shadow="never">
+        <el-card
+          v-if="remainingModel && remainingAnalysis?.conservationOk"
+          class="info-panel-card remaining-analysis-card"
+          shadow="never"
+        >
           <template #header>
             <div class="info-card-head">
               <strong>{{ t("sceneOptions.remainingAnalysisTitle") }}</strong>
               <el-tag type="primary" effect="light">
-                {{ t("sceneOptions.remainingBlockCount", { count: remainingAnalysis.fragmentCount }) }}
+                {{
+                  t("sceneOptions.remainingBlockCount", { count: remainingAnalysis.fragmentCount })
+                }}
               </el-tag>
             </div>
           </template>
@@ -151,13 +239,37 @@
               <b>{{ formatVolume(remainingAnalysis.reservedEnvelopeVolumeM3) }}</b>
             </div>
           </div>
-          <div class="remaining-view-shortcuts" role="group" :aria-label="t('sceneOptions.remainingViewShortcuts')">
+          <div
+            class="remaining-view-shortcuts"
+            role="group"
+            :aria-label="t('sceneOptions.remainingViewShortcuts')"
+          >
             <span>{{ t("sceneOptions.remainingViewShortcuts") }}</span>
             <div class="remaining-view-button-grid">
-              <el-button size="small" :type="activeView === 'iso' ? 'primary' : 'default'" @click="setView('iso')">{{ t("sceneOptions.viewIso") }}</el-button>
-              <el-button size="small" :type="activeView === 'top' ? 'primary' : 'default'" @click="setView('top')">{{ t("sceneOptions.viewTop") }}</el-button>
-              <el-button size="small" :type="activeView === 'front' ? 'primary' : 'default'" @click="setView('front')">{{ t("sceneOptions.viewFront") }}</el-button>
-              <el-button size="small" :type="activeView === 'side' ? 'primary' : 'default'" @click="setView('side')">{{ t("sceneOptions.viewSide") }}</el-button>
+              <el-button
+                size="small"
+                :type="activeView === 'iso' ? 'primary' : 'default'"
+                @click="setView('iso')"
+                >{{ t("sceneOptions.viewIso") }}</el-button
+              >
+              <el-button
+                size="small"
+                :type="activeView === 'top' ? 'primary' : 'default'"
+                @click="setView('top')"
+                >{{ t("sceneOptions.viewTop") }}</el-button
+              >
+              <el-button
+                size="small"
+                :type="activeView === 'front' ? 'primary' : 'default'"
+                @click="setView('front')"
+                >{{ t("sceneOptions.viewFront") }}</el-button
+              >
+              <el-button
+                size="small"
+                :type="activeView === 'side' ? 'primary' : 'default'"
+                @click="setView('side')"
+                >{{ t("sceneOptions.viewSide") }}</el-button
+              >
             </div>
           </div>
           <div class="remaining-block-list" :aria-label="t('sceneOptions.majorRemainingBlocks')">
@@ -165,7 +277,10 @@
               <i :style="{ backgroundColor: block.color }"></i>
               <span>
                 <strong>{{ block.label }}</strong>
-                <small>{{ formatDimension(block.lengthCm) }} × {{ formatDimension(block.widthCm) }} × {{ formatDimension(block.heightCm) }} cm</small>
+                <small
+                  >{{ formatDimension(block.lengthCm) }} × {{ formatDimension(block.widthCm) }} ×
+                  {{ formatDimension(block.heightCm) }} cm</small
+                >
               </span>
               <b>{{ formatVolume(block.volumeM3) }}</b>
             </div>
@@ -177,7 +292,9 @@
           <template #header>
             <div class="info-card-head">
               <strong>{{ tr("货物图例") }}</strong>
-              <el-button v-if="hiddenSkuKeys.size" link type="primary" @click="showAllSku">{{ tr("全部显示") }}</el-button>
+              <el-button v-if="hiddenSkuKeys.size" link type="primary" @click="showAllSku">{{
+                wt("showAll")
+              }}</el-button>
             </div>
           </template>
           <el-scrollbar class="legend-scrollbar" max-height="220">
@@ -192,7 +309,9 @@
               <i :style="{ background: item.color }"></i>
               <span>
                 <b>{{ item.label }}</b>
-                <small>{{ item.quantity }} {{ tr("件") }} · {{ formatWeight(item.weightKg) }}</small>
+                <small
+                  >{{ item.quantity }} {{ wt("pieces") }} · {{ formatWeight(item.weightKg) }}</small
+                >
                 <span class="legend-constraint-tags">
                   <el-tag
                     class="legend-constraint-tag"
@@ -200,7 +319,9 @@
                     :type="item.nonStack ? 'warning' : 'success'"
                     effect="light"
                   >
-                    {{ t(item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing") }}
+                    {{
+                      t(item.nonStack ? "sceneOptions.nonStackable" : "sceneOptions.loadBearing")
+                    }}
                   </el-tag>
                   <el-tag
                     v-if="item.keepUpright"
@@ -222,18 +343,37 @@
           <template #header>
             <div class="info-card-head">
               <strong>{{ tr("偏载重心") }}</strong>
-              <el-tag :type="balanceState.tagType" effect="light">{{ tr(balanceState.label) }}</el-tag>
+              <el-tag :type="balanceState.tagType" effect="light">{{
+                tr(balanceState.label)
+              }}</el-tag>
             </div>
           </template>
           <div class="balance-summary">
             <p>{{ tr(balanceState.description) }}</p>
             <div class="balance-metric-list">
               <span>{{ tr("重心坐标") }}</span>
-              <b>X {{ balanceState.center.xCm.toFixed(1) }} / Y {{ balanceState.center.yCm.toFixed(1) }} / Z {{ balanceState.center.zCm.toFixed(1) }} cm</b>
+              <b
+                >X {{ balanceState.center.xCm.toFixed(1) }} / Y
+                {{ balanceState.center.yCm.toFixed(1) }} / Z
+                {{ balanceState.center.zCm.toFixed(1) }} cm</b
+              >
               <span>{{ tr("横向偏移 Y") }}</span>
-              <b>{{ formatSigned(balanceState.offset.lateralCm ?? balanceState.offset.yCm) }} cm / {{ formatSigned(balanceState.offset.lateralPercent ?? balanceState.offset.yPercent) }}%</b>
+              <b
+                >{{ formatSigned(balanceState.offset.lateralCm ?? balanceState.offset.yCm) }} cm /
+                {{
+                  formatSigned(balanceState.offset.lateralPercent ?? balanceState.offset.yPercent)
+                }}%</b
+              >
               <span>{{ tr("纵向偏移 X") }}</span>
-              <b>{{ formatSigned(balanceState.offset.longitudinalCm ?? balanceState.offset.xCm) }} cm / {{ formatSigned(balanceState.offset.longitudinalPercent ?? balanceState.offset.xPercent) }}%</b>
+              <b
+                >{{ formatSigned(balanceState.offset.longitudinalCm ?? balanceState.offset.xCm) }}
+                cm /
+                {{
+                  formatSigned(
+                    balanceState.offset.longitudinalPercent ?? balanceState.offset.xPercent
+                  )
+                }}%</b
+              >
               <span>{{ tr("重心高度") }}</span>
               <b>{{ balanceState.center.zCm.toFixed(1) }} cm</b>
             </div>
@@ -242,12 +382,18 @@
             <div>
               <span>{{ tr("前 / 后") }}</span>
               <el-progress :percentage="frontPercent" :stroke-width="10" :show-text="false" />
-              <small>{{ tr("前") }} {{ frontPercent.toFixed(1) }}% · {{ tr("后") }} {{ rearPercent.toFixed(1) }}%</small>
+              <small
+                >{{ wt("front") }} {{ frontPercent.toFixed(1) }}% · {{ wt("rear") }}
+                {{ rearPercent.toFixed(1) }}%</small
+              >
             </div>
             <div>
               <span>{{ tr("左 / 右") }}</span>
               <el-progress :percentage="leftPercent" :stroke-width="10" :show-text="false" />
-              <small>{{ tr("左") }} {{ leftPercent.toFixed(1) }}% · {{ tr("右") }} {{ rightPercent.toFixed(1) }}%</small>
+              <small
+                >{{ wt("left") }} {{ leftPercent.toFixed(1) }}% · {{ wt("right") }}
+                {{ rightPercent.toFixed(1) }}%</small
+              >
             </div>
           </div>
         </el-card>
@@ -260,10 +406,21 @@
                 <el-tag v-if="planBoxCount" size="small" effect="plain">
                   {{ t("metrics.boxProgress", { current: currentBoxNumber, total: planBoxCount }) }}
                 </el-tag>
-                <el-tag v-if="planAverageFillPercent > 0" size="small" type="primary" effect="light">
-                  {{ t("metrics.planAverageUtilization", { value: planAverageFillPercent.toFixed(1) }) }}
+                <el-tag
+                  v-if="planAverageFillPercent > 0"
+                  size="small"
+                  type="primary"
+                  effect="light"
+                >
+                  {{
+                    t("metrics.planAverageUtilization", {
+                      value: planAverageFillPercent.toFixed(1)
+                    })
+                  }}
                 </el-tag>
-                <el-tag size="small" effect="plain">{{ viewMode === "3d" ? tr("3D装箱") : tr("2D视角") }}</el-tag>
+                <el-tag size="small" effect="plain">{{
+                  viewMode === "3d" ? wt("view3d") : wt("view2d")
+                }}</el-tag>
               </div>
             </div>
           </template>
@@ -279,7 +436,11 @@
             <div>
               <span>{{ t(currentBoxUtilizationLabel) }}</span>
               <b>{{ sceneData.stats.utilizationPercent.toFixed(1) }}%</b>
-              <small v-if="sceneData.stats.lengthUtilizationPercent">{{ t("metrics.lengthPercent", { value: sceneData.stats.lengthUtilizationPercent.toFixed(1) }) }}</small>
+              <small v-if="sceneData.stats.lengthUtilizationPercent">{{
+                t("metrics.lengthPercent", {
+                  value: sceneData.stats.lengthUtilizationPercent.toFixed(1)
+                })
+              }}</small>
             </div>
             <div>
               <span>{{ t("metrics.currentBoxWeight") }}</span>
@@ -287,11 +448,13 @@
             </div>
           </div>
           <p v-if="planBoxCount > 1" class="current-box-plan-hint">
-            {{ t("metrics.currentBoxPlanHint", {
-              current: currentBoxNumber,
-              total: planBoxCount,
-              value: planAverageFillPercent.toFixed(1)
-            }) }}
+            {{
+              t("metrics.currentBoxPlanHint", {
+                current: currentBoxNumber,
+                total: planBoxCount,
+                value: planAverageFillPercent.toFixed(1)
+              })
+            }}
           </p>
           <p v-if="nonStackFallbackVisible" class="nonstack-fallback-hint">
             {{ t("metrics.nonStackFallbackHint") }}
@@ -317,10 +480,35 @@
         <span>{{ tr("左键旋转 · 右键平移 · 滚轮缩放") }}</span>
       </div>
       <div class="bottom-button-group">
-        <el-button :icon="Picture" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-image')">{{ tr("导出可视化截图") }}</el-button>
-        <el-button :icon="Document" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-pdf')">{{ tr("导出装箱方案 PDF") }}</el-button>
-        <el-button :icon="DataAnalysis" :disabled="exportDisabled" :loading="exporting" @click="$emit('export-remaining-pdf')">{{ t("sceneOptions.exportRemainingReport") }}</el-button>
-        <el-button type="primary" :icon="Download" :disabled="zipDisabled" :loading="exporting" @click="$emit('export-zip')">{{ tr(exportZipLabel) }}</el-button>
+        <el-button
+          :icon="Picture"
+          :disabled="exportDisabled"
+          :loading="exporting"
+          @click="$emit('export-image')"
+          >{{ wt("exportImage") }}</el-button
+        >
+        <el-button
+          :icon="Document"
+          :disabled="exportDisabled"
+          :loading="exporting"
+          @click="$emit('export-pdf')"
+          >{{ wt("exportPlanPdf") }}</el-button
+        >
+        <el-button
+          :icon="DataAnalysis"
+          :disabled="exportDisabled"
+          :loading="exporting"
+          @click="$emit('export-remaining-pdf')"
+          >{{ t("sceneOptions.exportRemainingReport") }}</el-button
+        >
+        <el-button
+          type="primary"
+          :icon="Download"
+          :disabled="zipDisabled"
+          :loading="exporting"
+          @click="$emit('export-zip')"
+          >{{ tr(exportZipLabel) }}</el-button
+        >
         <el-button :icon="Printer" @click="$emit('print')">{{ tr("打印") }}</el-button>
       </div>
     </el-card>
@@ -328,6 +516,7 @@
 </template>
 
 <script setup lang="ts">
+import { wt } from "./workspace/workspaceCopy";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import {
   Aim,
@@ -340,10 +529,21 @@ import {
   Refresh,
   Setting
 } from "@element-plus/icons-vue";
-import { buildPackingSceneData, formatDimension, formatSigned, formatWeight } from "../visualization/packingSceneData";
+import {
+  buildPackingSceneData,
+  formatDimension,
+  formatSigned,
+  formatWeight
+} from "../visualization/packingSceneData";
 import { resolveBalanceState } from "../visualization/packingSceneBalance";
 import { PackingSceneRenderer } from "../visualization/packingSceneRenderer";
-import type { SceneHoverItem, SceneRemainingBlock, SceneViewMode, SceneViewPreset, SliceAxis } from "../visualization/packingSceneTypes";
+import type {
+  SceneHoverItem,
+  SceneRemainingBlock,
+  SceneViewMode,
+  SceneViewPreset,
+  SliceAxis
+} from "../visualization/packingSceneTypes";
 import { analyzeRemainingSpace } from "../utils/remainingSpace";
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
@@ -433,11 +633,13 @@ function tr(value: unknown) {
   return translateLegacyText(value == null ? "" : String(value), currentLocale.value);
 }
 
-const sceneData = computed(() => buildPackingSceneData({
-  container: props.container as any,
-  placements: props.placements as any[],
-  evaluation: props.evaluation
-}));
+const sceneData = computed(() =>
+  buildPackingSceneData({
+    container: props.container as any,
+    placements: props.placements as any[],
+    evaluation: props.evaluation
+  })
+);
 const remainingAnalysis = computed<any | null>(() => {
   if (!props.container || !(props.placements as any[]).length) return null;
   try {
@@ -450,9 +652,8 @@ const remainingAnalysis = computed<any | null>(() => {
     return null;
   }
 });
-const sceneRemainingBlocks = computed<SceneRemainingBlock[]>(() => (remainingAnalysis.value?.blocks || [])
-  .slice(0, 80)
-  .map((block: any, index: number) => ({
+const sceneRemainingBlocks = computed<SceneRemainingBlock[]>(() =>
+  (remainingAnalysis.value?.blocks || []).slice(0, 80).map((block: any, index: number) => ({
     ...block,
     kind: "remaining-space" as const,
     id: block.id || `R${index + 1}`,
@@ -460,12 +661,15 @@ const sceneRemainingBlocks = computed<SceneRemainingBlock[]>(() => (remainingAna
     displayNo: `R${index + 1}`,
     name: t("sceneOptions.remainingBlockName"),
     color: remainingBlockColors[index % remainingBlockColors.length]
-  })));
+  }))
+);
 const remainingTopBlocks = computed(() => sceneRemainingBlocks.value.slice(0, 6));
-const planBoxCount = computed(() => Math.max(
-  Number(props.evaluation?.boxes || 0),
-  Array.isArray(props.evaluation?.packedBoxes) ? props.evaluation.packedBoxes.length : 0
-));
+const planBoxCount = computed(() =>
+  Math.max(
+    Number(props.evaluation?.boxes || 0),
+    Array.isArray(props.evaluation?.packedBoxes) ? props.evaluation.packedBoxes.length : 0
+  )
+);
 const currentBoxNumber = computed(() => Math.max(1, Number(props.selectedBox?.index || 1)));
 const planAverageFillPercent = computed(() => {
   const candidates = [
@@ -473,21 +677,28 @@ const planAverageFillPercent = computed(() => {
     props.evaluation?.averageFillPercent,
     props.evaluation?.firstBoxFillPercent
   ];
-  const value = candidates.map(Number).find((candidate) => Number.isFinite(candidate) && candidate > 0);
+  const value = candidates
+    .map(Number)
+    .find((candidate) => Number.isFinite(candidate) && candidate > 0);
   return value ?? 0;
 });
-const currentBoxUtilizationLabel = computed(() => sceneData.value.stats.utilizationLabel === "metrics.deckUtilization"
-  ? "metrics.currentBoxDeckUtilization"
-  : "metrics.currentBoxSpaceUtilization");
-const nonStackFallbackVisible = computed(() =>
-  Number(props.selectedBox?.strategySummary?.nonStackFallbackRequired || 0) > 0
-  && (props.placements as any[]).some((placement) => Boolean(placement?.nonStack))
+const currentBoxUtilizationLabel = computed(() =>
+  sceneData.value.stats.utilizationLabel === "metrics.deckUtilization"
+    ? "metrics.currentBoxDeckUtilization"
+    : "metrics.currentBoxSpaceUtilization"
 );
-const balanceState = computed(() => resolveBalanceState({
-  container: props.container as any,
-  placements: props.placements as any[],
-  validation: props.balanceValidation || props.selectedBox?.balanceValidation
-}));
+const nonStackFallbackVisible = computed(
+  () =>
+    Number(props.selectedBox?.strategySummary?.nonStackFallbackRequired || 0) > 0 &&
+    (props.placements as any[]).some((placement) => Boolean(placement?.nonStack))
+);
+const balanceState = computed(() =>
+  resolveBalanceState({
+    container: props.container as any,
+    placements: props.placements as any[],
+    validation: props.balanceValidation || props.selectedBox?.balanceValidation
+  })
+);
 const remainingModel = computed({
   get: () => props.showRemaining,
   set: (value: boolean) => emit("update:showRemaining", value)
@@ -517,15 +728,22 @@ const renderOptions = computed(() => ({
   locale: currentLocale.value
 }));
 const visualBusy = computed(() => props.busy || props.waitingForResult || internalRendering.value);
-const emptyStateVisible = computed(() => !visualBusy.value && (!props.container || !props.placements.length || props.errorMessage));
-const emptyStateText = computed(() => tr(props.errorMessage || (!props.container ? "请选择箱型后查看3D装箱视图" : "当前货舱暂无可渲染货物")));
-const visualBusyText = computed(() => props.waitingForResult
-  ? "\u6b63\u5728\u7b49\u5f85\u88c5\u7bb1\u7ed3\u679c\uff0c\u968f\u540e\u751f\u6210 3D \u88c5\u7bb1\u89c6\u56fe..."
-  : props.busy
-  ? "\u6b63\u5728\u5207\u6362\u5f53\u524d\u8d27\u8231..."
-  : "\u6b63\u5728\u751f\u6210 3D \u88c5\u7bb1\u89c6\u56fe..."
+const emptyStateVisible = computed(
+  () => !visualBusy.value && (!props.container || !props.placements.length || props.errorMessage)
 );
-const exportDisabled = computed(() => props.exporting || !props.canExport || !props.placements.length);
+const emptyStateText = computed(() =>
+  tr(props.errorMessage || (!props.container ? wt("selectEquipmentToPreview") : wt("emptyHold")))
+);
+const visualBusyText = computed(() =>
+  props.waitingForResult
+    ? "\u6b63\u5728\u7b49\u5f85\u88c5\u7bb1\u7ed3\u679c\uff0c\u968f\u540e\u751f\u6210 3D \u88c5\u7bb1\u89c6\u56fe..."
+    : props.busy
+      ? "\u6b63\u5728\u5207\u6362\u5f53\u524d\u8d27\u8231..."
+      : "\u6b63\u5728\u751f\u6210 3D \u88c5\u7bb1\u89c6\u56fe..."
+);
+const exportDisabled = computed(
+  () => props.exporting || !props.canExport || !props.placements.length
+);
 const zipDisabled = computed(() => props.exporting || !props.canExportZip);
 const frontPercent = computed(() => Number(balanceState.value.loads.frontPercent || 0));
 const rearPercent = computed(() => Number(balanceState.value.loads.rearPercent || 0));
@@ -534,9 +752,11 @@ const rightPercent = computed(() => Number(balanceState.value.loads.rightPercent
 const sliceLabel = computed(() => {
   const container: any = sceneData.value.container;
   if (!container) return `${slicePercent.value}%`;
-  if (sliceAxis.value === "z") return `${tr("高度")} ${Math.round(container.heightCm * slicePercent.value / 100)} cm`;
-  if (sliceAxis.value === "x") return `${tr("前后")} ${Math.round(container.lengthCm * slicePercent.value / 100)} cm`;
-  return `${tr("左右")} ${Math.round(container.widthCm * slicePercent.value / 100)} cm`;
+  if (sliceAxis.value === "z")
+    return `${wt("height")} ${Math.round((container.heightCm * slicePercent.value) / 100)} cm`;
+  if (sliceAxis.value === "x")
+    return `${wt("longitudinal")} ${Math.round((container.lengthCm * slicePercent.value) / 100)} cm`;
+  return `${wt("lateral")} ${Math.round((container.widthCm * slicePercent.value) / 100)} cm`;
 });
 const tooltipStyle = computed(() => {
   const hostWidth = canvasHost.value?.clientWidth || 0;
@@ -583,10 +803,13 @@ watch(viewMode, (mode) => {
   if (mode === "2d") setView(activeView.value === "iso" ? "top" : activeView.value);
   else setView("iso");
 });
-watch(() => sceneData.value.legend.map((item) => item.key).join("|"), () => {
-  const allowed = new Set(sceneData.value.legend.map((item) => item.key));
-  hiddenSkuKeys.value = new Set([...hiddenSkuKeys.value].filter((key) => allowed.has(key)));
-});
+watch(
+  () => sceneData.value.legend.map((item) => item.key).join("|"),
+  () => {
+    const allowed = new Set(sceneData.value.legend.map((item) => item.key));
+    hiddenSkuKeys.value = new Set([...hiddenSkuKeys.value].filter((key) => allowed.has(key)));
+  }
+);
 
 function scheduleSceneUpdate() {
   if (!controller.value) return;
@@ -680,3 +903,97 @@ function handleFullscreenChange() {
   window.setTimeout(() => controller.value?.resize(), 80);
 }
 </script>
+
+<style scoped>
+.packing-visual-shell {
+  gap: 18px;
+}
+.packing-visual-toolbar {
+  border-radius: var(--radius-card);
+}
+.toolbar-left,
+.toolbar-right {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.packing-canvas-panel {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  min-height: 420px;
+}
+.packing-info-panel {
+  gap: 18px;
+}
+.info-panel-card {
+  border-radius: var(--radius-card);
+}
+.info-card-head strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.info-panel-card :deep(.el-card__header) {
+  padding: 18px;
+}
+.info-panel-card :deep(.el-card__body) {
+  padding: 18px;
+}
+.remaining-summary-grid span,
+.balance-metric-list span {
+  font-size: 12px;
+}
+.remaining-summary-grid b {
+  font-weight: 500;
+}
+.scene-tooltip {
+  max-width: min(380px, calc(100vw - 40px));
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.packing-bottom-actions {
+  border-radius: var(--radius-card);
+}
+.slice-control-card {
+  border-radius: var(--radius-card);
+}
+:global(.visual-options-popper) {
+  max-width: calc(100vw - 32px);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-overlay);
+  font-size: 14px;
+}
+@media (max-width: 760px) {
+  .packing-canvas-panel {
+    min-height: 320px;
+  }
+  .packing-scene-canvas {
+    min-height: 320px;
+  }
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .toolbar-left > .el-button-group {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .slice-control-row {
+    flex-wrap: wrap;
+  }
+  .slice-control-row > .el-slider {
+    flex-basis: 100%;
+  }
+  .packing-info-panel {
+    grid-template-columns: 1fr;
+  }
+  .bottom-button-group {
+    flex-wrap: wrap;
+  }
+  .bottom-button-group .el-button {
+    flex: 1 1 auto;
+    margin: 0;
+  }
+}
+</style>

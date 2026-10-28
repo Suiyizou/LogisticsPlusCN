@@ -1,0 +1,106 @@
+/* Opt-in page primitives. Import after a page's specific stylesheet. */
+:deep(.el-table) {
+  --el-table-header-bg-color: var(--color-surface-subtle);
+  --el-table-row-hover-bg-color: var(--color-surface-subtle);
+  border-radius: 8px;
+  font-size: 14px;
+}
+:deep(.el-table__cell) {
+  height: 52px;
+  padding: 10px 0;
+  font-size: 14px;
+}
+:deep(.el-table__header .cell) {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+:deep(.el-table__body .cell) {
+  line-height: 1.65;
+}
+:deep(.el-table__body .cell small) {
+  font-size: 12px;
+  line-height: 1.5;
+}
+:deep(.el-table__body .cell b) {
+  font-weight: 600;
+}
+:deep(.el-pagination) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 0;
+  padding: 20px 0 0;
+}
+:deep(.el-pagination .el-pager li),
+:deep(.el-pagination .btn-prev),
+:deep(.el-pagination .btn-next) {
+  border-radius: var(--radius-control) !important;
+}
+:deep(.el-form-item__label) {
+  color: var(--color-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+:deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+.list-page-full,
+.admin-panel,
+.main-card {
+  border-radius: var(--radius-card);
+}
+.admin-panel {
+  padding: 24px;
+}
+.admin-panel-head {
+  padding: 0 0 18px;
+  margin-bottom: 20px;
+}
+.admin-inline-actions,
+.list-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.admin-inline-actions > span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.table-actions > button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-control);
+}
+@media (max-width: 680px) {
+  .list-page-full,
+  .admin-panel {
+    padding: 18px;
+  }
+  .list-page-actions {
+    width: 100%;
+  }
+  .list-page-actions > .el-input {
+    width: 100% !important;
+  }
+  .admin-inline-actions {
+    justify-content: flex-start;
+  }
+  .table-actions {
+    flex-wrap: nowrap;
+  }
+  :deep(.el-pagination) {
+    justify-content: flex-start;
+    padding-top: 16px;
+  }
+}

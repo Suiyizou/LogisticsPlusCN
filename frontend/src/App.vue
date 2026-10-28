@@ -118,26 +118,26 @@
                     key="config-view"
                     class="planner-section"
                   >
-                    <el-card class="planner-page-head" shadow="never">
-                      <div class="page-heading">
-                        <p>Calculation Setup</p>
-                        <h2>计算配置</h2>
-                      </div>
-                      <div class="section-actions page-head-actions">
-                        <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
-                          apiStatus
-                        }}</el-tag>
-                        <el-button
-                          class="page-head-cta"
-                          type="primary"
-                          size="large"
-                          :icon="Tickets"
-                          @click="goPlannerStep('cargos')"
-                        >
-                          进入货物总览
-                        </el-button>
-                      </div>
-                    </el-card>
+                    <WorkspacePageHeader class="planner-page-head" :description="wt('planningHint')"
+                      ><template #title>{{ wt("configTitle") }}</template
+                      ><template #eyebrow>Calculation Setup</template
+                      ><template #actions
+                        ><div class="section-actions page-head-actions">
+                          <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
+                            apiStatus
+                          }}</el-tag>
+                          <el-button
+                            class="page-head-cta"
+                            type="primary"
+                            size="large"
+                            :icon="Tickets"
+                            @click="goPlannerStep('cargos')"
+                          >
+                            进入货物总览
+                          </el-button>
+                        </div></template
+                      ></WorkspacePageHeader
+                    >
                     <el-alert
                       v-if="showPackingWorkloadHint"
                       class="calculation-load-hint"
@@ -180,36 +180,40 @@
                             </div>
                             <el-slider v-model="globalGapCm" :min="0" :max="8" />
                           </div>
-                          <div class="slider-row">
-                            <div>
-                              <span class="field-label">{{ t("planner.supportRatio") }}</span>
-                              <el-tag type="success" effect="light"
-                                >{{ supportRatioPercent }}%</el-tag
-                              >
+                          <details class="planner-advanced-settings">
+                            <summary>{{ wt("advancedSettings") }}</summary>
+                            <p>{{ wt("advancedHint") }}</p>
+                            <div class="slider-row">
+                              <div>
+                                <span class="field-label">{{ t("planner.supportRatio") }}</span>
+                                <el-tag type="success" effect="light"
+                                  >{{ supportRatioPercent }}%</el-tag
+                                >
+                              </div>
+                              <el-slider
+                                v-model="supportRatioPercent"
+                                :min="50"
+                                :max="100"
+                                :step="5"
+                              />
                             </div>
-                            <el-slider
-                              v-model="supportRatioPercent"
-                              :min="50"
-                              :max="100"
-                              :step="5"
-                            />
-                          </div>
-                          <div class="slider-row">
-                            <div>
-                              <span class="field-label">{{
-                                t("planner.nonStackSupportRatio")
-                              }}</span>
-                              <el-tag type="warning" effect="light"
-                                >{{ nonStackSupportRatioPercent }}%</el-tag
-                              >
+                            <div class="slider-row">
+                              <div>
+                                <span class="field-label">{{
+                                  t("planner.nonStackSupportRatio")
+                                }}</span>
+                                <el-tag type="warning" effect="light"
+                                  >{{ nonStackSupportRatioPercent }}%</el-tag
+                                >
+                              </div>
+                              <el-slider
+                                v-model="nonStackSupportRatioPercent"
+                                :min="80"
+                                :max="100"
+                                :step="0.5"
+                              />
                             </div>
-                            <el-slider
-                              v-model="nonStackSupportRatioPercent"
-                              :min="80"
-                              :max="100"
-                              :step="0.5"
-                            />
-                          </div>
+                          </details>
                           <div class="priority-container-box">
                             <div class="priority-container-head">
                               <div>
@@ -246,104 +250,107 @@
                               </el-checkbox-button>
                             </el-checkbox-group>
                           </div>
-                          <div class="balance-settings-box">
-                            <div class="balance-settings-head">
-                              <div>
-                                <span class="field-label">偏载约束</span>
-                                <small>作为合规拦截阈值参与每次装箱计算</small>
+                          <details class="planner-advanced-settings planner-balance-disclosure">
+                            <summary>{{ wt("balanceLimits") }}</summary>
+                            <div class="balance-settings-box">
+                              <div class="balance-settings-head">
+                                <div>
+                                  <span class="field-label">偏载约束</span>
+                                  <small>作为合规拦截阈值参与每次装箱计算</small>
+                                </div>
+                                <el-radio-group
+                                  v-model="activeBalancePreset"
+                                  size="small"
+                                  @change="applyBalancePreset"
+                                >
+                                  <el-radio-button label="strict">严格</el-radio-button>
+                                  <el-radio-button label="standard">标准</el-radio-button>
+                                  <el-radio-button label="loose">宽松</el-radio-button>
+                                  <el-radio-button label="custom">自定义</el-radio-button>
+                                </el-radio-group>
                               </div>
-                              <el-radio-group
-                                v-model="activeBalancePreset"
-                                size="small"
-                                @change="applyBalancePreset"
-                              >
-                                <el-radio-button label="strict">严格</el-radio-button>
-                                <el-radio-button label="standard">标准</el-radio-button>
-                                <el-radio-button label="loose">宽松</el-radio-button>
-                                <el-radio-button label="custom">自定义</el-radio-button>
-                              </el-radio-group>
+                              <div class="balance-setting-grid">
+                                <div class="mini-slider-row">
+                                  <span>绿灯阈值</span>
+                                  <el-tag size="small" effect="plain"
+                                    >{{ balanceSettings.greenLimitPercent }}%</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.greenLimitPercent"
+                                    :min="1"
+                                    :max="5"
+                                    :step="0.5"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                                <div class="mini-slider-row">
+                                  <span>红色拦截</span>
+                                  <el-tag size="small" type="danger" effect="plain"
+                                    >{{ balanceSettings.redLimitPercent }}%</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.redLimitPercent"
+                                    :min="3"
+                                    :max="12"
+                                    :step="0.5"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                                <div class="mini-slider-row">
+                                  <span>左右偏移</span>
+                                  <el-tag size="small" type="warning" effect="plain"
+                                    >≤ {{ balanceSettings.lateralOffsetLimitCm * 10 }} mm</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.lateralOffsetLimitCm"
+                                    :min="4"
+                                    :max="20"
+                                    :step="1"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                                <div class="mini-slider-row">
+                                  <span>轻载不拦截</span>
+                                  <el-tag size="small" type="info" effect="plain"
+                                    >≤ {{ formatTons(balanceSettings.skipBelowWeightKg) }}</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.skipBelowWeightKg"
+                                    :min="0"
+                                    :max="30000"
+                                    :step="1000"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                                <div class="mini-slider-row">
+                                  <span>前半最大</span>
+                                  <el-tag size="small" effect="plain"
+                                    >≤ {{ balanceSettings.frontMaxPercent }}%</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.frontMaxPercent"
+                                    :min="55"
+                                    :max="70"
+                                    :step="1"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                                <div class="mini-slider-row">
+                                  <span>40FR 后半最低</span>
+                                  <el-tag size="small" effect="plain"
+                                    >≥ {{ balanceSettings.rearMinPercent40FR }}%</el-tag
+                                  >
+                                  <el-slider
+                                    v-model="balanceSettings.rearMinPercent40FR"
+                                    :min="20"
+                                    :max="45"
+                                    :step="1"
+                                    @change="markBalanceCustom"
+                                  />
+                                </div>
+                              </div>
                             </div>
-                            <div class="balance-setting-grid">
-                              <div class="mini-slider-row">
-                                <span>绿灯阈值</span>
-                                <el-tag size="small" effect="plain"
-                                  >{{ balanceSettings.greenLimitPercent }}%</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.greenLimitPercent"
-                                  :min="1"
-                                  :max="5"
-                                  :step="0.5"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                              <div class="mini-slider-row">
-                                <span>红色拦截</span>
-                                <el-tag size="small" type="danger" effect="plain"
-                                  >{{ balanceSettings.redLimitPercent }}%</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.redLimitPercent"
-                                  :min="3"
-                                  :max="12"
-                                  :step="0.5"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                              <div class="mini-slider-row">
-                                <span>左右偏移</span>
-                                <el-tag size="small" type="warning" effect="plain"
-                                  >≤ {{ balanceSettings.lateralOffsetLimitCm * 10 }} mm</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.lateralOffsetLimitCm"
-                                  :min="4"
-                                  :max="20"
-                                  :step="1"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                              <div class="mini-slider-row">
-                                <span>轻载不拦截</span>
-                                <el-tag size="small" type="info" effect="plain"
-                                  >≤ {{ formatTons(balanceSettings.skipBelowWeightKg) }}</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.skipBelowWeightKg"
-                                  :min="0"
-                                  :max="30000"
-                                  :step="1000"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                              <div class="mini-slider-row">
-                                <span>前半最大</span>
-                                <el-tag size="small" effect="plain"
-                                  >≤ {{ balanceSettings.frontMaxPercent }}%</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.frontMaxPercent"
-                                  :min="55"
-                                  :max="70"
-                                  :step="1"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                              <div class="mini-slider-row">
-                                <span>40FR 后半最低</span>
-                                <el-tag size="small" effect="plain"
-                                  >≥ {{ balanceSettings.rearMinPercent40FR }}%</el-tag
-                                >
-                                <el-slider
-                                  v-model="balanceSettings.rearMinPercent40FR"
-                                  :min="20"
-                                  :max="45"
-                                  :step="1"
-                                  @change="markBalanceCustom"
-                                />
-                              </div>
-                            </div>
-                          </div>
+                          </details>
                         </div>
                         <el-divider />
                         <div class="config-toolbox">
@@ -353,6 +360,7 @@
                               smartImportOpen ? "收起智能导入" : "智能/Excel 导入"
                             }}</el-button>
                             <el-select
+                              popper-class="business-select-popper workspace-select-popper"
                               v-model="quickImportMode"
                               class="quick-import-mode"
                               :aria-label="ui('excel.importMode')"
@@ -481,24 +489,24 @@
                     key="cargo-detail-view"
                     class="planner-section"
                   >
-                    <el-card class="planner-page-head" shadow="never">
-                      <div class="page-heading">
-                        <p>Cargo Overview</p>
-                        <h2>货物总览</h2>
-                      </div>
-                      <div class="section-actions page-head-actions">
-                        <el-button :icon="ArrowLeft" @click="goPlannerStep('config')"
-                          >返回配置</el-button
-                        >
-                        <el-button
-                          class="page-head-cta"
-                          type="primary"
-                          :disabled="!cargos.length"
-                          @click="goPlannerStep('results')"
-                          >进入计算方案</el-button
-                        >
-                      </div>
-                    </el-card>
+                    <WorkspacePageHeader class="planner-page-head" :description="wt('planningHint')"
+                      ><template #title>{{ wt("cargoOverviewTitle") }}</template
+                      ><template #eyebrow>Cargo Overview</template
+                      ><template #actions
+                        ><div class="section-actions page-head-actions">
+                          <el-button :icon="ArrowLeft" @click="goPlannerStep('config')"
+                            >返回配置</el-button
+                          >
+                          <el-button
+                            class="page-head-cta"
+                            type="primary"
+                            :disabled="!cargos.length"
+                            @click="goPlannerStep('results')"
+                            >进入计算方案</el-button
+                          >
+                        </div></template
+                      ></WorkspacePageHeader
+                    >
 
                     <div class="planner-metrics">
                       <el-card shadow="never"
@@ -543,18 +551,18 @@
 
                     <el-card class="panel cargo-template-panel" shadow="never">
                       <template #header>
-                        <div class="section-head">
-                          <div>
-                            <p>Templates</p>
-                            <h2>{{ ui("template.cargoTemplates") }}</h2>
-                          </div>
-                          <el-button
-                            type="primary"
-                            :disabled="!cargos.length"
-                            @click="saveCargoTemplate"
-                            >{{ ui("template.save") }}</el-button
-                          >
-                        </div>
+                        <WorkspacePageHeader compact class="section-head"
+                          ><template #title>{{ ui("template.cargoTemplates") }}</template
+                          ><template #eyebrow>Templates</template
+                          ><template #actions
+                            ><el-button
+                              type="primary"
+                              :disabled="!cargos.length"
+                              @click="saveCargoTemplate"
+                              >{{ ui("template.save") }}</el-button
+                            ></template
+                          ></WorkspacePageHeader
+                        >
                       </template>
                       <div class="cargo-template-content">
                         <div class="template-save-row">
@@ -606,39 +614,39 @@
 
                     <el-card class="panel cargo-overview-panel" shadow="never">
                       <template #header>
-                        <div class="section-head">
-                          <div>
-                            <p>Current Cargo</p>
-                            <h2>{{ ui("app.currentCargoList") }}</h2>
-                          </div>
-                          <div class="section-actions cargo-list-actions">
-                            <el-button type="primary" :icon="Plus" @click="openCargoModal()">{{
-                              ui("app.manualEntry")
-                            }}</el-button>
-                            <el-button
-                              data-i18n-ignore
-                              :icon="Star"
-                              @click="smartImportOpen = !smartImportOpen"
-                              >{{
-                                smartImportOpen ? ui("app.hideSmartImport") : ui("excel.title")
-                              }}</el-button
-                            >
-                            <el-button
-                              :icon="Delete"
-                              :disabled="!selectedCargoRows.length"
-                              @click="deleteSelectedCargos"
-                              >{{ ui("app.batchDelete") }}</el-button
-                            >
-                            <el-button
-                              type="danger"
-                              plain
-                              :icon="Delete"
-                              :disabled="!cargos.length"
-                              @click="clearCargos"
-                              >{{ ui("app.clearAll") }}</el-button
-                            >
-                          </div>
-                        </div>
+                        <WorkspacePageHeader compact class="section-head"
+                          ><template #title>{{ ui("app.currentCargoList") }}</template
+                          ><template #eyebrow>Current Cargo</template
+                          ><template #actions
+                            ><div class="section-actions cargo-list-actions">
+                              <el-button type="primary" :icon="Plus" @click="openCargoModal()">{{
+                                ui("app.manualEntry")
+                              }}</el-button>
+                              <el-button
+                                data-i18n-ignore
+                                :icon="Star"
+                                @click="smartImportOpen = !smartImportOpen"
+                                >{{
+                                  smartImportOpen ? ui("app.hideSmartImport") : ui("excel.title")
+                                }}</el-button
+                              >
+                              <el-button
+                                :icon="Delete"
+                                :disabled="!selectedCargoRows.length"
+                                @click="deleteSelectedCargos"
+                                >{{ ui("app.batchDelete") }}</el-button
+                              >
+                              <el-button
+                                type="danger"
+                                plain
+                                :icon="Delete"
+                                :disabled="!cargos.length"
+                                @click="clearCargos"
+                                >{{ ui("app.clearAll") }}</el-button
+                              >
+                            </div></template
+                          ></WorkspacePageHeader
+                        >
                       </template>
                       <el-collapse-transition>
                         <div v-if="smartImportOpen" class="embedded-smart-import">
@@ -744,25 +752,20 @@
                   </section>
 
                   <section v-else key="results-view" class="planner-section">
+                    <WorkspacePageHeader
+                      :title="wt('resultsTitle')"
+                      :description="wt('resultsHint')"
+                    />
                     <section class="panel result-summary-panel">
-                      <div class="section-head">
-                        <div>
-                          <p>Calculation Summary</p>
-                          <h2>计算结论</h2>
-                        </div>
-                        <el-tag
-                          :type="
-                            resultSummary.red
-                              ? 'danger'
-                              : resultSummary.yellow || resultSummary.estimated
-                                ? 'warning'
-                                : 'success'
-                          "
-                          effect="light"
-                        >
-                          {{ resultSummary.recommendationText }}
-                        </el-tag>
-                      </div>
+                      <WorkspacePageHeader compact class="section-head"
+                        ><template #title>{{ wt("calculationSummary") }}</template
+                        ><template #eyebrow>Calculation Summary</template
+                        ><template #actions
+                          ><el-tag :type="resultSummary.statusTone" data-i18n-ignore effect="light">
+                            {{ resultSummary.statusText }}
+                          </el-tag></template
+                        ></WorkspacePageHeader
+                      >
                       <div class="result-summary-grid">
                         <div class="summary-card success">
                           <span>{{ tr("绿色合格") }}</span>
@@ -800,98 +803,42 @@
                           <small>{{ ui("result.freightFormula") }}</small>
                         </div>
                       </div>
-                      <div v-if="resultOptimizationRows.length" class="optimization-explainer">
-                        <div class="optimization-head">
-                          <span>{{ ui("result.optimizationEyebrow") }}</span>
-                          <strong>{{ ui("result.optimizationTitle") }}</strong>
-                          <small>{{ ui("result.optimizationBasis") }}</small>
-                        </div>
-                        <div class="optimization-list">
-                          <div
-                            v-for="row in resultOptimizationRows"
-                            :key="row.key"
-                            class="optimization-row"
-                          >
-                            <span>{{ row.label }}</span>
-                            <b>{{ row.value }}</b>
-                            <small>{{ row.detail }}</small>
+                      <details class="planner-explanation-disclosure">
+                        <summary>{{ ui("result.optimizationTitle") }}</summary>
+                        <div v-if="resultOptimizationRows.length" class="optimization-explainer">
+                          <div class="optimization-head">
+                            <span>{{ ui("result.optimizationEyebrow") }}</span>
+                            <strong>{{ ui("result.optimizationTitle") }}</strong>
+                            <small>{{ ui("result.optimizationBasis") }}</small>
+                          </div>
+                          <div class="optimization-list">
+                            <div
+                              v-for="row in resultOptimizationRows"
+                              :key="row.key"
+                              class="optimization-row"
+                            >
+                              <span>{{ row.label }}</span>
+                              <b>{{ row.value }}</b>
+                              <small>{{ row.detail }}</small>
+                            </div>
+                          </div>
+                          <div v-if="resultMixedHoldRows.length" class="optimization-holds">
+                            <div v-for="row in resultMixedHoldRows" :key="row.key">
+                              <span>{{ row.label }}</span>
+                              <b>{{ row.value }}</b>
+                              <small>{{ row.detail }}</small>
+                            </div>
                           </div>
                         </div>
-                        <div v-if="resultMixedHoldRows.length" class="optimization-holds">
-                          <div v-for="row in resultMixedHoldRows" :key="row.key">
-                            <span>{{ row.label }}</span>
-                            <b>{{ row.value }}</b>
-                            <small>{{ row.detail }}</small>
-                          </div>
-                        </div>
-                      </div>
+                      </details>
                     </section>
-                    <section class="panel ranking-panel">
-                      <div class="section-head">
-                        <div>
-                          <p>{{ tr("箱型选择") }}</p>
-                          <h2>{{ ui("result.calculatedPlanComparison") }}</h2>
-                        </div>
-                        <div class="view-actions">
-                          <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
-                            tr(apiStatus)
-                          }}</el-tag>
-                          <el-button :icon="ArrowLeft" @click="goPlannerStep('cargos')">{{
-                            tr("返回货物总览")
-                          }}</el-button>
-                          <el-button type="primary" :icon="Refresh" @click="recalculate(true)">{{
-                            ui("result.recalculate")
-                          }}</el-button>
-                        </div>
-                      </div>
-                      <div class="container-grid">
-                        <el-button
-                          v-for="evaluation in sortedEvaluations"
-                          :key="evaluation.container.id"
-                          :class="{
-                            active: selectedContainerId === evaluation.container.id,
-                            best: result?.bestContainerId === evaluation.container.id,
-                            'balance-blocked': evaluation.fitStatus === 'balance-blocked',
-                            unavailable: evaluation.fitStatus === 'oversize'
-                          }"
-                          class="container-card"
-                          text
-                          :title="evaluationHint(evaluation)"
-                          @click="selectContainer(evaluation.container.id)"
-                        >
-                          <span class="container-icon">{{
-                            containerIcon(evaluation.container.name)
-                          }}</span>
-                          <mark
-                            v-if="result?.bestContainerId === evaluation.container.id"
-                            class="container-recommend-mark"
-                            >{{ ui("result.currentBestMark") }}</mark
-                          >
-                          <strong>{{ evaluationCardTitle(evaluation) }}</strong>
-                          <small>{{ evaluationCardSubtitle(evaluation) }}</small>
-                          <em class="freight-cost">{{ evaluationFreightText(evaluation) }}</em>
-                          <small class="utilization-line">{{
-                            evaluationCardMetric(evaluation)
-                          }}</small>
-                          <b
-                            v-if="evaluationCardStatus(evaluation)"
-                            :class="['fit-status', evaluation.fitStatus || 'fit']"
-                            >{{ evaluationCardStatus(evaluation) }}</b
-                          >
-                        </el-button>
-                      </div>
-                    </section>
-
                     <section class="panel visual-panel">
-                      <div class="section-head">
-                        <div>
-                          <p>Interactive 3D Packing</p>
-                          <h2>
-                            {{ trContainerName(selectedContainer?.name || "请选择箱型") }} ·
-                            {{ tr(`第 ${selectedBoxIndex} 货舱`) }}
-                          </h2>
-                        </div>
-                      </div>
+                      <WorkspacePageHeader compact class="section-head"
+                        ><template #title>
+                          {{ trContainerName(selectedContainer?.name || "请选择箱型") }} ·
+                          {{ wt("holdNumber", { index: selectedBoxIndex }) }} </template
+                        ><template #eyebrow>Interactive 3D Packing</template></WorkspacePageHeader
+                      >
                       <ContainerScene
                         :container="selectedContainer"
                         :placements="selectedPlacements"
@@ -935,13 +882,69 @@
                         </template>
                       </ContainerScene>
                     </section>
-                    <section class="panel decision-flow-panel">
-                      <div class="section-head">
-                        <div>
-                          <p>{{ t("decisionFlow.eyebrow") }}</p>
-                          <h2>{{ t("decisionFlow.title") }}</h2>
-                        </div>
+                    <section class="panel ranking-panel">
+                      <WorkspacePageHeader compact class="section-head"
+                        ><template #title>{{ ui("result.calculatedPlanComparison") }}</template
+                        ><template #eyebrow>{{ wt("equipmentChoice") }}</template
+                        ><template #actions
+                          ><div class="view-actions">
+                            <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
+                              tr(apiStatus)
+                            }}</el-tag>
+                            <el-button :icon="ArrowLeft" @click="goPlannerStep('cargos')">{{
+                              tr("返回货物总览")
+                            }}</el-button>
+                            <el-button type="primary" :icon="Refresh" @click="recalculate(true)">{{
+                              ui("result.recalculate")
+                            }}</el-button>
+                          </div></template
+                        ></WorkspacePageHeader
+                      >
+                      <div class="container-grid">
+                        <el-button
+                          v-for="evaluation in sortedEvaluations"
+                          :key="evaluation.container.id"
+                          :class="{
+                            active: selectedContainerId === evaluation.container.id,
+                            best: result?.bestContainerId === evaluation.container.id,
+                            'balance-blocked': evaluation.fitStatus === 'balance-blocked',
+                            unavailable: evaluation.fitStatus === 'oversize'
+                          }"
+                          class="container-card"
+                          text
+                          :title="evaluationHint(evaluation)"
+                          @click="selectContainer(evaluation.container.id)"
+                        >
+                          <span class="container-icon">{{
+                            containerIcon(evaluation.container.name)
+                          }}</span>
+                          <mark
+                            v-if="result?.bestContainerId === evaluation.container.id"
+                            class="container-recommend-mark"
+                            >{{ ui("result.currentBestMark") }}</mark
+                          >
+                          <strong>{{ evaluationCardTitle(evaluation) }}</strong>
+                          <small>{{ evaluationCardSubtitle(evaluation) }}</small>
+                          <em class="freight-cost">{{ evaluationFreightText(evaluation) }}</em>
+                          <small class="utilization-line">{{
+                            evaluationCardMetric(evaluation)
+                          }}</small>
+                          <b
+                            v-if="evaluationCardStatus(evaluation)"
+                            :class="['fit-status', evaluation.fitStatus || 'fit']"
+                            >{{ evaluationCardStatus(evaluation) }}</b
+                          >
+                        </el-button>
                       </div>
+                    </section>
+
+                    <section class="panel decision-flow-panel">
+                      <WorkspacePageHeader compact class="section-head"
+                        ><template #title>{{ t("decisionFlow.title") }}</template
+                        ><template #eyebrow>{{
+                          t("decisionFlow.eyebrow")
+                        }}</template></WorkspacePageHeader
+                      >
                       <div class="packing-progress-card">
                         <div class="packing-progress-main">
                           <span>{{ packingProgressState.kicker }}</span>
@@ -1023,165 +1026,185 @@
           @close="closeContainerModal"
           @save="saveContainer"
         />
-        <div v-if="profileOpen" class="modal-backdrop profile-backdrop">
-          <div class="modal profile-modal">
-            <header class="profile-modal-head">
-              <div class="profile-identity">
-                <span class="profile-avatar">{{ profileInitial }}</span>
+        <WorkspaceDialogTransition
+          ><div v-if="profileOpen" class="modal-backdrop profile-backdrop">
+            <div
+              class="modal profile-modal workspace-modal--form"
+              ref="profileDialogElement"
+              tabindex="-1"
+              role="dialog"
+              aria-modal="true"
+              :aria-label="ui('profile.personalCenter')"
+              @keydown="profileDialogFocus.onDialogKeydown"
+            >
+              <header class="profile-modal-head">
+                <div class="profile-identity">
+                  <span class="profile-avatar">{{ profileInitial }}</span>
+                  <div>
+                    <p>{{ ui("profile.personalCenter") }}</p>
+                    <h2>{{ userDisplayName }}</h2>
+                    <small>{{ currentUser?.username }}</small>
+                  </div>
+                </div>
+                <el-button class="icon-button" text @click="profileOpen = false">×</el-button>
+              </header>
+              <div class="profile-hero">
                 <div>
-                  <p>{{ ui("profile.personalCenter") }}</p>
-                  <h2>{{ userDisplayName }}</h2>
-                  <small>{{ currentUser?.username }}</small>
+                  <span class="profile-role-pill">{{ profileRoleText }}</span>
+                  <span class="profile-role-pill profile-party-pill">{{
+                    profilePartyRoleText
+                  }}</span>
+                  <h3>{{ ui("profile.welcomeUser", { name: userDisplayName }) }}</h3>
+                  <p>{{ ui("profile.description") }}</p>
+                </div>
+                <div class="profile-session-card">
+                  <span>{{ ui("profile.tokenValidUntil") }}</span>
+                  <strong>{{ sessionExpiryText }}</strong>
+                  <small>{{ ui("profile.autoLogout") }}</small>
                 </div>
               </div>
-              <el-button class="icon-button" text @click="profileOpen = false">×</el-button>
-            </header>
-            <div class="profile-hero">
-              <div>
-                <span class="profile-role-pill">{{ profileRoleText }}</span>
-                <span class="profile-role-pill profile-party-pill">{{ profilePartyRoleText }}</span>
-                <h3>{{ ui("profile.welcomeUser", { name: userDisplayName }) }}</h3>
-                <p>{{ ui("profile.description") }}</p>
-              </div>
-              <div class="profile-session-card">
-                <span>{{ ui("profile.tokenValidUntil") }}</span>
-                <strong>{{ sessionExpiryText }}</strong>
-                <small>{{ ui("profile.autoLogout") }}</small>
-              </div>
-            </div>
-            <div class="profile-summary-grid refined">
-              <div>
-                <span>{{ ui("profile.cargoTypes") }}</span
-                ><strong>{{ cargoTypeCount }}</strong
-                ><small>{{ ui("profile.currentPlan") }}</small>
-              </div>
-              <div>
-                <span>{{ ui("profile.totalCargoPieces") }}</span
-                ><strong>{{ cargoTotalQuantity }}</strong
-                ><small>{{ ui("unit.piece") }}</small>
-              </div>
-              <div>
-                <span>{{ ui("profile.containerTypes") }}</span
-                ><strong>{{ containers.length }}</strong
-                ><small>{{ ui("profile.availableForCalculation") }}</small>
-              </div>
-              <div>
-                <span>{{ ui("profile.planParameters") }}</span
-                ><strong>{{ utilizationPercent }}% / {{ globalGapCm }}cm</strong
-                ><small>{{ ui("profile.utilizationGap") }}</small>
-              </div>
-            </div>
-            <div class="profile-action-grid">
-              <RouterLink to="/planner/config" @click="profileOpen = false">
-                <b>{{ ui("profile.packingCalculation") }}</b
-                ><span>{{ ui("profile.configParametersContainers") }}</span>
-              </RouterLink>
-              <RouterLink to="/planner/cargos" @click="profileOpen = false">
-                <b>{{ ui("profile.smartImport") }}</b
-                ><span>{{ ui("profile.excelTextRecognition") }}</span>
-              </RouterLink>
-              <RouterLink to="/algorithm" @click="profileOpen = false">
-                <b>{{ ui("profile.algorithmNotes") }}</b
-                ><span>{{ ui("profile.viewRulesStrategies") }}</span>
-              </RouterLink>
-              <RouterLink
-                v-if="currentUser?.role === 'ADMIN'"
-                to="/admin"
-                @click="profileOpen = false"
-              >
-                <b>{{ ui("profile.adminConsole") }}</b
-                ><span>{{ ui("profile.employeesDevicesSystem") }}</span>
-              </RouterLink>
-            </div>
-            <div class="profile-footer">
-              <span>{{ profileRoleText }} / {{ currentUser?.username }}</span>
-              <el-button type="danger" plain @click="handleLogout">{{
-                ui("profile.logout")
-              }}</el-button>
-            </div>
-          </div>
-        </div>
-        <div
-          v-if="packingTimeoutDialogOpen"
-          class="modal-backdrop timeout-backdrop"
-          @click.self="packingTimeoutDialogOpen = false"
-        >
-          <div
-            class="modal timeout-modal"
-            role="dialog"
-            aria-modal="true"
-            :aria-label="t('packingTimeout.title')"
-          >
-            <header class="timeout-modal-head">
-              <div>
-                <p>{{ t("packingTimeout.eyebrow") }}</p>
-                <h2>{{ t("packingTimeout.title") }}</h2>
-              </div>
-              <el-button class="icon-button" text @click="packingTimeoutDialogOpen = false"
-                >×</el-button
-              >
-            </header>
-            <div class="timeout-modal-body">
-              <p class="timeout-lead">{{ t("packingTimeout.lead") }}</p>
-              <div class="timeout-stat-grid">
-                <div v-for="row in packingTimeoutDetailRows" :key="row.key">
-                  <span>{{ row.label }}</span>
-                  <strong>{{ row.value }}</strong>
+              <div class="profile-summary-grid refined">
+                <div>
+                  <span>{{ ui("profile.cargoTypes") }}</span
+                  ><strong>{{ cargoTypeCount }}</strong
+                  ><small>{{ ui("profile.currentPlan") }}</small>
+                </div>
+                <div>
+                  <span>{{ ui("profile.totalCargoPieces") }}</span
+                  ><strong>{{ cargoTotalQuantity }}</strong
+                  ><small>{{ ui("unit.piece") }}</small>
+                </div>
+                <div>
+                  <span>{{ ui("profile.containerTypes") }}</span
+                  ><strong>{{ containers.length }}</strong
+                  ><small>{{ ui("profile.availableForCalculation") }}</small>
+                </div>
+                <div>
+                  <span>{{ ui("profile.planParameters") }}</span
+                  ><strong>{{ utilizationPercent }}% / {{ globalGapCm }}cm</strong
+                  ><small>{{ ui("profile.utilizationGap") }}</small>
                 </div>
               </div>
-              <section class="timeout-section">
-                <h3>{{ t("packingTimeout.reasonTitle") }}</h3>
-                <p>{{ packingTimeoutReason }}</p>
-              </section>
-              <section
-                v-if="packingTimeoutInfo?.lastDecision"
-                class="timeout-section timeout-last-decision"
-              >
-                <h3>{{ t("packingTimeout.lastDecisionTitle") }}</h3>
-                <span
-                  >{{ t(`decisionFlow.steps.${packingTimeoutInfo.lastDecision.phaseKey}.label`) }} ·
-                  {{
-                    t("decisionFlow.recordIndex", { index: packingTimeoutInfo.lastDecision.index })
-                  }}</span
+              <div class="profile-action-grid">
+                <RouterLink to="/planner/config" @click="profileOpen = false">
+                  <b>{{ ui("profile.packingCalculation") }}</b
+                  ><span>{{ ui("profile.configParametersContainers") }}</span>
+                </RouterLink>
+                <RouterLink to="/planner/cargos" @click="profileOpen = false">
+                  <b>{{ ui("profile.smartImport") }}</b
+                  ><span>{{ ui("profile.excelTextRecognition") }}</span>
+                </RouterLink>
+                <RouterLink to="/algorithm" @click="profileOpen = false">
+                  <b>{{ ui("profile.algorithmNotes") }}</b
+                  ><span>{{ ui("profile.viewRulesStrategies") }}</span>
+                </RouterLink>
+                <RouterLink
+                  v-if="currentUser?.role === 'ADMIN'"
+                  to="/admin"
+                  @click="profileOpen = false"
                 >
-                <p>{{ tr(packingTimeoutInfo.lastDecision.text) }}</p>
-              </section>
-              <section class="timeout-section">
-                <h3>{{ t("packingTimeout.suggestionTitle") }}</h3>
-                <ul class="timeout-suggestion-list">
-                  <li v-for="item in packingTimeoutSuggestions" :key="item">{{ item }}</li>
-                </ul>
-              </section>
+                  <b>{{ ui("profile.adminConsole") }}</b
+                  ><span>{{ ui("profile.employeesDevicesSystem") }}</span>
+                </RouterLink>
+              </div>
+              <div class="profile-footer">
+                <span>{{ profileRoleText }} / {{ currentUser?.username }}</span>
+                <el-button type="danger" plain @click="handleLogout">{{
+                  ui("profile.logout")
+                }}</el-button>
+              </div>
             </div>
-            <footer class="timeout-modal-footer">
-              <el-button @click="packingTimeoutDialogOpen = false">{{
-                t(packingTimeoutHasPartial ? "packingTimeout.usePartial" : "packingTimeout.close")
-              }}</el-button>
-              <el-button
-                @click="
-                  goPlannerStep('config');
-                  packingTimeoutDialogOpen = false;
-                "
-                >{{ t("packingTimeout.adjust") }}</el-button
-              >
-              <el-button
-                v-if="packingTimeoutCanResume"
-                type="primary"
-                @click="continuePackingCalculation"
-                >{{ t("packingTimeout.continueRemaining") }}</el-button
-              >
-              <el-button
-                v-else
-                type="primary"
-                @click="
-                  packingTimeoutDialogOpen = false;
-                  recalculate(true);
-                "
-                >{{ t("packingTimeout.retry") }}</el-button
-              >
-            </footer>
-          </div>
-        </div>
+          </div></WorkspaceDialogTransition
+        >
+        <WorkspaceDialogTransition
+          ><div
+            v-if="packingTimeoutDialogOpen"
+            class="modal-backdrop timeout-backdrop"
+            @click.self="packingTimeoutDialogOpen = false"
+          >
+            <div
+              class="modal timeout-modal workspace-modal--form"
+              ref="timeoutDialogElement"
+              tabindex="-1"
+              @keydown="timeoutDialogFocus.onDialogKeydown"
+              role="dialog"
+              aria-modal="true"
+              :aria-label="t('packingTimeout.title')"
+            >
+              <header class="timeout-modal-head">
+                <div>
+                  <p>{{ t("packingTimeout.eyebrow") }}</p>
+                  <h2>{{ t("packingTimeout.title") }}</h2>
+                </div>
+                <el-button class="icon-button" text @click="packingTimeoutDialogOpen = false"
+                  >×</el-button
+                >
+              </header>
+              <div class="timeout-modal-body">
+                <p class="timeout-lead">{{ t("packingTimeout.lead") }}</p>
+                <div class="timeout-stat-grid">
+                  <div v-for="row in packingTimeoutDetailRows" :key="row.key">
+                    <span>{{ row.label }}</span>
+                    <strong>{{ row.value }}</strong>
+                  </div>
+                </div>
+                <section class="timeout-section">
+                  <h3>{{ t("packingTimeout.reasonTitle") }}</h3>
+                  <p>{{ packingTimeoutReason }}</p>
+                </section>
+                <section
+                  v-if="packingTimeoutInfo?.lastDecision"
+                  class="timeout-section timeout-last-decision"
+                >
+                  <h3>{{ t("packingTimeout.lastDecisionTitle") }}</h3>
+                  <span
+                    >{{ t(`decisionFlow.steps.${packingTimeoutInfo.lastDecision.phaseKey}.label`) }}
+                    ·
+                    {{
+                      t("decisionFlow.recordIndex", {
+                        index: packingTimeoutInfo.lastDecision.index
+                      })
+                    }}</span
+                  >
+                  <p>{{ tr(packingTimeoutInfo.lastDecision.text) }}</p>
+                </section>
+                <section class="timeout-section">
+                  <h3>{{ t("packingTimeout.suggestionTitle") }}</h3>
+                  <ul class="timeout-suggestion-list">
+                    <li v-for="item in packingTimeoutSuggestions" :key="item">{{ item }}</li>
+                  </ul>
+                </section>
+              </div>
+              <footer class="timeout-modal-footer">
+                <el-button @click="packingTimeoutDialogOpen = false">{{
+                  t(packingTimeoutHasPartial ? "packingTimeout.usePartial" : "packingTimeout.close")
+                }}</el-button>
+                <el-button
+                  @click="
+                    goPlannerStep('config');
+                    packingTimeoutDialogOpen = false;
+                  "
+                  >{{ t("packingTimeout.adjust") }}</el-button
+                >
+                <el-button
+                  v-if="packingTimeoutCanResume"
+                  type="primary"
+                  @click="continuePackingCalculation"
+                  >{{ t("packingTimeout.continueRemaining") }}</el-button
+                >
+                <el-button
+                  v-else
+                  type="primary"
+                  @click="
+                    packingTimeoutDialogOpen = false;
+                    recalculate(true);
+                  "
+                  >{{ t("packingTimeout.retry") }}</el-button
+                >
+              </footer>
+            </div>
+          </div></WorkspaceDialogTransition
+        >
         <div v-if="toast" class="toast">{{ toast }}</div>
       </div>
       <SystemWaitOverlay
@@ -1193,6 +1216,12 @@
 </template>
 
 <script setup lang="ts">
+import { planSummaryStatus } from "./components/workspace/planSummaryStatus.js";
+import WorkspacePageHeader from "./components/workspace/WorkspacePageHeader.vue";
+import { wt } from "./components/workspace/workspaceCopy";
+import { useDialogFocus } from "./composables/useDialogFocus.js";
+import WorkspaceDialogTransition from "./components/workspace/WorkspaceDialogTransition.vue";
+import "./components/workspace/workspaceMotion.css";
 import BrandLockup from "./components/brand/BrandLockup.vue";
 import PlannerSidebar from "./components/workspace/PlannerSidebar.vue";
 import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
@@ -1348,6 +1377,15 @@ const workspaceReady = ref(false);
 const hasStoredWorkspace = ref(false);
 const currentUser = ref(storedUser());
 const profileOpen = ref(false);
+const profileDialogElement = ref<HTMLElement | null>(null);
+const profileDialogFocus = useDialogFocus({
+  dialogElement: profileDialogElement,
+  isOpen: () => profileOpen.value,
+  isBusy: () => false,
+  close: () => {
+    profileOpen.value = false;
+  }
+});
 const pageLeaving = ref(false);
 const loginRedirecting = ref(false);
 const loginRedirectText = ref("正在进入系统...");
@@ -1459,6 +1497,15 @@ const apiStatus = ref("本机计算");
 const decisionLogs = ref<any[]>([]);
 const packingWorkerProgress = ref<any | null>(null);
 const packingTimeoutDialogOpen = ref(false);
+const timeoutDialogElement = ref<HTMLElement | null>(null);
+const timeoutDialogFocus = useDialogFocus({
+  dialogElement: timeoutDialogElement,
+  isOpen: () => packingTimeoutDialogOpen.value,
+  isBusy: () => false,
+  close: () => {
+    packingTimeoutDialogOpen.value = false;
+  }
+});
 const packingTimeoutInfo = ref<any | null>(null);
 const calcElapsedSeconds = ref(0);
 
@@ -1534,11 +1581,8 @@ const resultSummary = computed(() => {
           ? evaluationFreightLabel(best)
           : ui("result.bestFreight"),
     freightText: best ? evaluationFreightAmountText(best) : "-",
-    recommendationText: best
-      ? `${best.mixedPlan?.summary || best.container.name} / ${evaluationFitText(best)}`
-      : evaluations.length
-        ? ui("result.noFeasiblePlan")
-        : "暂无计算结果"
+    statusTone: planSummaryStatus(counts).tone,
+    statusText: wt(planSummaryStatus(counts).labelKey)
   };
 });
 const resultOptimizationRows = computed(() => buildResultOptimizationRows(sortedEvaluations.value));
@@ -4048,3 +4092,5 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => (toast.value = ""), 2200);
 }
 </script>
+
+<style scoped src="./components/workspace/workspaceDialogStyles.css"></style>

@@ -6,22 +6,26 @@
     </div>
     <div class="maritime-query__fields">
       <div class="maritime-field">
-        <label for="public-tracking-carrier">{{ t("maritime.carrier") }}</label
-        ><select id="public-tracking-carrier" v-model="carrier">
-          <option v-for="value in carriers" :key="value" :value="value">
-            {{ carrierLabel(value) }}
-          </option>
-        </select>
+        <label id="public-tracking-carrier-label" for="public-tracking-carrier">{{
+          t("maritime.carrier")
+        }}</label>
+        <PublicSelect
+          id="public-tracking-carrier"
+          v-model="carrier"
+          labelledby="public-tracking-carrier-label"
+          :options="carrierOptions"
+        />
       </div>
       <div class="maritime-field">
-        <label for="public-tracking-type">{{ t("maritime.referenceType") }}</label
-        ><select id="public-tracking-type" v-model="referenceType">
-          <option value="BOOKING">{{ t("maritime.bookingNumber") }}</option>
-          <option value="CONTAINER">{{ t("maritime.containerNumber") }}</option>
-          <option v-if="supportsBillOfLading" value="BILLOFLADING">
-            {{ t("maritime.billOfLading") }}
-          </option>
-        </select>
+        <label id="public-tracking-type-label" for="public-tracking-type">{{
+          t("maritime.referenceType")
+        }}</label>
+        <PublicSelect
+          id="public-tracking-type"
+          v-model="referenceType"
+          labelledby="public-tracking-type-label"
+          :options="referenceOptions"
+        />
       </div>
       <div class="maritime-field">
         <label for="public-tracking-number">{{ t("maritime.referenceLabel") }}</label
@@ -43,6 +47,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { t } from "../../i18n";
+import PublicSelect from "./PublicSelect.vue";
 const props = defineProps<{ trackingPath: string }>();
 const reference = ref("");
 const carriers = ["COSCO", "CMA", "MAERSK", "HAPAG_LLOYD", "MSC", "OOCL"];
@@ -55,6 +60,16 @@ const carrierNames: Record<string, string> = {
   MAERSK: "Maersk"
 };
 const carrierLabel = (value: string) => carrierNames[value] || value;
+const carrierOptions = computed(() =>
+  carriers.map((value) => ({ value, label: carrierLabel(value) }))
+);
+const referenceOptions = computed(() => [
+  { value: "BOOKING", label: t("maritime.bookingNumber") },
+  { value: "CONTAINER", label: t("maritime.containerNumber") },
+  ...(supportsBillOfLading.value
+    ? [{ value: "BILLOFLADING", label: t("maritime.billOfLading") }]
+    : [])
+]);
 watch(carrier, () => {
   if (!supportsBillOfLading.value && referenceType.value === "BILLOFLADING")
     referenceType.value = "BOOKING";

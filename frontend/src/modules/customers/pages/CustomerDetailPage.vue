@@ -3,44 +3,40 @@
     <button class="back-button" @click="navigateTo('customers')">
       {{ t("customers.backToList") }}
     </button>
+    <WorkspacePageHeader
+      :title="selectedCustomer.displayName || selectedCustomer.username"
+      :eyebrow="t('customers.detailEyebrow')"
+      :description="wt('directoryHint')"
+      ><template #meta
+        ><WorkspaceStatus
+          :tone="selectedCustomer.status === 'ACTIVE' ? 'success' : 'neutral'"
+          :label="statusLabel(selectedCustomer.status)"
+        /><span class="customer-detail-meta"
+          >@{{ selectedCustomer.username }} · {{ partyRoleLabel(selectedCustomer.partyRole) }}</span
+        ></template
+      ><template #actions
+        ><div v-if="isManager" class="main-card-header-actions">
+          <el-button text @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
+            {{ t("customers.resetPassword") }}
+          </el-button>
+          <el-button
+            v-if="selectedCustomer.status === 'ACTIVE'"
+            text
+            type="danger"
+            @click="deactivateCustomer"
+            :disabled="mutatingCustomer"
+          >
+            {{ t("customers.deactivate") }}
+          </el-button>
+          <el-button v-else text @click="reactivateCustomer" :disabled="mutatingCustomer">
+            {{ t("customers.reactivate") }}
+          </el-button>
+        </div></template
+      ></WorkspacePageHeader
+    >
     <el-card class="main-card" shadow="never">
-      <template #header>
-        <div class="main-card-header">
-          <div>
-            <span class="main-card-eyebrow">{{ t("customers.detailEyebrow") }}</span>
-            <h2 class="main-card-title">
-              {{ selectedCustomer.displayName || selectedCustomer.username }}
-            </h2>
-            <p class="main-card-subtitle">
-              @{{ selectedCustomer.username }}
-              <el-divider direction="vertical" />
-              {{ partyRoleLabel(selectedCustomer.partyRole) }}
-              <el-divider direction="vertical" />
-              {{ statusLabel(selectedCustomer.status) }}
-            </p>
-          </div>
-          <div v-if="isManager" class="main-card-header-actions">
-            <el-button text @click="resetPasswordDialogOpen = true" :disabled="mutatingCustomer">
-              {{ t("customers.resetPassword") }}
-            </el-button>
-            <el-button
-              v-if="selectedCustomer.status === 'ACTIVE'"
-              text
-              type="danger"
-              @click="deactivateCustomer"
-              :disabled="mutatingCustomer"
-            >
-              {{ t("customers.deactivate") }}
-            </el-button>
-            <el-button v-else text @click="reactivateCustomer" :disabled="mutatingCustomer">
-              {{ t("customers.reactivate") }}
-            </el-button>
-          </div>
-        </div>
-      </template>
-
       <section class="profile-section">
-        <div class="section-label">{{ t("customers.profileTitle") }}</div>
+        <h2 class="customer-profile-heading">{{ t("customers.profileTitle") }}</h2>
         <el-form
           class="profile-form"
           :disabled="!isManager || mutatingCustomer"
@@ -48,17 +44,17 @@
           label-position="top"
         >
           <el-row :gutter="16">
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item :label="t('customers.username')">
                 <el-input v-model.trim="editForm.username" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item :label="t('customers.displayName')">
                 <el-input v-model.trim="editForm.displayName" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item :label="t('customers.clientCode')">
                 <div class="client-code-inline">
                   <el-tag
@@ -79,7 +75,7 @@
             </el-col>
           </el-row>
           <el-row :gutter="16">
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item :label="t('customers.partyRole')">
                 <el-select
                   v-model="editForm.partyRole"
@@ -91,15 +87,16 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item :label="t('customers.contactEmail')">
                 <el-input v-model.trim="editForm.contactEmail" type="email" maxlength="254" />
               </el-form-item>
             </el-col>
             <el-col
               v-if="isManager"
-              :span="4"
-              :offset="4"
+              :xs="24"
+              :sm="24"
+              :lg="8"
               style="display: flex; align-items: flex-end; padding-bottom: 18px"
             >
               <el-button type="primary" native-type="submit" :disabled="mutatingCustomer">
@@ -178,7 +175,7 @@
           </template>
           <template v-else>
             <el-row :gutter="12">
-              <el-col :span="8">
+              <el-col :xs="24" :sm="12" :lg="8">
                 <el-form-item :label="t('customers.carrier')">
                   <el-select
                     v-model="bindForm.carrier"
@@ -194,7 +191,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
+              <el-col :xs="24" :sm="12" :lg="8">
                 <el-form-item :label="t('customers.referenceType')">
                   <el-select
                     v-model="bindForm.referenceType"
@@ -210,7 +207,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
+              <el-col :xs="24" :sm="12" :lg="8">
                 <el-form-item :label="t('customers.referenceNo')">
                   <el-input
                     v-model.trim="bindForm.referenceNo"
@@ -415,6 +412,9 @@ import {
   supportsShipmentReference
 } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceStatus from "../../../components/workspace/WorkspaceStatus.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 const { t } = useI18n();
@@ -511,11 +511,11 @@ function updateBindMode(value: string | number | boolean | undefined) {
   margin-bottom: 16px;
   padding: 6px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #5a6d80;
   background: #fff;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .back-button:hover {
@@ -525,7 +525,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .main-card {
   margin-bottom: 16px;
   border: 1px solid #dce3ec;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   box-shadow: none;
 }
 .main-card :deep(.el-card__header) {
@@ -567,21 +567,21 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-pagination :deep(.btn-prev),
 .shipment-pagination :deep(.btn-next),
 .shipment-pagination :deep(.el-pager li) {
   min-width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: var(--radius-control) !important;
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
@@ -603,8 +603,8 @@ function updateBindMode(value: string | number | boolean | undefined) {
 }
 .main-card-eyebrow {
   color: #4086d2;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -633,7 +633,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 }
 .section-label {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-foreground);
   margin: 0;
 }
@@ -657,7 +657,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .bind-form-card {
   margin-bottom: 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   background: #fafbfd;
 }
 .bind-form-card :deep(.el-card__body) {
@@ -674,12 +674,12 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .reference-hint {
   margin: 0;
   color: #7d93ae;
-  font-size: 11px;
+  font-size: 12px;
 }
 .candidate-card {
   margin-bottom: 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   background: #fafbfd;
 }
 .candidate-card :deep(.el-card__header) {
@@ -701,7 +701,7 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .candidate-header small {
   display: block;
   color: #7d93ae;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 2px;
 }
 .candidate-header-actions {
@@ -721,9 +721,9 @@ function updateBindMode(value: string | number | boolean | undefined) {
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid #e4eaf1;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
-  font-size: 11px;
+  font-size: 12px;
 }
 .candidate-row--bound {
   border-color: #d7e7fa;
@@ -834,4 +834,70 @@ function updateBindMode(value: string | number | boolean | undefined) {
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper.is-focused) {
   box-shadow: 0 0 0 1px var(--color-ring) inset;
 }
+
+.customer-detail-meta {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.customer-profile-heading {
+  margin: 0 0 22px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.client-code-inline {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.candidate-header {
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.candidate-header-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.candidate-row {
+  min-height: 76px;
+  border-radius: var(--radius-control);
+  padding: 16px;
+}
+.candidate-row small {
+  font-size: 12px;
+}
+.candidate-row-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.main-card {
+  border-radius: var(--radius-card);
+}
+.main-card :deep(.el-card__body) {
+  padding: 24px;
+}
+@media (max-width: 700px) {
+  .main-card :deep(.el-card__body) {
+    padding: 18px;
+  }
+  .candidate-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .candidate-row > :nth-child(n + 3) {
+    grid-column: 2;
+  }
+  .candidate-header-actions {
+    width: 100%;
+  }
+  .candidate-header-actions .el-button {
+    margin: 0;
+  }
+  .bind-form :deep(.el-col) {
+    max-width: 100%;
+    flex-basis: 100%;
+  }
+}
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

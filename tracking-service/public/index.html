@@ -11,10 +11,21 @@
     <title>logisticspluscn · Shipment tracking</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./site.webmanifest" />
-    <link rel="stylesheet" href="./vendor/element-plus.css" />
-    <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./design-system.css" />
-    <script src="./app.js" type="module"></script>
+    <link rel="stylesheet" href="./vendor/element-plus.css?v=maritime-v2-20261028-r3" />
+    <link
+      rel="preload"
+      href="./fonts/inter/files/inter-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./fonts/brand-fonts.css?v=maritime-v2-20261028-r3" />
+    <link rel="stylesheet" href="./styles.css?v=maritime-v2-20261028-r3" />
+    <link rel="stylesheet" href="./design-system.css?v=maritime-v2-20261028-r3" />
+    <!-- A versioned link also replaces brand tokens held by an older immutable cache. -->
+    <link rel="stylesheet" href="./brand-tokens.css?v=maritime-v2-20261028-r3" />
+    <link rel="stylesheet" href="./tracking-refinement.css?v=maritime-v2-20261028-r3" />
+    <script src="./app.js?v=maritime-v2-20261028-r3" type="module"></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -1814,6 +1825,9 @@
       <aside
         class="document-drawer"
         id="document-drawer"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
         aria-hidden="true"
         aria-labelledby="document-drawer-title"
       >
@@ -1833,12 +1847,18 @@
       </aside>
     </div>
 
-    <dialog class="supplement-dialog" id="business-reference-dialog">
+    <dialog
+      class="supplement-dialog"
+      id="business-reference-dialog"
+      aria-labelledby="business-reference-dialog-title"
+    >
       <form method="dialog" id="business-reference-form">
         <header>
           <span>
             <small data-i18n="business.kicker">BUSINESS REFERENCES</small>
-            <strong data-i18n="business.dialogTitle">Edit shipment identifiers</strong>
+            <strong id="business-reference-dialog-title" data-i18n="business.dialogTitle"
+              >Edit shipment identifiers</strong
+            >
           </span>
           <button
             type="button"
@@ -1894,7 +1914,11 @@
       </form>
     </dialog>
 
-    <dialog class="supplement-dialog document-editor-dialog" id="document-editor-dialog">
+    <dialog
+      class="supplement-dialog document-editor-dialog"
+      id="document-editor-dialog"
+      aria-labelledby="document-editor-title"
+    >
       <form method="dialog" id="document-editor-form">
         <header>
           <span>
@@ -1912,6 +1936,7 @@
         </header>
         <input type="hidden" id="document-type-input" name="documentType" />
         <div class="document-editor-topic" id="document-editor-topic">—</div>
+        <p class="document-editor-message" id="document-editor-message" role="alert" hidden></p>
         <div class="supplement-form-grid">
           <label>
             <span data-i18n="documents.file">File</span>
@@ -1943,7 +1968,11 @@
       </form>
     </dialog>
 
-    <dialog class="supplement-dialog file-preview-dialog" id="file-preview-dialog">
+    <dialog
+      class="supplement-dialog file-preview-dialog"
+      id="file-preview-dialog"
+      aria-labelledby="file-preview-name"
+    >
       <header>
         <span>
           <small data-i18n="files.previewTitle">File preview</small>

@@ -10,7 +10,7 @@
       :aria-busy="visible"
     >
       <section class="system-wait-card">
-        <BrandLockup />
+        <BrandLockup compact />
         <span class="system-wait-spinner" aria-hidden="true"></span>
         <h2>{{ message }}</h2>
         <p>{{ t("maritime.waitingHint") }}</p>
@@ -43,7 +43,7 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
 }
 .system-wait-card {
   width: min(520px, 100%);
-  padding: 42px;
+  padding: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -68,7 +68,7 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
   line-height: 1.4;
 }
 .system-wait-card p {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--color-muted);
   margin: 12px 0 0;
@@ -76,6 +76,14 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
 .system-wait-enter-active,
 .system-wait-leave-active {
   transition: opacity 180ms ease;
+}
+.system-wait-enter-active .system-wait-card,
+.system-wait-leave-active .system-wait-card {
+  transition: transform 180ms ease;
+}
+.system-wait-enter-from .system-wait-card,
+.system-wait-leave-to .system-wait-card {
+  transform: translateY(8px);
 }
 .system-wait-enter-from,
 .system-wait-leave-to {
@@ -98,7 +106,10 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
   }
   .system-wait-enter-active,
   .system-wait-leave-active {
-    transition: none;
+    transition: opacity 80ms linear;
+  }
+  .system-wait-card {
+    transform: none !important;
   }
 }
 </style>

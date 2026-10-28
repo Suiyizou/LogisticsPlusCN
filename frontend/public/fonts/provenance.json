@@ -1,0 +1,16 @@
+[
+  {
+    "package": "@fontsource-variable/inter",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "archiveSHA256": "d26710dd38e7217484a1d47ee76c024977ec550548876f26d06ed1844af09a14",
+    "fontFiles": 7
+  },
+  {
+    "package": "@fontsource-variable/noto-sans-sc",
+    "version": "5.3.1",
+    "license": "OFL-1.1",
+    "archiveSHA256": "95a11c5bbacd9995d94fc8cf964ee687307aacf20957ca6a4a16077519388163",
+    "fontFiles": 101
+  }
+]

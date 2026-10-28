@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import BrandLockup from "../../components/brand/BrandLockup.vue";
 import { useId } from "vue";
 import { RouterLink } from "vue-router";
@@ -95,39 +96,42 @@ function refresh() {
     </aside>
 
     <main class="admin-console-main">
-      <header class="admin-console-topbar">
-        <div>
-          <p>{{ meta.eyebrow }}</p>
-          <h1>{{ meta.title }}</h1>
-          <span>{{ meta.subtitle }}</span>
-        </div>
-        <div class="admin-top-actions">
-          <button
-            class="admin-system-message-button"
-            type="button"
-            @click="emit('open-announcements')"
-          >
-            {{ systemMessages }}
-            <em v-if="announcementCount > 0">{{
-              announcementCount > 99 ? "99+" : announcementCount
-            }}</em>
-          </button>
-          <button type="button" :disabled="busy" @click="refresh">
-            {{ busy ? copy.refreshing : copy.refresh }}
-          </button>
-          <button type="button" @click="emit('logout')">{{ copy.logout }}</button>
-        </div>
-      </header>
-
-      <p
-        v-if="message"
-        class="admin-message"
-        :class="{ error: hasError }"
-        :role="hasError ? 'alert' : 'status'"
-        :aria-live="hasError ? 'assertive' : 'polite'"
+      <WorkspacePageHeader
+        class="admin-console-topbar"
+        :title="meta.title"
+        :eyebrow="meta.eyebrow"
+        :description="meta.subtitle"
+        ><template #actions
+          ><div class="admin-top-actions">
+            <button
+              class="admin-system-message-button"
+              type="button"
+              @click="emit('open-announcements')"
+            >
+              {{ systemMessages }}
+              <em v-if="announcementCount > 0">{{
+                announcementCount > 99 ? "99+" : announcementCount
+              }}</em>
+            </button>
+            <button type="button" :disabled="busy" @click="refresh">
+              {{ busy ? copy.refreshing : copy.refresh }}
+            </button>
+            <button type="button" @click="emit('logout')">{{ copy.logout }}</button>
+          </div></template
+        ></WorkspacePageHeader
       >
-        {{ message }}
-      </p>
+
+      <Transition name="workspace-state"
+        ><p
+          v-if="message"
+          class="admin-message"
+          :class="{ error: hasError }"
+          :role="hasError ? 'alert' : 'status'"
+          :aria-live="hasError ? 'assertive' : 'polite'"
+        >
+          {{ message }}
+        </p></Transition
+      >
 
       <slot />
     </main>

@@ -3,16 +3,17 @@
     ><div data-i18n-ignore>
       <div data-module="overview" class="workspace-view">
         <div class="list-page list-page-full business-overview" v-loading="loading">
-          <div class="list-page-header business-overview-header">
-            <div>
-              <span class="business-overview-kicker">{{ t("customers.overviewKicker") }}</span>
-              <h2>{{ t("customers.overview") }}</h2>
-              <p>{{ t("customers.overviewHint") }}</p>
-            </div>
-            <el-button :loading="loading" @click="reload">
-              <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
-            </el-button>
-          </div>
+          <WorkspacePageHeader
+            class="list-page-header business-overview-header"
+            :description="wt('overviewHint')"
+            ><template #title>{{ t("customers.overview") }}</template
+            ><template #eyebrow>{{ t("customers.overviewKicker") }}</template
+            ><template #actions
+              ><el-button :loading="loading" @click="reload">
+                <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
+              </el-button></template
+            ></WorkspacePageHeader
+          >
           <div class="business-kpi-grid">
             <article
               v-for="metric in kpis"
@@ -50,6 +51,8 @@
   >
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -152,8 +155,8 @@ onMounted(() => {
   display: block;
   margin-bottom: 5px;
   color: #3982be;
-  font-size: 9px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -169,7 +172,7 @@ onMounted(() => {
   min-height: 132px;
   padding: 15px;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   background: var(--color-surface-subtle);
   box-shadow: none;
   align-content: space-between;
@@ -213,8 +216,8 @@ onMounted(() => {
 .business-kpi-card__top > span:last-child {
   overflow: hidden;
   color: #536f88;
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -223,7 +226,7 @@ onMounted(() => {
   flex: 0 0 34px;
   width: 34px;
   height: 34px;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   color: #347fc0;
   background: #eaf4fc;
   place-items: center;
@@ -244,7 +247,7 @@ onMounted(() => {
 .business-kpi-card__value > small {
   overflow: hidden;
   color: #8a9daf;
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -280,10 +283,10 @@ onMounted(() => {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #f0dfb7;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #916d28;
   background: #fff8e7;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 @keyframes business-kpi-in {
@@ -386,3 +389,5 @@ onMounted(() => {
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

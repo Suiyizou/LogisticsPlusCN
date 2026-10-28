@@ -23,7 +23,9 @@ html:root {
   --color-destructive: #b13d30;
   --color-destructive-soft: #fcf0ed;
   --color-ring: #157a9d;
-  --font-ui: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+  --font-ui:
+    "Inter Variable", "Noto Sans SC Variable", "Segoe UI", "Microsoft YaHei", "PingFang SC",
+    sans-serif;
   --font-data: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --space-1: 4px;
   --space-2: 8px;
@@ -31,10 +33,12 @@ html:root {
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --radius-control: 2px;
-  --radius-card: 4px;
-  --radius-dialog: 4px;
-  --radius-pill: 4px;
+  --control-height: 44px;
+  --control-height-small: 36px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-dialog: 12px;
+  --radius-pill: 999px;
   --shadow-sm: 0 1px 2px rgb(21 56 74 / 4%);
   --shadow-card: 0 3px 12px rgb(21 56 74 / 3%);
   --shadow-card-hover: 0 5px 16px rgb(21 56 74 / 6%);
@@ -109,6 +113,12 @@ html:root {
   --el-text-color-regular: var(--color-secondary);
   --el-text-color-secondary: var(--color-muted);
   --el-font-family: var(--font-ui);
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-weight-primary: 500;
+  --el-component-size: var(--control-height);
+  --el-component-size-small: var(--control-height-small);
+  --el-component-size-large: 48px;
   --el-border-radius-base: var(--radius-control);
   --el-border-radius-small: 2px;
 }

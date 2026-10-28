@@ -4,18 +4,30 @@
       <BrandLockup class="customer-access-brand" :href="roleHomePath" compact />
       <div class="customer-access-header-actions">
         <LanguageSwitcher class="customer-access-language" />
-        <span class="customer-access-party-pill">{{ t("customers.internalPartyAgent") }}</span>
-        <button type="button" class="system-message-button" @click="emit('open-announcements')">
+        <button
+          type="button"
+          class="system-message-button"
+          :aria-label="t('customers.systemMessages')"
+          @click="emit('open-announcements')"
+        >
           <el-icon><Bell /></el-icon>
           <span>{{ t("customers.systemMessages") }}</span>
           <i v-if="announcementCount > 0">{{
             announcementCount > 99 ? "99+" : announcementCount
           }}</i>
         </button>
-        <div class="customer-account" :class="{ 'is-open': accountMenuOpen }">
+        <div
+          class="customer-account"
+          ref="accountMenuElement"
+          :class="{ 'is-open': accountMenuOpen }"
+          @keydown.esc.stop.prevent="closeAccountMenu(true)"
+        >
           <button
             type="button"
             class="customer-account-trigger"
+            ref="accountTriggerElement"
+            :aria-expanded="accountMenuOpen"
+            :aria-controls="accountMenuId"
             @click="accountMenuOpen = !accountMenuOpen"
           >
             <span
@@ -24,12 +36,14 @@
             >
             <i aria-hidden="true">&#x2304;</i>
           </button>
-          <div v-if="accountMenuOpen" class="customer-account-menu">
-            <RouterLink v-if="isManager" to="/workbenches" @click="accountMenuOpen = false">{{
-              t("customers.backWorkbench")
-            }}</RouterLink>
-            <button type="button" @click="emit('logout')">{{ t("customers.logout") }}</button>
-          </div>
+          <Transition name="workspace-state"
+            ><div v-if="accountMenuOpen" :id="accountMenuId" class="customer-account-menu">
+              <RouterLink v-if="isManager" to="/workbenches" @click="accountMenuOpen = false">{{
+                t("customers.backWorkbench")
+              }}</RouterLink>
+              <button type="button" @click="emit('logout')">{{ t("customers.logout") }}</button>
+            </div></Transition
+          >
         </div>
       </div>
     </header>
@@ -46,6 +60,9 @@
     <div
       v-if="refreshingShipment"
       class="shipment-updating-overlay"
+      ref="refreshDialogElement"
+      tabindex="-1"
+      @keydown="refreshDialogFocus.onDialogKeydown"
       role="dialog"
       aria-modal="true"
       :aria-label="t('customers.updateTrackingTitle')"
@@ -167,6 +184,8 @@
 </template>
 
 <script setup>
+import { workspaceFeedbackKey } from "./workspace/workspaceFeedback";
+import { useDialogFocus } from "../composables/useDialogFocus.js";
 import BrandLockup from "./brand/BrandLockup.vue";
 import { OFFICIAL_TRACKING_URLS } from "../services/trackingCarriers.js";
 import { createWorkspacePresentation } from "../features/presentation/createWorkspacePresentation.js";
@@ -214,7 +233,7 @@ import { useReducedMotion } from "../composables/useReducedMotion.js";
 
 import { requestBusinessTracking } from "../services/businessTrackingTransport.js";
 
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch, useId, provide } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessageBox } from "element-plus";
 import "element-plus/es/components/message-box/style/css";
@@ -290,6 +309,7 @@ const {
   showSuccess,
   showError
 } = useWorkspaceFeedback({ t, markApiErrorHandled });
+provide(workspaceFeedbackKey, { message: pageMessage, isError: messageIsError });
 const isManager = computed(() => ["BUSINESS", "ADMIN"].includes(props.currentUser?.role));
 const isOverseaAgent = computed(() => props.currentUser?.role === "OVERSEA_AGENT");
 const canRequestBusinessHandover = computed(() => props.currentUser?.role === "BUSINESS");
@@ -306,6 +326,20 @@ function waitForNextPaint() {
 }
 
 const accountMenuOpen = ref(false);
+const accountMenuId = useId();
+const accountMenuElement = ref(null);
+const accountTriggerElement = ref(null);
+function closeAccountMenu(restoreFocus = false) {
+  accountMenuOpen.value = false;
+  if (restoreFocus) accountTriggerElement.value?.focus();
+}
+function onAccountOutsidePointer(event) {
+  if (accountMenuOpen.value && !accountMenuElement.value?.contains(event.target))
+    closeAccountMenu();
+}
+onMounted(() => document.addEventListener("pointerdown", onAccountOutsidePointer));
+onUnmounted(() => document.removeEventListener("pointerdown", onAccountOutsidePointer));
+
 const personalProfile = usePersonalProfile({
   currentUser: () => props.currentUser,
   updateOwnProfile,
@@ -626,6 +660,14 @@ provideModulePages({
   shipments: shipmentModulePages
 });
 
+const refreshDialogElement = ref(null);
+const refreshDialogFocus = useDialogFocus({
+  dialogElement: refreshDialogElement,
+  isOpen: () => refreshingShipment.value,
+  isBusy: () => true,
+  close: cancelRefreshShipment
+});
+
 onMounted(() => {
   businessNavigation.initialize();
   void restoreBatchTrackTask();
@@ -715,7 +757,40 @@ function openShipmentSupplement(shipment) {
 }
 </script>
 
-<style scoped src="../modules/shared/styles/workspaceControls.css"></style>
+<style scoped src="../modules/shared/styles/workspaceControls.css">
+.customer-account-menu {
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-overlay);
+}
+.customer-account-menu a,
+.customer-account-menu button {
+  min-height: 40px;
+  font-size: 14px;
+  border-radius: var(--radius-control);
+}
+.sidebar-nav button {
+  font-size: 14px;
+  font-weight: 500;
+}
+.sidebar-profile-copy b {
+  font-size: 14px;
+}
+.sidebar-profile-copy small {
+  font-size: 12px;
+}
+.customer-access-party-pill {
+  font-size: 12px;
+}
+.customer-access-header .customer-account-trigger b {
+  font-size: 14px;
+}
+.customer-access-header .customer-account-trigger small {
+  font-size: 12px;
+}
+</style>
 <style scoped>
 .customer-access-page {
   height: 100dvh;
@@ -751,11 +826,11 @@ function openShipmentSupplement(shipment) {
 .customer-access-party-pill {
   padding: 5px 10px;
   border: 1px solid rgba(100, 150, 210, 0.35);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: #a0c4e8;
   background: rgba(255, 255, 255, 0.06);
-  font-size: 10px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-access-message {
   margin: 0;
@@ -903,7 +978,7 @@ function openShipmentSupplement(shipment) {
 }
 .customer-account-trigger small {
   color: #8a9cb5;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-account-trigger i {
   color: #7a90ae;
@@ -952,8 +1027,8 @@ function openShipmentSupplement(shipment) {
   background: rgba(255, 255, 255, 0.06);
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition:
     border-color 160ms ease,
@@ -970,12 +1045,12 @@ function openShipmentSupplement(shipment) {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: #fff;
-  background: #ef596f;
+  background: var(--color-accent);
   box-shadow: none;
   place-items: center;
-  font-size: 9px;
+  font-size: 12px;
   font-style: normal;
 }
 .workspace-layout {
@@ -1078,11 +1153,11 @@ function openShipmentSupplement(shipment) {
   white-space: nowrap;
 }
 .sidebar-profile-copy b {
-  font-size: 11px;
+  font-size: 12px;
 }
 .sidebar-profile-copy small {
   color: #7d91a5;
-  font-size: 9px;
+  font-size: 12px;
 }
 .sidebar-profile-card > .el-icon {
   color: #8aa1b8;
@@ -1124,7 +1199,7 @@ function openShipmentSupplement(shipment) {
   color: #146a4c;
   background: #effbf6;
   box-shadow: none;
-  font-weight: 750;
+  font-weight: 600;
   font-size: 13px;
 }
 button:disabled {
@@ -1204,7 +1279,7 @@ button:disabled {
     justify-content: center;
     min-height: 36px;
     padding: 6px 8px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .sidebar-profile-card {
     width: calc(100% - 12px);
@@ -1251,16 +1326,16 @@ button:disabled {
 }
 .customer-access-party-pill {
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 .customer-access-header .system-message-button {
   min-height: 36px;
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: white;
   box-shadow: none;
@@ -1268,7 +1343,7 @@ button:disabled {
 .customer-access-header .customer-account-trigger {
   min-width: 136px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: white;
   color: var(--color-primary);
 }
@@ -1332,7 +1407,7 @@ button:disabled {
 }
 .sidebar-profile-avatar {
   border: 1px solid #ffffff35;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: #d5e3eb;
   box-shadow: none;
@@ -1343,7 +1418,7 @@ button:disabled {
 }
 .sidebar-profile-copy small {
   color: #9fb9c8;
-  font-size: 10px;
+  font-size: 12px;
 }
 .workspace-main {
   padding: 28px 30px 32px;
@@ -1403,7 +1478,7 @@ button:disabled {
     border-left: 0;
     border-bottom: 2px solid transparent;
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: 12px;
   }
   .sidebar-profile-card {
     display: none;

@@ -31,11 +31,13 @@ function lockDocumentScroll(document) {
 // supplied workflow. A pending confirmation must remain free to own the focus.
 export function useDialogFocus({ dialogElement, isOpen, isBusy, close }) {
   let previousFocus = null;
+  // Vue clears template refs before an animated leaving subtree is removed.
+  let openedDialog = null;
   let focusVersion = 0;
   let unlockScroll = () => {};
 
   function restoreFocus() {
-    const dialog = dialogElement.value;
+    const dialog = dialogElement.value || openedDialog;
     const active = globalThis.document?.activeElement;
     if (
       previousFocus?.isConnected &&
@@ -44,6 +46,7 @@ export function useDialogFocus({ dialogElement, isOpen, isBusy, close }) {
       previousFocus.focus({ preventScroll: true });
     }
     previousFocus = null;
+    openedDialog = null;
   }
 
   function focusableElements(dialog) {
@@ -101,6 +104,7 @@ export function useDialogFocus({ dialogElement, isOpen, isBusy, close }) {
       await nextTick();
       if (version === focusVersion && isOpen()) {
         const dialog = dialogElement.value;
+        openedDialog = dialog;
         // Workflows may already focus their primary action while opening a modal.
         if (dialog && !dialog.contains(globalThis.document?.activeElement))
           dialog.focus({ preventScroll: true });

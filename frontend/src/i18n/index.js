@@ -8,8 +8,10 @@ import { shipmentBatchMessages } from "./shipmentBatchMessages";
 import { customerWorkflowMessages } from "./customerWorkflowMessages.js";
 import { adminWorkflowMessages } from "./adminWorkflowMessages.js";
 import { moduleExampleMessages } from "./moduleExampleMessages.js";
+import { publicSiteMessages } from "./publicSiteMessages.js";
 
 for (const locale of SUPPORTED_LOCALES) {
+  messages[locale].publicSite = publicSiteMessages[locale].publicSite;
   messages[locale].adminWorkflow = adminWorkflowMessages[locale];
   messages[locale].moduleExample = moduleExampleMessages[locale];
   Object.assign(messages[locale].customers, shipmentBatchMessages[locale]);

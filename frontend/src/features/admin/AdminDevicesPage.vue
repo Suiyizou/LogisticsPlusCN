@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
 import type { AdminDevice, AdminWorkflowPorts } from "../../types/adminWorkflows";
@@ -40,12 +42,10 @@ const emit = defineEmits<{
     </div>
 
     <article class="admin-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Login Devices</p>
-          <h2>{{ t("adminWorkflow.deviceHeading") }}</h2>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ t("adminWorkflow.deviceHeading") }}</template
+        ><template #eyebrow>Login Devices</template></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table :data="rows" row-key="id" stripe class="standard-information-table devices">
           <DeviceColumn :label="t('admin.list.user')" min-width="150" show-overflow-tooltip>
@@ -101,7 +101,9 @@ const emit = defineEmits<{
               </div>
             </template>
           </DeviceColumn>
-          <template #empty>{{ t("admin.list.noDevices") }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ t("admin.list.noDevices") }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -119,3 +121,5 @@ const emit = defineEmits<{
   </section>
 </template>
 <style scoped src="./adminTableStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

@@ -25,7 +25,7 @@
   width: min(520px, 100%);
   padding: 30px;
   border: 1px solid rgba(180, 200, 220, 0.5);
-  border-radius: 4px;
+  border-radius: var(--radius-dialog);
   background: #fff;
   box-shadow: none;
   animation: operations-dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -43,8 +43,8 @@
 }
 .customer-code-kicker {
   color: #4086d2;
-  font-size: 10px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 .customer-code-dialog > div {
@@ -58,11 +58,11 @@
 .customer-access-primary {
   min-height: 40px;
   border: 1px solid #1a4f80;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #fff;
   background: var(--color-surface-subtle);
   box-shadow: none;
-  font-weight: 800;
+  font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
@@ -79,8 +79,8 @@
 }
 .customer-dialog-form label > span {
   color: #435d76;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-dialog-form input,
 .customer-dialog-form select,
@@ -88,7 +88,7 @@
   width: 100%;
   padding: 9px 11px;
   border: 1px solid #cfdeec;
-  border-radius: 4px;
+  border-radius: var(--radius-dialog);
   color: #183652;
   background: #fbfdff;
   font-size: 13px;
@@ -114,10 +114,10 @@
   flex: 1;
   min-height: 38px;
   border: 1px solid #cfdeec;
-  border-radius: 4px;
+  border-radius: var(--radius-dialog);
   color: #3a5572;
   background: #fff;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
@@ -163,7 +163,7 @@
 }
 .customer-field-rule {
   color: #71879b;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .customer-code-overlay {
@@ -212,12 +212,12 @@
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid #b9d1e8;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #2369a7;
   background: #f4f9ff;
   font: inherit;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -226,17 +226,17 @@
   margin: 0 !important;
   padding: 11px 13px;
   border: 1px solid #f0c6cc;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #983746;
   background: #fff7f8;
   gap: 4px !important;
 }
 .customer-import-file-error b {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.06em;
 }
 .customer-import-file-error span {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .customer-import-summary {
@@ -250,7 +250,7 @@
   min-height: 62px;
   padding: 10px 13px;
   border: 1px solid #dce6ef;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-background);
   align-content: center;
   gap: 2px;
@@ -261,8 +261,8 @@
 }
 .customer-import-summary > span small {
   color: #7b90a5;
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-import-summary > .is-valid {
   border-color: #bfe5d4;
@@ -301,7 +301,7 @@
 .customer-batch-actions > small {
   margin-right: auto;
   color: #a23e4d;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-batch-actions button {
   flex: 0 0 auto !important;

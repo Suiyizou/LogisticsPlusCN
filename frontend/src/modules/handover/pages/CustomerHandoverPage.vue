@@ -2,25 +2,21 @@
   <div data-i18n-ignore data-module="handover">
     <div class="workspace-view">
       <div class="list-page list-page-full business-handover-page">
-        <div class="list-page-header">
-          <div>
-            <span class="business-overview-kicker">{{
-              t("customers.businessHandoverKicker")
-            }}</span>
-            <h2>
-              {{
-                isOverseaAgent ? t("customers.businessTransfer") : t("customers.businessHandover")
-              }}
-            </h2>
-            <p>{{ t("customers.businessHandoverHint") }}</p>
-          </div>
-          <el-button
-            :loading="loadingBusinessHandoverAgents || loadingBusinessHandoverRequests"
-            @click="refreshBusinessHandoverData"
-          >
-            <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
-          </el-button>
-        </div>
+        <WorkspacePageHeader class="list-page-header" :description="wt('handoverHint')"
+          ><template #title>
+            {{
+              isOverseaAgent ? t("customers.businessTransfer") : t("customers.businessHandover")
+            }} </template
+          ><template #eyebrow>{{ t("customers.businessHandoverKicker") }}</template
+          ><template #actions
+            ><el-button
+              :loading="loadingBusinessHandoverAgents || loadingBusinessHandoverRequests"
+              @click="refreshBusinessHandoverData"
+            >
+              <el-icon><Refresh /></el-icon>{{ t("customers.refresh") }}
+            </el-button></template
+          ></WorkspacePageHeader
+        >
         <p v-if="isOverseaAgent" class="business-handover-readonly">
           {{ t("customers.businessHandoverReadonlyHint") }}
         </p>
@@ -49,6 +45,7 @@
                 <p>{{ t("customers.myHandoverRequestsHint") }}</p>
               </div>
               <el-select
+                popper-class="business-select-popper workspace-select-popper"
                 v-model="businessHandoverRequestStatus"
                 class="business-select handover-status-filter"
                 @change="changeBusinessHandoverRequestStatus"
@@ -145,6 +142,9 @@
           <el-form class="handover-agent-transfer-form" label-position="top">
             <el-form-item :label="t('customers.handoverCustomers')">
               <el-select
+                collapse-tags
+                collapse-tags-tooltip
+                :max-collapse-tags="2"
                 v-model="overseaTransferCustomerIds"
                 multiple
                 filterable
@@ -289,6 +289,8 @@
   </div>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -384,8 +386,8 @@ const compact = useMediaQuery("(max-width: 680px)");
   display: block;
   margin-bottom: 5px;
   color: #3982be;
-  font-size: 9px;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -398,7 +400,7 @@ const compact = useMediaQuery("(max-width: 680px)");
   margin: 0 0 14px;
   padding: 10px 12px;
   border: 1px solid #cddfec;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #46657f;
   background: #f4f9fc;
 }
@@ -429,21 +431,21 @@ const compact = useMediaQuery("(max-width: 680px)");
 .shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: 0 0 0 1px var(--color-border-strong) inset;
 }
 .shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
   color: #28445e;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .shipment-pagination :deep(.btn-prev),
 .shipment-pagination :deep(.btn-next),
 .shipment-pagination :deep(.el-pager li) {
   min-width: 32px;
   height: 32px;
-  border-radius: 8px !important;
+  border-radius: var(--radius-control) !important;
   font-size: 13px;
 }
 .shipment-pagination :deep(.el-pager li.is-active) {
@@ -467,7 +469,7 @@ const compact = useMediaQuery("(max-width: 680px)");
   margin: 0 0 26px;
   padding: 0;
   border: 1px solid #dbe5ee;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   box-shadow: none;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -492,7 +494,7 @@ const compact = useMediaQuery("(max-width: 680px)");
   color: #0e699e;
   background: #e7f3f9;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 600;
   place-items: center;
 }
 .handover-workflow-strip li > div {
@@ -506,7 +508,7 @@ const compact = useMediaQuery("(max-width: 680px)");
 }
 .handover-workflow-strip small {
   color: #71869a;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 .handover-section {
@@ -536,10 +538,10 @@ const compact = useMediaQuery("(max-width: 680px)");
   width: 168px !important;
 }
 .business-handover-table {
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 .business-handover-request-table {
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 .handover-request-id {
   color: #145f8b;
@@ -594,12 +596,12 @@ const compact = useMediaQuery("(max-width: 680px)");
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #fff;
   background: var(--color-primary);
   box-shadow: none;
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 600;
   place-items: center;
 }
 @keyframes operations-overlay-in {
@@ -674,3 +676,5 @@ const compact = useMediaQuery("(max-width: 680px)");
   width: 100%;
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

@@ -6,7 +6,7 @@
       :title="t('customers.businessHandoverDialogTitle')"
       width="min(620px, 92vw)"
       append-to-body
-      class="business-handover-dialog"
+      class="business-handover-dialog workspace-el-dialog"
       :show-close="!submittingBusinessHandover"
       :close-on-click-modal="!submittingBusinessHandover"
       :close-on-press-escape="!submittingBusinessHandover"
@@ -98,12 +98,12 @@ const { customerFilterOptionLabel } = workspace.formatters;
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #fff;
   background: var(--color-primary);
   box-shadow: none;
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 600;
   place-items: center;
 }
 .handover-target-summary {
@@ -113,7 +113,7 @@ const { customerFilterOptionLabel } = workspace.formatters;
   margin-bottom: 18px;
   padding: 14px 16px;
   border: 1px solid #cfe0ef;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
 }
 .handover-target-summary > span:last-child {
@@ -122,7 +122,7 @@ const { customerFilterOptionLabel } = workspace.formatters;
 }
 .handover-target-summary small {
   color: #72889c;
-  font-size: 11px;
+  font-size: 12px;
 }
 .handover-target-summary b {
   color: #1e405b;
@@ -132,10 +132,12 @@ const { customerFilterOptionLabel } = workspace.formatters;
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #d8e6f1;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #5d758a;
   background: #f7fafc;
   font-size: 12px;
   line-height: 1.6;
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

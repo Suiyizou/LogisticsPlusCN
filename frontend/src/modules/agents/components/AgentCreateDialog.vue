@@ -7,7 +7,7 @@
       width="min(640px, 94vw)"
       :close-on-click-modal="false"
       :close-on-press-escape="!creatingAgent"
-      class="square-dialog agent-create-dialog"
+      class="square-dialog agent-create-dialog workspace-el-dialog"
       :show-close="!creatingAgent"
     >
       <div class="agent-create-intro">
@@ -19,7 +19,7 @@
           <small>{{ t("customers.createOverseaAgentHint") }}</small>
         </div>
       </div>
-      <el-form
+      <WorkspaceDialogFeedback /><el-form
         class="agent-create-form"
         :disabled="creatingAgent"
         label-position="top"
@@ -89,6 +89,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import WorkspaceDialogFeedback from "../../../components/workspace/WorkspaceDialogFeedback.vue";
 import { toRefs } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -115,7 +116,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
   margin-bottom: 18px;
   padding: 15px;
   border: 1px solid #d6e5f2;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
 }
 .agent-create-intro > span {
@@ -123,7 +124,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #fff;
   background: var(--color-primary);
   box-shadow: none;
@@ -140,7 +141,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
 }
 .agent-create-intro small {
   color: #71879b;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .agent-create-form {
@@ -156,7 +157,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
   display: block;
   margin-top: 5px;
   color: #8295a8;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .agent-password-rules {
@@ -169,12 +170,12 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
 .agent-password-rules span {
   display: inline-flex;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #8a6270;
   background: #fff3f5;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 12px;
 }
 .agent-password-rules span.is-valid {
   color: #267458;
@@ -182,7 +183,7 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
 }
 .agent-password-rules i {
   font-style: normal;
-  font-weight: 850;
+  font-weight: 600;
 }
 @media (max-width: 680px) {
   .agent-create-form,
@@ -191,3 +192,5 @@ const { closeAgentCreateDialog, submitAgentCreate } = actions;
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

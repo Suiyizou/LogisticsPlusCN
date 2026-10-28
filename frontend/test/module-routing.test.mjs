@@ -207,7 +207,7 @@ test("invalid registry contracts fail at composition instead of silently overrid
   badMount[0].mount = "../other";
   assert.throws(() => validateModules(badMount), /mount/);
   const badSelection = clone();
-  badSelection[1].pages[1].path = ":wrongId";
+  badSelection.find((module) => module.id === "customers").pages[1].path = ":wrongId";
   assert.throws(() => validateModules(badSelection), /selection parameter/);
   assert.throws(
     () => createApplicationRoutes({ ...views, shipmentWorkspace: undefined }),

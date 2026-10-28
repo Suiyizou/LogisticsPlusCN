@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
+import WorkspaceEmptyState from "../../components/workspace/WorkspaceEmptyState.vue";
 import { ElTableColumn } from "element-plus";
 import "element-plus/es/components/table-column/style/css";
 import { createAnnouncementLabels } from "./announcementLabels.js";
@@ -39,21 +41,21 @@ const { announcementImageUrl, announcementExcerpt } = props.presentation;
 <template>
   <section class="admin-page-pane">
     <article class="admin-panel admin-announcement-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Announcement Center</p>
-          <h2>{{ copy.listTitle }}</h2>
-        </div>
-        <div class="admin-inline-actions">
-          <span>{{ copy.total.replace("{count}", String(total)) }}</span>
-          <button class="primary" type="button" :disabled="busy" @click="emit('create')">
-            {{ copy.create }}
-          </button>
-          <button type="button" :disabled="busy" @click="emit('refresh')">
-            {{ copy.refresh }}
-          </button>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ copy.listTitle }}</template
+        ><template #eyebrow>Announcement Center</template
+        ><template #actions
+          ><div class="admin-inline-actions">
+            <span>{{ copy.total.replace("{count}", String(total)) }}</span>
+            <button class="primary" type="button" :disabled="busy" @click="emit('create')">
+              {{ copy.create }}
+            </button>
+            <button type="button" :disabled="busy" @click="emit('refresh')">
+              {{ copy.refresh }}
+            </button>
+          </div></template
+        ></WorkspacePageHeader
+      >
       <div class="admin-table-wrap">
         <el-table
           :data="rows"
@@ -136,7 +138,9 @@ const { announcementImageUrl, announcementExcerpt } = props.presentation;
               </div>
             </template>
           </AnnouncementColumn>
-          <template #empty>{{ copy.empty }}</template>
+          <template #empty
+            ><WorkspaceEmptyState>{{ copy.empty }}</WorkspaceEmptyState></template
+          >
         </el-table>
       </div>
       <el-pagination
@@ -155,3 +159,5 @@ const { announcementImageUrl, announcementExcerpt } = props.presentation;
 </template>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./announcementListStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

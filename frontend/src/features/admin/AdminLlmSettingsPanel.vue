@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import { computed } from "vue";
 import type { AdminLlmWorkflow, AdminWorkflowPorts } from "../../types/adminWorkflows";
 import { createAdminLlmPresentation } from "./adminLlmPresentation.js";
@@ -13,17 +14,17 @@ const presentation = createAdminLlmPresentation({ t: (key, params) => props.t(ke
 </script>
 <template>
   <article class="admin-panel admin-llm-panel">
-    <div class="admin-panel-head">
-      <div>
-        <p>LLM Settings</p>
-        <h2>{{ t("adminWorkflow.llmHeading") }}</h2>
-      </div>
-      <span
-        class="admin-health-pill"
-        :class="{ warn: !llmSettings?.enabled || !llmSettings?.apiKeyConfigured }"
-        >{{ presentation.status(llmSettings) }}</span
-      >
-    </div>
+    <WorkspacePageHeader compact class="admin-panel-head"
+      ><template #title>{{ t("adminWorkflow.llmHeading") }}</template
+      ><template #eyebrow>LLM Settings</template
+      ><template #actions
+        ><span
+          class="admin-health-pill"
+          :class="{ warn: !llmSettings?.enabled || !llmSettings?.apiKeyConfigured }"
+          >{{ presentation.status(llmSettings) }}</span
+        ></template
+      ></WorkspacePageHeader
+    >
     <form
       class="admin-form-grid llm-settings-form"
       :aria-busy="locked"

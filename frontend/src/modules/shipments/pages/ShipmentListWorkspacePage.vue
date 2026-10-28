@@ -21,7 +21,7 @@
           :title="t('customers.batchEditBusinessFieldsTitle')"
           width="min(1080px, 94vw)"
           append-to-body
-          class="batch-business-fields-dialog"
+          class="batch-business-fields-dialog workspace-el-dialog"
         >
           <p class="batch-business-fields-hint">
             {{ t("customers.batchEditBusinessFieldsHint") }}
@@ -93,7 +93,7 @@
         width="min(1280px, 96vw)"
         append-to-body
         :destroy-on-close="false"
-        class="batch-track-task-dialog"
+        class="batch-track-task-dialog workspace-el-dialog"
       >
         <div class="batch-track-task-dialog-body">
           <div class="batch-track-panel">
@@ -104,6 +104,7 @@
                     >{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span
                   >
                   <el-select
+                    popper-class="business-select-popper workspace-select-popper"
                     v-model="batchTrackCustomerId"
                     :disabled="batchTrackChecking"
                     filterable
@@ -141,6 +142,7 @@
                 <label>
                   <span>{{ t("customers.referenceType") }}</span>
                   <el-select
+                    popper-class="business-select-popper workspace-select-popper"
                     v-model="batchTrackReferenceType"
                     :disabled="batchTrackChecking"
                     class="business-select"
@@ -161,6 +163,10 @@
                 >
               </div>
               <div
+                role="button"
+                tabindex="0"
+                @keydown.enter.prevent="batchTrackFileInput?.click()"
+                @keydown.space.prevent="batchTrackFileInput?.click()"
                 v-loading="batchTrackFileParsing"
                 :element-loading-text="t('app.loadingPage')"
                 class="customer-excel-dropzone batch-track-dropzone"
@@ -594,7 +600,7 @@ const {
 }
 .batch-track-panel {
   background: #fff;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   border: 1px solid #e2e8f0;
   padding: 20px;
   height: 100%;
@@ -618,7 +624,7 @@ const {
   max-height: none;
   overflow-y: auto;
   border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   padding: 12px;
   background: var(--color-background);
   display: flex;
@@ -665,7 +671,7 @@ const {
 }
 .batch-track-excel-rule {
   color: #6a8096;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   max-width: 100%;
   text-align: center;
@@ -675,7 +681,7 @@ const {
   gap: 10px;
   padding: 12px;
   border: 1px solid #d7e3f2;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
 }
 .batch-track-preview-controls {
@@ -707,7 +713,7 @@ const {
   min-width: 920px;
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
 }
 .batch-track-preview-table th,
 .batch-track-preview-table td {
@@ -789,7 +795,7 @@ const {
   min-width: 0;
   overflow: hidden;
   color: #18324b;
-  font-weight: 700;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -801,11 +807,11 @@ const {
 .customer-access-primary {
   min-height: 40px;
   border: 1px solid #1a4f80;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #fff;
   background: var(--color-primary);
   box-shadow: none;
-  font-weight: 800;
+  font-weight: 600;
   font-size: 12px;
   cursor: pointer;
 }
@@ -838,8 +844,8 @@ const {
   background: #f4f7fb;
   border: 1px solid #dfe7f0;
   border-radius: 8px 8px 0 0;
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 600;
 }
 .batch-business-field {
   min-width: 0;
@@ -861,7 +867,7 @@ const {
 }
 .batch-business-reference small {
   color: #7a8da0;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-excel-dropzone {
   display: grid;
@@ -869,7 +875,7 @@ const {
   place-items: center;
   padding: 28px 16px;
   border: 2px dashed #c8d6e2;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -897,17 +903,17 @@ const {
 }
 .customer-excel-dropzone small {
   color: #889aaf;
-  font-size: 11px;
+  font-size: 12px;
 }
 .customer-excel-dropzone button {
   min-height: 32px;
   padding: 6px 12px;
   border: 1px solid #cfdeec;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   color: #3a5572;
   background: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 @keyframes operations-overlay-in {
@@ -956,14 +962,14 @@ const {
   padding: 12px 14px;
   background: #f5f8fb;
   border: 1px solid #dfe7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 .batch-track-progress {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   border: 1px solid #e2e8f0;
   font-size: 12px;
@@ -991,11 +997,11 @@ const {
   top: 72px;
   z-index: 1;
   padding: 7px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #334155;
   background: #e8eef6;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1007,12 +1013,12 @@ const {
   align-items: stretch;
   gap: 4px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   font-size: 12px;
   background: #fff;
 }
 .batch-track-result-row.success b {
-  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-family: var(--font-ui);
   color: #1a3a5c;
 }
 .batch-track-result-row.success {
@@ -1052,20 +1058,20 @@ const {
 }
 .batch-track-retry-note {
   color: #9a5b00 !important;
-  font-weight: 700;
+  font-weight: 600;
 }
 .batch-track-error-details {
   margin-top: 3px;
   border: 1px solid #fecdd3;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff8f9;
 }
 .batch-track-error-details summary {
   padding: 6px 8px;
   cursor: pointer;
   color: #9f1239;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 }
 .batch-track-error-details pre {
   max-height: 180px;
@@ -1095,28 +1101,28 @@ const {
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid #d9e2ec;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #5f7187;
   background: var(--color-background);
 }
 .batch-track-subtask i {
   width: 7px;
   height: 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: #94a3b8;
 }
 .batch-track-subtask b {
   overflow: hidden;
   color: #40566f;
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .batch-track-subtask em {
   color: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
 }
 .batch-track-subtask small {
   grid-column: 2 / -1;
@@ -1168,14 +1174,14 @@ const {
   flex: 0 0 24px;
   width: 24px;
   height: 24px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: #475569;
   background: #e2e8f0;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 .batch-track-result-meta b {
-  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+  font-family: var(--font-ui);
   color: #1a3a5c;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1235,3 +1241,7 @@ const {
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+
+<style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

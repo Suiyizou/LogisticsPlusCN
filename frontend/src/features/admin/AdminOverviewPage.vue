@@ -34,13 +34,13 @@
 
     <div class="admin-overview-chart-grid">
       <article class="admin-panel admin-overview-chart-card admin-overview-chart-card--wide">
-        <div class="admin-panel-head">
-          <div>
-            <p>Activity Trend</p>
-            <h2>{{ overviewCopy.activityTrend }}</h2>
-          </div>
-          <span>{{ overviewCopy.activityTrendHint }}</span>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ overviewCopy.activityTrend }}</template
+          ><template #eyebrow>Activity Trend</template
+          ><template #actions
+            ><span>{{ overviewCopy.activityTrendHint }}</span></template
+          ></WorkspacePageHeader
+        >
         <div
           ref="activityRef"
           class="admin-overview-echart"
@@ -50,12 +50,10 @@
       </article>
 
       <article class="admin-panel admin-overview-chart-card">
-        <div class="admin-panel-head">
-          <div>
-            <p>User Composition</p>
-            <h2>{{ overviewCopy.userComposition }}</h2>
-          </div>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ overviewCopy.userComposition }}</template
+          ><template #eyebrow>User Composition</template></WorkspacePageHeader
+        >
         <div
           ref="usersRef"
           class="admin-overview-echart"
@@ -65,12 +63,10 @@
       </article>
 
       <article class="admin-panel admin-overview-chart-card">
-        <div class="admin-panel-head">
-          <div>
-            <p>Account Status</p>
-            <h2>{{ overviewCopy.accountStatus }}</h2>
-          </div>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ overviewCopy.accountStatus }}</template
+          ><template #eyebrow>Account Status</template></WorkspacePageHeader
+        >
         <div
           ref="statusRef"
           class="admin-overview-echart"
@@ -80,13 +76,13 @@
       </article>
 
       <article class="admin-panel admin-overview-chart-card admin-overview-chart-card--wide">
-        <div class="admin-panel-head">
-          <div>
-            <p>Management Actions</p>
-            <h2>{{ overviewCopy.operationTypes }}</h2>
-          </div>
-          <span>{{ overviewCopy.operationTypesHint }}</span>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ overviewCopy.operationTypes }}</template
+          ><template #eyebrow>Management Actions</template
+          ><template #actions
+            ><span>{{ overviewCopy.operationTypesHint }}</span></template
+          ></WorkspacePageHeader
+        >
         <div
           ref="operationsRef"
           class="admin-overview-echart admin-overview-echart--bar"
@@ -98,6 +94,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
 import { init, use } from "echarts/core";
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
@@ -168,3 +165,5 @@ defineExpose({ resize: charts.resize });
 </script>
 <style scoped src="./adminTableStyles.css"></style>
 <style scoped src="./adminOverviewStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

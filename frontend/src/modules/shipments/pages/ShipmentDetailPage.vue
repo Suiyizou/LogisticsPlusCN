@@ -4,50 +4,43 @@
       {{ t("customers.backToList") }}
     </button>
 
+    <WorkspacePageHeader
+      :title="selectedShipment?.referenceNo || selectedShipment?.shipmentId || '—'"
+      :eyebrow="t('customers.editShipment')"
+      :description="wt('shipmentIdentityHint')"
+    >
+      <template #meta
+        ><WorkspaceStatus :label="selectedShipment?.trackingStatus || wt('statusUnknown')" /><span
+          class="shipment-identity-meta"
+          >{{ selectedShipment?.carrier || "—" }} ·
+          {{ referenceTypeLabel(selectedShipment?.referenceType) }}</span
+        ></template
+      >
+      <template #actions
+        ><div class="main-card-header-actions">
+          <el-button text @click="refreshShipmentFromCarrier" :disabled="refreshingShipment">
+            {{ refreshingShipment ? t("customers.refreshing") : t("customers.refreshFromCarrier") }}
+          </el-button>
+          <el-button
+            v-if="isManager"
+            text
+            type="danger"
+            @click="removeShipment"
+            :disabled="
+              savingShipment || loadingShipmentDetail || refreshingShipment || deletingShipment
+            "
+          >
+            {{ t("customers.deleteShipment") }}
+          </el-button>
+        </div></template
+      >
+    </WorkspacePageHeader>
     <el-card
       v-loading="loadingShipmentDetail"
       :element-loading-text="t('customers.loadingShipmentDetail')"
       class="main-card shipment-detail-card"
       shadow="never"
     >
-      <template #header>
-        <div class="main-card-header">
-          <div>
-            <span class="main-card-eyebrow">{{ t("customers.editShipment") }}</span>
-            <h2 class="main-card-title">
-              {{ selectedShipment?.referenceNo || selectedShipment?.shipmentId || "—" }}
-            </h2>
-            <p class="main-card-subtitle">
-              <span class="detail-meta-pill">{{ selectedShipment?.carrier || "—" }}</span>
-              <span class="detail-meta-pill">{{
-                referenceTypeLabel(selectedShipment?.referenceType)
-              }}</span>
-              <span class="detail-meta-pill">{{
-                selectedShipment?.trackingStatus || t("customers.noStatus")
-              }}</span>
-            </p>
-          </div>
-          <div class="main-card-header-actions">
-            <el-button text @click="refreshShipmentFromCarrier" :disabled="refreshingShipment">
-              {{
-                refreshingShipment ? t("customers.refreshing") : t("customers.refreshFromCarrier")
-              }}
-            </el-button>
-            <el-button
-              v-if="isManager"
-              text
-              type="danger"
-              @click="removeShipment"
-              :disabled="
-                savingShipment || loadingShipmentDetail || refreshingShipment || deletingShipment
-              "
-            >
-              {{ t("customers.deleteShipment") }}
-            </el-button>
-          </div>
-        </div>
-      </template>
-
       <section class="profile-section">
         <div class="section-label">{{ t("customers.editShipment") }}</div>
         <el-form
@@ -82,15 +75,7 @@
             </el-form-item>
           </div>
 
-          <el-card class="pending-matches-card" shadow="never">
-            <template #header>
-              <div class="pending-matches-header">
-                <div>
-                  <b>{{ t("customers.manualSnapshotTitle") }}</b>
-                  <small>{{ t("customers.manualSnapshotDescription") }}</small>
-                </div>
-              </div>
-            </template>
+          <DetailSection :title="wt('businessFields')" :description="wt('businessFieldsHint')">
             <div class="customer-manual-fields shipment-detail-fields">
               <el-form-item :label="t('customers.jobNumber')">
                 <el-input v-model.trim="detailForm.forwarderJobNumber" />
@@ -103,7 +88,10 @@
               </el-form-item>
               <el-form-item :label="t('customers.shipmentStatus')">
                 <el-input v-model.trim="detailForm.trackingStatus" />
-              </el-form-item>
+              </el-form-item></div
+          ></DetailSection>
+          <DetailSection :title="wt('routeFields')" :description="wt('routeFieldsHint')"
+            ><div class="customer-manual-fields shipment-detail-fields">
               <el-form-item :label="t('customers.vesselVoyage')">
                 <el-input v-model.trim="detailForm.vesselVoyage" />
               </el-form-item>
@@ -135,7 +123,7 @@
                 <el-input v-model.trim="detailForm.actualDelivery" />
               </el-form-item>
             </div>
-          </el-card>
+          </DetailSection>
 
           <el-form-item :label="t('customers.shipmentNote')" class="shipment-note-field">
             <el-input
@@ -155,7 +143,7 @@
               {{ t("customers.invalidateSnapshot") }}
             </el-button>
             <el-button
-              type="primary"
+              plain
               @click="saveManualSnapshot"
               :disabled="savingShipment"
               :title="t('customers.manualSaveHint')"
@@ -175,11 +163,11 @@
       </section>
     </el-card>
 
-    <el-card v-if="isManager" class="main-card" shadow="never">
-      <template #header>
-        <div class="section-label">{{ t("customers.batchBindTitle") }}</div>
-      </template>
-      <p class="batch-bind-hint">{{ t("customers.batchBindHint") }}</p>
+    <DetailSection
+      v-if="isManager"
+      :title="wt('customerAccess')"
+      :description="wt('customerAccessHint')"
+    >
       <el-checkbox-group
         :model-value="selectedCustomerIds"
         @update:model-value="updateCustomerSelection"
@@ -240,7 +228,7 @@
           </el-button>
         </div>
       </div>
-    </el-card>
+    </DetailSection>
 
     <div class="shipment-tab-actions">
       <el-button
@@ -265,6 +253,10 @@ import {
   supportsShipmentReference
 } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+import DetailSection from "../../../components/workspace/DetailSection.vue";
+import WorkspaceStatus from "../../../components/workspace/WorkspaceStatus.vue";
+import { wt } from "../../../components/workspace/workspaceCopy";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 import { Plus, Refresh } from "@element-plus/icons-vue";
@@ -346,11 +338,11 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   margin-bottom: 16px;
   padding: 6px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #5a6d80;
   background: #fff;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .back-button:hover {
@@ -360,7 +352,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .main-card {
   margin-bottom: 16px;
   border: 1px solid #dce3ec;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   box-shadow: none;
 }
 .main-card :deep(.el-card__header) {
@@ -379,8 +371,8 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .main-card-eyebrow {
   color: #4086d2;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -409,7 +401,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .section-label {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-foreground);
   margin: 0;
 }
@@ -422,7 +414,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .pending-matches-card {
   margin-top: 16px;
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-card);
   background: #fafbfd;
 }
 .pending-matches-card :deep(.el-card__header) {
@@ -443,7 +435,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .pending-matches-header small {
   display: block;
   color: #7d93ae;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 2px;
 }
 .shipment-tab-actions {
@@ -463,7 +455,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   overflow-y: auto;
   padding: 8px 12px;
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fafbfd;
 }
 .customer-checkbox-group :deep(.el-checkbox) {
@@ -485,7 +477,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .checkbox-label small {
   color: #7d93ae;
-  font-size: 10px;
+  font-size: 12px;
 }
 .batch-bind-actions {
   display: flex;
@@ -496,7 +488,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 .batch-progress {
   color: #4086d2;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .bound-customers-section {
   margin-top: 4px;
@@ -507,7 +499,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   justify-content: space-between;
   padding: 8px 10px;
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   margin-bottom: 4px;
   background: #f9fafb;
 }
@@ -521,7 +513,7 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
 }
 .bound-customer-row small {
   color: #7d93ae;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-manual-fields {
   display: grid;
@@ -539,10 +531,10 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   align-items: center;
   padding: 3px 10px;
   border: 1px solid #d3dde9;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #ffffff;
   color: #4a5d75;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .shipment-detail-single-column {
@@ -559,19 +551,19 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
   gap: 8px;
 }
 .shipment-detail-fields .el-input {
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 .shipment-detail-fields .el-form-item {
   margin-bottom: 0;
   padding: 8px 10px;
   border: 1px solid #e1e8f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #ffffff;
 }
 .shipment-detail-fields :deep(.el-form-item__label) {
   padding-bottom: 4px;
   color: #5a6f86;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .shipment-detail-fields :deep(.el-input__wrapper) {
@@ -630,4 +622,73 @@ function updateCustomerSelection(values: (string | number | boolean)[]) {
     transform: scale(0.75);
   }
 }
+
+.shipment-identity-meta {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.shipment-detail-card {
+  border-radius: var(--radius-card);
+}
+.shipment-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+.shipment-detail-single-column {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(0, 1.3fr);
+  gap: 24px;
+  padding-bottom: 24px;
+}
+.shipment-detail-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.customer-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.customer-checkbox-group :deep(.el-checkbox) {
+  height: auto;
+  min-height: 58px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+.checkbox-label small {
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .shipment-detail-fields,
+  .shipment-detail-single-column,
+  .customer-checkbox-group {
+    grid-template-columns: 1fr;
+  }
+  .shipment-detail-single-column {
+    gap: 0;
+  }
+  .main-card-header-actions {
+    flex-wrap: wrap;
+  }
+  .shipment-detail-actions .el-button {
+    flex: 1 1 auto;
+    margin: 0;
+  }
+  .main-card :deep(.el-card__body) {
+    padding: 18px;
+  }
+}
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>

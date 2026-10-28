@@ -69,6 +69,7 @@ test("menu visibility and valid sections share the same role policy", () => {
       .map((item) => item.id);
   assert.deepEqual(builtinIds("BUSINESS"), [
     "overview",
+    "update-schedule-preview",
     "customers",
     "handover",
     "shipments",
@@ -76,6 +77,7 @@ test("menu visibility and valid sections share the same role policy", () => {
   ]);
   assert.deepEqual(builtinIds("ADMIN"), [
     "overview",
+    "update-schedule-preview",
     "customers",
     "handover",
     "shipments",

@@ -1,117 +1,120 @@
 <template>
   <div data-i18n-ignore>
     <Teleport to="body"
-      ><div
-        v-if="batchCredentialRows.length"
-        class="customer-code-overlay"
-        role="presentation"
-        @keydown="onDialogKeydown"
-      >
-        <section
-          class="customer-code-dialog customer-credential-dialog"
-          ref="dialogElement"
-          tabindex="-1"
-          role="dialog"
-          :aria-busy="exportingCredentials"
-          aria-modal="true"
-          :aria-label="t('customers.batchCredentialTitle')"
+      ><WorkspaceDialogTransition
+        ><div
+          v-if="batchCredentialRows.length"
+          class="customer-code-overlay"
+          role="presentation"
+          @keydown="onDialogKeydown"
         >
-          <header class="customer-batch-heading">
-            <div>
-              <span class="customer-code-kicker">{{
-                t("customers.dialogKickerCredentialExport")
-              }}</span>
-              <h2>{{ t("customers.batchCredentialTitle") }}</h2>
-              <p>{{ t("customers.batchCredentialDescription") }}</p>
-            </div>
-            <button
-              type="button"
-              :disabled="exportingCredentials"
-              class="customer-template-button"
-              @click="downloadCredentialWorkbook"
-            >
-              {{
-                exportingCredentials
-                  ? t("customers.preparingExport")
-                  : t("customers.exportCredentials")
-              }}
-            </button>
-          </header>
+          <section
+            class="customer-code-dialog customer-credential-dialog workspace-modal--wide"
+            ref="dialogElement"
+            tabindex="-1"
+            role="dialog"
+            :aria-busy="exportingCredentials"
+            aria-modal="true"
+            :aria-label="t('customers.batchCredentialTitle')"
+          >
+            <header class="customer-batch-heading">
+              <div>
+                <span class="customer-code-kicker">{{
+                  t("customers.dialogKickerCredentialExport")
+                }}</span>
+                <h2>{{ t("customers.batchCredentialTitle") }}</h2>
+                <p>{{ t("customers.batchCredentialDescription") }}</p>
+              </div>
+              <button
+                type="button"
+                :disabled="exportingCredentials"
+                class="customer-template-button"
+                @click="downloadCredentialWorkbook"
+              >
+                {{
+                  exportingCredentials
+                    ? t("customers.preparingExport")
+                    : t("customers.exportCredentials")
+                }}
+              </button>
+            </header>
 
-          <div class="customer-credential-body">
-            <div v-if="credentialExportError" class="customer-import-file-error" role="alert">
-              {{ credentialExportError }}
-            </div>
-            <div class="customer-import-summary">
-              <span
-                ><b>{{ batchCredentialSummary.total }}</b
-                ><small>{{ t("customers.importTotalRows") }}</small></span
-              >
-              <span class="is-valid"
-                ><b>{{ batchCredentialSummary.created }}</b
-                ><small>{{ t("customers.importCreatedCount") }}</small></span
-              >
-              <span class="is-invalid"
-                ><b>{{ batchCredentialSummary.failed }}</b
-                ><small>{{ t("customers.importFailedCount") }}</small></span
-              >
-            </div>
-            <div v-if="batchCredentialSummary.failed" class="customer-import-file-error">
-              <b>{{ t("customers.importFailureExplanation") }}</b>
-              <span>{{ t("customers.importFailureHint") }}</span>
-            </div>
-            <div class="customer-credential-table">
-              <div class="customer-credential-table-head">
-                <span>{{ t("customers.excelRow") }}</span>
-                <span>{{ t("customers.createAccount") }}</span>
-                <span>{{ t("customers.createDisplayName") }}</span>
-                <span>{{ t("customers.clientCode") }}</span>
-                <span>{{ t("customers.initialPassword") }}</span>
-                <span>{{ t("customers.importStatus") }}</span>
+            <div class="customer-credential-body">
+              <div v-if="credentialExportError" class="customer-import-file-error" role="alert">
+                {{ credentialExportError }}
               </div>
-              <div
-                v-for="row in batchCredentialRows"
-                :key="`${row.rowNumber}-${row.username}`"
-                class="customer-credential-entry"
-                :class="{ 'is-failed': row.status !== 'CREATED' }"
-              >
-                <div class="customer-credential-row">
-                  <span
-                    ><b>#{{ row.rowNumber }}</b></span
-                  >
-                  <span
-                    ><b>{{ row.username || "—" }}</b></span
-                  >
-                  <span>{{ row.displayName || row.username || "—" }}</span>
-                  <span>{{ row.customerCode || row.clientCode || "—" }}</span>
-                  <span class="customer-credential-password">{{ row.password || "—" }}</span>
-                  <span
-                    ><i :class="row.status === 'CREATED' ? 'is-created' : 'is-failed'">{{
-                      row.status === "CREATED"
-                        ? t("customers.importCreated")
-                        : t("customers.importFailedStatus")
-                    }}</i></span
-                  >
+              <div class="customer-import-summary">
+                <span
+                  ><b>{{ batchCredentialSummary.total }}</b
+                  ><small>{{ t("customers.importTotalRows") }}</small></span
+                >
+                <span class="is-valid"
+                  ><b>{{ batchCredentialSummary.created }}</b
+                  ><small>{{ t("customers.importCreatedCount") }}</small></span
+                >
+                <span class="is-invalid"
+                  ><b>{{ batchCredentialSummary.failed }}</b
+                  ><small>{{ t("customers.importFailedCount") }}</small></span
+                >
+              </div>
+              <div v-if="batchCredentialSummary.failed" class="customer-import-file-error">
+                <b>{{ t("customers.importFailureExplanation") }}</b>
+                <span>{{ t("customers.importFailureHint") }}</span>
+              </div>
+              <div class="customer-credential-table">
+                <div class="customer-credential-table-head">
+                  <span>{{ t("customers.excelRow") }}</span>
+                  <span>{{ t("customers.createAccount") }}</span>
+                  <span>{{ t("customers.createDisplayName") }}</span>
+                  <span>{{ t("customers.clientCode") }}</span>
+                  <span>{{ t("customers.initialPassword") }}</span>
+                  <span>{{ t("customers.importStatus") }}</span>
                 </div>
-                <div v-if="row.status !== 'CREATED'" class="customer-credential-message">
-                  <b>{{ t("customers.failureReason") }}</b>
-                  <span>{{ localizeCustomerImportResult(row.message) }}</span>
+                <div
+                  v-for="row in batchCredentialRows"
+                  :key="`${row.rowNumber}-${row.username}`"
+                  class="customer-credential-entry"
+                  :class="{ 'is-failed': row.status !== 'CREATED' }"
+                >
+                  <div class="customer-credential-row">
+                    <span
+                      ><b>#{{ row.rowNumber }}</b></span
+                    >
+                    <span
+                      ><b>{{ row.username || "—" }}</b></span
+                    >
+                    <span>{{ row.displayName || row.username || "—" }}</span>
+                    <span>{{ row.customerCode || row.clientCode || "—" }}</span>
+                    <span class="customer-credential-password">{{ row.password || "—" }}</span>
+                    <span
+                      ><i :class="row.status === 'CREATED' ? 'is-created' : 'is-failed'">{{
+                        row.status === "CREATED"
+                          ? t("customers.importCreated")
+                          : t("customers.importFailedStatus")
+                      }}</i></span
+                    >
+                  </div>
+                  <div v-if="row.status !== 'CREATED'" class="customer-credential-message">
+                    <b>{{ t("customers.failureReason") }}</b>
+                    <span>{{ localizeCustomerImportResult(row.message) }}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <footer class="customer-dialog-actions customer-batch-actions">
-            <small>{{ t("customers.credentialsSaveReminder") }}</small>
-            <button class="customer-access-primary" type="button" @click="closeBatchCredentials">
-              {{ t("customers.confirmStored") }}
-            </button>
-          </footer>
-        </section>
-      </div></Teleport
+            <footer class="customer-dialog-actions customer-batch-actions">
+              <small>{{ t("customers.credentialsSaveReminder") }}</small>
+              <button class="customer-access-primary" type="button" @click="closeBatchCredentials">
+                {{ t("customers.confirmStored") }}
+              </button>
+            </footer>
+          </section>
+        </div></WorkspaceDialogTransition
+      ></Teleport
     >
   </div>
 </template>
 <script setup lang="ts">
+import WorkspaceDialogTransition from "../../../components/workspace/WorkspaceDialogTransition.vue";
 import { toRefs, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
@@ -149,7 +152,7 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-credential-table {
   border: 1px solid #e0e7f0;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   max-height: 460px;
   overflow: auto;
 }
@@ -161,7 +164,7 @@ const { onDialogKeydown } = useDialogFocus({
   align-items: start;
   gap: 10px;
   padding: 10px 12px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .customer-credential-table-head {
   position: sticky;
@@ -169,8 +172,8 @@ const { onDialogKeydown } = useDialogFocus({
   z-index: 2;
   background: #f4f7fb;
   color: #5e7794;
-  font-weight: 800;
-  font-size: 10px;
+  font-weight: 600;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 .customer-credential-entry {
@@ -185,17 +188,17 @@ const { onDialogKeydown } = useDialogFocus({
 }
 .customer-credential-password {
   color: #204d70;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-weight: 700;
+  font-family: var(--font-ui);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .customer-credential-row i {
   display: inline-flex;
   padding: 4px 7px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   font-style: normal;
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 600;
 }
 .customer-credential-row i.is-created {
   color: #197454;
@@ -209,7 +212,7 @@ const { onDialogKeydown } = useDialogFocus({
   display: flex;
   margin: 0 12px 10px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: #7b5360;
   background: #fff0f2;
   line-height: 1.6;
@@ -249,3 +252,5 @@ const { onDialogKeydown } = useDialogFocus({
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspaceDialogStyles.css"></style>

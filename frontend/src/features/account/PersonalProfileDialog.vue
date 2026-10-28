@@ -5,7 +5,7 @@
     :close-on-press-escape="!busy"
     :show-close="!busy"
     @update:model-value="updateOpen"
-    class="operations-profile-dialog"
+    class="operations-profile-dialog workspace-el-dialog"
     :title="t('portal.personalInfoTitle')"
     width="min(860px, 94vw)"
     :close-on-click-modal="false"
@@ -184,7 +184,7 @@ function updateOpen(open: boolean) {
   margin: -4px 0 18px;
   padding: 14px;
   border: 1px solid #d8e6f2;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: linear-gradient(135deg, #f1f8ff, #f8fbff);
 }
 .operations-profile-avatar {
@@ -192,11 +192,11 @@ function updateOpen(open: boolean) {
   flex: 0 0 44px;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   color: #fff;
-  background: linear-gradient(135deg, #226fb5, #4aa4d7);
+  background: var(--color-primary);
   font-size: 18px;
-  font-weight: 850;
+  font-weight: 600;
   place-items: center;
 }
 .operations-profile-hero > div {
@@ -219,7 +219,7 @@ function updateOpen(open: boolean) {
   min-width: 0;
   padding: 16px;
   border: 1px solid #dae5ee;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: #fbfdff;
 }
 .operations-profile-section.is-security {
@@ -236,7 +236,7 @@ function updateOpen(open: boolean) {
 }
 .operations-profile-section header small {
   color: #8296a8;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .operations-profile-form {
@@ -259,7 +259,7 @@ function updateOpen(open: boolean) {
   display: block;
   margin: -7px 0 12px;
   color: #8a785d;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .operations-password-form .el-alert {
@@ -279,4 +279,35 @@ function updateOpen(open: boolean) {
     grid-column: 1 / -1;
   }
 }
+
+.operations-profile-section {
+  padding: 22px;
+  background: var(--color-surface-subtle);
+}
+.operations-profile-section.is-security {
+  background: var(--color-surface);
+}
+.operations-profile-section header b {
+  font-size: 18px;
+  font-weight: 600;
+}
+.operations-profile-section header small {
+  font-size: 13px;
+}
+.operations-profile-layout {
+  gap: 22px;
+}
+.operations-profile-hero {
+  padding: 20px;
+  border-radius: var(--radius-card);
+}
+.operations-profile-avatar {
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+}
+.operations-profile-form {
+  gap: 0 20px;
+}
 </style>
+
+<style scoped src="../../components/workspace/workspaceElementDialog.css"></style>

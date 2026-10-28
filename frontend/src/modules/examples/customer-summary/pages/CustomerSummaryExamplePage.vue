@@ -1,12 +1,14 @@
 <template>
   <section class="module-example" data-module="customer-summary-example">
-    <header>
-      <div>
-        <h2>{{ t("moduleExample.title") }}</h2>
-        <p>{{ t("moduleExample.description") }}</p>
-      </div>
-      <el-button :loading="loading" @click="refresh">{{ t("customers.refresh") }}</el-button>
-    </header>
+    <WorkspacePageHeader class=""
+      ><template #title>{{ t("moduleExample.title") }}</template
+      ><template #description>{{ t("moduleExample.description") }}</template
+      ><template #actions
+        ><el-button :loading="loading" @click="refresh">{{
+          t("customers.refresh")
+        }}</el-button></template
+      ></WorkspacePageHeader
+    >
     <el-input v-model="query" clearable :placeholder="t('customers.searchCustomerPlaceholder')" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <el-table :data="rows" v-loading="loading">
@@ -28,6 +30,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import WorkspacePageHeader from "../../../../components/workspace/WorkspacePageHeader.vue";
 import { onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useWorkspaceContext } from "../../../workspaceContext.js";
@@ -50,7 +53,7 @@ onMounted(refresh);
   min-width: 0;
   padding: 24px;
   border: 1px solid #dbe4ed;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: white;
 }
 header {
@@ -79,3 +82,5 @@ p {
   }
 }
 </style>
+
+<style scoped src="../../../../components/workspace/workspacePageStyles.css"></style>

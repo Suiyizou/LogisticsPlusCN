@@ -113,7 +113,7 @@ button:disabled {
 #related-files-upload-button {
   min-height: 44px;
   border: 1px solid var(--color-accent);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-on-primary);
   background: var(--color-accent);
   box-shadow: none;
@@ -128,7 +128,7 @@ button:disabled {
   transform: none;
 }
 .el-button {
-  --el-button-border-radius: 2px;
+  --el-button-border-radius: var(--radius-control);
   box-shadow: none;
 }
 .related-files-trigger,
@@ -144,7 +144,7 @@ button:disabled {
 .history-search button,
 .batch-local-badge {
   border-color: var(--color-border-strong);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -161,7 +161,7 @@ button:disabled {
 }
 .kicker {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.18em;
 }
@@ -206,7 +206,7 @@ body.is-customer-session .sidebar {
   flex: 0 0 36px;
   padding: 0;
   border: 2px solid currentColor;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-accent);
   background: transparent;
   box-shadow: none;
@@ -226,13 +226,13 @@ body.is-customer-session .sidebar {
 }
 .brand-copy small {
   opacity: 0.7;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.06em;
 }
 .brand-copy .brand-company {
   max-width: 166px;
   margin-top: 7px;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.6;
   letter-spacing: 0;
 }
@@ -249,14 +249,14 @@ body.is-customer-session .sidebar {
 }
 .sidebar .nav-title {
   margin: 24px 12px 10px;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.16em;
 }
 .sidebar .nav-item,
 .sidebar .carrier-nav-item {
   min-height: 44px;
   gap: 10px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-on-primary);
   font-size: 12px;
 }
@@ -305,12 +305,12 @@ body.is-customer-session .sidebar .nav-item.is-active {
   padding: 20px 8px 0;
 }
 .sidebar-foot strong {
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 2;
 }
 .carrier-monogram {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   box-shadow: none;
 }
 .topbar {
@@ -323,7 +323,7 @@ body.is-customer-session .sidebar .nav-item.is-active {
 }
 .breadcrumbs {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .breadcrumbs b,
 .breadcrumbs strong {
@@ -342,10 +342,10 @@ body.is-customer-session .sidebar .nav-item.is-active {
   min-width: 36px;
   min-height: 36px;
   padding: 4px 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-muted);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
 }
 .language-switch button.is-active {
   color: var(--color-primary);
@@ -356,7 +356,7 @@ body.is-customer-session .sidebar .nav-item.is-active {
   min-height: 38px;
   padding: 8px 20px;
   border: 1px solid var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -371,13 +371,13 @@ body.is-customer-session .sidebar .nav-item.is-active {
 .tracking-account-trigger,
 .tracking-system-messages {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
 }
 .tracking-account-mark {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
   color: var(--color-primary);
   box-shadow: none;
@@ -390,7 +390,7 @@ body.is-customer-session .sidebar .nav-item.is-active {
 }
 .tracking-account-menu {
   border-color: var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: 0 8px 24px #15384a14;
 }
@@ -433,7 +433,7 @@ body:not(.is-internal-session):not(.is-customer-session):not(.is-embedded)
   .brand-company {
   max-width: 280px;
   margin-top: 4px;
-  font-size: 8px;
+  font-size: 12px;
 }
 body:not(.is-internal-session):not(.is-customer-session):not(.is-embedded) .sidebar nav {
   display: flex;
@@ -507,7 +507,7 @@ body.is-internal-session .query-panel form {
 .field label {
   margin-bottom: 6px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 #tracking-view .query-panel input,
@@ -515,7 +515,7 @@ body.is-internal-session .query-panel form {
   height: 46px;
   min-height: 46px;
   border: 1px solid var(--color-border-strong);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -529,7 +529,7 @@ body.is-internal-session .query-panel form {
   height: 46px;
   min-height: 46px;
   margin: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   font-size: 13px;
   font-weight: 600;
 }
@@ -539,7 +539,7 @@ body.is-internal-session .query-panel form {
   margin-top: 0;
   padding: 36px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -548,7 +548,7 @@ body.is-internal-session .query-panel form {
   width: 48px;
   height: 48px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-accent);
   background: var(--color-surface-subtle);
   box-shadow: none;
@@ -563,7 +563,7 @@ body.is-internal-session .query-panel form {
   font-size: 13px;
 }
 .alert {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   box-shadow: none;
 }
 .alert[data-variant="error"] {
@@ -573,7 +573,7 @@ body.is-internal-session .query-panel form {
 }
 .supplemental-details-status {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface-subtle);
 }
@@ -586,7 +586,7 @@ body.is-internal-session .query-panel form {
   min-height: 190px;
   padding: 30px;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: 0 12px 36px #15384a14;
@@ -611,7 +611,7 @@ body.is-internal-session .query-panel form {
   width: 54px;
   height: 54px;
   border: 2px solid var(--color-accent);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-accent);
   background: transparent;
   box-shadow: none;
@@ -644,7 +644,7 @@ body.is-internal-session .query-panel form {
 #tracking-view .shipment-summary-card {
   margin-bottom: 22px;
   border-color: var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   box-shadow: none;
 }
 .shipment-summary-card .result-titlebar {
@@ -661,17 +661,17 @@ body.is-internal-session .query-panel form {
   min-width: 58px;
   padding: 7px 9px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface-subtle);
   box-shadow: none;
-  font-size: 10px;
+  font-size: 12px;
 }
 .result-type,
 .summary-booking-number small,
 .result-meta {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 #result-number {
   color: var(--color-primary);
@@ -719,7 +719,7 @@ body.is-internal-session .query-panel form {
 .shipment-summary-grid .summary-services > small {
   color: var(--color-on-primary);
   opacity: 0.7;
-  font-size: 11px;
+  font-size: 12px;
 }
 .summary-route-pair i,
 .summary-route-pair > div:last-child i {
@@ -746,11 +746,11 @@ body.is-internal-session .query-panel form {
   animation: none;
 }
 .shipment-summary-grid .summary-services span {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   border-color: color-mix(in srgb, var(--color-on-primary) 20%, transparent);
   color: var(--color-on-primary);
   background: transparent;
-  font-size: 10px;
+  font-size: 12px;
 }
 .shipment-summary-grid .summary-services i {
   color: inherit;
@@ -760,7 +760,7 @@ body.is-internal-session .query-panel form {
   gap: 0;
   margin-bottom: 24px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   overflow: hidden;
 }
@@ -781,7 +781,7 @@ body.is-internal-session .query-panel form {
 }
 .metric-head p {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 .metric-icon {
@@ -800,7 +800,7 @@ body.is-internal-session .query-panel form {
 }
 .metric-card > span {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .live-dot {
   width: 6px;
@@ -846,7 +846,7 @@ body.is-internal-session .query-panel form {
   width: 34px;
   height: 34px;
   border: 1px solid var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-muted);
   background: var(--color-surface);
   box-shadow: none;
@@ -867,7 +867,7 @@ body.is-internal-session .query-panel form {
 }
 .route-node small {
   color: var(--color-muted);
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.09em;
 }
 .route-node strong {
@@ -877,12 +877,12 @@ body.is-internal-session .query-panel form {
 }
 .route-node > span:not(.route-dot) {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .route-node time {
   color: var(--color-secondary);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 12px;
 }
 .references-panel {
   background: var(--color-surface);
@@ -890,7 +890,7 @@ body.is-internal-session .query-panel form {
 .reference-core dt,
 .business-reference-grid dt {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .reference-core dd,
 .business-reference-grid dd {
@@ -927,7 +927,7 @@ body.is-internal-session .query-panel form {
 #overview-view .hero-copy .kicker {
   margin: 0 0 12px;
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 #overview-view .hero-copy h1 {
   width: auto;
@@ -949,7 +949,7 @@ body.is-internal-session .query-panel form {
 #overview-view .overview-hero .primary-action.el-button {
   min-height: 42px;
   margin-top: 22px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   box-shadow: none;
 }
 .welcome-message {
@@ -964,7 +964,7 @@ body.is-internal-session .query-panel form {
   gap: 20px;
   padding: 22px 24px;
   border: 1px solid var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-on-primary);
   background: var(--color-primary);
   box-shadow: none;
@@ -980,7 +980,7 @@ body.is-internal-session .query-panel form {
   gap: 5px;
 }
 .hero-operations-summary > header small {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.13em;
   opacity: 0.65;
@@ -995,8 +995,8 @@ body.is-internal-session .query-panel form {
   gap: 5px;
   padding: 3px 7px;
   border: 1px solid color-mix(in srgb, var(--color-on-primary) 25%, transparent);
-  border-radius: 2px;
-  font-size: 9px;
+  border-radius: var(--radius-control);
+  font-size: 12px;
   font-weight: 500;
 }
 .hero-summary-status i {
@@ -1019,7 +1019,7 @@ body.is-internal-session .query-panel form {
   border-left: 1px solid color-mix(in srgb, var(--color-on-primary) 20%, transparent);
 }
 .hero-operations-summary dt {
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.65;
 }
 .hero-operations-summary dd {
@@ -1033,7 +1033,7 @@ body.is-internal-session .query-panel form {
   margin: 0;
   gap: 12px;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 12px;
 }
 .hero-operations-summary > p span {
   opacity: 0.6;
@@ -1043,7 +1043,7 @@ body.is-internal-session .query-panel form {
   text-align: right;
 }
 #overview-view .shipment-dashboard-panel {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   border-color: var(--color-border);
   box-shadow: none;
 }
@@ -1062,11 +1062,11 @@ body.is-internal-session .query-panel form {
   min-width: 160px;
   gap: 6px;
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .history-customer-filter select {
   min-height: 38px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-business-scope {
   min-width: 150px;
@@ -1079,7 +1079,7 @@ body.is-internal-session .query-panel form {
 }
 .history-search input {
   height: 36px;
-  font-size: 11px;
+  font-size: 12px;
 }
 #overview-view .shipment-list-wrap {
   padding: 0;
@@ -1111,7 +1111,7 @@ body.is-internal-session .query-panel form {
   background: var(--color-surface-subtle);
 }
 .shipment-transport-icon {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface-subtle);
   box-shadow: none;
@@ -1126,7 +1126,7 @@ body.is-internal-session .query-panel form {
 .shipment-field-label,
 .shipment-date-labels b {
   color: var(--color-muted);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 500;
 }
 .shipment-progress-track {
@@ -1147,12 +1147,12 @@ body.is-internal-session .query-panel form {
 }
 .history-pagination span {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-pagination button,
 .history-pagination select {
   min-height: 36px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-empty,
 .history-loading {
@@ -1162,7 +1162,7 @@ body.is-internal-session .query-panel form {
 /* 06 / Tables, file drawers and batch tasks */
 .table-scroll {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: none;
 }
@@ -1174,19 +1174,19 @@ thead th {
   border-color: var(--color-border);
   color: var(--color-muted);
   background: var(--color-surface-subtle);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 tbody td {
   border-color: var(--color-border);
-  font-size: 11px;
+  font-size: 12px;
 }
 tbody tr:hover {
   background: var(--color-surface-subtle);
 }
 #tracking-view .extra-information {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-secondary);
   background: var(--color-surface-subtle);
   box-shadow: none;
@@ -1210,12 +1210,12 @@ tbody tr:hover {
 }
 .related-file-item {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: none;
 }
 .related-file-extension {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface-subtle);
 }
@@ -1224,14 +1224,14 @@ tbody tr:hover {
 .visibility-role-menu,
 .document-uploaded-section {
   border-color: var(--color-border-strong);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
 }
 :where(dialog, .modal, .agent-update-task-dialog) {
   border-color: var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   color: var(--color-foreground);
   background: var(--color-surface);
   box-shadow: 0 16px 48px #15384a26;
@@ -1241,7 +1241,7 @@ tbody tr:hover {
   backdrop-filter: none;
 }
 .batch-workspace-dialog {
-  border-radius: 3px;
+  border-radius: var(--radius-control);
 }
 .batch-workspace-dialog .batch-import-panel {
   border-radius: 0;
@@ -1258,7 +1258,7 @@ tbody tr:hover {
 .batch-select-button {
   min-height: 44px;
   border: 1px solid var(--color-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -1276,7 +1276,7 @@ tbody tr:hover {
 .batch-subtask-item,
 .batch-import-empty {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: none;
 }
@@ -1288,7 +1288,7 @@ tbody tr:hover {
 .batch-import-actions button {
   min-height: 38px;
   border-color: var(--color-border-strong);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-primary);
   background: var(--color-surface);
   box-shadow: none;
@@ -1330,14 +1330,14 @@ tbody tr:hover {
 .agent-update-task-metrics > div,
 .agent-update-task-result {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
   box-shadow: none;
 }
 .customer-profile-hero,
 .customer-profile-card {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   box-shadow: none;
 }
@@ -1347,14 +1347,14 @@ tbody tr:hover {
   color: var(--color-primary);
 }
 .customer-profile-avatar {
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   color: var(--color-on-primary);
   background: var(--color-primary);
   box-shadow: none;
 }
 .customer-profile-card dl > div {
   border-color: var(--color-border);
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background: var(--color-surface-subtle);
 }
 .customer-profile-card > p {
@@ -1506,7 +1506,7 @@ tbody tr:hover {
   .batch-workspace-dialog {
     width: calc(100vw - 20px);
     height: calc(100dvh - 20px);
-    border-radius: 3px;
+    border-radius: var(--radius-control);
   }
 }
 @media (max-width: 600px) {
@@ -1525,7 +1525,7 @@ tbody tr:hover {
     .brand-copy
     .brand-company {
     max-width: 195px;
-    font-size: 7px;
+    font-size: 12px;
   }
   body:not(.is-internal-session):not(.is-customer-session):not(.is-embedded) .topbar {
     position: static;
@@ -1543,7 +1543,7 @@ tbody tr:hover {
     flex-wrap: wrap;
   }
   .breadcrumbs {
-    font-size: 10px;
+    font-size: 12px;
   }
   .topbar-actions {
     margin-left: auto;
@@ -1672,13 +1672,8 @@ body.is-embedded .content {
   html {
     scroll-behavior: auto;
   }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  html {
+    scroll-behavior: auto;
   }
 }
 

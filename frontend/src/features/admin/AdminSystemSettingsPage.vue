@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkspacePageHeader from "../../components/workspace/WorkspacePageHeader.vue";
 import type {
   AdminLlmWorkflow,
   AdminSystemMonitoring,
@@ -20,12 +21,10 @@ function formatSafeDate(value: string | null | undefined) {
   <section class="admin-page-pane admin-system-page">
     <div class="admin-dashboard-grid">
       <article class="admin-panel">
-        <div class="admin-panel-head">
-          <div>
-            <p>Security Policy</p>
-            <h2>{{ t("adminWorkflow.systemSecurityHeading") }}</h2>
-          </div>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ t("adminWorkflow.systemSecurityHeading") }}</template
+          ><template #eyebrow>Security Policy</template></WorkspacePageHeader
+        >
         <div class="admin-setting-list">
           <span
             ><b>{{ t("adminWorkflow.systemDeviceLimit") }}</b
@@ -45,12 +44,10 @@ function formatSafeDate(value: string | null | undefined) {
         </div>
       </article>
       <article class="admin-panel">
-        <div class="admin-panel-head">
-          <div>
-            <p>Service Status</p>
-            <h2>{{ t("adminWorkflow.systemServiceHeading") }}</h2>
-          </div>
-        </div>
+        <WorkspacePageHeader compact class="admin-panel-head"
+          ><template #title>{{ t("adminWorkflow.systemServiceHeading") }}</template
+          ><template #eyebrow>Service Status</template></WorkspacePageHeader
+        >
         <div class="admin-setting-list">
           <span
             ><b>{{ t("adminWorkflow.systemBackend") }}</b
@@ -73,12 +70,10 @@ function formatSafeDate(value: string | null | undefined) {
     </div>
     <AdminLlmSettingsPanel :workflow="workflow" :busy="busy" :t="t" />
     <article class="admin-panel">
-      <div class="admin-panel-head">
-        <div>
-          <p>Operations</p>
-          <h2>{{ t("adminWorkflow.systemReservedHeading") }}</h2>
-        </div>
-      </div>
+      <WorkspacePageHeader compact class="admin-panel-head"
+        ><template #title>{{ t("adminWorkflow.systemReservedHeading") }}</template
+        ><template #eyebrow>Operations</template></WorkspacePageHeader
+      >
       <div class="admin-operation-grid">
         <button type="button" disabled>{{ t("adminWorkflow.systemChangeLimit") }}</button>
         <button type="button" disabled>{{ t("adminWorkflow.systemBackup") }}</button>
@@ -90,3 +85,5 @@ function formatSafeDate(value: string | null | undefined) {
   </section>
 </template>
 <style scoped src="./adminSettingsStyles.css"></style>
+
+<style scoped src="../../components/workspace/workspacePageStyles.css"></style>

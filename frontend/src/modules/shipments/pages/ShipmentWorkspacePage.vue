@@ -36,3 +36,5 @@ defineOptions({ inheritAttrs: false });
   }
 }
 </style>
+
+<style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
