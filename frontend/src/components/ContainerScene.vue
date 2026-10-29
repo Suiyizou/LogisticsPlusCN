@@ -5,7 +5,7 @@
     class="packing-visual-shell"
     :class="{ fullscreen: isFullscreen }"
   >
-    <div class="packing-visual-layout">
+    <div class="packing-visual-layout" :class="{ 'analysis-open': analysisOpen }">
       <div class="packing-main-stage">
         <el-card class="packing-visual-toolbar" shadow="never">
           <div class="toolbar-left">
@@ -35,10 +35,17 @@
             </el-button-group>
           </div>
           <div class="toolbar-right">
+            <el-button
+              :icon="DataAnalysis"
+              :type="analysisOpen ? 'primary' : 'default'"
+              :aria-expanded="analysisOpen"
+              @click="analysisOpen = !analysisOpen"
+              >{{ wt("analysisPanel") }}</el-button
+            >
             <el-switch
               v-model="sliceEnabled"
               :active-text="wt('sliceLabel')"
-              :inactive-text="wt('sliceLabel')"
+              :aria-label="wt('sliceLabel')"
             />
             <el-popover
               placement="bottom-end"
@@ -265,7 +272,7 @@
           </div>
         </el-card>
       </div>
-      <aside class="packing-info-panel">
+      <aside v-show="analysisOpen" class="packing-info-panel">
         <el-card class="info-panel-card legend-card" shadow="never">
           <template #header>
             <div class="info-card-head">
@@ -619,6 +626,7 @@ import type {
 } from "../visualization/packingSceneTypes";
 import { analyzeRemainingSpace } from "../utils/remainingSpace";
 import { currentLocale, t } from "../i18n";
+import { readScenePreferences, saveScenePreferences } from "./workspace/plannerPreferences";
 import { translateLegacyText } from "../i18n/legacyText";
 import SystemWaitOverlay from "./SystemWaitOverlay.vue";
 
@@ -628,8 +636,8 @@ const props = defineProps({
   evaluation: { type: Object, default: null },
   selectedBox: { type: Object, default: null },
   balanceValidation: { type: Object, default: null },
-  showRemaining: { type: Boolean, default: true },
-  showMassBalance: { type: Boolean, default: true },
+  showRemaining: { type: Boolean, default: false },
+  showMassBalance: { type: Boolean, default: false },
   busy: { type: Boolean, default: false },
   waitingForResult: { type: Boolean, default: false },
   exporting: { type: Boolean, default: false },
@@ -658,15 +666,17 @@ const viewMode = ref<SceneViewMode>("3d");
 const sliceEnabled = ref(false);
 const sliceAxis = ref<SliceAxis>("z");
 const slicePercent = ref(100);
-const showLabels = ref(false);
-const showAxes = ref(true);
-const showGrid = ref(true);
-const showCenter = ref(true);
-const showShell = ref(true);
-const showClearanceEnvelope = ref(true);
-const showRemainingLabels = ref(true);
-const translucentCargo = ref(false);
-const showHeatmap = ref(false);
+const savedScenePreferences = readScenePreferences();
+const analysisOpen = ref(savedScenePreferences.analysisOpen);
+const showLabels = ref(savedScenePreferences.showLabels);
+const showAxes = ref(savedScenePreferences.showAxes);
+const showGrid = ref(savedScenePreferences.showGrid);
+const showCenter = ref(savedScenePreferences.showCenter);
+const showShell = ref(savedScenePreferences.showShell);
+const showClearanceEnvelope = ref(savedScenePreferences.showClearanceEnvelope);
+const showRemainingLabels = ref(savedScenePreferences.showRemainingLabels);
+const translucentCargo = ref(savedScenePreferences.translucentCargo);
+const showHeatmap = ref(savedScenePreferences.showHeatmap);
 const axisScalePreset = ref<"small" | "normal" | "large">("normal");
 const hiddenSkuKeys = ref<Set<string>>(new Set());
 const isFullscreen = ref(false);
@@ -872,6 +882,38 @@ onBeforeUnmount(() => {
 });
 
 watch([sceneData, balanceState, renderOptions], scheduleSceneUpdate, { deep: true });
+watch(
+  [
+    showLabels,
+    showAxes,
+    showGrid,
+    showCenter,
+    showShell,
+    showClearanceEnvelope,
+    showRemainingLabels,
+    translucentCargo,
+    showHeatmap,
+    analysisOpen,
+    () => props.showRemaining,
+    () => props.showMassBalance
+  ],
+  () => {
+    saveScenePreferences({
+      showLabels: showLabels.value,
+      showAxes: showAxes.value,
+      showGrid: showGrid.value,
+      showCenter: showCenter.value,
+      showShell: showShell.value,
+      showClearanceEnvelope: showClearanceEnvelope.value,
+      showRemainingLabels: showRemainingLabels.value,
+      translucentCargo: translucentCargo.value,
+      showHeatmap: showHeatmap.value,
+      showRemaining: props.showRemaining,
+      showMassBalance: props.showMassBalance,
+      analysisOpen: analysisOpen.value
+    });
+  }
+);
 watch(viewMode, (mode) => {
   if (mode === "2d") setView(activeView.value === "iso" ? "top" : activeView.value);
   else setView("iso");
@@ -1077,10 +1119,13 @@ function handleFullscreenChange() {
 }
 .packing-visual-layout {
   display: grid;
-  grid-template-columns: minmax(0, 72fr) minmax(250px, 28fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
   align-items: start;
+}
+.packing-visual-layout.analysis-open {
+  grid-template-columns: minmax(0, 72fr) minmax(250px, 28fr);
 }
 .packing-main-stage {
   min-width: 0;
@@ -1310,7 +1355,7 @@ function handleFullscreenChange() {
   }
 }
 @media (max-width: 1100px) {
-  .packing-visual-layout {
+  .packing-visual-layout.analysis-open {
     grid-template-columns: minmax(0, 1fr) 260px;
   }
   .packing-visual-toolbar :deep(.el-card__body) {
@@ -1328,7 +1373,8 @@ function handleFullscreenChange() {
   }
 }
 @media (max-width: 850px) {
-  .packing-visual-layout {
+  .packing-visual-layout,
+  .packing-visual-layout.analysis-open {
     grid-template-columns: minmax(0, 1fr);
   }
   .packing-info-panel {

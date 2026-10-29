@@ -31,7 +31,7 @@
           ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
         </button>
         <a :href="trackingPath">{{ t("publicSite.navTracking") }}</a
-        ><a href="/planner/config">{{ t("publicSite.navPlanning") }}</a>
+        ><a href="/planner/cargos">{{ t("publicSite.navPlanning") }}</a>
       </nav>
       <div class="maritime-header__actions">
         <LanguageSwitcher /><a

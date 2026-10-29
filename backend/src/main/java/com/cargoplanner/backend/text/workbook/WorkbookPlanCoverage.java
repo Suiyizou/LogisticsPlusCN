@@ -1,6 +1,5 @@
 package com.cargoplanner.backend.text.workbook;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -137,14 +136,7 @@ public final class WorkbookPlanCoverage {
   }
 
   private static boolean numeric(String value) {
-    if (value.isEmpty()) return false;
-    String normalized = value.matches("[+-]?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?") ? value.replace(",", "") : value;
-    try {
-      new BigDecimal(normalized);
-      return true;
-    } catch (NumberFormatException error) {
-      return false;
-    }
+    return WorkbookPlanExecutor.measuredNumber(value) != null;
   }
 
   private static boolean hasEvidence(Map<String, Object> sheet) {

@@ -5,7 +5,7 @@
       :eyebrow="tr('Container Reference')"
       :description="wt('equipmentHint')"
       ><template #actions
-        ><RouterLink to="/planner/config"
+        ><RouterLink to="/planner/cargos"
           ><el-button type="primary">{{ ui("container.backToConfig") }}</el-button></RouterLink
         ></template
       ></WorkspacePageHeader

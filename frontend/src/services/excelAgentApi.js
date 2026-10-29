@@ -68,6 +68,13 @@ export function createWorkbookRecognitionTask(file, options = {}) {
   });
 }
 
+export function createImageRecognitionTask(file, options = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("languageHint", options.languageHint || "auto");
+  return request("/text-recognition/tasks/image", { method: "POST", body: formData });
+}
+
 export function fetchTextRecognitionCapabilities() {
   return request("/text-recognition/capabilities");
 }

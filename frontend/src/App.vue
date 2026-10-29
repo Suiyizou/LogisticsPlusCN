@@ -84,7 +84,7 @@
                 @save-settings="applyUserSettings"
               />
               <main v-else-if="activePage === 'planner'" key="planner" class="planner-page">
-                <el-card class="planner-step-card" shadow="never">
+                <el-card class="planner-step-card" shadow="never" data-i18n-ignore>
                   <el-steps :active="activeStepIndex" finish-status="success" align-center>
                     <el-step
                       v-for="(step, index) in plannerWorkflowSteps"
@@ -121,13 +121,16 @@
                     key="config-view"
                     class="planner-section"
                   >
-                    <WorkspacePageHeader class="planner-page-head" :description="wt('planningHint')"
+                    <WorkspacePageHeader
+                      data-i18n-ignore
+                      class="planner-page-head"
+                      :description="wt('planningHint')"
                       ><template #title>{{ wt("configTitle") }}</template
-                      ><template #eyebrow>Calculation Setup</template
+                      ><template #eyebrow>Packing Settings</template
                       ><template #actions
                         ><div class="section-actions page-head-actions">
                           <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
-                            apiStatus
+                            tr(apiStatus)
                           }}</el-tag>
                           <el-button
                             class="page-head-cta"
@@ -136,11 +139,14 @@
                             :icon="Tickets"
                             @click="goPlannerStep('cargos')"
                           >
-                            进入货物总览
+                            {{ wt("backToCargos") }}
                           </el-button>
                         </div></template
                       ></WorkspacePageHeader
                     >
+                    <p class="planner-autosave-hint" data-i18n-ignore>
+                      {{ wt("settingsAutosaved") }}
+                    </p>
                     <el-alert
                       v-if="showPackingWorkloadHint"
                       class="calculation-load-hint"
@@ -492,42 +498,52 @@
                     key="cargo-detail-view"
                     class="planner-section"
                   >
-                    <WorkspacePageHeader class="planner-page-head" :description="wt('planningHint')"
+                    <WorkspacePageHeader
+                      data-i18n-ignore
+                      class="planner-page-head"
+                      :description="wt('planningHint')"
                       ><template #title>{{ wt("cargoOverviewTitle") }}</template
                       ><template #eyebrow>Cargo Overview</template
                       ><template #actions
                         ><div class="section-actions page-head-actions">
-                          <el-button :icon="ArrowLeft" @click="goPlannerStep('config')"
-                            >返回配置</el-button
+                          <el-button
+                            data-i18n-ignore
+                            :icon="Setting"
+                            @click="goPlannerStep('config')"
+                            >{{ wt("configTitle") }}</el-button
                           >
                           <el-button
                             class="page-head-cta"
                             type="primary"
                             :disabled="!cargos.length"
                             @click="goPlannerStep('results')"
-                            >进入计算方案</el-button
+                            >{{ wt("calculatePlan") }}</el-button
                           >
                         </div></template
                       ></WorkspacePageHeader
                     >
 
-                    <div class="planner-metrics">
+                    <div class="planner-metrics" data-i18n-ignore>
                       <el-card shadow="never"
-                        ><el-statistic title="货物品类数" :value="cargoTypeCount"
-                      /></el-card>
-                      <el-card shadow="never"
-                        ><el-statistic title="总件数" :value="cargoTotalQuantity"
+                        ><el-statistic
+                          :title="tr('\u8d27\u7269\u54c1\u7c7b\u6570')"
+                          :value="cargoTypeCount"
                       /></el-card>
                       <el-card shadow="never"
                         ><el-statistic
-                          title="总重量"
+                          :title="tr('\u603b\u4ef6\u6570')"
+                          :value="cargoTotalQuantity"
+                      /></el-card>
+                      <el-card shadow="never"
+                        ><el-statistic
+                          :title="wt('totalWeight')"
                           :value="cargoTotalWeightKg / 1000"
                           :precision="2"
                           suffix="t"
                       /></el-card>
                       <el-card shadow="never"
                         ><el-statistic
-                          title="总体积"
+                          :title="tr('\u603b\u4f53\u79ef')"
                           :value="cargoTotalVolumeM3"
                           :precision="2"
                           suffix="m³"
@@ -552,69 +568,6 @@
                       :closable="false"
                     />
 
-                    <el-card class="panel cargo-template-panel" shadow="never">
-                      <template #header>
-                        <WorkspacePageHeader compact class="section-head"
-                          ><template #title>{{ ui("template.cargoTemplates") }}</template
-                          ><template #eyebrow>Templates</template
-                          ><template #actions
-                            ><el-button
-                              type="primary"
-                              :disabled="!cargos.length"
-                              @click="saveCargoTemplate"
-                              >{{ ui("template.save") }}</el-button
-                            ></template
-                          ></WorkspacePageHeader
-                        >
-                      </template>
-                      <div class="cargo-template-content">
-                        <div class="template-save-row">
-                          <el-input
-                            v-model.trim="templateName"
-                            placeholder="模板名称，例如：E-House 项目"
-                            clearable
-                          />
-                          <el-button :icon="MagicStick" @click="loadSample">套用示例</el-button>
-                        </div>
-                        <el-table
-                          v-if="cargoTemplates.length"
-                          :data="cargoTemplates"
-                          row-key="id"
-                          size="small"
-                          class="template-table-lite cargo-template-table"
-                          max-height="220"
-                        >
-                          <el-table-column :label="ui('template.name')" min-width="180">
-                            <template #default="{ row }">{{ templateDisplayName(row) }}</template>
-                          </el-table-column>
-                          <el-table-column :label="ui('template.scale')" width="140">
-                            <template #default="{ row }"
-                              >{{ row.cargos.length }} 类 / {{ templateQuantity(row) }} 件</template
-                            >
-                          </el-table-column>
-                          <el-table-column :label="ui('common.actions')" width="150" fixed="right">
-                            <template #default="{ row }">
-                              <el-button
-                                size="small"
-                                type="primary"
-                                plain
-                                @click="applyCargoTemplate(row.id)"
-                                >套用</el-button
-                              >
-                              <el-button
-                                size="small"
-                                type="danger"
-                                plain
-                                @click="deleteCargoTemplate(row.id)"
-                                >{{ ui("common.delete") }}</el-button
-                              >
-                            </template>
-                          </el-table-column>
-                        </el-table>
-                        <el-empty v-else description="还没有本机货物模板" :image-size="48" />
-                      </div>
-                    </el-card>
-
                     <el-card class="panel cargo-overview-panel" shadow="never">
                       <template #header>
                         <WorkspacePageHeader compact class="section-head"
@@ -622,6 +575,12 @@
                           ><template #eyebrow>Current Cargo</template
                           ><template #actions
                             ><div class="section-actions cargo-list-actions">
+                              <el-segmented
+                                data-i18n-ignore
+                                v-model="cargoView"
+                                :options="cargoViewOptions"
+                                :aria-label="wt('cargoViewLabel')"
+                              />
                               <el-button type="primary" :icon="Plus" @click="openCargoModal()">{{
                                 ui("app.manualEntry")
                               }}</el-button>
@@ -630,7 +589,9 @@
                                 :icon="Star"
                                 @click="smartImportOpen = !smartImportOpen"
                                 >{{
-                                  smartImportOpen ? ui("app.hideSmartImport") : ui("excel.title")
+                                  smartImportOpen
+                                    ? ui("app.hideSmartImport")
+                                    : wt("smartImportTitle")
                                 }}</el-button
                               >
                               <el-button
@@ -653,7 +614,26 @@
                       </template>
                       <el-collapse-transition>
                         <div v-if="smartImportOpen" class="embedded-smart-import">
+                          <div class="smart-import-methods" data-i18n-ignore>
+                            <div>
+                              <strong>{{ wt("smartImportTitle") }}</strong>
+                              <p>{{ wt("smartImportHint") }}</p>
+                            </div>
+                            <el-radio-group v-model="smartImportKind">
+                              <el-radio-button value="workbook">{{
+                                wt("workbookImport")
+                              }}</el-radio-button>
+                              <el-radio-button value="image">{{
+                                wt("screenshotImport")
+                              }}</el-radio-button>
+                            </el-radio-group>
+                          </div>
+                          <ScreenshotImportReview
+                            v-if="smartImportKind === 'image'"
+                            @import-cargos="importExcelCargos"
+                          />
                           <ExcelTemplatePage
+                            v-if="smartImportKind === 'workbook'"
                             key="embedded-smart-import"
                             :current-cargo-count="cargos.length"
                             :review-source="pendingImportReview"
@@ -670,8 +650,14 @@
                         :title="cargoImportNoticeText"
                         @close="cargoImportNotice = null"
                       />
+                      <CargoOverviewSummary
+                        v-if="cargos.length && cargoView === 'overview'"
+                        :cargos="cargos"
+                        @edit="openCargoModal"
+                      />
                       <el-table
-                        v-if="cargos.length"
+                        data-i18n-ignore
+                        v-else-if="cargos.length"
                         :data="cargos"
                         row-key="id"
                         class="cargo-overview-table"
@@ -752,14 +738,100 @@
                       </el-table>
                       <el-empty v-else :description="ui('app.emptyCargoList')" />
                     </el-card>
+                    <details class="cargo-template-disclosure">
+                      <summary data-i18n-ignore>{{ wt("cargoTemplateTools") }}</summary>
+                      <el-card class="panel cargo-template-panel" shadow="never">
+                        <template #header>
+                          <WorkspacePageHeader compact class="section-head"
+                            ><template #title>{{ ui("template.cargoTemplates") }}</template
+                            ><template #eyebrow>Templates</template
+                            ><template #actions
+                              ><el-button
+                                type="primary"
+                                :disabled="!cargos.length"
+                                @click="saveCargoTemplate"
+                                >{{ ui("template.save") }}</el-button
+                              ></template
+                            ></WorkspacePageHeader
+                          >
+                        </template>
+                        <div class="cargo-template-content">
+                          <div class="template-save-row">
+                            <el-input
+                              v-model.trim="templateName"
+                              placeholder="模板名称，例如：E-House 项目"
+                              clearable
+                            />
+                            <el-button :icon="MagicStick" @click="loadSample">套用示例</el-button>
+                          </div>
+                          <el-table
+                            v-if="cargoTemplates.length"
+                            :data="cargoTemplates"
+                            row-key="id"
+                            size="small"
+                            class="template-table-lite cargo-template-table"
+                            max-height="220"
+                          >
+                            <el-table-column :label="ui('template.name')" min-width="180">
+                              <template #default="{ row }">{{ templateDisplayName(row) }}</template>
+                            </el-table-column>
+                            <el-table-column :label="ui('template.scale')" width="140">
+                              <template #default="{ row }"
+                                ><span data-i18n-ignore>{{
+                                  wt("templateScale", {
+                                    types: row.cargos.length,
+                                    pieces: templateQuantity(row)
+                                  })
+                                }}</span></template
+                              >
+                            </el-table-column>
+                            <el-table-column
+                              :label="ui('common.actions')"
+                              width="150"
+                              fixed="right"
+                            >
+                              <template #default="{ row }">
+                                <el-button
+                                  size="small"
+                                  type="primary"
+                                  plain
+                                  @click="applyCargoTemplate(row.id)"
+                                  >套用</el-button
+                                >
+                                <el-button
+                                  size="small"
+                                  type="danger"
+                                  plain
+                                  @click="deleteCargoTemplate(row.id)"
+                                  >{{ ui("common.delete") }}</el-button
+                                >
+                              </template>
+                            </el-table-column>
+                          </el-table>
+                          <el-empty v-else description="还没有本机货物模板" :image-size="48" />
+                        </div>
+                      </el-card>
+                    </details>
                   </section>
 
                   <section v-else key="results-view" class="planner-section">
                     <WorkspacePageHeader
+                      data-i18n-ignore
                       class="planner-results-head"
                       :title="wt('resultsTitle')"
                       :description="wt('resultsHint')"
-                    />
+                    >
+                      <template #actions
+                        ><div class="section-actions">
+                          <el-button :icon="Tickets" @click="goPlannerStep('cargos')">{{
+                            wt("backToCargos")
+                          }}</el-button>
+                          <el-button :icon="Setting" @click="goPlannerStep('config')">{{
+                            wt("configTitle")
+                          }}</el-button>
+                        </div></template
+                      >
+                    </WorkspacePageHeader>
                     <section class="panel result-summary-panel">
                       <div class="planner-result-summary-band" data-i18n-ignore>
                         <div>
@@ -919,9 +991,12 @@
                             <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
                               tr(apiStatus)
                             }}</el-tag>
-                            <el-button :icon="ArrowLeft" @click="goPlannerStep('cargos')">{{
-                              tr("返回货物总览")
-                            }}</el-button>
+                            <el-button
+                              data-i18n-ignore
+                              :icon="ArrowLeft"
+                              @click="goPlannerStep('cargos')"
+                              >{{ wt("backToCargos") }}</el-button
+                            >
                             <el-button type="primary" :icon="Refresh" @click="recalculate(true)">{{
                               ui("result.recalculate")
                             }}</el-button>
@@ -1157,7 +1232,7 @@
                 </div>
               </div>
               <div class="profile-action-grid">
-                <RouterLink to="/planner/config" @click="profileOpen = false">
+                <RouterLink to="/planner/cargos" @click="profileOpen = false">
                   <b>{{ ui("profile.packingCalculation") }}</b
                   ><span>{{ ui("profile.configParametersContainers") }}</span>
                 </RouterLink>
@@ -1350,6 +1425,12 @@ import {
   storedUser
 } from "./services/authSession";
 import { currentLocale, elementPlusLocale, t } from "./i18n";
+import CargoOverviewSummary from "./components/workspace/CargoOverviewSummary.vue";
+import {
+  readCargoView,
+  saveCargoView,
+  readScenePreferences
+} from "./components/workspace/plannerPreferences";
 import { translateLegacyText } from "./i18n/legacyText";
 import { translateUiText } from "./i18n/uiText";
 import { cargoLabel, fmt, shortType, uid } from "./utils/format";
@@ -1382,6 +1463,7 @@ const lazyPage = (loader) =>
 const AdminDashboard = lazyPage(() => import("./components/AdminDashboard.vue"));
 const LoginPage = lazyPage(() => import("./components/LoginPage.vue"));
 const AlgorithmPage = lazyPage(() => import("./components/AlgorithmPage.vue"));
+const ScreenshotImportReview = lazyPage(() => import("./components/ScreenshotImportReview.vue"));
 const ExcelTemplatePage = lazyPage(() => import("./components/ExcelTemplatePage.vue"));
 const HomePage = lazyPage(() => import("./components/HomePage.vue"));
 const PublicLandingPage = lazyPage(() => import("./components/PublicLandingPage.vue"));
@@ -1470,16 +1552,26 @@ const plannerMode = computed(() => {
   if (routeName.value === "planner-results") return "results";
   return "config";
 });
-const activePlannerStep = computed(() => (plannerMode.value === "results" ? "results" : "config"));
-const activeStepIndex = computed(() => (activePlannerStep.value === "results" ? 1 : 0));
-const activePlannerStepLabelRaw = computed(() =>
-  activePlannerStep.value === "results" ? "计算方案" : "配置与货物管理"
+const activePlannerStep = computed(() =>
+  plannerMode.value === "results" && selectedEvaluation.value ? "review" : plannerMode.value
 );
-const activePlannerStepLabel = computed(() => tr(activePlannerStepLabelRaw.value));
+const activeStepIndex = computed(() =>
+  plannerMode.value === "results" ? (selectedEvaluation.value ? 2 : 1) : 0
+);
+const activePlannerStepLabel = computed(() =>
+  wt(
+    plannerMode.value === "config"
+      ? "configTitle"
+      : activePlannerStep.value === "review"
+        ? "reviewExport"
+        : plannerMode.value === "results"
+          ? "calculatePlan"
+          : "cargoOverviewTitle"
+  )
+);
 const activeMenuIndex = computed(() => {
   if (activePage.value === "workbenches") return "/workbenches";
-  if (activePage.value === "planner")
-    return activePlannerStep.value === "results" ? "/planner/results" : "/planner/config";
+  if (activePage.value === "planner") return `/planner/${plannerMode.value}`;
   if (activePage.value === "algorithm") return "/algorithm";
   if (activePage.value === "containers") return "/containers";
   return "/home";
@@ -1549,12 +1641,22 @@ const fileImporting = ref(false);
 const quickImportMode = ref("append");
 const switchingBox = ref(false);
 const sceneRendering = ref(false);
-const showRemaining = ref(false);
-const showMassBalance = ref(true);
+const showRemaining = ref(readScenePreferences().showRemaining);
+const showMassBalance = ref(readScenePreferences().showMassBalance);
 const cargoModalOpen = ref(false);
 const containerModalOpen = ref(false);
 const smartImportOpen = ref(false);
+const smartImportKind = ref("workbook");
+const cargoView = ref(readCargoView());
+const cargoViewOptions = computed(() => [
+  { label: wt("cargoListView"), value: "list" },
+  { label: wt("cargoVisualView"), value: "overview" }
+]);
+watch(cargoView, saveCargoView);
 const pendingImportReview = ref(null);
+watch(pendingImportReview, (review) => {
+  if (review) smartImportKind.value = "workbook";
+});
 const selectedCargoRows = ref<any[]>([]);
 const editingCargo = ref(null);
 const editingContainer = ref(null);
@@ -1829,23 +1931,24 @@ const packingWorkloadDescription = computed(() => {
 });
 const plannerWorkflowSteps = computed(() => [
   {
-    key: "config",
+    key: "cargos",
     no: "01",
-    label: tr("配置与货物管理"),
-    description: tr(
-      `${utilizationPercent.value}% 可用率 / ${globalGapCm.value}cm 间隙 · ${cargoTypeCount.value} 类货物`
-    ),
-    done: cargos.value.length > 0,
+    label: wt("cargoOverviewTitle"),
+    description: wt("cargoStepHint", { count: cargoTypeCount.value }),
     disabled: false
   },
   {
     key: "results",
     no: "02",
-    label: tr("计算方案"),
-    description: selectedEvaluation.value
-      ? `${trContainerName(selectedEvaluation.value.container.name)} / ${tr(evaluationFitText(selectedEvaluation.value))}`
-      : tr("可视化与导出"),
-    done: Boolean(selectedEvaluation.value?.packedBoxes?.length),
+    label: wt("calculatePlan"),
+    description: wt("calculateStepHint"),
+    disabled: !cargos.value.length
+  },
+  {
+    key: "review",
+    no: "03",
+    label: wt("reviewExport"),
+    description: wt("reviewStepHint"),
     disabled: !cargos.value.length
   }
 ]);
@@ -1913,8 +2016,8 @@ watch([workspaceReady, activePage, plannerMode, cargoTypeCount], () => {
     plannerMode.value === "results" &&
     !cargos.value.length
   ) {
-    router.replace("/planner/config");
-    showToast("请先确认配置并录入货物，再进入计算方案。");
+    router.replace("/planner/cargos");
+    showToast(wt("addCargoFirst"));
   }
 });
 watch([activePage, currentUser, authChecked], () => {
@@ -2018,8 +2121,9 @@ function restoreState() {
         : saved.balanceSettings;
     balanceSettings.value = normalizeBalanceSettings(savedBalanceSettings);
     activeBalancePreset.value = saved.balancePreset || detectBalancePreset(balanceSettings.value);
-    showRemaining.value = saved.showRemaining ?? true;
-    showMassBalance.value = saved.showMassBalance ?? true;
+    // Display preferences are independent of the saved calculation configuration.
+    showRemaining.value = readScenePreferences().showRemaining;
+    showMassBalance.value = readScenePreferences().showMassBalance;
     selectedContainerId.value = saved.selectedContainerId || "";
     priorityContainerIds.value = Array.isArray(saved.priorityContainerIds)
       ? saved.priorityContainerIds
@@ -2101,7 +2205,7 @@ function uniqueCargoTemplateName(baseName) {
 }
 
 function goPlannerStep(stepKey) {
-  if (stepKey === "results" && !cargos.value.length) {
+  if (["results", "review"].includes(stepKey) && !cargos.value.length) {
     showToast("请先录入货物，再计算装箱方案。");
     router.push("/planner/cargos");
     return;
@@ -2109,9 +2213,10 @@ function goPlannerStep(stepKey) {
   const routeMap = {
     config: "/planner/config",
     cargos: "/planner/cargos",
-    results: "/planner/results"
+    results: "/planner/results",
+    review: "/planner/results"
   };
-  router.push(routeMap[stepKey] || "/planner/config");
+  router.push(routeMap[stepKey] || "/planner/cargos");
 }
 
 function handleMenuSelect(index) {
@@ -3532,7 +3637,7 @@ async function exportCurrentReport(format) {
       boxIndex: selectedBoxIndex.value,
       utilizationPercent: utilizationPercent.value,
       globalGapCm: globalGapCm.value,
-      showMassBalance: showMassBalance.value,
+      showMassBalance: true,
       locale: currentLocale.value,
       userName: userDisplayName.value,
       username: currentUser.value?.username,
@@ -3598,7 +3703,7 @@ async function exportAllReportsZip() {
       cargos: cargos.value,
       utilizationPercent: utilizationPercent.value,
       globalGapCm: globalGapCm.value,
-      showMassBalance: showMassBalance.value,
+      showMassBalance: true,
       locale: currentLocale.value,
       userName: userDisplayName.value,
       username: currentUser.value?.username,

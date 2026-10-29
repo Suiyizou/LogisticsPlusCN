@@ -76,6 +76,10 @@ public final class WorkbookToolConversation {
       nonStackMapping and keepUprightMapping map exact source labels to true/false. Do not infer constraints from product names.
       Columns are A1 letters, rows are 1-based. firstDataRow/lastDataRow exclude headers, subtotals and final totals.
       Use null for missing/unproven columns and total cells. Never fabricate dimensions, weights, package counts or units.
+      A unit must be supported by a visible header, unit note, or explicit cell suffix, never by a value's magnitude.
+      Cubic meters in a volume heading do not prove that a dimension triplet uses meters. If a unit is not proven,
+      any proposed conversion remains provisional and requires source confirmation; do not describe it as verified.
+      Split tables with different units into separate plans. A single plan cannot silently convert mixed units.
       Preserve all distinct sheets/tables that contain the shipment; no partial table or first-page-only plan.
       Every non-empty worksheet must be mapped, or explicitly listed in optional ignoredSheets:[{sheet,reason}].
       Read all non-empty cells of an ignored sheet before ignoring it; an unread or silently omitted sheet is invalid.

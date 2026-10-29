@@ -44,6 +44,12 @@ public final class WorkbookPlanExecutor {
       List<Integer> group = new ArrayList<>();
       for (int row = first; row <= last; row++) {
         if (!coveredRows.add(source.name + ":" + row)) throw new IllegalArgumentException("Workbook plans overlap source rows");
+        if (isControlOrHeader(source, plan, row)) {
+          if (!group.isEmpty()) cargos.add(packageCargo(source, plan, group, identities, blocks));
+          group = new ArrayList<>();
+          warnings.add(issue("PACKAGE_CONTROL_ROW_EXCLUDED", "A repeated header or explicit total was excluded from cargo rows; verify the selected source region", source.name, row));
+          continue;
+        }
         boolean identified = !source.raw(row, plan.get("packageIdColumn")).isBlank()
             || !source.raw(row, plan.get("marksColumn")).isBlank();
         boolean quantityRow = "quantity-column".equals(plan.get("quantityBasis"))
@@ -61,6 +67,7 @@ public final class WorkbookPlanExecutor {
         }
       }
       if (!group.isEmpty()) cargos.add(packageCargo(source, plan, group, identities, blocks));
+      checkUnitEvidence(source, plan, blocks, warnings);
       Map<String, Object> totals = map(plan.get("totals"));
       for (String metric : List.of("packageCount", "innerQuantity", "grossWeight", "netWeight", "volume")) {
         String address = text(totals.get(metric + "Cell"));
@@ -69,12 +76,13 @@ public final class WorkbookPlanExecutor {
         if (position[0] >= first && position[0] <= last) throw new IllegalArgumentException("A control total cannot be inside the cargo data rows");
         String key = source.name + ":" + address;
         if (!totalCells.add(key)) continue;
-        BigDecimal value = number(source.at(position[0], position[1]));
+        BigDecimal value = metric.endsWith("Weight")
+            ? controlWeightKg(source.at(position[0], position[1]), text(plan.get("weightUnit")))
+            : number(source.at(position[0], position[1]));
         if (value == null || value.signum() < 0) {
           blocks.add(issue("PACKAGE_TOTAL_INVALID", "A mapped source control total is not numeric: " + address, source.name, position[0]));
           continue;
         }
-        if (metric.endsWith("Weight")) value = value.multiply(weightFactor(text(plan.get("weightUnit"))));
         declared.merge(metric, value.doubleValue(), Double::sum);
       }
     }
@@ -121,8 +129,52 @@ public final class WorkbookPlanExecutor {
     result.put("reconciliation", reconciliation);
     result.put("partial", !blocks.isEmpty());
     result.put("totalSourceRows", coveredRows.size());
-    result.put("notes", "Mapped source coordinates were read directly. Package counts, product counts and per-package weights remain separate.");
+    result.put("notes", "Mapped source coordinates were read directly. Package counts, product counts and per-package weights remain separate. Units without source evidence require explicit preview confirmation.");
     return result;
+  }
+
+  private boolean isControlOrHeader(Source source, Map<String, Object> plan, int row) {
+    String identity = source.raw(row, plan.get("packageIdColumn")).toLowerCase(Locale.ROOT);
+    String name = source.raw(row, plan.get("nameColumn")).toLowerCase(Locale.ROOT);
+    if (identity.matches("(?:item|package\\s*(?:no\\.?|number)|箱号|包装编号)")
+        && name.matches("(?:product|name|description|品名|货物名称)")) return true;
+    String label = identity.isBlank() ? name : identity;
+    return label.matches("(?iu)(?:grand\\s+total|sub\\s*total|total|summary|合计|总计|小计)\\s*[:：]?")
+        && !source.raw(row, plan.get("combinedDimensionsColumn")).matches(".*[x×*].*");
+  }
+
+  private void checkUnitEvidence(Source source, Map<String, Object> plan,
+      List<Map<String, Object>> blocks, List<Map<String, Object>> warnings) {
+    checkUnitEvidence(source, plan, "dimensionUnit", List.of("combinedDimensionsColumn", "lengthColumn", "widthColumn", "heightColumn"), blocks, warnings);
+    checkUnitEvidence(source, plan, "weightUnit", List.of("grossWeightColumn", "netWeightColumn", "innerUnitWeightColumn"), blocks, warnings);
+  }
+
+  private void checkUnitEvidence(Source source, Map<String, Object> plan, String field, List<String> columns,
+      List<Map<String, Object>> blocks, List<Map<String, Object>> warnings) {
+    boolean dimensions = field.equals("dimensionUnit");
+    String expected = text(plan.get(field));
+    Set<String> proven = new HashSet<>();
+    for (String column : columns) {
+      if (text(plan.get(column)).isEmpty()) continue;
+      // Nearby headers, including a merged parent header, and explicit inline units are evidence.
+      for (int row = Math.max(1, integer(plan.get("firstDataRow")) - 4); row <= integer(plan.get("lastDataRow")); row++) {
+        String raw = source.mergedText(row, plan.get(column)).toLowerCase(Locale.ROOT);
+        Matcher tokens = Pattern.compile(dimensions
+            ? "(?iu)(?<![a-z])(mm|cm|m|毫米|厘米|米)(?![a-z³²23])"
+            : "(?iu)(?<![a-z])(kgs?|g|t|千克|公斤|克|吨)(?![a-z.])").matcher(raw);
+        while (tokens.find()) {
+          String token = tokens.group(1);
+          proven.add(switch (token) {
+            case "毫米" -> "mm"; case "厘米" -> "cm"; case "米" -> "m";
+            case "kgs", "千克", "公斤" -> "kg"; case "克" -> "g"; case "吨" -> "t"; default -> token;
+          });
+        }
+      }
+    }
+    if (proven.isEmpty()) warnings.add(issue("PACKAGE_UNIT_UNPROVEN",
+        "Source does not prove " + field + "=" + expected + "; inspect the original file and explicitly confirm or correct preview values", source.name, integer(plan.get("firstDataRow"))));
+    else if (proven.size() != 1 || !proven.contains(expected)) blocks.add(issue("PACKAGE_UNIT_CONFLICT",
+        "Mapped " + field + "=" + expected + " conflicts with source unit evidence " + proven + "; split mixed-unit regions or correct the mapping", source.name, integer(plan.get("firstDataRow"))));
   }
 
   private void validatePlan(Source source, Map<String, Object> plan) {
@@ -283,7 +335,7 @@ public final class WorkbookPlanExecutor {
         }
         line.put("quantity", count);
       }
-      BigDecimal unitNet = number(source.raw(row, plan.get("innerUnitWeightColumn")));
+      BigDecimal unitNet = measuredNumber(source.raw(row, plan.get("innerUnitWeightColumn")));
       if (unitNet != null) line.put("unitNetWeightKg", unitNet.multiply(factor).doubleValue());
       inner.add(line);
     }
@@ -387,7 +439,7 @@ public final class WorkbookPlanExecutor {
     for (int row : rows) {
       String raw = source.merged(row, column);
       if (raw.isEmpty()) continue;
-      BigDecimal value = number(raw);
+      BigDecimal value = measuredNumber(raw);
       if (value == null || value.signum() <= 0) invalid = true;
       else values.add(value.stripTrailingZeros());
     }
@@ -434,6 +486,24 @@ public final class WorkbookPlanExecutor {
     if (text.matches("[+-]?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?")) text = text.replace(",", "");
     if (!text.matches("[+-]?\\d+(?:\\.\\d+)?")) return null;
     try { return new BigDecimal(text); } catch (NumberFormatException error) { return null; }
+  }
+  static BigDecimal measuredNumber(Object value) {
+    return number(text(value).replaceFirst("(?iu)\\s*(?:kgs?|mm|cm|m|g|t|毫米|厘米|米|公斤|千克|克|吨)\\s*$", "").trim());
+  }
+  private static BigDecimal controlWeightKg(String raw, String mappedUnit) {
+    BigDecimal bare = number(raw);
+    if (bare != null) return bare.multiply(weightFactor(mappedUnit));
+    Matcher measured = Pattern.compile("(?iu)^\\s*(.+?)\\s*(kgs?|g|t|公斤|千克|克|吨)\\s*$").matcher(raw);
+    if (!measured.matches()) return null;
+    BigDecimal value = number(measured.group(1));
+    if (value == null) return null;
+    String unit = switch (measured.group(2).toLowerCase(Locale.ROOT)) {
+      case "kg", "kgs", "公斤", "千克" -> "kg";
+      case "g", "克" -> "g";
+      case "t", "吨" -> "t";
+      default -> throw new IllegalArgumentException("Unsupported control weight unit");
+    };
+    return value.multiply(weightFactor(unit));
   }
   private static int positiveInteger(BigDecimal value) {
     if (value == null || value.signum() <= 0 || value.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) return 0;

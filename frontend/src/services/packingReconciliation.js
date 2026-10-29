@@ -13,6 +13,7 @@ export function supportsTextRecognition(capabilities) {
 }
 
 export function supportsCreatedRecognitionTask(task, capabilities, workbook = false) {
+  if (task?.taskType === "IMAGE" || task?.inputContract === "cargo-image-v1") return false;
   const version = String(task?.serverEngineVersion || "");
   if (
     supportsWorkbookRecognition(capabilities) &&
@@ -89,6 +90,50 @@ export function packingIdentityKey(cargo = {}) {
   ]);
 }
 
+export function invalidPackingIdentity(row, identities = new Set()) {
+  const identity = cargoProvenance(row);
+  const packageNo = String(identity.packageNo || "").trim();
+  const marks = String(identity.marks || "").trim();
+  if (!packageNo && !marks) return false;
+  const key = JSON.stringify([identity.sourceSheet || "", packageNo || marks]);
+  const ranged = /\d\s*(?:[-–—~～]|\.\.|\bto\b|\u81f3|\u5230)\s*#?\s*\d/i;
+  const invalid =
+    Number(row.quantity) !== 1 ||
+    identities.has(key) ||
+    ranged.test(packageNo) ||
+    ranged.test(marks) ||
+    (!packageNo && /^[0-9]+(?:[.,][0-9]+)?$/.test(marks));
+  identities.add(key);
+  return invalid;
+}
+
+function imageFieldValueValid(field, value) {
+  if (["name", "sourceText"].includes(field)) return typeof value === "string" && !!value.trim();
+  if (["lengthCm", "widthCm", "heightCm", "weightKg"].includes(field))
+    return Number.isFinite(Number(value)) && Number(value) > 0;
+  if (field === "quantity")
+    return Number.isSafeInteger(Number(value)) && Number(value) > 0 && Number(value) <= 2147483647;
+  if (field === "type") return ["normal", "pallet"].includes(value);
+  if (["nonStack", "keepUpright"].includes(field)) return typeof value === "boolean";
+  return false;
+}
+
+export function isImageFieldIssueResolved(issue, rows, originalRows = []) {
+  if (issue?.code !== "IMAGE_FIELD_MISSING" || !Array.isArray(issue.fields) || !issue.fields.length)
+    return false;
+  const index = Number(issue.sourceRowNumber) - 1;
+  if (!Number.isInteger(index) || index < 0) return false;
+  const original = issue.cargo || originalRows[index];
+  const corrected = rows[index];
+  if (!original || !corrected) return false;
+  return issue.fields.every(
+    (field) =>
+      !imageFieldValueValid(field, original[field]) &&
+      imageFieldValueValid(field, corrected[field]) &&
+      corrected[field] !== original[field]
+  );
+}
+
 function numeric(value) {
   return value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
 }
@@ -128,6 +173,19 @@ function matches(actual, expected, tolerance = 1e-6) {
   );
 }
 
+function isReviewedImageReport(report) {
+  return (
+    report?.basis === "image-reviewed" &&
+    report?.imageProtocol === "cargo-image-v1" &&
+    report?.humanSourceConfirmed === true &&
+    report?.complete === true &&
+    ["unknown", "provided"].includes(report?.sourceTotalsStatus) &&
+    numeric(report?.reviewedTotals?.packageCount) != null &&
+    numeric(report?.reviewedTotals?.grossWeightKg) != null &&
+    numeric(report?.reviewedTotals?.calculatedVolumeM3) != null
+  );
+}
+
 export function reviewPackingTask(
   task,
   rows = task?.cleanedRows || [],
@@ -157,6 +215,27 @@ export function reviewPackingTask(
       if (source != null && !matches(actual[field], source))
         addBlock(`PACKAGE_EDIT_${field.toUpperCase()}`);
     }
+    if (isReviewedImageReport(reconciliation)) {
+      for (const field of [
+        "packageCount",
+        "innerQuantity",
+        "grossWeightKg",
+        "calculatedVolumeM3"
+      ]) {
+        const reviewed = numeric(reconciliation.reviewedTotals[field]);
+        if (reviewed != null && !matches(actual[field], reviewed))
+          addBlock("IMAGE_REVIEWED_VALUES_CHANGED");
+      }
+      const original = reconciliation.sourceReport;
+      if (
+        !original ||
+        (original.blockingIssues || []).some((issue) => !isImageFieldIssueResolved(issue, rows)) ||
+        (original.status === "blocked" && !(original.blockingIssues || []).length)
+      )
+        addBlock("IMAGE_SOURCE_INVALID");
+      if (reconciliation.sourceTotalsStatus === "unknown")
+        addWarning("IMAGE_SOURCE_TOTALS_UNKNOWN");
+    }
     const identities = new Set();
     for (const row of rows) {
       const values = packingNumbers(row);
@@ -170,17 +249,7 @@ export function reviewPackingTask(
         )
       )
         addBlock("PACKAGE_INVALID_VALUES");
-      const identity = cargoProvenance(row);
-      const physical = Boolean(identity.packageNo || identity.marks);
-      if (physical) {
-        const key = JSON.stringify([
-          identity.sourceSheet || "",
-          identity.packageNo || "",
-          identity.marks || ""
-        ]);
-        if (values.quantity !== 1 || identities.has(key)) addBlock("PACKAGE_IDENTITY_AMBIGUOUS");
-        identities.add(key);
-      }
+      if (invalidPackingIdentity(row, identities)) addBlock("PACKAGE_IDENTITY_AMBIGUOUS");
       const lines = row.packageInfo?.innerCargo?.lines;
       if (Array.isArray(lines) && lines.length) {
         const counts = lines.map((line) => numeric(line.quantity));
@@ -279,8 +348,9 @@ export function reviewCargoPreview(preview, rows = preview?.aggregated || [], op
       Array.isArray(report) ||
       !report.expected ||
       !["blocked", "matched", "review-required"].includes(report.status) ||
-      numeric(report.expected.packageCount) == null ||
-      numeric(report.expected.grossWeightKg) == null
+      (!isReviewedImageReport(report) &&
+        (numeric(report.expected.packageCount) == null ||
+          numeric(report.expected.grossWeightKg) == null))
     ) {
       extraBlocks.push({ code: "PACKAGE_RECONCILIATION_MISSING" });
       continue;

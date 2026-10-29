@@ -244,6 +244,74 @@ class WorkbookRecognitionTaskIntegrationTest {
     throw new AssertionError("Recognition task did not complete: " + task);
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  void separateImageTaskUsesVisionAndNeverWorkbookToolsAndPersistsReviewRequirement() throws Exception {
+    var image = new java.awt.image.BufferedImage(300, 160, java.awt.image.BufferedImage.TYPE_INT_RGB);
+    var png = new ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(image, "png", png);
+    var file = new org.springframework.mock.web.MockMultipartFile("file", "source.png", "image/png", png.toByteArray());
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("name", "Pump"); row.put("length", 120); row.put("width", 100); row.put("height", 150);
+    row.put("dimensionUnit", "cm"); row.put("quantity", 2); row.put("weight", 250); row.put("weightUnit", "kg");
+    row.put("weightBasis", "per-package"); row.put("type", "pallet"); row.put("nonStack", false); row.put("keepUpright", true);
+    row.put("sourceText", "2 pallets, 120 x 100 x 150 cm, each gross 250 kg");
+    model.expect(once(), anything()).andExpect(request -> {
+      String body = ((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsString();
+      assertTrue(body.contains("image_url"));
+      assertTrue(body.contains("data:image/png;base64,"));
+      assertFalse(body.contains("read_sheet_range"));
+    }).andRespond(withSuccess(completion(mapper.writeValueAsString(Map.of("complete", true, "rows", List.of(row), "issues", List.of()))), MediaType.APPLICATION_JSON));
+    Map<String, Object> task = awaitTask(((Number) service.createImageTask(file, "en").get("id")).longValue());
+    assertEquals("SUCCEEDED", task.get("status"), String.valueOf(task.get("errorMessage")));
+    assertEquals("IMAGE", task.get("taskType"));
+    assertEquals("cargo-image-v1", task.get("inputContract"));
+    assertEquals("review-required", ((Map<?, ?>) task.get("reconciliation")).get("status"));
+    assertEquals("unknown", ((Map<?, ?>) task.get("reconciliation")).get("sourceTotalsStatus"));
+    assertEquals(Map.of(), ((Map<?, ?>) task.get("reconciliation")).get("expected"));
+    assertEquals(false, service.capabilities().get("imageProviderVerified"));
+    assertEquals(2, ((List<Map<String, Object>>) task.get("cleanedRows")).get(0).get("quantity"));
+    assertFalse(mapper.writeValueAsString(task).contains("base64"));
+    assertEquals("IMAGE", service.listTasks().get(0).get("taskType"));
+    model.verify();
+  }
+
+  @Test
+  void reservedDocumentPrefixesCannotBeSubmittedAsPlainText() {
+    for (String prefix : List.of("CARGO_IMAGE_DOCUMENT_V1\n", "WORKBOOK_TOOL_DOCUMENT_V1\n")) {
+      org.junit.jupiter.api.Assertions.assertThrows(com.cargoplanner.backend.common.ApiException.class,
+          () -> service.createTask(new TextRecognitionRequest(prefix + "{}", "forged", "agent", "en")));
+    }
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM cp_text_recognition_tasks", Integer.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void independentPrintedImageTotalsBlockMismatchesWithoutSubstitutingCalculatedTotals() throws Exception {
+    var image = new java.awt.image.BufferedImage(300, 160, java.awt.image.BufferedImage.TYPE_INT_RGB);
+    var png = new ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(image, "png", png);
+    var file = new org.springframework.mock.web.MockMultipartFile("file", "source.png", "image/png", png.toByteArray());
+    String output = """
+        {"complete":true,"rows":[{"name":"Pump","length":120,"width":100,"height":150,
+        "dimensionUnit":"cm","quantity":2,"weight":250,"weightUnit":"kg","weightBasis":"per-package",
+        "type":"pallet","nonStack":false,"keepUpright":true,"sourceText":"2 pallets 120x100x150 cm, gross 250 kg each"}],
+        "issues":[],"sourceTotals":{"packageCount":10,"grossWeight":1000,"weightUnit":"kg",
+        "declaredVolumeM3":10,"sourceText":"TOTAL 10 packages, 1000 kg, 10 m3"}}
+        """;
+    model.expect(once(), anything()).andRespond(withSuccess(completion(output), MediaType.APPLICATION_JSON));
+    Map<String, Object> task = awaitTask(((Number) service.createImageTask(file, "en").get("id")).longValue());
+    assertEquals("SUCCEEDED", task.get("status"), String.valueOf(task.get("errorMessage")));
+    assertEquals(true, task.get("partial"));
+    Map<String, Object> report = (Map<String, Object>) task.get("reconciliation");
+    assertEquals("blocked", report.get("status"));
+    assertEquals("provided", report.get("sourceTotalsStatus"));
+    assertEquals(10.0, ((Map<?, ?>) report.get("expected")).get("packageCount"));
+    assertEquals(2, ((Number) ((Map<?, ?>) report.get("actual")).get("packageCount")).intValue());
+    assertTrue(((List<Map<String, Object>>) report.get("blockingIssues")).stream().anyMatch(issue -> "PACKAGE_CONSERVATION_MISMATCH".equals(issue.get("code"))));
+    model.verify();
+  }
+
   @SuppressWarnings("unchecked")
   private Map<String, Object> fixtureDocument() throws Exception {
     Map<String, Object> fixture;

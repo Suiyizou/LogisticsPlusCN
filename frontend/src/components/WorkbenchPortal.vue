@@ -6,7 +6,7 @@
       <nav :aria-label="t('portal.sectionAria')">
         <RouterLink to="/workbenches" class="is-active" aria-current="page"
           ><el-icon><Grid /></el-icon><span>{{ t("maritime.workspace") }}</span></RouterLink
-        ><RouterLink to="/planner/config"
+        ><RouterLink to="/planner/cargos"
           ><el-icon><Box /></el-icon><span>{{ wt("workbenchPlannerTitle") }}</span></RouterLink
         ><a :href="trackingWorkbenchUrl" target="_blank" rel="noopener noreferrer"
           ><el-icon><Location /></el-icon><span>{{ wt("workbenchTrackingTitle") }}</span></a
@@ -130,7 +130,7 @@
               t('portal.planner.featureReport')
             ]"
             :action="wt('workbenchPlannerAction')"
-            to="/planner/config"
+            to="/planner/cargos"
             new-tab
           />
           <WorkbenchEntryCard

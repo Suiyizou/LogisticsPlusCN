@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -28,7 +29,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class ShipmentUploadAuthFilter extends OncePerRequestFilter {
   private static final Pattern INTERNAL_UPLOAD = Pattern.compile(
-      "^/api/(?:shipments/[^/;]+/files|workspace-files|excel-cleaning/tasks|cargo-imports/preview|text-recognition/tasks/workbook)(?:;[^/]*)?/?$"
+      "^/api/(?:shipments/[^/;]+/files|workspace-files|excel-cleaning/tasks|cargo-imports/preview|text-recognition/tasks/(?:workbook|image))(?:;[^/]*)?/?$"
   );
   private static final Pattern CUSTOMER_UPLOAD = Pattern.compile(
       "^/api/customer/shipments/[^/;]+/files(?:;[^/]*)?/?$"
@@ -81,6 +82,10 @@ public class ShipmentUploadAuthFilter extends OncePerRequestFilter {
       } else {
         AuthenticatedUser user = authService.authenticate(request.getHeader("X-Auth-Token"), request);
         request.setAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, user);
+      }
+      if (request.getRequestURI().matches("^/api/text-recognition/tasks/image(?:;[^/]*)?/?$")
+          && request.getContentLengthLong() > 6L * 1024 * 1024) {
+        throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Image upload request exceeds 6 MB");
       }
       filterChain.doFilter(request, response);
     } catch (ApiException error) {

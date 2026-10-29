@@ -5,6 +5,7 @@ import com.cargoplanner.backend.admin.LlmSettingsService.LlmRuntimeSettings;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.text.workbook.WorkbookPlanExecutor;
 import com.cargoplanner.backend.text.workbook.WorkbookToolConversation;
+import com.cargoplanner.backend.text.image.ImageCargoRecognition;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,11 +59,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class TextRecognitionService {
   private static final String TEXT_RECOGNITION_ENGINE_VERSION = "excel-package-evidence-v7";
   private static final String WORKBOOK_DOCUMENT_PREFIX = "WORKBOOK_TOOL_DOCUMENT_V1\n";
+  private static final String IMAGE_DOCUMENT_PREFIX = "CARGO_IMAGE_DOCUMENT_V1\n";
   private static final List<String> OUTPUT_HEADERS = List.of(
       "name", "model", "lengthCm", "widthCm", "heightCm", "quantity", "weightKg", "type", "nonStack", "keepUpright", "color", "sku", "remark",
       "packageNo", "marks", "sourceSheet", "sourceRows", "innerQuantity", "totalWeightKg", "innerCargoJson", "packageInfoJson"
@@ -168,6 +171,14 @@ public class TextRecognitionService {
 
   public Map<String, Object> createTask(TextRecognitionRequest request) {
     String text = cleanCell(request == null ? "" : request.text());
+    if (text.startsWith(IMAGE_DOCUMENT_PREFIX) || text.startsWith(WORKBOOK_DOCUMENT_PREFIX)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Structured files must use their dedicated upload endpoint");
+    }
+    return createRecognitionTask(request);
+  }
+
+  private Map<String, Object> createRecognitionTask(TextRecognitionRequest request) {
+    String text = cleanCell(request == null ? "" : request.text());
     if (text.isBlank()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Text is required");
     }
@@ -198,7 +209,7 @@ public class TextRecognitionService {
     }
     try {
       String text = WORKBOOK_DOCUMENT_PREFIX + objectMapper.writeValueAsString(document);
-      return createTask(new TextRecognitionRequest(text, sourceName, "excel", languageHint));
+      return createRecognitionTask(new TextRecognitionRequest(text, sourceName, "excel", languageHint));
     } catch (JsonProcessingException error) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Workbook evidence cannot be serialized");
     }
@@ -219,7 +230,24 @@ public class TextRecognitionService {
     ));
     result.put("workbookTools", true);
     result.put("workbookToolProtocol", "workbook-evidence-v1");
+    result.put("imageRecognition", true);
+    result.put("imageTaskProtocol", ImageCargoRecognition.PROTOCOL);
+    result.put("imageProviderVerified", false);
+    result.put("imageRequiresConfirmation", true);
+    result.put("imageMaxBytes", ImageCargoRecognition.MAX_BYTES);
+    result.put("imageMimeTypes", List.of("image/png", "image/jpeg"));
     return result;
+  }
+
+  public Map<String, Object> createImageTask(MultipartFile file, String languageHint) {
+    Map<String, Object> image = new ImageCargoRecognition(objectMapper).read(file);
+    try {
+      // Existing AGENT storage remains compatible with the database enum. taskType is a separate contract.
+      return createRecognitionTask(new TextRecognitionRequest(IMAGE_DOCUMENT_PREFIX + objectMapper.writeValueAsString(image),
+          String.valueOf(image.get("sourceName")), "agent", languageHint));
+    } catch (JsonProcessingException error) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Image evidence cannot be serialized");
+    }
   }
 
   private void processTask(long taskId, String text, String languageHint) {
@@ -296,7 +324,8 @@ public class TextRecognitionService {
     return jdbcTemplate.query(
         """
         SELECT id, task_no, source_channel, source_name, status, row_count, valid_count,
-               issue_count, cleaned_count, agent_notes, error_message, created_at, updated_at, finished_at
+               issue_count, cleaned_count, agent_notes, error_message, created_at, updated_at, finished_at,
+               LEFT(raw_text, 32) AS task_prefix
         FROM cp_text_recognition_tasks
         ORDER BY created_at DESC, id DESC
         LIMIT 30
@@ -310,7 +339,7 @@ public class TextRecognitionService {
         """
         SELECT id, task_no, source_channel, source_name, status, row_count, valid_count,
                issue_count, cleaned_count, cleaned_json, issues_json, agent_notes, error_message,
-               created_at, updated_at, finished_at
+               created_at, updated_at, finished_at, LEFT(raw_text, 32) AS task_prefix
         FROM cp_text_recognition_tasks
         WHERE id = ?
         """,
@@ -432,6 +461,9 @@ public class TextRecognitionService {
   }
 
   private RecognitionResult recognize(String text, String languageHint) {
+    if (text.startsWith(IMAGE_DOCUMENT_PREFIX)) {
+      return recognizeImageDocument(text.substring(IMAGE_DOCUMENT_PREFIX.length()), languageHint);
+    }
     if (text.startsWith(WORKBOOK_DOCUMENT_PREFIX)) {
       return recognizeWorkbookDocument(text.substring(WORKBOOK_DOCUMENT_PREFIX.length()), languageHint);
     }
@@ -473,6 +505,55 @@ public class TextRecognitionService {
     }
     RecognitionResult fallback = recognizeLocally(text);
     return fallback.withNotes("管理员已关闭 LLM 识别，当前使用规则兜底。");
+  }
+
+  private RecognitionResult recognizeImageDocument(String documentJson, String languageHint) {
+    LlmRuntimeSettings settings = llmSettingsService.runtimeSettings();
+    if (!settings.enabled() || !settings.hasApiKey()) throw new IllegalStateException("Screenshot recognition requires an enabled vision-capable model and API key in LLM settings.");
+    try {
+      Map<String, Object> image = objectMapper.readValue(documentJson, new TypeReference<Map<String, Object>>() {});
+      if (!ImageCargoRecognition.PROTOCOL.equals(image.get("protocol"))) throw new IllegalArgumentException("Invalid image task protocol");
+      ImageCargoRecognition contract = new ImageCargoRecognition(objectMapper);
+      Map<String, Object> response = exchangeOpenAiCompatible(settings, contract.request(image, languageHint));
+      List<Map<String, Object>> choices = mapList(response.get("choices"));
+      if (choices.size() != 1 || !"stop".equals(choices.get(0).get("finish_reason"))) throw new IllegalArgumentException("Incomplete image response");
+      Map<String, Object> validated = contract.validate(extractAssistantContent(response), String.valueOf(image.get("sourceName")));
+      List<Map<String, Object>> rows = mapList(validated.get("rows")), issues = new ArrayList<>(mapList(validated.get("issues")));
+      List<Map<String, Object>> blocks = new ArrayList<>(issues.stream().filter(issue -> Set.of("IMAGE_SOURCE_INCOMPLETE", "IMAGE_FIELD_MISSING", "IMAGE_TOTAL_INVALID").contains(issue.get("code"))).toList());
+      Map<String, Object> expected = objectMap(validated.get("expected"));
+      Map<String, Object> actual = new LinkedHashMap<>();
+      actual.put("packageCount", rows.stream().mapToLong(row -> intValue(row.get("quantity"), 0)).sum());
+      actual.put("grossWeightKg", rows.stream().mapToDouble(row -> numberValue(row.get("quantity")) * numberValue(row.get("weightKg"))).sum());
+      actual.put("calculatedVolumeM3", rows.stream().mapToDouble(row -> numberValue(row.get("quantity")) * numberValue(row.get("lengthCm")) * numberValue(row.get("widthCm")) * numberValue(row.get("heightCm")) / 1e6).sum());
+      for (String metric : List.of("packageCount", "grossWeightKg")) {
+        if (expected.containsKey(metric) && Math.abs(numberValue(expected.get(metric)) - numberValue(actual.get(metric))) > 1e-6) {
+          Map<String, Object> mismatch = Map.of("code", "PACKAGE_CONSERVATION_MISMATCH", "errors", List.of("Explicit printed image total differs from extracted rows: " + metric));
+          blocks.add(mismatch); issues.add(mismatch);
+        }
+      }
+      boolean totalsKnown = expected.containsKey("packageCount") && expected.containsKey("grossWeightKg");
+      List<Map<String, Object>> warnings = new ArrayList<>();
+      warnings.add(Map.of("code", "IMAGE_SOURCE_CONFIRMATION_REQUIRED", "message", "Review every value against the source screenshot before importing"));
+      if (!totalsKnown) warnings.add(Map.of("code", "IMAGE_SOURCE_TOTALS_UNKNOWN", "message", "Independent printed package and gross-weight totals are unavailable; extracted row sums are not source reconciliation"));
+      if (expected.containsKey("declaredVolumeM3") && Math.abs(numberValue(expected.get("declaredVolumeM3")) - numberValue(actual.get("calculatedVolumeM3"))) > 1e-9) warnings.add(Map.of("code", "PACKAGE_SOURCE_VOLUME_MISMATCH", "message", "Printed volume differs from calculated outer volume"));
+      Map<String, Object> reconciliation = new LinkedHashMap<>();
+      reconciliation.put("basis", "image-proposal");
+      reconciliation.put("imageProtocol", ImageCargoRecognition.PROTOCOL);
+      reconciliation.put("complete", validated.get("complete"));
+      reconciliation.put("status", blocks.isEmpty() ? "review-required" : "blocked");
+      reconciliation.put("blockingIssues", blocks);
+      reconciliation.put("warnings", warnings);
+      reconciliation.put("expected", expected);
+      reconciliation.put("sourceTotalsStatus", totalsKnown ? "provided" : "unknown");
+      reconciliation.put("sourceTotalsEvidence", validated.get("sourceTotalsEvidence"));
+      reconciliation.put("actual", actual);
+      issues.add(new LinkedHashMap<>(Map.of("code", "PACKAGE_RECONCILIATION", "reconciliation", reconciliation, "errors", List.of())));
+      return new RecognitionResult(rows.size(), rows.size() - (int) blocks.stream().filter(issue -> "IMAGE_FIELD_MISSING".equals(issue.get("code"))).count(),
+          issues.size() - 1, rows, issues, "Screenshot vision proposal; source completeness, units, package counts and gross weights require human confirmation. Provider vision support has not been verified.");
+    } catch (Exception error) {
+      // Provider errors may echo image payloads or credentials; expose a fixed safe message for this contract.
+      throw new IllegalStateException("Screenshot recognition failed. Verify that the configured model supports image_url input and structured JSON, then retry with a complete readable PNG/JPEG.");
+    }
   }
 
   private RecognitionResult recognizeWorkbookDocument(String documentJson, String languageHint) {
@@ -3585,6 +3666,9 @@ public class TextRecognitionService {
     row.put("id", rs.getLong("id"));
     row.put("taskNo", rs.getString("task_no"));
     row.put("sourceChannel", rs.getString("source_channel"));
+    boolean imageTask = String.valueOf(rs.getString("task_prefix")).startsWith(IMAGE_DOCUMENT_PREFIX);
+    row.put("taskType", imageTask ? "IMAGE" : "WORKBOOK_OR_TEXT");
+    if (imageTask) row.put("inputContract", ImageCargoRecognition.PROTOCOL);
     row.put("sourceName", rs.getString("source_name"));
     row.put("status", rs.getString("status"));
     row.put("rowCount", rs.getInt("row_count"));
@@ -3615,7 +3699,7 @@ public class TextRecognitionService {
 
   private boolean isBlockingRecognitionIssueCode(Object code) {
     return Set.of("AGENT_OUTPUT_LIMIT", "AGENT_ROW_COVERAGE", "AGENT_REQUEST_BUDGET", "INPUT_TRUNCATED", "PALLET_DIMENSIONS_MISSING",
-        "PACKAGE_SOURCE_INVALID", "PACKAGE_CONSERVATION_MISMATCH", "PACKAGE_IDENTITY_AMBIGUOUS", "PACKAGE_PLAN_INVALID")
+        "PACKAGE_SOURCE_INVALID", "PACKAGE_CONSERVATION_MISMATCH", "PACKAGE_IDENTITY_AMBIGUOUS", "PACKAGE_PLAN_INVALID", "IMAGE_SOURCE_INCOMPLETE", "IMAGE_FIELD_MISSING", "IMAGE_TOTAL_INVALID")
         .contains(cleanCell(code));
   }
 

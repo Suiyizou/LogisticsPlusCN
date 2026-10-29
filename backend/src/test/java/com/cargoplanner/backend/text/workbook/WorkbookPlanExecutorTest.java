@@ -189,6 +189,70 @@ class WorkbookPlanExecutorTest {
     return executor.execute(document(source, List.of()), Map.of("plans", List.of(plan)));
   }
 
+  @Test
+  void sourceUnitsConflictWithModelPlanAndVolumeDoesNotProveDimensionUnits() {
+    List<List<Object>> source = simpleRows("1", "PACK#1", "10", "100", "110*110*115", "", "", "", "");
+    source.get(0).set(8, "Outer dimensions (mm)");
+    assertTrue(hasIssue(execute(source, plan(2, 2)), "PACKAGE_UNIT_CONFLICT"));
+    source.get(0).set(8, "Volume (m³)");
+    Map<String, Object> result = execute(source, plan(2, 2));
+    assertTrue(WorkbookEvidenceService.list(map(result.get("reconciliation")).get("warnings")).stream()
+        .anyMatch(issue -> "PACKAGE_UNIT_UNPROVEN".equals(issue.get("code"))));
+    assertEquals("review-required", map(result.get("reconciliation")).get("status"));
+  }
+
+  @Test
+  void repeatedHeadersAndExplicitTotalsNeverBecomePhysicalPackages() {
+    List<List<Object>> source = simpleRows("1", "PACK#1", "10", "100", "110*110*115", "", "", "", "");
+    source.add(new ArrayList<>(source.get(0)));
+    source.add(List.of("TOTAL", "", "", "", "10", "", "", "100", ""));
+    Map<String, Object> result = execute(source, plan(2, 4));
+    assertEquals(1, rows(result).size());
+    assertFalse((Boolean) result.get("partial"));
+    assertEquals(2, WorkbookEvidenceService.list(map(result.get("reconciliation")).get("warnings")).stream()
+        .filter(issue -> "PACKAGE_CONTROL_ROW_EXCLUDED".equals(issue.get("code"))).count());
+  }
+
+  @Test
+  void printedControlWeightUsesItsOwnUnitInsteadOfTheCargoMappingUnit() {
+    for (String control : List.of("100 t", "100000 g", "0.1 t", "100 kg", "100 cm")) {
+      List<List<Object>> source = simpleRows("1", "PACK#1", "10", "100 kg", "110*110*115", "", "", "", "");
+      source.add(List.of("TOTAL", "", "", "", "", "", "", control));
+      Map<String, Object> mapping = plan(2, 2);
+      mapping.put("totals", Map.of("grossWeightCell", "H3"));
+      Map<String, Object> result = execute(source, mapping);
+      if (control.equals("100 t")) {
+        assertTrue(hasIssue(result, "PACKAGE_CONSERVATION_MISMATCH"));
+        assertEquals(100000.0, map(map(result.get("reconciliation")).get("expected")).get("grossWeightKg"));
+      } else if (control.equals("100 cm")) {
+        assertTrue(hasIssue(result, "PACKAGE_TOTAL_INVALID"));
+      } else {
+        assertFalse((Boolean) result.get("partial"), control);
+        assertEquals(100.0, map(map(result.get("reconciliation")).get("expected")).get("grossWeightKg"));
+      }
+    }
+  }
+
+  @Test
+  void unitBearingSeparateDimensionsAndGrossWeightCannotHideAnUnmappedPackageRow() {
+    List<List<Object>> source = new ArrayList<>();
+    source.add(List.of("Package", "Marks", "Name", "Model", "", "", "", "Gross kg", "Length cm", "Width cm", "Height cm"));
+    source.add(List.of("P1", "A", "Pump", "M1", "", "", "", "100 kg", "110 cm", "110 cm", "115 cm"));
+    source.add(List.of("P2", "B", "Pump", "M2", "", "", "", "100 kg", "110 cm", "110 cm", "115 cm"));
+    Map<String, Object> mapping = plan(2, 2);
+    mapping.put("innerQuantityColumn", null); mapping.put("innerUnitWeightColumn", null);
+    mapping.put("combinedDimensionsColumn", null);
+    mapping.put("lengthColumn", "I"); mapping.put("widthColumn", "J"); mapping.put("heightColumn", "K");
+    Map<String, Object> result = execute(source, mapping);
+    assertEquals(1, rows(result).size());
+    assertTrue(hasIssue(result, "UNMAPPED_SOURCE_ROWS"));
+    assertEquals("blocked", map(result.get("reconciliation")).get("status"));
+    mapping.put("lastDataRow", 3);
+    Map<String, Object> complete = execute(source, mapping);
+    assertFalse((Boolean) complete.get("partial"));
+    assertEquals(2, rows(complete).size());
+  }
+
   private Map<String, Object> constraintsPlan() {
     Map<String, Object> plan = plan(2, 2);
     plan.put("typeColumn", "K"); plan.put("nonStackColumn", "L"); plan.put("keepUprightColumn", "M");

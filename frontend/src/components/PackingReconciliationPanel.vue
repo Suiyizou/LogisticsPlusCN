@@ -1,6 +1,11 @@
 <template>
   <Transition name="workspace-state"
-    ><section v-if="review.visible" class="packing-reconciliation" aria-live="polite">
+    ><section
+      v-if="review.visible"
+      class="packing-reconciliation"
+      aria-live="polite"
+      data-i18n-ignore
+    >
       <header>
         <h3>{{ ui("excel.packingCheckTitle") }}</h3>
         <span>{{ ui("excel.packingCheckBasis") }}</span>
@@ -28,13 +33,18 @@
         </ul>
       </div>
       <div v-if="review.requiresVolumeConfirmation" class="packing-volume-review">
-        <p>{{ ui("excel.volumeDifferenceReview") }}</p>
+        <p>{{ sourceWarnings ? sourceCopy.sourceReview : ui("excel.volumeDifferenceReview") }}</p>
+        <ul v-if="sourceWarnings">
+          <li v-for="(issue, index) in review.warnings" :key="index">{{ issueText(issue) }}</li>
+        </ul>
         <label
           ><input
             type="checkbox"
             :checked="volumeConfirmed"
             @change="$emit('update:volumeConfirmed', $event.target.checked)"
-          />{{ ui("excel.confirmVolumeDifference") }}</label
+          />{{
+            sourceWarnings ? sourceCopy.sourceConfirm : ui("excel.confirmVolumeDifference")
+          }}</label
         >
       </div>
       <p
@@ -57,9 +67,23 @@
 import { computed } from "vue";
 import { currentLocale } from "../i18n";
 import { translateUiText } from "../i18n/uiText";
+import { screenshotImportMessages } from "../i18n/screenshotImportMessages.js";
 const props = defineProps({ review: { type: Object, required: true }, volumeConfirmed: Boolean });
 defineEmits(["update:volumeConfirmed"]);
 const ui = (key, params) => translateUiText(key, currentLocale.value, params);
+const sourceCopy = computed(
+  () => screenshotImportMessages[currentLocale.value] || screenshotImportMessages["zh-CN"]
+);
+const sourceWarnings = computed(() =>
+  props.review.warnings.some((issue) =>
+    [
+      "PACKAGE_UNIT_UNPROVEN",
+      "PACKAGE_CONTROL_ROW_EXCLUDED",
+      "IMAGE_SOURCE_TOTALS_UNKNOWN",
+      "IMAGE_SOURCE_CONFIRMATION_REQUIRED"
+    ].includes(issue.code)
+  )
+);
 const metrics = computed(() =>
   [
     { field: "packageCount", label: "excel.packageCount", unit: ui("excel.packagesUnit") },
@@ -81,6 +105,15 @@ function display(value) {
 }
 function issueText(issue) {
   const code = String(issue?.code || "");
+  const sourceMessage = {
+    PACKAGE_UNIT_UNPROVEN: "unitUnproven",
+    PACKAGE_UNIT_CONFLICT: "unitConflict",
+    PACKAGE_CONTROL_ROW_EXCLUDED: "controlExcluded",
+    IMAGE_SOURCE_TOTALS_UNKNOWN: "totalsUnknown",
+    IMAGE_SOURCE_CONFIRMATION_REQUIRED: "caution"
+  }[code];
+  if (sourceMessage)
+    return `${sourceCopy.value[sourceMessage]} (${[issue?.sourceSheet, issue?.sourceRowNumber].filter(Boolean).join(" · ")})`;
   const key = code.startsWith("PACKAGE_EDIT_")
     ? "excel.sourceTotalsChanged"
     : /IDENTITY/.test(code)

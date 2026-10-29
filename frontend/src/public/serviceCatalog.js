@@ -21,7 +21,7 @@ const definitions = [
     group: "transport",
     icon: "box",
     access: "authenticated",
-    entry: "/planner/config",
+    entry: "/planner/cargos",
     layout: "planning",
     image: "planning"
   },

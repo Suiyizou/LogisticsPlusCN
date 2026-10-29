@@ -1,0 +1,1 @@
+EXAMPLE ONLY. Offline verification output from the production report exporter. Synthetic 2-box, 56-cargo plan; not a real shipment or transport approval. Each unit is 70 x 50 x 60 cm / 120 kg, with a 72 x 52 x 60 cm packing envelope. Expected totals: 56 pieces, 6720 kg, 11.76 m3. Source mixed units and normalized values are in example-input.json.

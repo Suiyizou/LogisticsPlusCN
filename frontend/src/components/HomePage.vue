@@ -25,7 +25,7 @@
       </article>
     </div>
     <div class="planning-home-tasks">
-      <RouterLink to="/planner/config" class="is-primary"
+      <RouterLink to="/planner/cargos" class="is-primary"
         ><el-icon><Box /></el-icon
         ><span
           ><strong>{{ wt("planningStart") }}</strong
@@ -118,7 +118,7 @@ const greetingName = computed(
 );
 const startPageOptions = computed(() => [
   { value: "/home", label: t("homeOptions.workspace") },
-  { value: "/planner/config", label: t("homeOptions.packing") },
+  { value: "/planner/cargos", label: t("homeOptions.packing") },
   { value: "/smart-import", label: t("homeOptions.smartImport") }
 ]);
 const todayText = computed(() =>

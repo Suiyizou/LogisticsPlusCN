@@ -105,7 +105,7 @@ export function createApplicationRoutes(
       component: views.planner,
       meta: { surface: "planner" }
     })),
-    { path: "/planner", redirect: "/planner/config" },
+    { path: "/planner", redirect: "/planner/cargos" },
     { path: "/excel", redirect: "/planner/cargos" },
     { path: "/smart-import", redirect: "/planner/cargos" },
     {

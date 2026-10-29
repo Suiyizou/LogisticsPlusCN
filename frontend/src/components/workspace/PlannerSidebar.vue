@@ -1,5 +1,5 @@
 <template>
-  <aside class="app-sidebar">
+  <aside class="app-sidebar" data-i18n-ignore>
     <BrandLockup class="planner-sidebar-brand" href="/workbenches" compact inverse />
     <button
       class="sidebar-mobile-toggle"
@@ -18,7 +18,7 @@
 
     <div :id="navigationId" v-show="!isMobile || mobileOpen" class="planner-sidebar-navigation">
       <div class="side-user-card">
-        <span>当前工作区</span>
+        <span>{{ t("workspaceV2.currentWorkspace") }}</span>
         <strong>{{ displayName }}</strong>
         <small>{{
           t("maritime.planningInventory", { cargos: cargoCount, containers: containerCount })
@@ -41,29 +41,33 @@
         </el-menu-item>
         <el-menu-item index="/home">
           <el-icon><House /></el-icon>
-          <span>工作台首页</span>
+          <span>{{ t("workspaceV2.plannerHome") }}</span>
         </el-menu-item>
         <el-sub-menu index="/planner">
           <template #title>
             <el-icon><Box /></el-icon>
-            <span>装箱计算</span>
+            <span>{{ t("workspaceV2.plannerNavigation") }}</span>
           </template>
-          <el-menu-item index="/planner/config">
-            <el-icon><Setting /></el-icon>
-            <span>01 配置与货物管理</span>
+          <el-menu-item index="/planner/cargos">
+            <el-icon><Box /></el-icon>
+            <span>{{ t("workspaceV2.cargoOverviewTitle") }}</span>
           </el-menu-item>
           <el-menu-item index="/planner/results" :disabled="!cargoCount">
             <el-icon><DataAnalysis /></el-icon>
-            <span>02 计算方案</span>
+            <span>{{ t("workspaceV2.reviewExport") }}</span>
+          </el-menu-item>
+          <el-menu-item index="/planner/config">
+            <el-icon><Setting /></el-icon>
+            <span>{{ t("workspaceV2.configTitle") }}</span>
           </el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/algorithm">
           <el-icon><Document /></el-icon>
-          <span>算法说明</span>
+          <span>{{ t("workspaceV2.algorithmNavigation") }}</span>
         </el-menu-item>
         <el-menu-item index="/containers">
           <el-icon><DataAnalysis /></el-icon>
-          <span>箱型资料</span>
+          <span>{{ t("workspaceV2.equipmentQuick") }}</span>
         </el-menu-item>
       </el-menu>
     </div>

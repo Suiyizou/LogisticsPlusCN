@@ -16,6 +16,20 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class WorkbookUploadAuthFilterTest {
   @Test
+  void screenshotUploadsAuthenticateBeforeParsingAndRejectOversizedAuthenticatedBodies() throws Exception {
+    AuthService staff = mock(AuthService.class);
+    var filter = new ShipmentUploadAuthFilter(staff, mock(CustomerAuthService.class), new ObjectMapper());
+    var request = new MockHttpServletRequest("POST", "/api/text-recognition/tasks/image");
+    request.setContentType("multipart/form-data; boundary=unparsed");
+    request.setContent(new byte[7 * 1024 * 1024]);
+    var response = new MockHttpServletResponse();
+    FilterChain chain = mock(FilterChain.class);
+    filter.doFilter(request, response, chain);
+    verify(staff).authenticate(isNull(), any());
+    assertEquals(413, response.getStatus());
+    verifyNoInteractions(chain);
+  }
+  @Test
   void rejectsUnauthorizedWorkbookUploadBeforeMultipartParsing() throws Exception {
     AuthService staff = mock(AuthService.class);
     when(staff.authenticate(isNull(), any())).thenThrow(new ApiException(HttpStatus.UNAUTHORIZED, "Login required"));

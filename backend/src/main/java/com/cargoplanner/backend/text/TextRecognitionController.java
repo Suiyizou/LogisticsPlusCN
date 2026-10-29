@@ -51,6 +51,14 @@ public class TextRecognitionController {
     return textRecognitionService.listTasks();
   }
 
+  @PostMapping(value = "/tasks/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public Map<String, Object> createImageTask(
+      @RequestParam("file") MultipartFile file,
+      @RequestParam(defaultValue = "auto") String languageHint
+  ) {
+    return textRecognitionService.createImageTask(file, languageHint);
+  }
+
   @GetMapping("/tasks/{id}")
   public Map<String, Object> task(@PathVariable long id) {
     return textRecognitionService.getTask(id);
