@@ -106,8 +106,14 @@ export function createApplicationRoutes(
       meta: { surface: "planner" }
     })),
     { path: "/planner", redirect: "/planner/cargos" },
-    { path: "/excel", redirect: "/planner/cargos" },
-    { path: "/smart-import", redirect: "/planner/cargos" },
+    ...["/excel", "/smart-import"].map((path) => ({
+      path,
+      redirect: (to) => ({
+        path: "/planner/cargos",
+        query: { ...to.query, import: "smart" },
+        hash: to.hash
+      })
+    })),
     {
       path: "/operations",
       component: views.operations,

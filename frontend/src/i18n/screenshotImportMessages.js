@@ -18,7 +18,7 @@ export const screenshotImportMessages = {
     title: "截图识别",
     description: "上传完整清晰的 PNG/JPEG（≤5 MB）。截图通过视觉模型识别；Excel 请使用工作簿解析。",
     caution:
-      "当前配置的模型需支持图片输入，视觉能力尚未在线验证。识别结果可能有误，导入前请逐项对照原图核实。",
+      "截图识别依赖后台模型的连接和图片输入能力；服务不可用时会明确报错。识别结果可能有误，导入前请逐项对照原图核实。",
     choose: "选择截图",
     start: "开始识别",
     cancel: "停止等待",
@@ -76,7 +76,7 @@ export const screenshotImportMessages = {
     description:
       "Upload a complete, readable PNG/JPEG (≤5 MB). Images use vision recognition; use workbook parsing for Excel.",
     caution:
-      "The configured model must support image input. Vision support has not been verified online. Review every proposed value against the source before importing.",
+      "Image recognition depends on the configured model connection and image-input support. Unavailable services report an error. Review every proposed value against the original image before importing.",
     choose: "Choose screenshot",
     start: "Recognize image",
     cancel: "Stop waiting",

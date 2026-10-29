@@ -149,17 +149,7 @@
     <section class="workspace-layout">
       <aside class="workspace-sidebar">
         <BrandLockup class="business-sidebar-brand" :href="roleHomePath" compact inverse company />
-        <nav class="sidebar-nav">
-          <button
-            v-for="section in businessNavigation.sections.value"
-            :key="section.id"
-            :class="{ active: menuItem === section.id }"
-            @click="navigateTo(section.id)"
-          >
-            <el-icon><component :is="businessNavigationIcons[section.icon]" /></el-icon>
-            <span>{{ t(section.labelKey) }}</span>
-          </button>
-        </nav>
+        <WorkspaceNavigation :role="currentUser?.role" />
         <button type="button" class="sidebar-profile-card" @click="openPersonalProfile">
           <span class="sidebar-profile-avatar">{{ displayName.slice(0, 1).toUpperCase() }}</span>
           <span class="sidebar-profile-copy">
@@ -191,6 +181,7 @@
 <script setup>
 import { workspaceFeedbackKey } from "./workspace/workspaceFeedback";
 import { useDialogFocus } from "../composables/useDialogFocus.js";
+import WorkspaceNavigation from "./workspace/WorkspaceNavigation.vue";
 import BrandLockup from "./brand/BrandLockup.vue";
 import "../modules/shared/styles/businessOverlays.css";
 import { OFFICIAL_TRACKING_URLS } from "../services/trackingCarriers.js";
@@ -290,15 +281,7 @@ import {
 import { changeOwnPassword, updateOwnProfile } from "../services/adminApi";
 import { saveStoredUser } from "../services/authSession";
 import { markApiErrorHandled } from "../services/apiClient";
-import {
-  User,
-  Document,
-  UserFilled,
-  Operation,
-  DataBoard,
-  ArrowRight,
-  Bell
-} from "@element-plus/icons-vue";
+import { ArrowRight, Bell } from "@element-plus/icons-vue";
 
 const props = defineProps({
   currentUser: { type: Object, default: null },
@@ -528,7 +511,6 @@ const {
 } = shipmentOperations.detail;
 const { restoreBatchTrackTask, toggleBatchTrackPanel } = shipmentOperations.batch;
 
-const businessNavigationIcons = { DataBoard, User, Operation, Document, UserFilled };
 const businessNavigation = useBusinessNavigation({
   modules: configuredBusinessModules,
   role: computed(() => props.currentUser?.role),

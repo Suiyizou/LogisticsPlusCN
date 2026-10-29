@@ -3,7 +3,13 @@ import {
   trackingDiagnosticMessage as presentTrackingDiagnostic,
   isPublicTrackingRouteUnavailable
 } from "./tracking-response.mjs";
-import { localReturnPath } from "./local-return-path.mjs";
+import {
+  milestoneTiming,
+  uniqueMilestones,
+  currentMilestoneIndex,
+  containerMilestoneTiming
+} from "./tracking-milestones.mjs";
+import { renderTrackingWorkspaceNavigation } from "./workspace-navigation.mjs";
 import { createFilePreviewLifecycle } from "./file-preview-lifecycle.mjs";
 import { createPdfCanvasPreview, pdfPreviewErrorKey } from "./pdf-canvas-preview.mjs";
 const filePreviewLifecycle = createFilePreviewLifecycle();
@@ -19,7 +25,8 @@ const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
 const carrierSelect = document.querySelector("#carrier-select");
 const carrierNavItems = Array.from(document.querySelectorAll("[data-carrier-select]"));
-const channelSelect = document.querySelector("#channel-select");
+// Channel remains a request protocol detail; it is not a customer form field.
+let queryChannel = "AUTO";
 document.body.classList.toggle(
   "is-embedded",
   new URLSearchParams(window.location.search).get("embed") === "1"
@@ -342,6 +349,11 @@ const CARRIERS = Object.freeze({
   }
 });
 
+const CARRIER_BRAND_ASSETS = Object.freeze({
+  COSCO: "./carriers/cosco-shipping-lines.png",
+  OOCL: "./carriers/oocl.svg"
+});
+
 const CHANNELS = Object.freeze({
   AGENT: { code: "AGENT", labelKey: "channel.agent", sourceKey: "source.agent" },
   AUTO: {
@@ -384,6 +396,8 @@ const MESSAGES = {
     "nav.portal": "Open workbenches",
     "nav.home": "Return to homepage",
     "nav.back": "Back",
+    "nav.workbenchHome": "Workbench home",
+    "nav.websiteHome": "Platform home",
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
     "nav.agentShipments": "Assigned shipments",
@@ -860,22 +874,31 @@ const MESSAGES = {
     "metrics.notDeparted": "Not departed",
     "metrics.notArrived": "Not arrived",
     "metrics.estimatedDelivery": "Estimated final delivery",
+    "metrics.actualDelivery": "Actual final delivery",
     "metrics.latestEvent": "Latest event",
     "metrics.noLatestEvent": "No latest event",
-    "journey.currentStage": "Current stage",
+    "journey.currentStage": "LATEST REPORTED STATUS",
     "journey.departed": "Departed",
     "journey.arrived": "Port arrival",
     "journey.delivered": "Final destination",
     "journey.progress": "{completed} of {total} milestones confirmed",
     "journey.awaiting": "Awaiting the next carrier event",
-    "route.title": "Route story",
+    "route.title": "Shipment milestones",
     "route.origin": "Origin",
     "route.destination": "Destination",
     "route.nodes": "{count} nodes",
     "route.noNodes": "The carrier did not provide route nodes.",
     "route.unknownLocation": "Unknown location",
     "route.noEvent": "Event name not provided",
-    "route.progress": "Route progress {progress}%",
+    "result.synced": "Last synced",
+    "route.evidence.actual": "Actual",
+    "route.evidence.estimated": "Estimated",
+    "route.evidence.unknown": "Not reported",
+    "route.time.actual": "Actual",
+    "route.time.estimated": "Estimated",
+    "route.time.unknown": "Time not reported",
+    "route.currentReported": "Last actual milestone",
+    "route.sourceNote": "Milestones reflect carrier reports. Estimated dates may change.",
     "route.stage.origin": "Place of receipt",
     "route.stage.departure": "Departure port",
     "route.stage.arrival": "Arrival port",
@@ -1016,6 +1039,8 @@ const MESSAGES = {
     "nav.portal": "进入业务工作台",
     "nav.home": "返回主页",
     "nav.back": "返回上一页",
+    "nav.workbenchHome": "工作台首页",
+    "nav.websiteHome": "返回官网",
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
     "nav.agentShipments": "分配票单",
@@ -1460,22 +1485,31 @@ const MESSAGES = {
     "metrics.notDeparted": "未离港",
     "metrics.notArrived": "未到港",
     "metrics.estimatedDelivery": "预计到达最终目的地",
+    "metrics.actualDelivery": "实际到达最终目的地",
     "metrics.latestEvent": "最新动态",
     "metrics.noLatestEvent": "暂无最新动态",
-    "journey.currentStage": "当前阶段",
+    "journey.currentStage": "最新报告状态",
     "journey.departed": "已离港",
     "journey.arrived": "已到港",
     "journey.delivered": "最终目的地",
     "journey.progress": "已确认 {completed}/{total} 个主要节点",
     "journey.awaiting": "等待船司更新下一节点",
-    "route.title": "路线详情",
+    "route.title": "运输节点",
     "route.origin": "起始地",
     "route.destination": "目的地",
     "route.nodes": "{count} 个节点",
     "route.noNodes": "船司未提供路线节点。",
     "route.unknownLocation": "未知地点",
     "route.noEvent": "船司未提供事件名称",
-    "route.progress": "路线进度 {progress}%",
+    "result.synced": "上次同步",
+    "route.evidence.actual": "已发生",
+    "route.evidence.estimated": "预计",
+    "route.evidence.unknown": "待报告",
+    "route.time.actual": "实际",
+    "route.time.estimated": "预计",
+    "route.time.unknown": "时间尚未报告",
+    "route.currentReported": "最近已确认节点",
+    "route.sourceNote": "节点以船司报告为准，预计日期可能调整。",
     "route.stage.origin": "起运节点",
     "route.stage.departure": "离港节点",
     "route.stage.arrival": "到港节点",
@@ -1681,6 +1715,7 @@ const elements = Object.fromEntries(
     "estimated-delivery",
     "estimated-delivery-location",
     "delivery-metric-card",
+    "delivery-metric-label",
     "latest-event",
     "latest-event-detail",
     "latest-metric-card",
@@ -2483,8 +2518,13 @@ function renderTrackingAccount(session = readFileSession()) {
   const returnsToWorkbenches =
     session.kind === "INTERNAL" && ["ADMIN", "BUSINESS"].includes(internalRole);
   portalReturnLink.href = returnsToWorkbenches ? "/workbenches" : "/";
-  portalReturnLink.setAttribute("aria-label", t("nav.back"));
-  if (portalReturnLabel) portalReturnLabel.textContent = t("nav.back");
+  const portalLabelKey = returnsToWorkbenches ? "nav.workbenchHome" : "nav.websiteHome";
+  portalReturnLink.dataset.i18nAriaLabel = portalLabelKey;
+  portalReturnLink.setAttribute("aria-label", t(portalLabelKey));
+  if (portalReturnLabel) {
+    portalReturnLabel.dataset.i18n = portalLabelKey;
+    portalReturnLabel.textContent = t(portalLabelKey);
+  }
 
   const authenticated = Boolean(session.token);
   const isCustomer = session.kind === "CUSTOMER";
@@ -2492,6 +2532,13 @@ function renderTrackingAccount(session = readFileSession()) {
   document.body.classList.toggle("is-internal-session", session.kind === "INTERNAL");
   renderBatchWorkspaceAccess(session);
   renderOverseaAgentWorkspace(session);
+  renderTrackingWorkspaceNavigation({
+    kind: session.kind,
+    role: session.user?.role,
+    partyRole: customerPartyRole(session),
+    language: currentLanguage,
+    activeView
+  });
   trackingAccount.hidden = !authenticated;
   if (signInButton) {
     signInButton.hidden = authenticated;
@@ -6171,7 +6218,7 @@ const ROUTE_STAGE_ICONS = Object.freeze({
   arrival:
     '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><path d="M12 7v12M7 11h10M5 15c1.5 4 4 6 7 6s5.5-2 7-6M7 15H4m13 0h3"/></svg>',
   destination:
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-13A7 7 0 0 0 5 9c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/><path d="m9.5 15.5 1.7 1.7 3.5-3.7"/></svg>',
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.2 7-13A7 7 0 0 0 5 9c0 6.8 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/></svg>',
   waypoint:
     '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 12h3.5c3.5 0 3-6 3.5-6M12 12c3.5 0 3 6 3.5 6"/></svg>'
 });
@@ -6193,61 +6240,8 @@ function routeStageKind(node, index, total) {
   return "waypoint";
 }
 
-function normalizeLocationName(value) {
-  return String(value ?? "")
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
-}
-
 function selectDisplayRouteNodes(route) {
-  const seen = new Set();
-  return route.filter((node) => {
-    if (!node) return false;
-    const identity = [
-      node.locationType,
-      normalizeLocationName(node.city),
-      node.event,
-      node.actualTime ?? node.estimatedTime
-    ]
-      .map((value) =>
-        String(value ?? "")
-          .trim()
-          .toUpperCase()
-      )
-      .join("|");
-    if (seen.has(identity)) return false;
-    seen.add(identity);
-    return true;
-  });
-}
-
-function calculateRouteProgress(route, snapshot) {
-  if (route.length === 0) return 0;
-  const finalNode = route.at(-1);
-  const finalLocationType = String(finalNode?.locationType ?? "").toUpperCase();
-  const latest = snapshot.summary?.latestEvent;
-  const latestStage = `${latest?.stage ?? ""} ${latest?.oceanStage ?? ""}`.toUpperCase();
-  const destination = normalizeLocationName(snapshot.summary?.destination?.name);
-  const latestLocation = normalizeLocationName(latest?.location);
-  const reachedDestination =
-    Boolean(snapshot.keyTimes?.estimatedDelivery?.actualTime) ||
-    Boolean(finalNode?.actualTime && finalLocationType === "FND") ||
-    Boolean(finalNode?.active && finalLocationType === "FND") ||
-    /FND|FINAL|DELIVER/.test(latestStage) ||
-    Boolean(latest?.occurredAt && destination && latestLocation === destination);
-
-  if (reachedDestination) return 100;
-
-  const activeIndex = route.findIndex((node) => node.active);
-  const lastActualIndex = route.reduce(
-    (lastIndex, node, index) => (node.actualTime ? index : lastIndex),
-    -1
-  );
-  const reachedIndex = Math.max(activeIndex, lastActualIndex);
-  if (reachedIndex < 0) return 0;
-  if (route.length === 1) return 100;
-  return Math.max(6, Math.round((reachedIndex / (route.length - 1)) * 100));
+  return uniqueMilestones(route);
 }
 
 function containerTypeSummary(snapshot) {
@@ -6286,21 +6280,14 @@ function renderPrimaryFacts(snapshot) {
   elements["result-primary-facts"].hidden = !trafficTerm && !containerTypes;
 }
 
-function renderRoute(route, snapshot = {}) {
+function renderRoute(route) {
   route = selectDisplayRouteNodes(route);
   elements["route-flow"].replaceChildren();
   elements["route-flow"].style.setProperty("--route-columns", Math.max(route.length, 1));
   elements["route-count"].textContent = t("route.nodes", { count: route.length });
-  const progress = calculateRouteProgress(route, snapshot);
-  const progressLabel = t("route.progress", { progress });
-  elements["route-flow"].style.setProperty("--route-progress", `${progress}%`);
-  elements["route-flow"].classList.toggle("is-complete", progress === 100);
-  elements["route-summary-line"].style.setProperty("--route-progress", `${progress}%`);
-  elements["route-summary-line"].classList.toggle("is-complete", progress === 100);
-  elements["route-summary-line"].setAttribute("aria-valuenow", String(progress));
-  elements["route-summary-line"].setAttribute("aria-label", progressLabel);
-  elements["route-summary-line"].title = progressLabel;
-  elements["route-summary-marker"].textContent = progress === 100 ? "✓" : "◭";
+  // Discrete carrier milestones are evidence, not a measurable percentage.
+  elements["route-summary-line"].removeAttribute("role");
+  elements["route-summary-line"].setAttribute("aria-hidden", "true");
 
   if (route.length === 0) {
     const empty = document.createElement("div");
@@ -6310,20 +6297,18 @@ function renderRoute(route, snapshot = {}) {
     return;
   }
 
-  const explicitActiveIndex = route.findIndex((node) => node.active);
-  const lastActualIndex = route.reduce(
-    (lastIndex, node, index) => (node.actualTime ? index : lastIndex),
-    -1
-  );
-  const currentIndex = explicitActiveIndex >= 0 ? explicitActiveIndex : lastActualIndex;
+  const currentIndex = currentMilestoneIndex(route);
 
   route.forEach((node, index) => {
     const stage = routeStageKind(node, index, route.length);
+    const timing = milestoneTiming(node);
     const item = document.createElement("article");
+    item.setAttribute("role", "listitem");
     item.className = [
       "route-node",
       `route-stage-${stage}`,
-      node.actualTime ? "is-complete" : "",
+      `is-${timing.state}`,
+      timing.actual ? "is-complete" : "",
       index === currentIndex ? "is-active is-current" : ""
     ]
       .filter(Boolean)
@@ -6336,7 +6321,8 @@ function renderRoute(route, snapshot = {}) {
     dot.title = t(`route.stage.${stage}`);
 
     const type = document.createElement("small");
-    type.textContent = valueOrDash(node.locationType, `#${node.sequence}`);
+    type.className = "route-stage-label";
+    type.textContent = t(`route.stage.${stage}`);
 
     const city = document.createElement("strong");
     city.append(
@@ -6347,12 +6333,40 @@ function renderRoute(route, snapshot = {}) {
     );
 
     const event = document.createElement("span");
+    event.className = "route-event-name";
     event.textContent = valueOrDash(node.event, t("route.noEvent"));
 
-    const time = document.createElement("time");
-    time.textContent = formatDateTime(node.actualTime ?? node.estimatedTime, node.timezone);
-
-    item.append(dot, type, city, event, time);
+    const evidence = document.createElement("span");
+    evidence.className = "route-evidence";
+    evidence.textContent = t(`route.evidence.${timing.state}`);
+    const times = document.createElement("div");
+    times.className = "route-node-times";
+    const appendTime = (kind, value) => {
+      const line = document.createElement("div");
+      line.className = `route-time route-time-${kind}`;
+      const label = document.createElement("small");
+      label.textContent = t(`route.time.${kind}`);
+      const time = document.createElement("time");
+      time.textContent = formatDateTime(value, node.timezone);
+      if (value) time.setAttribute("datetime", value);
+      line.append(label, time);
+      times.append(line);
+    };
+    if (timing.actual) appendTime("actual", timing.actual);
+    if (timing.estimated) appendTime("estimated", timing.estimated);
+    if (timing.state === "unknown") {
+      const unknown = document.createElement("span");
+      unknown.className = "route-time-unknown";
+      unknown.textContent = t("route.time.unknown");
+      times.append(unknown);
+    }
+    item.append(dot, type, evidence, city, event, times);
+    if (index === currentIndex) {
+      const current = document.createElement("span");
+      current.className = "route-current-label";
+      current.textContent = t("route.currentReported");
+      item.append(current);
+    }
     elements["route-flow"].append(item);
   });
 }
@@ -6516,19 +6530,31 @@ function renderContainerMilestones(cell, container) {
     const timeline = document.createElement("div");
     timeline.className = "container-milestone-timeline";
     for (const milestone of milestones) {
+      const timing = containerMilestoneTiming(milestone);
       const item = document.createElement("article");
+      item.className = `is-${timing.state}`;
       const marker = document.createElement("i");
+      marker.setAttribute("aria-hidden", "true");
       const copy = document.createElement("span");
       const name = document.createElement("strong");
       const meta = document.createElement("small");
       name.textContent = valueOrDash(milestone.name, t("route.noEvent"));
-      meta.textContent = [
-        milestone.location,
-        formatDateTime(milestone.occurredAt),
-        milestone.transportMode
-      ]
-        .filter((value) => value && value !== "—")
-        .join(" · ");
+      meta.textContent = [milestone.location, milestone.transportMode].filter(Boolean).join(" · ");
+      const evidence = document.createElement("small");
+      evidence.className = "container-milestone-evidence";
+      evidence.textContent = t(`route.evidence.${timing.state}`);
+      copy.append(evidence);
+      for (const kind of ["actual", "estimated"]) {
+        if (!timing[kind]) continue;
+        const time = document.createElement("small");
+        time.textContent = `${t(`route.time.${kind}`)} · ${formatDateTime(timing[kind], milestone.timezone)}`;
+        copy.append(time);
+      }
+      if (timing.state === "unknown") {
+        const unknown = document.createElement("small");
+        unknown.textContent = t("route.time.unknown");
+        copy.append(unknown);
+      }
       copy.append(name, meta);
       item.append(marker, copy);
       timeline.append(item);
@@ -6778,7 +6804,21 @@ function renderResult(payload) {
   setRelatedFilesContext(payload);
   results.classList.toggle("is-container-only", isContainerOnly);
   sourceTag.textContent = t(resultChannel.sourceKey);
-  elements["result-carrier"].textContent = providerCode;
+  const carrierName = CARRIERS[providerCode]?.name ?? snapshot.provider?.name ?? providerCode;
+  elements["result-carrier"].textContent = carrierName;
+  const carrierLogo = document.querySelector("#result-carrier-logo");
+  const logoPath = CARRIER_BRAND_ASSETS[providerCode];
+  carrierLogo.hidden = !logoPath;
+  carrierLogo.onerror = () => {
+    carrierLogo.hidden = true;
+  };
+  if (logoPath) {
+    carrierLogo.src = logoPath;
+    carrierLogo.alt = carrierName;
+  } else {
+    carrierLogo.removeAttribute("src");
+  }
+  document.querySelector("#result-carrier-brand").dataset.carrier = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
   elements["result-number"].textContent = valueOrDash(
     snapshot.tracking.originalNumber ?? summary.billOfLading ?? snapshot.tracking.number
@@ -6886,11 +6926,11 @@ function renderResult(payload) {
   visibleMetrics.push(
     renderTimeMetric({
       cardId: "delivery-metric-card",
-      labelId: null,
+      labelId: "delivery-metric-label",
       valueId: "estimated-delivery",
       locationId: "estimated-delivery-location",
       record: showDelivery ? deliveryRecord : null,
-      labelKey: "metrics.estimatedDelivery"
+      labelKey: deliveryRecord?.actualTime ? "metrics.actualDelivery" : "metrics.estimatedDelivery"
     })
   );
   const hasLatestEvent = [
@@ -6909,7 +6949,6 @@ function renderResult(payload) {
     .filter((item) => item && item !== "—")
     .join(" · ");
   elements["latest-event-detail"].hidden = !elements["latest-event-detail"].textContent;
-  visibleMetrics.push(hasLatestEvent);
   elements["metric-grid"].hidden = !visibleMetrics.some(Boolean);
 
   setCountryFlag(elements["origin-flag"], summary.origin?.countryCode);
@@ -6928,7 +6967,7 @@ function renderResult(payload) {
   elements["secondary-grid"].classList.toggle("is-single-panel", containers.length === 0);
   elements["secondary-grid"].hidden = false;
 
-  renderRoute(route, snapshot);
+  renderRoute(route);
   renderJourney(snapshot);
   renderRoutingLegs(routingLegs);
   renderReferences(snapshot);
@@ -7029,20 +7068,6 @@ function historyTiming(snapshot) {
   };
 }
 
-function historyProgress(snapshot, timing) {
-  if (timing.arrivalIsActual) return 100;
-  if (!timing.actualDeparture) return 8;
-
-  const departure = Date.parse(timing.actualDeparture);
-  const arrival = Date.parse(timing.estimatedArrival ?? "");
-  if (Number.isFinite(departure) && Number.isFinite(arrival) && arrival > departure) {
-    const elapsed = (Date.now() - departure) / (arrival - departure);
-    return Math.round(Math.min(92, Math.max(18, elapsed * 84 + 8)));
-  }
-
-  return snapshot.keyTimes?.actualArrival?.time ? 78 : 52;
-}
-
 function historyTimeline(snapshot) {
   const keyTimes = snapshot.keyTimes ?? {};
   const latest = snapshot.summary?.latestEvent;
@@ -7123,7 +7148,7 @@ function setHistoryDetailsExpanded({ item, toggle, details, entryKey, expanded, 
         { height: "0px", opacity: 0, transform: "translateY(-8px)" },
         { height: `${targetHeight}px`, opacity: 1, transform: "translateY(0)" }
       ],
-      { duration: 320, easing: "cubic-bezier(.2,.75,.2,1)" }
+      { duration: 220, easing: "cubic-bezier(.2,.75,.2,1)" }
     );
     animation.addEventListener("finish", () => {
       if (toggle.getAttribute("aria-expanded") === "true") details.style.height = "";
@@ -8144,7 +8169,6 @@ function renderHistory() {
     const origin = historyPort(snapshot, "origin");
     const destination = historyPort(snapshot, "destination");
     const timing = historyTiming(snapshot);
-    const progress = historyProgress(snapshot, timing);
     const detailId = `shipment-history-detail-${rowIndex}`;
     const entryKey = trackingQueryKey(entry.query);
     const initiallyExpanded = expandedHistoryKeys.has(entryKey);
@@ -8157,7 +8181,6 @@ function renderHistory() {
           ? "is-in-transit"
           : "is-planned"
     );
-    item.style.setProperty("--shipment-progress", `${progress}%`);
 
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -8211,10 +8234,11 @@ function renderHistory() {
     const arrivalDate = document.createElement("span");
     arrivalDate.innerHTML = `<b>${t(timing.arrivalIsActual ? "history.arrived" : "history.eta")}</b><small>${formatShipmentDate(timing.arrivalTime)}</small>`;
     dateLabels.append(departureDate, arrivalDate);
-    const progressTrack = document.createElement("span");
-    progressTrack.className = "shipment-progress-track";
-    progressTrack.append(document.createElement("i"));
-    journey.append(dateLabels, progressTrack);
+    const connector = document.createElement("span");
+    connector.className = "shipment-journey-connector";
+    connector.setAttribute("aria-hidden", "true");
+    connector.innerHTML = '<svg viewBox="0 0 120 12"><path d="M1 6h116m-5-4 5 4-5 4" /></svg>';
+    journey.append(dateLabels, connector);
 
     const current = document.createElement("span");
     current.className = "shipment-current-status";
@@ -8513,24 +8537,10 @@ async function clearCmaSession() {
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
   const cmaSelected = carrier.code === "CMA";
-  if (channelSelect) {
-    if (cmaSelected) channelSelect.value = "PLAYWRIGHT";
-    else if (channelSelect.disabled) channelSelect.value = "AUTO";
-    channelSelect.disabled = cmaSelected;
-    for (const option of channelSelect.options) {
-      option.hidden =
-        carrier.code === "COSCO"
-          ? option.value === "AGENT"
-          : cmaSelected
-            ? option.value !== "PLAYWRIGHT"
-            : !["AUTO", "NETWORK", "AGENT"].includes(option.value);
-    }
-    if (channelSelect.selectedOptions[0]?.hidden) channelSelect.value = "AUTO";
-  }
   const billOption = trackingType?.querySelector('option[value="BILLOFLADING"]');
   if (billOption) billOption.hidden = ["COSCO", "CMA"].includes(carrier.code);
   if (billOption?.hidden && trackingType.value === "BILLOFLADING") trackingType.value = "BOOKING";
-  const channel = CHANNELS[channelSelect?.value] ?? CHANNELS.NETWORK;
+  const channel = CHANNELS[queryChannel] ?? CHANNELS.AUTO;
   sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
   queryHelper.textContent = t(
     cmaSelected
@@ -8721,7 +8731,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
     } else if (currentPayload?.snapshot?.tracking?.number) {
       const query = normalizeQuery({
         carrier: carrierSelect.value,
-        channel: channelSelect?.value ?? "AUTO",
+        channel: queryChannel,
         type: trackingType.value,
         number: trackingNumber.value
       });
@@ -8746,7 +8756,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
           { opacity: 0, transform: "translateY(10px)" },
           { opacity: 1, transform: "translateY(0)" }
         ],
-        { duration: 320, easing: "cubic-bezier(.2,.75,.2,1)" }
+        { duration: 220, easing: "cubic-bezier(.2,.75,.2,1)" }
       );
     }
     if (["overview", "shipments"].includes(activeView)) renderHistory();
@@ -8789,7 +8799,7 @@ function showStoredTrackingQuery(
 ) {
   const normalized = normalizeQuery(query);
   carrierSelect.value = normalized.carrier;
-  if (channelSelect) channelSelect.value = normalized.channel ?? "AUTO";
+  queryChannel = normalized.channel ?? "AUTO";
   trackingType.value = normalized.type;
   trackingNumber.value = normalized.number;
   updateCarrierUI();
@@ -8905,6 +8915,14 @@ function applyLanguage(language, { persist = true } = {}) {
     }
   }
   renderOverseaAgentWorkspace();
+  const session = readFileSession();
+  renderTrackingWorkspaceNavigation({
+    kind: session.kind,
+    role: session.user?.role,
+    partyRole: customerPartyRole(session),
+    language: currentLanguage,
+    activeView
+  });
   activeViewTitle.textContent = t(activeViewTranslationKey(activeView));
   updateCarrierUI();
   renderChannelStatus(lastChannelStatus);
@@ -9019,9 +9037,10 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearError();
 
+  queryChannel = "AUTO";
   const baseQuery = normalizeQuery({
     carrier: carrierSelect.value,
-    channel: channelSelect?.value ?? "AUTO",
+    channel: "AUTO",
     type: trackingType.value,
     number: trackingNumber.value
   });
@@ -9104,7 +9123,6 @@ cmaSessionForm.addEventListener("submit", (event) => {
   void saveCmaSession();
 });
 cmaSessionClear.addEventListener("click", () => void clearCmaSession());
-channelSelect?.addEventListener("change", () => updateCarrierUI({ resetResult: true }));
 
 batchWorkspaceClose?.addEventListener("click", closeBatchWorkspace);
 batchWorkspaceDialog?.addEventListener("click", (event) => {
@@ -9411,17 +9429,6 @@ document.querySelector("#portal-return-link")?.addEventListener("click", (event)
   )
     return;
   event.preventDefault();
-  const requestedReturn = new URLSearchParams(window.location.search).get("returnTo") ?? "";
-  const safeReturn = localReturnPath(requestedReturn);
-  if (safeReturn) {
-    showPlatformRouteWait();
-    window.location.assign(safeReturn);
-    return;
-  }
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
-  }
   showPlatformRouteWait();
   window.location.assign(event.currentTarget.href);
 });

@@ -3,8 +3,52 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
-import { staticCacheControl } from "../lib/static-assets.mjs";
+import { readFile } from "node:fs/promises";
+import { MIME_TYPES, staticCacheControl } from "../lib/static-assets.mjs";
 import { createStaticRouter } from "../lib/static-routes.mjs";
+
+test("raster images advertise browser image MIME types", () => {
+  assert.equal(MIME_TYPES[".png"], "image/png");
+  assert.equal(MIME_TYPES[".jpg"], "image/jpeg");
+  assert.equal(MIME_TYPES[".jpeg"], "image/jpeg");
+  assert.equal(MIME_TYPES[".webp"], "image/webp");
+});
+
+test("official carrier PNG is served as an image with unchanged bytes, HEAD and revalidation", async (context) => {
+  const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+  const router = createStaticRouter({ publicDir });
+  const server = createServer((request, response) => {
+    void router.serveStatic(request, response).catch((error) => {
+      response.writeHead(error.status || 500);
+      response.end(error.message);
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  context.after(() => new Promise((resolve) => server.close(resolve)));
+  const path = "/carriers/cosco-shipping-lines.png";
+  const source = await readFile(new URL(`../public${path}`, import.meta.url));
+  const url = `http://127.0.0.1:${server.address().port}${path}`;
+  const response = await fetch(url);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("cache-control"), "no-cache, must-revalidate");
+  assert.equal(response.headers.get("content-encoding"), null);
+  assert.equal(Number(response.headers.get("content-length")), source.length);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), source);
+  const etag = response.headers.get("etag");
+  assert.ok(etag);
+  const head = await fetch(url, { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-type"), "image/png");
+  assert.equal(Number(head.headers.get("content-length")), source.length);
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
+  const cached = await fetch(url, { headers: { "If-None-Match": etag } });
+  assert.equal(cached.status, 304);
+  assert.equal(cached.headers.get("content-type"), "image/png");
+  assert.equal((await cached.arrayBuffer()).byteLength, 0);
+});
 
 test("mutable public stylesheet and module names never receive immutable caching", () => {
   for (const path of [

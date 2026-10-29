@@ -35,7 +35,7 @@ test("external and browser-normalized authority paths never become tracking retu
     assert.equal(localReturnPath(value), "");
 });
 
-test("tracking return click uses the boundary and preserves existing history/default fallback", async () => {
+test("workspace home follows the rendered role destination and ignores returnTo and history", async () => {
   const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   const start = source.indexOf(
     'document.querySelector("#portal-return-link")?.addEventListener("click", (event) => {'
@@ -67,27 +67,31 @@ test("tracking return click uses the boundary and preserves existing history/def
     localReturnPath,
     showPlatformRouteWait: () => {}
   });
-  const click = () =>
+  const click = (href = "http://localhost/workbenches", modifiers = {}) =>
     handler({
       button: 0,
-      currentTarget: { href: "http://localhost/customers" },
-      preventDefault() {}
+      currentTarget: { href },
+      preventDefault() {},
+      ...modifiers
     });
   const returnTo = "/business/cargo/A%2FB?filter=active#files";
   window.location.search = `?${new URLSearchParams({ returnTo })}`;
   click();
-  assert.deepEqual(assigned, [returnTo]);
+  assert.deepEqual(assigned, ["http://localhost/workbenches"]);
   window.location.search = `?${new URLSearchParams({ returnTo: "/\\external.invalid/" })}`;
   click();
-  assert.equal(back, 1);
-  assert.equal(assigned.length, 1);
+  assert.equal(back, 0);
+  assert.deepEqual(assigned, ["http://localhost/workbenches", "http://localhost/workbenches"]);
   window.history.length = 1;
-  click();
-  assert.equal(assigned.at(-1), "http://localhost/customers");
-  assert.equal(back, 1);
+  click("http://localhost/");
+  assert.equal(assigned.at(-1), "http://localhost/");
+  assert.equal(back, 0);
+  click("http://localhost/workbenches", { ctrlKey: true });
+  click("http://localhost/workbenches", { button: 1 });
+  assert.equal(assigned.length, 3, "modified clicks retain normal browser behavior");
 });
 
-test("actual static router serves the return module imported by the module-script entry", async (context) => {
+test("actual static router serves the navigation module imported by the module-script entry", async (context) => {
   const staticRouter = createStaticRouter({
     publicDir: fileURLToPath(new URL("../public/", import.meta.url))
   });
@@ -109,17 +113,15 @@ test("actual static router serves the return module imported by the module-scrip
   const appResponse = await fetch(new URL(entry, `${origin}/`));
   assert.equal(appResponse.status, 200);
   const app = await appResponse.text();
-  const dependency = app.match(/import \{ localReturnPath \} from "([^"]+)";/)?.[1];
-  assert.ok(dependency, "tracking entry imports its return guard");
+  const dependency = app.match(
+    /import \{ renderTrackingWorkspaceNavigation \} from "([^"]+)";/
+  )?.[1];
+  assert.ok(dependency, "tracking entry imports its executable navigation module");
   const response = await fetch(new URL(dependency, appResponse.url));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /^text\/javascript/);
   const served = await import(
     `data:text/javascript;base64,${Buffer.from(await response.text()).toString("base64")}`
   );
-  assert.equal(
-    served.localReturnPath("/business/cargo/S1?tab=files#documents"),
-    "/business/cargo/S1?tab=files#documents"
-  );
-  assert.equal(served.localReturnPath("/\\external.invalid/"), "");
+  assert.equal(typeof served.renderTrackingWorkspaceNavigation, "function");
 });

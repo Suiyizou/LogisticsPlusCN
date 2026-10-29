@@ -3,22 +3,7 @@
     <aside class="portal-sidebar">
       <BrandLockup href="/workbenches" compact inverse />
       <p class="portal-sidebar-label">{{ t("maritime.operations") }}</p>
-      <nav :aria-label="t('portal.sectionAria')">
-        <RouterLink to="/workbenches" class="is-active" aria-current="page"
-          ><el-icon><Grid /></el-icon><span>{{ t("maritime.workspace") }}</span></RouterLink
-        ><RouterLink to="/planner/cargos"
-          ><el-icon><Box /></el-icon><span>{{ wt("workbenchPlannerTitle") }}</span></RouterLink
-        ><a :href="trackingWorkbenchUrl" target="_blank" rel="noopener noreferrer"
-          ><el-icon><Location /></el-icon><span>{{ wt("workbenchTrackingTitle") }}</span></a
-        ><RouterLink
-          v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
-          to="/customers"
-          ><el-icon><Document /></el-icon
-          ><span>{{ wt("workbenchCustomersTitle") }}</span></RouterLink
-        ><RouterLink v-if="currentUser?.role === 'ADMIN'" to="/admin"
-          ><el-icon><Setting /></el-icon><span>{{ t("portal.adminConsole") }}</span></RouterLink
-        >
-      </nav>
+      <WorkspaceNavigation :role="currentUser?.role" />
       <div class="portal-sidebar-user">
         <strong>{{ displayName }}</strong
         ><small>{{ roleLabel }}</small>
@@ -301,10 +286,10 @@
 
 <script setup>
 import { wt } from "./workspace/workspaceCopy";
+import WorkspaceNavigation from "./workspace/WorkspaceNavigation.vue";
 import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
 import WorkbenchEntryCard from "./workspace/WorkbenchEntryCard.vue";
 import BrandLockup from "./brand/BrandLockup.vue";
-import { Grid, Box, Location, Document, Setting } from "@element-plus/icons-vue";
 import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";

@@ -26,7 +26,9 @@
     <link rel="stylesheet" href="./brand-tokens.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./tracking-refinement.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./tracking-composition.css?v=maritime-comp-20261028" />
-    <script src="./app.js?v=maritime-v2-20261028-r3" type="module"></script>
+    <link rel="stylesheet" href="./tracking-milestones.css?v=carrier-workspace-20261029" />
+    <link rel="stylesheet" href="./workspace-navigation.css?v=carrier-workspace-20261029" />
+    <script src="./app.js?v=carrier-workspace-20261029" type="module"></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -719,24 +721,6 @@
                     <option value="OOCL">OOCL</option>
                   </select>
                 </div>
-                <div class="field channel-field internal-query-channel">
-                  <label for="channel-select" data-i18n="query.channel">Query channel</label>
-                  <select id="channel-select" name="channel">
-                    <option value="AUTO" data-i18n="channel.auto">
-                      Automatic · API first, DOM fallback
-                    </option>
-                    <option value="NETWORK" data-i18n="channel.network">
-                      Channel 1 · Network interface
-                    </option>
-                    <option value="PLAYWRIGHT" data-i18n="channel.playwright">
-                      Channel 2 · Playwright browser
-                    </option>
-                    <option value="PROXY" data-i18n="channel.proxy">
-                      Proxy · Alternate outbound IP
-                    </option>
-                    <option value="AGENT">AI Agent</option>
-                  </select>
-                </div>
                 <div class="field type-field">
                   <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
                   <select id="tracking-type" name="type">
@@ -1033,7 +1017,13 @@
             </section>
 
             <section class="empty-state" id="empty-state">
-              <div class="empty-icon">↗</div>
+              <div class="empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 64 64">
+                  <path
+                    d="M11 37h42l-7 12H18zM21 37V19h22v18M21 27h22M32 19v18M27 19v-7h10v7M7 54c5-3 9-3 14 0 5-3 9-3 14 0 5-3 9-3 14 0 3-2 5-2 8-1"
+                  />
+                </svg>
+              </div>
               <div>
                 <strong data-i18n="empty.title">Ready when you are</strong>
                 <p data-i18n="empty.description">
@@ -1046,7 +1036,10 @@
               <section class="shipment-summary-card">
                 <div class="result-titlebar">
                   <div class="result-identity">
-                    <span class="result-carrier" id="result-carrier">COSCO</span>
+                    <span class="result-carrier-brand" id="result-carrier-brand">
+                      <img id="result-carrier-logo" class="result-carrier-logo" alt="" hidden />
+                      <span class="result-carrier" id="result-carrier">COSCO SHIPPING</span>
+                    </span>
                     <span>
                       <small class="result-type" id="result-type">Bill of lading</small>
                       <h2 id="result-number">—</h2>
@@ -1074,11 +1067,29 @@
                   </button>
                   <div class="result-meta">
                     <span id="cache-status">Live result</span>
-                    <time id="fetched-at">—</time>
+                    <span class="result-sync"
+                      ><span data-i18n="result.synced">Last synced</span>
+                      <time id="fetched-at">—</time></span
+                    >
                   </div>
                 </div>
 
                 <div class="shipment-summary-grid">
+                  <section
+                    class="journey-overview"
+                    id="journey-overview"
+                    aria-label="Latest reported status"
+                  >
+                    <div class="journey-stage-summary">
+                      <span class="journey-pulse"><i></i></span>
+                      <span>
+                        <small data-i18n="journey.currentStage">LATEST REPORTED STATUS</small>
+                        <strong id="journey-stage">—</strong>
+                        <em id="summary-latest-detail">—</em>
+                      </span>
+                    </div>
+                  </section>
+
                   <div class="summary-route-pair">
                     <div>
                       <i></i>
@@ -1107,21 +1118,6 @@
                     </div>
                   </div>
 
-                  <section
-                    class="journey-overview"
-                    id="journey-overview"
-                    aria-label="Journey progress"
-                  >
-                    <div class="journey-stage-summary">
-                      <span class="journey-pulse"><i></i></span>
-                      <span>
-                        <small data-i18n="journey.currentStage">Current stage</small>
-                        <strong id="journey-stage">—</strong>
-                        <em id="summary-latest-detail">—</em>
-                      </span>
-                    </div>
-                  </section>
-
                   <div class="summary-services" id="summary-services">
                     <small data-i18n="summary.services">Selected services</small>
                     <div>
@@ -1145,7 +1141,9 @@
               <section class="metric-grid" id="metric-grid" aria-label="Key shipment events">
                 <article class="metric-card departure-card" id="departure-metric-card">
                   <div class="metric-head">
-                    <span class="metric-icon">↗</span>
+                    <span class="metric-icon" aria-hidden="true"
+                      ><svg viewBox="0 0 24 24"><path d="M5 19 19 5M7 5h12v12" /></svg
+                    ></span>
                     <p id="departure-metric-label" data-i18n="metrics.actualDeparture">
                       Actual departure
                     </p>
@@ -1155,7 +1153,9 @@
                 </article>
                 <article class="metric-card arrival-card" id="arrival-metric-card">
                   <div class="metric-head">
-                    <span class="metric-icon">↘</span>
+                    <span class="metric-icon" aria-hidden="true"
+                      ><svg viewBox="0 0 24 24"><path d="m5 5 14 14M7 19h12V7" /></svg
+                    ></span>
                     <p id="arrival-metric-label" data-i18n="metrics.actualArrival">
                       Actual arrival
                     </p>
@@ -1165,8 +1165,14 @@
                 </article>
                 <article class="metric-card estimate-card" id="delivery-metric-card">
                   <div class="metric-head">
-                    <span class="metric-icon">◷</span>
-                    <p data-i18n="metrics.estimatedDelivery">Estimated final delivery</p>
+                    <span class="metric-icon" aria-hidden="true"
+                      ><svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8" />
+                        <path d="M12 7v5l3 2" /></svg
+                    ></span>
+                    <p id="delivery-metric-label" data-i18n="metrics.estimatedDelivery">
+                      Estimated final delivery
+                    </p>
                   </div>
                   <strong id="estimated-delivery">—</strong>
                   <span id="estimated-delivery-location">Not provided</span>
@@ -1190,8 +1196,11 @@
                 <section class="panel route-panel" id="route-panel">
                   <div class="panel-header">
                     <div>
-                      <span class="panel-icon">⌖</span>
-                      <strong data-i18n="route.title">Route story</strong>
+                      <span class="panel-icon" aria-hidden="true"
+                        ><svg viewBox="0 0 24 24">
+                          <path d="M4 6h6v6H4zM14 12h6v6h-6zM10 9h7v3M7 12v6h7" /></svg
+                      ></span>
+                      <strong data-i18n="route.title">Shipment milestones</strong>
                     </div>
                     <span id="route-count">0 nodes</span>
                   </div>
@@ -1204,15 +1213,11 @@
                       >
                       <span id="origin-code">—</span>
                     </div>
-                    <div
-                      class="route-summary-line"
-                      id="route-summary-line"
-                      role="progressbar"
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                      aria-valuenow="0"
-                    >
-                      <i></i><span id="route-summary-marker" aria-hidden="true">◭</span>
+                    <div class="route-summary-line" id="route-summary-line" aria-hidden="true">
+                      <i></i
+                      ><span id="route-summary-marker" aria-hidden="true"
+                        ><svg viewBox="0 0 24 24"><path d="M4 12h16m-5-5 5 5-5 5" /></svg
+                      ></span>
                     </div>
                     <div>
                       <small data-i18n="route.destination">Destination</small>
@@ -1223,7 +1228,16 @@
                       <span id="destination-code">—</span>
                     </div>
                   </div>
-                  <div class="route-flow" id="route-flow"></div>
+                  <div
+                    class="route-flow"
+                    id="route-flow"
+                    role="list"
+                    data-i18n-aria-label="route.title"
+                    aria-label="Shipment milestones"
+                  ></div>
+                  <p class="route-source-note" data-i18n="route.sourceNote">
+                    Milestones reflect carrier reports. Estimated dates may change.
+                  </p>
                 </section>
 
                 <aside class="panel references-panel">
@@ -1282,7 +1296,10 @@
               <section class="panel table-panel routing-panel" id="routing-panel">
                 <div class="panel-header">
                   <div>
-                    <span class="panel-icon">⇄</span>
+                    <span class="panel-icon" aria-hidden="true"
+                      ><svg viewBox="0 0 24 24">
+                        <path d="M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4" /></svg
+                    ></span>
                     <strong data-i18n="routing.title">Routing legs</strong>
                   </div>
                   <span id="routing-count">0 legs</span>
@@ -1316,7 +1333,11 @@
                 <section class="panel table-panel" id="container-panel">
                   <div class="panel-header">
                     <div>
-                      <span class="panel-icon">▣</span>
+                      <span class="panel-icon" aria-hidden="true"
+                        ><svg viewBox="0 0 24 24">
+                          <rect x="3" y="5" width="18" height="14" rx="1" />
+                          <path d="M7 5v14M12 5v14M17 5v14" /></svg
+                      ></span>
                       <strong data-i18n="containers.title">Transport details</strong>
                     </div>
                     <span id="container-count">0 containers</span>

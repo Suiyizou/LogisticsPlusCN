@@ -18,7 +18,11 @@ export const MIME_TYPES = Object.freeze({
   ".ttf": "font/ttf",
   ".icc": "application/vnd.iccprofile",
   ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp"
 });
 const COMPRESSIBLE_EXTENSIONS = new Set([".css", ".html", ".js", ".mjs", ".json", ".svg"]);
 // Plain names such as design-system.css are mutable source assets, not hashes.

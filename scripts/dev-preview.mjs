@@ -20,6 +20,8 @@ const composeArgs = [
   path.join(root, "docker-compose.dev-preview.yml")
 ];
 const action = process.argv[2] || "status";
+const llmOverlayArgs = ["-f", path.join(root, "docker/dev-preview/llm-relay.compose.yml")];
+if (process.argv.includes("--llm-relay")) composeArgs.push(...llmOverlayArgs);
 const sqlPath = path.resolve(
   process.argv.find((arg) => arg.startsWith("--sql="))?.slice(6) ||
     "C:/Users/ASUS/Desktop/cargo_planner.sql"
@@ -267,14 +269,46 @@ async function start() {
   await status();
 }
 try {
-  if (action === "start") await start();
+  if (action === "llm-on") {
+    if (!(await exists(envFile))) throw new Error("Preview not initialized; run start.");
+    if (!process.argv.includes("--llm-relay")) composeArgs.push(...llmOverlayArgs);
+    const networks = JSON.parse(
+      await run(["network", "ls", "--format", "json"], { capture: true }).then(
+        (output) => `[${output.trim().split(/\r?\n/).join(",")}]`
+      )
+    );
+    for (const network of networks.filter((item) => item.Name !== "cargo-ui-preview-llm")) {
+      const inspected = JSON.parse(
+        await run(["network", "inspect", network.ID], { capture: true })
+      )[0];
+      for (const config of inspected.IPAM?.Config || []) {
+        if (/^172\.30\./.test(config.Subnet || ""))
+          throw new Error(
+            "Review existing 172.30.* network before enabling the fixed preview LLM subnet."
+          );
+      }
+    }
+    await compose(["up", "--detach", "--no-deps", "llm-relay"]);
+    await compose(["up", "--detach", "--no-deps", "--force-recreate", "backend"]);
+    await waitHealthy("backend", 200);
+    console.log(
+      "Preview LLM TLS relay enabled for api.deepseek.com:443 only; backend remains on internal networks."
+    );
+  } else if (action === "llm-off") {
+    if (process.argv.includes("--llm-relay")) throw new Error("Omit --llm-relay for llm-off.");
+    await compose(["up", "--detach", "--no-deps", "--force-recreate", "backend"]);
+    await waitHealthy("backend", 200);
+    await run([...composeArgs, ...llmOverlayArgs, "rm", "--stop", "--force", "llm-relay"]);
+    await run(["network", "rm", "cargo-ui-preview-llm"]);
+    console.log("Preview LLM relay removed; data volumes were retained.");
+  } else if (action === "start") await start();
   else if (action === "status") {
     if (!(await exists(envFile))) throw new Error("Preview not initialized; run start.");
     await status();
   } else if (action === "stop") await compose(["stop"]);
   else
     throw new Error(
-      "Usage: node scripts/dev-preview.mjs start|status|stop [--sql=C:/path/cargo_planner.sql] [--no-build]"
+      "Usage: node scripts/dev-preview.mjs start|status|stop|llm-on|llm-off [--sql=C:/path/cargo_planner.sql] [--no-build] [--llm-relay]"
     );
 } catch (error) {
   console.error(error.message);

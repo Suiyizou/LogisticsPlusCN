@@ -6,48 +6,6 @@
       :description="wt('importCargoHint')"
     />
 
-    <div class="excel-import-mode-switch" role="tablist" :aria-label="ui('excel.importModeChoice')">
-      <el-button
-        id="quick-import-tab"
-        ref="quickImportTab"
-        size="large"
-        :type="excelMode === 'manual' ? 'primary' : 'default'"
-        :plain="excelMode !== 'manual'"
-        :disabled="importBusy"
-        role="tab"
-        aria-controls="cargo-import-panel"
-        :aria-selected="excelMode === 'manual'"
-        :tabindex="excelMode === 'manual' ? 0 : -1"
-        @click="switchExcelMode('manual')"
-        @keydown.left.prevent="selectImportModeFromKeyboard('recognition')"
-        @keydown.right.prevent="selectImportModeFromKeyboard('recognition')"
-        @keydown.home.prevent="selectImportModeFromKeyboard('manual')"
-        @keydown.end.prevent="selectImportModeFromKeyboard('recognition')"
-      >
-        {{ ui("excel.manualImport") }}
-      </el-button>
-      <el-button
-        id="smart-import-tab"
-        ref="smartImportTab"
-        size="large"
-        :type="excelMode === 'recognition' ? 'primary' : 'default'"
-        :plain="excelMode !== 'recognition'"
-        :disabled="importBusy"
-        role="tab"
-        aria-controls="cargo-import-panel"
-        :aria-selected="excelMode === 'recognition'"
-        :tabindex="excelMode === 'recognition' ? 0 : -1"
-        @click="switchExcelMode('recognition')"
-        @keydown.left.prevent="selectImportModeFromKeyboard('manual')"
-        @keydown.right.prevent="selectImportModeFromKeyboard('manual')"
-        @keydown.home.prevent="selectImportModeFromKeyboard('manual')"
-        @keydown.end.prevent="selectImportModeFromKeyboard('recognition')"
-      >
-        <span class="hollow-star button-star" aria-hidden="true">☆</span>
-        {{ ui("excel.smartRecognition") }}
-      </el-button>
-    </div>
-
     <div class="excel-workspace-layout">
       <div class="excel-main-pane">
         <div
@@ -214,6 +172,7 @@
             </div>
             <div class="recognition-actions">
               <input
+                v-if="!sourceFile"
                 ref="preciseFileInput"
                 hidden
                 type="file"
@@ -221,22 +180,28 @@
                 :accept="WORKBOOK_FILE_ACCEPT"
                 @change="handlePreciseFile"
               />
-              <el-button type="primary" :loading="preciseImportBusy" @click="openPreciseFilePicker">
+              <el-button
+                v-if="!coordinated && !sourceFile"
+                type="primary"
+                :loading="preciseImportBusy"
+                @click="openPreciseFilePicker"
+              >
                 {{ ui("common.chooseFile") }}
               </el-button>
-              <el-button @click="openWorkspaceFiles('recognition')">{{
+              <el-button v-if="!sourceFile" @click="openWorkspaceFiles('recognition')">{{
                 ui("excel.workspaceFiles")
               }}</el-button>
-              <el-button :disabled="importBusy" @click="fillRecognitionSample">{{
+              <el-button v-if="!sourceFile" :disabled="importBusy" @click="fillRecognitionSample">{{
                 ui("common.useSample")
               }}</el-button>
-              <el-button :disabled="importBusy" @click="clearRecognition">{{
+              <el-button v-if="!sourceFile" :disabled="importBusy" @click="clearRecognition">{{
                 ui("common.clear")
               }}</el-button>
             </div>
           </div>
 
           <div
+            v-if="!coordinated && !sourceFile"
             class="excel-drop-zone"
             :class="{ active: preciseDropActive }"
             role="button"
@@ -263,7 +228,7 @@
             <span class="excel-drop-formats">XLSX / XLS / CSV / TSV</span>
           </div>
 
-          <div v-if="preciseFileQueue.length" class="import-file-queue">
+          <div v-if="!sourceFile && preciseFileQueue.length" class="import-file-queue">
             <header>
               <strong>{{ ui("excel.fileQueue") }}</strong>
               <span>{{ ui("excel.smartQueueHint") }}</span>
@@ -298,31 +263,33 @@
             </div>
           </div>
 
-          <div class="recognition-text-divider">
-            <span>{{ ui("excel.orPasteText") }}</span>
-          </div>
-          <el-input
-            v-model="recognitionText"
-            type="textarea"
-            :disabled="importBusy"
-            @input="resetRecognitionResult"
-            :rows="7"
-            :placeholder="t('smartImport.recognitionPlaceholder')"
-          />
-          <div class="recognition-submit-row">
-            <el-button
-              type="primary"
-              :disabled="!recognitionText.trim() || importBusy"
-              :loading="recognitionAgentBusy"
-              @click="submitTextRecognitionTask"
-            >
-              <span class="hollow-star button-star" aria-hidden="true">☆</span>
-              {{
-                recognitionAgentBusy ? ui("excel.recognizing") : ui("excel.startSmartRecognition")
-              }}
-            </el-button>
-          </div>
-
+          <details v-if="!sourceFile" class="recognition-optional-text">
+            <summary>{{ ui("excel.orPasteText") }}</summary>
+            <div class="recognition-text-divider">
+              <span>{{ ui("excel.orPasteText") }}</span>
+            </div>
+            <el-input
+              v-model="recognitionText"
+              type="textarea"
+              :disabled="importBusy"
+              @input="resetRecognitionResult"
+              :rows="7"
+              :placeholder="t('smartImport.recognitionPlaceholder')"
+            />
+            <div class="recognition-submit-row">
+              <el-button
+                type="primary"
+                :disabled="!recognitionText.trim() || importBusy"
+                :loading="recognitionAgentBusy"
+                @click="submitTextRecognitionTask"
+              >
+                <span class="hollow-star button-star" aria-hidden="true">☆</span>
+                {{
+                  recognitionAgentBusy ? ui("excel.recognizing") : ui("excel.startSmartRecognition")
+                }}
+              </el-button>
+            </div>
+          </details>
           <div v-if="recognitionAgentBusy" class="recognition-loading-panel">
             <span class="recognition-loader"></span>
             <div>
@@ -727,7 +694,7 @@
                 <el-button link type="primary" @click="previewWorkspaceFile(file)">{{
                   ui("excel.previewWorkbook")
                 }}</el-button>
-                <el-button link type="primary" @click="useWorkspaceFile(file)">{{
+                <el-button v-if="!sourceFile" link type="primary" @click="useWorkspaceFile(file)">{{
                   ui(
                     workspaceFilesTargetMode === "recognition"
                       ? "excel.useForSmartImport"
@@ -1253,13 +1220,16 @@ import {
   supportsCreatedRecognitionTask
 } from "../services/packingReconciliation";
 
-const emit = defineEmits(["import-cargos"]);
+const emit = defineEmits(["import-cargos", "review-change"]);
 const props = defineProps({
   currentCargoCount: {
     type: Number,
     default: 0
   },
-  reviewSource: { type: Object, default: null }
+  reviewSource: { type: Object, default: null },
+  coordinated: { type: Boolean, default: false },
+  sourceFile: { type: Object, default: null },
+  externalImportBlocked: { type: Boolean, default: false }
 });
 
 function tr(value) {
@@ -1285,7 +1255,7 @@ const recognitionWorkbook = ref(null);
 const selectedSheetName = ref("");
 const activeSheet = ref(null);
 const preview = ref(null);
-const excelMode = ref("manual");
+const excelMode = ref("recognition");
 const recognitionText = ref("");
 const recognitionPreview = ref(null);
 const recognitionMessage = ref("");
@@ -1405,7 +1375,10 @@ const manualPackingReview = computed(() =>
   })
 );
 const manualCanImport = computed(
-  () => approvedAggregated.value.length > 0 && manualPackingReview.value.canImport
+  () =>
+    !props.externalImportBlocked &&
+    approvedAggregated.value.length > 0 &&
+    manualPackingReview.value.canImport
 );
 const approvedQuantity = computed(() =>
   approvedAggregated.value.reduce((sum, cargo) => sum + Number(cargo.quantity || 0), 0)
@@ -1457,6 +1430,7 @@ const recognitionPackingReview = computed(() =>
 );
 const recognitionCanImport = computed(
   () =>
+    !props.externalImportBlocked &&
     recognitionHasResult.value &&
     !recognitionBlockingIssues.value.length &&
     recognitionPackingReview.value.canImport
@@ -1692,34 +1666,42 @@ let manualDragDepth = 0;
 let preciseDragDepth = 0;
 let preciseProcessSeq = 0;
 let workspacePreviewSeq = 0;
+let componentActive = true;
+let recognitionRunVersion = 0;
 
 function openManualFilePicker() {
+  if (props.sourceFile) return;
   manualFileInput.value?.click();
 }
 
 function openPreciseFilePicker() {
+  if (props.sourceFile) return;
   preciseFileInput.value?.click();
 }
 
 function handleFile(event) {
+  if (props.sourceFile) return;
   const files = Array.from(event.target.files || []);
   event.target.value = "";
   enqueueManualFiles(files);
 }
 
 function handlePreciseFile(event) {
+  if (props.sourceFile) return;
   const files = Array.from(event.target.files || []);
   event.target.value = "";
   enqueuePreciseFiles(files);
 }
 
 function handleManualDragEnter(event) {
+  if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   manualDragDepth += 1;
   manualDropActive.value = true;
 }
 
 function handleManualDragOver(event) {
+  if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
   manualDropActive.value = true;
@@ -1732,6 +1714,7 @@ function handleManualDragLeave() {
 }
 
 async function handleManualDrop(event) {
+  if (props.sourceFile) return;
   manualDragDepth = 0;
   manualDropActive.value = false;
   const files = Array.from(event.dataTransfer?.files || []);
@@ -1740,12 +1723,14 @@ async function handleManualDrop(event) {
 }
 
 function handlePreciseDragEnter(event) {
+  if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   preciseDragDepth += 1;
   preciseDropActive.value = true;
 }
 
 function handlePreciseDragOver(event) {
+  if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
   preciseDropActive.value = true;
@@ -1758,6 +1743,7 @@ function handlePreciseDragLeave() {
 }
 
 async function handlePreciseDrop(event) {
+  if (props.sourceFile) return;
   preciseDragDepth = 0;
   preciseDropActive.value = false;
   const files = Array.from(event.dataTransfer?.files || []);
@@ -1766,6 +1752,7 @@ async function handlePreciseDrop(event) {
 }
 
 function enqueueManualFiles(files) {
+  if (props.sourceFile) return;
   const items = appendQueueFiles(manualFileQueue, files, "manual");
   if (!items.length) return;
   void persistWorkspaceQueueItems(items, "QUICK_IMPORT");
@@ -1773,6 +1760,7 @@ function enqueueManualFiles(files) {
 }
 
 function enqueuePreciseFiles(files) {
+  if (props.sourceFile) return;
   const items = appendQueueFiles(preciseFileQueue, files, "recognition");
   if (!items.length) return;
   void persistWorkspaceQueueItems(items, "AGENT_IMPORT");
@@ -1879,6 +1867,7 @@ function selectManualQueueItem(item) {
 }
 
 function applyManualSnapshot(snapshot, previewIdentity = "") {
+  if (props.sourceFile) return;
   if (!snapshot) return;
   previewSeq += 1;
   workbookVersion += 1;
@@ -1913,6 +1902,7 @@ function syncActiveManualQueueSnapshot() {
 }
 
 async function processPreciseQueueItem(item) {
+  if (props.sourceFile && item?.file !== props.sourceFile) return false;
   if (!item || preciseQueueProcessing.value || item.status === "processing") return;
   if (activePreciseFileId.value && activePreciseFileId.value !== item.id) {
     syncActivePreciseQueueSnapshot();
@@ -1968,6 +1958,7 @@ function capturePreciseSnapshot(file) {
 }
 
 function selectPreciseQueueItem(item) {
+  if (props.sourceFile) return;
   if (!item?.snapshot || preciseQueueProcessing.value) return;
   if (activePreciseFileId.value && activePreciseFileId.value !== item.id) {
     syncActivePreciseQueueSnapshot();
@@ -1977,6 +1968,7 @@ function selectPreciseQueueItem(item) {
 }
 
 function applyPreciseSnapshot(snapshot, previewIdentity = "") {
+  if (props.sourceFile && snapshot?.file !== props.sourceFile) return false;
   if (!snapshot) return;
   sourceWorkbookFile.value = snapshot.file;
   recognitionWorkbook.value = snapshot.workbook;
@@ -2054,6 +2046,7 @@ function clearRecognitionStatus() {
 }
 
 async function loadWorkbookFile(file) {
+  if (props.sourceFile) return;
   if (!isSupportedWorkbookFile(file)) {
     showManualFileError("excel.dropUnsupportedFile", { name: file?.name || "-" });
     return;
@@ -2081,14 +2074,17 @@ async function loadWorkbookFile(file) {
 }
 
 async function loadWorkbookFileForRecognition(file, context = {}) {
-  const shouldApply = typeof context.shouldApply === "function" ? context.shouldApply : () => true;
+  if (props.sourceFile && file !== props.sourceFile) return false;
+  const callerShouldApply =
+    typeof context.shouldApply === "function" ? context.shouldApply : () => true;
+  if (!componentActive || !callerShouldApply()) return false;
   if (!isSupportedWorkbookFile(file)) {
-    if (shouldApply()) {
-      setRecognitionStatus("error", "excel.dropUnsupportedFile", { name: file?.name || "-" });
-    }
-    return shouldApply();
+    setRecognitionStatus("error", "excel.dropUnsupportedFile", { name: file?.name || "-" });
+    return true;
   }
-  if (!shouldApply()) return false;
+  const runVersion = ++recognitionRunVersion;
+  const shouldApply = () =>
+    componentActive && runVersion === recognitionRunVersion && callerShouldApply();
   preciseImportBusy.value = true;
   sourceWorkbookFile.value = file;
   recognitionWorkbook.value = null;
@@ -2111,6 +2107,7 @@ async function loadWorkbookFileForRecognition(file, context = {}) {
       file,
       sourceName: file?.name || ui("excel.excelFormattedSource"),
       keepTimer: true,
+      requestVersion: runVersion,
       shouldApply
     });
     return applied !== false && shouldApply();
@@ -2119,8 +2116,10 @@ async function loadWorkbookFileForRecognition(file, context = {}) {
     setRecognitionStatus("error", "excel.excelAgentFailed");
     return true;
   } finally {
-    preciseImportBusy.value = false;
-    if (!recognitionAgentBusy.value) stopRecognitionTimer();
+    if (runVersion === recognitionRunVersion && componentActive) {
+      preciseImportBusy.value = false;
+      if (!recognitionAgentBusy.value) stopRecognitionTimer();
+    }
   }
 }
 
@@ -2168,6 +2167,7 @@ function applyBackendImportResult(result, file) {
 
 function switchExcelMode(mode) {
   const nextMode = mode === "agent" ? "recognition" : mode;
+  if (props.sourceFile && nextMode !== "recognition") return;
   if (importBusy.value || !["manual", "recognition"].includes(nextMode)) return;
   manualDragDepth = 0;
   preciseDragDepth = 0;
@@ -2312,9 +2312,20 @@ function resetRecognitionResult() {
 }
 
 async function submitTextRecognitionTask(options = {}) {
+  if (props.sourceFile && options.file !== props.sourceFile) return false;
   const text = String(options.textOverride ?? recognitionText.value).trim();
-  const shouldApply = typeof options.shouldApply === "function" ? options.shouldApply : () => true;
-  if ((!options.file && !text) || !shouldApply()) return false;
+  const callerShouldApply =
+    typeof options.shouldApply === "function" ? options.shouldApply : () => true;
+  if ((!options.file && !text) || !componentActive || !callerShouldApply()) return false;
+  const runVersion = options.requestVersion ?? ++recognitionRunVersion;
+  const shouldApply = () =>
+    componentActive && runVersion === recognitionRunVersion && callerShouldApply();
+  if (!shouldApply()) return false;
+  if (!options.file) {
+    sourceWorkbookFile.value = null;
+    recognitionWorkbook.value = null;
+    clearWorkbookPreview();
+  }
   if (!options.keepTimer) startRecognitionTimer();
   recognitionAgentBusy.value = true;
   clearRecognitionStatus();
@@ -2372,8 +2383,10 @@ async function submitTextRecognitionTask(options = {}) {
     closeRecognitionReviewDialog();
     return true;
   } finally {
-    recognitionAgentBusy.value = false;
-    stopRecognitionTimer();
+    if (runVersion === recognitionRunVersion && componentActive) {
+      recognitionAgentBusy.value = false;
+      stopRecognitionTimer();
+    }
   }
 }
 
@@ -2548,6 +2561,7 @@ function downloadBrowserFile(file) {
 }
 
 async function openWorkspaceFiles(mode = "manual") {
+  if (props.sourceFile) return;
   workspaceFilesTargetMode.value = mode === "recognition" ? "recognition" : "manual";
   workspaceFilesOpen.value = true;
   await loadWorkspaceFiles();
@@ -2569,6 +2583,7 @@ async function loadWorkspaceFiles() {
 }
 
 async function useWorkspaceFile(item) {
+  if (props.sourceFile) return;
   workspacePreviewSeq += 1;
   workspaceFilesBusy.value = true;
   workspaceFilesError.value = "";
@@ -2661,6 +2676,24 @@ function displayWorkspaceTime(value) {
   }).format(date);
 }
 
+watch(
+  [recognitionAgentTask, recognitionRows, importBusy],
+  () =>
+    emit("review-change", {
+      task: recognitionAgentTask.value,
+      rows: recognitionRows.value,
+      busy: importBusy.value
+    }),
+  { deep: true, immediate: true }
+);
+watch(
+  () => props.sourceFile,
+  (file) => {
+    if (file) loadWorkbookFileForRecognition(file);
+  },
+  { immediate: true }
+);
+
 watch(approvedAggregated, () => {
   manualVolumeConfirmed.value = false;
 });
@@ -2671,6 +2704,10 @@ watch(
   () => props.reviewSource,
   (source) => {
     if (!source?.preview || !source?.workbook) return;
+    if (props.coordinated) {
+      if (source.file && !props.sourceFile) loadWorkbookFileForRecognition(source.file);
+      return;
+    }
     excelMode.value = "manual";
     const sheet = source.workbook.sheets?.[0];
     applyManualSnapshot({
@@ -2692,12 +2729,15 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  componentActive = false;
   preciseProcessSeq += 1;
   workspacePreviewSeq += 1;
   stopRecognitionTimer();
 });
 
 function fillRecognitionSample() {
+  if (props.sourceFile) return;
+  recognitionRunVersion += 1;
   sourceWorkbookFile.value = null;
   recognitionWorkbook.value = null;
   clearWorkbookPreview();
@@ -2712,6 +2752,8 @@ function fillRecognitionSample() {
 }
 
 function clearRecognition() {
+  if (props.sourceFile) return;
+  recognitionRunVersion += 1;
   sourceWorkbookFile.value = null;
   recognitionWorkbook.value = null;
   clearWorkbookPreview();

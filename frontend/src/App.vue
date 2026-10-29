@@ -63,6 +63,7 @@
 
         <div class="app-body" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
           <PlannerSidebar
+            :role="currentUser?.role"
             :collapsed="sidebarCollapsed"
             :display-name="userDisplayName"
             :cargo-count="cargos.length"
@@ -366,29 +367,8 @@
                           <strong>常用工具</strong>
                           <div class="config-tool-grid">
                             <el-button :icon="Star" @click="smartImportOpen = !smartImportOpen">{{
-                              smartImportOpen ? "收起智能导入" : "智能/Excel 导入"
+                              smartImportOpen ? ui("app.hideSmartImport") : wt("smartImportTitle")
                             }}</el-button>
-                            <el-select
-                              popper-class="business-select-popper workspace-select-popper"
-                              v-model="quickImportMode"
-                              class="quick-import-mode"
-                              :aria-label="ui('excel.importMode')"
-                              :disabled="fileImporting"
-                            >
-                              <el-option :label="ui('excel.appendCargo')" value="append" />
-                              <el-option :label="ui('excel.replaceCargo')" value="replace" />
-                            </el-select>
-                            <el-upload
-                              :auto-upload="false"
-                              :show-file-list="false"
-                              accept=".xlsx,.xls,.csv,.tsv,text/csv"
-                              :disabled="fileImporting"
-                              :on-change="handleWorkbookQuickUpload"
-                            >
-                              <el-button :icon="Upload" :loading="fileImporting"
-                                >导入 Excel</el-button
-                              >
-                            </el-upload>
                             <el-button :icon="Box" @click="openContainerModal">添加箱型</el-button>
                             <el-button :icon="MagicStick" @click="loadSample">套用示例</el-button>
                             <el-button :icon="Download" @click="exportCsv">导出 CSV</el-button>
@@ -483,7 +463,7 @@
                         v-if="smartImportOpen"
                         class="embedded-smart-import config-embedded-import"
                       >
-                        <ExcelTemplatePage
+                        <UnifiedSmartImport
                           key="config-smart-import"
                           :current-cargo-count="cargos.length"
                           :review-source="pendingImportReview"
@@ -614,26 +594,7 @@
                       </template>
                       <el-collapse-transition>
                         <div v-if="smartImportOpen" class="embedded-smart-import">
-                          <div class="smart-import-methods" data-i18n-ignore>
-                            <div>
-                              <strong>{{ wt("smartImportTitle") }}</strong>
-                              <p>{{ wt("smartImportHint") }}</p>
-                            </div>
-                            <el-radio-group v-model="smartImportKind">
-                              <el-radio-button value="workbook">{{
-                                wt("workbookImport")
-                              }}</el-radio-button>
-                              <el-radio-button value="image">{{
-                                wt("screenshotImport")
-                              }}</el-radio-button>
-                            </el-radio-group>
-                          </div>
-                          <ScreenshotImportReview
-                            v-if="smartImportKind === 'image'"
-                            @import-cargos="importExcelCargos"
-                          />
-                          <ExcelTemplatePage
-                            v-if="smartImportKind === 'workbook'"
+                          <UnifiedSmartImport
                             key="embedded-smart-import"
                             :current-cargo-count="cargos.length"
                             :review-source="pendingImportReview"
@@ -1463,8 +1424,7 @@ const lazyPage = (loader) =>
 const AdminDashboard = lazyPage(() => import("./components/AdminDashboard.vue"));
 const LoginPage = lazyPage(() => import("./components/LoginPage.vue"));
 const AlgorithmPage = lazyPage(() => import("./components/AlgorithmPage.vue"));
-const ScreenshotImportReview = lazyPage(() => import("./components/ScreenshotImportReview.vue"));
-const ExcelTemplatePage = lazyPage(() => import("./components/ExcelTemplatePage.vue"));
+const UnifiedSmartImport = lazyPage(() => import("./components/UnifiedSmartImport.vue"));
 const HomePage = lazyPage(() => import("./components/HomePage.vue"));
 const PublicLandingPage = lazyPage(() => import("./components/PublicLandingPage.vue"));
 const BusinessCustomerPage = lazyPage(() => import("./components/BusinessCustomerPage.vue"));
@@ -1646,7 +1606,13 @@ const showMassBalance = ref(readScenePreferences().showMassBalance);
 const cargoModalOpen = ref(false);
 const containerModalOpen = ref(false);
 const smartImportOpen = ref(false);
-const smartImportKind = ref("workbook");
+watch(
+  () => route.query.import,
+  (value) => {
+    if (value === "smart") smartImportOpen.value = true;
+  },
+  { immediate: true }
+);
 const cargoView = ref(readCargoView());
 const cargoViewOptions = computed(() => [
   { label: wt("cargoListView"), value: "list" },
@@ -1655,7 +1621,7 @@ const cargoViewOptions = computed(() => [
 watch(cargoView, saveCargoView);
 const pendingImportReview = ref(null);
 watch(pendingImportReview, (review) => {
-  if (review) smartImportKind.value = "workbook";
+  if (review) smartImportOpen.value = true;
 });
 const selectedCargoRows = ref<any[]>([]);
 const editingCargo = ref(null);

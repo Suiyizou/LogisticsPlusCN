@@ -237,6 +237,14 @@ test("every result element registered by the renderer exists in the page", () =>
   const missingIds = registeredIds.filter((id) => !pageIds.has(id));
 
   assert.deepEqual(missingIds, [], `renderer references missing DOM ids: ${missingIds.join(", ")}`);
+  const metricIds = [
+    ...appSource.matchAll(/(?:cardId|labelId|valueId|locationId): "([^"]+)"/g)
+  ].map((match) => match[1]);
+  assert.deepEqual(
+    metricIds.filter((id) => !registeredIds.includes(id)),
+    [],
+    "every time metric element must be registered before rendering stored results"
+  );
 });
 
 test("system announcements are audience-scoped, read-once, and safely rendered", () => {
@@ -475,17 +483,15 @@ test("customer history sends the chosen ETA sort to the server and retains serve
   assert.equal(context.historyLoadingState, false);
 });
 
-test("business users can explicitly select the alternate proxy channel", () => {
-  assert.match(
-    indexSource,
-    /class="field channel-field internal-query-channel"[\s\S]*?id="channel-select"[\s\S]*?<option value="PROXY"/
+test("ordinary tracking has no channel control and always submits automatic selection", () => {
+  assert.doesNotMatch(indexSource, /id="channel-select"|name="channel"/);
+  const submit = appSource.slice(
+    appSource.indexOf('form.addEventListener("submit"'),
+    appSource.indexOf("batchWorkspaceClose?.addEventListener")
   );
-  assert.match(appSource, /PROXY:[\s\S]*?labelKey: "channel\.proxy"/);
-  assert.match(
-    stylesSource,
-    /body\.is-internal-session \.internal-query-channel[\s\S]*?display: flex/
-  );
-  assert.match(stylesSource, /\.internal-query-channel[\s\S]*?display: none/);
+  assert.match(submit, /const baseQuery = normalizeQuery\(\{[\s\S]*?channel: "AUTO"/);
+  // Older records and protocol clients can still carry their original channel.
+  assert.match(appSource, /channel: String\(query\.channel \?\? "AUTO"\)/);
 });
 
 test("file preview uses a same-origin preview endpoint and safe blob rendering", () => {
@@ -770,14 +776,23 @@ test("view navigation keeps browser back-forward state and restores stored track
   assert.match(appSource, /showView\(link\.dataset\.viewTarget, \{ pushLocation: true \}\)/);
 });
 
-test("tracking sidebar returns to the safe caller page and uses the light workspace style", () => {
-  assert.match(indexSource, /id="portal-return-link"[\s\S]*?data-i18n="nav\.back"/);
-  assert.doesNotMatch(indexSource, /id="portal-return-link"[\s\S]{0,180}?data-home-link/);
+test("tracking sidebar home entry uses an explicit role destination and accurate label", () => {
+  assert.match(indexSource, /id="portal-return-link"/);
   assert.match(
     appSource,
-    /const safeReturn = localReturnPath\(requestedReturn\);[\s\S]*?window\.location\.assign\(safeReturn\)[\s\S]*?window\.history\.back\(\)/
+    /portalReturnLink\.href = returnsToWorkbenches \? "\/workbenches" : "\/"/
   );
-  assert.match(stylesSource, /body\.is-customer-session \.sidebar \{[\s\S]*?background: #fff;/);
+  assert.match(
+    appSource,
+    /const portalLabelKey = returnsToWorkbenches \? "nav\.workbenchHome" : "nav\.websiteHome"/
+  );
+  assert.match(appSource, /portalReturnLabel\.dataset\.i18n = portalLabelKey/);
+  const click = appSource.slice(
+    appSource.indexOf('document.querySelector("#portal-return-link")?.addEventListener'),
+    appSource.indexOf('document.querySelector("#start-tracking-button")')
+  );
+  assert.match(click, /window\.location\.assign\(event\.currentTarget\.href\)/);
+  assert.doesNotMatch(click, /history\.back|returnTo/);
 });
 
 test("signed-in overview loads account-bound snapshot objects and never offers browser-history clearing", () => {

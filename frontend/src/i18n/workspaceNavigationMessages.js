@@ -1,0 +1,40 @@
+export const workspaceNavigationMessages = {
+  "zh-CN": {
+    label: "工作台导航",
+    home: "工作台首页",
+    tracking: "运输跟踪",
+    planning: "装箱工具",
+    business: "业务协同",
+    admin: "系统管理",
+    overview: "跟踪总览",
+    query: "运单查询",
+    cargos: "货物清单",
+    smartImport: "智能导入",
+    results: "装箱结果与导出",
+    config: "装箱设置",
+    algorithm: "算法说明",
+    equipment: "集装箱资料",
+    menu: "工作台菜单",
+    expand: "展开导航",
+    collapse: "收起导航"
+  },
+  "en-US": {
+    label: "Workspace navigation",
+    home: "Workspace home",
+    tracking: "Shipment tracking",
+    planning: "Load planning",
+    business: "Business operations",
+    admin: "Administration",
+    overview: "Tracking overview",
+    query: "Shipment lookup",
+    cargos: "Cargo list",
+    smartImport: "Smart import",
+    results: "Results & export",
+    config: "Planning settings",
+    algorithm: "Planning guide",
+    equipment: "Container reference",
+    menu: "Workspace menu",
+    expand: "Expand navigation",
+    collapse: "Collapse navigation"
+  }
+};

@@ -3,7 +3,7 @@
     <p>{{ copy.description }}</p>
     <p class="screenshot-note">{{ copy.caution }}</p>
     <div class="screenshot-actions">
-      <label class="screenshot-picker">
+      <label v-if="!sourceFile" class="screenshot-picker">
         {{ copy.choose }}
         <input
           class="screenshot-file-input"
@@ -106,7 +106,7 @@
           </tbody>
         </table>
       </div>
-      <label class="screenshot-confirm"
+      <label v-if="!reviewOnly" class="screenshot-confirm"
         ><input
           v-model="confirmed"
           type="checkbox"
@@ -115,7 +115,12 @@
           "
         />{{ copy.confirm }}</label
       >
-      <button type="button" :disabled="!review.canImport || busy" @click="importRows">
+      <button
+        v-if="!reviewOnly"
+        type="button"
+        :disabled="!review.canImport || busy || externalImportBlocked"
+        @click="importRows"
+      >
         {{ copy.import }}
       </button>
     </template>
@@ -138,7 +143,12 @@ import {
 } from "../services/imageCargoImport.js";
 import { isSessionExpired, storedToken } from "../services/authSession";
 
-const emit = defineEmits(["import-cargos"]);
+const props = defineProps({
+  sourceFile: { type: Object, default: null },
+  reviewOnly: { type: Boolean, default: false },
+  externalImportBlocked: { type: Boolean, default: false }
+});
+const emit = defineEmits(["import-cargos", "review-change"]);
 const copy = computed(
   () => screenshotImportMessages[currentLocale.value] || screenshotImportMessages["zh-CN"]
 );
@@ -189,6 +199,16 @@ function cancel() {
   status.value = copy.value.canceled;
 }
 function selectFile(event) {
+  if (props.sourceFile) {
+    event.target.value = "";
+    return;
+  }
+  const candidate = event.target.files?.[0];
+  event.target.value = "";
+  applyFile(candidate);
+}
+function applyFile(candidate) {
+  if (props.sourceFile && candidate !== props.sourceFile) return;
   stopWaiting();
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = "";
@@ -196,8 +216,6 @@ function selectFile(event) {
   task.value = null;
   rows.value = [];
   confirmed.value = false;
-  const candidate = event.target.files?.[0];
-  event.target.value = "";
   if (!candidate) return;
   if (
     !["image/png", "image/jpeg"].includes(candidate.type) ||
@@ -212,7 +230,7 @@ function selectFile(event) {
   status.value = "";
 }
 async function recognize() {
-  if (!file.value || busy.value) return;
+  if (!file.value || busy.value || (props.sourceFile && file.value !== props.sourceFile)) return;
   const run = ++revision,
     session = storedToken();
   const current = () => run === revision && session === storedToken() && !isSessionExpired();
@@ -261,10 +279,22 @@ function importRows() {
     rows.value = [];
     return;
   }
-  if (!review.value.canImport) return;
+  if (props.reviewOnly || props.externalImportBlocked || !review.value.canImport) return;
   emit("import-cargos", buildImageImportPayload(task.value, rows.value, confirmed.value));
   confirmed.value = false;
 }
+watch(
+  [task, rows, busy],
+  () => emit("review-change", { task: task.value, rows: rows.value, busy: busy.value }),
+  { deep: true, immediate: true }
+);
+watch(
+  () => props.sourceFile,
+  (candidate) => {
+    if (candidate) applyFile(candidate);
+  },
+  { immediate: true }
+);
 onBeforeUnmount(() => {
   stopWaiting();
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
