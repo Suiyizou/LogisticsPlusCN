@@ -13,7 +13,7 @@
   margin: 0;
 }
 .landing-page :is(h1, h2, h3) {
-  color: var(--color-primary);
+  color: #0c1c3a;
   line-height: 1.25;
   font-weight: 600;
 }
@@ -26,6 +26,27 @@
 }
 .landing-page button {
   font: inherit;
+}
+.landing-page.public-site {
+  color: #0c1c3a;
+  font-family: var(--font-ui);
+}
+.landing-page.public-site :is(h1, h2, h3) {
+  color: #0c1c3a;
+}
+.landing-page.public-site .maritime-primary-nav > a,
+.landing-page.public-site .maritime-nav-trigger {
+  color: #0c1c3a;
+  font-weight: 500;
+}
+.landing-page.public-site .maritime-button--navy {
+  background: #0866e8;
+  border-color: #0866e8;
+  color: white;
+}
+.landing-page.public-site .maritime-button--navy:hover {
+  background: #0755d0;
+  border-color: #0755d0;
 }
 .landing-page svg {
   width: 22px;

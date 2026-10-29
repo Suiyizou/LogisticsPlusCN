@@ -5,8 +5,8 @@
     data-i18n-ignore
   >
     <section class="app-login-photo" :aria-label="t('maritime.loginBrandAria')">
-      <PublicBrand inverse company />
-      <div>
+      <PublicBrand />
+      <div class="app-login-photo-copy">
         <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
         <p>{{ t("maritime.loginHeroDescription") }}</p>
       </div>

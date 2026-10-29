@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 import {
-  buildShipmentBatchItems,
+  buildShipmentBatchPreview,
   parseShipmentBatchWorkbook
 } from "../../services/shipmentBatchImport.js";
 import { useShipmentBatchTask } from "./useShipmentBatchTask.js";
@@ -45,7 +45,7 @@ export function useShipmentBatchTracking({
   const batchTrackDialogOpen = ref(false);
   const batchTrackDropzoneActive = ref(false);
   const batchTrackFileParsing = ref(false);
-  const batchTrackCarrier = ref("COSCO");
+  const batchTrackCarrier = ref("");
   const batchTrackReferenceType = ref("BOOKING");
   watch(batchTrackCarrier, (carrier) => {
     if (!supportsShipmentReference(carrier, batchTrackReferenceType.value))
@@ -116,14 +116,16 @@ export function useShipmentBatchTracking({
       batchTrackSheets.value.find((sheet) => sheet.name === batchTrackSelectedSheetName.value) ||
       null
   );
-  const batchTrackItems = computed(() =>
-    buildShipmentBatchItems(
+  const batchTrackImportPreview = computed(() =>
+    buildShipmentBatchPreview(
       batchTrackSelectedSheet.value,
       batchTrackSelectedColumnIndex.value,
       batchTrackCarrier.value,
       batchTrackReferenceType.value
     )
   );
+  const batchTrackItems = computed(() => batchTrackImportPreview.value.items);
+  const batchTrackImportErrors = computed(() => batchTrackImportPreview.value.errors);
   const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => item.displayNumber));
   const batchTrackTrackableCount = computed(
     () => batchTrackItems.value.filter((item) => !item.manualOnly).length
@@ -163,7 +165,7 @@ export function useShipmentBatchTracking({
   watch(batchTrackDialogOpen, (open) => {
     if (open && batchTrackMode.value === "IMPORT" && !batchTrackCustomerId.value) {
       batchTrackCustomerId.value =
-        selectedCustomerId.value || assignableCustomers.value[0]?.id || "";
+        selectedCustomerId.value || "";
     }
   });
   watch(
@@ -214,7 +216,7 @@ export function useShipmentBatchTracking({
       busy() ||
       batchTrackFileParsing.value ||
       !batchTrackCustomerId.value ||
-      !batchTrackItems.value.length
+      (!batchTrackItems.value.length || batchTrackImportErrors.value.length > 0)
     )
       return;
     // Capture the form before awaiting conflict inspection; edits must not change the approved import.
@@ -323,7 +325,7 @@ export function useShipmentBatchTracking({
       const xlsx = await loadXlsxModule();
       const bytes = await file.arrayBuffer();
       if (!currentFile()) return;
-      const workbook = xlsx.read(bytes, { type: "array", cellDates: true });
+      const workbook = xlsx.read(bytes, { type: "array", cellDates: false, cellNF: true });
       const sheets = parseShipmentBatchWorkbook(workbook, xlsx);
       if (!sheets.length) throw new Error(t("customers.noTrackNumbers"));
       const score = (sheet) =>
@@ -383,6 +385,8 @@ export function useShipmentBatchTracking({
     batchTrackSelectedSheet,
     batchTrackProblemResults,
     visibleBatchTrackResults,
+    batchTrackImportPreview,
+    batchTrackImportErrors,
     batchTrackNumbers,
     batchTrackTrackableCount,
     batchTrackManualCount,

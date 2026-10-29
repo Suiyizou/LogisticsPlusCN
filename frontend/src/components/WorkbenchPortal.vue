@@ -1240,3 +1240,84 @@ async function submitPasswordChange() {
   min-width: 0;
 }
 </style>
+
+<style scoped>
+/* The portal shares the quiet white surfaces and blue accents of the reference workspace. */
+.is-content-only .portal-content {
+  padding: 28px;
+}
+.is-content-only .portal-content :deep(.workspace-page-header__title) {
+  font-size: 32px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--color-foreground);
+}
+.portal-content :deep(.workspace-page-header__description) {
+  font-size: 14px;
+}
+.portal-task-row {
+  border-color: #dce8fa;
+  border-radius: 10px;
+  background: #edf4ff;
+  min-height: 56px;
+  padding: 12px 20px;
+}
+.portal-workbench-section {
+  margin-top: 24px;
+}
+.portal-section-head {
+  margin-bottom: 18px;
+}
+.portal-section-head h2 {
+  font-size: 20px;
+  color: var(--color-foreground);
+}
+.portal-section-head > div > span {
+  color: var(--color-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.portal-card-grid {
+  gap: 18px;
+}
+.portal-quick-links {
+  padding: 20px;
+  margin-top: 24px;
+}
+.portal-quick-links h2 {
+  margin-bottom: 14px;
+  font-size: 16px;
+  color: var(--color-foreground);
+}
+.portal-quick-links a {
+  padding: 13px 30px 13px 14px;
+  border-color: var(--color-border);
+  color: var(--color-foreground);
+}
+.portal-quick-links small {
+  line-height: 1.6;
+}
+.portal-today {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+@media (max-width: 1100px) {
+  .is-content-only .portal-content {
+    padding: 24px;
+  }
+}
+@media (max-width: 620px) {
+  .is-content-only .portal-content {
+    padding: 22px 16px;
+  }
+  .is-content-only .portal-content :deep(.workspace-page-header__title) {
+    font-size: 28px;
+  }
+  .portal-card-grid {
+    gap: 14px;
+  }
+  .portal-quick-links {
+    padding: 16px;
+  }
+}
+</style>

@@ -1116,21 +1116,23 @@ function handleFullscreenChange() {
 <style scoped>
 .packing-visual-shell {
   display: block;
+  color: #0c1c3a;
+  font: 400 14px/1.6 var(--font-ui);
 }
 .packing-visual-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 18px;
   min-height: 0;
   align-items: start;
 }
 .packing-visual-layout.analysis-open {
-  grid-template-columns: minmax(0, 72fr) minmax(250px, 28fr);
+  grid-template-columns: minmax(0, 68fr) minmax(280px, 32fr);
 }
 .packing-main-stage {
   min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--color-surface);
 }
@@ -1143,9 +1145,10 @@ function handleFullscreenChange() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  min-height: 44px;
-  padding: 6px 10px;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e9f3;
 }
 .toolbar-left,
 .toolbar-right {
@@ -1155,24 +1158,26 @@ function handleFullscreenChange() {
   flex-wrap: wrap;
 }
 .packing-visual-toolbar :deep(.el-button) {
-  height: 30px;
-  min-height: 30px;
-  padding: 6px 9px;
-  font-size: 12px;
+  height: 34px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
 }
 .packing-visual-toolbar :deep(.el-segmented) {
-  min-height: 30px;
-  font-size: 12px;
+  min-height: 34px;
+  font-size: 13px;
 }
 .packing-visual-toolbar :deep(.el-switch__label) {
   font-size: 12px;
 }
 .packing-canvas-panel {
-  height: 370px;
-  min-height: 370px;
+  height: 440px;
+  min-height: 440px;
   border: 0;
   border-radius: 0;
-  background: var(--color-surface);
+  background: #f9fbff;
 }
 .packing-scene-canvas {
   position: absolute;
@@ -1183,21 +1188,28 @@ function handleFullscreenChange() {
 }
 .packing-info-panel {
   display: grid;
-  gap: 10px;
-  max-height: 464px;
+  gap: 18px;
+  max-height: 592px;
   padding: 0;
   overflow-y: auto;
   grid-template-columns: 1fr;
 }
 .info-panel-card :deep(.el-card__header) {
-  padding: 12px 14px;
+  padding: 18px 20px 14px;
   border-bottom: 0;
 }
 .info-panel-card :deep(.el-card__body) {
-  padding: 0 14px 12px;
+  padding: 0 20px 18px;
+}
+.info-panel-card {
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  background: #fff;
 }
 .info-card-head strong {
-  font-size: 16px;
+  color: #0c1c3a;
+  font-size: 18px;
+  font-weight: 600;
 }
 .legend-scrollbar {
   max-height: 145px;
@@ -1211,12 +1223,13 @@ function handleFullscreenChange() {
 }
 .legend-row > b,
 .legend-row b {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
 }
 .legend-row small,
 .legend-row em {
-  font-size: 12px;
+  color: #6b7d99;
+  font-size: 13px;
 }
 .legend-constraint-tags {
   display: none;
@@ -1253,8 +1266,8 @@ function handleFullscreenChange() {
   line-height: 1.5;
 }
 .balance-metric-list span {
-  font-size: 12px;
-  color: var(--color-muted);
+  font-size: 13px;
+  color: #6b7d99;
 }
 .balance-more {
   font-size: 12px;
@@ -1298,13 +1311,13 @@ function handleFullscreenChange() {
   font-size: 12px;
 }
 .packing-bottom-actions :deep(.el-card__body) {
-  padding: 8px 10px;
-  min-height: 48px;
+  padding: 12px 14px;
+  min-height: 54px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid #e2e9f3;
 }
 .packing-bottom-actions :deep(.el-card__body) > div:first-child {
   display: none;
@@ -1316,9 +1329,9 @@ function handleFullscreenChange() {
   justify-content: flex-end;
 }
 .bottom-button-group .el-button {
-  min-height: 30px;
-  height: 30px;
-  font-size: 12px;
+  min-height: 34px;
+  height: 34px;
+  font-size: 13px;
   margin: 0;
   padding: 6px 9px;
 }
@@ -1347,11 +1360,11 @@ function handleFullscreenChange() {
 }
 @media (min-width: 1500px) {
   .packing-info-panel {
-    max-height: 504px;
+    max-height: 632px;
   }
   .packing-canvas-panel {
-    height: 410px;
-    min-height: 410px;
+    height: 480px;
+    min-height: 480px;
   }
 }
 @media (max-width: 1100px) {

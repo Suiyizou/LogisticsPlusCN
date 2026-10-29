@@ -51,10 +51,10 @@ withDefaults(
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 60%) minmax(0, 40%);
-  min-height: 228px;
+  min-height: 238px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  padding: 16px;
+  padding: 24px;
   color: var(--color-foreground);
   background: var(--color-surface);
   text-decoration: none;
@@ -65,9 +65,9 @@ withDefaults(
     transform var(--motion-normal);
 }
 .workbench-entry-card:hover {
-  border-color: var(--color-border-strong);
+  border-color: #bfd5f5;
   box-shadow: var(--shadow-card-hover);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 .workbench-entry-card:focus-visible {
   outline: 3px solid var(--color-ring);
@@ -83,12 +83,12 @@ withDefaults(
 }
 header {
   display: flex;
-  gap: 22px;
+  gap: 16px;
   align-items: flex-start;
 }
 .workbench-entry-card__number {
-  color: var(--color-accent);
-  font-size: 28px;
+  color: #a7c4ef;
+  font-size: 25px;
   line-height: 1.2;
   font-weight: 600;
 }
@@ -109,6 +109,7 @@ h3 {
   line-height: 1.65;
   margin: 10px 0;
   max-width: 310px;
+  color: var(--color-muted);
 }
 .workbench-entry-card__features {
   display: flex;
@@ -119,8 +120,8 @@ h3 {
 .workbench-entry-card__features span {
   font-size: 12px;
   padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-subtle);
+  border-radius: 5px;
+  background: #f0f5fd;
   color: var(--color-secondary);
   white-space: nowrap;
 }
@@ -129,7 +130,7 @@ h3 {
   gap: 20px;
   align-items: center;
   justify-content: space-between;
-  min-height: 38px;
+  min-height: 40px;
   min-width: 166px;
   padding: 0 16px;
   background: var(--color-accent);
@@ -157,7 +158,7 @@ h3 {
 }
 @media (max-width: 1100px) {
   .workbench-entry-card {
-    padding: 16px;
+    padding: 24px;
     grid-template-columns: minmax(0, 64%) 36%;
   }
   header {

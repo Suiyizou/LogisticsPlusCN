@@ -32,15 +32,26 @@
       <p v-if="!review.complete" role="alert">{{ copy.incomplete }}</p>
       <p v-if="!review.sourceTotalsKnown" class="screenshot-note">{{ copy.totalsUnknown }}</p>
       <p v-if="review.blockingIssues.length" role="alert">{{ copy.sourceBlocked }}</p>
-      <p>
-        {{ copy.rowTotals }}: {{ review.actual.packageCount }} {{ copy.quantity }} ·
-        {{ review.actual.grossWeightKg }} kg · {{ review.actual.calculatedVolumeM3.toFixed(6) }} m³
-      </p>
-      <p>
-        {{ copy.printedTotals }}: {{ review.expected.packageCount ?? "—" }} {{ copy.quantity }} ·
-        {{ review.expected.grossWeightKg ?? "—" }} kg ·
-        {{ review.expected.declaredVolumeM3 ?? "—" }} m³
-      </p>
+      <div class="screenshot-totals">
+        <section>
+          <h3>{{ copy.rowTotals }}</h3>
+          <div>
+            <strong
+              >{{ review.actual.packageCount }} <small>{{ copy.quantity }}</small></strong
+            ><strong>{{ review.actual.grossWeightKg }} <small>kg</small></strong
+            ><strong>{{ review.actual.calculatedVolumeM3.toFixed(6) }} <small>m³</small></strong>
+          </div>
+        </section>
+        <section>
+          <h3>{{ copy.printedTotals }}</h3>
+          <div>
+            <strong
+              >{{ review.expected.packageCount ?? "—" }} <small>{{ copy.quantity }}</small></strong
+            ><strong>{{ review.expected.grossWeightKg ?? "—" }} <small>kg</small></strong
+            ><strong>{{ review.expected.declaredVolumeM3 ?? "—" }} <small>m³</small></strong>
+          </div>
+        </section>
+      </div>
       <p v-if="review.invalidRows.length" role="alert">{{ copy.invalidRows }}</p>
       <p
         v-if="review.invalidRows.some((item) => item.fields.includes('packageIdentity'))"
@@ -316,7 +327,8 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 16px;
   min-width: 0;
-  color: #21334a;
+  color: #0c1c3a;
+  font: 400 14px/1.6 var(--font-ui);
 }
 .screenshot-import p {
   margin: 0;
@@ -451,8 +463,8 @@ button:disabled {
 }
 .screenshot-actions button:first-of-type {
   color: #fff;
-  background: #326aa5;
-  border-color: #326aa5;
+  background: #0866e8;
+  border-color: #0866e8;
 }
 .screenshot-actions button {
   min-height: 44px;
@@ -467,23 +479,34 @@ button:disabled {
   transform: translateY(-1px);
 }
 .screenshot-table-wrap {
-  border: 1px solid #dce5ee;
-  border-radius: 12px;
+  border: 1px solid #e2e9f3;
+  border-radius: 8px;
 }
 th {
-  color: #51687f;
-  background: #f4f7fb;
-  font-size: 12px;
-  font-weight: 600;
+  height: 40px;
+  box-sizing: border-box;
+  color: #0c1c3a;
+  background: #f4f7fc;
+  font-size: 13px;
+  font-weight: 500;
+}
+th,
+td {
+  border-color: #e2e9f3;
+}
+td {
+  height: 46px;
+  padding: 5px 8px;
 }
 td input:not([type="checkbox"]),
 td textarea,
 td select {
   background: #fff;
-  color: #233c54;
-  border: 1px solid #cddae7;
+  color: #243a5a;
+  border: 1px solid #d5e0ef;
   border-radius: 6px;
-  padding: 8px;
+  min-height: 38px;
+  padding: 7px 9px;
   font: inherit;
   font-size: 13px;
 }
@@ -491,8 +514,86 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #447db7;
+  outline: 2px solid #0866e8;
   outline-offset: 3px;
+}
+.screenshot-import input[type="checkbox"] {
+  accent-color: #0866e8;
+}
+.screenshot-import [role="alert"] {
+  padding: 12px 16px;
+  border: 1px solid #f5d0c6;
+  border-radius: 7px;
+  background: #fff5f1;
+  color: #a84028;
+  font-size: 13px;
+}
+.screenshot-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.screenshot-totals section {
+  padding: 18px 20px;
+  border: 1px solid #e2e9f3;
+  border-radius: 8px;
+  background: #fff;
+}
+.screenshot-totals h3 {
+  margin: 0 0 14px;
+  color: #0c1c3a;
+  font-size: 14px;
+  font-weight: 500;
+}
+.screenshot-totals section > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.screenshot-totals strong {
+  color: #0866e8;
+  font-size: 21px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.screenshot-totals small {
+  font-size: 13px;
+  font-weight: 400;
+}
+.screenshot-confirm {
+  padding: 16px 20px;
+  border: 1px solid #e2e9f3;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+.screenshot-confirm + button {
+  justify-self: end;
+  min-height: 44px;
+  padding-inline: 28px;
+  color: #fff;
+  border-color: #0866e8;
+  background: #0866e8;
+  font: 500 14px/1.5 var(--font-ui);
+}
+.screenshot-import button:hover:not(:disabled) {
+  border-color: #0755d0;
+}
+.screenshot-actions button:first-of-type:hover:not(:disabled),
+.screenshot-confirm + button:hover:not(:disabled) {
+  background: #0755d0;
+}
+@media (max-width: 680px) {
+  .screenshot-totals {
+    grid-template-columns: 1fr;
+  }
+  .screenshot-totals section {
+    padding: 16px;
+  }
+  .screenshot-totals strong {
+    font-size: 19px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .screenshot-actions button {

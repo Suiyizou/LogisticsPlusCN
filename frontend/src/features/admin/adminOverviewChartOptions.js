@@ -32,7 +32,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
   /** @type {ChartOption} */
   const activity = {
     ...animation,
-    color: [chartColor("--color-primary"), chartColor("--color-accent")],
+    color: ["#0866e8", "#60a5fa"],
     tooltip: { trigger: "axis", renderMode: "richText", confine: true },
     legend: {
       bottom: 0,
@@ -53,7 +53,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         name: copy.businessActions,
         position: "left",
         minInterval: 1,
-        nameTextStyle: { color: chartColor("--color-primary"), fontSize: 12 },
+        nameTextStyle: { color: "#0866e8", fontSize: 12 },
         axisLabel: { color: chartColor("--color-muted") },
         splitLine: { lineStyle: { color: chartColor("--color-border") } }
       },
@@ -62,7 +62,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         name: copy.managementActions,
         position: "right",
         minInterval: 1,
-        nameTextStyle: { color: chartColor("--color-accent"), fontSize: 12 },
+        nameTextStyle: { color: "#60a5fa", fontSize: 12 },
         axisLabel: { color: chartColor("--color-muted") },
         splitLine: { show: false }
       }
@@ -74,7 +74,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
         smooth: true,
         symbolSize: 7,
         yAxisIndex: 0,
-        areaStyle: { color: chartColor("--color-primary"), opacity: 0.08 },
+        areaStyle: { color: "#0866e8", opacity: 0.06 },
         data: trend.map((day) => adminCount(day.businessActions))
       },
       {
@@ -93,12 +93,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
       name: copy.roles[item.code] || item.code,
       value: adminCount(item.value)
     })),
-    [
-      chartColor("--color-primary"),
-      chartColor("--color-quiet"),
-      chartColor("--color-accent"),
-      chartColor("--color-success")
-    ],
+    ["#0866e8", "#3b8cf6", "#75b5ff", "#b4d7ff"],
     locale,
     animation
   );
@@ -123,7 +118,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
       data: accountStates.map((item) => item.name),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { fontSize: 12, color: chartColor("--color-primary") }
+      axisLabel: { fontSize: 12, color: "#0c1c3a" }
     },
     series: [
       {
@@ -143,7 +138,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
           name: item.name,
           value: item.value,
           itemStyle: {
-            color: chartColor(item.code === "ACTIVE" ? "--color-primary" : "--color-accent")
+            color: item.code === "ACTIVE" ? "#0866e8" : "#a9bad2"
           }
         }))
       }
@@ -152,7 +147,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
   /** @type {ChartOption} */
   const operations = {
     ...animation,
-    color: [chartColor("--color-primary")],
+    color: ["#0866e8"],
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -182,7 +177,7 @@ export function adminOverviewChartOptions(overview, locale, reducedMotion = fals
       {
         type: "bar",
         barMaxWidth: 48,
-        label: { show: true, position: "top", fontSize: 12, color: chartColor("--color-primary") },
+        label: { show: true, position: "top", fontSize: 12, color: "#0c1c3a" },
         itemStyle: { borderRadius: 0 },
         data: displayOperations.map((item) => adminCount(item.value))
       }
@@ -213,7 +208,7 @@ function donut(data, colors, locale, animation) {
             top: "40%",
             style: {
               text: String(total),
-              fill: chartColor("--color-primary"),
+              fill: "#0c1c3a",
               fontSize: 30,
               fontWeight: 600,
               textAlign: "center"

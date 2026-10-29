@@ -2226,13 +2226,6 @@ body.is-embedded .content {
   padding: 28px 0 48px;
 }
 @media (max-width: 1400px) {
-  .query-panel form,
-  body.is-internal-session .query-panel form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  #submit-button {
-    grid-column: 1 / -1;
-  }
   .primary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2681,21 +2674,9 @@ body.is-embedded .content {
   }
 }
 
-/* The authenticated workspace shares the light application palette. */
+/* Embedded tracking uses the same self-hosted fonts and tokens as the workspace. */
 body.is-embedded {
-  --color-primary: #17374d;
-  --color-accent: #246b91;
-  --color-accent-hover: #1c5c80;
-  --color-accent-soft: #eaf3fb;
-  --color-background: #f4f7fa;
-  --color-surface: #fff;
-  --color-surface-subtle: #f8fafc;
-  --color-border: #e1e8ef;
-  --color-muted: #6c7e8d;
-  --color-foreground: #19354a;
-  --font-ui: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
-  --font-data: var(--font-ui);
-  background: #f4f7fa;
+  background: var(--color-background);
   font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
 }

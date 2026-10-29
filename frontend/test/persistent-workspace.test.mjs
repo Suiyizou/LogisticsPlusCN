@@ -146,6 +146,7 @@ test("actual workspace SFC preserves sidebar and iframe while its accordion foll
     "../src/components/workspace/WorkspaceNavigation.vue",
     {
       "@element-plus/icons-vue": icons,
+      "./WorkspaceIcon.vue": { default: stub },
       "../../i18n": translation,
       "../../i18n/workspaceNavigationMessages.js":
         await import("../src/i18n/workspaceNavigationMessages.js"),
@@ -175,6 +176,7 @@ test("actual workspace SFC preserves sidebar and iframe while its accordion foll
       "./WorkspaceAccountDialogs.vue": { default: stub },
       "./workspaceCopy": { wt: (key) => key },
       "./WorkspaceNavigation.vue": { default: navigation },
+      "./WorkspaceIcon.vue": { default: stub },
       "./TrackingWorkspaceFrame.vue": { default: frame },
       "../brand/BrandLockup.vue": { default: stub },
       "../LanguageSwitcher.vue": { default: stub },

@@ -39,6 +39,7 @@ async function mountApplication() {
   }
   await import("./design-system.css");
   await import("./login.css");
+  await import("./workspace-hifi.css");
 
   const app = createApp(RootComponent);
   if (appRouter) {

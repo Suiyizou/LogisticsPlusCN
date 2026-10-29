@@ -46,9 +46,9 @@ withDefaults(
 }
 .workspace-page-header__title {
   margin: 0;
-  color: var(--color-primary);
+  color: var(--color-foreground);
   font-size: var(--text-page-title);
-  font-weight: 600;
+  font-weight: 650;
   line-height: 1.3;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;

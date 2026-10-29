@@ -1502,6 +1502,8 @@ button:disabled {
   padding: 0;
   overflow: visible;
   background: transparent;
+  color: #0c1c3a;
+  font: 400 14px/1.6 var(--font-ui);
 }
 .is-content-only > .workspace-layout {
   display: block;
@@ -1516,5 +1518,48 @@ button:disabled {
   padding: 28px;
   margin: 0;
   overflow: visible;
+}
+.is-content-only :deep(.workspace-page-header__title),
+.is-content-only :deep(.customer-profile-heading),
+.is-content-only :deep(.section-label) {
+  color: #0c1c3a;
+}
+.is-content-only :deep(.workspace-page-header__description) {
+  color: #6b7d99;
+  font-size: 14px;
+}
+.is-content-only :deep(.el-form-item__label) {
+  color: #6b7d99;
+  font: 500 13px/1.6 var(--font-ui);
+}
+.is-content-only :deep(.el-table) {
+  --el-table-header-bg-color: #f4f7fc;
+  --el-table-row-hover-bg-color: #f7faff;
+  --el-table-border-color: #e2e9f3;
+  --el-table-text-color: #243a5a;
+  border-color: #e2e9f3;
+  border-radius: 8px;
+  font: 400 14px/1.6 var(--font-ui);
+}
+.is-content-only :deep(.el-table th.el-table__cell) {
+  height: 40px;
+  padding-block: 7px;
+  color: #0c1c3a;
+  font-size: 13px;
+  font-weight: 500;
+}
+.is-content-only :deep(.el-table td.el-table__cell) {
+  height: 46px;
+  padding-block: 7px;
+}
+.is-content-only :deep(.el-table__row:has(.el-checkbox.is-checked) > td.el-table__cell) {
+  background: #eaf2ff;
+}
+.is-content-only :deep(.el-table .el-tag) {
+  font-weight: 500;
+}
+.is-content-only :deep(.el-pagination .number.is-active) {
+  border-color: #0866e8;
+  background: #0866e8;
 }
 </style>

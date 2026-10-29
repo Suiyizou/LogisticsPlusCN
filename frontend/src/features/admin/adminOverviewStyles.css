@@ -11,8 +11,8 @@
   position: absolute;
   right: 0;
   top: -45px;
-  font-size: 12px;
-  color: var(--color-muted);
+  font-size: 13px;
+  color: #6b7d99;
 }
 .admin-overview-today strong {
   color: var(--color-primary);
@@ -24,7 +24,7 @@
 .admin-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 18px;
 }
 .admin-metrics > div {
   position: relative;
@@ -34,8 +34,8 @@
   align-content: center;
   gap: 8px;
   padding: 18px 20px 18px 58px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
   background: var(--color-surface);
 }
 .admin-metrics > div::before {
@@ -59,25 +59,25 @@
   border-bottom-width: 3px;
 }
 .admin-metrics span {
-  font-size: 14px;
-  color: var(--color-primary);
+  font-size: 13px;
+  color: #6b7d99;
   font-weight: 500;
 }
 .admin-metrics strong {
   font-size: 30px;
   line-height: 1;
   font-weight: 600;
-  color: var(--color-primary);
+  color: #0c1c3a;
 }
 .admin-metrics small {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--color-muted);
 }
 .admin-overview-chart-grid {
   display: grid;
   grid-template-columns: repeat(20, minmax(0, 1fr));
-  gap: 12px;
+  gap: 18px;
 }
 .admin-page-pane .admin-overview-chart-card {
   padding: 16px 18px 10px;
@@ -101,6 +101,7 @@
 }
 .admin-overview-chart-card :deep(.workspace-page-header__title) {
   font-size: 18px;
+  color: #0c1c3a;
 }
 .admin-overview-chart-card .admin-panel-head {
   margin: 0;
@@ -133,7 +134,8 @@
   margin-bottom: 10px;
 }
 .admin-overview-audit h2 {
-  font-size: 20px;
+  color: #0c1c3a;
+  font-size: 18px;
   margin: 0;
   font-weight: 600;
 }
@@ -155,17 +157,17 @@
   text-align: left;
 }
 .admin-overview-audit th {
-  height: 32px;
-  font-size: 12px;
+  height: 40px;
+  font-size: 13px;
   font-weight: 500;
-  background: var(--color-surface-subtle);
+  background: #f4f7fc;
   padding: 0 12px;
-  color: var(--color-secondary);
+  color: #0c1c3a;
 }
 .admin-overview-audit td {
-  height: 36px;
+  height: 46px;
   padding: 7px 12px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #e2e9f3;
   vertical-align: top;
   max-width: 280px;
   overflow: hidden;

@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { effectScope, ref } from "vue";
@@ -354,7 +355,7 @@ function uiHarness(t, overrides = {}) {
     loadAvailableShipments() {},
     loadXlsxModule: async () => ({
       read: (bytes) => bytes,
-      utils: { sheet_to_json: (rows) => rows }
+      utils: XLSX.utils, SSF: XLSX.SSF
     }),
     waitForNextPaint: async () => {},
     confirm: () => true,
@@ -386,7 +387,7 @@ function fileEvent(name, bytes) {
   };
 }
 function workbook(number) {
-  return { SheetNames: ["Bookings"], Sheets: { Bookings: [["Booking"], [number]] } };
+  return { SheetNames: ["Bookings"], Sheets: { Bookings: XLSX.utils.aoa_to_sheet([["Booking"], [number]]) } };
 }
 
 test("import captures the same customer, items and channel inspected before submission", async (t) => {
@@ -448,7 +449,7 @@ test("a second workbook wins when the first finishes late", async (t) => {
   older.resolve(workbook("COSU1111111111"));
   await first;
   assert.equal(h.ui.batchTrackFileName.value, "new.xlsx");
-  assert.deepEqual(h.ui.batchTrackNumbers.value, ["2222222222"]);
+  assert.deepEqual(h.ui.batchTrackNumbers.value, ["COSU2222222222"]);
   assert.equal(h.ui.batchTrackFileParsing.value, false);
 });
 
@@ -565,4 +566,27 @@ test("stopped and circuit-paused retries do not report that retrying is still ac
       status === "STOPPED" ? "customers.trackStopped" : "customers.batchTrackCircuitSkipped"
     );
   }
+});
+
+
+test("invalid workbook preview never creates a task or inspects remote conflicts", async (t) => {
+  let inspected = 0;
+  const h = uiHarness(t, { inspectBusinessShipmentImportConflicts: async () => { inspected++; return {conflicts: []}; } });
+  const sheet = prepareSheet("Mixed", [["BOOKING", "CARRIER"], ["COSU1234567890", "COSCO"], ["BAD12345", "MYSTERY"]]);
+  h.ui.batchTrackSheets.value = [sheet];
+  h.ui.batchTrackSelectedSheetName.value = sheet.name;
+  assert.equal(h.ui.batchTrackImportPreview.value.items.length, 1);
+  assert.equal(h.ui.batchTrackImportErrors.value.length, 1);
+  await h.ui.startBatchTrack();
+  assert.equal(inspected, 0);
+  assert.equal(h.created.length, 0);
+});
+
+test("opening import never chooses the first assignable customer", async (t) => {
+  const h = uiHarness(t);
+  h.ui.batchTrackCustomerId.value = "";
+  h.context.selectedCustomerId.value = "";
+  h.ui.batchTrackDialogOpen.value = true;
+  await Promise.resolve();
+  assert.equal(h.ui.batchTrackCustomerId.value, "");
 });

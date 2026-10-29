@@ -11,11 +11,11 @@ execFileSync(
 );
 const source = read("../../design-system/logisticspluscn-maritime/tokens.css");
 assert.match(source, /html:root\s*\{/);
-assert.match(source, /--color-primary:\s*#15384a/i);
-assert.match(source, /--color-accent:\s*#ba4b25/i);
-assert.match(source, /--color-background:\s*#f2f5f6/i);
-assert.match(source, /--radius-control:\s*6px/);
-assert.match(source, /--radius-card:\s*6px/);
+assert.match(source, /--color-primary:\s*#0866e8/i);
+assert.match(source, /--color-accent:\s*#0866e8/i);
+assert.match(source, /--color-background:\s*#f4f7fc/i);
+assert.match(source, /--radius-control:\s*7px/);
+assert.match(source, /--radius-card:\s*10px/);
 assert.match(source, /--radius-dialog:\s*12px/);
 assert.match(source, /--control-height:\s*44px/);
 for (const path of [

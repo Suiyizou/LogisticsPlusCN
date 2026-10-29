@@ -248,6 +248,24 @@
                     })
                   }}
                 </p>
+                <p>{{ t('customers.trackImportSummary', { ready: batchTrackImportPreview.items.length, blocked: batchTrackImportErrors.length, skipped: batchTrackImportPreview.skipped, duplicates: batchTrackImportPreview.duplicates }) }}</p>
+                <el-alert v-if="batchTrackImportErrors.length" type="error" :closable="false" :title="t('customers.trackImportBlocked')" />
+                <ul v-if="batchTrackImportErrors.length">
+                  <li v-for="(issue, index) in batchTrackImportErrors" :key="index">{{ t('customers.trackImportRow', { row: issue.row }) }} · {{ issue.code }}: {{ issue.message }}</li>
+                </ul>
+                <details>
+                  <summary>{{ t('customers.trackFieldMapping') }}</summary>
+                  <ul><li v-for="mapping in batchTrackImportPreview.mappings" :key="mapping.field">{{ mapping.header }} → {{ mapping.field }}</li></ul>
+                </details>
+                <el-table :data="batchTrackImportPreview.rows" size="small" max-height="320" border>
+                  <el-table-column prop="sourceRow" :label="t('customers.trackSourceRow')" width="75" />
+                  <el-table-column prop="originalReference" :label="t('customers.trackOriginalReference')" min-width="200" />
+                  <el-table-column prop="number" :label="t('customers.trackQueryReference')" min-width="180" />
+                  <el-table-column prop="carrier" :label="t('customers.carrier')" min-width="120" />
+                  <el-table-column prop="carrierSource" :label="t('customers.trackCarrierEvidence')" width="120" />
+                  <el-table-column prop="type" :label="t('customers.referenceType')" min-width="130" />
+                  <el-table-column prop="status" :label="t('customers.trackValidation')" width="110" />
+                </el-table>
                 <div class="batch-track-preview-table-wrap">
                   <el-table
                     :data="batchTrackPreviewRows"
@@ -462,7 +480,7 @@
                   batchTrackFileParsing ||
                   !batchTrackCustomerId ||
                   !batchTrackSelectedSheet ||
-                  !batchTrackNumbers.length
+                  (!batchTrackNumbers.length || batchTrackImportErrors.length > 0)
                 "
                 @click="startBatchTrack"
               >
@@ -522,6 +540,8 @@ const {
   batchTrackFileParsing,
   batchTrackManualCount,
   batchTrackNumbers,
+  batchTrackImportPreview,
+  batchTrackImportErrors,
   batchTrackPreviewRows,
   batchTrackProblemResults,
   batchTrackProblemsOnly,

@@ -1,11 +1,11 @@
 /* Carrier workspace: source facts, explicit timing evidence, and discrete milestones. */
 #tracking-view {
-  --track-ink: #17384b;
-  --track-muted: #596e7c;
-  --track-line: #dbe4e9;
-  --track-blue: #164c69;
-  --track-accent: #b94d31;
-  --track-pale: #f4f7f9;
+  --track-ink: var(--color-foreground);
+  --track-muted: var(--color-muted);
+  --track-line: var(--color-border);
+  --track-blue: var(--color-primary);
+  --track-accent: var(--color-primary);
+  --track-pale: var(--color-background);
   color: var(--track-ink);
 }
 #tracking-view .page-heading {
@@ -15,7 +15,7 @@
 #tracking-view .page-heading .kicker {
   margin: 0 0 8px;
   color: var(--track-accent);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.13em;
   font-weight: 700;
 }
@@ -57,6 +57,7 @@
   background: white;
 }
 #tracking-view .query-panel input {
+  color: var(--track-ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
@@ -75,8 +76,8 @@
   font-weight: 600;
 }
 #tracking-view #submit-button:hover:not(:disabled) {
-  background: #103d55;
-  border-color: #103d55;
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
 }
 #tracking-view :is(button, a, input, select, summary):focus-visible {
   outline: 3px solid #568cb3;
@@ -94,7 +95,7 @@
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--track-line);
-  border-top: 3px solid var(--track-blue);
+  border-top: 1px solid var(--track-line);
   border-radius: 10px;
   background: white;
   box-shadow: 0 3px 12px #17384b04;
@@ -166,7 +167,7 @@
 }
 #tracking-view .result-type {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 #tracking-view #result-number {
@@ -187,7 +188,7 @@
 }
 #tracking-view .summary-booking-number small {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .summary-booking-number strong {
   font-size: 13px;
@@ -295,7 +296,7 @@
 }
 #tracking-view .journey-stage-summary small {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.09em;
   font-weight: 600;
 }
@@ -325,7 +326,7 @@
   border: 0;
   border-radius: 50%;
   background: var(--track-accent);
-  box-shadow: 0 0 0 4px #f8e9e4;
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 #tracking-view .journey-pulse i,
 #tracking-view .journey-pulse::after {
@@ -371,7 +372,7 @@
 }
 #tracking-view .summary-route-pair small {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .shipment-summary-grid .result-primary-facts {
   grid-area: facts;
@@ -387,7 +388,7 @@
 }
 #tracking-view .result-primary-fact small {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .result-primary-fact strong {
   font-size: 14px;
@@ -399,17 +400,21 @@
   align-items: center;
   padding: 9px 24px;
   border-top: 1px solid var(--track-line);
-  background: #fafcfd;
+  background: #f8faff;
   gap: 14px;
 }
 #tracking-view .summary-services > small {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .summary-services span {
+  color: var(--track-muted);
   background: transparent;
   padding: 0;
-  font-size: 11px;
+  font-size: 12px;
+}
+#tracking-view .summary-services span.is-enabled {
+  color: var(--track-ink);
 }
 #tracking-view .metric-grid {
   display: grid;
@@ -474,6 +479,9 @@
 #tracking-view #latest-metric-card {
   display: none;
 }
+#tracking-view .route-panel {
+  min-height: 0;
+}
 #tracking-view .primary-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -500,7 +508,7 @@
   color: var(--track-ink);
 }
 #tracking-view .panel-header > span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--track-muted);
 }
 #tracking-view .panel-icon {
@@ -544,7 +552,7 @@
   align-items: flex-start;
   gap: 0;
   min-width: 0;
-  min-height: 230px;
+  min-height: 0;
   padding: 0 20px 0 0;
   margin: 0;
   border: 0;
@@ -696,9 +704,9 @@
   margin: 0;
   padding: 12px 26px;
   border-top: 1px solid #edf1f4;
-  background: #fafcfd;
+  background: #f8faff;
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .references-panel .business-reference-grid,
 #tracking-view .reference-core {
@@ -709,7 +717,7 @@
 }
 #tracking-view .references-panel :is(dt, .reference-list) {
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 #tracking-view .references-panel dd {
   margin-top: 7px;
@@ -718,9 +726,9 @@
 }
 #tracking-view .routing-panel th,
 #tracking-view #container-panel th {
-  background: #f7f9fb;
+  background: #f4f7fc;
   color: var(--track-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -779,7 +787,7 @@
   padding: 32px;
   border: 1px dashed #cad8e1;
   border-radius: 10px;
-  background: #fafcfd;
+  background: #f8faff;
 }
 #tracking-view .empty-icon {
   display: flex;
@@ -1057,5 +1065,722 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Reference workspace composition: shared type, compact facts and clear evidence. */
+body.is-embedded .content {
+  width: calc(100% - 48px);
+  padding: 26px 0 40px;
+}
+#tracking-view .page-heading h1 {
+  color: var(--track-ink);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+#tracking-view .page-heading {
+  margin-bottom: 22px;
+}
+#tracking-view .page-heading p:last-child {
+  margin-top: 9px;
+  font-size: 14px;
+}
+#tracking-view .query-panel {
+  margin-bottom: 16px;
+  padding: 18px 22px;
+}
+#tracking-view .query-panel .field label {
+  margin-bottom: 8px;
+  color: var(--color-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+#tracking-view .query-panel :is(input, select, .tracking-select-trigger),
+#tracking-view .query-panel #submit-button {
+  height: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+}
+#tracking-view .query-panel #submit-button {
+  grid-column: auto;
+  grid-row: auto;
+  width: auto;
+  padding-inline: 20px;
+  color: white;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+#tracking-view .query-panel #submit-button:hover:not(:disabled) {
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+}
+#tracking-view .query-panel #submit-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+#tracking-view #submit-button svg,
+#overview-view :is(.panel-icon, .primary-action, .history-search) svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#tracking-view .batch-workspace-trigger {
+  border-color: var(--track-line);
+  color: var(--track-blue);
+  background: white;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+#tracking-view .result-type,
+#tracking-view .summary-route-pair small,
+#tracking-view .metric-head p {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--track-muted);
+}
+#tracking-view .result-meta #cache-status {
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--track-blue);
+  background: var(--color-accent-soft);
+}
+#tracking-view .result-carrier-logo {
+  width: 190px;
+}
+#tracking-view .shipment-summary-card .metric-grid {
+  overflow: hidden;
+  border: 0;
+  border-top: 1px solid var(--track-line);
+  border-radius: 0;
+  background: white;
+}
+#tracking-view .shipment-summary-card .metric-card {
+  min-height: 0;
+  padding: 14px 22px;
+  border: 0;
+  border-right: 1px solid var(--track-line);
+  border-radius: 0;
+  background: white;
+}
+#tracking-view .shipment-summary-card .metric-card:last-child {
+  border-right: 0;
+}
+#tracking-view .shipment-summary-card .metric-card > strong {
+  color: var(--track-ink);
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+#tracking-view .shipment-summary-card .metric-card > span {
+  font-size: 12px;
+  color: var(--track-muted);
+}
+#tracking-view .journey-stage-summary strong {
+  font-size: 18px;
+  line-height: 1.4;
+}
+#tracking-view .route-flow {
+  padding: 18px 24px 14px;
+}
+#tracking-view .route-node,
+#tracking-view .route-node.is-complete,
+#tracking-view .route-node.is-active {
+  align-items: center;
+  padding: 0 14px;
+  text-align: center;
+}
+#tracking-view .route-node::before {
+  left: calc(50% + 21px);
+  right: calc(-50% + 21px);
+  border-top: 1px dashed #c5d2e6;
+}
+#tracking-view .route-node.is-actual:has(+ .route-node.is-actual)::before {
+  border-top-style: solid;
+  border-top-color: var(--track-blue);
+}
+#tracking-view .route-node .route-dot {
+  margin-bottom: 8px;
+  border-color: #a3b2c9;
+  color: #60728e;
+}
+#tracking-view .route-node.is-actual .route-dot {
+  color: white;
+  border-color: var(--track-blue);
+  background: var(--track-blue);
+}
+#tracking-view .route-node.is-current .route-dot {
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+#tracking-view .route-node > .route-stage-label {
+  margin-bottom: 4px;
+  color: var(--track-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+#tracking-view .route-node > .route-evidence {
+  align-self: center;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+#tracking-view .route-node > strong {
+  justify-content: center;
+  color: var(--track-ink);
+  font-size: 14px;
+}
+#tracking-view .route-node > .route-event-name {
+  margin-top: 4px;
+  color: var(--track-muted);
+  font-size: 12px;
+}
+#tracking-view .route-node-times {
+  width: 100%;
+  margin-top: 8px;
+  gap: 6px;
+}
+#tracking-view .route-time {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 6px;
+}
+#tracking-view .route-node > .route-current-label {
+  margin-top: 6px;
+  font-weight: 500;
+}
+#tracking-view .route-source-note {
+  padding: 8px 24px;
+  font-size: 12px;
+}
+#tracking-view .panel-header {
+  min-height: 54px;
+  padding: 14px 22px;
+}
+#tracking-view .panel-header strong {
+  font-size: 17px;
+  font-weight: 650;
+}
+#tracking-view .references-panel .business-reference-grid,
+#tracking-view .reference-core {
+  padding: 16px 22px;
+  gap: 14px;
+}
+#tracking-view :is(.routing-panel, #container-panel) :is(th, td) {
+  padding: 11px 14px;
+  border-color: var(--track-line);
+  line-height: 1.5;
+}
+#tracking-view :is(.routing-panel, #container-panel) th {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+#tracking-view :is(.routing-panel, #container-panel) td {
+  font-size: 13px;
+}
+#tracking-view .container-details-button {
+  color: var(--track-blue);
+  border-color: var(--track-line);
+  border-radius: var(--radius-control);
+  background: white;
+}
+#overview-view {
+  gap: 16px;
+}
+#overview-view .overview-hero,
+body.is-embedded #overview-view .overview-hero {
+  min-height: 0;
+  padding: 22px 24px;
+  gap: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: white;
+  color: var(--color-foreground);
+  box-shadow: var(--shadow-sm);
+}
+#overview-view .hero-copy,
+#overview-view .hero-copy h1 {
+  max-width: none;
+}
+#overview-view .hero-copy .kicker {
+  margin: 0 0 8px;
+  color: var(--color-primary);
+  letter-spacing: 0.04em;
+  font-size: 12px;
+}
+#overview-view .welcome-message {
+  margin-bottom: 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+#overview-view .hero-copy h1,
+body.is-embedded #overview-view .hero-copy h1 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 26px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+#overview-view .hero-copy > p:last-of-type,
+body.is-embedded #overview-view .hero-copy > p:last-of-type {
+  max-width: 620px;
+  margin: 9px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+#overview-view .overview-hero .primary-action.el-button {
+  display: inline-flex;
+  gap: 10px;
+  min-height: 44px;
+  height: 44px;
+  margin-top: 14px;
+  padding: 0 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  color: white;
+  background: var(--color-primary);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+#overview-view .overview-hero .primary-action.el-button:hover {
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+}
+#overview-view .hero-operations-summary,
+body.is-embedded #overview-view .hero-operations-summary {
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-foreground);
+  background: #f8faff;
+  box-shadow: none;
+}
+#overview-view .hero-operations-summary :is(dt, small, p) {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+#overview-view .hero-operations-summary :is(dd, strong) {
+  color: var(--color-foreground);
+}
+#overview-view .hero-operations-summary header strong {
+  font-size: 14px;
+}
+#overview-view .hero-operations-summary dl > div {
+  padding: 8px;
+}
+#overview-view .hero-operations-summary dd {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+#overview-view .hero-summary-status {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border: 0;
+  font-size: 12px;
+}
+#overview-view .panel-header.history-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 0;
+  padding: 16px 22px;
+  gap: 14px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+#overview-view .history-heading > div:first-child {
+  flex: 1 0 100%;
+}
+#overview-view .history-heading strong {
+  color: var(--color-foreground);
+  font-size: 17px;
+  font-weight: 650;
+}
+#overview-view .history-heading small {
+  margin-top: 3px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+#overview-view .history-heading .panel-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--color-primary);
+  background: none;
+}
+#overview-view .history-heading-actions {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(128px, 0.8fr) minmax(
+      200px,
+      2fr
+    );
+  width: 100%;
+  margin: 0;
+  align-items: end;
+  gap: 12px;
+}
+#overview-view .history-customer-filter {
+  min-width: 0;
+  gap: 6px;
+  color: var(--color-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+#overview-view .history-heading :is(.tracking-select-trigger, .history-search) {
+  min-height: 42px;
+  height: 42px;
+  border-color: var(--color-border-strong);
+  border-radius: var(--radius-control);
+  color: var(--color-foreground);
+  background: white;
+  font-size: 13px;
+  box-shadow: none;
+}
+#overview-view .history-search {
+  width: 100%;
+}
+#overview-view .history-search input {
+  min-height: 40px;
+  height: 40px;
+  color: var(--color-foreground);
+  font-size: 13px;
+}
+#overview-view .shipment-history-item {
+  border-color: var(--color-border);
+  box-shadow: none;
+  transform: none;
+  border-radius: 0;
+}
+#overview-view .shipment-row-toggle {
+  min-height: 116px;
+  padding: 16px 22px;
+  gap: 14px;
+  color: var(--color-foreground);
+  background: white;
+}
+#overview-view .shipment-row-toggle:hover,
+#overview-view .is-expanded .shipment-row-toggle {
+  background: #f8faff;
+}
+#overview-view .shipment-transport-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  color: var(--color-primary);
+  background: var(--color-accent-soft);
+}
+#overview-view .shipment-transport-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+#overview-view .shipment-field-label,
+#overview-view .shipment-date-labels b {
+  margin-bottom: 5px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+#overview-view .shipment-identity > strong {
+  color: var(--color-foreground);
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+#overview-view .shipment-identity > small:last-child {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+#overview-view .shipment-port strong,
+#overview-view .shipment-current-status strong,
+#overview-view .shipment-date-labels small {
+  color: var(--color-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+#overview-view .shipment-identity > small:last-child,
+#overview-view .shipment-port > span > small:last-child,
+#overview-view .shipment-current-status > small {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+#overview-view .shipment-current-status {
+  min-width: 0;
+}
+#overview-view .shipment-port .flag-icon {
+  width: 20px;
+  height: 14px;
+}
+@media (min-width: 960px) {
+  #tracking-view .query-panel form,
+  body.is-internal-session #tracking-view .query-panel form {
+    grid-template-columns: minmax(200px, 1.2fr) minmax(170px, 0.85fr) minmax(220px, 1.25fr) 132px;
+    gap: 16px;
+  }
+  #tracking-view .query-panel :is(.carrier-field, .type-field, .number-field, #submit-button) {
+    grid-column: auto;
+    grid-row: 1;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-card {
+    display: grid;
+    grid-template-columns: minmax(230px, 1.1fr) minmax(250px, 1.2fr) minmax(250px, 1.2fr);
+    gap: 10px 22px;
+    padding: 18px 22px 0;
+  }
+  body:not(.related-files-open)
+    #tracking-view
+    .shipment-summary-card
+    :is(.result-titlebar, .shipment-summary-grid) {
+    display: contents;
+  }
+  body:not(.related-files-open) #tracking-view .result-identity {
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  body:not(.related-files-open) #tracking-view .result-carrier-brand {
+    max-width: 190px;
+    padding: 0;
+    border: 0;
+  }
+  body:not(.related-files-open) #tracking-view #result-number {
+    font-size: 22px;
+  }
+  body:not(.related-files-open) #tracking-view .result-meta {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 12px;
+    gap: 5px 10px;
+  }
+  body:not(.related-files-open) #tracking-view .result-sync {
+    padding-left: 0;
+    border-left: 0;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-grid .summary-route-pair {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    gap: 18px;
+    padding: 0;
+  }
+  body:not(.related-files-open) #tracking-view .summary-route-pair > div > span {
+    gap: 7px;
+  }
+  body:not(.related-files-open) #tracking-view .summary-route-pair strong {
+    font-size: 16px;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-card .metric-grid {
+    display: grid;
+    grid-column: 3;
+    grid-row: 1;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    align-content: center;
+    gap: 0;
+    border: 0;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-card .metric-card {
+    padding: 0 0 0 16px;
+    border: 0;
+    border-left: 1px solid var(--track-line);
+  }
+  body:not(.related-files-open) #tracking-view .metric-head {
+    gap: 5px;
+    margin-bottom: 7px;
+  }
+  body:not(.related-files-open) #tracking-view .metric-icon {
+    display: none;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-card .metric-card > strong {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-grid .journey-overview {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding: 12px 0;
+    border-top: 1px solid var(--track-line);
+    border-bottom: 1px solid var(--track-line);
+  }
+  body:not(.related-files-open) #tracking-view .journey-stage-summary > span:last-child {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 4px 14px;
+  }
+  body:not(.related-files-open) #tracking-view .journey-stage-summary em {
+    grid-column: 1 / -1;
+  }
+  #tracking-view .result-meta .summary-booking-number {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 6px;
+    max-width: none;
+  }
+  #tracking-view .result-meta .summary-booking-number strong {
+    margin: 0;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-grid .result-primary-facts {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 0;
+    gap: 16px;
+    align-items: center;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-grid .result-primary-fact {
+    padding: 0;
+    border: 0;
+  }
+  body:not(.related-files-open) #tracking-view .result-primary-fact strong {
+    margin-top: 3px;
+    font-size: 13px;
+  }
+  body:not(.related-files-open) #tracking-view .related-files-trigger {
+    grid-column: 3;
+    grid-row: 2;
+    font-size: 13px;
+    min-height: 40px;
+    align-self: center;
+  }
+  body:not(.related-files-open) #tracking-view .shipment-summary-grid .summary-services {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-inline: -22px;
+    min-height: 36px;
+    padding: 8px 22px;
+  }
+  #overview-view .overview-hero,
+  body.is-embedded #overview-view .overview-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+    align-items: center;
+  }
+  #overview-view .shipment-row-toggle {
+    grid-template-areas: "icon identity origin timing destination" "icon identity status status status";
+    grid-template-columns:
+      36px minmax(190px, 1.2fr) minmax(120px, 0.8fr) minmax(200px, 1.1fr)
+      minmax(120px, 0.8fr);
+    row-gap: 12px;
+  }
+  #overview-view .shipment-current-status {
+    display: flex;
+    grid-area: status;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+  #overview-view .shipment-current-status .shipment-field-label {
+    margin: 0;
+    flex: none;
+  }
+  #overview-view .shipment-current-status > small {
+    margin: 0;
+    flex: none;
+  }
+}
+@media (min-width: 1200px) {
+  body:not(.related-files-open) #tracking-view .result-identity {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+  body:not(.related-files-open) #tracking-view .result-carrier-brand {
+    flex: 0 1 145px;
+    max-width: 145px;
+  }
+  body:not(.related-files-open) #tracking-view .result-carrier-logo {
+    width: 145px;
+  }
+}
+@media (max-width: 959px) {
+  #tracking-view .query-panel form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #tracking-view .query-panel #submit-button {
+    align-self: end;
+  }
+  #overview-view .history-heading-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  body.is-embedded .content {
+    width: calc(100% - 32px);
+    padding-top: 20px;
+  }
+  #tracking-view .page-heading h1 {
+    font-size: 28px;
+  }
+  #tracking-view .query-panel {
+    padding: 16px;
+  }
+  #tracking-view .query-panel #submit-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  #tracking-view .route-node,
+  #tracking-view .route-node.is-complete,
+  #tracking-view .route-node.is-active {
+    align-items: start;
+    padding: 0 0 24px;
+    text-align: left;
+  }
+  #tracking-view .route-node > .route-evidence {
+    align-self: start;
+  }
+  #tracking-view .route-time {
+    justify-content: flex-start;
+  }
+  #tracking-view .route-node > strong {
+    justify-content: flex-start;
+  }
+  #tracking-view .route-node::before,
+  #tracking-view .route-node:nth-child(3n)::before {
+    left: 18px;
+    right: auto;
+    border-top: 0;
+  }
+  #overview-view .overview-hero,
+  body.is-embedded #overview-view .overview-hero {
+    padding: 18px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  #overview-view .hero-copy h1,
+  body.is-embedded #overview-view .hero-copy h1 {
+    font-size: 24px;
+  }
+  #overview-view .panel-header.history-heading {
+    padding: 16px;
+  }
+  #overview-view .history-heading-actions {
+    gap: 10px;
+  }
+  #overview-view .history-search {
+    grid-column: 1 / -1;
+  }
+  #overview-view .shipment-row-toggle {
+    padding: 16px;
   }
 }

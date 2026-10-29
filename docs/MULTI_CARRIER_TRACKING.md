@@ -101,3 +101,12 @@ Agent 只从服务端目录读取所选船司的文件；模型和请求参数�
 - [Maersk API 接入与 Consumer Key](https://www.maersk.com/support/faqs/how-to-start-with-api)
 - [MSC Track and Trace API](https://developerportal.msc.com/api-details/)
 - [OOCL 货踪入口升级公告](https://moc.digital.oocl.com/static/oocl_tracking_announcement.html)
+
+## 重构版代码验收（2026-10-28）
+
+- Java 后端：337 项，0 失败、0 错误；覆盖新增四家快照持久化与缓存、客户绑定、提单身份、自动刷新及人工验证暂停。客户集成用例修正测试用客户代码长度后重跑通过。
+- Node 追踪服务：242 项通过；覆盖注册表一致性、四家执行适配器、授权先于缓存、DCSA 分页/身份校验和 Agent 错误透传。
+- 浏览器 Agent：73 项通过，TypeScript 构建通过。
+- 前端：635 项特性测试通过，类型检查、生产构建、既有与多船司批量导入检查通过。
+- Compose 叠加配置校验通过；未启动或更新远端部署。
+- 验收元数据：`output/carrier-tracking-20261028/acceptance.json`。官网实测边界以该文件的 `live` 字段和上节为准，不能用代码测试数量代替实际官网查询成功率。

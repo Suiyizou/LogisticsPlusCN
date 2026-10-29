@@ -44,7 +44,7 @@ assert.equal(sheet.suggestedColumnIndex, 2);
 assert.equal(sheet.columns[8].label, "VOLUME");
 assert.equal(sheet.previewRows.length, 9);
 
-const items = buildShipmentBatchItems(sheet, 2);
+const items = buildShipmentBatchItems(sheet, 2, "COSCO");
 assert.equal(items.length, 35);
 assert.equal(items.filter((item) => !item.manualOnly).length, 35);
 assert.equal(items.filter((item) => item.manualOnly).length, 0);
@@ -53,7 +53,8 @@ assert.deepEqual(
   items.map((item) => item.number),
   bookingNumbers
 );
-assert.ok(items.every((item) => item.importedDetails.clientNameCode === "Hayden US"));
+assert.equal(items[0].importedDetails.clientNameCode, "Hayden US");
+assert.equal(items[1].importedDetails.clientNameCode, "");
 assert.equal(items[0].importedDetails.volume, "");
 assert.equal(items[1].importedDetails.volume, "2*40HC");
 assert.equal(items[0].importedDetails.originalBillOfLading, "COSU6502406170");
@@ -152,10 +153,7 @@ assert.deepEqual(resultWorkbook.SheetNames, ["导入结果"]);
 
 const punctuationSheet = prepareSheet("Manual", [["BOOKING NO."], ["ABC/123.45 manual note"]]);
 const punctuationItems = buildShipmentBatchItems(punctuationSheet, 0);
-assert.equal(punctuationItems.length, 1);
-assert.equal(punctuationItems[0].number, "ABC/123.45");
-assert.equal(punctuationItems[0].manualOnly, false);
-assert.equal(punctuationItems[0].type, "BOOKING");
+assert.equal(punctuationItems.length, 0);
 
 const cosuBookingSheet = prepareSheet("COSU", [["BOOKING NO."], ["COSU 6502406170"]]);
 const cosuBookingItems = buildShipmentBatchItems(cosuBookingSheet, 0);
@@ -169,7 +167,7 @@ const duplicateBookingSheet = prepareSheet("Duplicates", [
   ["6502406170", "JOB-001", ""],
   ["COSU6502406170", "", "SHANGHAI"]
 ]);
-const duplicateBookingItems = buildShipmentBatchItems(duplicateBookingSheet, 0);
+const duplicateBookingItems = buildShipmentBatchItems(duplicateBookingSheet, 0, "COSCO");
 assert.equal(duplicateBookingItems.length, 1);
 assert.equal(duplicateBookingItems[0].number, "6502406170");
 assert.equal(duplicateBookingItems[0].importedDetails.forwarderJobNumber, "JOB-001");

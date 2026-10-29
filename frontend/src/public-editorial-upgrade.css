@@ -1,10 +1,10 @@
 /* Editorial public-site layer. These tokens never affect authenticated workspaces. */
 .landing-page.public-site {
-  --public-ink: #153e56;
-  --public-blue: #176c94;
-  --public-muted: #536773;
-  --public-line: #dbe5ea;
-  --public-wash: #f2f7fa;
+  --public-ink: #0c1c3a;
+  --public-blue: #0866e8;
+  --public-muted: #657691;
+  --public-line: #e2e9f3;
+  --public-wash: #f4f7fc;
   --public-orange: #be5b25;
   color: var(--public-ink);
   background: #fff;
@@ -33,8 +33,8 @@
   border-color: var(--public-blue);
 }
 .landing-page.public-site .maritime-button--navy:hover {
-  background: #115573;
-  border-color: #115573;
+  background: #0755d0;
+  border-color: #0755d0;
 }
 .landing-page.public-site .maritime-eyebrow {
   color: var(--public-orange);
@@ -110,18 +110,19 @@
   font-size: 12px;
 }
 .landing-page.public-site .public-detail-hero__grid > div {
-  width: min(590px, 55%);
-  padding: 34px 40px 38px;
+  width: min(540px, 52%);
+  padding: 30px 34px 34px;
   background: #fff;
-  border-top: 3px solid var(--public-orange);
+  border: 1px solid var(--public-line);
   box-shadow: 0 8px 25px #1438490a;
 }
 .landing-page.public-site .public-detail-hero h1,
 .landing-page.public-site:lang(en-US) .public-detail-hero h1 {
   width: auto;
   max-width: none;
-  font-size: clamp(32px, 3.1vw, 44px);
-  line-height: 1.35;
+  font-size: clamp(32px, 3.1vw, 42px);
+  line-height: 1.3;
+  font-weight: 700;
   letter-spacing: -0.025em;
 }
 .landing-page.public-site .public-detail-hero .public-hero-tagline {

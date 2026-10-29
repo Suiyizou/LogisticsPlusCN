@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, useId, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { Box, Location, Briefcase, Setting, Grid, ArrowRight } from "@element-plus/icons-vue";
+import WorkspaceIcon from "./WorkspaceIcon.vue";
 import { currentLocale, t } from "../../i18n";
 import { workspaceNavigationMessages } from "../../i18n/workspaceNavigationMessages.js";
 import { configuredPlatformModules } from "../../modules/configuredRegistry.js";
@@ -34,7 +34,7 @@ const groups = computed(() => {
   return [
     {
       key: "tracking",
-      icon: Location,
+      icon: "tracking",
       items: [
         { key: "overview", label: copy.value.overview, to: "/workspace/tracking/overview" },
         { key: "query", label: copy.value.query, to: "/workspace/tracking/query" }
@@ -42,7 +42,7 @@ const groups = computed(() => {
     },
     {
       key: "planning",
-      icon: Box,
+      icon: "box",
       items: [
         { key: "cargos", label: copy.value.cargos, to: "/planner/cargos" },
         {
@@ -69,7 +69,7 @@ const groups = computed(() => {
       ? [
           {
             key: "business",
-            icon: Briefcase,
+            icon: "business",
             items: business.map((module) => ({
               key: module.id,
               label: t(module.labelKey),
@@ -82,7 +82,7 @@ const groups = computed(() => {
       ? [
           {
             key: "admin",
-            icon: Setting,
+            icon: "settings",
             items:
               props.adminItems ||
               adminNavigation(currentLocale.value, t, configuredPlatformModules).pages.map(
@@ -186,9 +186,9 @@ function keydown(event) {
       :aria-controls="id"
       @click="mobileOpen = !mobileOpen"
     >
-      <Grid /><span>{{ copy.menu }}</span
+      <WorkspaceIcon name="grid" /><span>{{ copy.menu }}</span
       ><small>{{ mobileOpen ? copy.collapse : copy.expand }}</small
-      ><ArrowRight :class="{ 'is-open': mobileOpen }" />
+      ><WorkspaceIcon name="chevron" :class="{ 'is-open': mobileOpen }" />
     </button>
     <nav
       :id="id"
@@ -201,7 +201,7 @@ function keydown(event) {
         to="/workbenches"
         class="workspace-navigation__home"
         :aria-current="route.path === '/workbenches' ? 'page' : undefined"
-        ><Grid /><span>{{ copy.home }}</span></RouterLink
+        ><WorkspaceIcon name="grid" /><span>{{ copy.home }}</span></RouterLink
       >
       <section
         v-for="group in groups"
@@ -218,8 +218,8 @@ function keydown(event) {
           :title="compact ? copy[group.key] : undefined"
           @click="toggle(group.key)"
         >
-          <component :is="group.icon" /><span>{{ copy[group.key] }}</span
-          ><ArrowRight class="workspace-navigation__chevron" />
+          <WorkspaceIcon :name="group.icon" /><span>{{ copy[group.key] }}</span
+          ><WorkspaceIcon name="chevron" class="workspace-navigation__chevron" />
         </button>
         <div
           :id="`${id}-${group.key}`"
@@ -236,7 +236,7 @@ function keydown(event) {
                 @click="toggle(item.key)"
               >
                 <span>{{ item.label }}</span
-                ><ArrowRight :class="{ 'is-open': openGroups.has(item.key) }" />
+                ><WorkspaceIcon name="chevron" :class="{ 'is-open': openGroups.has(item.key) }" />
               </button>
               <div
                 v-show="openGroups.has(item.key)"
@@ -279,104 +279,138 @@ function keydown(event) {
 .workspace-navigation {
   width: 100%;
   min-width: 0;
-  color: #d4e1e9;
+  color: var(--color-secondary);
 }
 .workspace-navigation__nav {
   display: grid;
   align-content: start;
-  gap: 5px;
+  gap: 12px;
   margin: 0;
-  overflow: visible;
 }
 .workspace-navigation__mobile {
   display: none;
 }
 .workspace-navigation__group {
-  border-bottom: 1px solid #ffffff18;
-  padding-bottom: 6px;
   min-width: 0;
 }
 .workspace-navigation :is(.workspace-navigation__home, .workspace-navigation__trigger) {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
   min-height: 48px;
   margin: 0;
-  padding: 11px 12px;
+  padding: 11px 18px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   text-decoration: none;
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
 }
 .workspace-navigation :is(.workspace-navigation__home, .workspace-navigation__trigger) > svg {
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
 }
 .workspace-navigation__home {
-  margin-bottom: 12px !important;
+  margin-bottom: 4px !important;
 }
 .workspace-navigation__trigger > span {
   flex: 1;
 }
 .workspace-navigation__trigger > .workspace-navigation__chevron {
-  flex-basis: 13px !important;
-  width: 13px !important;
-  height: 13px !important;
+  flex-basis: 12px !important;
+  width: 12px !important;
+  height: 12px !important;
   transition: transform 180ms ease;
 }
 .workspace-navigation__trigger[aria-expanded="true"] .workspace-navigation__chevron {
   transform: rotate(90deg);
 }
 .workspace-navigation__group.is-current > .workspace-navigation__trigger {
-  color: white;
+  color: var(--color-primary);
+  font-weight: 600;
 }
 .workspace-navigation__children {
   display: grid;
   gap: 2px;
-  padding: 2px 0 8px;
+  padding: 3px 0 5px;
 }
 .workspace-navigation a.workspace-navigation__link {
   display: flex;
   align-items: center;
   min-height: 44px;
   margin: 0;
-  padding: 10px 12px 10px 44px;
+  padding: 10px 14px 10px 56px;
   border: 0;
   border-left: 2px solid transparent;
-  border-radius: 2px;
+  border-radius: 6px;
   background: transparent;
-  color: #c4d4df;
+  color: var(--color-secondary);
   font: inherit;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   text-decoration: none;
   box-sizing: border-box;
 }
 .workspace-navigation :is(a, button):hover {
-  color: #fff;
-  background: #ffffff0c;
+  color: var(--color-primary);
+  background: #f4f8ff;
 }
 .workspace-navigation a.is-active,
 .workspace-navigation__home[aria-current] {
-  border-left: 2px solid var(--color-accent, #c67556);
-  color: white;
-  background: #ffffff15;
+  color: var(--color-primary);
+  background: var(--color-accent-soft);
+  border-left-color: var(--color-primary);
+  font-weight: 600;
 }
 .workspace-navigation a.is-disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 .workspace-navigation :is(a, button):focus-visible {
-  outline: 2px solid #e1ab82;
+  outline: 2px solid var(--color-ring);
   outline-offset: -2px;
+}
+.workspace-navigation__subtrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  padding: 10px 18px 10px 56px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.workspace-navigation__subtrigger span {
+  flex: 1;
+}
+.workspace-navigation__subtrigger svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 180ms ease;
+}
+.workspace-navigation__subtrigger svg.is-open {
+  transform: rotate(90deg);
+}
+.workspace-navigation__subchildren a.workspace-navigation__link {
+  padding-left: 70px;
+  font-size: 14px;
+}
+.workspace-navigation__link,
+.workspace-navigation__trigger span {
+  overflow-wrap: anywhere;
 }
 @media (min-width: 761px) {
   .is-compact .workspace-navigation__trigger > span,
@@ -393,8 +427,10 @@ function keydown(event) {
     z-index: 20;
     width: 220px;
     padding: 6px;
-    background: var(--color-primary, #102c40);
-    box-shadow: 6px 8px 24px #071a2e33;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-overlay);
   }
   .is-compact .workspace-navigation__link {
     padding-left: 16px !important;
@@ -411,12 +447,12 @@ function keydown(event) {
     width: 100%;
     min-height: 44px;
     padding: 10px 12px;
-    border: 1px solid #ffffff30;
-    border-radius: 3px;
-    background: transparent;
-    color: white;
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    background: white;
+    color: var(--color-foreground);
     font: inherit;
-    font-size: 13px;
+    font-size: 14px;
     text-align: left;
   }
   .workspace-navigation__mobile > svg {
@@ -426,7 +462,7 @@ function keydown(event) {
   .workspace-navigation__mobile > small {
     margin-left: auto;
     font-size: 12px;
-    color: #c4d4df;
+    color: var(--color-muted);
   }
   .workspace-navigation__mobile > .is-open {
     transform: rotate(90deg);
@@ -441,7 +477,7 @@ function keydown(event) {
     gap: 8px;
   }
   .workspace-navigation__home {
-    grid-column: 1 / -1;
+    grid-column: 1/-1;
     margin-bottom: 0 !important;
   }
   .workspace-navigation a.workspace-navigation__link {
@@ -455,72 +491,9 @@ function keydown(event) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .workspace-navigation__chevron {
-    transition: none !important;
-  }
-}
-</style>
-
-<style scoped>
-.workspace-navigation {
-  color: #526578;
-}
-.workspace-navigation__group {
-  border-color: #edf1f5;
-}
-.workspace-navigation__group.is-current > .workspace-navigation__trigger {
-  color: #246b91;
-}
-.workspace-navigation a.workspace-navigation__link {
-  color: #526578;
-}
-.workspace-navigation :is(a, button):hover {
-  color: #246b91;
-  background: #f0f6fb;
-}
-.workspace-navigation a.is-active,
-.workspace-navigation__home[aria-current] {
-  color: #246b91;
-  background: #eaf3fb;
-  border-left-color: #246b91;
-  font-weight: 600;
-}
-.workspace-navigation__subtrigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  border: 0;
-  padding: 12px 14px 12px 44px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.workspace-navigation__subtrigger span {
-  flex: 1;
-}
-.workspace-navigation__subtrigger svg {
-  width: 13px;
-  height: 13px;
-  transition: transform 180ms ease;
-}
-.workspace-navigation__subtrigger svg.is-open {
-  transform: rotate(90deg);
-}
-.workspace-navigation__subchildren a.workspace-navigation__link {
-  padding-left: 58px;
-  font-size: 12px;
-}
-.workspace-navigation__link,
-.workspace-navigation__trigger span {
-  overflow-wrap: anywhere;
-}
-@media (prefers-reduced-motion: reduce) {
+  .workspace-navigation__chevron,
   .workspace-navigation__subtrigger svg {
-    transition: none;
+    transition: none !important;
   }
 }
 </style>

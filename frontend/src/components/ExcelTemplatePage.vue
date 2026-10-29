@@ -1,7 +1,11 @@
 <template>
   <section
     class="algorithm-page excel-template-page"
-    :class="{ 'is-coordinated': coordinated, 'is-text-import': recognitionInput === 'text' }"
+    :class="{
+      'is-coordinated': coordinated,
+      'is-text-import': recognitionInput === 'text',
+      'has-recognition-result': recognitionHasResult
+    }"
     data-i18n-ignore
   >
     <WorkspacePageHeader
@@ -343,7 +347,7 @@
             <strong>{{ recognitionStatusMessage }}</strong>
           </div>
 
-          <template v-if="recognitionHasResult">
+          <div v-if="recognitionHasResult" class="recognition-review-workspace">
             <div class="excel-summary-grid recognition-summary-grid">
               <div>
                 <span>{{ ui("excel.textItems") }}</span>
@@ -368,8 +372,7 @@
             </div>
 
             <div v-if="recognitionAgentTask" class="agent-status-row text-agent-status">
-              <span
-                >{{ recognitionAgentTask.taskNo }} ·
+              <span :title="recognitionAgentTask.taskNo">
                 {{
                   recognitionPackingReview.strict
                     ? ui("excel.originalWorkbookChecked")
@@ -388,6 +391,7 @@
             </div>
 
             <PackingReconciliationPanel
+              class="recognition-check-sidebar"
               :review="recognitionPackingReview"
               v-model:volume-confirmed="recognitionVolumeConfirmed"
             />
@@ -419,6 +423,14 @@
               v-if="recognitionRows.length"
               class="template-table-wrap recognition-result-table-wrap"
             >
+              <header class="recognition-list-heading">
+                <h2>{{ ui("excel.openRecognitionReview") }}</h2>
+                <span
+                  >{{ recognitionRows.length }} {{ ui("unit.classes") }} / {{ recognitionQuantity }}
+                  {{ ui("unit.cargoPieces") }}</span
+                >
+                <el-button @click="openRecognitionReviewDialog">{{ ui("common.edit") }}</el-button>
+              </header>
               <table class="template-table sample recognition-result-table">
                 <thead>
                   <tr>
@@ -473,7 +485,7 @@
                 </tbody>
               </table>
             </div>
-          </template>
+          </div>
         </div>
       </div>
     </div>
@@ -3525,6 +3537,8 @@ function cargoKey(cargo, index = "") {
 <style scoped>
 .excel-template-page {
   gap: 24px;
+  color: #0c1c3a;
+  font-family: var(--font-ui);
 }
 .excel-import-mode-switch {
   display: flex;
@@ -3642,6 +3656,7 @@ function cargoKey(cargo, index = "") {
 }
 .is-coordinated .excel-workspace-layout {
   display: block;
+  margin-top: 0;
 }
 .is-coordinated .smart-recognition-card {
   padding: 0;
@@ -3679,16 +3694,332 @@ function cargoKey(cargo, index = "") {
   box-shadow: 0 0 0 2px #6d9acb inset;
 }
 .is-coordinated .source-workbook-bar {
-  background: #f7fafe;
-  border: 1px solid #dee7f0;
-  border-radius: 12px;
+  padding: 18px 22px;
+  background: #fff;
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+.is-coordinated.has-recognition-result .source-workbook-bar {
+  min-height: 48px;
+  margin: 0 0 10px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
+}
+.is-coordinated.has-recognition-result .source-workbook-bar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.is-coordinated.has-recognition-result .source-workbook-bar strong {
+  max-width: 360px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.is-coordinated.has-recognition-result .source-workbook-actions .el-button {
+  min-height: 34px;
+  height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+.is-coordinated.has-recognition-result .recognition-placeholder {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-style: solid;
+  border-color: #d5e4fb;
+  border-radius: 6px;
+  background: #eaf2ff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.is-coordinated.has-recognition-result .recognition-placeholder > span {
+  flex: none;
+  font-weight: 500;
+}
+.is-coordinated.has-recognition-result .recognition-placeholder > strong {
+  font-weight: 400;
+}
+.is-coordinated.has-recognition-result .recognition-placeholder.error {
+  border-color: #f5d0c6;
+  background: #fff5f1;
+  color: #a84028;
 }
 .is-coordinated .recognition-loading-panel {
   background: #f3f7fc;
   border-color: #dce7f2;
 }
 .is-coordinated .recognition-import-row {
-  padding-block: 18px;
+  padding: 20px 24px;
+}
+.recognition-review-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+.recognition-review-workspace > * {
+  min-width: 0;
+}
+.recognition-review-workspace > .recognition-summary-grid {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  background: #fff;
+  gap: 12px;
+}
+.recognition-summary-grid > div {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.recognition-summary-grid span {
+  color: #6b7d99;
+  font-size: 13px;
+  font-weight: 400;
+}
+.recognition-summary-grid strong {
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: #0c1c3a;
+  font-variant-numeric: tabular-nums;
+}
+.recognition-review-workspace > .text-agent-status {
+  grid-column: 1;
+  grid-row: 3;
+  margin: 0;
+  padding: 8px 12px;
+  background: #f4f7fc;
+  border: 1px solid #e2e9f3;
+  border-radius: 7px;
+  color: #3c5e8f;
+  font-size: 13px;
+}
+.recognition-review-workspace > .recognition-result-table-wrap {
+  display: block;
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  align-content: start;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  background: #fff;
+}
+.recognition-list-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2e9f3;
+}
+.recognition-list-heading h2 {
+  margin: 0;
+  color: #0c1c3a;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.recognition-list-heading > span {
+  font-size: 13px;
+  color: #6b7d99;
+}
+.recognition-list-heading .el-button {
+  margin-left: auto;
+  color: #0866e8;
+  border-color: #d5e2f5;
+}
+.recognition-result-table {
+  display: table;
+  align-self: start;
+  height: auto;
+  min-height: 0;
+  font-size: 14px;
+}
+.recognition-result-table thead,
+.recognition-result-table tbody {
+  height: auto;
+}
+.recognition-result-table thead tr {
+  height: 40px;
+}
+.recognition-result-table th {
+  box-sizing: border-box;
+  height: 40px;
+  padding: 8px 12px;
+  background: #f4f7fc;
+  color: #0c1c3a;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  border-color: #e2e9f3;
+}
+.recognition-result-table tbody tr,
+.recognition-result-table td {
+  height: 46px;
+}
+.recognition-result-table td {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 6px 12px;
+  border-color: #e2e9f3;
+  color: #243a5a;
+  line-height: 20px;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.recognition-result-table td .el-button {
+  height: 32px;
+  min-height: 32px;
+  padding-block: 4px;
+}
+.recognition-result-table tbody tr:hover {
+  background: #f7faff;
+}
+.recognition-review-workspace > .recognition-check-sidebar {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  margin: 0;
+  padding: 22px 20px;
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  background: #fff;
+}
+.recognition-check-sidebar :deep(header) {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.recognition-check-sidebar :deep(h3) {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0c1c3a;
+}
+.recognition-check-sidebar :deep(header span),
+.recognition-check-sidebar :deep(.packing-check-metrics span),
+.recognition-check-sidebar :deep(.packing-check-metrics small) {
+  color: #6b7d99;
+  font-size: 13px;
+  font-weight: 400;
+}
+.recognition-check-sidebar :deep(.packing-check-metrics) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 14px;
+  padding: 18px 0;
+  border-color: #e2e9f3;
+}
+.recognition-check-sidebar :deep(.packing-check-metrics strong) {
+  color: #0866e8;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.recognition-check-sidebar :deep(.packing-check-blocked) {
+  padding: 14px;
+  border: 1px solid #f5d0c6;
+  background: #fff5f1;
+  color: #a84028;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.recognition-check-sidebar :deep(.packing-volume-review) {
+  padding: 14px;
+  border: 1px solid #f6dba9;
+  background: #fff9ee;
+  color: #946115;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.recognition-check-sidebar :deep(.packing-check-matched) {
+  padding: 14px;
+  border: 1px solid #bde7d8;
+  border-radius: 7px;
+  background: #eef9f4;
+  color: #1b825c;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.recognition-check-sidebar :deep(input) {
+  accent-color: #0866e8;
+}
+.recognition-review-workspace > .recognition-import-row {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  margin: 2px 0 0;
+  border: 1px solid #e2e9f3;
+  border-radius: 10px;
+  background: #fff;
+}
+.recognition-import-row :deep(.el-form-item__label) {
+  color: #6b7d99;
+  font-size: 13px;
+  font-weight: 500;
+}
+.recognition-review-workspace > .template-table-wrap:not(.recognition-result-table-wrap) {
+  grid-column: 1;
+  grid-row: 4;
+}
+.excel-template-page :deep(.el-input__wrapper),
+.excel-template-page :deep(.el-select__wrapper) {
+  min-height: 38px;
+  font: 400 14px/1.5 var(--font-ui);
+}
+@media (max-width: 1020px) {
+  .recognition-review-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .recognition-review-workspace > .recognition-check-sidebar {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .recognition-review-workspace > .template-table-wrap:not(.recognition-result-table-wrap) {
+    grid-row: 5;
+  }
+  .recognition-review-workspace > .recognition-import-row {
+    grid-row: 6;
+  }
+  .recognition-check-sidebar :deep(.packing-check-metrics) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .recognition-review-workspace > .recognition-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recognition-check-sidebar :deep(.packing-check-metrics) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recognition-import-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .recognition-import-row .el-form-item,
+  .recognition-import-row .el-select {
+    min-width: 0;
+    width: 100%;
+  }
+  .recognition-import-row > .el-button {
+    margin-left: 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .is-coordinated .recognition-loader {
