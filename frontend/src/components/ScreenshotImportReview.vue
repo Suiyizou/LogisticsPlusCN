@@ -3,10 +3,17 @@
     <p>{{ copy.description }}</p>
     <p class="screenshot-note">{{ copy.caution }}</p>
     <div class="screenshot-actions">
-      <label class="screenshot-picker"
-        >{{ copy.choose }}<input type="file" accept="image/png,image/jpeg" @change="selectFile"
-      /></label>
-      <span>{{ file?.name }}</span>
+      <label class="screenshot-picker">
+        {{ copy.choose }}
+        <input
+          class="screenshot-file-input"
+          type="file"
+          accept="image/png,image/jpeg"
+          :aria-label="copy.choose"
+          @change="selectFile"
+        />
+      </label>
+      <span v-if="file" class="screenshot-filename" :title="file.name">{{ file.name }}</span>
       <button type="button" :disabled="!file || busy" @click="recognize">{{ copy.start }}</button>
       <button v-if="busy" type="button" @click="cancel">{{ copy.cancel }}</button>
     </div>
@@ -288,8 +295,28 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 .screenshot-picker {
-  display: grid;
-  gap: 6px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.screenshot-picker:focus-within {
+  outline: 2px solid var(--el-color-primary, #1684a3);
+  outline-offset: 3px;
+}
+.screenshot-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.screenshot-filename {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .screenshot-source {
   max-width: 100%;
@@ -330,7 +357,8 @@ td textarea {
   gap: 8px;
   line-height: 1.6;
 }
-button {
+button,
+.screenshot-picker {
   justify-self: start;
   padding: 9px 16px;
   border: 1px solid #bad0df;
