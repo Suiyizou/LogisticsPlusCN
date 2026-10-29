@@ -25,8 +25,7 @@ test("carrier display identities accept source names and preserve unfamiliar car
     const identity = carrierIdentity(code);
     assert.equal(identity.code, code);
     assert.ok(identity.name);
-    if (!["COSCO", "OOCL"].includes(code))
-      assert.equal(identity.logo, "", "unverified brands remain text badges");
+    assert.match(identity.logo, /^\/carriers\//, "verified brands use original local images");
   }
   assert.deepEqual(carrierIdentity("New Local Carrier"), {
     code: "NEW LOCAL CARRIER",
@@ -46,4 +45,38 @@ test("official carrier images remain identical to the recorded local source asse
     const contents = readFileSync(new URL(`../public${identity.logo}`, import.meta.url));
     assert.equal(createHash("sha256").update(contents).digest("hex"), hash);
   }
+});
+
+test("verified brand registry keeps both UI maps, provenance hashes and local files consistent", () => {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../public/carriers/manifest.json", import.meta.url), "utf8")
+  );
+  const trackingRoot = new URL("../../tracking-service/public/", import.meta.url);
+  assert.equal(manifest.assets.length, 14);
+  for (const asset of manifest.assets) {
+    assert.equal(carrierIdentity(asset.code).logo, `/carriers/${asset.file}`);
+    const local = readFileSync(new URL(`../public/carriers/${asset.file}`, import.meta.url));
+    assert.equal(createHash("sha256").update(local).digest("hex"), asset.sha256);
+    assert.deepEqual(readFileSync(new URL(`carriers/${asset.file}`, trackingRoot)), local);
+    assert.match(asset.source, /^https:\/\//);
+  }
+  for (const [file, constant] of [
+    ["app.js", "CARRIER_BRAND_ASSETS"],
+    ["tracking-v1-adapter.mjs", "CARRIER_LOGOS"]
+  ]) {
+    const source = readFileSync(new URL(file, trackingRoot), "utf8");
+    const mapping = source.match(
+      new RegExp(`const ${constant} = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\)`)
+    )[1];
+    for (const asset of manifest.assets)
+      assert.ok(
+        mapping.includes(`${asset.code}: "./carriers/${asset.file}"`),
+        `${file}: ${asset.code}`
+      );
+  }
+  for (const code of ["WAN_HAI", "HEDE"]) assert.equal(carrierIdentity(code).logo, "");
+  assert.deepEqual(
+    JSON.parse(readFileSync(new URL("carriers/manifest.json", trackingRoot), "utf8")),
+    manifest
+  );
 });

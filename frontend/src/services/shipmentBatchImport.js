@@ -30,10 +30,16 @@ const FIELD_ALIASES = {
     "CARRIERCODE",
     "\u627f\u8fd0\u4eba",
     "\u8239\u516c\u53f8",
+    "\u8239\u53f8",
     "\u8239\u53f8\u4ee3\u7801"
   ],
   originalBillOfLading: BILL_HEADERS,
-  forwarderJobNumber: ["JOBNUMBER", "FORWARDERJOBNUMBER", "\u4e1a\u52a1\u5355\u53f7"],
+  forwarderJobNumber: [
+    "JOBNUMBER",
+    "FORWARDERJOBNUMBER",
+    "\u4e1a\u52a1\u5355\u53f7",
+    "\u8d27\u4ee3\u8ba2\u5355\u53f7"
+  ],
   vesselVoyage: ["VESSELVOY", "VESSELVOYAGE", "\u8239\u540d\u822a\u6b21"],
   portOfLoading: ["POL", "PORTOFLOADING", "\u8d77\u8fd0\u6e2f"],
   portOfDischarge: ["POD", "PORTOFDISCHARGE", "\u76ee\u7684\u6e2f"],
@@ -200,7 +206,7 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
   };
 }
 
-/** @param {{ adapterMode?: string }} [options] */
+/** @param {{ adapterMode?: string, includedSourceRows?: number[] }} [options] */
 export function buildShipmentBatchPreview(
   sheet,
   selectedColumnIndex,
@@ -211,6 +217,9 @@ export function buildShipmentBatchPreview(
   const adapterMode = normalizeTrackingAdapterMode(options.adapterMode ?? TRACKING_ADAPTER_MODE);
   const localQueue = adapterMode === "LOCAL_QUEUE";
   const configuredCarriers = trackingCarriersForMode(adapterMode);
+  const includedSourceRows = options.includedSourceRows
+    ? new Set(options.includedSourceRows)
+    : null;
   /** @type {{ items: any[], rows: any[], errors: {row:number,code:string,message:string}[], skipped:number, duplicates:number, mappings:{field:string,index:number,header:string}[], adapterMode:string }} */
   const preview = {
     items: [],
@@ -227,6 +236,15 @@ export function buildShipmentBatchPreview(
       code: "RESULT_WORKBOOK",
       message: "Tracking result workbook is not a task import workbook"
     });
+  if (sheet && !sheet.resultSheet && !sheet.columns.some((column) => column.score > 0)) {
+    preview.errors.push({
+      row: sheet.headerRow,
+      code: "UNRECOGNIZED_TASK_SHEET",
+      message:
+        "This sheet has no recognized booking or bill-of-lading header. Packing cargo is not a tracking task workbook."
+    });
+    return preview;
+  }
   if (
     !sheet ||
     selectedColumnIndex === null ||
@@ -277,6 +295,7 @@ export function buildShipmentBatchPreview(
   for (let r = 1; r < sheet.rows.length; r++) {
     const cells = sheet.rows[r];
     const row = sheet.sourceRowNumbers[r];
+    if (includedSourceRows && !includedSourceRows.has(row)) continue;
     const original = cellText(cells[col]);
     if (!cells.some(Boolean)) {
       preview.skipped++;
@@ -420,6 +439,68 @@ export function buildShipmentBatchPreview(
       message: "A shipment batch cannot exceed 500 references"
     });
   return preview;
+}
+
+/** Local-only review scope; every parsing pass uses the same production parser.
+ * @param {{adapterMode?:string,sourceCandidateLimit?:number,excludedSourceRows?:number[]}} [options]
+ */
+export function buildShipmentBatchReview(
+  sheet,
+  column,
+  carrier = "",
+  type = "BOOKING",
+  options = {}
+) {
+  const full = buildShipmentBatchPreview(sheet, column, carrier, type, options);
+  const candidates = [
+    ...new Set([
+      ...full.rows.map((row) => row.sourceRow),
+      ...full.errors
+        .filter((issue) => issue.row > (sheet?.headerRow || 0))
+        .map((issue) => issue.row)
+    ])
+  ].sort((a, b) => a - b);
+  const sourceLimit = Math.max(1, Math.min(60, Number(options.sourceCandidateLimit) || 60));
+  const windowRows = candidates.slice(0, sourceLimit);
+  const excluded = new Set(
+    (options.excludedSourceRows || []).filter((row) => windowRows.includes(row))
+  );
+  const displayed = buildShipmentBatchPreview(sheet, column, carrier, type, {
+    ...options,
+    includedSourceRows: windowRows
+  });
+  const selected = buildShipmentBatchPreview(sheet, column, carrier, type, {
+    ...options,
+    includedSourceRows: windowRows.filter((row) => !excluded.has(row))
+  });
+  const rows = windowRows.map((sourceRow) => {
+    const original = displayed.rows.find((row) => row.sourceRow === sourceRow);
+    const errors = displayed.errors.filter((issue) => issue.row === sourceRow);
+    return {
+      ...(original || {
+        sourceRow,
+        originalReference: "",
+        number: "",
+        carrier: "",
+        carrierSource: "",
+        type: "",
+        errors,
+        status: "BLOCKED"
+      }),
+      sourceCells: sheet?.rows?.[sheet.sourceRowNumbers.indexOf(sourceRow)] || [],
+      excluded: excluded.has(sourceRow),
+      status: excluded.has(sourceRow) ? "EXCLUDED" : original?.status || "BLOCKED"
+    };
+  });
+  return {
+    ...selected,
+    rows,
+    totalCandidates: candidates.length,
+    sourceLimit,
+    windowCount: windowRows.length,
+    outsideLimit: Math.max(0, candidates.length - windowRows.length),
+    excludedCount: excluded.size
+  };
 }
 
 export function buildShipmentBatchItems(sheet, column, carrier = "", type = "BOOKING") {

@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { supportsShipmentReference } from "../../services/trackingCarriers.js";
 import {
-  buildShipmentBatchPreview,
+  buildShipmentBatchReview,
   parseShipmentBatchWorkbook
 } from "../../services/shipmentBatchImport.js";
 import { useShipmentBatchTask } from "./useShipmentBatchTask.js";
@@ -19,7 +19,7 @@ import {
 export function useShipmentBatchTracking({
   owner,
   canManage = ref(true),
-  selectedCustomerId,
+  selectedCustomerId: _selectedCustomerId,
   assignableCustomers: _assignableCustomers,
   shipmentTrackingChannel,
   refreshingShipment,
@@ -63,7 +63,25 @@ export function useShipmentBatchTracking({
   const batchTrackSelectedSheetName = ref("");
   const batchTrackSelectedColumnIndex = ref(null);
   const batchTrackCustomerId = ref("");
-  const batchTrackPublishToCustomer = ref(true);
+  const batchTrackPublishToCustomer = ref(false);
+  const batchTrackReviewed = ref(false);
+  /** @type {import("vue").Ref<number[]>} */
+  const batchTrackExcludedRows = ref([]);
+  watch(
+    [
+      batchTrackCustomerId,
+      batchTrackPublishToCustomer,
+      batchTrackCarrier,
+      batchTrackReferenceType,
+      batchTrackSelectedSheetName,
+      batchTrackSelectedColumnIndex,
+      batchTrackExcludedRows
+    ],
+    () => {
+      batchTrackReviewed.value = false;
+    },
+    { deep: true, flush: "sync" }
+  );
   const batchTrackProblemsOnly = ref(false);
   const requestedMode = ref("IMPORT");
   const failureKey = ref("customers.batchTrackStartFailed");
@@ -121,11 +139,12 @@ export function useShipmentBatchTracking({
       null
   );
   const batchTrackImportPreview = computed(() =>
-    buildShipmentBatchPreview(
+    buildShipmentBatchReview(
       batchTrackSelectedSheet.value,
       batchTrackSelectedColumnIndex.value,
       batchTrackCarrier.value,
-      batchTrackReferenceType.value
+      batchTrackReferenceType.value,
+      { sourceCandidateLimit: 60, excludedSourceRows: batchTrackExcludedRows.value }
     )
   );
   const batchTrackItems = computed(() => batchTrackImportPreview.value.items);
@@ -166,16 +185,20 @@ export function useShipmentBatchTracking({
     },
     { flush: "sync" }
   );
-  watch(batchTrackDialogOpen, (open) => {
-    if (open && batchTrackMode.value === "IMPORT" && !batchTrackCustomerId.value) {
-      batchTrackCustomerId.value = selectedCustomerId.value || "";
-    }
-  });
   watch(
     batchTrackSelectedSheetName,
     () => {
+      batchTrackExcludedRows.value = [];
       const sheet = batchTrackSelectedSheet.value;
       if (sheet) batchTrackSelectedColumnIndex.value = sheet.suggestedColumnIndex;
+    },
+    { flush: "sync" }
+  );
+
+  watch(
+    batchTrackSelectedColumnIndex,
+    () => {
+      batchTrackExcludedRows.value = [];
     },
     { flush: "sync" }
   );
@@ -219,6 +242,7 @@ export function useShipmentBatchTracking({
       busy() ||
       batchTrackFileParsing.value ||
       !batchTrackCustomerId.value ||
+      !batchTrackReviewed.value ||
       !batchTrackItems.value.length ||
       batchTrackImportErrors.value.length > 0
     )
@@ -305,6 +329,8 @@ export function useShipmentBatchTracking({
   function clearBatchTrackFile() {
     if (busy()) return false;
     fileVersion++;
+    batchTrackReviewed.value = false;
+    batchTrackExcludedRows.value = [];
     batchTrackFileParsing.value = false;
     batchTrackFileName.value = "";
     batchTrackSheets.value = [];
@@ -357,6 +383,14 @@ export function useShipmentBatchTracking({
     if (!files?.length || !/\.(xlsx|xls|csv)$/i.test(files[0].name)) return;
     return handleBatchTrackWorkbook({ target: { files } });
   }
+  function setBatchTrackRowExcluded(row, excluded) {
+    if (busy()) return;
+    const sourceRow = Number(row);
+    if (!Number.isInteger(sourceRow)) return;
+    batchTrackExcludedRows.value = excluded
+      ? [...new Set([...batchTrackExcludedRows.value, sourceRow])]
+      : batchTrackExcludedRows.value.filter((value) => value !== sourceRow);
+  }
   function toggleBatchTrackPanel() {
     if (disposed || !canManage.value) return;
     batchTrackDialogOpen.value = !batchTrackDialogOpen.value;
@@ -385,6 +419,9 @@ export function useShipmentBatchTracking({
     batchTrackCancelRequested,
     batchTrackCustomerId,
     batchTrackPublishToCustomer,
+    batchTrackReviewed,
+    batchTrackExcludedRows,
+    setBatchTrackRowExcluded,
     batchTrackProblemsOnly,
     batchTrackSelectedSheet,
     batchTrackProblemResults,

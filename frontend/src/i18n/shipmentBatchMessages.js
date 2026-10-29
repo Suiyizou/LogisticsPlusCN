@@ -1,5 +1,33 @@
 export const shipmentBatchMessages = {
   "zh-CN": {
+    trackingTaskExcludeRow: "明确排除源表第 {row} 行",
+    trackingTaskDefaultCarrier: "默认船司（仅补空缺）",
+    trackingTaskExample: "下载任务模板",
+    trackingTaskExampleHint: "每行一票，可在同一文件填写不同船司。请保留表头，填写真实船司和单号。",
+    trackingTaskList: "Excel 导入任务清单",
+    trackingTaskHint: "上传运单表，核对前60条记录。处理异常后选择客户，确认开始批量查询。",
+    trackingTaskScope:
+      "原表记录共 {total} 条，本次选择前 {window} 条；另有 {outside} 条未选择，已明确排除 {excluded} 条。排除后不会自动补入第61条之后的记录。",
+    trackingTaskLeaveHint: "离开页面后任务仍会在后台执行，可返回查看进度。",
+    trackingTaskTechnicalDetails: "技术详情",
+    trackImportIssueCARRIER_CONFLICT: "船司与单号前缀不一致",
+    trackImportIssueUNKNOWN_CARRIER: "无法确认船司，请填写或修正船司",
+    trackImportIssueCARRIER_NOT_CONFIGURED: "已识别船司，当前服务暂不支持查询",
+    trackImportIssueMISSING_REFERENCE: "缺少单号，请填写提单号或订舱号",
+    trackImportIssueINVALID_REFERENCE: "单号格式无效，请核对是否包含多项或说明文字",
+    trackImportIssueUNSAFE_REFERENCE: "单号为数字或公式，无法精确保留，请改为文本格式",
+    trackImportIssueREFERENCE_TYPE_CONFLICT: "单号与所选类型不一致，请选择提单号类型",
+    trackImportIssueUNSUPPORTED_REFERENCE: "当前船司不支持所选单号类型",
+    trackImportIssueDUPLICATE_CONFLICT: "重复单号的业务字段不一致，请核对原表",
+    trackImportIssueRESULT_WORKBOOK: "这是查询结果表，请上传任务清单",
+    trackImportIssueUNRECOGNIZED_TASK_SHEET: "未识别到提单号或订舱号列，请上传运单任务表",
+    trackImportIssueBUSINESS_ID_COLUMN: "当前列为内部业务单号，请选择提单号列",
+    trackImportIssueBATCH_LIMIT: "本次记录超出批量查询数量限制",
+    trackingTaskExclude: "明确排除",
+    trackingTaskIssues: "源行校验",
+    trackingTaskReview:
+      "我已核对所选客户、对客可见性、异常排除与 {count} 条查询任务；确认开始查询并保存票单。",
+    trackingTaskStart: "开始查询并保存 {count} 票",
     trackImportSummary:
       "可提交 {ready} 条；问题 {blocked} 项；跳过 {skipped} 行；重复 {duplicates} 条",
     trackImportBlocked: "请修正原文件中的问题后重新上传，当前不会创建导入任务。",
@@ -14,8 +42,7 @@ export const shipmentBatchMessages = {
       "\u4efb\u52a1 {status}\uff1a{done}/{total}\uff08\u5df2\u8ffd\u8e2a {succeeded}\uff0c\u5f85\u4eba\u5de5 {manual}\uff0c\u5931\u8d25 {failed}\uff09",
     trackSheet: "\u5de5\u4f5c\u8868",
     trackColumn: "\u8ffd\u8e2a\u5355\u53f7\u5217",
-    trackColumnDecision:
-      "所选列作为唯一查询号来源：{trackable} 条通过当前船司能力校验，{manual} 条需人工处理。有阻断问题时不会提交整批。",
+    trackColumnDecision: "已准备 {trackable} 条查询任务，请处理下方问题并核对清单。",
     trackSucceeded: "\u8ffd\u8e2a\u5b8c\u6210",
     trackManualPlaceholder: "\u5df2\u5efa\u6863\uff0c\u7b49\u5f85\u4eba\u5de5\u8865\u5f55",
     trackFailed: "\u5904\u7406\u5931\u8d25",
@@ -28,6 +55,43 @@ export const shipmentBatchMessages = {
       "\u7cfb\u7edf\u53ea\u63d0\u4f9b\u5efa\u8bae\u5217\uff1b\u63d0\u4ea4\u65f6\u4ec5\u4f7f\u7528\u4f60\u660e\u786e\u9009\u62e9\u7684\u5217\uff0c\u4e0d\u4f1a\u626b\u63cf\u5176\u4ed6\u5217\u8865\u731c\u5355\u53f7\u3002"
   },
   "en-US": {
+    trackingTaskExcludeRow: "Exclude source row {row}",
+    trackingTaskDefaultCarrier: "Default carrier (blank cells only)",
+    trackingTaskExample: "Download task template",
+    trackingTaskExampleHint:
+      "Use one shipment per row. You can enter different carriers in the same file. Keep the headers and enter real carriers and references.",
+    trackingTaskList: "Excel tracking task list",
+    trackingTaskHint:
+      "Upload your shipment spreadsheet and review the first 60 records. Resolve any issues, select a customer, then confirm to start batch tracking.",
+    trackingTaskScope:
+      "{total} spreadsheet records; the first {window} selected; {outside} not selected; {excluded} explicitly excluded. Exclusions do not pull in records beyond the first 60.",
+    trackingTaskLeaveHint:
+      "Tasks continue in the background after you leave this page. Return to check their progress.",
+    trackingTaskTechnicalDetails: "Technical details",
+    trackImportIssueCARRIER_CONFLICT: "The carrier conflicts with the reference prefix",
+    trackImportIssueUNKNOWN_CARRIER:
+      "Carrier could not be identified; enter or correct the carrier",
+    trackImportIssueCARRIER_NOT_CONFIGURED:
+      "Carrier recognized; queries are unavailable in this service",
+    trackImportIssueMISSING_REFERENCE: "Missing reference; enter a bill or booking number",
+    trackImportIssueINVALID_REFERENCE: "Invalid reference; check for multiple numbers or notes",
+    trackImportIssueUNSAFE_REFERENCE:
+      "Numeric or formula reference cannot be preserved precisely; use text",
+    trackImportIssueREFERENCE_TYPE_CONFLICT:
+      "Reference conflicts with its type; choose bill of lading",
+    trackImportIssueUNSUPPORTED_REFERENCE: "The carrier does not support this reference type",
+    trackImportIssueDUPLICATE_CONFLICT: "Duplicate references have conflicting business fields",
+    trackImportIssueRESULT_WORKBOOK: "This is a query result workbook; upload a task list",
+    trackImportIssueUNRECOGNIZED_TASK_SHEET:
+      "No bill or booking column found; upload a shipment task list",
+    trackImportIssueBUSINESS_ID_COLUMN:
+      "This column contains internal job numbers; select the bill column",
+    trackImportIssueBATCH_LIMIT: "The selected records exceed the batch query limit",
+    trackingTaskExclude: "Exclude row",
+    trackingTaskIssues: "Source validation",
+    trackingTaskReview:
+      "I have reviewed the customer, publication visibility, excluded rows and {count} query tasks, and confirm querying and saving shipment records.",
+    trackingTaskStart: "Query and save {count} shipments",
     trackImportSummary:
       "{ready} ready; {blocked} issues; {skipped} skipped rows; {duplicates} duplicates",
     trackImportBlocked:
@@ -44,7 +108,7 @@ export const shipmentBatchMessages = {
     trackSheet: "Worksheet",
     trackColumn: "Tracking column",
     trackColumnDecision:
-      "Only the selected column supplies references: {trackable} pass the configured carrier checks; {manual} need manual attention. Blocking issues prevent the entire submission.",
+      "{trackable} query tasks are ready. Resolve the issues below and review the list.",
     trackSucceeded: "Tracking completed",
     trackManualPlaceholder: "Saved for manual entry",
     trackFailed: "Processing failed",

@@ -269,6 +269,7 @@ test("actual workspace SFC preserves sidebar and iframe while its accordion foll
     "/smart-import/image",
     "/smart-import/text",
     "/customers/shipments",
+    "/workspace/tracking/tasks",
     "/admin/overview",
     "/workspace/tracking/overview"
   ]) {
@@ -388,4 +389,47 @@ test("child bridge authenticates parent messages, validates views/locales and ke
   win.parent = win;
   const standalone = createTrackingWorkspaceBridge({ hostWindow: win });
   assert.equal(standalone.navigate("/planner/cargos"), false);
+});
+
+test("task-list route reuses the protected business host and bridge navigation stays inside the shell", async () => {
+  const view = { render: () => null };
+  const views = Object.fromEntries(
+    [
+      "planner",
+      "operations",
+      "workbenches",
+      "admin",
+      "business",
+      "legacyBusiness",
+      ...businessModules.flatMap((m) => m.pages.map((p) => p.view)).filter(Boolean)
+    ].map((name) => [name, view])
+  );
+  const router = vr.createRouter({
+    history: vr.createMemoryHistory(),
+    routes: createApplicationRoutes(views)
+  });
+  await router.push("/workspace/tracking/tasks");
+  assert.equal(router.currentRoute.value.name, "business-shipment-tasks");
+  assert.equal(router.currentRoute.value.meta.workspace, "business");
+  assert.equal(router.currentRoute.value.meta.section, "shipments");
+  assert.deepEqual(router.currentRoute.value.meta.roles, ["ADMIN", "BUSINESS"]);
+  assert.ok(router.currentRoute.value.matched.some((r) => r.name === "customers"));
+  const win = hostWindow();
+  let navigated = "";
+  const parent = (win.parent = {
+    postMessage: (message) => {
+      navigated = message.path;
+    }
+  });
+  const bridge = createTrackingWorkspaceBridge({
+    hostWindow: win,
+    applyRoute() {},
+    applyLocale() {},
+    applyVisibility() {}
+  });
+  assert.equal(bridge.navigate("/workspace/tracking/tasks"), true);
+  assert.equal(navigated, "/workspace/tracking/tasks");
+  assert.equal(bridge.navigate("/workspace/tracking/tasks/../../api/logout"), false);
+  bridge.dispose();
+  void parent;
 });

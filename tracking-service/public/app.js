@@ -398,7 +398,19 @@ const CARRIERS = Object.freeze({
 
 const CARRIER_BRAND_ASSETS = Object.freeze({
   COSCO: "./carriers/cosco-shipping-lines.png",
-  OOCL: "./carriers/oocl.svg"
+  OOCL: "./carriers/oocl.svg",
+  HMM: "./carriers/hmm.png",
+  SML: "./carriers/sml.png",
+  MATSON: "./carriers/matson.png",
+  MSC: "./carriers/msc.webp",
+  EVERGREEN: "./carriers/evergreen.svg",
+  HAPAG_LLOYD: "./carriers/hapag-lloyd.svg",
+  KMTC: "./carriers/kmtc.png",
+  MAERSK: "./carriers/maersk.jpg",
+  YML: "./carriers/yml.png",
+  ZIM: "./carriers/zim.webp",
+  CMA: "./carriers/cma.svg",
+  ONE: "./carriers/one.svg"
 });
 
 const CHANNELS = Object.freeze({
@@ -789,6 +801,7 @@ const MESSAGES = {
     "wait.home": "Returning to the logisticspluscn home page…",
     "wait.batch": "Processing the imported shipment queue…",
     "wait.complete": "Request completed",
+    "batch.excelTaskList": "Import Excel tracking tasks",
     "batch.title": "Batch tracking import",
     "batch.subtitle": "Import an Excel or CSV list and process it as a background task",
     "batch.localBadge": "Background task",
@@ -1414,6 +1427,7 @@ const MESSAGES = {
     "wait.home": "正在返回 logisticspluscn 首页…",
     "wait.batch": "正在逐条处理导入的货物队列…",
     "wait.complete": "请求已完成",
+    "batch.excelTaskList": "Excel 导入任务清单",
     "batch.title": "批量导入查询",
     "batch.subtitle": "导入 Excel 或 CSV 清单后，以后台任务逐票处理",
     "batch.localBadge": "后台任务",

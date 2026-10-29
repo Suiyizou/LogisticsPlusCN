@@ -85,7 +85,8 @@ test("unknown provider is never COSCO and grouping conflicts are rejected", () =
   assert.equal(adaptTrackingV1(record).snapshot.provider.code, "NEW_CARRIER");
   assert.equal(carrierIdentity("").code, "UNKNOWN");
   assert.throws(() => adaptTrackingV1(record, { carrierCode: "COSCO" }), /conflicts/);
-  assert.deepEqual(Object.keys(CARRIER_LOGOS).sort(), ["COSCO", "OOCL"]);
+  for (const { code } of expectedCarrierShapes) assert.ok(CARRIER_LOGOS[code], code);
+  assert.equal(CARRIER_LOGOS.UNKNOWN, undefined);
 });
 test("untyped source time remains text instead of claiming actual or estimated time", () => {
   const r = structuredClone(syntheticByCarrier.by_carrier.MATSON[0]);
@@ -158,12 +159,12 @@ test("summary separates declared containers from returned details and exposes un
   assert.match(summary, /声明箱数: 7/);
   assert.match(summary, /返回箱明细: 0/);
   assert.match(summary, /尚未验证/);
-  assert.match(summary, /PAGE_TEXT/);
+  assert.doesNotMatch(summary, /PAGE_TEXT/);
   const source = fs.readFileSync(
     new URL("../public/tracking-json-preview.mjs", import.meta.url),
     "utf8"
   );
-  assert.match(source, /源数据条目/);
+  assert.match(source, /船司原始记录/);
   assert.match(source, /源条目数/);
   assert.doesNotMatch(source, /票级运输事件|eventTitle: "Shipment events"/);
 });

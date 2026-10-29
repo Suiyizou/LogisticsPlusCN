@@ -1,0 +1,134 @@
+{
+  "retrievedOn": "2026-10-30",
+  "rights": "Carrier logos are trademarks/copyright of their respective owners. Included only to identify the named carrier; no endorsement or general redistribution license is claimed. Source website terms and brand guidelines continue to apply. Original asset geometry, color, aspect ratio and margins are preserved.",
+  "assets": [
+    {
+      "code": "COSCO",
+      "file": "cosco-shipping-lines.png",
+      "source": "https://world.lines.coscoshipping.com/homelocal/img/logo.2e4d3cc0.png",
+      "discovery": "https://world.lines.coscoshipping.com/homelocal/",
+      "note": "Official home page application asset; retained existing bytes.",
+      "sha256": "ac42616f2114df19c8409adab85b01f13b24e14425cbbc633b5102cee532a4a2"
+    },
+    {
+      "code": "OOCL",
+      "file": "oocl.svg",
+      "source": "https://www.oocl.com/Style%20Library/revamp/Images/OOCL_logo.svg",
+      "discovery": "https://www.oocl.com/eng/Pages/default.aspx",
+      "note": "Official home page logo; retained existing bytes.",
+      "sha256": "d6b364887f9389b53a4f5e1c23a74cf26ccb3c64f62b9e57cef9aef2f8d32f65"
+    },
+    {
+      "code": "HMM",
+      "file": "hmm.png",
+      "source": "https://apiportal.hmm21.com/image/logo.png",
+      "discovery": "https://apiportal.hmm21.com/",
+      "note": "Official developer portal footer image, original positive full color.",
+      "sha256": "ddf5eae29fc8022b507a858f80b61efd43f27096bb2d499d7842ca095f8faef0"
+    },
+    {
+      "code": "SML",
+      "file": "sml.png",
+      "source": "https://www.smlines.com/assets/images/logo_org.png",
+      "discovery": "https://www.smlines.com/en/",
+      "note": "Official navigation positive logo referenced in /assets/css/style.css.",
+      "sha256": "40a4138539294360dcb637cddc177863fbfcc3562c2e8a04ae705c8a51742823"
+    },
+    {
+      "code": "MATSON",
+      "file": "matson.png",
+      "source": "https://www.matson.com/wp-content/themes/matson_2021/public/images/matson_logo.png",
+      "discovery": "https://www.matson.com/",
+      "note": "Official home page header custom-logo image.",
+      "sha256": "dee820896cc89d64243aaca778b5e9c0199b9cd56f641b687502411aee0e22a0"
+    },
+    {
+      "code": "MSC",
+      "file": "msc.webp",
+      "source": "https://assets.msc.com/api/public/content/dfe0759c4408466ab90fd928e049d62b?v=d0148982",
+      "discovery": "https://www.msccargo.cn/en/newsroom/media-kit",
+      "note": "Official MSC media kit Black-Yellow download; delivered original WEBP on white.",
+      "sha256": "03590e0bb1363d02c83c955e6437d18747a1a644b0ce71d84e4a02bbbb911e66"
+    },
+    {
+      "code": "EVERGREEN",
+      "file": "evergreen.svg",
+      "source": "https://www.evergreen-marine.com/emc/common/images/logo/emc_logo.svg",
+      "discovery": "https://www.evergreen-marine.com/",
+      "note": "Official home page EMC header SVG.",
+      "sha256": "ef31931dc1ad3c303be7e5765dcf4580408db53f594c55068beb8e39c0871d3d"
+    },
+    {
+      "code": "HAPAG_LLOYD",
+      "file": "hapag-lloyd.svg",
+      "source": "https://www.hapag-lloyd.com/en/home.html",
+      "discovery": "https://www.hapag-lloyd.com/en/home.html",
+      "note": "Verbatim original inline navigation SVG extracted from official HTML; paths, colors and dimensions unchanged.",
+      "sha256": "3136404bb61ea3e16874b1e930fe6f4c0d4f8730c9a864edb91405da0c9112e3"
+    },
+    {
+      "code": "KMTC",
+      "file": "kmtc.png",
+      "source": "https://kmtc.co.kr/resources/kor/images/common/logo.png",
+      "discovery": "https://kmtc.co.kr/",
+      "note": "Official home page header logo.",
+      "sha256": "e1d5f07eec5624519db8549f80e4c47cb0b3e58381a7ae61206aff5dd676dce5"
+    },
+    {
+      "code": "MAERSK",
+      "file": "maersk.jpg",
+      "source": "https://www.maersk.com/~/media_sc9/maersk/assets/favicon/ogimage.png",
+      "discovery": "https://www.maersk.com/",
+      "note": "Official Organization JSON-LD logo; server delivers JPEG, retained original bytes and margins.",
+      "sha256": "9dbaef925e0ca3364e694c5dc32530a685c609e7db4d2578e4d5b914ddddc283"
+    },
+    {
+      "code": "YML",
+      "file": "yml.png",
+      "source": "https://www.yangming.com/_next/static/media/ymfulllogo.3fdzku7itpe7i.png",
+      "discovery": "https://www.yangming.com/en",
+      "note": "Official site Next.js logo module in /_next/static/chunks/36od18ihay9sc.js.",
+      "sha256": "e566644c1ba60478b88a4d903a3a0960746e070523396a6e0aaa0e588407c964"
+    },
+    {
+      "code": "ZIM",
+      "file": "zim.webp",
+      "source": "https://s203.q4cdn.com/172866090/files/design/zim-logoz-factor-logo-dark.webp",
+      "discovery": "https://investors.zim.com/overview/default.aspx",
+      "note": "Official investor site header image on its referenced Q4-hosted CDN; full current wordmark unchanged.",
+      "sha256": "2940dd00a9286626cf743026d2526694941ada2acae0beb31b101da62d756c85"
+    },
+    {
+      "code": "CMA",
+      "file": "cma.svg",
+      "source": "https://www.cmacgm-group.com/static/logo-better-ways.svg",
+      "discovery": "https://www.cmacgm-group.com/en",
+      "note": "Official corporate header/Organization JSON-LD logo, original full lockup.",
+      "sha256": "56d23f0460afa731e8141a19d27c7395e1d106ccc4d1c1d65c33b031114044cf"
+    },
+    {
+      "code": "ONE",
+      "file": "one.svg",
+      "source": "https://www.one-line.com/assets/_next/static/media/logo.8b5ca3fe.svg",
+      "discovery": "https://www.one-line.com/en",
+      "note": "Official home page navigation logo.",
+      "sha256": "ec5dacc3226d5dfd73820e577ff6c94bf9c1b202904c41ac3201a5dd9f465a17"
+    }
+  ],
+  "unavailable": [
+    {
+      "code": "WAN_HAI",
+      "checked": [
+        "https://www.wanhai.com/views/Main.xhtml",
+        "https://esg.wanhai.com/wanhai/",
+        "https://vn.wanhai.com/"
+      ],
+      "reason": "Official sites returned WAF challenge HTML instead of page/image assets. No verified standalone original logo obtained."
+    },
+    {
+      "code": "HEDE",
+      "checked": ["https://www.hedehk.com/", "http://www.hedehk.com/"],
+      "reason": "HTTPS connection failed; HTTP returned WAF script content. No verified standalone original logo obtained."
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 // @ts-check
 
+export const loadShipmentTasksPage = () => import("./pages/ShipmentTasksPage.vue");
+
 export const loadShipmentWorkspacePage = () => import("./pages/ShipmentWorkspacePage.vue");
 
 /** @type {import("../../types/moduleRegistry").RegisteredBusinessModuleDefinition} */
@@ -16,6 +18,7 @@ export const moduleDefinition = {
       path: "",
       view: "shipmentWorkspace"
     },
+    { name: "business-shipment-tasks", path: "tasks", view: "shipmentTasks" },
     {
       name: "business-shipments-detail",
       path: ":shipmentId",
@@ -28,5 +31,5 @@ export const moduleDefinition = {
 /** @type {import("../../types/moduleRegistry").BusinessModuleRegistration} */
 export const shipmentRegistration = {
   module: moduleDefinition,
-  views: { shipmentWorkspace: loadShipmentWorkspacePage }
+  views: { shipmentWorkspace: loadShipmentWorkspacePage, shipmentTasks: loadShipmentTasksPage }
 };

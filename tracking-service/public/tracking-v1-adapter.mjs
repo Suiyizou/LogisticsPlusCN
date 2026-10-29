@@ -15,7 +15,19 @@ export function carrierIdentity(code, name = "") {
 }
 export const CARRIER_LOGOS = Object.freeze({
   COSCO: "./carriers/cosco-shipping-lines.png",
-  OOCL: "./carriers/oocl.svg"
+  OOCL: "./carriers/oocl.svg",
+  HMM: "./carriers/hmm.png",
+  SML: "./carriers/sml.png",
+  MATSON: "./carriers/matson.png",
+  MSC: "./carriers/msc.webp",
+  EVERGREEN: "./carriers/evergreen.svg",
+  HAPAG_LLOYD: "./carriers/hapag-lloyd.svg",
+  KMTC: "./carriers/kmtc.png",
+  MAERSK: "./carriers/maersk.jpg",
+  YML: "./carriers/yml.png",
+  ZIM: "./carriers/zim.webp",
+  CMA: "./carriers/cma.svg",
+  ONE: "./carriers/one.svg"
 });
 
 function normalizeEvent(value, index, source) {

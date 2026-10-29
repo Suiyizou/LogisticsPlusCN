@@ -49,14 +49,20 @@ export function createApplicationRoutes(
         return {
           path: [module.mount, page.path].filter(Boolean).join("/"),
           name: page.name,
+          ...(page.name === "business-shipment-tasks"
+            ? { alias: "/workspace/tracking/tasks" }
+            : {}),
           component: views[page.view || "legacyBusiness"],
           meta: {
             surface: "operations",
             workspace: "business",
             moduleId: module.id,
             section: module.id,
-            roles: module.roles,
-            titleKey: module.labelKey,
+            roles: page.name === "business-shipment-tasks" ? ["ADMIN", "BUSINESS"] : module.roles,
+            titleKey:
+              page.name === "business-shipment-tasks"
+                ? "customers.trackingTaskList"
+                : module.labelKey,
             selection: page.selection || ""
           }
         };

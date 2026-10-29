@@ -375,6 +375,7 @@ function uiHarness(t, overrides = {}) {
   ui.batchTrackSelectedSheetName.value = sheet.name;
   ui.batchTrackCustomerId.value = "customer-A";
   ui.batchTrackFileName.value = "A.xlsx";
+  ui.batchTrackReviewed.value = true;
   return { ui, scope, context, scheduler, created, refreshed };
 }
 function fileEvent(name, bytes) {
@@ -397,6 +398,8 @@ function workbook(number) {
 test("import captures the same customer, items and channel inspected before submission", async (t) => {
   const inspection = deferred();
   const h = uiHarness(t, { inspectBusinessShipmentImportConflicts: () => inspection.promise });
+  h.ui.batchTrackPublishToCustomer.value = true;
+  h.ui.batchTrackReviewed.value = true;
   const pending = h.ui.startBatchTrack();
   h.ui.batchTrackCustomerId.value = "customer-B";
   h.ui.batchTrackCarrier.value = "CMA";
@@ -601,4 +604,48 @@ test("opening import never chooses the first assignable customer", async (t) => 
   h.ui.batchTrackDialogOpen.value = true;
   await Promise.resolve();
   assert.equal(h.ui.batchTrackCustomerId.value, "");
+});
+
+test("reading and reviewing the first 60 source candidates never submits until explicit approval", async (t) => {
+  const h = uiHarness(t);
+  const sheet = prepareSheet("TaskScope", [
+    ["BOOKING", "CARRIER"],
+    ...Array.from({ length: 65 }, (_, i) => ["COSU" + String(1234567890 + i), "COSCO"])
+  ]);
+  h.ui.batchTrackSheets.value = [sheet];
+  h.ui.batchTrackSelectedSheetName.value = sheet.name;
+  assert.equal(h.ui.batchTrackImportPreview.value.totalCandidates, 65);
+  assert.equal(h.ui.batchTrackImportPreview.value.windowCount, 60);
+  assert.equal(h.ui.batchTrackImportPreview.value.outsideLimit, 5);
+  assert.equal(h.ui.batchTrackReviewed.value, false);
+  assert.equal(h.ui.batchTrackPublishToCustomer.value, false);
+  await h.ui.startBatchTrack();
+  assert.equal(h.created.length, 0);
+  h.ui.setBatchTrackRowExcluded(2, true);
+  assert.equal(h.ui.batchTrackNumbers.value.length, 59);
+  assert.equal(h.ui.batchTrackImportPreview.value.rows[0].status, "EXCLUDED");
+  h.ui.batchTrackReviewed.value = true;
+  await h.ui.startBatchTrack();
+  assert.equal(h.created.length, 1);
+  assert.equal(h.created[0].items.length, 59);
+  assert.equal(h.created[0].items[0].id, "TaskScope-row-3");
+  assert.equal(h.created[0].items.at(-1).id, "TaskScope-row-61");
+  assert.equal(h.created[0].publishToCustomer, false);
+});
+
+test("review acknowledgement is invalidated by exclusions and customer changes; no context customer is silently bound", async (t) => {
+  const h = uiHarness(t);
+  h.ui.batchTrackCustomerId.value = "";
+  h.context.selectedCustomerId.value = "context-customer";
+  h.ui.batchTrackDialogOpen.value = true;
+  await Promise.resolve();
+  assert.equal(h.ui.batchTrackCustomerId.value, "");
+  h.ui.batchTrackReviewed.value = true;
+  h.ui.batchTrackCustomerId.value = "customer-explicit";
+  assert.equal(h.ui.batchTrackReviewed.value, false);
+  h.ui.batchTrackReviewed.value = true;
+  h.ui.setBatchTrackRowExcluded(2, true);
+  assert.equal(h.ui.batchTrackReviewed.value, false);
+  await h.ui.startBatchTrack();
+  assert.equal(h.created.length, 0);
 });

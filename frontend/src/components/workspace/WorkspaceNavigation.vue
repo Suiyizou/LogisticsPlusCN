@@ -37,7 +37,22 @@ const groups = computed(() => {
       icon: "tracking",
       items: [
         { key: "overview", label: copy.value.overview, to: "/workspace/tracking/overview" },
-        { key: "query", label: copy.value.query, to: "/workspace/tracking/query" }
+        { key: "query", label: copy.value.query, to: "/workspace/tracking/query" },
+        ...(role.value === "OVERSEA_AGENT"
+          ? []
+          : [
+              {
+                key: "tracking-batch",
+                label: copy.value.batchTasks,
+                children: [
+                  {
+                    key: "tracking-tasks",
+                    label: copy.value.taskList,
+                    to: "/workspace/tracking/tasks"
+                  }
+                ]
+              }
+            ])
       ]
     },
     {

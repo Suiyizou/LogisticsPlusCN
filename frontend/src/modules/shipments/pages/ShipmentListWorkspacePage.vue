@@ -1,7 +1,19 @@
 <template>
   <section class="module-page" data-module="shipments">
-    <div class="list-page list-page-full shipment-workspace">
-      <div class="shipment-workspace-main">
+    <div
+      class="list-page list-page-full shipment-workspace"
+      :class="{ 'shipment-workspace--tasks': tasksOnly }"
+    >
+      <WorkspacePageHeader
+        v-if="tasksOnly"
+        :title="t('customers.trackingTaskList')"
+        :description="t('customers.trackingTaskHint')"
+      />
+      <p v-if="tasksOnly" class="tracking-task-example">
+        <a href="/tracking-task-example.csv" download>{{ t("customers.trackingTaskExample") }}</a
+        ><small>{{ t("customers.trackingTaskExampleHint") }}</small>
+      </p>
+      <div v-if="!tasksOnly" class="shipment-workspace-main">
         <ShipmentListPage :workspace="pages.list" :t="t" />
         <el-dialog
           :model-value="batchBusinessFieldsDialogOpen"
@@ -87,13 +99,15 @@
           </template>
         </el-dialog>
       </div>
-      <el-dialog
+      <component
+        :is="tasksOnly ? 'section' : ElDialog"
         v-model="batchTrackDialogOpen"
         :title="batchTrackDialogTitle"
         width="min(1280px, 96vw)"
         append-to-body
         :destroy-on-close="false"
-        class="batch-track-task-dialog workspace-el-dialog business-comp-dialog"
+        class="batch-track-task-dialog"
+        :class="tasksOnly ? 'tracking-task-inline' : 'workspace-el-dialog business-comp-dialog'"
       >
         <div class="batch-track-task-dialog-body">
           <div class="batch-track-panel">
@@ -124,7 +138,7 @@
                   </el-select>
                 </label>
                 <label>
-                  <span>{{ t("customers.carrier") }} <i class="required-star">*</i></span>
+                  <span>{{ t("customers.trackingTaskDefaultCarrier") }}</span>
                   <el-select
                     v-model="batchTrackCarrier"
                     :disabled="batchTrackChecking"
@@ -266,8 +280,12 @@
                 />
                 <ul v-if="batchTrackImportErrors.length">
                   <li v-for="(issue, index) in batchTrackImportErrors" :key="index">
-                    {{ t("customers.trackImportRow", { row: issue.row }) }} · {{ issue.code }}:
-                    {{ issue.message }}
+                    {{ t("customers.trackImportRow", { row: issue.row }) }} ·
+                    {{ importIssueLabel(issue) }}
+                    <details>
+                      <summary>{{ t("customers.trackingTaskTechnicalDetails") }}</summary>
+                      {{ issue.code }}: {{ issue.message }}
+                    </details>
                   </li>
                 </ul>
                 <details>
@@ -278,7 +296,38 @@
                     </li>
                   </ul>
                 </details>
+                <p>
+                  {{
+                    t("customers.trackingTaskScope", {
+                      window: batchTrackImportPreview.windowCount,
+                      total: batchTrackImportPreview.totalCandidates,
+                      outside: batchTrackImportPreview.outsideLimit,
+                      excluded: batchTrackImportPreview.excludedCount
+                    })
+                  }}
+                </p>
                 <el-table :data="batchTrackImportPreview.rows" size="small" max-height="320" border>
+                  <el-table-column type="expand"
+                    ><template #default="{ row }"
+                      ><dl class="tracking-task-source-row">
+                        <div v-for="column in batchTrackSelectedSheet.columns" :key="column.index">
+                          <dt>{{ column.label }}</dt>
+                          <dd>{{ row.sourceCells[column.index] || "—" }}</dd>
+                        </div>
+                      </dl></template
+                    ></el-table-column
+                  >
+                  <el-table-column :label="t('customers.trackingTaskExclude')" width="100">
+                    <template #default="{ row }"
+                      ><el-checkbox
+                        :aria-label="t('customers.trackingTaskExcludeRow', { row: row.sourceRow })"
+                        :model-value="batchTrackExcludedRows.includes(row.sourceRow)"
+                        :disabled="batchTrackRunning || batchTrackChecking"
+                        @update:model-value="
+                          (value) => setBatchTrackRowExcluded(row.sourceRow, value === true)
+                        "
+                    /></template>
+                  </el-table-column>
                   <el-table-column
                     prop="sourceRow"
                     :label="t('customers.trackSourceRow')"
@@ -310,6 +359,13 @@
                     :label="t('customers.trackValidation')"
                     width="110"
                   />
+                  <el-table-column :label="t('customers.trackingTaskIssues')" min-width="240"
+                    ><template #default="{ row }"
+                      ><span v-for="issue in row.errors" :key="issue.code"
+                        >{{ importIssueLabel(issue) }}; </span
+                      ><span v-if="!row.errors.length">—</span></template
+                    ></el-table-column
+                  >
                 </el-table>
                 <div class="batch-track-preview-table-wrap">
                   <el-table
@@ -511,8 +567,23 @@
             </div>
 
             <p class="batch-track-close-hint">
-              {{ t("customers.batchTrackCloseHint") }}
+              {{
+                t(tasksOnly ? "customers.trackingTaskLeaveHint" : "customers.batchTrackCloseHint")
+              }}
             </p>
+            <el-checkbox
+              v-if="!batchTrackRunning"
+              :model-value="batchTrackReviewed"
+              :disabled="
+                !batchTrackNumbers.length ||
+                batchTrackImportErrors.length > 0 ||
+                !batchTrackCustomerId
+              "
+              @update:model-value="batchTrackReviewed = $event === true"
+              >{{
+                t("customers.trackingTaskReview", { count: batchTrackNumbers.length })
+              }}</el-checkbox
+            >
             <div class="batch-track-actions">
               <button
                 class="customer-access-primary"
@@ -522,6 +593,7 @@
                   batchTrackChecking ||
                   batchTrackFileParsing ||
                   !batchTrackCustomerId ||
+                  !batchTrackReviewed ||
                   !batchTrackSelectedSheet ||
                   !batchTrackNumbers.length ||
                   batchTrackImportErrors.length > 0
@@ -533,10 +605,14 @@
                     ? t("customers.batchTrackRunning")
                     : batchTrackChecking
                       ? t("customers.batchTrackChecking")
-                      : t("customers.batchTrackStart")
+                      : t("customers.trackingTaskStart", { count: batchTrackNumbers.length })
                 }}
               </button>
-              <el-button native-type="button" @click="batchTrackDialogOpen = false">
+              <el-button
+                v-if="!tasksOnly"
+                native-type="button"
+                @click="batchTrackDialogOpen = false"
+              >
                 {{ t("customers.close") }}
               </el-button>
               <el-button
@@ -550,7 +626,7 @@
             </div>
           </div>
         </div>
-      </el-dialog>
+      </component>
     </div>
   </section>
 </template>
@@ -560,11 +636,19 @@ import {
   supportsShipmentReference
 } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
+import { ElDialog } from "element-plus";
+import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
+defineProps<{ tasksOnly?: boolean }>();
 import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 import ShipmentListPage from "./ShipmentListPage.vue";
 const { t } = useI18n();
+function importIssueLabel(issue: { code: string; message: string }) {
+  const key = `customers.trackImportIssue${issue.code}`;
+  const label = t(key);
+  return label === key ? issue.message : label;
+}
 const pages = useModulePages("shipments");
 const workspace = pages.listDialogs;
 const {
@@ -592,6 +676,8 @@ const {
   batchTrackProblemsOnly,
   batchTrackProgress,
   batchTrackPublishToCustomer,
+  batchTrackReviewed,
+  batchTrackExcludedRows,
   batchTrackResults,
   batchTrackRunning,
   batchTrackSelectedColumnIndex,
@@ -609,7 +695,8 @@ const {
   handleBatchTrackWorkbook,
   saveBatchBusinessFields,
   closeBatchBusinessFieldsEditor,
-  startBatchTrack
+  startBatchTrack,
+  setBatchTrackRowExcluded
 } = actions;
 const {
   batchDiagnosticText,
@@ -1304,6 +1391,70 @@ const {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+.shipment-workspace.shipment-workspace--tasks {
+  flex-direction: column;
+  min-width: 0;
+}
+.shipment-workspace--tasks > * {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.shipment-workspace--tasks .tracking-task-example {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+}
+.shipment-workspace--tasks .tracking-task-inline {
+  position: static;
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  overflow: visible;
+}
+.shipment-workspace--tasks .batch-track-task-dialog-body {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.shipment-workspace--tasks :is(.batch-track-panel, .batch-track-form, .batch-track-preview) {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.shipment-workspace--tasks .batch-track-form,
+.shipment-workspace--tasks .batch-track-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shipment-workspace--tasks .assignment-customer-row {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  min-width: 0;
+}
+.shipment-workspace--tasks .assignment-customer-row > *,
+.shipment-workspace--tasks .batch-track-preview > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.shipment-workspace--tasks .batch-track-preview-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+.shipment-workspace--tasks .batch-track-actions {
+  flex-wrap: wrap;
+}
+.shipment-workspace--tasks :deep(.el-checkbox) {
+  height: auto;
+  white-space: normal;
+}
+.shipment-workspace--tasks :deep(.el-checkbox__label) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>
 

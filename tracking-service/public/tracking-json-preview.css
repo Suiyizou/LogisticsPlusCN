@@ -35,8 +35,8 @@
 }
 .tracking-json-preview button:hover,
 .tracking-json-preview button[aria-pressed="true"] {
-  border-color: var(--primary-color, #176d79);
-  background: #edf6f6;
+  border-color: #0866e8;
+  background: #f0f6ff;
 }
 .tracking-json-carriers {
   margin: 12px 0;
@@ -93,8 +93,8 @@
 .tracking-json-banner {
   margin-bottom: 14px;
   padding: 12px 18px;
-  background: #edf6f6;
-  border: 1px solid #b8d4d6;
+  background: #f0f6ff;
+  border: 1px solid #d3e3fa;
   border-radius: 6px;
   justify-content: space-between;
 }
@@ -158,5 +158,56 @@
   max-height: 20rem;
   overflow: auto;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tracking-json-reported {
+  background: #fff;
+  border: 1px solid #dce6f2;
+  border-radius: 12px;
+}
+.tracking-json-history {
+  margin: 18px 0;
+  border: 1px solid #dce6f2;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tracking-json-history h4 {
+  margin: 0;
+  padding: 16px 18px 0;
+  color: #0866e8;
+  font-size: 14px;
+}
+.tracking-json-history > p {
+  margin: 6px 18px 14px;
+}
+.tracking-json-history th {
+  background: #f0f6ff;
+}
+.tracking-json-disclosure {
+  margin-top: 10px;
+  border-top: 1px solid #e3eaf3;
+  padding-top: 10px;
+}
+.tracking-json-disclosure > summary {
+  padding: 8px 0;
+  cursor: pointer;
+  color: var(--text-secondary, #536576);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tracking-json-disclosure > summary:focus-visible {
+  outline: 2px solid #0866e8;
+  outline-offset: 4px;
+}
+.tracking-json-source-fields details > summary {
+  color: #0866e8;
+  font-size: 11px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.tracking-json-disclosure li {
+  font-size: 13px;
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }

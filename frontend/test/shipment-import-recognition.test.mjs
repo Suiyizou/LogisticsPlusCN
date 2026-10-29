@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   trackingCarriersForMode,
   supportsShipmentReference,
@@ -9,7 +10,8 @@ import * as XLSX from "xlsx";
 import {
   prepareSheet,
   parseShipmentBatchWorkbook,
-  buildShipmentBatchPreview
+  buildShipmentBatchPreview,
+  buildShipmentBatchReview
 } from "../src/services/shipmentBatchImport.js";
 const operationalHeaders = [
   "提单号",
@@ -265,4 +267,82 @@ test("recognized HEDE stays blocked until a desktop adapter actually exists", ()
   assert.equal(result.items.length, 0);
   assert.equal(result.rows[0].carrier, "HEDE");
   assert.equal(result.errors[0].code, "CARRIER_NOT_CONFIGURED");
+});
+
+test("source review scope counts missing references and keeps explicit exclusions inside the first 60", () => {
+  const rows = [
+    ["BOOKING", "CARRIER", "JOB NUMBER"],
+    ["COSU1234567890", "COSCO", "JOB-1"],
+    ["", "COSCO", "MISSING-REF"],
+    ...Array.from({ length: 63 }, (_, i) => ["COSU" + String(1234567891 + i), "COSCO", ""])
+  ];
+  const sheet = prepareSheet("SourceOrder", rows);
+  const first = buildShipmentBatchReview(sheet, 0);
+  assert.equal(first.totalCandidates, 65);
+  assert.equal(first.windowCount, 60);
+  assert.equal(first.outsideLimit, 5);
+  assert.ok(first.errors.some((e) => e.row === 3 && e.code === "MISSING_REFERENCE"));
+  assert.equal(first.rows[1].status, "BLOCKED");
+  const approved = buildShipmentBatchReview(sheet, 0, "", "BOOKING", {
+    excludedSourceRows: [3, 2]
+  });
+  assert.equal(approved.excludedCount, 2);
+  assert.equal(approved.items.length, 58);
+  assert.equal(approved.errors.length, 0);
+  assert.equal(approved.items.at(-1).id, "SourceOrder-row-61");
+  assert.equal(approved.rows[1].status, "EXCLUDED");
+  assert.ok(approved.rows[1].errors.some((e) => e.code === "MISSING_REFERENCE"));
+});
+
+test("out-of-window duplicate conflicts do not pollute the reviewed task payload", () => {
+  const sheet = prepareSheet("DuplicateWindow", [
+    ["BOOKING", "CARRIER", "POL"],
+    ...Array.from({ length: 60 }, (_, i) => [
+      "COSU" + String(1234567890 + i),
+      "COSCO",
+      "SOURCE PORT"
+    ]),
+    ["COSU1234567890", "COSCO", "CONFLICTING PORT"]
+  ]);
+  const review = buildShipmentBatchReview(sheet, 0);
+  assert.equal(review.totalCandidates, 61);
+  assert.equal(review.items.length, 60);
+  assert.equal(review.errors.length, 0);
+  assert.equal(review.items[0].importedDetails.portOfLoading, "SOURCE PORT");
+});
+
+test("cargo files cannot become tracking tasks by manually selecting an arbitrary numeric column", () => {
+  const sheet = prepareSheet("Cargo", [
+    ["SKU", "Quantity", "Length", "Width", "Height"],
+    ["SKU12345", 2, 120, 80, 90]
+  ]);
+  const review = buildShipmentBatchReview(sheet, 0, "COSCO");
+  assert.equal(review.items.length, 0);
+  assert.ok(review.errors.some((e) => e.code === "UNRECOGNIZED_TASK_SHEET"));
+});
+
+test("downloaded task template is UTF-8 BOM headers only and produces no query tasks", () => {
+  const contents = readFileSync(new URL("../public/tracking-task-example.csv", import.meta.url));
+  assert.equal(contents.subarray(0, 3).toString("hex"), "efbbbf");
+  assert.equal(
+    contents.toString("utf8").trim(),
+    "\uFEFF船司,提单号,货代订单号,发票号,原ETD,现ETD,原ETA,现ETA,箱量,船名航次".trim()
+  );
+  const workbook = XLSX.read(contents, { type: "buffer" });
+  const sheet = parseShipmentBatchWorkbook(workbook, XLSX)[0];
+  assert.equal(sheet.suggestedColumnIndex, 1);
+  const review = buildShipmentBatchReview(sheet, sheet.suggestedColumnIndex);
+  assert.equal(review.items.length, 0);
+  assert.equal(review.totalCandidates, 0);
+  assert.equal(review.errors.length, 0);
+  const filled = prepareSheet("Template", [
+    sheet.headers,
+    ["COSCO", "COSU1234567890", "JOB-01", "INV-01"]
+  ]);
+  const filledReview = buildShipmentBatchReview(filled, 1, "", "BILLOFLADING", {
+    adapterMode: "LOCAL_QUEUE"
+  });
+  assert.equal(filledReview.items.length, 1);
+  assert.equal(filledReview.items[0].carrier, "COSCO");
+  assert.equal(filledReview.items[0].importedDetails.forwarderJobNumber, "JOB-01");
 });

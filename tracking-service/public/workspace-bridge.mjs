@@ -10,7 +10,7 @@ function safePath(value) {
     return null;
   const url = new URL(value, "https://workspace.invalid");
   return url.origin === "https://workspace.invalid" &&
-    /^(?:\/workbenches|\/home|\/planner(?:\/(?:cargos|config|results))?|\/smart-import\/(?:excel|image|text)|\/containers|\/algorithm|\/customers(?:\/[a-z0-9-]+)*|\/admin(?:\/[a-z0-9-]+)*|\/workspace\/tracking\/(?:overview|query))$/.test(
+    /^(?:\/workbenches|\/home|\/planner(?:\/(?:cargos|config|results))?|\/smart-import\/(?:excel|image|text)|\/containers|\/algorithm|\/customers(?:\/[a-z0-9-]+)*|\/admin(?:\/[a-z0-9-]+)*|\/workspace\/tracking\/(?:overview|query|tasks))$/.test(
       url.pathname
     )
     ? url.pathname + url.search + url.hash

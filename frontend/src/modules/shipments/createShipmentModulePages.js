@@ -76,6 +76,9 @@ export function createShipmentModulePages({
     batchTrackProblemsOnly,
     batchTrackProgress,
     batchTrackPublishToCustomer,
+    batchTrackReviewed,
+    batchTrackExcludedRows,
+    setBatchTrackRowExcluded,
     batchTrackResults,
     batchTrackSelectedColumnIndex,
     batchTrackSelectedSheet,
@@ -230,6 +233,8 @@ export function createShipmentModulePages({
         batchTrackProblemsOnly,
         batchTrackProgress,
         batchTrackPublishToCustomer,
+        batchTrackReviewed,
+        batchTrackExcludedRows,
         batchTrackResults,
         batchTrackRunning,
         batchTrackSelectedColumnIndex,
@@ -247,6 +252,7 @@ export function createShipmentModulePages({
         saveBatchBusinessFields,
         closeBatchBusinessFieldsEditor,
         startBatchTrack,
+        setBatchTrackRowExcluded,
         setBatchFileInput: (
           /** @type {import("../../types/businessModulePorts").FileInputRefTarget} */ input
         ) => {

@@ -21,19 +21,21 @@ const labels = {
     limit: "Select a JSON file smaller than 20 MB.",
     empty: "No tracking file selected.",
     count: "records",
-    details: "Reported tracking details",
+    details: "Carrier information",
     vessel: "Vessel / voyage",
     noData: "The source reports no business data for this reference.",
     warnings: "Source warnings",
     notVerified: "Business data has not been verified by the source.",
     verified: "Source marks this record as business verified.",
-    eventTitle: "Source entries",
-    additionalEvents: "Supplementary source history",
+    eventTitle: "Carrier raw records",
+    additionalEvents: "History reported by the carrier",
     time: "Reported time",
     event: "Source entry",
     location: "Location",
     source: "Source",
-    fields: "Other source fields and extensions",
+    sourceDetails: "Source details",
+    historyHint: "Original times, locations and descriptions as reported by the carrier.",
+    fields: "Original fields and extensions",
     expandSource: "Expand source value",
     sourceLimited:
       "Source value exceeds the display depth or size limit; displayed text is incomplete.",
@@ -88,19 +90,21 @@ const labels = {
     limit: "请选择小于20 MB的 JSON 文件。",
     empty: "尚未选择货踪结果文件。",
     count: "条记录",
-    details: "源文件返回的货踪详情",
+    details: "船司信息",
     vessel: "船名 / 航次",
     noData: "源文件明确报告：此单号没有业务数据。",
     warnings: "源数据告警",
     notVerified: "源文件尚未验证本票业务数据。",
     verified: "源文件标记本票业务数据已验证。",
-    eventTitle: "源数据条目",
-    additionalEvents: "来源补充历史",
+    eventTitle: "船司原始记录",
+    additionalEvents: "船司报告的历史",
     time: "源数据时间",
     event: "源条目",
     location: "地点",
     source: "来源",
-    fields: "其他源字段与扩展字段",
+    sourceDetails: "来源详情",
+    historyHint: "保留船司报告的原始时间、地点与描述。",
+    fields: "原始字段与扩展字段",
     expandSource: "展开源值",
     sourceLimited: "源值超过展示深度或大小限制，当前文字并非完整内容。",
     untypedTime:
@@ -160,14 +164,10 @@ export function trackingSourceSummary(snapshot, language) {
   const declaredText =
     typeof declared === "number" || typeof declared === "string" ? String(declared) : l.notProvided;
   const returned = Array.isArray(snapshot.containers) ? snapshot.containers.length : 0;
-  const provenance = [snapshot.sourceDetails.strategy, snapshot.sourceDetails.confidence]
-    .filter(Boolean)
-    .join(" / ");
   return [
     l.declaredContainers + ": " + declaredText,
     l.returnedContainers + ": " + returned,
-    snapshot.sourceDetails.businessVerified === true ? l.verified : l.notVerified,
-    provenance ? l.source + ": " + provenance : ""
+    snapshot.sourceDetails.businessVerified === true ? l.verified : l.notVerified
   ]
     .filter(Boolean)
     .join(" · ");
@@ -186,69 +186,87 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
   target.hidden = !details && !events.length;
   if (target.hidden) return;
   const l = copy(language);
-  target.append(node(doc, "h3", l.details));
+  const carrier = snapshot.provider?.name || snapshot.provider?.code;
+  target.append(node(doc, "h3", carrier ? `${carrier} · ${l.details}` : l.details));
   if (details?.noBusinessData) target.append(node(doc, "p", l.noData, "tracking-json-notice"));
-  if (details?.vessel || details?.voyage) {
-    const p = node(doc, "p");
-    p.append(
-      node(doc, "strong", l.vessel + ": "),
-      node(doc, "span", [details.vessel, details.voyage].filter(Boolean).join(" / "))
-    );
-    target.append(p);
-  }
-  if (details) {
-    const status = node(doc, "p");
-    status.textContent = [
-      l.status + ": " + (details.queryStatus || l.unknown),
-      details.businessVerified ? l.verified : l.notVerified
-    ].join(" · ");
-    target.append(status);
+  const criticalStatus = /HUMAN_REQUIRED|NO_BUSINESS_DATA|ERROR|FAILED|BLOCKED/.test(
+    details?.queryStatus || ""
+  );
+  if (criticalStatus && !(details.noBusinessData && details.queryStatus === "NO_BUSINESS_DATA")) {
+    target.append(node(doc, "p", `${l.status}: ${details.queryStatus}`, "tracking-json-notice"));
   }
   if (details?.warnings?.length) {
-    const warning = node(doc, "div", undefined, "tracking-json-notice");
-    warning.append(node(doc, "strong", l.warnings));
-    const ul = node(doc, "ul");
-    details.warnings.forEach((w) => ul.append(node(doc, "li", w)));
-    warning.append(ul);
-    target.append(warning);
+    const critical = details.warnings.filter((warning) =>
+      /HUMAN_REQUIRED|NO_BUSINESS_DATA|ERROR|FAILED|BLOCKED/.test(warning)
+    );
+    const ordinary = details.warnings.filter((warning) => !critical.includes(warning));
+    for (const [warnings, blocking] of [
+      [critical, true],
+      [ordinary, false]
+    ]) {
+      if (!warnings.length) continue;
+      const warning = node(
+        doc,
+        blocking ? "div" : "details",
+        undefined,
+        blocking ? "tracking-json-notice" : "tracking-json-disclosure"
+      );
+      warning.append(
+        node(doc, blocking ? "strong" : "summary", `${l.warnings} (${warnings.length})`)
+      );
+      const ul = node(doc, "ul");
+      warnings.forEach((w) => ul.append(node(doc, "li", w)));
+      warning.append(ul);
+      target.append(warning);
+    }
   }
-  for (const [title, entries] of [
-    [l.eventTitle, events],
-    [l.additionalEvents, details?.additionalEvents || []]
-  ]) {
-    if (!entries.length) continue;
-    target.append(node(doc, "h4", `${title} (${entries.length})`), node(doc, "p", l.untypedTime));
-    const { wrap, body } = table(doc, [l.time, l.event, l.location, l.source]);
+  function eventTable(entries) {
+    const { wrap, body } = table(doc, [l.time, l.event, l.location]);
     for (const event of entries) {
       const row = node(doc, "tr");
       [
         event.reportedTime || event.occurredAt || "—",
         event.name || "—",
-        event.location || "—",
-        event.source || "—"
-      ].forEach((v) => row.append(node(doc, "td", v)));
+        event.location || "—"
+      ].forEach((value) => row.append(node(doc, "td", value)));
       body.append(row);
     }
-    target.append(wrap);
+    return wrap;
+  }
+  const history = details?.additionalEvents || [];
+  if (history.length) {
+    const section = node(doc, "section", undefined, "tracking-json-history");
+    section.append(
+      node(doc, "h4", `${l.additionalEvents} (${history.length})`),
+      node(doc, "p", l.historyHint),
+      eventTable(history)
+    );
+    target.append(section);
+  }
+  if (events.length) {
+    const section = node(doc, "details", undefined, "tracking-json-disclosure");
+    section.append(
+      node(doc, "summary", `${l.eventTitle} (${events.length})`),
+      node(doc, "p", l.untypedTime),
+      eventTable(events)
+    );
+    target.append(section);
   }
   if (details?.fields?.length) {
-    const section = node(doc, "details");
-    section.append(node(doc, "summary", l.fields));
+    const section = node(doc, "details", undefined, "tracking-json-disclosure");
+    section.append(node(doc, "summary", `${l.fields} (${details.fields.length})`));
     const dl = node(doc, "dl", undefined, "tracking-json-source-fields");
     for (const field of details.fields) {
       const row = node(doc, "div");
-      const term = node(
-        doc,
-        "dt",
-        (l.fieldLabels[field.key] || field.key) +
-          (field.source ? " · " + field.source + "." + field.key : "")
-      );
+      const term = node(doc, "dt", l.fieldLabels[field.key] || field.key);
       const description = node(doc, "dd", field.value);
+      const original = node(doc, "details");
+      original.append(node(doc, "summary", l.sourceDetails));
+      if (field.source) original.append(node(doc, "p", `${field.source}.${field.key}`));
       if (field.structured || field.rawText?.length > 1200) {
-        const original = node(doc, "details");
-        original.append(node(doc, "summary", l.expandSource), node(doc, "pre", field.rawText));
-        description.append(original);
+        original.append(node(doc, "pre", field.rawText));
       }
+      description.append(original);
       if (field.truncated) description.append(node(doc, "small", l.sourceLimited));
       row.append(term, description);
       dl.append(row);
@@ -256,7 +274,28 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     section.append(dl);
     target.append(section);
   }
-  if (details?.evidenceAvailable) target.append(node(doc, "p", l.evidence));
+  if (details) {
+    const section = node(doc, "details", undefined, "tracking-json-disclosure");
+    section.append(node(doc, "summary", l.sourceDetails));
+    const metadata = node(doc, "dl", undefined, "tracking-json-source-fields");
+    for (const key of ["queryStatus", "schema", "strategy", "confidence", "jobId"]) {
+      if (!details[key]) continue;
+      const row = node(doc, "div");
+      row.append(node(doc, "dt", key), node(doc, "dd", String(details[key])));
+      metadata.append(row);
+    }
+    const sources = [
+      ...new Set([...events, ...history].map((event) => event.source).filter(Boolean))
+    ];
+    if (sources.length) {
+      const row = node(doc, "div");
+      row.append(node(doc, "dt", l.source), node(doc, "dd", sources.join(" · ")));
+      metadata.append(row);
+    }
+    section.append(metadata);
+    if (details.evidenceAvailable) section.append(node(doc, "p", l.evidence));
+    target.append(section);
+  }
 }
 export function installLocalTrackingPreview({
   doc = document,
