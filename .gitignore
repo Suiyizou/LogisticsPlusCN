@@ -25,3 +25,7 @@ carrier-agent-lab/.browser-states/
 
 frontend/public/pdfjs/
 output/ui-full-design-20261028/deprecated-*
+
+# Local design proposals, screenshots, reports, and acceptance artifacts.
+/output/
+/design-concepts/
