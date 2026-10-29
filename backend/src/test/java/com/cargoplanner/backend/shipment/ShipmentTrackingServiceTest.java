@@ -45,6 +45,7 @@ class ShipmentTrackingServiceTest {
   private ShipmentTrackingService service;
   private AuthenticatedUser employee;
   private AuthenticatedUser business;
+  private ShipmentTrackingProperties properties;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -85,7 +86,7 @@ class ShipmentTrackingServiceTest {
     when(adapterClient.track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001")))
         .thenReturn(adapterResponse);
 
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    properties = new ShipmentTrackingProperties();
     properties.setCacheTtl(Duration.ofMinutes(15));
     ShipmentAccessService accessService = new ShipmentAccessService(jdbcTemplate);
     service = new ShipmentTrackingService(
@@ -107,6 +108,54 @@ class ShipmentTrackingServiceTest {
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest("MAERSK", "AUTO", "BILLOFLADING", "TEST-BL-10001", false), null
     )).isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.status()).isEqualTo(HttpStatus.FORBIDDEN));
+  }
+
+  @Test
+  void localCmaUsesDesktopSessionAndPersistsTheMappedSnapshot() throws Exception {
+    properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
+    NormalizedTrackRequest query = new NormalizedTrackRequest("CMA", "PLAYWRIGHT", "BOOKING", "TJN0940917");
+    JsonNode record = objectMapper.readTree("""
+        {"schema":"tracking.v1","carrier":{"code":"CMA_CGM","name":"CMA CGM"},
+         "query":{"reference_input":"TJN0940917","status":"QUERY_COMPLETED"},
+         "shipment":{"booking":"TJN0940917","containers":[{"number":"CMAU1234567"}],
+           "fields":{"eta":"2026-08-01 08:00"}},"meta":{"business_verified":false}}
+        """);
+    when(adapterClient.track(query)).thenReturn(new TrackingV1SnapshotMapper(objectMapper)
+        .map(record, query, "2026-07-16T10:00:00Z", "local-job-cma"));
+    ShipmentTrackRequest input = new ShipmentTrackRequest("CMA", "AUTO", "BOOKING", "TJN0940917", false);
+    ObjectNode live = service.track(input, business);
+    ObjectNode cached = service.track(input, business);
+    assertThat(live.path("persisted").asBoolean()).isTrue();
+    assertThat(cached.path("shipmentId").asText()).isEqualTo(live.path("shipmentId").asText());
+    assertThat(cached.path("snapshot").path("provider").path("code").asText()).isEqualTo("CMA");
+    assertThat(cached.path("snapshot").path("keyTimes").path("estimatedArrival").path("time").asText())
+        .isEqualTo("2026-08-01 08:00");
+    org.mockito.Mockito.verifyNoInteractions(cmaTrackingSessionService);
+    verify(adapterClient, times(1)).track(query);
+  }
+
+  @Test
+  void localCoscoBillAndEventsOnlyRemainIntactAcrossPersistenceAndCacheReads() throws Exception {
+    properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
+    NormalizedTrackRequest query = new NormalizedTrackRequest("COSCO", "AUTO", "BILLOFLADING", "COSU000010001");
+    JsonNode record = objectMapper.readTree("""
+        {"schema":"tracking.v1","carrier":{"code":"COSCO"},
+         "query":{"reference_input":"COSU000010001","status":"QUERY_COMPLETED"},
+         "shipment":{"bill_of_lading":"COSU000010001","events":[
+           {"description":"Carrier source entry","time_raw":"2026-07-15 08:00"}]},"meta":{}}
+        """);
+    when(adapterClient.track(query)).thenReturn(new TrackingV1SnapshotMapper(objectMapper)
+        .map(record, query, "2026-07-16T10:00:00Z", "local-job-cosco"));
+    ShipmentTrackRequest input = new ShipmentTrackRequest("COSCO", "AUTO", "BILLOFLADING", "COSU000010001", false);
+    ObjectNode live = service.track(input, business);
+    ObjectNode cached = service.track(input, business);
+    assertThat(live.path("shipmentId").asText()).isNotBlank();
+    assertThat(cached.path("snapshot").path("route")).isEmpty();
+    assertThat(cached.path("snapshot").path("supplementalDetails").path("pendingRefresh").asBoolean()).isFalse();
+    assertThat(cached.path("snapshot").path("events").get(0).path("occurredAt").isNull()).isTrue();
+    assertThat(cached.path("snapshot").path("events").get(0).path("reportedTime").asText())
+        .isEqualTo("2026-07-15 08:00");
+    verify(adapterClient, times(1)).track(query);
   }
 
   @Test

@@ -23,8 +23,10 @@ public class TrackingAdapterClient {
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private final RestClient restClient;
   private final RestClient agentRestClient;
+  private final LocalTrackingQueueClient localQueueClient;
 
   public TrackingAdapterClient(ShipmentTrackingProperties properties) {
+    this.localQueueClient = properties.usesLocalQueue() ? new LocalTrackingQueueClient(properties) : null;
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(validDuration(properties.getConnectTimeout(), Duration.ofSeconds(5)));
     requestFactory.setReadTimeout(validDuration(properties.getReadTimeout(), Duration.ofSeconds(90)));
@@ -59,6 +61,7 @@ public class TrackingAdapterClient {
       CmaSessionCredentials credentials,
       boolean forceRefresh
   ) {
+    if (localQueueClient != null) return localQueueClient.track(request);
     Map<String, Object> body = requestBody(request);
     if (forceRefresh) body.put("forceRefresh", true);
     try {
@@ -100,6 +103,7 @@ public class TrackingAdapterClient {
   }
 
   public JsonNode cancelBatchTask(String taskId) {
+    if (localQueueClient != null) return localQueueClient.cancelBatchTask(taskId);
     try {
       JsonNode response = restClient.post()
           .uri("/api/batch-tasks/{taskId}/cancel", taskId)
@@ -117,6 +121,7 @@ public class TrackingAdapterClient {
   }
 
   public JsonNode discoverContainers(NormalizedTrackRequest request) {
+    requireLegacyOperation();
     try {
       JsonNode response = restClient.post()
           .uri("/api/track/cosco/container-list")
@@ -162,6 +167,7 @@ public class TrackingAdapterClient {
       List<String> sources,
       boolean allowPlaywrightFallback
   ) {
+    requireLegacyOperation();
     try {
       Map<String, Object> body = requestBody(request);
       if (sources != null && !sources.isEmpty()) body.put("sources", sources);
@@ -208,6 +214,13 @@ public class TrackingAdapterClient {
       return "Tracking adapter request failed: " + response.substring(0, Math.min(240, response.length()));
     }
     return "Tracking adapter request failed with status " + error.getStatusCode().value();
+  }
+
+  private void requireLegacyOperation() {
+    if (localQueueClient != null) {
+      throw new ApiException(HttpStatus.CONFLICT, "TRACKING_LOCAL_OPERATION_UNSUPPORTED",
+          "The desktop tracking API returns one complete result; separate COSCO supplemental queries are unavailable");
+    }
   }
 
   private Map<String, Object> requestBody(NormalizedTrackRequest request) {

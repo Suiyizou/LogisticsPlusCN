@@ -126,6 +126,10 @@ public class ShipmentTrackingService {
     return track(input, user, false);
   }
 
+  public boolean usesLocalTrackingQueue() {
+    return properties.usesLocalQueue();
+  }
+
   /**
    * Persists a non-COSU spreadsheet row as a manual placeholder without calling a carrier.
    * Imported business fields remain available to the operator, while customer views keep the
@@ -163,7 +167,7 @@ public class ShipmentTrackingService {
     ShipmentImportDetails details = input.importedDetails();
     String type = normalizeCode(input.type(), "BOOKING");
     if (!"BOOKING".equals(type)
-        && !TrackingCarriers.supportsReference(normalizeCode(input.carrier(), ""), type)) {
+        && !TrackingCarriers.supportsReference(normalizeCode(input.carrier(), ""), type, properties.usesLocalQueue())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "BOOKING_REFERENCE_REQUIRED",
@@ -442,7 +446,7 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.UNAUTHORIZED, "Customer sign in is required");
     }
     NormalizedTrackRequest request = normalize(input);
-    if (!TrackingCarriers.supportsReference(request.carrier(), request.type())) {
+    if (!TrackingCarriers.supportsReference(request.carrier(), request.type(), properties.usesLocalQueue())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "Customers can only open assigned shipments by booking number"
@@ -1429,7 +1433,7 @@ public class ShipmentTrackingService {
 
     JsonNode upstream;
     try {
-      if ("CMA".equals(request.carrier())) {
+      if ("CMA".equals(request.carrier()) && !properties.usesLocalQueue()) {
         CmaTrackingSessionService.CmaSessionCredentials credentials =
             cmaTrackingSessionService.requireCredentials();
         upstream = forceRefresh
@@ -1476,7 +1480,7 @@ public class ShipmentTrackingService {
       );
     }
     upstream = enrichWithImportedDetails(upstream, importedDetails);
-    upstream = ensureRouteFallback(upstream, importedDetails);
+    if (!properties.usesLocalQueue()) upstream = ensureRouteFallback(upstream, importedDetails);
     snapshot = upstream.path("snapshot");
     if (!hasMeaningfulTrackingData(snapshot)) {
       if (cached != null) {
@@ -1510,8 +1514,8 @@ public class ShipmentTrackingService {
       return transientLiveResponse(upstream);
     }
 
-    boolean supplementalIncomplete = request.batchTaskId() != null
-        || upstream.path("enrichment").path("partial").asBoolean(false);
+    boolean supplementalIncomplete = !properties.usesLocalQueue() && (request.batchTaskId() != null
+        || upstream.path("enrichment").path("partial").asBoolean(false));
     if (supplementalIncomplete && snapshot.isObject()) {
       ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
       supplemental.put("partial", true);
@@ -1521,7 +1525,7 @@ public class ShipmentTrackingService {
       // flight, so the pre-request cache is not a safe merge base.
       supplemental.remove(List.of("carriedForward", "sourceFetchedAt"));
     }
-    if ("COSCO".equals(request.carrier()) && "BOOKING".equals(request.type())
+    if (!properties.usesLocalQueue() && "COSCO".equals(request.carrier()) && "BOOKING".equals(request.type())
         && snapshot.isObject()) {
       ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
       supplemental.put("lastAppliedRequestStartedAt", now.toString());
@@ -2492,6 +2496,13 @@ public class ShipmentTrackingService {
     if ("IMPORTED_MANUAL".equalsIgnoreCase(snapshot.path("channel").asText())) {
       return false;
     }
+    if ("LOCAL_CHROME".equals(snapshot.path("channel").asText())
+        && (arrayHasItems(snapshot.path("events"))
+            || hasText(snapshot.path("keyTimes").path("estimatedArrival"), "time")
+            || hasText(snapshot.path("keyTimes").path("estimatedDeparture"), "time")
+            || hasText(snapshot.path("summary"), "vesselVoyage"))) {
+      return true;
+    }
     if (arrayHasItems(snapshot.path("containers"))
         || arrayHasItems(snapshot.path("route"))
         || arrayHasItems(snapshot.path("routingLegs"))
@@ -3095,7 +3106,8 @@ public class ShipmentTrackingService {
     if (!SUPPORTED_TYPES.contains(type)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported shipment number type");
     }
-    if ("BILLOFLADING".equals(type) && !TrackingCarriers.browserAgentCarrier(carrier)) {
+    if ("BILLOFLADING".equals(type) && !TrackingCarriers.browserAgentCarrier(carrier)
+        && !(properties.usesLocalQueue() && "COSCO".equals(carrier))) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "BOOKING_REFERENCE_REQUIRED",
@@ -3244,6 +3256,7 @@ public class ShipmentTrackingService {
 
   private JsonNode ensureRouteFallback(JsonNode upstream, ShipmentImportDetails details) {
     if (!upstream.isObject() || !upstream.path("snapshot").isObject()
+        || "LOCAL_CHROME".equals(upstream.path("snapshot").path("channel").asText())
         || arrayHasItems(upstream.path("snapshot").path("route"))) {
       return upstream;
     }

@@ -131,11 +131,11 @@ public class ShipmentAutoRefreshService {
         JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
         LEFT JOIN cp_tracking_refresh_jobs j ON j.shipment_id = s.id
         WHERE j.shipment_id IS NULL
-          AND s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
+          AND s.carrier_code IN (%s)
           AND COALESCE(t.source_channel, '') <> 'IMPORTED_MANUAL'
         ORDER BY s.id
         LIMIT ?
-        """,
+        """.formatted(refreshCarrierCodes()),
         (rs, rowNumber) -> new UnregisteredShipment(
             rs.getLong("id"), rs.getString("public_id"), rs.getString("snapshot_json")
         ),
@@ -354,7 +354,7 @@ public class ShipmentAutoRefreshService {
         JOIN cp_shipments s ON s.id = j.shipment_id
         JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
         WHERE j.auto_refresh_enabled = TRUE
-          AND s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
+          AND s.carrier_code IN (%s)
           AND COALESCE(t.source_channel, '') <> 'IMPORTED_MANUAL'
           AND j.next_attempt_at IS NOT NULL
           AND j.next_attempt_at <= ?
@@ -362,7 +362,7 @@ public class ShipmentAutoRefreshService {
           AND (j.lease_until IS NULL OR j.lease_until < ?)
         ORDER BY j.next_attempt_at, j.shipment_id
         LIMIT ?
-        """,
+        """.formatted(refreshCarrierCodes()),
         (rs, rowNumber) -> new JobCandidate(
             rs.getLong("shipment_id"),
             rs.getInt("failure_count"),
@@ -423,13 +423,11 @@ public class ShipmentAutoRefreshService {
         SELECT s.carrier_code, r.reference_type, r.reference_no_normalized
         FROM cp_shipments s
         JOIN cp_shipment_references r ON r.shipment_id = s.id
-        WHERE s.id = ? AND (r.reference_type = 'BOOKING'
-            OR (s.carrier_code IN ('MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
-                AND r.reference_type = 'BILLOFLADING'))
+        WHERE s.id = ? AND %s
         ORDER BY r.primary_reference DESC,
                  r.id
         LIMIT 1
-        """,
+        """.formatted(refreshReferencePredicate()),
         (rs, rowNumber) -> new RefreshReference(
             rs.getString("carrier_code"),
             rs.getString("reference_type"),
@@ -441,7 +439,8 @@ public class ShipmentAutoRefreshService {
   }
 
   private void refreshClaim(RefreshClaim claim) {
-    boolean supplemental = "SUPPLEMENTAL".equalsIgnoreCase(claim.candidate().refreshScope());
+    boolean supplemental = !trackingService.usesLocalTrackingQueue()
+        && "SUPPLEMENTAL".equalsIgnoreCase(claim.candidate().refreshScope());
     try {
       RefreshReference reference = claim.reference();
       ObjectNode response = supplemental
@@ -515,6 +514,19 @@ public class ShipmentAutoRefreshService {
         recordFailure(claim, safeMessage(error));
       }
     }
+  }
+
+  private String refreshCarrierCodes() {
+    return trackingService.usesLocalTrackingQueue()
+        ? "'" + String.join("', '", TrackingCarriers.CODES) + "'"
+        : "'COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL'";
+  }
+
+  private String refreshReferencePredicate() {
+    return trackingService.usesLocalTrackingQueue()
+        ? "(r.reference_type = 'BOOKING' OR (s.carrier_code <> 'CMA' AND r.reference_type = 'BILLOFLADING'))"
+        : "(r.reference_type = 'BOOKING' OR (s.carrier_code IN ('MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')"
+            + " AND r.reference_type = 'BILLOFLADING'))";
   }
 
   private void disableClaim(RefreshClaim claim, String terminalStatus, String message) {

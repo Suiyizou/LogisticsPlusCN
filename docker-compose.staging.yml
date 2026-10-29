@@ -13,12 +13,7 @@ services:
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=10.0
   tracking:
     container_name: cargo-staging-tracking
-    mem_limit: 768m
-    shm_size: 256mb
-    environment:
-      PLAYWRIGHT_MAX_CONCURRENCY: "1"
-      COSCO_PLAYWRIGHT_MAX_CONCURRENCY: "1"
-      NODE_OPTIONS: --max-old-space-size=192
+    mem_limit: 128m
   frontend:
     container_name: cargo-staging-frontend
     ports: !override

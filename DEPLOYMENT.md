@@ -4,7 +4,7 @@
 
 - `frontend`：Nginx 静态前端与统一网关。
 - `backend`：Spring Boot 管理账号、设备登录、监控接口。
-- `tracking`：Node.js + Playwright 货物追踪适配器，仅在 Compose 的 `app` 网络暴露 `3000`。
+- `tracking`：纯静态 Nginx 追踪页面，仅在 Compose 的 `app` 网络暴露 `3000`；最终镜像不含 Node.js、Playwright 或浏览器。
 - `mysql`：保存用户、客户、票单、追踪快照、文件元数据、设备和审计日志，仅接入内部 `data` 网络。
 
 路由关系：
@@ -14,9 +14,9 @@
 | `/`                                       | Vue 公开品牌主页       |
 | `/planner/*`、`/admin`、`/workbenches` 等 | Vue 企业登录与权限门禁 |
 | `/api/*`                                  | Spring Boot            |
-| `/tracking/*`                             | Node.js 公开追踪服务   |
+| `/tracking/*`                             | Nginx 追踪静态资源     |
 
-`/tracking/` 页面和查询 API 面向访客公开。CMA 会话维护区会读取同域平台登录 token，但只允许 `BUSINESS`/`ADMIN` 调用 Spring 的受保护维护接口；普通员工、客户和匿名访客不能上传或查看会话。Nginx 代理到 Node 时仍会清空浏览器 `Cookie`，并只对成本较高的追踪查询与通道检查接口按来源 IP 限流；国旗、承运人列表与状态接口不计入该限流。
+实时查询经过 Spring 的业务员/管理员鉴权，由后端调用内网穿透后的本地 Chrome 队列 API；客户读取已授权快照。静态容器保留 `/api/health` 供存活检查，旧浏览器查询与通道检查端点返回 `410 TRACKING_CLOUD_ADAPTER_REMOVED`。完整契约见 [本地 Chrome API 对接](docs/LOCAL_CHROME_TRACKING_API.md)。
 
 如果 Docker Nginx 前方还有 CDN 或宿主机反向代理，需要仅对受信任的代理地址配置 `set_real_ip_from` 与 `real_ip_header`。否则 `$binary_remote_addr` 会是统一的前置代理 IP，所有访客将共用同一追踪查询限额。
 
@@ -63,11 +63,19 @@ APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 
 成功启动后会更新该管理员的口令哈希、撤销已有登录设备会话并写入审计日志，不会创建第二个管理员。随后立即禁用引导并清除密码。若命中多个账号，或命中的是非管理员账号，需先在受控数据库环境中逐一轮换或停用，后端不会猜测迁移目标。
 
-首次构建 `tracking` 会拉取 Playwright Chromium 基础镜像，下载体积较大。Compose 已为浏览器兜底通道设置 `1gb` 共享内存和健康检查；服务器还需要能够访问船司查询站点。`PLAYWRIGHT_MAX_CONCURRENCY`、`PLAYWRIGHT_QUEUE_LIMIT` 和 `PLAYWRIGHT_QUEUE_TIMEOUT_MS` 分别限制浏览器并发数、排队数量和最长排队时间，默认值为 `2`、`8`、`15000`。海外小规格服务器不要盲目提高并发，队列满或超时会返回 `429`，不会继续挤占内存。
+`tracking` 构建阶段根据锁文件准备页面所需资源，最终阶段仅复制到 `nginx:alpine`。默认 Compose 不再启动船司浏览器、通道监控或代理池，也不分配浏览器共享内存。`docker-compose.carrier-agent.yml`、`docker-compose.proxy-pool.yml` 属于旧适配器实验配置，不用于这套云端部署。
 
-若 COSCO 已限制服务器出口 IP，可在服务器 `.env` 配置 `COSCO_PROXY_ENABLED=true`、`COSCO_PROXY_SERVER=http://代理地址:端口`、`COSCO_PROXY_USERNAME` 和 `COSCO_PROXY_PASSWORD`。这组代理同时作用于 COSCO REST 网络通道与 Playwright Chrome；只支持 HTTP/HTTPS 代理。建议保持默认的 `COSCO_QUERY_MIN_INTERVAL_MS=10000`、`COSCO_QUERY_MAX_INTERVAL_MS=12000` 与 `COSCO_BLOCK_COOLDOWN_MS=1800000`。正常请求会在 10–12 秒随机窗口内串行发起；确认 `403/429` 后进入冷却，不会按 10 秒继续重试。还需确认代理服务条款允许该业务流量，且代理凭据不得写入镜像、仓库或工单截图。
+部署环境中配置：
 
-批量查询使用可取消的任务 ID。浏览器停止按钮先中止本地请求，再经 Spring `POST /api/public/shipments/batch-tasks/{taskId}/cancel` 转发给 Node；正在运行的请求会退出，未完成条目保留为待处理。Node 重启会清空内存中的任务状态，但不影响浏览器保存的待处理队列。
+```env
+APP_TRACKING_ADAPTER_MODE=LOCAL_QUEUE
+APP_TRACKING_LOCAL_BASE_URL=http://host.docker.internal:18791
+APP_TRACKING_LOCAL_TOKEN=与本地服务一致的业务令牌
+```
+
+若已有 `.env` 写入 `APP_TRACKING_ADAPTER_MODE=LEGACY`，需改为 `LOCAL_QUEUE`。本地 `D:\AI\shipping-tracking` 运行 Chrome 和队列，设置 `CONCURRENCY=1`；云端只需能访问隧道 API，不需要访问船司官网。Docker 到宿主机隧道监听地址的配置见接口说明。
+
+批量取消由 Spring 映射为本地 `POST /jobs/{id}/cancel`。超时也会尝试取消已知作业；本地正在执行的单条是否立即中止，以本地服务实现为准。
 
 ### 票单手动更新
 
@@ -84,15 +92,13 @@ APP_TRACKING_AUTO_REFRESH_CLAIM_BATCH_SIZE=10
 
 部署环境应保持 `APP_TRACKING_AUTO_REFRESH_ENABLED=false`。一键更新会跳过已空箱归还的终止票单，批量更新仅处理代理勾选的授权票单；所有接口都会重新校验海外代理与票单的有效授权关系。
 
-Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。这样公开的 Node/Playwright 追踪服务无法直接连接数据库。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
+Compose 把 `frontend`、`backend`、`tracking` 放入 `app` 网络，只让 `backend` 额外加入内部 `data` 网络访问 MySQL。静态追踪容器不连接数据库，也不保存 API Token。附件实体文件由 `SHIPMENT_FILE_HOST_PATH` 挂载到宿主机固态硬盘，MySQL 只保存安全文件名、路径和可见性元数据；该目录必须纳入独立备份并限制宿主机权限。
 
-### CMA DataDome 会话
+### 本地 Chrome 登录态与旧会话数据
 
-服务器 `.env` 不需要填写或传输 DataDome。业务员或管理员登录平台后进入 `/tracking/`，选择 `CMA CGM`，在“DataDome 会话”区域粘贴 `datadome` 值或 CMA 请求的完整 `Cookie` 头并保存。页面不会把该值写入 LocalStorage，保存成功后也不会回显。
+本地 API 模式使用 Windows 上专用 Chrome 的登录态，CMA 查询不要求云端保存 DataDome Cookie。云端只配置队列 API 的业务 Token。
 
-后端把会话以 AES-GCM 密文保存到 `cp_tracking_credentials`，加密密钥首次使用时自动生成到 Compose 的 `backend-secrets` 命名卷。备份和迁移服务器时必须把 MySQL 数据与该命名卷一起迁移；只恢复数据库而丢失密钥时，旧密文无法恢复，需要业务员重新保存会话。更新与清除操作都会写入审计日志。
-
-“已保存”不代表 DataDome 已验证可用。DataDome 可能把会话绑定到 User-Agent、来源 IP 或浏览器指纹；业务员保存后必须立即用服务器实际查询一票。若返回“已保存会话被拒绝”，需要重新获取与服务器出口环境兼容的会话，不能通过反复重试绕过挑战。
+已有 `cp_tracking_credentials` 与 `backend-secrets` 卷仍保留在备份流程中，避免升级时丢失历史数据；新本地查询链不依赖这些旧会话。
 
 Compose 为 `app`、`data` 固定使用 `cargo-planner-app`、`cargo-planner-data` 两个 Docker 网络名；代码目录改名或 Compose 项目名变化时不会再生成另一套网络，同时不会改变既有 MySQL 数据卷名。若升级前已经出现“backend 解析不到 `mysql`”，先检查新网络和旧 MySQL 的网络归属：
 

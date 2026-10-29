@@ -114,6 +114,71 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
+  void localQueueDiscoversAndRefreshesAllCarriersWithTheirSupportedPrimaryReferences() {
+    when(trackingService.usesLocalTrackingQueue()).thenReturn(true);
+    properties.setClaimBatchSize(100);
+    int index = 1;
+    for (String carrier : TrackingCarriers.CODES) {
+      String type = "CMA".equals(carrier) ? "BOOKING" : "BILLOFLADING";
+      String publicId = String.format("00000000-0000-0000-0000-%012d", index);
+      insertShipment(index, publicId, "In transit");
+      jdbcTemplate.update("UPDATE cp_shipments SET carrier_code = ? WHERE id = ?", carrier, index);
+      jdbcTemplate.update("UPDATE cp_shipment_references SET carrier_code = ?, reference_type = ? "
+          + "WHERE shipment_id = ?", carrier, type, index);
+      ObjectNode response = objectMapper.createObjectNode();
+      response.putObject("snapshot").putObject("summary").putObject("latestEvent").put("name", "In transit");
+      when(trackingService.refreshAutomatically(carrier, type, "BK" + index)).thenReturn(response);
+      index++;
+    }
+    assertThat(service.registerMissingJobs(NOW)).isEqualTo(TrackingCarriers.CODES.size());
+    jdbcTemplate.update("UPDATE cp_tracking_refresh_jobs SET next_attempt_at = ?",
+        Timestamp.from(NOW.minusSeconds(1)));
+
+    assertThat(service.refreshDueShipments()).isEqualTo(TrackingCarriers.CODES.size());
+    index = 1;
+    for (String carrier : TrackingCarriers.CODES) {
+      verify(trackingService).refreshAutomatically(carrier,
+          "CMA".equals(carrier) ? "BOOKING" : "BILLOFLADING", "BK" + index++);
+    }
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM cp_tracking_refresh_jobs WHERE lease_token IS NOT NULL OR failure_count > 0",
+        Integer.class)).isZero();
+  }
+
+  @Test
+  void localQueueConvertsExistingSupplementalRetryIntoCompleteTrackingAndClearsPendingSources() {
+    when(trackingService.usesLocalTrackingQueue()).thenReturn(true);
+    String publicId = "00000000-0000-0000-0000-000000000001";
+    insertShipment(1, publicId, "In transit");
+    insertDueJob(1, NOW.minusSeconds(1));
+    jdbcTemplate.update("UPDATE cp_tracking_refresh_jobs SET refresh_scope = 'SUPPLEMENTAL', "
+        + "supplemental_sources = 'containerInfo', failure_count = 2 WHERE shipment_id = 1");
+    ObjectNode response = objectMapper.createObjectNode();
+    response.putObject("snapshot").put("channel", "LOCAL_CHROME")
+        .putObject("summary").putObject("latestEvent").put("name", "Discharged");
+    when(trackingService.refreshAutomatically("COSCO", "BOOKING", "BK1")).thenReturn(response);
+
+    // The default schedule has daily refresh disabled but supplemental retries enabled.
+    service.scheduledRefresh();
+
+    verify(trackingService).refreshAutomatically("COSCO", "BOOKING", "BK1");
+    verify(trackingService, never()).refreshSupplementalAutomatically(
+        publicId, "COSCO", "BOOKING", "BK1", List.of("containerInfo"));
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT refresh_scope FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", String.class))
+        .isEqualTo("FULL");
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT supplemental_sources FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", String.class))
+        .isNull();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT failure_count FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", Integer.class))
+        .isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT lease_token FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", String.class))
+        .isNull();
+  }
+
+  @Test
   void schedulesOnlySupplementalRetryBetweenFifteenAndThirtyMinutes() {
     String publicId = "00000000-0000-0000-0000-000000000001";
     insertShipment(1, publicId, "In transit");

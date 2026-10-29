@@ -3,6 +3,8 @@ package com.cargoplanner.backend.customer;
 import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
+import com.cargoplanner.backend.shipment.ShipmentTrackingProperties;
+import com.cargoplanner.backend.shipment.TrackingCarriers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -38,6 +41,7 @@ public class CustomerShipmentQueryService {
   private final JdbcTemplate jdbcTemplate;
   private final ObjectMapper objectMapper;
   private final CustomerAccessGuard accessGuard;
+  private ShipmentTrackingProperties trackingProperties = new ShipmentTrackingProperties();
 
   public CustomerShipmentQueryService(
       JdbcTemplate jdbcTemplate,
@@ -47,6 +51,11 @@ public class CustomerShipmentQueryService {
     this.jdbcTemplate = jdbcTemplate;
     this.objectMapper = objectMapper;
     this.accessGuard = accessGuard;
+  }
+
+  @Autowired
+  public void setTrackingProperties(ShipmentTrackingProperties properties) {
+    this.trackingProperties = properties;
   }
 
   public Map<String, Object> listAvailableShipments(AuthenticatedUser actor) {
@@ -376,14 +385,14 @@ public class CustomerShipmentQueryService {
         JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-            AND r2.reference_type = 'BOOKING'
+            AND %s
           ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
-        WHERE s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
+        WHERE s.carrier_code IN (%s)
           AND REPLACE(UPPER(COALESCE(s.tracking_status, '')), '_', ' ')
-                NOT LIKE '%EMPTY RETURNED%'
-        """;
+                NOT LIKE '%%EMPTY RETURNED%%'
+        """.formatted(refreshReferencePredicate(), refreshCarrierCodes());
     List<RefreshableShipment> candidates = actor.isAdmin()
         ? jdbcTemplate.query(
             baseSql + " ORDER BY COALESCE(t.fetched_at, s.updated_at) DESC, s.id DESC",
@@ -416,13 +425,13 @@ public class CustomerShipmentQueryService {
         JOIN cp_shipment_references r ON r.id = (
           SELECT r2.id FROM cp_shipment_references r2
           WHERE r2.shipment_id = s.id
-            AND r2.reference_type = 'BOOKING'
+            AND %s
           ORDER BY r2.primary_reference DESC, r2.id ASC
           LIMIT 1
         )
-        WHERE s.carrier_code IN ('COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL')
+        WHERE s.carrier_code IN (%s)
           AND s.public_id IN (%s)
-        """.formatted(placeholders);
+        """.formatted(refreshReferencePredicate(), refreshCarrierCodes(), placeholders);
     List<Object> parameters = new ArrayList<>(shipmentIds);
     if (!actor.isAdmin()) {
       sql += " AND (s.responsible_agent_id = ? OR EXISTS ("
@@ -473,13 +482,26 @@ public class CustomerShipmentQueryService {
     return items;
   }
 
+  private String refreshReferencePredicate() {
+    return trackingProperties.usesLocalQueue()
+        ? "(r2.reference_type = 'BOOKING' OR (s.carrier_code <> 'CMA' AND r2.reference_type = 'BILLOFLADING'))"
+        : "r2.reference_type = 'BOOKING'";
+  }
+
+  private String refreshCarrierCodes() {
+    return trackingProperties.usesLocalQueue()
+        ? "'" + String.join("', '", TrackingCarriers.CODES) + "'"
+        : "'COSCO', 'CMA', 'MAERSK', 'HAPAG_LLOYD', 'MSC', 'OOCL'";
+  }
+
   private RefreshableShipment mapRefreshableShipment(ResultSet rs, int rowNumber)
       throws SQLException {
     String normalized = rs.getString("reference_no_normalized");
     String raw = rs.getString("reference_no_raw");
     String carrier = rs.getString("carrier_code");
     String referenceType = rs.getString("reference_type");
-    if (ShipmentReferences.isSharedCoscoNumericIdentity(carrier, referenceType, normalized)) {
+    if (!trackingProperties.usesLocalQueue()
+        && ShipmentReferences.isSharedCoscoNumericIdentity(carrier, referenceType, normalized)) {
       normalized = ShipmentReferences.normalizeReference(normalized);
       if (normalized.startsWith("COSU")) normalized = normalized.substring(4);
       referenceType = "BOOKING";

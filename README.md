@@ -1,6 +1,6 @@
 # 货代业务平台（装箱规划 + 货物追踪）
 
-这是一个面向货代装箱估算、箱型选择、可视化剖析与货物追踪的统一业务平台。装箱工作台保留浏览器端 WebWorker 本地计算；货物追踪工作台使用 Node.js 双通道适配器；Spring Boot + MySQL 统一负责公司员工账号、设备登录限制和总管理员后台。
+这是一个面向货代装箱估算、箱型选择、可视化剖析与货物追踪的统一业务平台。装箱工作台保留浏览器端 WebWorker 本地计算；货物追踪由 Spring Boot 通过内网穿透调用本地 Chrome 队列 API；Spring Boot + MySQL 统一负责账号、设备登录、追踪快照和总管理员后台。
 
 当前角色权限、内部运营追踪、外部客户追踪和智能装箱计算的完整功能说明见
 [平台功能与角色说明](docs/PLATFORM_FUNCTIONS.md)。
@@ -12,7 +12,7 @@
 - 装箱计算：WebWorker 本地计算
 - 桌面打包：Electron
 - 后端：Spring Boot 3 + MyBatis（客户列表）+ JDBC（其余模块逐步迁移）
-- 货物追踪：Node.js + Playwright，源码位于 `tracking-service/`
+- 货物追踪：云端 `tracking-service/` 镜像仅用 Nginx 提供页面、国旗和 PDF 预览资源，不包含 Node.js、Playwright 或浏览器；真实查询位于本地 Chrome 服务。
 - 智能导入：后台可控制 LLM 开关、API Key、Base URL 和模型；原文件智能模式通过工作簿工具生成读取计划并核对来源，需配置支持工具调用的模型。规则预览与粘贴文本路径独立保留。
 - 数据库：MySQL 8
 - 部署：单仓库 Docker Compose；Nginx 代理 `/api/` 到 Spring、`/tracking/` 到追踪服务
@@ -34,9 +34,9 @@
 
 根路径 `/` 是 DrewesLogistics 公开品牌主页，包含中英文内容、首屏翻页动效、平台能力与建设路线。主页导航和能力卡均提供 Cargo Tracking 入口，可直接访问同域路径 `/tracking/`。
 
-`/tracking/` 页面及其查询 API 面向访客公开，不要求企业账号。船司可在查询表单或左侧适配器卡片中显式选择。CMA 的 DataDome 会话由已登录业务员/管理员在页面维护，后端加密保存且不回显；公开访客只能使用查询能力。Nginx 会清除代理到追踪服务的浏览器 Cookie，并对公开查询 API 按来源 IP 限流。
+`/tracking/` 提供追踪工作台静态页面；实时查询由已登录业务员或管理员通过 Spring 的受保护接口触发，客户只能读取已授权票单快照。浏览器登录态保存在本地 Chrome，云端通过 Bearer Token 调用本地队列 API。配置与渲染契约见 [本地 Chrome API 对接](docs/LOCAL_CHROME_TRACKING_API.md)。
 
-企业员工登录成功后进入 `/workbenches`，再进入装箱规划工作台；总管理员登录后直接进入 `/admin`。`/workbenches`、`/planner`、`/home`、`/containers`、`/algorithm` 与 `/admin` 等业务路径仍由统一登录状态和角色权限保护。两个模块的源码、入口、网关和 Compose 编排均位于本仓库的 `combine` 分支，运行时继续按清晰的业务边界使用 Spring 与 Node 两个服务容器。
+企业员工登录成功后进入 `/workbenches`，再进入装箱规划工作台；总管理员登录后直接进入 `/admin`。`/workbenches`、`/planner`、`/home`、`/containers`、`/algorithm` 与 `/admin` 等业务路径由统一登录状态和角色权限保护。云端由 Nginx 提供前端和追踪静态资源，Spring 提供业务接口。
 
 前端入口链接的构建时变量为：
 
@@ -46,7 +46,7 @@ VITE_TRACKING_WORKBENCH_URL=/tracking/
 
 默认部署路径固定为 `/tracking/`。如果修改它，还需同步调整 `docker/nginx.conf` 与 `frontend/vite.config.js` 中的代理路径，不能只修改这个变量。
 
-COSCO 两个查询通道可通过 `COSCO_PROXY_*` 环境变量共用 HTTP(S) 代理，并由全局最小请求间隔、有限队列和 403 冷却保护出口 IP。批量页面支持停止当前任务；当前请求会被中止，剩余条目可稍后继续。
+Compose 默认使用 `APP_TRACKING_ADAPTER_MODE=LOCAL_QUEUE`；部署时须填写 `APP_TRACKING_LOCAL_BASE_URL` 与 `APP_TRACKING_LOCAL_TOKEN`。本地服务设置 `CONCURRENCY=1`。批量任务的查询、取消和错误信息通过 Spring 与本地队列传递。
 
 ## 后端与数据库
 
