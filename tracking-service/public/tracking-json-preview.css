@@ -153,3 +153,10 @@
 .tracking-json-controls .tracking-select:has(select[hidden]) {
   display: none;
 }
+
+.tracking-json-source-fields pre {
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

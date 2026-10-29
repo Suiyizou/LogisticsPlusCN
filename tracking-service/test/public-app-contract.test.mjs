@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
+import { detailSections } from "../public/tracking-v1-adapter.mjs";
 import { presentBatchTask } from "../../frontend/src/features/shipments/batchTrackingPresentation.js";
 import { hasRefreshIssue } from "../../frontend/src/features/shipments/shipmentPresentation.js";
 import {
@@ -938,12 +939,14 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
   );
   assert.match(
     appSource,
-    /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = false;[\s\S]*?renderContainers\(containers\)/
+    /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = !sections\.containers;[\s\S]*?renderContainers\(containers\)/
   );
-  assert.doesNotMatch(
-    appSource,
-    /elements\["container-panel"\]\.hidden = containers\.length === 0/
-  );
+  // An empty returned-detail list hides its panel even when a shipment declares boxes.
+  // This capability does not remove the shipment summary or its declared count.
+  const declaredOnly = { summary: { containerCount: { declared: 7 } }, containers: [] };
+  assert.equal(detailSections(declaredOnly).containers, false);
+  assert.equal(declaredOnly.summary.containerCount.declared, 7);
+  assert.equal(detailSections({ containers: [{ number: "SYNTHETIC0001" }] }).containers, true);
   assert.match(appSource, /"references\.title": "订舱信息及参考号"/);
   assert.match(appSource, /"containers\.title": "运输详情"/);
 });
@@ -990,4 +993,16 @@ test("blank legacy browser business references do not hide database-backed field
       forwarderJobNumber: "LJSH2607005"
     }
   );
+});
+
+test("local Chrome snapshots retain their exact source channel without a network or verification claim", () => {
+  const start = appSource.indexOf("const CHANNELS = Object.freeze({");
+  const end = appSource.indexOf("const TYPE_KEYS", start);
+  const channels = vm.runInNewContext(appSource.slice(start, end) + ";CHANNELS");
+  assert.equal(channels.LOCAL_CHROME.code, "LOCAL_CHROME");
+  assert.equal(channels.LOCAL_CHROME.sourceKey, "source.localChrome");
+  assert.notEqual(channels.LOCAL_CHROME.sourceKey, channels.NETWORK.sourceKey);
+  assert.match(appSource, /"source.localChrome": "LOCAL CHROME \/ API · SOURCE DATA"/);
+  assert.match(appSource, /"source.localChrome": "本地 Chrome \/ API · 源数据"/);
+  assert.match(appSource, /sourceTag\.textContent = payload.localPreview/);
 });

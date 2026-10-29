@@ -40,8 +40,8 @@
             >
               <span class="batch-business-reference"
                 ><b>{{ row.referenceNo }}</b
-                ><small>{{ row.carrier }}</small></span
-              >
+                ><small><CarrierBadge :carrier="row.carrier || ''" /></small
+              ></span>
               <label class="batch-business-field">
                 <span>{{ t("customers.jobNumber") }}</span>
                 <el-input
@@ -248,23 +248,68 @@
                     })
                   }}
                 </p>
-                <p>{{ t('customers.trackImportSummary', { ready: batchTrackImportPreview.items.length, blocked: batchTrackImportErrors.length, skipped: batchTrackImportPreview.skipped, duplicates: batchTrackImportPreview.duplicates }) }}</p>
-                <el-alert v-if="batchTrackImportErrors.length" type="error" :closable="false" :title="t('customers.trackImportBlocked')" />
+                <p>
+                  {{
+                    t("customers.trackImportSummary", {
+                      ready: batchTrackImportPreview.items.length,
+                      blocked: batchTrackImportErrors.length,
+                      skipped: batchTrackImportPreview.skipped,
+                      duplicates: batchTrackImportPreview.duplicates
+                    })
+                  }}
+                </p>
+                <el-alert
+                  v-if="batchTrackImportErrors.length"
+                  type="error"
+                  :closable="false"
+                  :title="t('customers.trackImportBlocked')"
+                />
                 <ul v-if="batchTrackImportErrors.length">
-                  <li v-for="(issue, index) in batchTrackImportErrors" :key="index">{{ t('customers.trackImportRow', { row: issue.row }) }} · {{ issue.code }}: {{ issue.message }}</li>
+                  <li v-for="(issue, index) in batchTrackImportErrors" :key="index">
+                    {{ t("customers.trackImportRow", { row: issue.row }) }} · {{ issue.code }}:
+                    {{ issue.message }}
+                  </li>
                 </ul>
                 <details>
-                  <summary>{{ t('customers.trackFieldMapping') }}</summary>
-                  <ul><li v-for="mapping in batchTrackImportPreview.mappings" :key="mapping.field">{{ mapping.header }} → {{ mapping.field }}</li></ul>
+                  <summary>{{ t("customers.trackFieldMapping") }}</summary>
+                  <ul>
+                    <li v-for="mapping in batchTrackImportPreview.mappings" :key="mapping.field">
+                      {{ mapping.header }} → {{ mapping.field }}
+                    </li>
+                  </ul>
                 </details>
                 <el-table :data="batchTrackImportPreview.rows" size="small" max-height="320" border>
-                  <el-table-column prop="sourceRow" :label="t('customers.trackSourceRow')" width="75" />
-                  <el-table-column prop="originalReference" :label="t('customers.trackOriginalReference')" min-width="200" />
-                  <el-table-column prop="number" :label="t('customers.trackQueryReference')" min-width="180" />
+                  <el-table-column
+                    prop="sourceRow"
+                    :label="t('customers.trackSourceRow')"
+                    width="75"
+                  />
+                  <el-table-column
+                    prop="originalReference"
+                    :label="t('customers.trackOriginalReference')"
+                    min-width="200"
+                  />
+                  <el-table-column
+                    prop="number"
+                    :label="t('customers.trackQueryReference')"
+                    min-width="180"
+                  />
                   <el-table-column prop="carrier" :label="t('customers.carrier')" min-width="120" />
-                  <el-table-column prop="carrierSource" :label="t('customers.trackCarrierEvidence')" width="120" />
-                  <el-table-column prop="type" :label="t('customers.referenceType')" min-width="130" />
-                  <el-table-column prop="status" :label="t('customers.trackValidation')" width="110" />
+                  <el-table-column
+                    prop="carrierSource"
+                    :label="t('customers.trackCarrierEvidence')"
+                    width="120"
+                  />
+                  <el-table-column
+                    prop="type"
+                    :label="t('customers.referenceType')"
+                    min-width="130"
+                  />
+                  <el-table-column
+                    prop="status"
+                    :label="t('customers.trackValidation')"
+                    width="110"
+                  />
                 </el-table>
                 <div class="batch-track-preview-table-wrap">
                   <el-table
@@ -379,9 +424,7 @@
                   <span class="batch-track-result-meta">
                     <span class="batch-track-result-index">{{ r.index }}</span>
                     <b>{{ r.number }}</b>
-                    <el-tag v-if="r.carrier" size="small" effect="plain" type="info">{{
-                      r.carrier
-                    }}</el-tag>
+                    <CarrierBadge v-if="r.carrier" :carrier="r.carrier" />
                     <el-tag v-if="r.errorCode" size="small" effect="plain" type="danger">{{
                       r.errorCode
                     }}</el-tag>
@@ -480,7 +523,8 @@
                   batchTrackFileParsing ||
                   !batchTrackCustomerId ||
                   !batchTrackSelectedSheet ||
-                  (!batchTrackNumbers.length || batchTrackImportErrors.length > 0)
+                  !batchTrackNumbers.length ||
+                  batchTrackImportErrors.length > 0
                 "
                 @click="startBatchTrack"
               >
@@ -516,6 +560,7 @@ import {
   supportsShipmentReference
 } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
+import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 import ShipmentListPage from "./ShipmentListPage.vue";

@@ -12,7 +12,7 @@
       <template #meta
         ><WorkspaceStatus :label="selectedShipment?.trackingStatus || wt('statusUnknown')" /><span
           class="shipment-identity-meta"
-          >{{ selectedShipment?.carrier || "—" }} ·
+          ><CarrierBadge :carrier="selectedShipment?.carrier || ''" /> ·
           {{ referenceTypeLabel(selectedShipment?.referenceType) }}</span
         ></template
       >
@@ -253,6 +253,7 @@ import {
   supportsShipmentReference
 } from "../../../services/trackingCarriers.js";
 import { toRefs } from "vue";
+import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import DetailSection from "../../../components/workspace/DetailSection.vue";
 import WorkspaceStatus from "../../../components/workspace/WorkspaceStatus.vue";

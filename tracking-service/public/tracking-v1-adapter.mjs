@@ -36,7 +36,8 @@ function normalizeEvent(value, index, source) {
 function shipmentEvents(shipment) {
   return list(shipment.events)
     .map((e, i) => normalizeEvent(e, i, "shipment.events"))
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((entry) => ({ ...entry, semanticKind: "SOURCE_ENTRY", occurredAt: null }));
 }
 function additionalEvents(shipment) {
   const extra = object(shipment.fields_extra);
@@ -60,6 +61,92 @@ function additionalEvents(shipment) {
 function timeRecord(value, location) {
   const time = text(value);
   return time ? { time, location: text(location) || null } : null;
+}
+
+const SOURCE_VALUE_LIMIT = 65536;
+function sourceFieldValue(value) {
+  let truncated = false;
+  let budget = 48000;
+  const seen = new WeakSet();
+  const marker = () => {
+    truncated = true;
+    return "[source display limit]";
+  };
+  const visit = (entry, depth) => {
+    if (budget <= 0 || depth > 8) return marker();
+    if (typeof entry === "string") {
+      const length = Math.min(entry.length, budget, 8192);
+      budget -= length;
+      if (length < entry.length) {
+        truncated = true;
+        return entry.slice(0, length) + " [source display limit]";
+      }
+      return entry;
+    }
+    if (!entry || typeof entry !== "object") {
+      budget -= 16;
+      return entry;
+    }
+    if (seen.has(entry)) return marker();
+    seen.add(entry);
+    const pairs = Object.entries(entry);
+    const result = Array.isArray(entry) ? [] : Object.create(null);
+    let rendered = 0;
+    for (const [key, item] of pairs) {
+      if (rendered >= 100 || budget <= 0) break;
+      const safeKey = key.slice(0, 512);
+      if (safeKey !== key) truncated = true;
+      budget -= safeKey.length + 16;
+      const child = visit(item, depth + 1);
+      if (Array.isArray(result)) result.push(child);
+      else result[safeKey] = child;
+      rendered++;
+    }
+    if (rendered < pairs.length) {
+      const omitted = marker() + " (" + (pairs.length - rendered) + " omitted)";
+      if (Array.isArray(result)) result.push(omitted);
+      else result["[source display limit]"] = omitted;
+    }
+    seen.delete(entry);
+    return result;
+  };
+  const structured = value !== null && typeof value === "object";
+  let rawText = structured ? JSON.stringify(visit(value, 0), null, 2) : String(value);
+  if (rawText.length > SOURCE_VALUE_LIMIT) {
+    rawText = rawText.slice(0, SOURCE_VALUE_LIMIT) + " [source display limit]";
+    truncated = true;
+  }
+  return {
+    value: rawText.length > 1200 ? rawText.slice(0, 1200) + "…" : rawText,
+    rawText,
+    structured,
+    truncated
+  };
+}
+function collectSourceFields(value, source) {
+  const entries = Object.entries(object(value)).filter(
+    ([, item]) =>
+      item !== null &&
+      item !== undefined &&
+      (typeof item === "string"
+        ? item.trim() !== ""
+        : typeof item === "object"
+          ? Object.keys(item).length > 0
+          : true)
+  );
+  const fields = entries
+    .slice(0, 200)
+    .map(([key, item]) => ({ key: key.slice(0, 512), source, ...sourceFieldValue(item) }));
+  if (entries.length > fields.length)
+    fields.push({
+      key: "[source field limit]",
+      source,
+      value: String(entries.length - fields.length) + " additional fields exceed the display limit",
+      rawText: "",
+      structured: false,
+      truncated: true
+    });
+  return fields;
 }
 
 export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
@@ -141,9 +228,10 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
   );
   const latestEvent = first(status.latest_event, fields.latest_event);
   const warnings = list(record.meta?.warnings).map(text).filter(Boolean);
-  const sourceFields = Object.entries(fields)
-    .filter(([, v]) => text(v))
-    .map(([key, value]) => ({ key, value: text(value) }));
+  const sourceFields = [
+    ...collectSourceFields(fields, "shipment.fields"),
+    ...collectSourceFields(shipment.fields_extra, "shipment.fields_extra")
+  ];
   const snapshot = {
     schemaVersion: "tracking.v1",
     provider: carrier,
@@ -196,8 +284,61 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
   return { snapshot, raw: null, cached: false, sourceSchema: "tracking.v1" };
 }
 
+export function normalizeSourceDetails(details) {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return details;
+  const fields = list(details.fields)
+    .slice(0, 200)
+    .flatMap((entry) => {
+      if (!entry || !text(entry.key) || entry.value === null || entry.value === undefined)
+        return [];
+      const alreadyFormatted =
+        typeof entry.rawText === "string" && typeof entry.structured === "boolean";
+      const formatted = sourceFieldValue(alreadyFormatted ? entry.rawText : entry.value);
+      return [
+        {
+          key: text(entry.key).slice(0, 512),
+          source: text(entry.source).slice(0, 512) || "shipment.fields",
+          ...formatted,
+          structured: alreadyFormatted ? entry.structured : formatted.structured,
+          truncated: entry.truncated === true || formatted.truncated
+        }
+      ];
+    });
+  if (list(details.fields).length > 200)
+    fields.push({
+      key: "[source field limit]",
+      source: "shipment.fields",
+      value: "Additional source fields exceed the display limit",
+      rawText: "",
+      structured: false,
+      truncated: true
+    });
+  fields.push(...collectSourceFields(details.extraFields, "shipment.fields_extra"));
+  const seen = new Set();
+  const normalized = {
+    ...details,
+    fields: fields.filter((field) => {
+      const key = field.source + "|" + field.key;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  };
+  delete normalized.extraFields;
+  return normalized;
+}
+
 export function normalizeTrackingPayload(payload) {
-  if (payload?.snapshot && typeof payload.snapshot === "object") return payload;
+  if (payload?.snapshot && typeof payload.snapshot === "object") {
+    if (!payload.snapshot.sourceDetails) return payload;
+    return {
+      ...payload,
+      snapshot: {
+        ...payload.snapshot,
+        sourceDetails: normalizeSourceDetails(payload.snapshot.sourceDetails)
+      }
+    };
+  }
   if (payload?.schema === "tracking.v1" && payload.shipment) return adaptTrackingV1(payload);
   throw new Error("Expected an existing snapshot response or a tracking.v1 record");
 }

@@ -22,6 +22,8 @@ services:
       APP_BOOTSTRAP_ADMIN_ENABLED: "false"
       APP_BOOTSTRAP_ADMIN_USERNAME: ""
       APP_BOOTSTRAP_ADMIN_PASSWORD: ""
+      # The preserved preview backend still uses the legacy adapter contract.
+      APP_TRACKING_ADAPTER_MODE: LEGACY
       APP_TRACKING_AUTO_REFRESH_ENABLED: "false"
       APP_TRACKING_SUPPLEMENTAL_RETRY_ENABLED: "false"
       SPRING_AI_CHAT_MODEL: none
@@ -43,6 +45,7 @@ services:
     build:
       args:
         VITE_TRACKING_WORKBENCH_URL: /workspace/tracking/overview
+        VITE_TRACKING_ADAPTER_MODE: LEGACY
     ports: !reset []
   gateway:
     image: nginx:alpine

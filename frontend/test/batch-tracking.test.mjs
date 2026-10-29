@@ -355,7 +355,8 @@ function uiHarness(t, overrides = {}) {
     loadAvailableShipments() {},
     loadXlsxModule: async () => ({
       read: (bytes) => bytes,
-      utils: XLSX.utils, SSF: XLSX.SSF
+      utils: XLSX.utils,
+      SSF: XLSX.SSF
     }),
     waitForNextPaint: async () => {},
     confirm: () => true,
@@ -387,7 +388,10 @@ function fileEvent(name, bytes) {
   };
 }
 function workbook(number) {
-  return { SheetNames: ["Bookings"], Sheets: { Bookings: XLSX.utils.aoa_to_sheet([["Booking"], [number]]) } };
+  return {
+    SheetNames: ["Bookings"],
+    Sheets: { Bookings: XLSX.utils.aoa_to_sheet([["Booking"], [number]]) }
+  };
 }
 
 test("import captures the same customer, items and channel inspected before submission", async (t) => {
@@ -568,11 +572,19 @@ test("stopped and circuit-paused retries do not report that retrying is still ac
   }
 });
 
-
 test("invalid workbook preview never creates a task or inspects remote conflicts", async (t) => {
   let inspected = 0;
-  const h = uiHarness(t, { inspectBusinessShipmentImportConflicts: async () => { inspected++; return {conflicts: []}; } });
-  const sheet = prepareSheet("Mixed", [["BOOKING", "CARRIER"], ["COSU1234567890", "COSCO"], ["BAD12345", "MYSTERY"]]);
+  const h = uiHarness(t, {
+    inspectBusinessShipmentImportConflicts: async () => {
+      inspected++;
+      return { conflicts: [] };
+    }
+  });
+  const sheet = prepareSheet("Mixed", [
+    ["BOOKING", "CARRIER"],
+    ["COSU1234567890", "COSCO"],
+    ["BAD12345", "MYSTERY"]
+  ]);
   h.ui.batchTrackSheets.value = [sheet];
   h.ui.batchTrackSelectedSheetName.value = sheet.name;
   assert.equal(h.ui.batchTrackImportPreview.value.items.length, 1);

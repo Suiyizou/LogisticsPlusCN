@@ -1,4 +1,4 @@
-import { readTrackingPreview, createCarrierBadge, detailSections } from "./tracking-v1-adapter.mjs";
+import { readTrackingPreview, createCarrierBadge } from "./tracking-v1-adapter.mjs";
 const labels = {
   en: {
     title: "Preview tracking JSON",
@@ -10,8 +10,11 @@ const labels = {
     carrier: "Carrier",
     reference: "Reference",
     status: "Query status",
-    containers: "Containers",
-    events: "Events",
+    containers: "Returned container details",
+    declaredContainers: "Declared containers",
+    returnedContainers: "Returned container details",
+    notProvided: "Not provided",
+    events: "Source entries",
     scope: "Local JSON · read-only",
     exit: "Exit preview",
     error: "Could not preview this file",
@@ -24,15 +27,18 @@ const labels = {
     warnings: "Source warnings",
     notVerified: "Business data has not been verified by the source.",
     verified: "Source marks this record as business verified.",
-    eventTitle: "Shipment events",
-    additionalEvents: "Additional structured carrier history",
+    eventTitle: "Source entries",
+    additionalEvents: "Supplementary source history",
     time: "Reported time",
-    event: "Event",
+    event: "Source entry",
     location: "Location",
     source: "Source",
-    fields: "Other source fields",
+    fields: "Other source fields and extensions",
+    expandSource: "Expand source value",
+    sourceLimited:
+      "Source value exceeds the display depth or size limit; displayed text is incomplete.",
     untypedTime:
-      "Reported times retain the source precision. No actual/estimated classification is inferred.",
+      "Source entries may contain page labels, summaries or transport descriptions. They do not establish that an event occurred or completed. Original order and reported times are retained.",
     evidence: "The source lists local evidence paths. They are not opened by this preview.",
     unknown: "Unknown",
     fieldLabels: {
@@ -71,8 +77,11 @@ const labels = {
     carrier: "船司",
     reference: "查询单号",
     status: "查询状态",
-    containers: "箱数",
-    events: "事件数",
+    containers: "返回箱明细数",
+    declaredContainers: "声明箱数",
+    returnedContainers: "返回箱明细",
+    notProvided: "未提供",
+    events: "源条目数",
     scope: "本地 JSON · 只读预览",
     exit: "退出预览",
     error: "无法预览此文件",
@@ -85,14 +94,17 @@ const labels = {
     warnings: "源数据告警",
     notVerified: "源文件尚未验证本票业务数据。",
     verified: "源文件标记本票业务数据已验证。",
-    eventTitle: "票级运输事件",
-    additionalEvents: "船司补充结构化历史",
+    eventTitle: "源数据条目",
+    additionalEvents: "来源补充历史",
     time: "源数据时间",
-    event: "事件",
+    event: "源条目",
     location: "地点",
     source: "来源",
-    fields: "其他源字段",
-    untypedTime: "时间保留源数据精度，不推断实际或预计时间类型。",
+    fields: "其他源字段与扩展字段",
+    expandSource: "展开源值",
+    sourceLimited: "源值超过展示深度或大小限制，当前文字并非完整内容。",
+    untypedTime:
+      "源条目可能包含页面标签、摘要或运输描述，不代表事件已发生或已完成；保留原始顺序与源数据时间。",
     evidence: "源文件含本地证据路径；此预览不会打开这些路径。",
     unknown: "未知",
     fieldLabels: {
@@ -141,10 +153,34 @@ function table(doc, headers) {
   wrap.append(t);
   return { wrap, body };
 }
+export function trackingSourceSummary(snapshot, language) {
+  if (!snapshot?.sourceDetails) return "";
+  const l = copy(language);
+  const declared = snapshot.summary?.containerCount?.declared;
+  const declaredText =
+    typeof declared === "number" || typeof declared === "string" ? String(declared) : l.notProvided;
+  const returned = Array.isArray(snapshot.containers) ? snapshot.containers.length : 0;
+  const provenance = [snapshot.sourceDetails.strategy, snapshot.sourceDetails.confidence]
+    .filter(Boolean)
+    .join(" / ");
+  return [
+    l.declaredContainers + ": " + declaredText,
+    l.returnedContainers + ": " + returned,
+    snapshot.sourceDetails.businessVerified === true ? l.verified : l.notVerified,
+    provenance ? l.source + ": " + provenance : ""
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 export function renderReportedTrackingDetails(doc, snapshot, language) {
   const target = doc.querySelector("#reported-tracking-details");
   if (!target) return;
   target.replaceChildren();
+  const sourceSummary = doc.querySelector("#tracking-json-source-summary");
+  if (sourceSummary) {
+    sourceSummary.textContent = trackingSourceSummary(snapshot, language);
+    sourceSummary.hidden = !snapshot?.sourceDetails;
+  }
   const details = snapshot?.sourceDetails,
     events = Array.isArray(snapshot?.events) ? snapshot.events : [];
   target.hidden = !details && !events.length;
@@ -201,10 +237,20 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     const dl = node(doc, "dl", undefined, "tracking-json-source-fields");
     for (const field of details.fields) {
       const row = node(doc, "div");
-      row.append(
-        node(doc, "dt", l.fieldLabels[field.key] || field.key),
-        node(doc, "dd", field.value)
+      const term = node(
+        doc,
+        "dt",
+        (l.fieldLabels[field.key] || field.key) +
+          (field.source ? " · " + field.source + "." + field.key : "")
       );
+      const description = node(doc, "dd", field.value);
+      if (field.structured || field.rawText?.length > 1200) {
+        const original = node(doc, "details");
+        original.append(node(doc, "summary", l.expandSource), node(doc, "pre", field.rawText));
+        description.append(original);
+      }
+      if (field.truncated) description.append(node(doc, "small", l.sourceLimited));
+      row.append(term, description);
       dl.append(row);
     }
     section.append(dl);
@@ -256,6 +302,10 @@ export function installLocalTrackingPreview({
   exit.type = "button";
   banner.append(bannerLabel, exit);
   results.prepend(banner);
+  const sourceSummary = node(doc, "p", undefined, "tracking-json-notice");
+  sourceSummary.id = "tracking-json-source-summary";
+  sourceSummary.hidden = true;
+  results.querySelector(".shipment-summary-card")?.prepend(sourceSummary);
   const supplemental = node(doc, "section", undefined, "panel tracking-json-reported");
   supplemental.id = "reported-tracking-details";
   supplemental.hidden = true;

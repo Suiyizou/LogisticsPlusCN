@@ -3,6 +3,7 @@
 ARG PREVIEW_TRACKING_BASE=cargo-ui-preview-tracking:local
 FROM ${PREVIEW_TRACKING_BASE}
 COPY --chmod=0644 public/app.js public/styles.css public/workspace-bridge.mjs public/index.html public/brand-tokens.css public/design-system.css public/tracking-composition.css public/tracking-refinement.css public/tracking-milestones.css public/tracking-milestones.mjs public/workspace-navigation.css public/workspace-navigation.mjs /app/public/
+COPY --chmod=0644 public/tracking-response.mjs public/tracking-presentation.mjs public/carrier-catalog.mjs public/file-preview-lifecycle.mjs public/pdf-canvas-preview.mjs public/tracking-v1-adapter.mjs public/tracking-json-preview.mjs public/tracking-json-preview.css /app/public/
 # Tracking documents permit only same-origin workspace embedding.
 COPY --chmod=0644 lib/static-assets.mjs lib/http-utils.mjs /app/lib/
 COPY public/carriers/ /app/public/carriers/

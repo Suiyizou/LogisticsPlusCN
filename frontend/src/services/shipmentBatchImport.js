@@ -1,4 +1,10 @@
-import { TRACKING_CARRIERS, supportsShipmentReference } from "./trackingCarriers.js";
+import {
+  ALL_TRACKING_CARRIERS,
+  TRACKING_ADAPTER_MODE,
+  trackingCarriersForMode,
+  normalizeTrackingAdapterMode,
+  supportsShipmentReference
+} from "./trackingCarriers.js";
 
 const BOOKING_HEADERS = [
   "BOOKING",
@@ -45,7 +51,7 @@ const CARRIER_ALIASES = {
   MSK: "MAERSK",
   MATSN: "MATSON",
   EMC: "EVERGREEN",
-  WANHAI: "WANHAI"
+  WANHAI: "WAN_HAI"
 };
 const RECOGNIZED_IMPORT_CARRIERS = new Set([
   "COSCO",
@@ -60,7 +66,7 @@ const RECOGNIZED_IMPORT_CARRIERS = new Set([
   "EVERGREEN",
   "KMTC",
   "ONE",
-  "WANHAI",
+  "WAN_HAI",
   "YML",
   "ZIM",
   "HEDE"
@@ -182,20 +188,39 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
     referenceColumn,
     merges: metadata.merges || [],
     unsafeCells: metadata.unsafeCells || [],
-    resultSheet: headers.includes("\u63d0\u4ea4\u5355\u53f7") && headers.includes("\u7bb1\u53f7"),
+    resultSheet:
+      headers.includes("\u63d0\u4ea4\u5355\u53f7") &&
+      (headers.includes("\u7bb1\u53f7") ||
+        (headers.includes("\u5355\u53f7\u7c7b\u578b") &&
+          headers.includes("\u8fd0\u8f93\u72b6\u6001")) ||
+        (headers.includes("\u8239\u53f8\u4ee3\u7801") &&
+          headers.includes("\u67e5\u8be2\u65b9\u5f0f"))),
     suggestedColumnIndex: suggested?.index ?? null,
     previewRows: rows.slice(0, 9)
   };
 }
 
+/** @param {{ adapterMode?: string }} [options] */
 export function buildShipmentBatchPreview(
   sheet,
   selectedColumnIndex,
   defaultCarrier = "",
-  referenceType = "BOOKING"
+  referenceType = "BOOKING",
+  options = {}
 ) {
-  /** @type {{ items: any[], rows: any[], errors: {row:number,code:string,message:string}[], skipped:number, duplicates:number, mappings:{field:string,index:number,header:string}[] }} */
-  const preview = { items: [], rows: [], errors: [], skipped: 0, duplicates: 0, mappings: [] };
+  const adapterMode = normalizeTrackingAdapterMode(options.adapterMode ?? TRACKING_ADAPTER_MODE);
+  const localQueue = adapterMode === "LOCAL_QUEUE";
+  const configuredCarriers = trackingCarriersForMode(adapterMode);
+  /** @type {{ items: any[], rows: any[], errors: {row:number,code:string,message:string}[], skipped:number, duplicates:number, mappings:{field:string,index:number,header:string}[], adapterMode:string }} */
+  const preview = {
+    items: [],
+    rows: [],
+    errors: [],
+    skipped: 0,
+    duplicates: 0,
+    mappings: [],
+    adapterMode
+  };
   if (sheet?.resultSheet)
     preview.errors.push({
       row: sheet.headerRow,
@@ -307,11 +332,11 @@ export function buildShipmentBatchPreview(
     const carrier = normalizeCarrier(explicit || inferred || defaultCarrier);
     if (explicit && inferred && normalizeCarrier(explicit) !== inferred)
       add("CARRIER_CONFLICT", "Carrier cell conflicts with the reference prefix");
-    if (!TRACKING_CARRIERS.some((c) => c.code === carrier)) {
+    if (!configuredCarriers.some((c) => c.code === carrier)) {
       if (RECOGNIZED_IMPORT_CARRIERS.has(carrier))
         add(
           "CARRIER_NOT_CONFIGURED",
-          "Carrier is recognized but has no configured query adapter in this application"
+          `Carrier is recognized but has no configured query adapter in the ${adapterMode} profile`
         );
       else
         add(
@@ -322,15 +347,23 @@ export function buildShipmentBatchPreview(
     const headerType = BILL_HEADERS.includes(normalizeHeader(headers[col]))
       ? "BILLOFLADING"
       : referenceType;
-    // Existing COSCO/CMA contract queries bill references via BOOKING; keep the source bill separately.
-    const type = ["COSCO", "CMA"].includes(carrier) ? "BOOKING" : headerType;
+    // Only the legacy COSCO route converts a bill to its numeric BOOKING query.
+    // LOCAL_QUEUE receives the original bill identity; CMA still requires BOOKING.
+    const type = carrier === "CMA" || (carrier === "COSCO" && !localQueue) ? "BOOKING" : headerType;
+    if (localQueue && carrier === "COSCO" && type === "BOOKING" && /^COSU\d+$/i.test(rawReference))
+      add(
+        "REFERENCE_TYPE_CONFLICT",
+        "A COSU-prefixed bill must use BILLOFLADING in LOCAL_QUEUE; select the bill column or reference type"
+      );
     if (
-      !supportsShipmentReference(carrier, type) &&
-      TRACKING_CARRIERS.some((c) => c.code === carrier)
+      !supportsShipmentReference(carrier, type, adapterMode) &&
+      configuredCarriers.some((c) => c.code === carrier)
     )
       add("UNSUPPORTED_REFERENCE", "Carrier does not support the selected reference type");
     const number =
-      carrier === "COSCO" && /^COSU\d+$/i.test(rawReference) ? rawReference.slice(4) : rawReference;
+      !localQueue && carrier === "COSCO" && /^COSU\d+$/i.test(rawReference)
+        ? rawReference.slice(4)
+        : rawReference;
     const importedDetails = Object.fromEntries(
       Object.entries(fieldIndexes)
         .filter(([field]) => field !== "carrier")
@@ -353,6 +386,13 @@ export function buildShipmentBatchPreview(
       number,
       carrier,
       carrierSource: explicit ? "cell" : inferred ? "prefix" : "selection",
+      sourceReference: {
+        raw: original,
+        normalized: rawReference,
+        type: headerType,
+        address: columnLetter(col) + row
+      },
+      adapterMode,
       type,
       errors: rowErrors,
       status: rowErrors.length ? "BLOCKED" : "READY"
@@ -394,8 +434,9 @@ function normalizeCarrier(value) {
   const n = normalizeHeader(value);
   return (
     CARRIER_ALIASES[n] ||
-    TRACKING_CARRIERS.find((c) => normalizeHeader(c.code) === n || normalizeHeader(c.name) === n)
-      ?.code ||
+    ALL_TRACKING_CARRIERS.find(
+      (c) => normalizeHeader(c.code) === n || normalizeHeader(c.name) === n
+    )?.code ||
     n
   );
 }

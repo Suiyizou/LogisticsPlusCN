@@ -754,7 +754,15 @@
       <template #header>
         <div class="dialog-title">
           <p>{{ ui("excel.recognitionReviewEyebrow") }}</p>
-          <h2>{{ ui("excel.recognitionReviewTitle") }}</h2>
+          <h2>
+            {{
+              ui(
+                recognitionSourceConfirmationPending
+                  ? "excel.recognitionSourceReviewTitle"
+                  : "excel.recognitionReviewTitle"
+              )
+            }}
+          </h2>
         </div>
       </template>
 
@@ -787,8 +795,18 @@
             <strong>{{ recognitionNormalRows.length }}</strong>
           </div>
           <div>
-            <span>{{ ui("excel.reviewNeedsConfirmItems") }}</span>
-            <strong>{{ recognitionReviewFindings.length }}</strong>
+            <span>{{
+              ui(
+                recognitionSourceConfirmationPending
+                  ? "excel.recognitionSourceReviewLabel"
+                  : "excel.reviewNeedsConfirmItems"
+              )
+            }}</span>
+            <strong>{{
+              recognitionSourceConfirmationPending
+                ? ui("excel.recognitionSourceReviewPending")
+                : recognitionReviewFindings.length
+            }}</strong>
           </div>
           <div>
             <span>{{ ui("excel.importPieces") }}</span>
@@ -805,8 +823,16 @@
           <el-collapse-item name="needsReview">
             <template #title>
               <span class="recognition-review-title-line">
-                {{ ui("excel.reviewNeedsConfirm") }}
-                <b>{{ recognitionReviewFindings.length }}</b>
+                {{
+                  ui(
+                    recognitionSourceConfirmationPending
+                      ? "excel.recognitionSourceReviewTitle"
+                      : "excel.reviewNeedsConfirm"
+                  )
+                }}
+                <b v-if="!recognitionSourceConfirmationPending">{{
+                  recognitionReviewFindings.length
+                }}</b>
               </span>
             </template>
 
@@ -928,7 +954,15 @@
                 </ol>
               </article>
             </div>
-            <p v-else class="recognition-review-empty">{{ ui("excel.reviewNoIssues") }}</p>
+            <p v-else class="recognition-review-empty">
+              {{
+                ui(
+                  recognitionSourceConfirmationPending
+                    ? "excel.recognitionSourceReviewHint"
+                    : "excel.reviewNoIssues"
+                )
+              }}
+            </p>
           </el-collapse-item>
 
           <el-collapse-item name="normal">
@@ -1446,6 +1480,8 @@ const importStatusType = computed(() => {
   return preview.value.invalidRows.length ? "warning" : "success";
 });
 const recognitionStatusMessage = computed(() => {
+  if (recognitionSourceConfirmationPending.value)
+    return ui("excel.recognitionSourceReviewComplete", { pieces: recognitionQuantity.value });
   if (recognitionMessageFactory.value) return recognitionMessageFactory.value();
   if (recognitionMessageKey.value)
     return ui(recognitionMessageKey.value, recognitionMessageParams.value);
@@ -1463,6 +1499,16 @@ const recognitionPackingReview = computed(() =>
     volumeConfirmed: recognitionVolumeConfirmed.value
   })
 );
+const recognitionSourceConfirmationPending = computed(() => {
+  const review = recognitionPackingReview.value;
+  return (
+    recognitionHasResult.value &&
+    !review.blockingIssues.length &&
+    !recognitionVolumeConfirmed.value &&
+    (taskReconciliation(recognitionAgentTask.value)?.requiresSourceConfirmation === true ||
+      review.requiresVolumeConfirmation)
+  );
+});
 const recognitionCanImport = computed(
   () =>
     !props.externalImportBlocked &&

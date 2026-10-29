@@ -230,11 +230,13 @@
       </el-table-column>
       <el-table-column
         :label="t('customers.carrier')"
-        width="80"
+        width="112"
         align="center"
         header-align="center"
       >
-        <template #default="{ row }">{{ row.carrier || "—" }}</template>
+        <template #default="{ row }"
+          ><CarrierBadge :carrier="row.carrier || ''" compact
+        /></template>
       </el-table-column>
       <el-table-column :label="t('customers.clientNoName')" min-width="136" show-overflow-tooltip>
         <template #default="{ row }">{{ shipmentClientLabel(row) }}</template>
@@ -330,6 +332,7 @@
 
 <script setup lang="ts">
 import { toRefs } from "vue";
+import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import { compactShipmentDate } from "../../../features/shipments/compactShipmentPresentation.js";
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";

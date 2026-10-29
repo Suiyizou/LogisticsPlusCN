@@ -1,3 +1,8 @@
+import {
+  trackingCarriersForMode,
+  supportsShipmentReference,
+  normalizeTrackingAdapterMode
+} from "../src/services/trackingCarriers.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as XLSX from "xlsx";
@@ -169,4 +174,95 @@ test("recognized carrier without a query adapter is distinguished from unidentif
   );
   assert.equal(result.rows[0].carrier, "HMM");
   assert.equal(result.items.length, 0);
+});
+
+test("carrier result sheets without container columns remain blocked after manual column selection", () => {
+  for (const carrier of ["COSCO", "HAPAG_LLOYD"]) {
+    const { sheet } = preview([
+      [carrier + " result"],
+      ["船司代码", "提交单号", "单号类型", "运输状态", "查询方式"],
+      [carrier, "SYNTHETIC123456", "BILL_OF_LADING", "UNKNOWN", "PAGE_TEXT"]
+    ]);
+    assert.equal(sheet.headerRow, 2);
+    assert.equal(sheet.resultSheet, true);
+    assert.ok(
+      buildShipmentBatchPreview(sheet, 1, carrier).errors.some((e) => e.code === "RESULT_WORKBOOK")
+    );
+  }
+});
+
+test("adapter capabilities explicitly distinguish the old preview from the implemented local queue", () => {
+  assert.equal(trackingCarriersForMode("LEGACY").length, 6);
+  assert.equal(trackingCarriersForMode("LOCAL_QUEUE").length, 15);
+  assert.equal(normalizeTrackingAdapterMode("unknown"), "LEGACY");
+  assert.equal(supportsShipmentReference("HMM", "BILLOFLADING", "LEGACY"), false);
+  assert.equal(supportsShipmentReference("HMM", "BILLOFLADING", "LOCAL_QUEUE"), true);
+  assert.equal(supportsShipmentReference("COSCO", "BILLOFLADING", "LEGACY"), false);
+  assert.equal(supportsShipmentReference("COSCO", "BILLOFLADING", "LOCAL_QUEUE"), true);
+  assert.equal(supportsShipmentReference("CMA", "BILLOFLADING", "LOCAL_QUEUE"), false);
+  assert.equal(supportsShipmentReference("CMA", "BOOKING", "LOCAL_QUEUE"), true);
+  assert.equal(supportsShipmentReference("UNKNOWN", "BOOKING", "LOCAL_QUEUE"), false);
+  assert.equal(supportsShipmentReference("HEDE", "BILLOFLADING", "LOCAL_QUEUE"), false);
+});
+
+test("local queue keeps source COSCO bills and canonical backend carrier codes", () => {
+  const { sheet } = preview([
+    operationalHeaders,
+    ["JOB-001", "", "", "", "", "", "", "", "COSU0012345678", ""],
+    ["JOB-002", "", "", "", "", "", "", "", "WHZTEST123456(主) 放行", "wanhai"],
+    ["JOB-003", "", "", "", "", "", "", "", "HDMUTEST123456", "HMM"],
+    ["JOB-004", "", "", "", "", "", "", "", "CMDUTEST123456", "CMA CGM"]
+  ]);
+  const local = buildShipmentBatchPreview(sheet, 8, "", "BOOKING", { adapterMode: "LOCAL_QUEUE" });
+  assert.equal(local.errors.length, 0);
+  assert.deepEqual(
+    local.items.map((i) => [i.carrier, i.type, i.number]),
+    [
+      ["COSCO", "BILLOFLADING", "COSU0012345678"],
+      ["WAN_HAI", "BILLOFLADING", "WHZTEST123456"],
+      ["HMM", "BILLOFLADING", "HDMUTEST123456"],
+      ["CMA", "BOOKING", "CMDUTEST123456"]
+    ]
+  );
+  assert.equal(local.items[0].importedDetails.originalBillOfLading, "COSU0012345678");
+  assert.deepEqual(local.rows[0].sourceReference, {
+    raw: "COSU0012345678",
+    normalized: "COSU0012345678",
+    type: "BILLOFLADING",
+    address: "I2"
+  });
+  assert.equal(local.rows[0].adapterMode, "LOCAL_QUEUE");
+  const legacy = buildShipmentBatchPreview(sheet, 8, "", "BOOKING", { adapterMode: "LEGACY" });
+  assert.equal(legacy.items[0].type, "BOOKING");
+  assert.equal(legacy.items[0].number, "0012345678");
+  assert.equal(legacy.errors.filter((e) => e.code === "CARRIER_NOT_CONFIGURED").length, 2);
+});
+
+test("local capability never bypasses unknown carrier, conflict, unsafe number or ambiguous reference type", () => {
+  const { sheet } = preview([
+    ["BOOKING", "CARRIER"],
+    ["COSU1234567890", "COSCO"],
+    ["TEST123456", "MYSTERY"],
+    ["COSU1234567891", "MSC"],
+    [12345678901234568, "MSC"]
+  ]);
+  const local = buildShipmentBatchPreview(sheet, 0, "", "BOOKING", { adapterMode: "LOCAL_QUEUE" });
+  assert.equal(local.items.length, 0);
+  assert.ok(local.errors.some((e) => e.code === "REFERENCE_TYPE_CONFLICT"));
+  assert.ok(local.errors.some((e) => e.code === "UNKNOWN_CARRIER"));
+  assert.ok(local.errors.some((e) => e.code === "CARRIER_CONFLICT"));
+  assert.ok(local.errors.some((e) => e.code === "UNSAFE_REFERENCE"));
+});
+
+test("recognized HEDE stays blocked until a desktop adapter actually exists", () => {
+  const { sheet } = preview([
+    ["提单号", "CARRIER"],
+    ["HDUJTEST123456", "HEDE"]
+  ]);
+  const result = buildShipmentBatchPreview(sheet, 0, "", "BILLOFLADING", {
+    adapterMode: "LOCAL_QUEUE"
+  });
+  assert.equal(result.items.length, 0);
+  assert.equal(result.rows[0].carrier, "HEDE");
+  assert.equal(result.errors[0].code, "CARRIER_NOT_CONFIGURED");
 });

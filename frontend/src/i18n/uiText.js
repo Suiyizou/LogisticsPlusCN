@@ -921,6 +921,20 @@ const uiText = {
     zh: "智能识别完成：{types} 类货物，{pieces} 件；{review} 条硬性问题需确认。低风险提示已自动放行，导入后请检查当前货物清单。",
     en: "Smart recognition complete: {types} cargo types, {pieces} pcs; {review} hard issues need confirmation. Low-risk hints were auto-approved; review the current cargo list after importing."
   },
+  "excel.recognitionSourceReviewComplete": {
+    zh: "包装识别完成：{pieces} 个包装；来源单位 / 原单体积待确认。请核对原文件并完成下方来源确认后导入。",
+    en: "Package recognition complete: {pieces} packages. Source units / declared volume need confirmation. Check the original file and confirm the source below before importing."
+  },
+  "excel.recognitionSourceReviewTitle": {
+    zh: "包装识别完成，来源单位 / 原单体积待确认",
+    en: "Packages recognized; source units / declared volume need confirmation"
+  },
+  "excel.recognitionSourceReviewLabel": { zh: "来源核对", en: "Source review" },
+  "excel.recognitionSourceReviewPending": { zh: "待确认", en: "Pending confirmation" },
+  "excel.recognitionSourceReviewHint": {
+    zh: "包装明细没有待修正项；来源单位或原单声明体积仍需人工核对。请在包装清单核对区域查看依据并确认，导入限制将继续保留。",
+    en: "No package rows need correction. Source units or the declared volume still require human review. Check and confirm the evidence in the packing reconciliation panel before importing."
+  },
   "excel.downloadFailed": { zh: "下载失败：{message}", en: "Download failed: {message}" },
   "excel.recognitionTimeout": {
     zh: "智能识别仍在后台处理中，请稍后重新进入当前任务查看结果。",

@@ -20,7 +20,7 @@ export function useShipmentBatchTracking({
   owner,
   canManage = ref(true),
   selectedCustomerId,
-  assignableCustomers,
+  assignableCustomers: _assignableCustomers,
   shipmentTrackingChannel,
   refreshingShipment,
   selectedShipmentRows,
@@ -47,10 +47,14 @@ export function useShipmentBatchTracking({
   const batchTrackFileParsing = ref(false);
   const batchTrackCarrier = ref("");
   const batchTrackReferenceType = ref("BOOKING");
-  watch(batchTrackCarrier, (carrier) => {
-    if (!supportsShipmentReference(carrier, batchTrackReferenceType.value))
-      batchTrackReferenceType.value = "BOOKING";
-  }, { flush: "sync" });
+  watch(
+    batchTrackCarrier,
+    (carrier) => {
+      if (!supportsShipmentReference(carrier, batchTrackReferenceType.value))
+        batchTrackReferenceType.value = "BOOKING";
+    },
+    { flush: "sync" }
+  );
   /** @type {import("vue").Ref<HTMLInputElement | null>} */
   const batchTrackFileInput = ref(null);
   const batchTrackFileName = ref("");
@@ -164,8 +168,7 @@ export function useShipmentBatchTracking({
   );
   watch(batchTrackDialogOpen, (open) => {
     if (open && batchTrackMode.value === "IMPORT" && !batchTrackCustomerId.value) {
-      batchTrackCustomerId.value =
-        selectedCustomerId.value || "";
+      batchTrackCustomerId.value = selectedCustomerId.value || "";
     }
   });
   watch(
@@ -216,7 +219,8 @@ export function useShipmentBatchTracking({
       busy() ||
       batchTrackFileParsing.value ||
       !batchTrackCustomerId.value ||
-      (!batchTrackItems.value.length || batchTrackImportErrors.value.length > 0)
+      !batchTrackItems.value.length ||
+      batchTrackImportErrors.value.length > 0
     )
       return;
     // Capture the form before awaiting conflict inspection; edits must not change the approved import.

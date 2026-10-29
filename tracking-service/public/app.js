@@ -21,7 +21,11 @@ import {
 } from "./tracking-presentation.mjs?v=maritime-v2-20261028-r3";
 
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
-import { normalizeTrackingPayload, detailSections, createCarrierBadge } from "./tracking-v1-adapter.mjs";
+import {
+  normalizeTrackingPayload,
+  detailSections,
+  createCarrierBadge
+} from "./tracking-v1-adapter.mjs";
 import { installLocalTrackingPreview } from "./tracking-json-preview.mjs";
 let localTrackingPreview = null;
 let preLocalPreviewPayload = null;
@@ -398,6 +402,11 @@ const CARRIER_BRAND_ASSETS = Object.freeze({
 });
 
 const CHANNELS = Object.freeze({
+  LOCAL_CHROME: {
+    code: "LOCAL_CHROME",
+    labelKey: "channel.localChrome",
+    sourceKey: "source.localChrome"
+  },
   AGENT: { code: "AGENT", labelKey: "channel.agent", sourceKey: "source.agent" },
   AUTO: {
     code: "AUTO",
@@ -890,6 +899,8 @@ const MESSAGES = {
     "cmaSession.saveFailed": "Could not save the CMA session: {message}",
     "cmaSession.clearConfirm": "Clear the saved CMA DataDome session?",
     "channel.auto": "Automatic · API first, DOM fallback",
+    "channel.localChrome": "Local Chrome / API",
+    "source.localChrome": "LOCAL CHROME / API · SOURCE DATA",
     "channel.agent": "AI browser Agent",
     "source.agent": "OFFICIAL WEBSITE · AI AGENT",
     "channel.network": "Channel 1 · Network interface",
@@ -1502,6 +1513,8 @@ const MESSAGES = {
     "cmaSession.saveFailed": "无法保存 CMA 会话：{message}",
     "cmaSession.clearConfirm": "确定清除已保存的 CMA DataDome 会话吗？",
     "channel.auto": "自动 · 接口优先，DOM 托底",
+    "channel.localChrome": "本地 Chrome / API",
+    "source.localChrome": "本地 Chrome / API · 源数据",
     "channel.agent": "AI 浏览器助手",
     "source.agent": "船司官网 · AI 助手",
     "channel.network": "通道一 · 网络接口",
@@ -6435,8 +6448,23 @@ function renderRoutingLegs(legs) {
     return;
   }
 
-  const visibleColumns = [true, legs.some(leg => leg.mode || leg.vesselName), legs.some(leg => leg.service || leg.voyage), ...["loadPort", "dischargePort", "estimatedDeparture", "actualDeparture", "estimatedArrival", "actualArrival", "masterBill"].map(key => legs.some(leg => hasText(leg[key])))];
-  document.querySelectorAll("#routing-panel thead th").forEach((cell, index) => { cell.hidden = !visibleColumns[index]; });
+  const visibleColumns = [
+    true,
+    legs.some((leg) => leg.mode || leg.vesselName),
+    legs.some((leg) => leg.service || leg.voyage),
+    ...[
+      "loadPort",
+      "dischargePort",
+      "estimatedDeparture",
+      "actualDeparture",
+      "estimatedArrival",
+      "actualArrival",
+      "masterBill"
+    ].map((key) => legs.some((leg) => hasText(leg[key])))
+  ];
+  document.querySelectorAll("#routing-panel thead th").forEach((cell, index) => {
+    cell.hidden = !visibleColumns[index];
+  });
   for (const leg of legs) {
     const row = document.createElement("tr");
     appendCell(row, leg.sequence);
@@ -6475,7 +6503,9 @@ function renderRoutingLegs(legs) {
       `actual-time${leg.actualArrival ? "" : " pending-time"}`
     );
     appendCell(row, leg.masterBill);
-    Array.from(row.children).forEach((cell, index) => { cell.hidden = !visibleColumns[index]; });
+    Array.from(row.children).forEach((cell, index) => {
+      cell.hidden = !visibleColumns[index];
+    });
     body.append(row);
   }
 }
@@ -6636,8 +6666,21 @@ function renderContainers(containers) {
     return;
   }
 
-  const visibleColumns = [true, ...["type", "transportMode", "trafficTerm", "currentLocation", "latestEvent", "latestEventTime"].map(key => containers.some(container => hasText(container[key]))), containers.some(container => (container.milestones ?? []).length > 0)];
-  document.querySelectorAll("#container-panel thead th").forEach((cell, index) => { cell.hidden = !visibleColumns[index]; });
+  const visibleColumns = [
+    true,
+    ...[
+      "type",
+      "transportMode",
+      "trafficTerm",
+      "currentLocation",
+      "latestEvent",
+      "latestEventTime"
+    ].map((key) => containers.some((container) => hasText(container[key]))),
+    containers.some((container) => (container.milestones ?? []).length > 0)
+  ];
+  document.querySelectorAll("#container-panel thead th").forEach((cell, index) => {
+    cell.hidden = !visibleColumns[index];
+  });
   for (const container of containers) {
     const row = document.createElement("tr");
     appendCell(row, container.number);
@@ -6657,7 +6700,9 @@ function renderContainers(containers) {
     if (showMilestoneDetails) actionCell.append(detailsButton);
     else actionCell.textContent = "—";
     row.append(actionCell);
-    Array.from(row.children).forEach((cell, index) => { cell.hidden = !visibleColumns[index]; });
+    Array.from(row.children).forEach((cell, index) => {
+      cell.hidden = !visibleColumns[index];
+    });
 
     const detailRow = document.createElement("tr");
     detailRow.className = "container-detail-row";
@@ -6682,8 +6727,14 @@ function renderContainers(containers) {
 function renderJourney(snapshot) {
   const latest = snapshot.summary?.latestEvent;
   const sourceEmpty = snapshot.sourceDetails?.noBusinessData
-    ? (currentLanguage === "zh" ? "无业务数据" : "No business data")
-    : snapshot.sourceDetails ? (currentLanguage === "zh" ? "未提供最新节点" : "Latest event not provided") : t("journey.awaiting");
+    ? currentLanguage === "zh"
+      ? "无业务数据"
+      : "No business data"
+    : snapshot.sourceDetails
+      ? currentLanguage === "zh"
+        ? "未提供最新节点"
+        : "Latest event not provided"
+      : t("journey.awaiting");
   journeyStage.textContent = valueOrDash(latest?.name, sourceEmpty);
 }
 
@@ -6853,7 +6904,9 @@ async function loadSupplementalDetails(payload) {
 }
 
 function renderResult(payload) {
+  const requestFingerprint = trackingPayloadSessionFingerprints.get(payload);
   payload = normalizeTrackingPayload(payload);
+  if (requestFingerprint) trackingPayloadSessionFingerprints.set(payload, requestFingerprint);
   const snapshot = payload.snapshot;
   const summary = snapshot.summary || {};
   const sections = detailSections(snapshot);
@@ -6872,7 +6925,11 @@ function renderResult(payload) {
   const previewBanner = document.querySelector("#tracking-json-preview-banner");
   if (previewBanner) previewBanner.hidden = !payload.localPreview;
   results.classList.toggle("is-container-only", isContainerOnly);
-  sourceTag.textContent = payload.localPreview ? (currentLanguage === "zh" ? "本地 JSON · 只读" : "Local JSON · read-only") : t(resultChannel.sourceKey);
+  sourceTag.textContent = payload.localPreview
+    ? currentLanguage === "zh"
+      ? "本地 JSON · 只读"
+      : "Local JSON · read-only"
+    : t(resultChannel.sourceKey);
   const carrierName = CARRIERS[providerCode]?.name ?? snapshot.provider?.name ?? providerCode;
   elements["result-carrier"].textContent = carrierName;
   const carrierLogo = document.querySelector("#result-carrier-logo");
@@ -6911,7 +6968,8 @@ function renderResult(payload) {
     [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
   );
   const summaryRoutePair = document.querySelector(".summary-route-pair");
-  if (summaryRoutePair) summaryRoutePair.hidden = !summary.origin?.name && !summary.destination?.name;
+  if (summaryRoutePair)
+    summaryRoutePair.hidden = !summary.origin?.name && !summary.destination?.name;
   elements["summary-origin-name"].title = elements["summary-origin-name"].textContent;
   elements["summary-destination-name"].title = elements["summary-destination-name"].textContent;
   const summaryLatestDetail = [latest?.location, formatDateTime(latest?.occurredAt)]
@@ -6950,7 +7008,11 @@ function renderResult(payload) {
 
   const source = payload.databaseStored ? "database" : payload.cached ? "server" : "live";
   elements["cache-status"].dataset.source = source;
-  elements["cache-status"].textContent = payload.localPreview ? (currentLanguage === "zh" ? "本地文件" : "Local file") : t(`cache.${source}`);
+  elements["cache-status"].textContent = payload.localPreview
+    ? currentLanguage === "zh"
+      ? "本地文件"
+      : "Local file"
+    : t(`cache.${source}`);
   elements["cache-status"].title = payload.databaseStoredAt
     ? t("cache.savedAt", { time: formatLocalDateTime(payload.databaseStoredAt) })
     : "";
@@ -7045,7 +7107,15 @@ function renderResult(payload) {
   renderBusinessReferences(snapshot);
   renderExtraInformation(snapshot);
   const referencesPanel = document.querySelector(".references-panel");
-  if (referencesPanel) referencesPanel.hidden = Boolean(payload.localPreview) && ["business-reference-grid", "reference-core", "reference-information", "extra-information-section"].every(id => elements[id]?.hidden !== false);
+  if (referencesPanel)
+    referencesPanel.hidden =
+      Boolean(payload.localPreview) &&
+      [
+        "business-reference-grid",
+        "reference-core",
+        "reference-information",
+        "extra-information-section"
+      ].every((id) => elements[id]?.hidden !== false);
   renderContainers(containers);
   if (!payload.localPreview) renderDocumentDrawer(snapshot);
   localTrackingPreview?.renderDetails(snapshot);
@@ -7585,7 +7655,9 @@ function renderAgentShipmentManagement(history) {
 
     const carrier = document.createElement("span");
     carrier.className = "agent-shipment-carrier";
-    carrier.append(createCarrierBadge(document, entry.query?.carrier || entry.snapshot?.provider?.code));
+    carrier.append(
+      createCarrierBadge(document, entry.query?.carrier || entry.snapshot?.provider?.code)
+    );
 
     const client = document.createElement("span");
     client.className = "agent-shipment-client";
@@ -8297,7 +8369,14 @@ function renderHistory() {
     ]
       .filter(Boolean)
       .join(" · ");
-    identityMeta.prepend(createCarrierBadge(document, entry.query.carrier || snapshot.provider?.code, snapshot.provider?.name), document.createTextNode(" "));
+    identityMeta.prepend(
+      createCarrierBadge(
+        document,
+        entry.query.carrier || snapshot.provider?.code,
+        snapshot.provider?.name
+      ),
+      document.createTextNode(" ")
+    );
     identity.append(identityLabel, number, identityMeta);
 
     const journey = document.createElement("span");
@@ -9889,7 +9968,12 @@ localTrackingPreview = installLocalTrackingPreview({
     const queryPanel = form.closest(".query-panel");
     if (queryPanel) queryPanel.hidden = false;
     if (preLocalPreviewPayload) renderResult(preLocalPreviewPayload);
-    else { currentPayload = null; results.hidden = true; emptyState.hidden = false; setRelatedFilesContext(null); }
+    else {
+      currentPayload = null;
+      results.hidden = true;
+      emptyState.hidden = false;
+      setRelatedFilesContext(null);
+    }
     preLocalPreviewPayload = null;
     results.classList.remove("is-local-json-preview");
     void showView("overview", { updateLocation: false });

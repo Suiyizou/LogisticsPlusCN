@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { computed } from "vue";
 import { compileScript, compileTemplate, parse } from "vue/compiler-sfc";
 import ts from "typescript";
 import * as XLSX from "xlsx";
@@ -18,8 +19,10 @@ import {
   reviewPackingTask,
   supportsCreatedRecognitionTask,
   supportsTextRecognition,
-  supportsWorkbookRecognition
+  supportsWorkbookRecognition,
+  taskReconciliation
 } from "../src/services/packingReconciliation.js";
+import { translateUiText } from "../src/i18n/uiText.js";
 import {
   aggregateCargos,
   buildPreview,
@@ -50,6 +53,75 @@ const task = (changes = {}) => ({
     actual: { ...fixture.expected }
   },
   ...changes
+});
+
+test("successful package recognition reports pending source confirmation instead of zero auto-approved issues", () => {
+  const source = readFileSync(
+    new URL("../src/components/ExcelTemplatePage.vue", import.meta.url),
+    "utf8"
+  );
+  const { descriptor } = parse(source);
+  const ast = ts.createSourceFile(
+    "excel.js",
+    descriptor.scriptSetup.content,
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const initializer = (name) => {
+    for (const statement of ast.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      const declaration = statement.declarationList.declarations.find(
+        (entry) => entry.name.getText(ast) === name
+      );
+      if (declaration) return declaration.initializer.getText(ast);
+    }
+    throw new Error(`Missing component computed: ${name}`);
+  };
+  const evaluate = (review, report = {}, confirmed = false) =>
+    new Function(
+      "computed",
+      "taskReconciliation",
+      "ui",
+      "state",
+      `const { recognitionPackingReview, recognitionHasResult, recognitionVolumeConfirmed, recognitionAgentTask, recognitionQuantity, recognitionMessageFactory, recognitionMessageKey, recognitionMessageParams, recognitionMessage } = state;
+     const tr = (text) => text;
+     const recognitionSourceConfirmationPending = ${initializer("recognitionSourceConfirmationPending")};
+     const recognitionStatusMessage = ${initializer("recognitionStatusMessage")};
+     return { pending: recognitionSourceConfirmationPending.value, message: recognitionStatusMessage.value };`
+    )(computed, taskReconciliation, (key, params) => translateUiText(key, "zh-CN", params), {
+      recognitionPackingReview: {
+        value: { blockingIssues: [], requiresVolumeConfirmation: false, ...review }
+      },
+      recognitionHasResult: { value: true },
+      recognitionVolumeConfirmed: { value: confirmed },
+      recognitionAgentTask: { value: { reconciliation: report } },
+      recognitionQuantity: { value: 2 },
+      recognitionMessageFactory: { value: null },
+      recognitionMessageKey: { value: "excel.recognitionCompleteMessage" },
+      recognitionMessageParams: { value: { types: 2, pieces: 2, review: 0 } },
+      recognitionMessage: { value: "" }
+    });
+  for (const pending of [
+    evaluate({ requiresVolumeConfirmation: true }),
+    evaluate({}, { requiresSourceConfirmation: true })
+  ]) {
+    assert.equal(pending.pending, true);
+    assert.match(pending.message, /来源单位 \/ 原单体积待确认/);
+    assert.doesNotMatch(pending.message, /自动放行|0 条硬性问题/);
+  }
+  assert.equal(evaluate({ requiresVolumeConfirmation: true }, {}, true).pending, false);
+  assert.equal(
+    evaluate({
+      blockingIssues: [{ code: "PACKAGE_INVALID_VALUES" }],
+      requiresVolumeConfirmation: true
+    }).pending,
+    false
+  );
+  assert.equal(evaluate({}).pending, false);
+  assert.match(
+    source,
+    /recognitionSourceConfirmationPending\s*\?\s*"excel\.recognitionSourceReviewTitle"/
+  );
 });
 
 test("workbook protocol enables v7 while legacy text v4+ remains compatible", () => {
