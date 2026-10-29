@@ -16,3 +16,6 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.bat text eol=crlf
+# Official carrier assets retain the exact source bytes recorded in their manifests.
+frontend/public/carriers/*.svg -text
+tracking-service/public/carriers/*.svg -text
