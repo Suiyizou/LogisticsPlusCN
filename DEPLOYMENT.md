@@ -70,10 +70,16 @@ APP_BOOTSTRAP_ADMIN_DISPLAY_NAME=系统管理员
 ```env
 APP_TRACKING_ADAPTER_MODE=LOCAL_QUEUE
 APP_TRACKING_LOCAL_BASE_URL=http://host.docker.internal:18791
-APP_TRACKING_LOCAL_TOKEN=与本地服务一致的业务令牌
+APP_TRACKING_LOCAL_TOKEN=
 ```
 
+生产与预发 Compose 从同一个 `APP_TRACKING_ADAPTER_MODE` 同时设置后端环境和前端构建参数 `VITE_TRACKING_ADAPTER_MODE`，未设置时均使用 `LOCAL_QUEUE`。模式变更后必须重新构建 frontend；仅修改正在运行容器的环境变量不会改变已编译页面。独立执行前端构建时，应显式传入与目标后端匹配的 `VITE_TRACKING_ADAPTER_MODE`。
+
+现有隔离开发预览保留旧后端，`docker-compose.dev-preview.yml` 将两侧显式固定为 `LEGACY`，不继承生产的模式变量；升级预览后端前应保留此配对。直接为该预览运行本机 `npm --prefix frontend run build` 时同样应显式使用 `VITE_TRACKING_ADAPTER_MODE=LEGACY`。
+
 若已有 `.env` 写入 `APP_TRACKING_ADAPTER_MODE=LEGACY`，需改为 `LOCAL_QUEUE`。本地 `D:\AI\shipping-tracking` 运行 Chrome 和队列，设置 `CONCURRENCY=1`；云端只需能访问隧道 API，不需要访问船司官网。Docker 到宿主机隧道监听地址的配置见接口说明。
+
+本地未启用业务令牌时，Java 令牌可以留空；启用时本地 `TRACK_TOKEN`/`TOKEN` 与云端令牌必须一致，并重启相应服务，本地 `/health` 同样受鉴权。`DISABLE_UI=1` 只关闭页面入口，不保护 `/jobs`。若 18791 仍对公网开放，应在云安全组限制到后端来源 IP/网段，或启用业务令牌。健康接口与不入库的手动 canary 见接口说明，不以 HTTP 200 或首次 `chrome.connected:false` 单独判断查询能力。
 
 批量取消由 Spring 映射为本地 `POST /jobs/{id}/cancel`。超时也会尝试取消已知作业；本地正在执行的单条是否立即中止，以本地服务实现为准。
 

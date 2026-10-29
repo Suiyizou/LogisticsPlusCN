@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,7 @@ final class LocalTrackingQueueClient {
   private final HttpClient client;
   private final URI baseUri;
   private final TrackingV1SnapshotMapper mapper = new TrackingV1SnapshotMapper(JSON);
+  private final LocalTrackingHealth health = new LocalTrackingHealth(JSON);
   // The desktop service currently shares one browser page between jobs.
   private final Semaphore slot = new Semaphore(1, true);
   private final Map<String, Set<String>> activeJobs = new ConcurrentHashMap<>();
@@ -50,6 +52,8 @@ final class LocalTrackingQueueClient {
   }
 
   JsonNode track(NormalizedTrackRequest request) {
+    request = new NormalizedTrackRequest(TrackingCarriers.canonicalCode(request.carrier()),
+        request.channel(), request.type(), request.number(), request.batchTaskId());
     if (!TrackingCarriers.CODES.contains(request.carrier())
         || !List.of("BOOKING", "BILLOFLADING").contains(request.type())) {
       throw failure(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
@@ -87,6 +91,17 @@ final class LocalTrackingQueueClient {
         checkCancelled(batch);
         JsonNode progress = exchange("GET", "jobs/" + job, null, deadline);
         if (!job.equals(progress.path("id").asText())) throw invalidResponse(job);
+        String jobState = progress.path("status").asText();
+        if (!List.of("queued", "running", "completed", "completed_with_gaps", "failed", "cancelled")
+            .contains(jobState)) throw invalidResponse(job);
+        if (List.of("completed", "completed_with_gaps", "failed", "cancelled").contains(jobState)) finished = true;
+        if (!"cancelled".equals(jobState)) {
+          String itemState = progressItemState(progress, request, job);
+          if (!List.of("PENDING", "RUNNING", "DONE").contains(itemState)) {
+            finished = true;
+            requireSuccessfulQuery(itemState, job);
+          }
+        }
         switch (progress.path("status").asText()) {
           case "completed", "completed_with_gaps": {
             JsonNode result;
@@ -100,8 +115,10 @@ final class LocalTrackingQueueClient {
             finished = true;
             checkCancelled(batch);
             JsonNode record = selectRecord(result, request, carrier, job);
-            return mapper.map(record, request,
+            JsonNode envelope = mapper.map(record, request,
                 result.path("generated_at").asText(Instant.now().toString()), job);
+            health.recordQuerySuccess();
+            return envelope;
           }
           case "failed":
             throw failure(HttpStatus.BAD_GATEWAY, "TRACKING_LOCAL_JOB_FAILED",
@@ -131,6 +148,26 @@ final class LocalTrackingQueueClient {
     }
   }
 
+  JsonNode localHealth() {
+    JsonNode response = exchange("GET", "health", null,
+        System.nanoTime() + properties.getLocalRequestTimeout().toNanos());
+    if (!response.path("ok").asBoolean(false)) throw invalidResponse(null);
+    return health.snapshot(response, properties.getLocalToken() != null && !properties.getLocalToken().isBlank());
+  }
+
+  JsonNode localCanary(NormalizedTrackRequest request) {
+    try {
+      JsonNode envelope = track(request);
+      health.recordCanarySuccess();
+      return JSON.createObjectNode().put("status", "SUCCEEDED").put("verified", true)
+          .put("persisted", false).put("checkedAt", Instant.now().toString())
+          .put("localJobId", envelope.path("snapshot").path("sourceDetails").path("jobId").asText());
+    } catch (ApiException error) {
+      health.recordCanaryFailure(error.code());
+      throw error;
+    }
+  }
+
   JsonNode cancelBatchTask(String batch) {
     pruneCancelledBatches();
     cancelledBatches.put(batch, Instant.now());
@@ -152,9 +189,29 @@ final class LocalTrackingQueueClient {
         || !carrier.equals(record.path("carrier").path("code").asText())
         || !request.number().equals(record.path("query").path("reference_input").asText())
         || !record.path("shipment").isObject()) throw invalidResponse(job);
-    String state = record.path("query").path("status").asText();
+    requireSuccessfulQuery(record.path("query").path("status").asText(), job);
+    return record;
+  }
+
+  private String progressItemState(JsonNode progress, NormalizedTrackRequest request, String job) {
+    // Older queue implementations may omit items. When supplied, their identity and
+    // failure state are authoritative even before a canonical result file exists.
+    if (!progress.has("items")) return "PENDING";
+    JsonNode items = progress.path("items");
+    if (!items.isArray() || items.size() != 1) throw invalidResponse(job);
+    JsonNode item = items.get(0);
+    if (!request.carrier().equals(TrackingCarriers.canonicalCode(item.path("carrier").asText()))
+        || !request.number().equals(item.path("reference").asText())) throw invalidResponse(job);
+    String state = item.path("status").asText().toUpperCase(Locale.ROOT);
+    if (!List.of("PENDING", "RUNNING", "DONE", "HUMAN_REQUIRED", "NO_BUSINESS_DATA",
+        "CARRIER_NOT_IMPLEMENTED", "FAILED", "MATCHED_NO_STRUCTURE").contains(state)) throw invalidResponse(job);
+    return state;
+  }
+
+  private void requireSuccessfulQuery(String value, String job) {
+    String state = value.toUpperCase(Locale.ROOT);
     switch (state) {
-      case "QUERY_COMPLETED": return record;
+      case "QUERY_COMPLETED": return;
       case "HUMAN_REQUIRED":
         throw failure(HttpStatus.CONFLICT, "TRACKING_HUMAN_REQUIRED",
             "The carrier requires manual verification in the local Chrome session", job);
@@ -165,7 +222,7 @@ final class LocalTrackingQueueClient {
         throw failure(HttpStatus.BAD_GATEWAY, "UPSTREAM_EMPTY",
             "The carrier page matched but returned no structured tracking data", job);
       case "CARRIER_NOT_IMPLEMENTED":
-        throw failure(HttpStatus.BAD_REQUEST, "UNSUPPORTED_CARRIER",
+        throw failure(HttpStatus.NOT_FOUND, "UNSUPPORTED_CARRIER",
             "This carrier is not implemented by the local tracking service", job);
       case "FAILED":
         throw failure(HttpStatus.BAD_GATEWAY, "TRACKING_QUERY_FAILED", "The local carrier query failed", job);
@@ -192,6 +249,8 @@ final class LocalTrackingQueueClient {
       if (status == 409 && path.endsWith("/result")) {
         throw failure(HttpStatus.CONFLICT, "TRACKING_LOCAL_RESULT_NOT_READY", "Tracking result is not ready", null);
       }
+      if (status == 400 && "jobs".equals(path)) throw failure(HttpStatus.BAD_REQUEST,
+          "INVALID_REFERENCE", "Local tracking rejected the submitted items or carrier reference", null);
       if (status < 200 || status >= 300) throw failure(HttpStatus.BAD_GATEWAY,
           "TRACKING_LOCAL_HTTP_ERROR", "Local tracking API returned HTTP " + status, null);
       JsonNode value = JSON.readTree(response.body());

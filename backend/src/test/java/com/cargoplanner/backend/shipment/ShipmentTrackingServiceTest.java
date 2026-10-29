@@ -186,6 +186,68 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void aliasesShareCanonicalSnapshotIdentityAndNeverCreateManualPlaceholders() throws Exception {
+    properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
+    Map<String, String> aliases = Map.of(
+        "HPL", "HAPAG_LLOYD", "YANGMING", "YML", "WHL", "WAN_HAI", "CMA_CGM", "CMA"
+    );
+    for (Map.Entry<String, String> alias : aliases.entrySet()) {
+      String carrier = alias.getValue();
+      String type = "CMA".equals(carrier) ? "BOOKING" : "BILLOFLADING";
+      String channel = "CMA".equals(carrier) ? "PLAYWRIGHT" : "AUTO";
+      String number = "ALIAS-10001";
+      NormalizedTrackRequest request = new NormalizedTrackRequest(carrier, channel, type, number);
+      ObjectNode upstream = (ObjectNode) objectMapper.readTree("""
+          {"snapshot":{"channel":"LOCAL_CHROME","fetchedAt":"2026-07-16T10:00:00Z",
+            "summary":{"latestEvent":{"name":"Carrier reported loaded"}},
+            "containers":[{"number":"CSNU1234567"}]},"cached":false}
+          """);
+      upstream.withObject("snapshot").putObject("provider").put("code", carrier);
+      upstream.withObject("snapshot").putObject("tracking").put("type", type).put("number", number);
+      when(adapterClient.track(request)).thenReturn(upstream);
+      ObjectNode queried = service.track(
+          new ShipmentTrackRequest(alias.getKey(), "AUTO", type, number, false), business
+      );
+      ObjectNode cached = service.track(
+          new ShipmentTrackRequest(carrier, "AUTO", type, number, false), business
+      );
+      assertThat(queried.path("persisted").asBoolean()).isTrue();
+      assertThat(cached.path("cacheSource").asText()).isEqualTo("MYSQL");
+      assertThat(cached.path("shipmentId").asText()).isEqualTo(queried.path("shipmentId").asText());
+      assertThat(cached.path("snapshot").path("provider").path("code").asText()).isEqualTo(carrier);
+      verify(adapterClient, times(1)).track(request);
+    }
+    assertThat(jdbcTemplate.queryForList("SELECT carrier_code FROM cp_shipments", String.class))
+        .containsExactlyInAnyOrder("HAPAG_LLOYD", "YML", "WAN_HAI", "CMA");
+    org.mockito.Mockito.verifyNoInteractions(cmaTrackingSessionService);
+  }
+
+  @Test
+  void rejectsUnknownAndMissingCarriersBeforeCallingAnAdapter() {
+    properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
+    for (String carrier : java.util.Arrays.asList("UNREGISTERED", "", null)) {
+      assertThatThrownBy(() -> service.track(
+          new ShipmentTrackRequest(carrier, "AUTO", "BOOKING", "UNKNOWN-10001", false), business
+      )).isInstanceOfSatisfying(ApiException.class, error -> {
+        assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(error.code()).isEqualTo("INVALID_REFERENCE");
+      });
+    }
+    verify(adapterClient, times(0)).track(org.mockito.ArgumentMatchers.any(NormalizedTrackRequest.class));
+  }
+
+  @Test
+  void legacyModePreservesItsOmittedCarrierDefault() {
+    ObjectNode response = service.track(
+        new ShipmentTrackRequest(null, "AUTO", "BOOKING", "BK-10001", false), business
+    );
+    assertThat(response.path("persisted").asBoolean()).isTrue();
+    assertThat(jdbcTemplate.queryForObject("SELECT carrier_code FROM cp_shipments", String.class))
+        .isEqualTo("COSCO");
+    verify(adapterClient).track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
+  }
+
+  @Test
   void marksTheProductionConstructorForSpringInjection() {
     var autowiredConstructors = Arrays.stream(ShipmentTrackingService.class.getDeclaredConstructors())
         .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))

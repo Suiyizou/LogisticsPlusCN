@@ -167,7 +167,7 @@ public class ShipmentTrackingService {
     ShipmentImportDetails details = input.importedDetails();
     String type = normalizeCode(input.type(), "BOOKING");
     if (!"BOOKING".equals(type)
-        && !TrackingCarriers.supportsReference(normalizeCode(input.carrier(), ""), type, properties.usesLocalQueue())) {
+        && !TrackingCarriers.supportsReference(TrackingCarriers.canonicalCode(input.carrier()), type, properties.usesLocalQueue())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
           "BOOKING_REFERENCE_REQUIRED",
@@ -184,9 +184,10 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment number format is invalid");
     }
     String prefix = cleanImported(details == null ? null : details.carrierPrefix(), 8);
-    String requestedCarrier = cleanImported(input.carrier(), 32);
-    String carrier = normalizeCode(TrackingCarriers.CODES.contains(normalizeCode(requestedCarrier, ""))
-        ? requestedCarrier : prefix != null ? prefix : requestedCarrier, "UNSUPPORTED");
+    String requestedCarrier = TrackingCarriers.canonicalCode(cleanImported(input.carrier(), 32));
+    String carrier = TrackingCarriers.canonicalCode(TrackingCarriers.CODES.contains(requestedCarrier)
+        ? requestedCarrier : prefix != null ? prefix : requestedCarrier);
+    if (carrier.isBlank()) carrier = "UNSUPPORTED";
     if (!carrier.matches("[A-Z0-9_-]{2,32}")) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Carrier code format is invalid");
     }
@@ -1043,7 +1044,7 @@ public class ShipmentTrackingService {
       );
     }
     if (!TrackingCarriers.CODES.contains(
-        String.valueOf(shipment.carrier()).toUpperCase(Locale.ROOT)
+        TrackingCarriers.canonicalCode(shipment.carrier())
     )) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
@@ -3093,7 +3094,8 @@ public class ShipmentTrackingService {
 
   private NormalizedTrackRequest normalize(ShipmentTrackRequest input) {
     if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Tracking request is required");
-    String carrier = normalizeCode(input.carrier(), "COSCO");
+    String carrier = TrackingCarriers.canonicalCode(input.carrier());
+    if (carrier.isBlank() && !properties.usesLocalQueue()) carrier = "COSCO";
     if (!TrackingCarriers.CODES.contains(carrier)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Unsupported carrier");
     }

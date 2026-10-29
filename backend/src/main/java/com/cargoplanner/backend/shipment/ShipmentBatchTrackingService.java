@@ -1264,7 +1264,7 @@ public class ShipmentBatchTrackingService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row " + (index + 1) + " is empty");
     }
     String type = clean(request.type(), 24, "BOOKING").toUpperCase(Locale.ROOT);
-    String requestedCarrier = clean(request.carrier(), 32, "").toUpperCase(Locale.ROOT);
+    String requestedCarrier = TrackingCarriers.canonicalCode(clean(request.carrier(), 32, ""));
     if (!"BOOKING".equals(type) && !TrackingCarriers.supportsReference(
         requestedCarrier, type, trackingService.usesLocalTrackingQueue())) {
       throw new ApiException(
@@ -1272,8 +1272,7 @@ public class ShipmentBatchTrackingService {
           "Shipment row " + (index + 1) + " must use a booking number"
       );
     }
-    String carrier = clean(request.carrier(), 32, null);
-    if (carrier != null) carrier = carrier.toUpperCase(Locale.ROOT);
+    String carrier = requestedCarrier.isBlank() ? null : requestedCarrier;
     String number = canonicalBookingNumber(
         carrier,
         type,
@@ -1308,7 +1307,7 @@ public class ShipmentBatchTrackingService {
     if (request == null) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Shipment row " + (index + 1) + " is empty");
     }
-    String carrier = clean(request.carrier(), 32, "").toUpperCase(Locale.ROOT);
+    String carrier = TrackingCarriers.canonicalCode(clean(request.carrier(), 32, ""));
     String type = clean(request.type(), 24, "").toUpperCase(Locale.ROOT);
     String number = canonicalBookingNumber(
         carrier,

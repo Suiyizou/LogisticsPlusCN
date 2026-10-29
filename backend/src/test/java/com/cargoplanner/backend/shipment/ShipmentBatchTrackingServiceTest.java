@@ -192,6 +192,58 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
+  void canonicalizesAliasesBeforeBatchDeduplicationAndCarrierCapabilityChecks() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.usesLocalTrackingQueue()).thenReturn(true);
+    ObjectNode tracked = new ObjectMapper().createObjectNode()
+        .put("shipmentId", "tracked-alias-shipment").put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(trackingService, executor, 0, 0, Clock.systemUTC());
+    AuthenticatedUser user = new AuthenticatedUser(71L, "alias-operator", "Operator", "BUSINESS", "ACTIVE");
+    Map<String, Object> started = service.start(new ShipmentBatchTaskRequest("aliases.xlsx", List.of(
+        new ShipmentBatchItemRequest("alias-hpl", "HPL", "BILLOFLADING", "HLCU10001", "HLCU10001", false, null),
+        new ShipmentBatchItemRequest("canonical-hpl", "HAPAG_LLOYD", "BILLOFLADING", "HLCU10001", "HLCU10001", false, null),
+        new ShipmentBatchItemRequest("alias-yml", "YANGMING", "BILLOFLADING", "YMLU10001", "YMLU10001", false, null),
+        new ShipmentBatchItemRequest("alias-whl", "WHL", "BILLOFLADING", "WHLC10001", "WHLC10001", false, null),
+        new ShipmentBatchItemRequest("alias-cma", "CMA_CGM", "BOOKING", "TJN10001", "TJN10001", false, null)
+    )), user);
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals(4, completed.get("succeeded"));
+    assertEquals(0, completed.get("manual"));
+    assertEquals(1, completed.get("ignoredDuplicateCount"));
+    ArgumentCaptor<ShipmentTrackRequest> requests = ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService, times(4)).track(requests.capture(), any());
+    assertEquals(List.of("HAPAG_LLOYD", "YML", "WAN_HAI", "CMA"),
+        requests.getAllValues().stream().map(ShipmentTrackRequest::carrier).toList());
+    verify(trackingService, never()).recordImportedPlaceholder(any(), any());
+  }
+
+  @Test
+  void selectedRefreshCanonicalizesAliasesFromExistingReferences() throws Exception {
+    ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.usesLocalTrackingQueue()).thenReturn(true);
+    ObjectNode tracked = new ObjectMapper().createObjectNode()
+        .put("shipmentId", "tracked-alias-shipment").put("cacheSource", "LIVE");
+    when(trackingService.track(any(), any())).thenReturn(tracked);
+    executor = Executors.newSingleThreadExecutor();
+    service = new ShipmentBatchTrackingService(trackingService, executor, 0, 0, Clock.systemUTC());
+    AuthenticatedUser user = new AuthenticatedUser(72L, "alias-refresh", "Operator", "BUSINESS", "ACTIVE");
+    Map<String, Object> started = service.startRefreshSelected(List.of(
+        new ShipmentBatchItemRequest("refresh-hpl", "HPL", "BILLOFLADING", "HLCU10001", "HLCU10001", false, null),
+        new ShipmentBatchItemRequest("refresh-yml", "YANG MING", "BILLOFLADING", "YMLU10001", "YMLU10001", false, null)
+    ), user, "AUTO");
+    Map<String, Object> completed = awaitTerminal((String) started.get("taskId"), user);
+    assertEquals("COMPLETED", completed.get("status"));
+    assertEquals(2, completed.get("succeeded"));
+    ArgumentCaptor<ShipmentTrackRequest> requests = ArgumentCaptor.forClass(ShipmentTrackRequest.class);
+    verify(trackingService, times(2)).track(requests.capture(), any());
+    assertEquals(List.of("HAPAG_LLOYD", "YML"),
+        requests.getAllValues().stream().map(ShipmentTrackRequest::carrier).toList());
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   void neverStartsPerContainerSubtasksAfterTheMainShipmentSucceeds()
       throws Exception {

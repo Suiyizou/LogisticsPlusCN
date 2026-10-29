@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 class LocalTrackingQueueClientTest {
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -93,6 +94,58 @@ class LocalTrackingQueueClientTest {
   }
 
   @Test
+  void canonicalizesCarrierAliasesBeforeSubmittingAndCheckingTheResult() throws Exception {
+    Map<String, String> outbound = Map.of(
+        "CMA_CGM", "CMA_CGM",
+        "HPL", "HAPAG_LLOYD",
+        "YANGMING", "YML",
+        "YANG MING", "YML",
+        "WHL", "WAN_HAI",
+        "YML", "YML"
+    );
+    for (Map.Entry<String, String> alias : outbound.entrySet()) {
+      String canonical = "CMA_CGM".equals(alias.getValue()) ? "CMA" : alias.getValue();
+      String type = "CMA".equals(canonical) ? "BOOKING" : "BILLOFLADING";
+      try (QueueServer server = completedServer(alias.getValue(), NUMBER, "QUERY_COMPLETED")) {
+        TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+        JsonNode response = client.track(new NormalizedTrackRequest(alias.getKey(), "AUTO", type, NUMBER));
+
+        assertThat(server.requests.get(0).body().path("items").get(0).path("carrier").asText())
+            .as(alias.getKey()).isEqualTo(alias.getValue());
+        assertThat(response.path("snapshot").path("provider").path("code").asText())
+            .as(alias.getKey()).isEqualTo(canonical);
+        assertThat(response.path("snapshot").path("tracking").path("number").asText()).isEqualTo(NUMBER);
+      }
+    }
+  }
+
+  @Test
+  void emptyDesktopTokenOmitsAuthorizationOnEveryQueueRequest() throws Exception {
+    try (QueueServer server = completedServer("COSCO", NUMBER, "QUERY_COMPLETED")) {
+      ShipmentTrackingProperties properties = properties(server);
+      properties.setLocalToken("");
+      TrackingAdapterClient client = new TrackingAdapterClient(properties);
+
+      assertThat(client.track(request()).path("snapshot").isObject()).isTrue();
+      assertThat(server.requests).allSatisfy(received -> assertThat(received.authorization()).isNull());
+    }
+  }
+
+  @Test
+  void acceptsEquivalentCarrierAliasInProgressWithoutRelaxingReferenceIdentity() throws Exception {
+    try (QueueServer server = new QueueServer(received -> {
+      if (received.path().equals("/jobs")) return accepted();
+      if (received.path().equals("/jobs/" + JOB)) return progress("completed", "HPL", NUMBER, "done");
+      return reply(200, result("HAPAG_LLOYD", NUMBER, "QUERY_COMPLETED"));
+    })) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      JsonNode response = client.track(new NormalizedTrackRequest("HAPAG_LLOYD", "AUTO", "BILLOFLADING", NUMBER));
+      assertThat(response.path("snapshot").path("provider").path("code").asText()).isEqualTo("HAPAG_LLOYD");
+      assertThat(server.count("POST", "/jobs")).isEqualTo(1);
+    }
+  }
+
+  @Test
   void legacyModeNeverSendsDesktopBearerToken() throws Exception {
     try (QueueServer server = new QueueServer(request ->
         reply(200, Map.of("snapshot", Map.of("provider", Map.of("code", "COSCO")))))) {
@@ -115,6 +168,7 @@ class LocalTrackingQueueClientTest {
         "HUMAN_REQUIRED", "TRACKING_HUMAN_REQUIRED",
         "NO_BUSINESS_DATA", "TRACKING_NO_BUSINESS_DATA",
         "MATCHED_NO_STRUCTURE", "UPSTREAM_EMPTY",
+        "CARRIER_NOT_IMPLEMENTED", "UNSUPPORTED_CARRIER",
         "FAILED", "TRACKING_QUERY_FAILED"
     );
     for (Map.Entry<String, String> entry : expected.entrySet()) {
@@ -123,6 +177,102 @@ class LocalTrackingQueueClientTest {
         assertCode(() -> client.track(request()), entry.getValue());
         assertThat(server.count("POST", "/jobs")).isEqualTo(1);
       }
+    }
+  }
+
+  @Test
+  void readsItemFailuresBeforeResultEvenWhenTheJobOrQueryStatusLooksSuccessful() throws Exception {
+    Map<String, String> codes = Map.of(
+        "human_required", "TRACKING_HUMAN_REQUIRED",
+        "no_business_data", "TRACKING_NO_BUSINESS_DATA",
+        "carrier_not_implemented", "UNSUPPORTED_CARRIER",
+        "failed", "TRACKING_QUERY_FAILED"
+    );
+    Map<String, HttpStatus> statuses = Map.of(
+        "human_required", HttpStatus.CONFLICT,
+        "no_business_data", HttpStatus.NOT_FOUND,
+        "carrier_not_implemented", HttpStatus.NOT_FOUND,
+        "failed", HttpStatus.BAD_GATEWAY
+    );
+    for (String jobStatus : List.of("running", "completed", "completed_with_gaps")) {
+      for (Map.Entry<String, String> item : codes.entrySet()) {
+        try (QueueServer server = new QueueServer(received -> {
+          if (received.path().equals("/jobs")) return accepted();
+          if (received.path().equals("/jobs/" + JOB)) {
+            Reply progress = progress(jobStatus, "COSCO", NUMBER, item.getKey());
+            ((ObjectNode) progress.body().path("items").get(0)).put("result_status", "QUERY_COMPLETED");
+            return progress;
+          }
+          if (received.path().endsWith("/cancel")) return reply(200, Map.of("status", "cancelled"));
+          // A result might be absent or stale; item failure must take precedence either way.
+          return reply(200, result("COSCO", NUMBER, "QUERY_COMPLETED"));
+        })) {
+          TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+          assertThatThrownBy(() -> client.track(request()))
+              .isInstanceOfSatisfying(ApiException.class, error -> {
+                assertThat(error.code()).as(jobStatus + "/" + item.getKey()).isEqualTo(item.getValue());
+                assertThat(error.status()).isEqualTo(statuses.get(item.getKey()));
+              });
+          assertThat(server.count("POST", "/jobs")).isEqualTo(1);
+          assertThat(server.count("GET", "/jobs/" + JOB + "/result")).isZero();
+        }
+      }
+    }
+  }
+
+  @Test
+  void rejectsMalformedOrMismatchedProgressItemsBeforeFetchingResults() throws Exception {
+    List<Consumer<ObjectNode>> mutations = List.of(
+        progress -> progress.put("items", "invalid"),
+        progress -> progress.putArray("items"),
+        progress -> ((com.fasterxml.jackson.databind.node.ArrayNode) progress.path("items"))
+            .add(progress.path("items").get(0).deepCopy()),
+        progress -> progress.putArray("items").add("invalid"),
+        progress -> ((ObjectNode) progress.path("items").get(0)).put("carrier", "OOCL"),
+        progress -> ((ObjectNode) progress.path("items").get(0)).put("reference", "COSU0000000000"),
+        progress -> ((ObjectNode) progress.path("items").get(0)).put("status", "unexpected_status")
+    );
+    for (Consumer<ObjectNode> mutation : mutations) {
+      ObjectNode progress = (ObjectNode) progress("completed").body();
+      mutation.accept(progress);
+      try (QueueServer server = new QueueServer(received -> {
+        if (received.path().equals("/jobs")) return accepted();
+        if (received.path().equals("/jobs/" + JOB)) return reply(200, progress);
+        if (received.path().endsWith("/cancel")) return reply(200, Map.of("status", "cancelled"));
+        return reply(200, result("COSCO", NUMBER, "QUERY_COMPLETED"));
+      })) {
+        TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+        assertCode(() -> client.track(request()), "TRACKING_LOCAL_INVALID_RESPONSE");
+        assertThat(server.count("GET", "/jobs/" + JOB + "/result")).isZero();
+      }
+    }
+  }
+
+  @Test
+  void queryStatusCaseDoesNotHideSuccessfulOrFailedResults() throws Exception {
+    try (QueueServer server = completedServer("COSCO", NUMBER, "query_completed")) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      assertThat(client.track(request()).path("snapshot").isObject()).isTrue();
+    }
+    try (QueueServer server = completedServer("COSCO", NUMBER, "human_required")) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      assertCode(() -> client.track(request()), "TRACKING_HUMAN_REQUIRED");
+    }
+  }
+
+  @Test
+  void noItemsSubmissionErrorRemainsBadRequestAndIsNeverRetried() throws Exception {
+    try (QueueServer server = new QueueServer(received ->
+        reply(400, Map.of("error", "NO_ITEMS", "details", TOKEN + " private upstream detail")))) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      assertThatThrownBy(() -> client.track(request()))
+          .isInstanceOfSatisfying(ApiException.class, error -> {
+            assertThat(error.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(error.code()).isEqualTo("INVALID_REFERENCE");
+            assertThat(error.getMessage()).doesNotContain(TOKEN, "private upstream detail");
+            assertThat(error.details().toString()).doesNotContain(TOKEN, "private upstream detail");
+          });
+      assertThat(server.requests).hasSize(1);
     }
   }
 
@@ -296,11 +446,115 @@ class LocalTrackingQueueClientTest {
     }
   }
 
+  @Test
+  void healthReadsDoNotStartQueriesAndOnlySuccessfulCanaryVerifiesConnectedChrome() throws Exception {
+    AtomicReference<Boolean> connected = new AtomicReference<>(false);
+    try (QueueServer server = new QueueServer(received -> {
+      if (received.path().equals("/health")) {
+        return reply(200, Map.of("ok", true, "chrome", Map.of("connected", connected.get())));
+      }
+      if (received.path().equals("/jobs")) return accepted();
+      if (received.path().equals("/jobs/" + JOB)) return progress("completed");
+      if (received.path().equals("/jobs/" + JOB + "/result")) {
+        return reply(200, result("COSCO", NUMBER, "QUERY_COMPLETED"));
+      }
+      return reply(404, Map.of("error", "UNEXPECTED_PATH"));
+    })) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      JsonNode initial = client.localHealth();
+      assertThat(initial.path("status").asText()).isEqualTo("UNVERIFIED");
+      assertThat(initial.path("serviceReachable").asBoolean()).isTrue();
+      assertThat(initial.path("chromeConnected").asBoolean()).isFalse();
+      assertThat(initial.path("requiresCanary").asBoolean()).isTrue();
+      assertThat(initial.path("localTokenConfigured").asBoolean()).isTrue();
+      assertThat(initial.path("authenticationEnforced").asText()).isEqualTo("UNKNOWN");
+
+      connected.set(true);
+      assertThat(client.localHealth().path("status").asText()).isEqualTo("UNVERIFIED");
+      assertThat(server.count("POST", "/jobs")).isZero();
+      assertThat(server.requests).allSatisfy(received -> assertThat(received.path()).isEqualTo("/health"));
+
+      JsonNode canary = client.localCanary(new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", NUMBER, true));
+      assertThat(canary.path("status").asText()).isEqualTo("SUCCEEDED");
+      assertThat(canary.path("verified").asBoolean()).isTrue();
+      assertThat(canary.path("persisted").asBoolean()).isFalse();
+      assertThat(canary.path("checkedAt").asText()).isNotBlank();
+      assertThat(canary.path("localJobId").asText()).isEqualTo(JOB);
+      assertThat(canary.has("shipmentId")).isFalse();
+      JsonNode verified = client.localHealth();
+      assertThat(verified.path("status").asText()).isEqualTo("READY");
+      assertThat(verified.path("requiresCanary").asBoolean()).isFalse();
+      assertThat(verified.path("lastVerifiedAt").asText()).isNotBlank();
+      assertThat(verified.path("lastCanaryAt").asText()).isNotBlank();
+      assertThat(verified.path("authenticationEnforced").asText()).isEqualTo("UNKNOWN");
+      assertThat(server.count("POST", "/jobs")).isEqualTo(1);
+      assertThat(server.requests).allSatisfy(received -> {
+        assertThat(received.authorization()).isEqualTo("Bearer " + TOKEN);
+        assertThat(received.path()).doesNotStartWith("/api/");
+        assertThat(received.cmaCookie()).isNull();
+      });
+      assertThat(verified.toString()).doesNotContain(TOKEN);
+    }
+  }
+
+  @Test
+  void healthAuthenticationFailureUsesBearerAndNeverSubmitsAProbeJob() throws Exception {
+    try (QueueServer server = new QueueServer(received ->
+        reply(401, Map.of("error", TOKEN + " private-health-response")))) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      assertThatThrownBy(client::localHealth)
+          .isInstanceOfSatisfying(ApiException.class, error -> {
+            assertThat(error.code()).isEqualTo("TRACKING_LOCAL_UNAUTHORIZED");
+            assertThat(error.status()).isEqualTo(HttpStatus.BAD_GATEWAY);
+            assertThat(error.getMessage()).doesNotContain(TOKEN, "private-health-response");
+          });
+      assertThat(server.requests).singleElement().satisfies(received -> {
+        assertThat(received.method()).isEqualTo("GET");
+        assertThat(received.path()).isEqualTo("/health");
+        assertThat(received.authorization()).isEqualTo("Bearer " + TOKEN);
+      });
+      assertThat(server.count("POST", "/jobs")).isZero();
+    }
+  }
+
+  @Test
+  void failedCanaryMarksConnectedServiceDegradedWithoutPublishingAuthenticationClaims() throws Exception {
+    try (QueueServer server = new QueueServer(received -> {
+      if (received.path().equals("/health")) {
+        return reply(200, Map.of("ok", true, "chrome", Map.of("connected", true)));
+      }
+      if (received.path().equals("/jobs")) return accepted();
+      if (received.path().equals("/jobs/" + JOB)) {
+        return progress("completed_with_gaps", "COSCO", NUMBER, "human_required");
+      }
+      return reply(404, Map.of("error", "UNEXPECTED_PATH"));
+    })) {
+      ShipmentTrackingProperties properties = properties(server);
+      properties.setLocalToken("");
+      TrackingAdapterClient client = new TrackingAdapterClient(properties);
+      assertCode(() -> client.localCanary(
+          new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", NUMBER, true)), "TRACKING_HUMAN_REQUIRED");
+
+      JsonNode health = client.localHealth();
+      assertThat(health.path("status").asText()).isEqualTo("DEGRADED");
+      assertThat(health.path("chromeConnected").asBoolean()).isTrue();
+      assertThat(health.path("requiresCanary").asBoolean()).isTrue();
+      assertThat(health.path("lastCanaryErrorCode").asText()).isEqualTo("TRACKING_HUMAN_REQUIRED");
+      assertThat(health.path("lastVerifiedAt").isNull()).isTrue();
+      assertThat(health.path("localTokenConfigured").asBoolean()).isFalse();
+      assertThat(health.path("authenticationEnforced").asText()).isEqualTo("UNKNOWN");
+      assertThat(server.count("GET", "/jobs/" + JOB + "/result")).isZero();
+      assertThat(server.requests).allSatisfy(received -> assertThat(received.authorization()).isNull());
+    }
+  }
+
   private static QueueServer completedServer(String carrier, String reference, String status) throws IOException {
     return new QueueServer(received -> {
       if (received.path().equals("/jobs")) return accepted();
       if (received.path().equals("/jobs/" + JOB)) {
-        return progress("QUERY_COMPLETED".equals(status) ? "completed" : "completed_with_gaps");
+        // Keep item success independent of query.status so the result-level guard is also exercised.
+        return progress("QUERY_COMPLETED".equalsIgnoreCase(status) ? "completed" : "completed_with_gaps",
+            carrier, reference, "done");
       }
       if (received.path().endsWith("/cancel")) return reply(200, Map.of("status", "cancelled"));
       return reply(200, result(carrier, reference, status));
@@ -332,8 +586,18 @@ class LocalTrackingQueueClientTest {
   }
 
   private static Reply progress(String status) {
+    String itemStatus = switch (status) {
+      case "queued" -> "pending";
+      case "running" -> "running";
+      default -> "done";
+    };
+    return progress(status, "COSCO", NUMBER, itemStatus);
+  }
+
+  private static Reply progress(String status, String carrier, String reference, String itemStatus) {
     return reply(200, Map.of("id", JOB, "status", status,
-        "progress", Map.of("done", 0, "failed", 0, "total", 1)));
+        "progress", Map.of("done", 0, "failed", 0, "total", 1),
+        "items", List.of(Map.of("carrier", carrier, "reference", reference, "status", itemStatus))));
   }
 
   private static ObjectNode result(String carrier, String reference, String status) {

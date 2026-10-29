@@ -10,6 +10,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -46,6 +47,28 @@ public class TrackingAdapterClient {
 
   public JsonNode track(NormalizedTrackRequest request) {
     return track(request, null, false);
+  }
+
+  public JsonNode localHealth() {
+    return requireLocalQueue().localHealth();
+  }
+
+  public JsonNode localCanary(ShipmentTrackRequest input) {
+    LocalTrackingQueueClient queue = requireLocalQueue();
+    if (input == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Canary reference is required");
+    String carrier = TrackingCarriers.canonicalCode(input.carrier());
+    String type = input.type() == null ? "" : input.type().trim().toUpperCase(Locale.ROOT);
+    String number = input.number() == null ? "" : input.number().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+    if (!TrackingCarriers.supportsReference(carrier, type, true) || !number.matches("[A-Z0-9-]{4,35}")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE", "Use a supported canary carrier and booking or bill reference");
+    }
+    return queue.localCanary(new NormalizedTrackRequest(carrier, "AUTO", type, number));
+  }
+
+  private LocalTrackingQueueClient requireLocalQueue() {
+    if (localQueueClient == null) throw new ApiException(HttpStatus.CONFLICT,
+        "TRACKING_LOCAL_OPERATION_UNSUPPORTED", "The local tracking queue is not enabled");
+    return localQueueClient;
   }
 
   public JsonNode track(NormalizedTrackRequest request, boolean forceRefresh) {
