@@ -143,17 +143,24 @@ export function findPublicService(id) {
   return publicServices.find((service) => service.id === id);
 }
 
-export function serviceEntry(service, role, trackingPath = "/tracking/") {
+export function trackingQueryEntry(trackingPath = "/workspace/tracking/overview") {
+  const base = trackingPath.split("#")[0];
+  return /\/workspace\/tracking\/(?:overview|query)(?:\?|$)/.test(base)
+    ? base.replace(/(\/workspace\/tracking\/)(?:overview|query)(?=\?|$)/, "$1query")
+    : `${base}#tracking`;
+}
+
+export function serviceEntry(service, role, trackingPath = "/workspace/tracking/overview") {
   if (service.id === "transport")
     return {
-      href: trackingPath.split("#")[0] + "#tracking",
+      href: trackingQueryEntry(trackingPath),
       allowed: true,
       external: false
     };
   if (service.access === "external") return { href: service.entry, allowed: true, external: true };
   if (service.access === "context") {
     return {
-      href: trackingPath.split("#")[0] + "#tracking",
+      href: trackingQueryEntry(trackingPath),
       allowed: true,
       external: false
     };

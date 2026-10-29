@@ -6,7 +6,7 @@
     :show-close="!busy"
     @update:model-value="updateOpen"
     class="operations-profile-dialog workspace-el-dialog"
-    :title="t('portal.personalInfoTitle')"
+    :title="t(section === 'password' ? 'portal.changePasswordTitle' : 'portal.personalInfoTitle')"
     width="min(860px, 94vw)"
     :close-on-click-modal="false"
   >
@@ -18,8 +18,8 @@
       </div>
       <el-tag type="success" effect="light">{{ t("portal.accountActive") }}</el-tag>
     </div>
-    <div class="operations-profile-layout">
-      <section class="operations-profile-section">
+    <div class="operations-profile-layout" :class="{ 'is-single-section': section !== 'all' }">
+      <section v-if="section !== 'password'" class="operations-profile-section">
         <header>
           <b>{{ t("portal.basicProfile") }}</b>
           <small>{{ t("portal.basicProfileHint") }}</small>
@@ -60,7 +60,7 @@
           </el-button>
         </el-form>
       </section>
-      <section class="operations-profile-section is-security">
+      <section v-if="section !== 'profile'" class="operations-profile-section is-security">
         <header>
           <b>{{ t("portal.accountSecurity") }}</b>
           <small>{{ t("portal.accountSecurityHint") }}</small>
@@ -138,9 +138,10 @@ const props = withDefaults(
   defineProps<{
     workflow: PersonalProfileWorkflow;
     currentUser?: WorkspaceUser | null;
+    section?: string;
     t: FeatureTranslator;
   }>(),
-  { currentUser: null }
+  { currentUser: null, section: "all" }
 );
 const {
   personalProfileOpen,
@@ -311,3 +312,9 @@ function updateOpen(open: boolean) {
 </style>
 
 <style scoped src="../../components/workspace/workspaceElementDialog.css"></style>
+
+<style scoped>
+.operations-profile-layout.is-single-section {
+  grid-template-columns: minmax(0, 1fr);
+}
+</style>

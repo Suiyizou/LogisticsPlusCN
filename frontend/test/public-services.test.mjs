@@ -162,3 +162,14 @@ test("self-hosted font CSS retains local WOFF2 files, Unicode ranges and OFL not
   for (const name of ["inter", "noto-sans-sc"])
     assert.match(readFileSync(new URL(name + "-OFL.txt", root), "utf8"), /SIL OPEN FONT LICENSE/i);
 });
+
+test("public tracking entries default to the persistent workspace query route", () => {
+  for (const id of ["transport", "files"]) {
+    const service = publicServices.find((item) => item.id === id);
+    assert.equal(serviceEntry(service).href, "/workspace/tracking/query");
+    assert.equal(
+      serviceEntry(service, "BUSINESS", "/workspace/tracking/overview?carrier=MSC#overview").href,
+      "/workspace/tracking/query?carrier=MSC"
+    );
+  }
+});

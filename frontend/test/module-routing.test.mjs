@@ -228,7 +228,8 @@ test("actual matched components retain one auth shell and one business workspace
   assert.equal(list.matched[2].components.default, views.shipmentWorkspace);
   assert.equal(list.matched[0], detail.matched[0]);
   assert.equal(list.matched[1], detail.matched[1]);
-  assert.equal(router.resolve("/home").matched[0].components.default, views.planner);
+  assert.equal(router.resolve("/home").matched[0].components.default, views.operations);
+  assert.equal(router.resolve("/home").matched[1].components.default, views.planner);
 });
 
 test("role policy applies to nested routes, and empty roles are never public access", () => {

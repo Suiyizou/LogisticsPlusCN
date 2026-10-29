@@ -270,7 +270,7 @@ test("system announcements are audience-scoped, read-once, and safely rendered",
     appSource,
     /function announcementLocalReadKey[\s\S]*?announcement-read:[\s\S]*?announcementIdentity/
   );
-  assert.match(appSource, /loadSystemAnnouncements\(\{ autoOpen: true \}\)/);
+  assert.match(appSource, /loadSystemAnnouncements\(\{ autoOpen: !workspaceBridge\.embedded \}\)/);
   assert.match(
     appSource,
     /systemAnnouncementAutoOpenRequested[\s\S]*?systemAnnouncements\.some\(\(item\) => !item\.read\)/

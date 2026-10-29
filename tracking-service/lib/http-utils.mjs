@@ -23,13 +23,13 @@ export function secureTextEquals(left, right) {
   );
 }
 
-export function setCommonHeaders(response) {
+export function setCommonHeaders(response, { trackingDocument = false } = {}) {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "no-referrer");
-  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("X-Frame-Options", trackingDocument ? "SAMEORIGIN" : "DENY");
   response.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+    `default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors ${trackingDocument ? "'self'" : "'none'"}`
   );
 }
 

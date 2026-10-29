@@ -8,7 +8,8 @@
         >
       </div>
       <div v-if="compact" class="public-mega-mobile-actions">
-        <LanguageSwitcher /><a class="maritime-button maritime-button--navy" href="/workbenches"
+        <a href="/services/company" class="maritime-button">{{ labels.company }}</a
+        ><LanguageSwitcher /><a class="maritime-button maritime-button--navy" href="/workbenches"
           >{{ t(signedIn ? "publicSite.navOpen" : "publicSite.navLogin") }}
           <span aria-hidden="true">↗</span></a
         >
@@ -66,12 +67,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { t } from "../../i18n";
+import { getPublicDetailLabels } from "../../i18n/publicServiceDetailMessages.js";
+import { currentLocale, t } from "../../i18n";
 import { serviceGroups, publicServices } from "../../public/serviceCatalog.js";
 import PublicServiceCard from "./PublicServiceCard.vue";
 import ServiceIcon from "./ServiceIcon.vue";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
 defineProps<{ id: string; compact: boolean; signedIn?: boolean }>();
+const labels = computed(() => getPublicDetailLabels(currentLocale.value));
 const emit = defineEmits<{ navigate: [] }>();
 const selectedId = ref("transport");
 const expanded = ref("transport");

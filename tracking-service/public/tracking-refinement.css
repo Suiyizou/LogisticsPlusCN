@@ -2680,3 +2680,130 @@ body.is-embedded .content {
     }
   }
 }
+
+/* The authenticated workspace shares the light application palette. */
+body.is-embedded {
+  --color-primary: #17374d;
+  --color-accent: #246b91;
+  --color-accent-hover: #1c5c80;
+  --color-accent-soft: #eaf3fb;
+  --color-background: #f4f7fa;
+  --color-surface: #fff;
+  --color-surface-subtle: #f8fafc;
+  --color-border: #e1e8ef;
+  --color-muted: #6c7e8d;
+  --color-foreground: #19354a;
+  --font-ui: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-data: var(--font-ui);
+  background: #f4f7fa;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+body.is-embedded .content {
+  width: calc(100% - 56px);
+  max-width: none;
+  padding-top: 28px;
+}
+body.is-embedded #overview-view .overview-hero {
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  align-items: start;
+  padding: 20px 24px;
+  gap: 24px;
+  background: #fff;
+  color: #19354a;
+  border: 1px solid #e1e8ef;
+  box-shadow: none;
+}
+body.is-embedded #overview-view .hero-copy h1 {
+  font-size: 30px;
+  line-height: 1.45;
+  color: #19354a;
+  margin-bottom: 10px;
+}
+body.is-embedded #overview-view .hero-copy .kicker,
+body.is-embedded #overview-view .hero-copy > p:last-of-type {
+  color: #6c7e8d;
+}
+body.is-embedded .hero-operations-summary {
+  background: #f8fafc;
+  color: #19354a;
+  border: 1px solid #e1e8ef;
+  box-shadow: none;
+}
+body.is-embedded .hero-operations-summary :is(dt, small, p),
+body.is-embedded .hero-summary-status {
+  color: #6c7e8d;
+}
+body.is-embedded .hero-operations-summary :is(dd, strong) {
+  color: #19354a;
+}
+body.is-embedded #tracking-view .metric-card {
+  background: #fff;
+  color: #19354a;
+  border: 1px solid #e1e8ef;
+}
+body.is-embedded #tracking-view .metric-card :is(strong, p) {
+  color: #19354a;
+}
+body.is-embedded #tracking-view .metric-card > span {
+  color: #6c7e8d;
+}
+body.is-embedded #overview-view .overview-hero::before,
+body.is-embedded #overview-view .overview-hero::after {
+  content: none;
+}
+/* The iframe viewport is narrower than the outer workspace; keep its desktop
+   summary beside the copy instead of inheriting the standalone 1320px stack. */
+@media (min-width: 1000px) {
+  body.is-embedded #overview-view .overview-hero {
+    grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr);
+    grid-template-rows: auto;
+    min-height: 0;
+  }
+  body.is-embedded #overview-view .hero-copy h1 {
+    font-size: 28px;
+    line-height: 1.35;
+  }
+  body.is-embedded #overview-view .hero-copy > p:last-of-type {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  body.is-embedded #overview-view .overview-hero .primary-action.el-button {
+    min-height: 40px;
+    margin-top: 16px;
+    font-size: 14px;
+  }
+  body.is-embedded .hero-operations-summary {
+    gap: 12px;
+    padding: 16px 18px;
+  }
+  body.is-embedded .hero-operations-summary > header strong {
+    font-size: 15px;
+  }
+  body.is-embedded .hero-operations-summary dl > div {
+    padding: 12px 8px;
+  }
+  body.is-embedded .hero-operations-summary dd {
+    font-size: 26px;
+  }
+}
+@media (max-width: 900px) {
+  body.is-embedded .content {
+    width: calc(100% - 32px);
+    padding-top: 20px;
+  }
+  body.is-embedded #overview-view .overview-hero {
+    padding: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-embedded *,
+  body.is-embedded *::before,
+  body.is-embedded *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

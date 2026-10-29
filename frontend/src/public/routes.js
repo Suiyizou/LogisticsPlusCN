@@ -7,6 +7,12 @@ export function isPublicPath(path) {
 export function createPublicServiceRoutes() {
   return [
     {
+      path: "/services/company",
+      name: "public-company",
+      component: () => import("../components/public/CompanyPage.vue"),
+      meta: { surface: "public" }
+    },
+    {
       path: "/services",
       name: "public-services",
       component: () => import("../components/public/ServiceIndexPage.vue"),

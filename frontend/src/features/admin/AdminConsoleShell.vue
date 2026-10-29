@@ -23,8 +23,9 @@ const props = withDefaults(
     systemMessages: string;
     copy: AdminConsoleCopy;
     transitioning?: boolean;
+    contentOnly?: boolean;
   }>(),
-  { transitioning: false }
+  { transitioning: false, contentOnly: false }
 );
 const emit = defineEmits<{
   select: [page: string];
@@ -48,8 +49,11 @@ function refresh() {
 }
 </script>
 <template>
-  <section class="admin-console-shell" :class="{ 'is-table-page-switching': transitioning }">
-    <aside class="admin-console-sidebar">
+  <section
+    class="admin-console-shell"
+    :class="{ 'is-table-page-switching': transitioning, 'is-content-only': contentOnly }"
+  >
+    <aside v-if="!contentOnly" class="admin-console-sidebar">
       <BrandLockup class="admin-console-brand" href="/workbenches" compact inverse />
 
       <div class="admin-profile-card">
@@ -71,7 +75,7 @@ function refresh() {
     </aside>
 
     <main class="admin-console-main">
-      <header class="admin-app-bar">
+      <header v-if="!contentOnly" class="admin-app-bar">
         <RouterLink to="/workbenches">{{ copy.switchWorkbench }}</RouterLink
         ><span aria-hidden="true">/</span><strong>{{ meta.title }}</strong>
         <div class="admin-app-bar-actions">
@@ -122,3 +126,17 @@ function refresh() {
   </section>
 </template>
 <style scoped src="./adminConsoleShellStyles.css"></style>
+
+<style scoped>
+.admin-console-shell.is-content-only {
+  display: block;
+  min-height: 0;
+  background: transparent;
+}
+.is-content-only > .admin-console-main {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 28px;
+}
+</style>

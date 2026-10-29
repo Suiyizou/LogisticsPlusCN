@@ -51,7 +51,7 @@ services:
     image: cargo-ui-preview-frontend:local
     build:
       args:
-        VITE_TRACKING_WORKBENCH_URL: /tracking/
+        VITE_TRACKING_WORKBENCH_URL: /workspace/tracking/overview
     ports: !reset []
   gateway:
     image: nginx:alpine

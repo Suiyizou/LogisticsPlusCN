@@ -1,6 +1,11 @@
 <template>
-  <section class="algorithm-page excel-template-page" data-i18n-ignore>
+  <section
+    class="algorithm-page excel-template-page"
+    :class="{ 'is-coordinated': coordinated, 'is-text-import': recognitionInput === 'text' }"
+    data-i18n-ignore
+  >
     <WorkspacePageHeader
+      v-if="!coordinated"
       :title="ui('excel.importCargoTitle')"
       :eyebrow="ui('excel.importCargoEyebrow')"
       :description="wt('importCargoHint')"
@@ -162,7 +167,7 @@
           @dragleave.prevent="handlePreciseDragLeave"
           @drop.prevent="handlePreciseDrop"
         >
-          <div class="recognition-head">
+          <div v-if="!coordinated" class="recognition-head">
             <div>
               <strong class="recognition-title">
                 <span class="hollow-star" aria-hidden="true">☆</span>
@@ -228,7 +233,10 @@
             <span class="excel-drop-formats">XLSX / XLS / CSV / TSV</span>
           </div>
 
-          <div v-if="!sourceFile && preciseFileQueue.length" class="import-file-queue">
+          <div
+            v-if="recognitionInput !== 'text' && !sourceFile && preciseFileQueue.length"
+            class="import-file-queue"
+          >
             <header>
               <strong>{{ ui("excel.fileQueue") }}</strong>
               <span>{{ ui("excel.smartQueueHint") }}</span>
@@ -263,12 +271,14 @@
             </div>
           </div>
 
-          <details v-if="!sourceFile" class="recognition-optional-text">
-            <summary>{{ ui("excel.orPasteText") }}</summary>
-            <div class="recognition-text-divider">
-              <span>{{ ui("excel.orPasteText") }}</span>
-            </div>
+          <section
+            v-if="recognitionInput === 'text' && !sourceFile"
+            class="recognition-text-editor"
+          >
+            <label for="smart-import-cargo-text">{{ textCopy.label }}</label>
+            <p>{{ textCopy.hint }}</p>
             <el-input
+              id="smart-import-cargo-text"
               v-model="recognitionText"
               type="textarea"
               :disabled="importBusy"
@@ -288,8 +298,11 @@
                   recognitionAgentBusy ? ui("excel.recognizing") : ui("excel.startSmartRecognition")
                 }}
               </el-button>
+              <el-button :disabled="importBusy || !recognitionText" @click="clearRecognition">{{
+                ui("common.clear")
+              }}</el-button>
             </div>
-          </details>
+          </section>
           <div v-if="recognitionAgentBusy" class="recognition-loading-panel">
             <span class="recognition-loader"></span>
             <div>
@@ -1197,6 +1210,7 @@ import {
 import { currentLocale, t } from "../i18n";
 import { translateLegacyText } from "../i18n/legacyText";
 import { translateUiText } from "../i18n/uiText";
+import { unifiedImportMessages } from "../i18n/unifiedImportMessages.js";
 import { uid } from "../utils/format";
 import {
   cargoConstraintFlags,
@@ -1228,9 +1242,18 @@ const props = defineProps({
   },
   reviewSource: { type: Object, default: null },
   coordinated: { type: Boolean, default: false },
+  recognitionInput: {
+    type: String,
+    default: "excel",
+    validator: (value) => ["excel", "text"].includes(value)
+  },
   sourceFile: { type: Object, default: null },
   externalImportBlocked: { type: Boolean, default: false }
 });
+
+const textCopy = computed(
+  () => (unifiedImportMessages[currentLocale.value] || unifiedImportMessages["zh-CN"]).textEditor
+);
 
 function tr(value) {
   return translateLegacyText(value == null ? "" : String(value), currentLocale.value);
@@ -1675,6 +1698,7 @@ function openManualFilePicker() {
 }
 
 function openPreciseFilePicker() {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   preciseFileInput.value?.click();
 }
@@ -1687,6 +1711,7 @@ function handleFile(event) {
 }
 
 function handlePreciseFile(event) {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   const files = Array.from(event.target.files || []);
   event.target.value = "";
@@ -1723,6 +1748,7 @@ async function handleManualDrop(event) {
 }
 
 function handlePreciseDragEnter(event) {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   preciseDragDepth += 1;
@@ -1730,6 +1756,7 @@ function handlePreciseDragEnter(event) {
 }
 
 function handlePreciseDragOver(event) {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   if (!dragContainsFiles(event)) return;
   if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
@@ -1743,6 +1770,7 @@ function handlePreciseDragLeave() {
 }
 
 async function handlePreciseDrop(event) {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   preciseDragDepth = 0;
   preciseDropActive.value = false;
@@ -1760,6 +1788,7 @@ function enqueueManualFiles(files) {
 }
 
 function enqueuePreciseFiles(files) {
+  if (props.recognitionInput === "text") return;
   if (props.sourceFile) return;
   const items = appendQueueFiles(preciseFileQueue, files, "recognition");
   if (!items.length) return;
@@ -2074,6 +2103,7 @@ async function loadWorkbookFile(file) {
 }
 
 async function loadWorkbookFileForRecognition(file, context = {}) {
+  if (props.recognitionInput === "text") return false;
   if (props.sourceFile && file !== props.sourceFile) return false;
   const callerShouldApply =
     typeof context.shouldApply === "function" ? context.shouldApply : () => true;
@@ -2312,6 +2342,7 @@ function resetRecognitionResult() {
 }
 
 async function submitTextRecognitionTask(options = {}) {
+  if (props.recognitionInput === "text" && options.file) return false;
   if (props.sourceFile && options.file !== props.sourceFile) return false;
   const text = String(options.textOverride ?? recognitionText.value).trim();
   const callerShouldApply =
@@ -3599,6 +3630,69 @@ function cargoKey(cargo, index = "") {
   }
   .workspace-file-actions {
     flex-wrap: wrap;
+  }
+}
+
+/* Embedded import pages share their parent title and source controls. */
+.excel-template-page.is-coordinated {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.is-coordinated .excel-workspace-layout {
+  display: block;
+}
+.is-coordinated .smart-recognition-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.recognition-text-editor {
+  display: grid;
+  gap: 12px;
+}
+.recognition-text-editor > label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #273e55;
+}
+.recognition-text-editor > p {
+  margin: 0;
+  font-size: 13px;
+  color: #61758b;
+  line-height: 1.7;
+}
+.recognition-text-editor :deep(.el-textarea__inner) {
+  min-height: 240px;
+  padding: 20px;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #d5e0eb inset;
+  font-size: 14px;
+  line-height: 1.85;
+  color: #273e55;
+}
+.recognition-text-editor :deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 2px #6d9acb inset;
+}
+.is-coordinated .source-workbook-bar {
+  background: #f7fafe;
+  border: 1px solid #dee7f0;
+  border-radius: 12px;
+}
+.is-coordinated .recognition-loading-panel {
+  background: #f3f7fc;
+  border-color: #dce7f2;
+}
+.is-coordinated .recognition-import-row {
+  padding-block: 18px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-coordinated .recognition-loader {
+    animation: none;
   }
 }
 </style>

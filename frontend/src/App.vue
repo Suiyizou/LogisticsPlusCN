@@ -32,9 +32,13 @@
       <div
         v-else
         class="app-shell"
-        :class="{ 'is-page-leaving': pageLeaving, 'is-sidebar-collapsed': sidebarCollapsed }"
+        :class="{
+          'is-page-leaving': pageLeaving,
+          'is-sidebar-collapsed': sidebarCollapsed,
+          'is-content-only': props.contentOnly
+        }"
       >
-        <header class="topbar">
+        <header v-if="!props.contentOnly" class="topbar">
           <el-breadcrumb separator="/" class="top-breadcrumb">
             <el-breadcrumb-item>工作台</el-breadcrumb-item>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
@@ -63,6 +67,7 @@
 
         <div class="app-body" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
           <PlannerSidebar
+            v-if="!props.contentOnly"
             :role="currentUser?.role"
             :collapsed="sidebarCollapsed"
             :display-name="userDisplayName"
@@ -85,7 +90,12 @@
                 @save-settings="applyUserSettings"
               />
               <main v-else-if="activePage === 'planner'" key="planner" class="planner-page">
-                <el-card class="planner-step-card" shadow="never" data-i18n-ignore>
+                <el-card
+                  v-if="!isImportPage"
+                  class="planner-step-card"
+                  shadow="never"
+                  data-i18n-ignore
+                >
                   <el-steps :active="activeStepIndex" finish-status="success" align-center>
                     <el-step
                       v-for="(step, index) in plannerWorkflowSteps"
@@ -366,8 +376,8 @@
                         <div class="config-toolbox">
                           <strong>常用工具</strong>
                           <div class="config-tool-grid">
-                            <el-button :icon="Star" @click="smartImportOpen = !smartImportOpen">{{
-                              smartImportOpen ? ui("app.hideSmartImport") : wt("smartImportTitle")
+                            <el-button :icon="Star" @click="router.push('/smart-import/excel')">{{
+                              wt("smartImportTitle")
                             }}</el-button>
                             <el-button :icon="Box" @click="openContainerModal">添加箱型</el-button>
                             <el-button :icon="MagicStick" @click="loadSample">套用示例</el-button>
@@ -458,19 +468,16 @@
                         </div>
                       </el-card>
                     </div>
-                    <el-collapse-transition>
-                      <div
-                        v-if="smartImportOpen"
-                        class="embedded-smart-import config-embedded-import"
-                      >
-                        <UnifiedSmartImport
-                          key="config-smart-import"
-                          :current-cargo-count="cargos.length"
-                          :review-source="pendingImportReview"
-                          @import-cargos="importExcelCargos"
-                        />
-                      </div>
-                    </el-collapse-transition>
+                  </section>
+
+                  <section v-else-if="isImportPage" class="planner-section planner-import-page">
+                    <UnifiedSmartImport
+                      :key="importMode"
+                      :import-mode="importMode"
+                      :current-cargo-count="cargos.length"
+                      :review-source="pendingImportReview"
+                      @import-cargos="importExcelCargos"
+                    />
                   </section>
 
                   <section
@@ -567,12 +574,8 @@
                               <el-button
                                 data-i18n-ignore
                                 :icon="Star"
-                                @click="smartImportOpen = !smartImportOpen"
-                                >{{
-                                  smartImportOpen
-                                    ? ui("app.hideSmartImport")
-                                    : wt("smartImportTitle")
-                                }}</el-button
+                                @click="router.push('/smart-import/excel')"
+                                >{{ wt("smartImportTitle") }}</el-button
                               >
                               <el-button
                                 :icon="Delete"
@@ -592,16 +595,6 @@
                           ></WorkspacePageHeader
                         >
                       </template>
-                      <el-collapse-transition>
-                        <div v-if="smartImportOpen" class="embedded-smart-import">
-                          <UnifiedSmartImport
-                            key="embedded-smart-import"
-                            :current-cargo-count="cargos.length"
-                            :review-source="pendingImportReview"
-                            @import-cargos="importExcelCargos"
-                          />
-                        </div>
-                      </el-collapse-transition>
                       <el-alert
                         v-if="cargoImportNoticeText"
                         data-i18n-ignore
@@ -1323,6 +1316,7 @@
 </template>
 
 <script setup lang="ts">
+import { workspaceContextKey } from "./modules/workspaceContext.js";
 import { planSummaryStatus } from "./components/workspace/planSummaryStatus.js";
 import WorkspacePageHeader from "./components/workspace/WorkspacePageHeader.vue";
 import { wt } from "./components/workspace/workspaceCopy";
@@ -1331,7 +1325,7 @@ import WorkspaceDialogTransition from "./components/workspace/WorkspaceDialogTra
 import "./components/workspace/workspaceMotion.css";
 import PlannerSidebar from "./components/workspace/PlannerSidebar.vue";
 import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
-import { computed, defineAsyncComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, h, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 import {
@@ -1480,14 +1474,25 @@ const BALANCE_PRESETS = {
   }
 };
 
+defineOptions({ inheritAttrs: false });
+const props = defineProps({ contentOnly: Boolean });
+const workspaceContext = inject(workspaceContextKey, null);
 const route = useRoute();
 const router = useRouter();
 const profileVersion = ref(0);
 const sidebarCollapsed = ref(false);
-const authChecked = ref(false);
+const authChecked = ref(Boolean(workspaceContext));
 const workspaceReady = ref(false);
 const hasStoredWorkspace = ref(false);
-const currentUser = ref(storedUser());
+const localUser = ref(storedUser());
+const currentUser = computed({
+  get: () => (workspaceContext ? workspaceContext.user.value : localUser.value),
+  set: (user) => {
+    if (workspaceContext) {
+      if (user) workspaceContext.updateUser(user);
+    } else localUser.value = user;
+  }
+});
 const profileOpen = ref(false);
 const profileDialogElement = ref<HTMLElement | null>(null);
 const profileDialogFocus = useDialogFocus({
@@ -1508,10 +1513,19 @@ const activePage = computed(() => {
   return routeName.value || "home";
 });
 const plannerMode = computed(() => {
-  if (routeName.value === "planner-cargos") return "cargos";
+  if (routeName.value === "planner-cargos" || routeName.value.startsWith("planner-import-"))
+    return "cargos";
   if (routeName.value === "planner-results") return "results";
   return "config";
 });
+const importMode = computed(() =>
+  routeName.value === "planner-import-image"
+    ? "image"
+    : routeName.value === "planner-import-text"
+      ? "text"
+      : "excel"
+);
+const isImportPage = computed(() => routeName.value.startsWith("planner-import-"));
 const activePlannerStep = computed(() =>
   plannerMode.value === "results" && selectedEvaluation.value ? "review" : plannerMode.value
 );
@@ -1606,13 +1620,12 @@ const showMassBalance = ref(readScenePreferences().showMassBalance);
 const cargoModalOpen = ref(false);
 const containerModalOpen = ref(false);
 const smartImportOpen = ref(false);
-watch(
-  () => route.query.import,
-  (value) => {
-    if (value === "smart") smartImportOpen.value = true;
-  },
-  { immediate: true }
-);
+// Review requests from quick imports now open the dedicated import page.
+watch(smartImportOpen, (open) => {
+  if (!open) return;
+  smartImportOpen.value = false;
+  if (!isImportPage.value) void router.push("/smart-import/excel");
+});
 const cargoView = ref(readCargoView());
 const cargoViewOptions = computed(() => [
   { label: wt("cargoListView"), value: "list" },
@@ -1939,10 +1952,10 @@ function initializePlannerWorkspace() {
 }
 
 onMounted(async () => {
-  window.addEventListener("auth-expired", handleAuthExpired);
+  if (!workspaceContext) window.addEventListener("auth-expired", handleAuthExpired);
   window.addEventListener("pageshow", resetGlobalWaitState);
   window.addEventListener("pagehide", resetGlobalWaitState);
-  await initializeAuth();
+  if (!workspaceContext) await initializeAuth();
   initializePlannerWorkspace();
 });
 
@@ -2007,6 +2020,7 @@ watch([activePage, currentUser, authChecked], () => {
 });
 
 async function initializeAuth() {
+  if (workspaceContext) return;
   const cachedUser = storedUser();
   if (!storedToken() || isSessionExpired()) {
     clearSession();
@@ -2040,6 +2054,10 @@ async function handleLoggedIn(user) {
 }
 
 async function handleLogout() {
+  if (workspaceContext) {
+    profileOpen.value = false;
+    return workspaceContext.logout();
+  }
   try {
     await logoutAdmin();
   } catch {
@@ -2058,6 +2076,7 @@ function handleAuthExpired() {
 }
 
 function handleUserUpdated(user) {
+  if (workspaceContext) return workspaceContext.updateUser(user);
   if (user) currentUser.value = user;
 }
 
@@ -4238,3 +4257,29 @@ function showToast(message) {
 </script>
 
 <style scoped src="./components/workspace/workspaceDialogStyles.css"></style>
+
+<style>
+.app-shell.is-content-only {
+  display: block;
+  min-height: 0;
+  height: auto;
+  background: transparent;
+}
+.app-shell.is-content-only > .app-body {
+  display: block;
+  min-height: 0;
+}
+.app-shell.is-content-only .workspace {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.app-shell.is-content-only .planner-page,
+.app-shell.is-content-only .container-reference-page,
+.app-shell.is-content-only .algorithm-page,
+.app-shell.is-content-only .home-page {
+  padding: 28px;
+}
+</style>

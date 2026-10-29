@@ -1,3 +1,4 @@
+import { createTrackingWorkspaceBridge } from "./workspace-bridge.mjs";
 import {
   trackingResponseMessage,
   trackingDiagnosticMessage as presentTrackingDiagnostic,
@@ -31,6 +32,44 @@ document.body.classList.toggle(
   "is-embedded",
   new URLSearchParams(window.location.search).get("embed") === "1"
 );
+const workspaceBridge = createTrackingWorkspaceBridge({
+  hostWindow: window,
+  applyLocale: (locale) => applyLanguage(locale.startsWith("zh") ? "zh" : "en", { persist: false }),
+  applyVisibility: (visible) => {
+    document.body.classList.toggle("is-workspace-hidden", !visible);
+  },
+  applyRoute: async (view, query) => {
+    const url = new URL(window.location.href);
+    if (
+      view === activeView &&
+      ["carrier", "type", "number"].every(
+        (key) => (url.searchParams.get(key) || "") === (query[key] || "")
+      )
+    )
+      return;
+    url.hash = view;
+    for (const key of ["carrier", "type", "number", "returnTo"]) {
+      if (query[key]) url.searchParams.set(key, query[key]);
+      else url.searchParams.delete(key);
+    }
+    window.history.replaceState({}, "", url);
+    if (view === "tracking" && query.number) {
+      const requested = normalizeQuery({
+        carrier: query.carrier || "COSCO",
+        type: query.type || "BOOKING",
+        number: query.number,
+        channel: "AUTO"
+      });
+      const restored = showStoredTrackingQuery(requested, { clearWhenMissing: true });
+      await showView(view, { updateLocation: false });
+      if (!restored) form.requestSubmit();
+    } else if (view !== activeView) await showView(view, { updateLocation: false });
+  }
+});
+function notifyWorkspaceRoute(view = activeView) {
+  const query = Object.fromEntries(new URLSearchParams(window.location.search));
+  workspaceBridge.routeChanged(view, query);
+}
 const trackingType = document.querySelector("#tracking-type");
 const trackingNumber = document.querySelector("#tracking-number");
 const carrierNotice = document.querySelector("#carrier-notice");
@@ -268,7 +307,7 @@ function appUrl(path) {
 
 function requireAuthorizedResponse(response) {
   if (response.status === 401) {
-    window.location.replace("/");
+    if (!workspaceBridge.embedded) window.location.replace("/");
     throw new Error("Platform session expired");
   }
   return response;
@@ -1931,7 +1970,7 @@ function readCustomerSession() {
 }
 
 function readFileSession() {
-  const customerSession = readCustomerSession();
+  const customerSession = workspaceBridge.embedded ? { token: "" } : readCustomerSession();
   if (customerSession.token) {
     return {
       kind: "CUSTOMER",
@@ -2108,6 +2147,7 @@ function clearFileSession(session = readFileSession(), { expired = false } = {})
   if (session.kind === "CUSTOMER") cleared = clearCustomerSession(session.token);
   if (session.kind === "INTERNAL") cleared = clearPlatformSession(session.token);
   if (!cleared) return false;
+  if (expired && session.kind === "INTERNAL") workspaceBridge.authExpired(session.token);
 
   synchronizeRelatedFilesSession(readFileSession(), {
     force: true,
@@ -8686,6 +8726,7 @@ function updateUrl(query, { push = false } = {}) {
   url.searchParams.set("number", normalized.number);
   url.hash = "tracking";
   window.history[push ? "pushState" : "replaceState"]({}, "", url);
+  notifyWorkspaceRoute("tracking");
 }
 
 function showView(name, { updateLocation = true, pushLocation = false } = {}) {
@@ -8741,6 +8782,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
       url.searchParams.set("number", query.number);
     }
     window.history[pushLocation ? "pushState" : "replaceState"]({}, "", url);
+    notifyWorkspaceRoute();
   }
 
   const revealIncoming = () => {
@@ -8793,11 +8835,18 @@ function historyEntryForQuery(query, shipmentId = null) {
   );
 }
 
+function invalidateTrackingRequest() {
+  trackingRequestSequence += 1;
+  setLoading(false);
+  clearSystemWaitType("tracking");
+}
+
 function showStoredTrackingQuery(
   query,
   { entry = null, importedDetails = null, clearWhenMissing = false } = {}
 ) {
   const normalized = normalizeQuery(query);
+  invalidateTrackingRequest();
   carrierSelect.value = normalized.carrier;
   queryChannel = normalized.channel ?? "AUTO";
   trackingType.value = normalized.type;
@@ -9100,9 +9149,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 carrierSelect.addEventListener("change", () => {
-  trackingRequestSequence += 1;
-  setLoading(false);
-  clearSystemWaitType("tracking");
+  invalidateTrackingRequest();
   updateCarrierUI({ resetResult: true });
 });
 carrierNavItems.forEach((item) => {
@@ -9311,12 +9358,15 @@ trackingAccountLogoutButton.addEventListener("click", async () => {
   } catch {
     // Local sign-out must remain available when the server cannot be reached.
   } finally {
-    clearFileSession(session);
+    const cleared = clearFileSession(session);
+    if (cleared && workspaceBridge.embedded) workspaceBridge.authExpired(session.token);
     trackingAccountLogoutButton.disabled = false;
     setTrackingAccountMenuOpen(false);
     renderRelatedFilesDrawer();
-    showPlatformRouteWait();
-    window.setTimeout(() => window.location.assign("/"), 120);
+    if (!workspaceBridge.embedded) {
+      showPlatformRouteWait();
+      window.setTimeout(() => window.location.assign("/"), 120);
+    }
   }
 });
 document.addEventListener("click", (event) => {
@@ -9407,6 +9457,13 @@ document.querySelectorAll("[data-home-link], [data-platform-link]").forEach((lin
       return;
 
     event.preventDefault();
+    if (workspaceBridge.embedded) {
+      const target = new URL(link.href, window.location.origin);
+      workspaceBridge.navigate(
+        target.pathname === "/" ? "/workbenches" : target.pathname + target.search + target.hash
+      );
+      return;
+    }
     if (link === batchWorkspaceTrigger && !canOpenBatchWorkspace()) return;
     if (document.body.classList.contains("is-page-leaving")) return;
     showPlatformRouteWait(
@@ -9429,6 +9486,13 @@ document.querySelector("#portal-return-link")?.addEventListener("click", (event)
   )
     return;
   event.preventDefault();
+  if (workspaceBridge.embedded) {
+    const target = new URL(event.currentTarget.href, window.location.origin);
+    workspaceBridge.navigate(
+      target.pathname === "/" ? "/workbenches" : target.pathname + target.search + target.hash
+    );
+    return;
+  }
   showPlatformRouteWait();
   window.location.assign(event.currentTarget.href);
 });
@@ -9787,7 +9851,7 @@ async function initializeTrackingPage() {
       await Promise.all([
         loadCustomerAssignedHistory(),
         loadInternalTrackedHistory(),
-        loadSystemAnnouncements({ autoOpen: true })
+        loadSystemAnnouncements({ autoOpen: !workspaceBridge.embedded })
       ]);
       const restored = showStoredTrackingQuery(initialQuery);
       if (!restored) form.requestSubmit();
@@ -9807,11 +9871,14 @@ async function initializeTrackingPage() {
   await Promise.all([
     loadCustomerAssignedHistory(),
     loadInternalTrackedHistory(),
-    loadSystemAnnouncements({ autoOpen: true })
+    loadSystemAnnouncements({ autoOpen: !workspaceBridge.embedded })
   ]);
 }
 
-void initializeTrackingPage();
+void initializeTrackingPage().finally(() => {
+  workspaceBridge.ready();
+  if (workspaceBridge.embedded && !readPlatformSession().token) workspaceBridge.authExpired("");
+});
 
 renderTrackingAccount();
 // Re-render account after a short delay to catch any late session writes
@@ -9827,7 +9894,7 @@ window.addEventListener("storage", (event) => {
     event.key === CUSTOMER_AUTH_SESSION_KEY
   ) {
     renderTrackingAccount(readFileSession());
-    void loadSystemAnnouncements({ autoOpen: true });
+    void loadSystemAnnouncements({ autoOpen: !workspaceBridge.embedded });
   }
 });
 void refreshChannelStatus();
@@ -9837,3 +9904,27 @@ setInterval(() => {
 
 // Progressive controls preserve the native form values and original change listeners.
 installTrackingPresentation();
+
+// Embedded platform destinations always navigate the parent, including dynamically rendered links.
+if (workspaceBridge.embedded)
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href]");
+    if (
+      !link ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    const target = new URL(link.href, window.location.origin);
+    if (
+      target.origin === window.location.origin &&
+      workspaceBridge.navigate(
+        target.pathname === "/" ? "/workbenches" : target.pathname + target.search + target.hash
+      )
+    )
+      event.preventDefault();
+  });

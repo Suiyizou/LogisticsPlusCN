@@ -63,6 +63,7 @@ test("workspace home follows the rendered role destination and ignores returnTo 
       })
     },
     window,
+    workspaceBridge: { embedded: false },
     URLSearchParams,
     localReturnPath,
     showPlatformRouteWait: () => {}

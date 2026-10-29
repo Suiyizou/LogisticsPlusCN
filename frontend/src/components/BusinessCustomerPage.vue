@@ -1,6 +1,10 @@
 <template>
-  <main class="customer-access-page business-workspace-shell" data-i18n-ignore>
-    <header class="customer-access-header">
+  <main
+    class="customer-access-page business-workspace-shell"
+    :class="{ 'is-content-only': contentOnly }"
+    data-i18n-ignore
+  >
+    <header v-if="!contentOnly" class="customer-access-header">
       <div class="business-header-breadcrumb">
         <RouterLink :to="roleHomePath">{{ t("customers.backWorkbench") }}</RouterLink>
         <span aria-hidden="true">/</span>
@@ -147,7 +151,7 @@
     </div>
 
     <section class="workspace-layout">
-      <aside class="workspace-sidebar">
+      <aside v-if="!contentOnly" class="workspace-sidebar">
         <BrandLockup class="business-sidebar-brand" :href="roleHomePath" compact inverse company />
         <WorkspaceNavigation :role="currentUser?.role" />
         <button type="button" class="sidebar-profile-card" @click="openPersonalProfile">
@@ -284,10 +288,13 @@ import { markApiErrorHandled } from "../services/apiClient";
 import { ArrowRight, Bell } from "@element-plus/icons-vue";
 
 const props = defineProps({
+  contentOnly: Boolean,
   currentUser: { type: Object, default: null },
   announcementCount: { type: Number, default: 0 }
 });
 const emit = defineEmits(["logout", "user-updated", "open-announcements"]);
+const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 const {
   pageMessage,
@@ -514,8 +521,8 @@ const { restoreBatchTrackTask, toggleBatchTrackPanel } = shipmentOperations.batc
 const businessNavigation = useBusinessNavigation({
   modules: configuredBusinessModules,
   role: computed(() => props.currentUser?.role),
-  route: useRoute(),
-  router: useRouter(),
+  route,
+  router,
   menuItem,
   subView,
   selectedShipmentId,
@@ -741,7 +748,7 @@ function trackShipmentInWorkspace(shipment) {
 
 function openTrackingWorkspace(shipment = null) {
   const returnTo = businessNavigation.trackingReturnTo();
-  if (returnTo) window.location.assign(trackingWorkspaceLink({ returnTo, shipment }));
+  if (returnTo) void router.push(trackingWorkspaceLink({ returnTo, shipment }));
 }
 
 function openShipmentSupplement(shipment) {
@@ -1486,3 +1493,28 @@ button:disabled {
 </style>
 
 <style scoped src="../modules/shared/styles/businessWorkspace.css"></style>
+
+<style scoped>
+.customer-access-page.is-content-only {
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+.is-content-only > .workspace-layout {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.is-content-only .workspace-main {
+  min-width: 0;
+  min-height: 0;
+  padding: 28px;
+  margin: 0;
+  overflow: visible;
+}
+</style>

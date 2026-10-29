@@ -1,5 +1,5 @@
 <template>
-  <section class="public-service-workflow" data-public-reveal>
+  <section id="service-workflow" class="public-service-workflow" data-public-reveal>
     <div class="maritime-wrap">
       <header class="public-editorial-heading">
         <h2>{{ planning ? t("publicSite.planningDiagram") : t("publicSite.serviceSteps") }}</h2>

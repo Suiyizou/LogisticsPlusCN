@@ -239,6 +239,8 @@ function customerTrackingTarget() {
   if (target.origin !== window.location.origin) {
     throw new Error(t("login.customerTrackingSameOrigin"));
   }
+  // Customer sessions retain the dedicated tracking surface; the embedded workspace is employee-only.
+  if (target.pathname.startsWith("/workspace/tracking/")) target.pathname = "/tracking/";
   target.hash = "overview";
   return target.href;
 }

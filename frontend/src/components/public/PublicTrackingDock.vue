@@ -47,6 +47,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { t } from "../../i18n";
+import { trackingQueryEntry } from "../../public/serviceCatalog.js";
 import PublicSelect from "./PublicSelect.vue";
 const props = defineProps<{ trackingPath: string }>();
 const reference = ref("");
@@ -76,12 +77,11 @@ watch(carrier, () => {
 });
 function search() {
   if (!reference.value) return;
-  const target = new URL(props.trackingPath, window.location.origin);
+  const target = new URL(trackingQueryEntry(props.trackingPath), window.location.origin);
   target.searchParams.set("number", reference.value);
   target.searchParams.set("carrier", carrier.value);
   target.searchParams.set("type", referenceType.value);
   target.searchParams.set("channel", "AUTO");
-  target.hash = "tracking";
   window.location.assign(target.href);
 }
 </script>

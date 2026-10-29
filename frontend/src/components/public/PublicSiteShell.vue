@@ -12,5 +12,5 @@ import { currentLocale } from "../../i18n";
 import PublicSiteHeader from "./PublicSiteHeader.vue";
 import PublicSiteFooter from "./PublicSiteFooter.vue";
 defineProps<{ currentUser?: { role?: string } | null }>();
-const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
+const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/workspace/tracking/overview";
 </script>

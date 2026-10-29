@@ -22,11 +22,12 @@
               <span class="maritime-eyebrow">{{
                 service.id === "planning" ? "LOAD PLANNING" : service.id.toUpperCase()
               }}</span>
-              <h1>
+              <h1>{{ copy.title }}</h1>
+              <p class="public-hero-tagline">
                 {{
                   service.id === "planning" ? t("publicSite.editorial.planningHero") : copy.summary
                 }}
-              </h1>
+              </p>
               <p class="public-lead">{{ copy.intro }}</p>
               <div class="public-detail-actions">
                 <a
@@ -41,6 +42,36 @@
             </div>
           </div>
         </div>
+      </section>
+      <nav class="public-section-nav" :aria-label="labels.more">
+        <div class="maritime-wrap">
+          <a href="#service-overview">{{ labels.overview }}</a
+          ><a href="#service-capabilities">{{ t("publicSite.editorial.capabilities") }}</a
+          ><a href="#service-workflow">{{ t("publicSite.serviceSteps") }}</a
+          ><a href="#service-faq">{{ labels.faq }}</a>
+        </div>
+      </nav>
+      <section
+        id="service-overview"
+        class="public-service-overview maritime-wrap"
+        data-public-reveal
+      >
+        <div>
+          <span class="maritime-eyebrow">{{ labels.overview }}</span>
+          <h2>{{ copy.title }}</h2>
+          <p v-for="paragraph in detailContent?.overview" :key="paragraph">{{ paragraph }}</p>
+        </div>
+        <PublicLoadIllustration v-if="service.id === 'planning'" />
+        <figure v-else>
+          <img
+            :src="heroImage"
+            :alt="t('publicSite.' + service.image + 'ImageAlt')"
+            width="1280"
+            height="564"
+            loading="lazy"
+          />
+          <figcaption>{{ copy.boundary }}</figcaption>
+        </figure>
       </section>
       <PublicServiceWorkflow
         :planning="service.layout === 'planning'"
@@ -231,7 +262,7 @@
               >{{ t("publicSite.bookingAction") }} <span aria-hidden="true">↗</span></a
             ><small>{{ t("publicSite.bookingNote") }}</small>
           </section>
-          <section class="public-capability-table" data-public-reveal>
+          <section id="service-capabilities" class="public-capability-table" data-public-reveal>
             <header class="public-editorial-heading">
               <h2>{{ t("publicSite.editorial.capabilities") }}</h2>
               <span></span>
@@ -282,6 +313,13 @@
           >
         </aside>
       </div>
+      <PublicServiceEditorial
+        :service-id="service.id"
+        :image="heroImage"
+        :image-alt="t('publicSite.' + service.image + 'ImageAlt')"
+        :entry="entry"
+        :action="entry.allowed ? copy.cta : t('publicSite.availableWorkspaces')"
+      />
       <section class="public-related" data-public-reveal>
         <div class="maritime-wrap">
           <header>
@@ -327,14 +365,24 @@ import PublicSiteShell from "./PublicSiteShell.vue";
 import PublicTrackingDock from "./PublicTrackingDock.vue";
 import ServiceIcon from "./ServiceIcon.vue";
 import PublicServiceWorkflow from "./PublicServiceWorkflow.vue";
+import PublicServiceEditorial from "./PublicServiceEditorial.vue";
+import PublicLoadIllustration from "./PublicLoadIllustration.vue";
+import {
+  getPublicDetailContent,
+  getPublicDetailLabels
+} from "../../i18n/publicServiceDetailMessages.js";
 import { usePublicReveal } from "./usePublicReveal.js";
 const props = defineProps<{ currentUser?: { role?: string } | null }>();
 const route = useRoute(),
   page = ref<HTMLElement | null>(null);
-const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
+const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/workspace/tracking/overview";
 const service = computed(() => findPublicService(String(route.params.slug || "")));
 const copy = computed(() =>
   service.value ? getPublicServiceCopy(service.value.id, currentLocale.value) : null
+);
+const labels = computed(() => getPublicDetailLabels(currentLocale.value));
+const detailContent = computed(() =>
+  getPublicDetailContent(service.value?.id || "", currentLocale.value)
 );
 const text = computed(() => getPublicCopy(currentLocale.value));
 const entry = computed(() =>

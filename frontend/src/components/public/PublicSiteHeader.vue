@@ -31,7 +31,8 @@
           ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
         </button>
         <a :href="trackingPath">{{ t("publicSite.navTracking") }}</a
-        ><a href="/planner/cargos">{{ t("publicSite.navPlanning") }}</a>
+        ><a href="/planner/cargos">{{ t("publicSite.navPlanning") }}</a
+        ><a href="/services/company">{{ labels.company }}</a>
       </nav>
       <div class="maritime-header__actions">
         <LanguageSwitcher /><a
@@ -64,17 +65,19 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, useId } from "vue";
+import { computed, onMounted, onUnmounted, ref, useId } from "vue";
 import PublicBrand from "./PublicBrand.vue";
 import { useRoute } from "vue-router";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
 import PublicMegaMenu from "./PublicMegaMenu.vue";
-import { t } from "../../i18n";
+import { getPublicDetailLabels } from "../../i18n/publicServiceDetailMessages.js";
+import { currentLocale, t } from "../../i18n";
 defineProps<{
   trackingPath: string;
   currentUser?: { role?: string } | null;
   entryLabel?: string;
 }>();
+const labels = computed(() => getPublicDetailLabels(currentLocale.value));
 const open = ref(false),
   compact = ref(false);
 const route = useRoute();

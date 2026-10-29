@@ -3,17 +3,15 @@
     <LanguageSwitcher v-if="!authChecked" class="global-language-switcher" />
     <LoginPage v-if="authChecked && !currentUser" @logged-in="handleLoggedIn" />
     <SystemWaitOverlay v-else-if="!authChecked" :visible="true" :message="t('app.loadingAuth')" />
-    <RouterView v-else-if="authorizedPage" v-slot="{ Component }">
-      <component
-        :is="Component"
-        :key="workspaceSessionKey(currentUser)"
-        :current-user="currentUser"
-        :announcement-count="unreadAnnouncementCount"
-        @logout="handleLogout"
-        @user-updated="handleUserUpdated"
-        @open-announcements="openAnnouncements"
-      />
-    </RouterView>
+    <WorkspaceShell
+      v-else-if="authorizedPage"
+      :key="workspaceSessionKey(currentUser)"
+      :current-user="currentUser"
+      :announcement-count="unreadAnnouncementCount"
+      @logout="handleLogout"
+      @user-updated="handleUserUpdated"
+      @open-announcements="openAnnouncements"
+    />
     <SystemWaitOverlay v-else :visible="true" :message="t('app.loadingPage')" />
     <SystemAnnouncementDialog
       v-if="authChecked && currentUser"
@@ -27,6 +25,7 @@
 
 <script setup>
 import "./components/workspace/workspaceMotion.css";
+import WorkspaceShell from "./components/workspace/WorkspaceShell.vue";
 import {
   computed,
   defineAsyncComponent,

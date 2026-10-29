@@ -1,6 +1,6 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-ARG VITE_TRACKING_WORKBENCH_URL=/tracking/
+ARG VITE_TRACKING_WORKBENCH_URL=/workspace/tracking/overview
 ENV VITE_TRACKING_WORKBENCH_URL=$VITE_TRACKING_WORKBENCH_URL
 COPY frontend/package*.json ./
 RUN npm ci

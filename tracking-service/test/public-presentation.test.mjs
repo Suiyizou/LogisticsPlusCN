@@ -552,6 +552,7 @@ test("the batch entry uses the existing platform navigation without opening or s
     };
     const context = vm.createContext({
       document: { querySelectorAll: () => [link], body: { classList: { contains: () => false } } },
+      workspaceBridge: { embedded: false },
       batchWorkspaceTrigger: link,
       canOpenBatchWorkspace: () => allowed,
       showPlatformRouteWait: (key) => waits.push(key),

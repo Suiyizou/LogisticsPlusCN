@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { createMemoryHistory, createRouter } from "vue-router";
-import { createApplicationRoutes } from "../src/modules/routes.js";
+import { canonicalSmartImportLocation, createApplicationRoutes } from "../src/modules/routes.js";
 
 const preferencesSource = readFileSync(
   new URL("../src/components/workspace/plannerPreferences.ts", import.meta.url),
@@ -94,4 +94,42 @@ test("storage read/write failures leave the workspace usable", () => {
   assert.doesNotThrow(() => preferences.saveCargoView("overview"));
   assert.doesNotThrow(() => preferences.saveScenePreferences(preferences.defaultScenePreferences));
   delete globalThis.localStorage;
+});
+
+test("legacy inline smart-import URLs replace the cargo route while retaining query and hash", async () => {
+  const views = Object.fromEntries(
+    ["planner", "operations", "workbenches", "admin", "business", "legacyBusiness"].map((name) => [
+      name,
+      { render: () => null }
+    ])
+  );
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: createApplicationRoutes(views, [])
+  });
+  router.beforeEach(canonicalSmartImportLocation);
+  await router.push("/workbenches");
+  await router.push("/planner/cargos");
+  await router.push("/planner/cargos?import=smart&carrier=MSC&note=keep%20me#review");
+  assert.equal(router.currentRoute.value.path, "/smart-import/excel");
+  assert.deepEqual(router.currentRoute.value.query, { carrier: "MSC", note: "keep me" });
+  assert.equal(router.currentRoute.value.hash, "#review");
+  assert.equal(router.currentRoute.value.name, "planner-import-excel");
+  router.back();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    router.currentRoute.value.path,
+    "/workbenches",
+    "canonicalizing replaces the old cargo entry instead of adding it to history"
+  );
+  const freshRouter = createRouter({
+    history: createMemoryHistory(),
+    routes: createApplicationRoutes(views, [])
+  });
+  await freshRouter.push("/planner/cargos?import=smart&source=reload#sheet");
+  assert.equal(
+    freshRouter.currentRoute.value.fullPath,
+    "/smart-import/excel?source=reload#sheet",
+    "the route factory also canonicalizes a direct legacy reload"
+  );
 });

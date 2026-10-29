@@ -122,7 +122,7 @@ export async function sendStaticContent(request, response, content, options) {
   if (COMPRESSIBLE_EXTENSIONS.has(extension)) headers.Vary = "Accept-Encoding";
 
   if (request.headers["if-none-match"] === etag) {
-    setCommonHeaders(response);
+    setCommonHeaders(response, { trackingDocument: extension === ".html" });
     response.writeHead(304, headers);
     response.end();
     return;
@@ -131,7 +131,7 @@ export async function sendStaticContent(request, response, content, options) {
   const representation = await compressStaticContent(request, content, extension, etag);
   if (representation.encoding) headers["Content-Encoding"] = representation.encoding;
   headers["Content-Length"] = representation.content.length;
-  setCommonHeaders(response);
+  setCommonHeaders(response, { trackingDocument: extension === ".html" });
   response.writeHead(200, headers);
   response.end(request.method === "HEAD" ? undefined : representation.content);
 }

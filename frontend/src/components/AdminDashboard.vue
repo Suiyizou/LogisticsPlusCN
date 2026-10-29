@@ -18,6 +18,7 @@
   <AdminConsoleShell
     v-else
     :current-user="currentUser"
+    :content-only="contentOnly"
     :display-name="displayAdminName"
     :nav-groups="adminNavGroups"
     :active-page="activeAdminPage"
@@ -138,6 +139,7 @@ import { saveSession } from "../services/authSession.js";
 import { useReducedMotion } from "../composables/useReducedMotion.js";
 import { useTablePageTransition } from "../features/tables/useTablePageTransition.js";
 const props = defineProps({
+  contentOnly: Boolean,
   currentUser: { type: Object, default: null },
   announcementCount: { type: Number, default: 0 }
 });

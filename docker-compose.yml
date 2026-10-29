@@ -153,7 +153,7 @@ services:
       context: .
       dockerfile: docker/frontend.Dockerfile
       args:
-        VITE_TRACKING_WORKBENCH_URL: ${VITE_TRACKING_WORKBENCH_URL:-/tracking/}
+        VITE_TRACKING_WORKBENCH_URL: ${VITE_TRACKING_WORKBENCH_URL:-/workspace/tracking/overview}
     image: cargo-planner-frontend:${IMAGE_TAG:-0.1.0}
     container_name: cargo-planner-frontend
     ports:

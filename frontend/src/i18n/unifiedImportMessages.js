@@ -1,4 +1,40 @@
 const zh = {
+  textEditor: {
+    label: "货物明细",
+    hint: "请保留独立包装编号、尺寸单位、包装数和单包装毛重，便于逐项核对。"
+  },
+  eyebrow: "SMART IMPORT",
+  reviewBadge: "逐项审阅后导入",
+  stepsLabel: "导入步骤",
+  reviewStep: "核对识别结果",
+  importStep: "确认加入货物",
+  browse: "浏览文件",
+  changeSource: "更换文件",
+  replaceSource: "点击或拖入文件以更换，已有识别结果将重新核对。",
+  optional: "按需展开",
+  excelGuidance:
+    "请保留原表标题、尺寸单位和合计行。上传后可预览原工作簿，逐项核实包装与重量，再确认导入。",
+  modes: {
+    excel: {
+      title: "Excel 智能导入",
+      description: "从原始装箱单开始，识别包装明细，核对尺寸、数量与毛重。",
+      choose: "选择装箱单，或将文件拖到这里",
+      support: "支持 XLSX / XLS / CSV / TSV · 保留原始表格与单位",
+      sourceStep: "上传原始表格"
+    },
+    image: {
+      title: "图片智能导入",
+      description: "上传清晰完整的装箱单图片，对照原图审阅识别结果。",
+      choose: "选择装箱单图片，或将图片拖到这里",
+      support: "支持 PNG / JPEG · 单张不超过 5 MB",
+      sourceStep: "上传完整图片"
+    },
+    text: {
+      title: "文本智能导入",
+      description: "粘贴货物明细，保留尺寸单位与包装信息，识别后逐项核对。",
+      sourceStep: "粘贴货物文本"
+    }
+  },
   title: "智能导入",
   description:
     "统一上传 Excel 或完整清晰的装箱单截图，系统按文件类型识别。所有结果均须对照来源审阅后导入。",
@@ -6,19 +42,19 @@ const zh = {
   support: "XLSX / XLS / CSV / TSV · PNG / JPEG（图片 ≤5 MB）",
   invalid: "请选择支持的 Excel 文件或不超过 5 MB 的 PNG/JPEG 图片。",
   selected: "当前来源",
-  auxiliary: "附加原表截图交叉核对",
+  auxiliary: "附加原表截图核对",
   auxiliaryHint:
-    "Excel 的单位、合并行或包装归属不确定时，可附加同一完整表格的截图。两路必须逐件匹配；截图不能解除原 Excel 的阻断。多张工作表请提供涵盖全部包装的清晰截图，匹配不全将阻断。",
+    "如需核对单位、合并行或包装归属，可附上同一装箱单的完整截图。Excel 与图片中的包装必须逐件对应；任何一方有差异或缺失都不能导入。多张工作表需涵盖全部包装。",
   chooseAuxiliary: "选择核对截图",
   removeAuxiliary: "移除核对截图",
-  noVisual: "尚未进行截图交叉核对。Excel 当前仅有工作簿证据审阅；没有视觉验证结论。",
+  noVisual: "未附截图时，仅核对原工作簿；上传截图后才会增加原图比对。",
   pending: "等待两路识别完成，当前不能导入。",
-  matched: "两路候选字段一致",
-  matchedHint: "一致仅说明两路识别结果相符，不证明模型准确；仍须人工对照原文件。",
-  blocked: "两路结果有差异，导入已阻断",
+  matched: "Excel 与图片字段一致",
+  matchedHint: "识别结果一致仍须人工核实。请对照原文件检查每件包装，确认尺寸、数量和毛重。",
+  blocked: "Excel 与图片尚未核对通过，暂不能导入",
   confirm:
     "我已对照原 Excel 和截图，核实逐件包号、源行、厘米尺寸、包装数、单包装公斤毛重及原单合计。",
-  sourceTotals: "两路原单合计各自保留，缺失仍为未知，不使用明细计算合计补齐。",
+  sourceTotals: "Excel 和原图的合计分别保留；原单没有注明的合计将显示为未知，不以计算值代替。",
   workbook: "Excel",
   image: "截图",
   field: "字段（cm / kg）",
@@ -61,6 +97,45 @@ const zh = {
   }
 };
 const en = {
+  textEditor: {
+    label: "Cargo details",
+    hint: "Keep package IDs, dimension units, package counts and gross weight per package in the original text."
+  },
+  eyebrow: "SMART IMPORT",
+  reviewBadge: "Review before import",
+  stepsLabel: "Import steps",
+  reviewStep: "Review recognized details",
+  importStep: "Confirm cargo import",
+  browse: "Browse files",
+  changeSource: "Change file",
+  replaceSource: "Click or drop a replacement. A new source requires a fresh review.",
+  optional: "Optional",
+  excelGuidance:
+    "Keep original headers, units and totals. Preview the source workbook and verify packages and gross weights before importing.",
+  modes: {
+    excel: {
+      title: "Excel smart import",
+      description:
+        "Start with the original packing list. Recognize package details and verify dimensions, counts and gross weights.",
+      choose: "Choose a packing list or drop it here",
+      support: "XLSX / XLS / CSV / TSV · Keep original tables and units",
+      sourceStep: "Upload original workbook"
+    },
+    image: {
+      title: "Image smart import",
+      description:
+        "Upload a complete, readable packing-list image and review every recognized value against it.",
+      choose: "Choose a packing-list image or drop it here",
+      support: "PNG / JPEG · Up to 5 MB per image",
+      sourceStep: "Upload complete image"
+    },
+    text: {
+      title: "Text smart import",
+      description:
+        "Paste cargo details with their units and packaging information, then review the recognized results.",
+      sourceStep: "Paste cargo details"
+    }
+  },
   title: "Smart import",
   description:
     "Upload an Excel file or a complete, readable packing-list image. The file type selects the recognition workflow. Review every result against its source before import.",

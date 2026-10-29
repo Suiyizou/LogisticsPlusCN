@@ -1,6 +1,14 @@
 import { businessModules, validateModules } from "./registry.js";
 import { createPublicServiceRoutes } from "../public/routes.js";
 
+// Canonicalize legacy inline-import links before mounting the cargo-list page.
+export function canonicalSmartImportLocation(to) {
+  if (to.path !== "/planner/cargos" || to.query.import !== "smart") return;
+  const query = { ...to.query };
+  delete query.import;
+  return { path: "/smart-import/excel", query, hash: to.hash, replace: true };
+}
+
 // Components are supplied by the composition root, so the registry can be tested without a browser.
 export function createApplicationRoutes(
   views,
@@ -79,6 +87,7 @@ export function createApplicationRoutes(
   if (customerPages.length && !views.customer) throw Error("Missing customer surface host");
   const routes = [
     ...createPublicServiceRoutes(),
+    { path: "/", name: "landing", component: views.planner, meta: { surface: "public" } },
     ...(customerPages.length
       ? [
           {
@@ -91,35 +100,44 @@ export function createApplicationRoutes(
           }
         ]
       : []),
-    ...[
-      ["/", "landing"],
-      ["/home", "home"],
-      ["/planner/config", "planner-config"],
-      ["/planner/cargos", "planner-cargos"],
-      ["/planner/results", "planner-results"],
-      ["/containers", "containers"],
-      ["/algorithm", "algorithm"]
-    ].map(([path, name]) => ({
-      path,
-      name,
-      component: views.planner,
-      meta: { surface: "planner" }
-    })),
-    { path: "/planner", redirect: "/planner/cargos" },
-    ...["/excel", "/smart-import"].map((path) => ({
-      path,
-      redirect: (to) => ({
-        path: "/planner/cargos",
-        query: { ...to.query, import: "smart" },
-        hash: to.hash
-      })
-    })),
     {
       path: "/operations",
       component: views.operations,
       redirect: "/workbenches",
       meta: { surface: "operations" },
       children: [
+        ...[
+          ["/home", "home"],
+          ["/planner/config", "planner-config"],
+          ["/planner/cargos", "planner-cargos"],
+          ["/planner/results", "planner-results"],
+          ["/smart-import/excel", "planner-import-excel"],
+          ["/smart-import/image", "planner-import-image"],
+          ["/smart-import/text", "planner-import-text"],
+          ["/containers", "containers"],
+          ["/algorithm", "algorithm"]
+        ].map(([path, name]) => ({
+          path,
+          name,
+          component: views.planner,
+          ...(name === "planner-cargos" ? { beforeEnter: canonicalSmartImportLocation } : {}),
+          meta: { surface: "planner" }
+        })),
+        { path: "/planner", redirect: "/planner/cargos" },
+        ...["/excel", "/smart-import"].map((path) => ({
+          path,
+          redirect: (to) => ({
+            path: "/smart-import/excel",
+            query: { ...to.query },
+            hash: to.hash
+          })
+        })),
+        ...["overview", "query"].map((view) => ({
+          path: `/workspace/tracking/${view}`,
+          name: `tracking-${view}`,
+          component: { render: () => null },
+          meta: { workspace: "tracking", trackingView: view }
+        })),
         { path: "/workbenches", name: "workbenches", component: views.workbenches },
         {
           path: "/admin",

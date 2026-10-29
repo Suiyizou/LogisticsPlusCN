@@ -192,7 +192,7 @@ function coordinator() {
     .map((node) => node.getText(ast))
     .join("\n");
   const events = [],
-    props = reactive({ reviewSource: null, currentCargoCount: 0 });
+    props = reactive({ reviewSource: null, currentCargoCount: 0, importMode: "excel" });
   const scope = effectScope();
   const api = scope.run(() =>
     new Function(
@@ -207,7 +207,7 @@ function coordinator() {
       "crossCheckImportEvidence",
       "taskReconciliation",
       body +
-        "\nreturn { primaryFile, kind, auxiliaryFile, crossConfirmed, crossBlocked, crossReview, selectPrimary, selectAuxiliary, updateWorkbookReview, updateImageReview, forwardWorkbookImport, removeAuxiliary }; "
+        "\nreturn { primaryFile, kind, auxiliaryFile, crossConfirmed, crossBlocked, crossReview, selectPrimary, selectAuxiliary, updateWorkbookReview, updateImageReview, forwardWorkbookImport, forwardImageImport, forwardTextImport, removeAuxiliary }; "
     )(
       () => props,
       () =>
@@ -223,7 +223,7 @@ function coordinator() {
       taskReconciliation
     )
   );
-  return { api, events, stop: () => scope.stop() };
+  return { api, props, events, stop: () => scope.stop() };
 }
 const fileEvent = (file) => ({ target: { files: [file], value: "selected" } });
 test("actual coordinator blocks until image completes and human confirms, resets confirmation on changes, preserves both reports", async () => {
@@ -251,12 +251,56 @@ test("actual coordinator blocks until image completes and human confirms, resets
   h.api.updateImageReview({ ...image, rows: [{ ...image.rows[0], weightKg: 61 }] });
   assert.equal(h.api.crossConfirmed.value, false);
   assert.equal(h.api.crossBlocked.value, true);
+  h.props.importMode = "image";
   h.api.selectPrimary(fileEvent({ name: "other.jpg", type: "image/jpeg", size: 100 }));
   await nextTick();
   assert.equal(h.api.kind.value, "image");
   assert.equal(h.api.auxiliaryFile.value, null);
   h.stop();
 });
+test("dedicated import modes reject other source types, reset evidence and only forward their own import path", async () => {
+  const h = coordinator();
+  const workbook = { name: "source.xlsx", size: 100 };
+  const image = { name: "source.png", type: "image/png", size: 100 };
+  const payload = { cargos: [], mode: "append" };
+  h.api.selectPrimary(fileEvent(image));
+  assert.equal(h.api.primaryFile.value, null, "Excel page rejects image as its primary source");
+  h.api.selectPrimary(fileEvent(workbook));
+  h.api.selectAuxiliary(fileEvent(image));
+  h.api.crossConfirmed.value = true;
+  h.props.importMode = "image";
+  assert.equal(h.api.primaryFile.value, null);
+  assert.equal(h.api.auxiliaryFile.value, null);
+  assert.equal(h.api.crossConfirmed.value, false);
+  h.api.selectPrimary(fileEvent(workbook));
+  assert.equal(h.api.primaryFile.value, null, "Image page rejects a workbook");
+  h.api.selectPrimary(fileEvent(image));
+  assert.equal(h.api.primaryFile.value.name, image.name);
+  h.api.selectAuxiliary(fileEvent(image));
+  assert.equal(h.api.auxiliaryFile.value, null, "Only Excel can add comparison evidence");
+  h.api.forwardWorkbookImport(payload);
+  h.api.forwardTextImport(payload);
+  assert.equal(h.events.length, 0);
+  h.api.forwardImageImport(payload);
+  assert.equal(h.events.length, 1);
+  h.props.importMode = "text";
+  h.api.selectPrimary(fileEvent(workbook));
+  assert.equal(h.api.primaryFile.value, null, "Text page does not accept primary files");
+  h.api.forwardImageImport(payload);
+  h.api.forwardWorkbookImport(payload);
+  assert.equal(h.events.length, 1);
+  h.api.forwardTextImport(payload);
+  assert.equal(h.events.length, 2);
+  h.props.reviewSource = { file: workbook };
+  await nextTick();
+  assert.equal(
+    h.api.primaryFile.value,
+    null,
+    "Workbook review handoffs cannot replace a text source"
+  );
+  h.stop();
+});
+
 test("unified entry and both review components compile; legacy quick controls are no longer offered", () => {
   for (const file of [
     "UnifiedSmartImport.vue",
@@ -283,8 +327,9 @@ test("unified entry and both review components compile; legacy quick controls ar
   assert.match(excel, /!props.externalImportBlocked/);
   const app = readFileSync(new URL("../src/App.vue", import.meta.url), "utf8");
   assert.doesNotMatch(app, /:on-change="handleWorkbookQuickUpload"|v-model="smartImportKind"/);
-  assert.equal((app.match(/<UnifiedSmartImport/g) || []).length, 2);
-  assert.match(app, /route.query.import/);
+  assert.equal((app.match(/<UnifiedSmartImport/g) || []).length, 1);
+  assert.doesNotMatch(app, /embedded-smart-import/);
+  assert.match(app, /v-else-if="isImportPage"/);
 });
 function deferred() {
   let resolve;
@@ -450,4 +495,23 @@ test("unowned workbook view clears its prior file identity before recognizing pa
   await textRun;
   assert.equal(h.recognitionAgentTask.value.cleanedRows[0].name, "B");
   assert.equal(h.sourceWorkbookFile.value, null);
+});
+
+test("text import cannot switch to a workbook through file drop or direct recognition submission", async () => {
+  const h = workbookRequests({ sourceFile: null, recognitionInput: "text" });
+  const file = { name: "unrelated.xlsx", size: 100 };
+  assert.equal(await h.run(file), false);
+  assert.equal(await h.submit({ file }), false);
+  h.handlePreciseFile(fileEvent(file));
+  await h.handlePreciseDrop({ dataTransfer: { files: [file] } });
+  assert.equal(h.requests.size, 0);
+  assert.equal(h.sourceWorkbookFile.value, null);
+  const run = h.submit({ textOverride: "P1 120 x 100 x 52.5 cm, 1 package, gross 60 kg" });
+  await new Promise(setImmediate);
+  assert.equal(h.requests.size, 1);
+  h.requests
+    .get("pasted-text")
+    .resolve({ status: "SUCCEEDED", cleanedRows: [{ name: "text cargo" }] });
+  await run;
+  assert.equal(h.recognitionAgentTask.value.cleanedRows[0].name, "text cargo");
 });

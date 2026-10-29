@@ -3,13 +3,14 @@
     <div class="maritime-wrap">
       <div class="public-footer-top">
         <div>
-          <PublicBrand inverse compact />
+          <PublicBrand compact />
           <p>{{ t("publicSite.footerCompany") }}</p>
           <span>{{ t("publicSite.editorial.companyEnglish") }}</span>
         </div>
         <nav :aria-label="t('publicSite.footerPlatform')">
           <h2>{{ t("publicSite.footerPlatform") }}</h2>
-          <a href="/services">{{ t("publicSite.footerAll") }}</a
+          <a href="/services/company">{{ labels.company }}</a
+          ><a href="/services">{{ t("publicSite.footerAll") }}</a
           ><a href="/services/transport">{{ t("publicSite.services.transport.title") }}</a
           ><a href="/services/planning">{{ t("publicSite.services.planning.title") }}</a
           ><a href="/services/customerportal">{{
@@ -36,9 +37,14 @@
   </footer>
 </template>
 <script setup lang="ts">
+import { computed } from "vue";
+import { getPublicDetailLabels } from "../../i18n/publicServiceDetailMessages.js";
 import PublicBrand from "./PublicBrand.vue";
 import ServiceIcon from "./ServiceIcon.vue";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
-import { t } from "../../i18n";
-withDefaults(defineProps<{ trackingPath?: string }>(), { trackingPath: "/tracking/" });
+import { currentLocale, t } from "../../i18n";
+const labels = computed(() => getPublicDetailLabels(currentLocale.value));
+withDefaults(defineProps<{ trackingPath?: string }>(), {
+  trackingPath: "/workspace/tracking/overview"
+});
 </script>

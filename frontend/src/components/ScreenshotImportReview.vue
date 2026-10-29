@@ -1,9 +1,16 @@
 <template>
   <section class="screenshot-import" :aria-label="copy.title" data-i18n-ignore>
-    <p>{{ copy.description }}</p>
+    <p v-if="!coordinated">{{ copy.description }}</p>
     <p class="screenshot-note">{{ copy.caution }}</p>
+    <figure v-if="previewUrl" class="screenshot-source-frame">
+      <figcaption>
+        <span>{{ copy.preview }}</span
+        ><strong>{{ file?.name }}</strong>
+      </figcaption>
+      <img class="screenshot-source" :src="previewUrl" :alt="copy.preview" />
+    </figure>
     <div class="screenshot-actions">
-      <label v-if="!sourceFile" class="screenshot-picker">
+      <label v-if="!sourceFile && !coordinated" class="screenshot-picker">
         {{ copy.choose }}
         <input
           class="screenshot-file-input"
@@ -13,12 +20,14 @@
           @change="selectFile"
         />
       </label>
-      <span v-if="file" class="screenshot-filename" :title="file.name">{{ file.name }}</span>
+      <span v-if="file && !coordinated" class="screenshot-filename" :title="file.name">{{
+        file.name
+      }}</span>
       <button type="button" :disabled="!file || busy" @click="recognize">{{ copy.start }}</button>
       <button v-if="busy" type="button" @click="cancel">{{ copy.cancel }}</button>
     </div>
     <p v-if="status" role="status">{{ status }}</p>
-    <img v-if="previewUrl" class="screenshot-source" :src="previewUrl" :alt="copy.preview" />
+
     <template v-if="task">
       <p v-if="!review.complete" role="alert">{{ copy.incomplete }}</p>
       <p v-if="!review.sourceTotalsKnown" class="screenshot-note">{{ copy.totalsUnknown }}</p>
@@ -145,6 +154,7 @@ import { isSessionExpired, storedToken } from "../services/authSession";
 
 const props = defineProps({
   sourceFile: { type: Object, default: null },
+  coordinated: { type: Boolean, default: false },
   reviewOnly: { type: Boolean, default: false },
   externalImportBlocked: { type: Boolean, default: false }
 });
@@ -306,7 +316,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 16px;
   min-width: 0;
-  color: var(--text-primary, #21334a);
+  color: #21334a;
 }
 .screenshot-import p {
   margin: 0;
@@ -350,7 +360,9 @@ onBeforeUnmount(() => {
 }
 .screenshot-source {
   max-width: 100%;
-  max-height: 480px;
+  max-height: 520px;
+  width: 100%;
+  display: block;
   object-fit: contain;
   justify-self: start;
   border: 1px solid #d6e4ed;
@@ -399,5 +411,95 @@ button,
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.screenshot-source-frame {
+  margin: 0;
+  border: 1px solid #dce5ee;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f4f7fb;
+}
+.screenshot-source-frame figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  background: #fff;
+  color: #62778c;
+  font-size: 12px;
+  border-bottom: 1px solid #e1e8f0;
+}
+.screenshot-source-frame figcaption strong {
+  color: #2b4259;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.screenshot-source-frame .screenshot-source {
+  border: 0;
+  border-radius: 0;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.screenshot-note {
+  color: #5c7187;
+  font-size: 13px;
+  line-height: 1.75;
+  background: #f7fafe;
+  border-color: #e0e8f0;
+}
+.screenshot-actions button:first-of-type {
+  color: #fff;
+  background: #326aa5;
+  border-color: #326aa5;
+}
+.screenshot-actions button {
+  min-height: 44px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease;
+}
+.screenshot-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.screenshot-table-wrap {
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+}
+th {
+  color: #51687f;
+  background: #f4f7fb;
+  font-size: 12px;
+  font-weight: 600;
+}
+td input:not([type="checkbox"]),
+td textarea,
+td select {
+  background: #fff;
+  color: #233c54;
+  border: 1px solid #cddae7;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #447db7;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .screenshot-actions button {
+    transition: none;
+  }
+  .screenshot-actions button:hover:not(:disabled) {
+    transform: none;
+  }
 }
 </style>

@@ -1,6 +1,6 @@
 <template>
-  <main class="workbench-portal" data-i18n-ignore>
-    <aside class="portal-sidebar">
+  <main class="workbench-portal" :class="{ 'is-content-only': contentOnly }" data-i18n-ignore>
+    <aside v-if="!contentOnly" class="portal-sidebar">
       <BrandLockup href="/workbenches" compact inverse />
       <p class="portal-sidebar-label">{{ t("maritime.operations") }}</p>
       <WorkspaceNavigation :role="currentUser?.role" />
@@ -9,7 +9,7 @@
         ><small>{{ roleLabel }}</small>
       </div>
     </aside>
-    <header class="portal-header">
+    <header v-if="!contentOnly" class="portal-header">
       <span class="portal-header-title">{{ t("maritime.workspace") }}</span>
 
       <div class="portal-header-actions">
@@ -116,7 +116,6 @@
             ]"
             :action="wt('workbenchPlannerAction')"
             to="/planner/cargos"
-            new-tab
           />
           <WorkbenchEntryCard
             index="02"
@@ -130,8 +129,7 @@
               t('portal.tracking.featureChannels')
             ]"
             :action="wt('workbenchTrackingAction')"
-            :href="trackingWorkbenchUrl"
-            new-tab
+            to="/workspace/tracking/overview"
           />
           <WorkbenchEntryCard
             v-if="['BUSINESS', 'ADMIN', 'OVERSEA_AGENT'].includes(currentUser?.role)"
@@ -299,6 +297,7 @@ import { changeOwnPassword, updateOwnProfile } from "../services/adminApi";
 import { saveStoredUser } from "../services/authSession";
 
 const props = defineProps({
+  contentOnly: Boolean,
   currentUser: { type: Object, default: null },
   announcementCount: { type: Number, default: 0 }
 });
@@ -317,7 +316,6 @@ const passwordForm = reactive({
 });
 const profileForm = reactive({ displayName: "" });
 
-const trackingWorkbenchUrl = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
 const displayName = computed(
   () => props.currentUser?.displayName || props.currentUser?.username || t("portal.operator")
 );
@@ -1222,5 +1220,23 @@ async function submitPasswordChange() {
     min-width: 0;
     width: 100%;
   }
+}
+</style>
+
+<style scoped>
+.workbench-portal.is-content-only {
+  display: block;
+  min-height: 0;
+  background: transparent;
+}
+.is-content-only .portal-content {
+  padding: 28px;
+}
+.is-content-only .portal-content :deep(.workspace-page-header__title) {
+  font-size: 28px;
+  line-height: 1.4;
+}
+.is-content-only .portal-workbench-section {
+  min-width: 0;
 }
 </style>

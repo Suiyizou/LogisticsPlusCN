@@ -19,5 +19,5 @@ export function trackingWorkspaceLink({ returnTo, shipment }) {
     parameters.set("type", reference.type);
     parameters.set("number", reference.number);
   }
-  return `/tracking/?${parameters.toString()}${reference.number ? "#tracking" : "#overview"}`;
+  return `/workspace/tracking/${reference.number ? "query" : "overview"}?${parameters.toString()}`;
 }

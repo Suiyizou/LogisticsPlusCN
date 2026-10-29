@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
-import { createApplicationRoutes } from "./modules/routes.js";
+import { canonicalSmartImportLocation, createApplicationRoutes } from "./modules/routes.js";
 import { applicationViews } from "./modules/views.js";
 import { configuredPlatformModules } from "./modules/configuredRegistry.js";
 
@@ -16,7 +16,9 @@ export const router = createRouter({
   history: createWebHistory("/"),
   routes: createApplicationRoutes(applicationViews, configuredPlatformModules)
 });
-router.beforeEach(() => {
+router.beforeEach((to) => {
+  const canonicalImport = canonicalSmartImportLocation(to);
+  if (canonicalImport) return canonicalImport;
   routeLoading.value = true;
   routeLoadError.value = null;
 });

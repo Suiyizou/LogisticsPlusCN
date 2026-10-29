@@ -27,12 +27,6 @@ const copy = computed(
   () => workspaceNavigationMessages[currentLocale.value] || workspaceNavigationMessages["en-US"]
 );
 const role = computed(() => props.role);
-const trackingBase = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/tracking/";
-function trackingHref(view) {
-  const url = new URL(trackingBase, window.location.origin);
-  url.hash = view;
-  return url.href;
-}
 const groups = computed(() => {
   if (!["ADMIN", "BUSINESS", "OVERSEA_AGENT"].includes(role.value)) return [];
   const business = modulesForRole(role.value, configuredPlatformModules);
@@ -42,8 +36,8 @@ const groups = computed(() => {
       key: "tracking",
       icon: Location,
       items: [
-        { key: "overview", label: copy.value.overview, href: trackingHref("overview") },
-        { key: "query", label: copy.value.query, href: trackingHref("tracking") }
+        { key: "overview", label: copy.value.overview, to: "/workspace/tracking/overview" },
+        { key: "query", label: copy.value.query, to: "/workspace/tracking/query" }
       ]
     },
     {
@@ -51,7 +45,15 @@ const groups = computed(() => {
       icon: Box,
       items: [
         { key: "cargos", label: copy.value.cargos, to: "/planner/cargos" },
-        { key: "smart-import", label: copy.value.smartImport, to: "/planner/cargos?import=smart" },
+        {
+          key: "smart-import",
+          label: copy.value.smartImport,
+          children: [
+            { key: "import-excel", label: copy.value.importExcel, to: "/smart-import/excel" },
+            { key: "import-image", label: copy.value.importImage, to: "/smart-import/image" },
+            { key: "import-text", label: copy.value.importText, to: "/smart-import/text" }
+          ]
+        },
         {
           key: "results",
           label: copy.value.results,
@@ -98,8 +100,7 @@ const groups = computed(() => {
 const currentPath = computed(() => props.activeIndex || route.path);
 function isCurrent(item) {
   if (props.activeAdminPage && item.adminKey) return item.adminKey === props.activeAdminPage;
-  if (item.key === "smart-import")
-    return route.path === "/planner/cargos" && route.query.import === "smart";
+  if (item.children) return item.children.some(isCurrent);
   if (item.key === "cargos" && route.query.import === "smart") return false;
   return item.to && (currentPath.value === item.to || currentPath.value.startsWith(`${item.to}/`));
 }
@@ -109,7 +110,10 @@ watch(
   () => [currentPath.value, props.activeAdminPage, groups.value],
   () => {
     const current = groups.value.find((group) => group.items.some(isCurrent));
-    if (current) openGroups.value = new Set([...openGroups.value, current.key]);
+    if (current) {
+      const nested = current.items.find((item) => item.children?.some(isCurrent));
+      openGroups.value = new Set([current.key, ...(nested ? [nested.key] : [])]);
+    }
   },
   { immediate: true }
 );
@@ -119,7 +123,18 @@ watch(
     mobileOpen.value = false;
   }
 );
+function expandGroup(key) {
+  openGroups.value = new Set([
+    key,
+    ...(key === "planning" && openGroups.value.has("smart-import") ? ["smart-import"] : [])
+  ]);
+}
 function toggle(key) {
+  if (groups.value.some((group) => group.key === key)) {
+    if (openGroups.value.has(key)) openGroups.value = new Set();
+    else expandGroup(key);
+    return;
+  }
   const next = new Set(openGroups.value);
   next.has(key) ? next.delete(key) : next.add(key);
   openGroups.value = next;
@@ -153,11 +168,11 @@ function keydown(event) {
   const key = group.dataset.group;
   if (event.key === "Escape" || (event.key === "ArrowLeft" && event.target === button)) {
     event.preventDefault();
-    openGroups.value = new Set([...openGroups.value].filter((value) => value !== key));
+    openGroups.value = new Set();
     button.focus();
   } else if (event.key === "ArrowRight" && event.target === button) {
     event.preventDefault();
-    openGroups.value = new Set([...openGroups.value, key]);
+    expandGroup(key);
   }
 }
 </script>
@@ -211,21 +226,49 @@ function keydown(event) {
           v-show="openGroups.has(group.key)"
           class="workspace-navigation__children"
         >
-          <a
-            v-for="item in group.items"
-            :key="item.key"
-            :href="item.href || router.resolve(item.to).href"
-            class="workspace-navigation__link"
-            :class="{
-              'is-active': isCurrent(item),
-              'is-disabled': item.disabled || (item.adminKey && busy)
-            }"
-            :aria-current="isCurrent(item) ? 'page' : undefined"
-            :aria-disabled="item.disabled || (item.adminKey && busy) ? 'true' : undefined"
-            :tabindex="item.disabled || (item.adminKey && busy) ? -1 : undefined"
-            @click="navigate($event, item)"
-            >{{ item.label }}</a
-          >
+          <template v-for="item in group.items" :key="item.key">
+            <div v-if="item.children" class="workspace-navigation__subgroup">
+              <button
+                type="button"
+                class="workspace-navigation__subtrigger"
+                :aria-expanded="openGroups.has(item.key)"
+                :aria-controls="`${id}-${item.key}`"
+                @click="toggle(item.key)"
+              >
+                <span>{{ item.label }}</span
+                ><ArrowRight :class="{ 'is-open': openGroups.has(item.key) }" />
+              </button>
+              <div
+                v-show="openGroups.has(item.key)"
+                :id="`${id}-${item.key}`"
+                class="workspace-navigation__subchildren"
+              >
+                <RouterLink
+                  v-for="child in item.children"
+                  :key="child.key"
+                  :to="child.to"
+                  class="workspace-navigation__link"
+                  :class="{ 'is-active': isCurrent(child) }"
+                  :aria-current="isCurrent(child) ? 'page' : undefined"
+                  >{{ child.label }}</RouterLink
+                >
+              </div>
+            </div>
+            <a
+              v-else
+              :href="router.resolve(item.to).href"
+              class="workspace-navigation__link"
+              :class="{
+                'is-active': isCurrent(item),
+                'is-disabled': item.disabled || (item.adminKey && busy)
+              }"
+              :aria-current="isCurrent(item) ? 'page' : undefined"
+              :aria-disabled="item.disabled || (item.adminKey && busy) ? 'true' : undefined"
+              :tabindex="item.disabled || (item.adminKey && busy) ? -1 : undefined"
+              @click="navigate($event, item)"
+              >{{ item.label }}</a
+            >
+          </template>
         </div>
       </section>
     </nav>
@@ -414,6 +457,70 @@ function keydown(event) {
 @media (prefers-reduced-motion: reduce) {
   .workspace-navigation__chevron {
     transition: none !important;
+  }
+}
+</style>
+
+<style scoped>
+.workspace-navigation {
+  color: #526578;
+}
+.workspace-navigation__group {
+  border-color: #edf1f5;
+}
+.workspace-navigation__group.is-current > .workspace-navigation__trigger {
+  color: #246b91;
+}
+.workspace-navigation a.workspace-navigation__link {
+  color: #526578;
+}
+.workspace-navigation :is(a, button):hover {
+  color: #246b91;
+  background: #f0f6fb;
+}
+.workspace-navigation a.is-active,
+.workspace-navigation__home[aria-current] {
+  color: #246b91;
+  background: #eaf3fb;
+  border-left-color: #246b91;
+  font-weight: 600;
+}
+.workspace-navigation__subtrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  padding: 12px 14px 12px 44px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.workspace-navigation__subtrigger span {
+  flex: 1;
+}
+.workspace-navigation__subtrigger svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 180ms ease;
+}
+.workspace-navigation__subtrigger svg.is-open {
+  transform: rotate(90deg);
+}
+.workspace-navigation__subchildren a.workspace-navigation__link {
+  padding-left: 58px;
+  font-size: 12px;
+}
+.workspace-navigation__link,
+.workspace-navigation__trigger span {
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-navigation__subtrigger svg {
+    transition: none;
   }
 }
 </style>
