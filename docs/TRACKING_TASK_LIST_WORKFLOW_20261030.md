@@ -1,5 +1,19 @@
 # Excel tracking task-list workflow
 
+## Query-only task page (current behavior)
+
+The dedicated `/workspace/tracking/tasks` page defaults to `QUERY_ONLY`. Upload reads and recognizes the first 60 source records locally; it does not submit a request. The main page shows the upload control, a concise row list, and one Start tracking N shipments button. Customer selection, publication, review checkboxes and row exclusion are absent from this page. Detailed column mapping and parser diagnostics are collapsed under advanced details. The original business IMPORT dialog retains its customer, publication, review and conflict checks.
+
+QUERY_ONLY submits to the existing POST `/api/business/shipment-batch-tasks` endpoint with `mode: "QUERY_ONLY"`, source filename, channel and all selected source rows in their original order. It omits customerId/publishToCustomer. Each item preserves sourceRow and the original sourceReference string. Recognition failures use recognitionErrorCode/recognitionError and become individual FAILED results without sending an ambiguous query. The server creates no shipment, customer binding or customer publication. Polling and cancellation reuse the existing task endpoints.
+
+In this mode a CARRIER cell is authoritative only when it matches a recognized carrier alias; other text remains a source remark. Exact known bill prefixes can identify a carrier. The specifically observed named SM vessels SEOUL, KWANGYANG and YANTIAN identify SML when the carrier is absent. A known carrier conflicting with a known bill prefix still fails that row. Unknown references never inherit a prior default carrier. IMPORT recognition stays strict.
+
+Successful results expand inline from the returned item.payload.snapshot. The view displays existing summary facts, normalized containers, routing legs, source entries and source fields, preserving arrays and objects as text. It does not re-query or navigate to a persistence endpoint. Business-unverified source data is labelled; local evidence paths and sensitive diagnostics are excluded from this read-only view.
+
+Read-only regression against the current original file recognized 60/60 selected records with no recognition errors. Rows 32/33/34 use COSU prefix evidence while preserving their carrier-cell remarks; rows 38/53/54/58 use named SM-vessel evidence. The non-identifying audit is in ignored `.tmp/import-real-20261030/query-only-real-preview.json`; no 60-row query was submitted.
+
+## Original business IMPORT workflow
+
 `/workspace/tracking/tasks` is an authenticated alias of the shipments module task page, rendered inside the existing WorkspaceShell and BusinessCustomerPage host. ADMIN/BUSINESS roles can use it. The sidebar shows Shipment tracking → Batch tasks → Task list. The tracking overview and single-query page contain an Excel task-list link; embedded navigation uses the existing same-origin workspace bridge, while standalone links target the protected route.
 
 The page reuses ShipmentListWorkspacePage in inline task mode, createShipmentModulePages, useShipmentBatchTracking and the existing batch-task APIs. The parser is not duplicated. Its review-scope helper runs the same production parser on an explicit subset while retaining original source row numbers, merged-cell evidence and original cell values.

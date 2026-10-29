@@ -7,8 +7,14 @@ public record ShipmentBatchTaskRequest(
     String channel,
     List<ShipmentBatchItemRequest> items,
     String customerId,
-    Boolean publishToCustomer
+    Boolean publishToCustomer,
+    String mode
 ) {
+  public ShipmentBatchTaskRequest(String sourceFileName, String channel,
+      List<ShipmentBatchItemRequest> items, String customerId, Boolean publishToCustomer) {
+    this(sourceFileName, channel, items, customerId, publishToCustomer, null);
+  }
+
   public ShipmentBatchTaskRequest(
       String sourceFileName,
       String channel,

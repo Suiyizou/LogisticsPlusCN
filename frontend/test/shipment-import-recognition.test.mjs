@@ -25,6 +25,57 @@ const operationalHeaders = [
   "提单号：",
   "CARRIER"
 ];
+test("query-only recognizes carrier remarks and named SM vessels while IMPORT stays strict", () => {
+  const sheet = prepareSheet("Queries", [
+    operationalHeaders,
+    ["JOB-1", "", "", "", "", "", "", "COSCO ITALY 084E", "COSU1234567890", "送货备注"],
+    ["JOB-2", "", "", "", "", "", "", "SM SEOUL / 2607E", "SHUH12345678", ""],
+    ["JOB-3", "", "", "", "", "", "", "SM KWANGYANG 2607E", "SHZY12345678", ""]
+  ]);
+  const query = buildShipmentBatchReview(sheet, 8, "", "BILLOFLADING", {
+    adapterMode: "LOCAL_QUEUE",
+    queryOnly: true
+  });
+  assert.equal(query.errors.length, 0);
+  assert.deepEqual(
+    query.queryItems.map((item) => item.carrier),
+    ["COSCO", "SML", "SML"]
+  );
+  assert.deepEqual(
+    query.rows.map((row) => row.carrierSource),
+    ["prefix", "vessel", "vessel"]
+  );
+  assert.equal(query.rows[0].carrierRemark, "送货备注");
+  assert.equal(query.queryItems[0].number, "COSU1234567890");
+  assert.equal(query.queryItems[0].sourceReference, "COSU1234567890");
+  assert.ok(
+    buildShipmentBatchReview(sheet, 8, "", "BILLOFLADING", { adapterMode: "LOCAL_QUEUE" }).errors
+      .length > 0
+  );
+});
+test("query-only keeps failed rows in source order and never inherits a default carrier", () => {
+  const sheet = prepareSheet("Queries", [
+    ["提单号", "CARRIER", "JOB NUMBER"],
+    ["COSU1234567890", "COSCO", "A"],
+    ["COSU1234567891", "MSC", "B"],
+    ["ABC12345678", "备注", "C"],
+    ["", "COSCO", "D"]
+  ]);
+  const review = buildShipmentBatchReview(sheet, 0, "COSCO", "BILLOFLADING", {
+    adapterMode: "LOCAL_QUEUE",
+    queryOnly: true
+  });
+  assert.equal(review.queryItems.length, 4);
+  assert.deepEqual(
+    review.queryItems.map((item) => item.sourceRow),
+    [2, 3, 4, 5]
+  );
+  assert.deepEqual(
+    review.queryItems.map((item) => item.recognitionErrorCode),
+    ["", "CARRIER_CONFLICT", "UNKNOWN_CARRIER", "MISSING_REFERENCE"]
+  );
+  assert.equal(review.queryItems[2].carrier, null);
+});
 function preview(rows, opts = {}) {
   const w = XLSX.utils.book_new();
   const s = XLSX.utils.aoa_to_sheet(rows);

@@ -69,6 +69,7 @@ public class ShipmentBatchTrackingService {
   );
 
   private final ShipmentTrackingService trackingService;
+  private TrackingAdapterClient queryAdapterClient;
   private final BusinessCustomerService customerService;
   private final ExecutorService executor;
   private final long minIntervalMs;
@@ -85,7 +86,8 @@ public class ShipmentBatchTrackingService {
   @Autowired
   public ShipmentBatchTrackingService(
       ShipmentTrackingService trackingService,
-      ObjectProvider<BusinessCustomerService> customerServiceProvider
+      ObjectProvider<BusinessCustomerService> customerServiceProvider,
+      ObjectProvider<TrackingAdapterClient> adapterClientProvider
   ) {
     this(
         trackingService,
@@ -101,6 +103,7 @@ public class ShipmentBatchTrackingService {
         DEFAULT_RETRY_MAX_MS,
         Clock.systemUTC()
     );
+    this.queryAdapterClient = adapterClientProvider.getIfAvailable();
   }
 
   ShipmentBatchTrackingService(
@@ -151,13 +154,23 @@ public class ShipmentBatchTrackingService {
     this.clock = clock;
   }
 
+  ShipmentBatchTrackingService(ShipmentTrackingService trackingService,
+      TrackingAdapterClient adapterClient, ExecutorService executor, Clock clock) {
+    this(trackingService, executor, 0, 0, clock);
+    this.queryAdapterClient = adapterClient;
+  }
+
   public synchronized Map<String, Object> start(
       ShipmentBatchTaskRequest request,
       AuthenticatedUser user
   ) {
     // A batch import is a deliberate carrier query. Existing bookings must be
     // refreshed once in place instead of being returned from an imported placeholder.
-    return startInternal(request, user, "IMPORT", false, true);
+    String mode = request == null ? null : request.mode();
+    if (mode != null && !mode.isBlank() && !List.of("IMPORT", "QUERY_ONLY").contains(mode)) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported batch task mode");
+    }
+    return startInternal(request, user, "QUERY_ONLY".equals(mode) ? "QUERY_ONLY" : "IMPORT", false, true);
   }
 
   public synchronized Map<String, Object> startRefreshAll(
@@ -215,6 +228,9 @@ public class ShipmentBatchTrackingService {
     if (requestedItems.isEmpty()) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "At least one shipment is required");
     }
+    if ("QUERY_ONLY".equals(mode) && requestedItems.size() > 60) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "A query-only batch cannot exceed 60 rows");
+    }
     if (requestedItems.size() > MAX_ITEMS) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "A shipment batch cannot exceed 500 rows");
     }
@@ -230,16 +246,20 @@ public class ShipmentBatchTrackingService {
 
     Map<String, BatchItem> uniqueItems = new LinkedHashMap<>();
     for (int index = 0; index < requestedItems.size(); index++) {
-      BatchItem item = trustedExistingReferences
-          ? normalizeExistingReference(requestedItems.get(index), index)
-          : normalizeItem(requestedItems.get(index), index);
-      uniqueItems.putIfAbsent(
-          item.request.carrier() + "|" + item.request.type() + "|" + item.queryNumber,
-          item
-      );
+      BatchItem item;
+      if ("QUERY_ONLY".equals(mode)) {
+        item = normalizeQueryItem(requestedItems.get(index), index);
+        uniqueItems.put("row-" + index, item);
+      } else {
+        item = trustedExistingReferences
+            ? normalizeExistingReference(requestedItems.get(index), index)
+            : normalizeItem(requestedItems.get(index), index);
+        uniqueItems.putIfAbsent(
+            item.request.carrier() + "|" + item.request.type() + "|" + item.queryNumber, item);
+      }
     }
     List<BatchItem> items = new ArrayList<>(uniqueItems.values());
-    if (forceRefresh && !"IMPORT".equals(mode)) {
+    if (forceRefresh && !List.of("IMPORT", "QUERY_ONLY").contains(mode)) {
       items.forEach(this::initializeSupplementalSubtasks);
     }
     String taskId = "batch_" + UUID.randomUUID().toString().replace("-", "");
@@ -307,7 +327,9 @@ public class ShipmentBatchTrackingService {
       for (BatchItem item : task.items) {
         if (task.cancelRequested.get()) break;
         try {
-          if (item.manualOnly) {
+          if ("QUERY_ONLY".equals(task.mode)) {
+            queryOnly(task, item);
+          } else if (item.manualOnly) {
             markAttemptStarted(task, item);
             ObjectNode response = trackingService.recordImportedPlaceholder(item.request, task.owner);
             synchronized (task) {
@@ -342,7 +364,7 @@ public class ShipmentBatchTrackingService {
           }
           markFinalFailure(task, item, error);
         }
-        if (recordBatchCircuitOutcome(task, item)) {
+        if (!"QUERY_ONLY".equals(task.mode) && recordBatchCircuitOutcome(task, item)) {
           finalStatus = "PAUSED";
           break;
         }
@@ -350,6 +372,63 @@ public class ShipmentBatchTrackingService {
     } finally {
       finish(task, task.cancelRequested.get() ? "STOPPED" : finalStatus);
     }
+  }
+
+  private void queryOnly(BatchTask task, BatchItem item) {
+    if (item.validationError != null) throw item.validationError;
+    if (queryAdapterClient == null) {
+      throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Tracking adapter is unavailable");
+    }
+    markWaitingForTrackingWindow(task, item);
+    waitForTrackingWindow(task);
+    if (task.cancelRequested.get()) return;
+    markAttemptStarted(task, item);
+    JsonNode response = queryAdapterClient.track(new TrackingAdapterClient.NormalizedTrackRequest(
+        item.request.carrier(), task.channel, item.request.type(), item.queryNumber, task.id));
+    if (response == null || !response.path("snapshot").isObject()) {
+      throw new ApiException(HttpStatus.BAD_GATEWAY, "Tracking adapter returned an incomplete response");
+    }
+    if (task.cancelRequested.get()) {
+      markPendingAfterCancellation(task, item);
+      return;
+    }
+    synchronized (task) {
+      item.payload = response.deepCopy();
+      item.status = "SUCCEEDED";
+      item.mainStatus = "SUCCEEDED";
+      item.source = "LIVE";
+      item.mainSource = "LIVE";
+      item.mainChannel = task.channel;
+      item.updatedAt = clock.instant();
+      item.finishedAt = item.updatedAt;
+      task.updatedAt = item.updatedAt;
+    }
+  }
+
+  private BatchItem normalizeQueryItem(ShipmentBatchItemRequest supplied, int index) {
+    ShipmentBatchItemRequest request = supplied == null
+        ? new ShipmentBatchItemRequest("row-" + (index + 1), null, null, null, null, false, null)
+        : supplied;
+    String carrier = TrackingCarriers.canonicalCode(clean(request.carrier(), 32, ""));
+    String type = clean(request.type(), 24, "").toUpperCase(Locale.ROOT);
+    String number = canonicalBookingNumber(carrier, type, compact(clean(request.number(), 128, "")));
+    ShipmentBatchItemRequest normalized = new ShipmentBatchItemRequest(
+        clean(request.id(), 120, "row-" + (index + 1)), carrier, type, number,
+        clean(request.displayNumber(), 128, number), false, sanitizeImportedDetails(request.importedDetails()),
+        clean(request.recognitionErrorCode(), 120, null), clean(request.recognitionError(), 1000, null),
+        request.sourceRow(), clean(request.sourceReference(), 256, null));
+    BatchItem item = new BatchItem(normalized, number, false);
+    if (normalized.recognitionErrorCode() != null || normalized.recognitionError() != null) {
+      item.validationError = new ApiException(HttpStatus.BAD_REQUEST,
+          normalized.recognitionErrorCode() == null ? "INVALID_REFERENCE" : normalized.recognitionErrorCode(),
+          normalized.recognitionError() == null ? "Reference could not be identified safely" : normalized.recognitionError());
+    } else if (supplied == null || Boolean.TRUE.equals(request.manualOnly())
+        || !TrackingCarriers.supportsReference(carrier, type, trackingService.usesLocalTrackingQueue())
+        || !number.matches("[A-Z0-9-]{4,35}")) {
+      item.validationError = new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
+          "Shipment row " + (index + 1) + " has no supported carrier and reference");
+    }
+    return item;
   }
 
   private void assignImportedShipment(BatchTask task, BatchItem item) {
@@ -1405,6 +1484,11 @@ public class ShipmentBatchTrackingService {
         value.put("displayNumber", item.request.displayNumber());
         value.put("manualOnly", item.manualOnly);
         value.put("importedDetails", item.request.importedDetails());
+        if ("QUERY_ONLY".equals(task.mode)) {
+          value.put("payload", item.payload == null ? null : item.payload.deepCopy());
+          value.put("sourceRow", item.request.sourceRow());
+          value.put("sourceReference", item.request.sourceReference());
+        }
         value.put("status", item.status);
         value.put("source", item.source);
         value.put("mainStatus", item.mainStatus);
@@ -1610,6 +1694,8 @@ public class ShipmentBatchTrackingService {
     private final ShipmentBatchItemRequest request;
     private final String queryNumber;
     private final boolean manualOnly;
+    private ApiException validationError;
+    private JsonNode payload;
     private String status = "PENDING";
     private String source;
     private String mainStatus = "PENDING";

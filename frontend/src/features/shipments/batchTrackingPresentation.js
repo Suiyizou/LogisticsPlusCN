@@ -202,6 +202,8 @@ export function presentBatchTask(task, taskObservedAt, t, formatDateTime) {
       shipmentId: item.shipmentId,
       number: item.displayNumber || item.number,
       carrier: item.carrier,
+      sourceRow: item.sourceRow || null,
+      payload: item.payload || null,
       manualOnly: Boolean(item.manualOnly),
       source: item.source || "",
       mainStatus: String(item.mainStatus || "").toUpperCase(),

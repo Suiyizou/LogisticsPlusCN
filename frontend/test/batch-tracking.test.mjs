@@ -388,6 +388,40 @@ function fileEvent(name, bytes) {
     }
   };
 }
+test("query-only starts without customer, publication or confirmation and keeps failed source rows", async (t) => {
+  let inspected = 0,
+    confirmed = 0;
+  const h = uiHarness(t, {
+    inspectBusinessShipmentImportConflicts: async () => {
+      inspected++;
+      return { conflicts: [] };
+    },
+    confirm: () => {
+      confirmed++;
+      return false;
+    }
+  });
+  h.ui.batchTrackQueryOnly.value = true;
+  h.ui.batchTrackCustomerId.value = "";
+  h.ui.batchTrackReviewed.value = false;
+  const sheet = prepareSheet("Queries", [
+    ["提单号", "CARRIER", "JOB NUMBER"],
+    ["COSU1234567890", "COSCO", "A"],
+    ["", "COSCO", "B"]
+  ]);
+  h.ui.batchTrackSheets.value = [sheet];
+  h.ui.batchTrackSelectedSheetName.value = sheet.name;
+  assert.equal(h.created.length, 0);
+  await h.ui.startBatchTrack();
+  assert.equal(h.created.length, 1);
+  assert.equal(h.created[0].mode, "QUERY_ONLY");
+  assert.equal(Object.hasOwn(h.created[0], "customerId"), false);
+  assert.equal(Object.hasOwn(h.created[0], "publishToCustomer"), false);
+  assert.equal(h.created[0].items.length, 2);
+  assert.equal(h.created[0].items[1].recognitionErrorCode, "MISSING_REFERENCE");
+  assert.equal(inspected, 0);
+  assert.equal(confirmed, 0);
+});
 function workbook(number) {
   return {
     SheetNames: ["Bookings"],

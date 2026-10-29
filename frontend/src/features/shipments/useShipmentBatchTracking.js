@@ -63,6 +63,7 @@ export function useShipmentBatchTracking({
   const batchTrackSelectedSheetName = ref("");
   const batchTrackSelectedColumnIndex = ref(null);
   const batchTrackCustomerId = ref("");
+  const batchTrackQueryOnly = ref(false);
   const batchTrackPublishToCustomer = ref(false);
   const batchTrackReviewed = ref(false);
   /** @type {import("vue").Ref<number[]>} */
@@ -96,10 +97,10 @@ export function useShipmentBatchTracking({
     now,
     onTerminal(snapshot) {
       const view = presentBatchTask(snapshot, job.observedAt.value, t, formatDateTime);
-      batchTrackProblemsOnly.value = view.results.some((item) =>
-        ["failed", "partial"].includes(item.status)
-      );
-      void loadAvailableShipments();
+      batchTrackProblemsOnly.value =
+        snapshot?.mode !== "QUERY_ONLY" &&
+        view.results.some((item) => ["failed", "partial"].includes(item.status));
+      if (snapshot?.mode !== "QUERY_ONLY") void loadAvailableShipments();
     }
   });
   const batchTrackRunning = job.running;
@@ -144,10 +145,18 @@ export function useShipmentBatchTracking({
       batchTrackSelectedColumnIndex.value,
       batchTrackCarrier.value,
       batchTrackReferenceType.value,
-      { sourceCandidateLimit: 60, excludedSourceRows: batchTrackExcludedRows.value }
+      {
+        sourceCandidateLimit: 60,
+        excludedSourceRows: batchTrackQueryOnly.value ? [] : batchTrackExcludedRows.value,
+        queryOnly: batchTrackQueryOnly.value
+      }
     )
   );
-  const batchTrackItems = computed(() => batchTrackImportPreview.value.items);
+  const batchTrackItems = computed(() =>
+    batchTrackQueryOnly.value
+      ? batchTrackImportPreview.value.queryItems
+      : batchTrackImportPreview.value.items
+  );
   const batchTrackImportErrors = computed(() => batchTrackImportPreview.value.errors);
   const batchTrackNumbers = computed(() => batchTrackItems.value.map((item) => item.displayNumber));
   const batchTrackTrackableCount = computed(
@@ -238,13 +247,14 @@ export function useShipmentBatchTracking({
     );
   }
   async function startBatchTrack() {
+    const queryOnly = batchTrackQueryOnly.value;
     if (
       busy() ||
       batchTrackFileParsing.value ||
-      !batchTrackCustomerId.value ||
-      !batchTrackReviewed.value ||
+      (!queryOnly && !batchTrackCustomerId.value) ||
+      (!queryOnly && !batchTrackReviewed.value) ||
       !batchTrackItems.value.length ||
-      batchTrackImportErrors.value.length > 0
+      (!queryOnly && batchTrackImportErrors.value.length > 0)
     )
       return;
     // Capture the form before awaiting conflict inspection; edits must not change the approved import.
@@ -252,17 +262,21 @@ export function useShipmentBatchTracking({
       sourceFileName: batchTrackFileName.value,
       channel: shipmentTrackingChannel.value,
       items: batchTrackItems.value.map((item) => ({ ...item })),
-      customerId: batchTrackCustomerId.value,
-      publishToCustomer: batchTrackPublishToCustomer.value
+      ...(queryOnly
+        ? { mode: "QUERY_ONLY" }
+        : {
+            customerId: batchTrackCustomerId.value,
+            publishToCustomer: batchTrackPublishToCustomer.value
+          })
     };
-    requestedMode.value = "IMPORT";
+    requestedMode.value = queryOnly ? "QUERY_ONLY" : "IMPORT";
     failureKey.value = "customers.batchTrackStartFailed";
     batchTrackProblemsOnly.value = false;
     await job.start({
-      beforeCreate: () => confirmExistingBatchBookings(payload.items),
+      ...(queryOnly ? {} : { beforeCreate: () => confirmExistingBatchBookings(payload.items) }),
       createTask: () => createShipmentBatchTask(payload),
       initialTask: {
-        mode: "IMPORT",
+        mode: queryOnly ? "QUERY_ONLY" : "IMPORT",
         status: "QUEUED",
         total: payload.items.length,
         items: payload.items.map((item) => ({ ...item, status: "PENDING" }))
@@ -323,7 +337,8 @@ export function useShipmentBatchTracking({
       batchTrackProgress.value.status === "STOPPING"
     )
       return;
-    if (confirm(t("customers.batchTrackStopConfirm"))) await job.cancel();
+    if (batchTrackQueryOnly.value || confirm(t("customers.batchTrackStopConfirm")))
+      await job.cancel();
   }
 
   function clearBatchTrackFile() {
@@ -418,6 +433,7 @@ export function useShipmentBatchTracking({
     batchTrackMode,
     batchTrackCancelRequested,
     batchTrackCustomerId,
+    batchTrackQueryOnly,
     batchTrackPublishToCustomer,
     batchTrackReviewed,
     batchTrackExcludedRows,

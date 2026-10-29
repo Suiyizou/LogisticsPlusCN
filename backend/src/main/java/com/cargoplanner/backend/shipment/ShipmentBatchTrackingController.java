@@ -28,7 +28,8 @@ public class ShipmentBatchTrackingController {
       @RequestBody ShipmentBatchTaskRequest request,
       @RequestAttribute(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE) AuthenticatedUser user
   ) {
-    if (request == null || request.customerId() == null || request.customerId().isBlank()) {
+    if (request == null || (!"QUERY_ONLY".equals(request.mode())
+        && (request.customerId() == null || request.customerId().isBlank()))) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Select a customer before batch tracking");
     }
     return ResponseEntity.accepted().body(batchTrackingService.start(request, user));

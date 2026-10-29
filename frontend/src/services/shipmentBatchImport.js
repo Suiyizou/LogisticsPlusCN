@@ -206,7 +206,7 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
   };
 }
 
-/** @param {{ adapterMode?: string, includedSourceRows?: number[] }} [options] */
+/** @param {{ adapterMode?: string, includedSourceRows?: number[], queryOnly?: boolean }} [options] */
 export function buildShipmentBatchPreview(
   sheet,
   selectedColumnIndex,
@@ -346,9 +346,20 @@ export function buildShipmentBatchPreview(
         "UNSAFE_REFERENCE",
         "Numeric reference or formula cannot be preserved precisely; use a text cell"
       );
-    const explicit = cellText(cells[fieldIndexes.carrier]);
+    const carrierCell = cellText(cells[fieldIndexes.carrier]);
+    // Query-only workbooks often put delivery notes in CARRIER cells. Only a known
+    // carrier alias is binding here; IMPORT keeps its original strict validation.
+    const explicit =
+      options.queryOnly && !RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(carrierCell))
+        ? ""
+        : carrierCell;
     const inferred = PREFIXES.find(([pattern]) => pattern.test(rawReference))?.[1] || "";
-    const carrier = normalizeCarrier(explicit || inferred || defaultCarrier);
+    const vessel = cellText(cells[fieldIndexes.vesselVoyage]);
+    const vesselCarrier =
+      options.queryOnly && /^SM\s+(?:SEOUL|KWANGYANG|YANTIAN)\b/i.test(vessel) ? "SML" : "";
+    const carrier = normalizeCarrier(
+      explicit || inferred || vesselCarrier || (options.queryOnly ? "" : defaultCarrier)
+    );
     if (explicit && inferred && normalizeCarrier(explicit) !== inferred)
       add("CARRIER_CONFLICT", "Carrier cell conflicts with the reference prefix");
     if (!configuredCarriers.some((c) => c.code === carrier)) {
@@ -404,7 +415,14 @@ export function buildShipmentBatchPreview(
       originalReference: original,
       number,
       carrier,
-      carrierSource: explicit ? "cell" : inferred ? "prefix" : "selection",
+      carrierSource: explicit
+        ? "cell"
+        : inferred
+          ? "prefix"
+          : vesselCarrier
+            ? "vessel"
+            : "selection",
+      carrierRemark: carrierCell !== explicit ? carrierCell : "",
       sourceReference: {
         raw: original,
         normalized: rawReference,
@@ -442,7 +460,7 @@ export function buildShipmentBatchPreview(
 }
 
 /** Local-only review scope; every parsing pass uses the same production parser.
- * @param {{adapterMode?:string,sourceCandidateLimit?:number,excludedSourceRows?:number[]}} [options]
+ * @param {{adapterMode?:string,sourceCandidateLimit?:number,excludedSourceRows?:number[],queryOnly?:boolean}} [options]
  */
 export function buildShipmentBatchReview(
   sheet,
@@ -492,8 +510,32 @@ export function buildShipmentBatchReview(
       status: excluded.has(sourceRow) ? "EXCLUDED" : original?.status || "BLOCKED"
     };
   });
+  const queryItems = displayed.errors.some((issue) => issue.row <= (sheet?.headerRow || 0))
+    ? []
+    : rows.map((row) => {
+        const item = selected.items.find(
+          (entry) => entry.id === `${sheet.name}-row-${row.sourceRow}`
+        );
+        const issue = row.errors[0];
+        return {
+          ...(item || {
+            id: `${sheet.name}-row-${row.sourceRow}`,
+            carrier: row.carrier || null,
+            type: row.type || "BILLOFLADING",
+            number: row.number || "",
+            displayNumber: row.originalReference || "",
+            manualOnly: false,
+            importedDetails: {}
+          }),
+          sourceRow: row.sourceRow,
+          sourceReference: row.sourceReference?.raw || row.originalReference || "",
+          recognitionErrorCode: issue?.code || "",
+          recognitionError: issue?.message || ""
+        };
+      });
   return {
     ...selected,
+    queryItems,
     rows,
     totalCandidates: candidates.length,
     sourceLimit,
