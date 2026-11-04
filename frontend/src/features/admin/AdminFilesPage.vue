@@ -75,7 +75,7 @@ const {
 } = props.presentation;
 </script>
 <template>
-  <section class="admin-page-pane">
+  <section class="admin-page-pane" :aria-busy="busy">
     <div
       class="admin-file-scope-tabs"
       role="tablist"
@@ -142,7 +142,13 @@ const {
             </div></template
           ></WorkspacePageHeader
         >
-        <div class="admin-table-wrap">
+        <div
+          class="admin-table-wrap"
+          v-loading="busy"
+          tabindex="0"
+          role="region"
+          :aria-label="t('admin.files.workspaceTitle')"
+        >
           <el-table
             :data="workspaceRows"
             row-key="id"
@@ -191,7 +197,7 @@ const {
               </template>
             </WorkspaceColumn>
             <template #empty
-              ><WorkspaceEmptyState>{{
+              ><WorkspaceEmptyState v-if="!busy">{{
                 t("admin.files.workspaceEmpty")
               }}</WorkspaceEmptyState></template
             >
@@ -230,7 +236,13 @@ const {
             </div></template
           ></WorkspacePageHeader
         >
-        <div class="admin-table-wrap">
+        <div
+          class="admin-table-wrap"
+          v-loading="busy"
+          tabindex="0"
+          role="region"
+          :aria-label="t('admin.files.shipmentTitle')"
+        >
           <el-table
             :data="shipmentRows"
             :row-key="shipmentFileKey"
@@ -317,7 +329,7 @@ const {
               </template>
             </ShipmentColumn>
             <template #empty
-              ><WorkspaceEmptyState>{{
+              ><WorkspaceEmptyState v-if="!busy">{{
                 t("admin.files.shipmentEmpty")
               }}</WorkspaceEmptyState></template
             >

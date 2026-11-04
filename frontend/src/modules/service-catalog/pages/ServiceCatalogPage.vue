@@ -8,46 +8,78 @@
         }}</el-button></template
       ></WorkspacePageHeader
     >
+    <CommercialSummary v-if="hasLoaded" :metrics="metrics" />
     <form class="search" @submit.prevent="search">
       <el-input
         v-model="query"
         :maxlength="100"
-        :placeholder="t('serviceCatalog.search')"
+        :aria-label="commercialText('catalogSearchHint')"
+        :placeholder="commercialText('catalogSearchHint')"
         clearable
       /><el-button native-type="submit">{{ t("serviceCatalog.search") }}</el-button
-      ><el-button :loading="loading" @click="refresh">{{ t("serviceCatalog.refresh") }}</el-button>
+      ><el-button :loading="loading" @click="refresh(page, appliedQuery)">{{
+        t("serviceCatalog.refresh")
+      }}</el-button>
     </form>
-    <el-alert v-if="error && !visible" :title="error" type="error" :closable="false" role="alert" />
-    <el-table :data="rows" v-loading="loading" row-key="id">
+    <el-alert
+      v-if="error && !visible"
+      class="commercial-state"
+      :title="error"
+      type="error"
+      :closable="false"
+      role="alert"
+    />
+    <el-table :data="rows" v-loading="loading" row-key="id" class="commercial-reveal">
+      <template #empty>
+        <WorkspaceEmptyState
+          class="commercial-state"
+          v-if="hasLoaded && !loading && !error"
+          :title="commercialText(appliedQuery ? 'catalogSearchEmpty' : 'catalogEmpty')"
+          :description="commercialText(appliedQuery ? 'catalogSearchHint' : 'catalogEmptyHint')"
+        >
+          <template #actions>
+            <el-button v-if="appliedQuery" @click="clearSearch">{{
+              commercialText("clearSearch")
+            }}</el-button>
+            <el-button v-else type="primary" @click="open()">{{
+              t("serviceCatalog.create")
+            }}</el-button>
+          </template>
+        </WorkspaceEmptyState>
+      </template>
       <el-table-column
         v-for="field in fields"
         :key="field.name"
         :label="t('serviceCatalog.fields.' + field.name)"
-        min-width="140"
+        :min-width="field.name === 'description' ? 220 : 126"
         show-overflow-tooltip
       >
-        <template #default="{ row }">{{
-          row[field.name] == null
-            ? "—"
-            : field.type === "boolean"
-              ? t(row[field.name] ? "serviceCatalog.enabled" : "serviceCatalog.disabled")
-              : row[field.name]
-        }}</template>
+        <template #default="{ row }">
+          <WorkspaceStatus
+            v-if="field.name === 'enabled'"
+            :tone="row.enabled ? 'success' : 'neutral'"
+            :label="t(row.enabled ? 'serviceCatalog.enabled' : 'serviceCatalog.disabled')"
+          />
+          <strong v-else-if="field.name === 'name'">{{ row.name }}</strong>
+          <code v-else-if="field.name === 'code'" class="catalog-code">{{ row.code }}</code>
+          <span v-else>{{ row.description || "—" }}</span>
+        </template>
       </el-table-column>
       <el-table-column :label="t('serviceCatalog.updatedAt')" min-width="185"
         ><template #default="{ row }">{{
-          new Date(row.updatedAt).toLocaleString()
+          formatUpdatedAt(row.updatedAt)
         }}</template></el-table-column
       >
       <el-table-column :label="t('serviceCatalog.actions')" width="100"
         ><template #default="{ row }"
-          ><el-button :disabled="saving" @click="openById(row.id)">{{
+          ><el-button size="small" :disabled="saving" @click="openById(row.id)">{{
             t("serviceCatalog.edit")
           }}</el-button></template
         ></el-table-column
       >
     </el-table>
     <el-pagination
+      v-if="total > pageSize"
       :current-page="page + 1"
       :page-size="pageSize"
       :total="total"
@@ -57,6 +89,7 @@
     />
     <el-dialog
       class="workspace-el-dialog"
+      modal-class="catalog-editor-overlay"
       :model-value="visible"
       @update:model-value="setDialogOpen"
       :title="t(editing ? 'serviceCatalog.edit' : 'serviceCatalog.create')"
@@ -93,18 +126,24 @@
 <script setup lang="ts">
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
+import CommercialSummary from "../../shared/CommercialSummary.vue";
+import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
+import WorkspaceEmptyState from "../../../components/workspace/WorkspaceEmptyState.vue";
+import WorkspaceStatus from "../../../components/workspace/WorkspaceStatus.vue";
 import { useI18n } from "vue-i18n";
 import { fields } from "../../../generated/service-catalog-model";
 import ReferenceField from "../../../components/platform/ReferenceField.vue";
 import { useServiceCatalog } from "../useServiceCatalog";
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const {
   rows,
   loading,
   saving,
   visible,
   query,
+  appliedQuery,
+  hasLoaded,
   page,
   pageSize,
   total,
@@ -121,36 +160,74 @@ const {
   close,
   setDialogOpen
 } = useServiceCatalog(t);
-onMounted(refresh);
+const enabledCount = computed(() => rows.value.filter((row) => row.enabled).length);
+const metrics = computed(() => [
+  { label: commercialText("catalogMatches"), value: total.value },
+  { label: commercialText("catalogEnabled"), value: enabledCount.value },
+  { label: commercialText("catalogDisabled"), value: rows.value.length - enabledCount.value }
+]);
+function clearSearch() {
+  query.value = "";
+  void search();
+}
+function formatUpdatedAt(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat(locale.value, { dateStyle: "medium", timeStyle: "short" }).format(
+        date
+      );
+}
+onMounted(() => void refresh());
 </script>
 <style scoped>
+:global(.catalog-editor-overlay) {
+  --el-transition-duration: var(--motion-normal);
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.catalog-editor-overlay.dialog-fade-enter-active),
+  :global(.catalog-editor-overlay.dialog-fade-leave-active),
+  :global(.catalog-editor-overlay.dialog-fade-enter-active .el-overlay-dialog),
+  :global(.catalog-editor-overlay.dialog-fade-leave-active .el-overlay-dialog) {
+    animation: none;
+  }
+}
 .reference-module {
   display: grid;
-  gap: 20px;
+  gap: 14px;
   padding: 24px;
   min-width: 0;
   background: var(--surface-card, #fff);
   border: 1px solid #dbe4ed;
   border-radius: var(--radius-control);
 }
-header,
+.reference-module :deep(.commercial-summary),
+.reference-module :deep(.workspace-page-header) {
+  margin-bottom: 0;
+}
+.search {
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.catalog-code {
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
 .search,
 footer {
   display: flex;
   gap: 12px;
   align-items: center;
 }
-header {
-  justify-content: space-between;
-}
-h2 {
-  margin: 0;
-}
-p {
-  color: #687d91;
-}
 .search .el-input {
+  flex: 1 1 180px;
   max-width: 420px;
+}
+.search .el-button {
+  margin: 0;
 }
 .editor-field {
   display: grid;
@@ -162,10 +239,9 @@ footer {
   margin-top: 24px;
 }
 @media (max-width: 640px) {
-  header,
-  .search {
-    align-items: stretch;
-    flex-direction: column;
+  .search .el-input {
+    flex-basis: 100%;
+    max-width: none;
   }
   .reference-module {
     padding: 16px;
@@ -174,5 +250,6 @@ footer {
 </style>
 
 <style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+<style scoped src="../../shared/commercialWorkspaceMotion.css"></style>
 
 <style scoped src="../../../components/workspace/workspaceElementDialog.css"></style>

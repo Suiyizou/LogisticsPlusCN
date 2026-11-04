@@ -41,14 +41,16 @@ withDefaults(
   color: var(--color-muted);
   font-size: 12px;
   line-height: 1.5;
-  font-weight: 500;
+  font-family: var(--font-display, var(--font-ui));
+  font-weight: 650;
   letter-spacing: 0.06em;
 }
 .workspace-page-header__title {
   margin: 0;
   color: var(--color-foreground);
   font-size: var(--text-page-title);
-  font-weight: 650;
+  font-family: var(--font-display, var(--font-ui));
+  font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;

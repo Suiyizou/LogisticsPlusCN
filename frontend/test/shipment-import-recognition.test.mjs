@@ -25,32 +25,63 @@ const operationalHeaders = [
   "提单号：",
   "CARRIER"
 ];
-test("query-only recognizes carrier remarks and named SM vessels while IMPORT stays strict", () => {
+test("both modes recognize reliable prefixes and named SM vessels despite carrier remarks", () => {
   const sheet = prepareSheet("Queries", [
     operationalHeaders,
     ["JOB-1", "", "", "", "", "", "", "COSCO ITALY 084E", "COSU1234567890", "送货备注"],
     ["JOB-2", "", "", "", "", "", "", "SM SEOUL / 2607E", "SHUH12345678", ""],
     ["JOB-3", "", "", "", "", "", "", "SM KWANGYANG 2607E", "SHZY12345678", ""]
   ]);
-  const query = buildShipmentBatchReview(sheet, 8, "", "BILLOFLADING", {
-    adapterMode: "LOCAL_QUEUE",
-    queryOnly: true
+  for (const queryOnly of [false, true]) {
+    const review = buildShipmentBatchReview(sheet, 8, "", "BILLOFLADING", {
+      adapterMode: "LOCAL_QUEUE",
+      queryOnly
+    });
+    assert.deepEqual(review.errors, []);
+    assert.deepEqual(
+      (queryOnly ? review.queryItems : review.items).map((item) => item.carrier),
+      ["COSCO", "SML", "SML"]
+    );
+    assert.deepEqual(
+      review.rows.map((row) => row.carrierSource),
+      ["prefix", "vessel", "vessel"]
+    );
+    assert.equal(review.rows[0].carrierRemark, "送货备注");
+    assert.equal(review.queryItems[0].number, "COSU1234567890");
+    assert.equal(review.queryItems[0].sourceReference, "COSU1234567890");
+  }
+});
+test("import keeps shipment remarks, blocks known carrier conflicts and leaves unverified prefixes unresolved", () => {
+  const note = "CSLU6183093-10月19号已提箱，未还，CAAU9184799未提箱";
+  const sheet = prepareSheet("Review", [
+    ["提单号", "CARRIER", "船名航次"],
+    ["COSU9509726260", note, "COSCO ITALY 084E"],
+    ["COSU6466209120", "MSC", "COSCO ITALY 084E"],
+    ["SHUH6C876700", "", "SM SEOUL / 2607E"],
+    ["SHZY6B439500", "", "SM YANTIAN 2607E"],
+    ["SHZY6B123400", "", "SM UNKNOWN 2607E"],
+    ["ABC12345678", note, ""]
+  ]);
+  const review = buildShipmentBatchReview(sheet, 0, "", "BILLOFLADING", {
+    adapterMode: "LOCAL_QUEUE"
   });
-  assert.equal(query.errors.length, 0);
   assert.deepEqual(
-    query.queryItems.map((item) => item.carrier),
-    ["COSCO", "SML", "SML"]
+    review.items.map(({ carrier, number }) => [carrier, number]),
+    [
+      ["COSCO", "COSU9509726260"],
+      ["SML", "SHUH6C876700"],
+      ["SML", "SHZY6B439500"]
+    ]
   );
+  assert.equal(review.rows[0].carrierRemark, note);
+  assert.equal(review.rows[0].sourceCells[1], note);
   assert.deepEqual(
-    query.rows.map((row) => row.carrierSource),
-    ["prefix", "vessel", "vessel"]
-  );
-  assert.equal(query.rows[0].carrierRemark, "送货备注");
-  assert.equal(query.queryItems[0].number, "COSU1234567890");
-  assert.equal(query.queryItems[0].sourceReference, "COSU1234567890");
-  assert.ok(
-    buildShipmentBatchReview(sheet, 8, "", "BILLOFLADING", { adapterMode: "LOCAL_QUEUE" }).errors
-      .length > 0
+    review.errors.map(({ row, code }) => [row, code]),
+    [
+      [3, "CARRIER_CONFLICT"],
+      [6, "UNKNOWN_CARRIER"],
+      [7, "UNKNOWN_CARRIER"]
+    ]
   );
 });
 test("query-only keeps failed rows in source order and never inherits a default carrier", () => {

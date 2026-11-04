@@ -13,7 +13,13 @@
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="ui('admin.audit.apiTitle')"
+      >
         <el-table
           :data="rows"
           row-key="id"
@@ -54,7 +60,9 @@
             </template>
           </AuditColumn>
           <template #empty
-            ><WorkspaceEmptyState>{{ ui("admin.audit.empty") }}</WorkspaceEmptyState></template
+            ><WorkspaceEmptyState v-if="!busy">{{
+              ui("admin.audit.empty")
+            }}</WorkspaceEmptyState></template
           >
         </el-table>
       </div>

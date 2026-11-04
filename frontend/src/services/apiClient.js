@@ -97,7 +97,8 @@ async function requestJsonOnce(base, path, options, identity) {
       ...(!options.headers ? { "Content-Type": "application/json" } : {}),
       ...identity.headers
     },
-    body: normalizeBody(options.body)
+    body: normalizeBody(options.body),
+    signal: options.signal
   });
   identity.assertCurrent();
   const text = await response.text();
@@ -202,6 +203,7 @@ function createApiError(message, { status, retryable, data, url } = {}) {
   error.status = status;
   error.retryable = Boolean(retryable);
   error.code = data?.code;
+  error.details = data?.details;
   error.errorId = data?.errorId;
   error.retryAfterMs = data?.retryAfterMs;
   error.url = url;

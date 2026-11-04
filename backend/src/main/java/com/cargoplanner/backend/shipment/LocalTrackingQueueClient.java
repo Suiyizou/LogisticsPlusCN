@@ -4,6 +4,7 @@ import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -71,7 +72,7 @@ final class LocalTrackingQueueClient {
         acquired = slot.tryAcquire(Math.min(remainingMillis(deadline), pollMillis()), TimeUnit.MILLISECONDS);
       }
       checkCancelled(batch);
-      String carrier = "CMA".equals(request.carrier()) ? "CMA_CGM" : request.carrier();
+      String carrier = desktopCarrier(request.carrier());
       JsonNode accepted = exchange("POST", "jobs", Map.of(
           "items", List.of(Map.of("carrier", carrier, "reference", request.number())),
           "source", "LogisticsPlusCN"
@@ -148,6 +149,100 @@ final class LocalTrackingQueueClient {
     }
   }
 
+  String submitPublished(NormalizedTrackRequest request, String key) {
+    JsonNode accepted = exchange("POST", "jobs", Map.of(
+        "items", List.of(Map.of("carrier", desktopCarrier(request.carrier()), "reference", request.number())),
+        "source", publishedSource(key)
+    ), requestDeadline(), key);
+    return validatedJobId(accepted.path("job_id").asText(""));
+  }
+
+  PublishedProgress publishedStatus(NormalizedTrackRequest request, String job) {
+    JsonNode progress = exchange("GET", "jobs/" + validatedJobId(job), null, requestDeadline());
+    if (!job.equals(progress.path("id").asText())) throw invalidResponse(job);
+    String status = progress.path("status").asText();
+    if (!List.of("queued", "running", "cancelling", "completed", "completed_with_gaps", "failed", "cancelled")
+        .contains(status)) throw invalidResponse(job);
+    ApiException itemFailure = null;
+    if (!List.of("cancelling", "cancelled").contains(status)) {
+      String itemState = progressItemState(progress, request, job);
+      boolean cancelledByJobFailure = "failed".equals(status) && "CANCELLED".equals(itemState);
+      if (!cancelledByJobFailure && !List.of("PENDING", "RUNNING", "DONE").contains(itemState)) {
+        try {
+          requireSuccessfulQuery(itemState, job);
+        } catch (ApiException failure) {
+          itemFailure = failure;
+        }
+      }
+    }
+    if ("failed".equals(status) && itemFailure == null) {
+      itemFailure = failure(HttpStatus.BAD_GATEWAY, "TRACKING_LOCAL_JOB_FAILED",
+          "The desktop tracking job failed; check the local service and Chrome", job);
+    }
+    return new PublishedProgress(status, itemFailure);
+  }
+
+  JsonNode publishedResult(String job) {
+    return exchange("GET", "jobs/" + validatedJobId(job) + "/result", null, requestDeadline());
+  }
+
+  ObjectNode mapPublishedResult(NormalizedTrackRequest request, JsonNode result, String job) {
+    JsonNode record = selectRecord(result, request, desktopCarrier(request.carrier()), job);
+    String generated = record.path("generated_at").asText(result.path("generated_at").asText(""));
+    try {
+      Instant.parse(generated);
+    } catch (java.time.format.DateTimeParseException error) {
+      throw invalidResponse(job);
+    }
+    ObjectNode envelope = mapper.map(record, request, generated, job);
+    health.recordQuerySuccess();
+    return envelope;
+  }
+
+  String findPublishedJob(String key) {
+    JsonNode jobs = exchange("GET", "jobs", null, requestDeadline()).path("jobs");
+    if (!jobs.isArray()) throw invalidResponse(null);
+    for (JsonNode job : jobs) {
+      if (publishedSource(key).equals(job.path("source").asText())) {
+        return validatedJobId(job.path("id").asText(""));
+      }
+    }
+    return null;
+  }
+
+  boolean cancelPublished(String job) {
+    try {
+      JsonNode response = exchange("POST", "jobs/" + validatedJobId(job) + "/cancel", Map.of(), requestDeadline());
+      String status = response.path("status").asText();
+      if (!job.equals(response.path("id").asText()) || !List.of("cancelled", "cancelling").contains(status)) {
+        throw invalidResponse(job);
+      }
+      return "cancelled".equals(status);
+    } catch (ApiException error) {
+      if (List.of("TRACKING_LOCAL_JOB_NOT_FOUND", "TRACKING_LOCAL_ALREADY_FINISHED").contains(error.code())) return true;
+      throw error;
+    }
+  }
+
+  private long requestDeadline() {
+    return System.nanoTime() + properties.getLocalRequestTimeout().toNanos();
+  }
+
+  private String validatedJobId(String job) {
+    if (job == null || !job.matches("[A-Za-z0-9_-]{1,100}")) throw invalidResponse(null);
+    return job;
+  }
+
+  private String desktopCarrier(String carrier) {
+    return "CMA".equals(carrier) ? "CMA_CGM" : carrier;
+  }
+
+  private String publishedSource(String key) {
+    return "LogisticsPlusCN/" + key;
+  }
+
+  record PublishedProgress(String status, ApiException itemFailure) {}
+
   JsonNode localHealth() {
     JsonNode response = exchange("GET", "health", null,
         System.nanoTime() + properties.getLocalRequestTimeout().toNanos());
@@ -204,7 +299,9 @@ final class LocalTrackingQueueClient {
         || !request.number().equals(item.path("reference").asText())) throw invalidResponse(job);
     String state = item.path("status").asText().toUpperCase(Locale.ROOT);
     if (!List.of("PENDING", "RUNNING", "DONE", "HUMAN_REQUIRED", "NO_BUSINESS_DATA",
-        "CARRIER_NOT_IMPLEMENTED", "FAILED", "MATCHED_NO_STRUCTURE").contains(state)) throw invalidResponse(job);
+        "CARRIER_NOT_IMPLEMENTED", "FAILED", "MATCHED_NO_STRUCTURE", "CANCELLED").contains(state)) {
+      throw invalidResponse(job);
+    }
     return state;
   }
 
@@ -231,6 +328,10 @@ final class LocalTrackingQueueClient {
   }
 
   private JsonNode exchange(String method, String path, Object body, long deadline) {
+    return exchange(method, path, body, deadline, null);
+  }
+
+  private JsonNode exchange(String method, String path, Object body, long deadline, String key) {
     try {
       Duration timeout = Duration.ofMillis(Math.min(remainingMillis(deadline),
           properties.getLocalRequestTimeout().toMillis()));
@@ -238,6 +339,7 @@ final class LocalTrackingQueueClient {
           .timeout(timeout).header("Accept", "application/json");
       String token = properties.getLocalToken();
       if (token != null && !token.isBlank()) builder.header("Authorization", "Bearer " + token.trim());
+      if (key != null) builder.header("Idempotency-Key", key);
       if ("POST".equals(method)) {
         builder.header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)));
@@ -248,6 +350,15 @@ final class LocalTrackingQueueClient {
           "TRACKING_LOCAL_UNAUTHORIZED", "Local tracking API authentication failed; check the server token", null);
       if (status == 409 && path.endsWith("/result")) {
         throw failure(HttpStatus.CONFLICT, "TRACKING_LOCAL_RESULT_NOT_READY", "Tracking result is not ready", null);
+      }
+      if (status == 404 || status == 409) {
+        String code = readErrorCode(response.body());
+        if ("JOB_NOT_FOUND".equals(code)) throw failure(HttpStatus.NOT_FOUND,
+            "TRACKING_LOCAL_JOB_NOT_FOUND", "The desktop queue does not have this job", null);
+        if ("JOB_ALREADY_FINISHED".equals(code)) throw failure(HttpStatus.CONFLICT,
+            "TRACKING_LOCAL_ALREADY_FINISHED", "The desktop tracking job already finished", null);
+        if ("IDEMPOTENCY_CONFLICT".equals(code)) throw failure(HttpStatus.CONFLICT,
+            "TRACKING_LOCAL_IDEMPOTENCY_CONFLICT", "Desktop queue rejected a conflicting execution key", null);
       }
       if (status == 400 && "jobs".equals(path)) throw failure(HttpStatus.BAD_REQUEST,
           "INVALID_REFERENCE", "Local tracking rejected the submitted items or carrier reference", null);
@@ -265,6 +376,15 @@ final class LocalTrackingQueueClient {
           "TRACKING_LOCAL_TIMEOUT", "The local tracking job exceeded its time limit", null);
       throw failure(HttpStatus.SERVICE_UNAVAILABLE, "TRACKING_LOCAL_UNAVAILABLE",
           "Cannot reach the local tracking API; check the service and tunnel", null);
+    }
+  }
+
+  private String readErrorCode(String body) {
+    try {
+      JsonNode value = JSON.readTree(body);
+      return value == null ? "" : value.path("error").asText();
+    } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+      return "";
     }
   }
 

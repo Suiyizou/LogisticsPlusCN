@@ -5,22 +5,34 @@
       :eyebrow="tr('Container Reference')"
       :description="wt('equipmentHint')"
       ><template #actions
-        ><RouterLink to="/planner/cargos"
+        ><RouterLink to="/planner/config"
           ><el-button type="primary">{{ ui("container.backToConfig") }}</el-button></RouterLink
         ></template
       ></WorkspacePageHeader
     >
-    <div class="equipment-filters" role="group" :aria-label="ui('container.referenceTitle')">
-      <button
-        v-for="filter in equipmentFilters"
-        :key="filter.value"
-        type="button"
-        :aria-pressed="equipmentFilter === filter.value"
-        :class="{ active: equipmentFilter === filter.value }"
-        @click="equipmentFilter = filter.value"
-      >
-        {{ filter.label }}<span>{{ filter.count }}</span>
-      </button>
+    <div class="equipment-catalog-controls">
+      <div class="equipment-filters" role="group" :aria-label="ui('container.referenceTitle')">
+        <button
+          v-for="filter in equipmentFilters"
+          :key="filter.value"
+          type="button"
+          :aria-pressed="equipmentFilter === filter.value"
+          :class="{ active: equipmentFilter === filter.value }"
+          @click="equipmentFilter = filter.value"
+        >
+          {{ filter.label }}<span>{{ filter.count }}</span>
+        </button>
+      </div>
+      <el-input
+        v-model="equipmentQuery"
+        clearable
+        :prefix-icon="Search"
+        :placeholder="wt('equipmentSearch')"
+        :aria-label="wt('equipmentSearch')"
+      />
+      <span class="equipment-catalog-count" role="status">{{
+        wt("manifestMatches", { shown: referenceRows.length, total: allReferenceRows.length })
+      }}</span>
     </div>
 
     <el-alert
@@ -31,7 +43,7 @@
       :closable="false"
     />
 
-    <div class="container-reference-grid">
+    <TransitionGroup tag="div" name="equipment-item" class="container-reference-grid">
       <article
         v-for="container in referenceRows"
         :key="container.id"
@@ -114,12 +126,19 @@
           }}</span>
         </div>
       </article>
+    </TransitionGroup>
+    <div v-if="!referenceRows.length" class="equipment-catalog-empty">
+      <strong>{{ wt("equipmentNoMatches") }}</strong>
+      <el-button v-if="equipmentQuery" link type="primary" @click="equipmentQuery = ''">{{
+        wt("manifestResetSearch")
+      }}</el-button>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { Search } from "@element-plus/icons-vue";
 import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
 import { wt } from "./workspace/workspaceCopy";
 import { currentLocale } from "../i18n";
@@ -139,15 +158,26 @@ const allReferenceRows = computed(() =>
 );
 
 const equipmentFilter = ref("all");
-const referenceRows = computed(() =>
-  allReferenceRows.value.filter(
-    (row) =>
+const equipmentQuery = ref("");
+const referenceRows = computed(() => {
+  const query = equipmentQuery.value.trim().toLocaleLowerCase(currentLocale.value);
+  return allReferenceRows.value.filter((row) => {
+    const inCategory =
       equipmentFilter.value === "all" ||
       (equipmentFilter.value === "common"
         ? row.usagePriority === "common"
-        : row.usagePriority !== "common")
-  )
-);
+        : row.usagePriority !== "common");
+    return (
+      inCategory &&
+      (!query ||
+        [row.id, row.name, tr(row.name)].some((value) =>
+          String(value ?? "")
+            .toLocaleLowerCase(currentLocale.value)
+            .includes(query)
+        ))
+    );
+  });
+});
 const equipmentFilters = computed(() => [
   { value: "all", label: wt("allEquipment"), count: allReferenceRows.value.length },
   {

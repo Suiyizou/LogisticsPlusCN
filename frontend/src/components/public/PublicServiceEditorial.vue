@@ -22,10 +22,7 @@
           <span class="maritime-eyebrow">IN YOUR WORKFLOW</span>
           <h2>{{ labels.scenarios }}</h2>
         </header>
-        <div class="public-scenario-layout">
-          <figure>
-            <img :src="image" :alt="imageAlt" width="1280" height="564" loading="lazy" />
-          </figure>
+        <div class="public-scenario-layout public-scenario-layout--cards">
           <div>
             <article v-for="(item, index) in content.scenarios" :key="item[0]">
               <span class="public-row-number">0{{ index + 1 }}</span>
@@ -75,8 +72,6 @@ import {
 } from "../../i18n/publicServiceDetailMessages.js";
 const props = defineProps<{
   serviceId: string;
-  image: string;
-  imageAlt: string;
   action: string;
   entry: { href: string; external: boolean };
 }>();

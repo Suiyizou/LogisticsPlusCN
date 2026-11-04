@@ -89,55 +89,55 @@
                 :global-gap-cm="globalGapCm"
                 @save-settings="applyUserSettings"
               />
-              <main v-else-if="activePage === 'planner'" key="planner" class="planner-page">
-                <el-card
+              <main
+                v-else-if="activePage === 'planner'"
+                key="planner"
+                class="planner-page planner-console"
+              >
+                <ol
                   v-if="!isImportPage"
-                  class="planner-step-card"
-                  shadow="never"
+                  class="planner-workflow"
+                  :aria-label="wt('workbenchPlannerTitle')"
                   data-i18n-ignore
                 >
-                  <el-steps :active="activeStepIndex" finish-status="success" align-center>
-                    <el-step
-                      v-for="(step, index) in plannerWorkflowSteps"
-                      :key="step.key"
-                      :status="
-                        activePlannerStep === step.key
-                          ? 'process'
-                          : index < activeStepIndex
-                            ? 'success'
-                            : 'wait'
-                      "
+                  <li
+                    v-for="(step, index) in plannerWorkflowSteps"
+                    :key="step.key"
+                    :class="{
+                      active: activeStepIndex === index,
+                      complete: index < activeStepIndex
+                    }"
+                  >
+                    <button
+                      type="button"
+                      :disabled="step.disabled"
+                      :aria-current="activeStepIndex === index ? 'step' : undefined"
+                      @click="goPlannerStep(step.key)"
                     >
-                      <template #title>
-                        <el-button
-                          link
-                          :type="activePlannerStep === step.key ? 'primary' : 'default'"
-                          :disabled="step.disabled"
-                          class="step-title-button"
-                          @click="goPlannerStep(step.key)"
-                        >
-                          {{ step.no }} {{ step.label }}
-                        </el-button>
-                      </template>
-                      <template #description>
-                        <span class="step-description">{{ step.description }}</span>
-                      </template>
-                    </el-step>
-                  </el-steps>
-                </el-card>
+                      <span class="planner-workflow-number">{{ step.no }}</span>
+                      <span class="planner-workflow-copy"
+                        ><strong>{{ step.label }}</strong
+                        ><small>{{ step.description }}</small></span
+                      >
+                      <el-icon v-if="index < activeStepIndex" class="planner-workflow-check"
+                        ><Check
+                      /></el-icon>
+                    </button>
+                  </li>
+                </ol>
 
                 <Transition name="planner-view" mode="out-in">
                   <section
                     v-if="plannerMode === 'config'"
                     key="config-view"
-                    class="planner-section"
+                    class="planner-section planner-setup"
                   >
                     <WorkspacePageHeader
                       data-i18n-ignore
                       class="planner-page-head"
                       :description="wt('planningHint')"
                       ><template #title>{{ wt("configTitle") }}</template
-                      ><template #eyebrow>Packing Settings</template
+                      ><template #eyebrow>{{ wt("settingsEyebrow") }}</template
                       ><template #actions
                         ><div class="section-actions page-head-actions">
                           <el-tag :type="loading ? 'warning' : 'primary'" effect="light">{{
@@ -155,9 +155,18 @@
                         </div></template
                       ></WorkspacePageHeader
                     >
-                    <p class="planner-autosave-hint" data-i18n-ignore>
-                      {{ wt("settingsAutosaved") }}
-                    </p>
+                    <div class="planner-context-band" data-i18n-ignore>
+                      <span
+                        ><el-icon><Check /></el-icon>{{ wt("settingsAutosaved") }}</span
+                      >
+                      <span
+                        ><el-icon><Box /></el-icon
+                        >{{
+                          wt("settingsActiveEquipment", { count: calculationContainers.length })
+                        }}</span
+                      >
+                      <RouterLink to="/containers">{{ wt("equipmentQuick") }} →</RouterLink>
+                    </div>
                     <el-alert
                       v-if="showPackingWorkloadHint"
                       class="calculation-load-hint"
@@ -471,26 +480,48 @@
                   </section>
 
                   <section v-else-if="isImportPage" class="planner-section planner-import-page">
-                    <UnifiedSmartImport
-                      :key="importMode"
-                      :import-mode="importMode"
-                      :current-cargo-count="cargos.length"
-                      :review-source="pendingImportReview"
-                      @import-cargos="importExcelCargos"
-                    />
+                    <nav
+                      class="planner-import-navigation"
+                      :aria-label="wt('smartImportTitle')"
+                      data-i18n-ignore
+                    >
+                      <RouterLink class="planner-import-return" to="/planner/cargos"
+                        ><el-icon><ArrowLeft /></el-icon>{{ wt("backToCargos") }}</RouterLink
+                      >
+                      <div class="planner-import-tabs">
+                        <RouterLink
+                          v-for="source in plannerImportSources"
+                          :key="source.mode"
+                          :to="`/smart-import/${source.mode}`"
+                          :aria-current="importMode === source.mode ? 'page' : undefined"
+                          >{{ source.label }}</RouterLink
+                        >
+                      </div>
+                    </nav>
+                    <Transition name="planner-import-source" mode="out-in">
+                      <UnifiedSmartImport
+                        :key="importMode"
+                        :import-mode="importMode"
+                        :current-cargo-count="cargos.length"
+                        :review-source="pendingImportReview"
+                        @import-cargos="importExcelCargos"
+                      />
+                    </Transition>
                   </section>
 
                   <section
                     v-else-if="plannerMode === 'cargos'"
                     key="cargo-detail-view"
-                    class="planner-section"
+                    class="planner-section planner-manifest"
                   >
                     <WorkspacePageHeader
                       data-i18n-ignore
-                      class="planner-page-head"
-                      :description="wt('planningHint')"
+                      class="planner-page-head planner-manifest-head"
+                      :description="wt('manifestDescription')"
                       ><template #title>{{ wt("cargoOverviewTitle") }}</template
-                      ><template #eyebrow>Cargo Overview</template
+                      ><template #eyebrow>
+                        <span class="planner-manifest-index" aria-hidden="true">01 / 03</span>
+                        {{ wt("manifestEyebrow") }} </template
                       ><template #actions
                         ><div class="section-actions page-head-actions">
                           <el-button
@@ -510,91 +541,80 @@
                       ></WorkspacePageHeader
                     >
 
-                    <div class="planner-metrics" data-i18n-ignore>
-                      <el-card shadow="never"
-                        ><el-statistic
-                          :title="tr('\u8d27\u7269\u54c1\u7c7b\u6570')"
-                          :value="cargoTypeCount"
-                      /></el-card>
-                      <el-card shadow="never"
-                        ><el-statistic
-                          :title="tr('\u603b\u4ef6\u6570')"
-                          :value="cargoTotalQuantity"
-                      /></el-card>
-                      <el-card shadow="never"
-                        ><el-statistic
-                          :title="wt('totalWeight')"
-                          :value="cargoTotalWeightKg / 1000"
-                          :precision="2"
-                          suffix="t"
-                      /></el-card>
-                      <el-card shadow="never"
-                        ><el-statistic
-                          :title="tr('\u603b\u4f53\u79ef')"
-                          :value="cargoTotalVolumeM3"
-                          :precision="2"
-                          suffix="m³"
-                      /></el-card>
-                    </div>
-                    <el-alert
+                    <dl
+                      class="planner-metrics planner-manifest-metrics"
+                      :aria-label="wt('manifestSummary')"
+                      data-i18n-ignore
+                    >
+                      <div
+                        v-for="metric in manifestMetrics"
+                        :key="metric.key"
+                        class="planner-manifest-metric"
+                      >
+                        <dt>
+                          <span class="planner-metric-icon"
+                            ><el-icon><component :is="metric.icon" /></el-icon></span
+                          >{{ metric.label }}
+                        </dt>
+                        <dd>
+                          {{ metric.value }} <small v-if="metric.unit">{{ metric.unit }}</small>
+                        </dd>
+                        <span class="planner-metric-context">{{ metric.hint }}</span>
+                      </div>
+                    </dl>
+                    <details
                       v-if="showPackingWorkloadHint"
-                      class="calculation-load-hint compact"
+                      class="planner-workload-disclosure"
                       :class="packingWorkloadHint.level"
-                      :title="tr(packingWorkloadHint.title)"
-                      :description="
-                        tr(`${packingWorkloadHint.detail}。${packingWorkloadHint.advice}`)
-                      "
-                      :type="
-                        packingWorkloadHint.level === 'heavy'
-                          ? 'error'
-                          : packingWorkloadHint.level === 'medium'
-                            ? 'warning'
-                            : 'info'
-                      "
-                      show-icon
-                      :closable="false"
-                    />
+                      data-i18n-ignore
+                    >
+                      <summary>
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>{{ tr(packingWorkloadHint.title) }}</span>
+                        <el-icon class="planner-disclosure-chevron"><ArrowDown /></el-icon>
+                      </summary>
+                      <p>{{ packingWorkloadDescription }}</p>
+                    </details>
 
-                    <el-card class="panel cargo-overview-panel" shadow="never">
-                      <template #header>
-                        <WorkspacePageHeader compact class="section-head"
-                          ><template #title>{{ ui("app.currentCargoList") }}</template
-                          ><template #eyebrow>Current Cargo</template
-                          ><template #actions
-                            ><div class="section-actions cargo-list-actions">
-                              <el-segmented
-                                data-i18n-ignore
-                                v-model="cargoView"
-                                :options="cargoViewOptions"
-                                :aria-label="wt('cargoViewLabel')"
-                              />
-                              <el-button type="primary" :icon="Plus" @click="openCargoModal()">{{
-                                ui("app.manualEntry")
-                              }}</el-button>
+                    <section class="cargo-overview-panel">
+                      <WorkspacePageHeader compact class="section-head"
+                        ><template #title>{{ ui("app.currentCargoList") }}</template
+                        ><template #actions
+                          ><div class="section-actions cargo-list-actions">
+                            <el-button
+                              :type="cargos.length ? 'default' : 'primary'"
+                              :icon="Plus"
+                              @click="openCargoModal()"
+                              >{{ ui("app.manualEntry") }}</el-button
+                            >
+                            <el-dropdown
+                              ref="plannerImportMenu"
+                              popper-class="planner-import-menu"
+                              trigger="click"
+                              data-i18n-ignore
+                              @command="openPlannerImport"
+                            >
                               <el-button
-                                data-i18n-ignore
                                 :icon="Star"
-                                @click="router.push('/smart-import/excel')"
-                                >{{ wt("smartImportTitle") }}</el-button
-                              >
-                              <el-button
-                                :icon="Delete"
-                                :disabled="!selectedCargoRows.length"
-                                @click="deleteSelectedCargos"
-                                >{{ ui("app.batchDelete") }}</el-button
-                              >
-                              <el-button
-                                type="danger"
-                                plain
-                                :icon="Delete"
-                                :disabled="!cargos.length"
-                                @click="clearCargos"
-                                >{{ ui("app.clearAll") }}</el-button
-                              >
-                            </div></template
-                          ></WorkspacePageHeader
-                        >
-                      </template>
+                                @keydown.esc="plannerImportMenu?.handleClose()"
+                                >{{ wt("smartImportTitle")
+                                }}<el-icon class="planner-import-caret"><ArrowDown /></el-icon
+                              ></el-button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item
+                                    v-for="source in plannerImportSources"
+                                    :key="source.mode"
+                                    :command="source.mode"
+                                    :icon="source.icon"
+                                    >{{ source.label }}</el-dropdown-item
+                                  >
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div></template
+                        ></WorkspacePageHeader
+                      >
                       <el-alert
                         v-if="cargoImportNoticeText"
                         data-i18n-ignore
@@ -604,15 +624,50 @@
                         :title="cargoImportNoticeText"
                         @close="cargoImportNotice = null"
                       />
+                      <div v-if="cargos.length" class="planner-manifest-toolbar" data-i18n-ignore>
+                        <el-input
+                          v-model="cargoSearch"
+                          clearable
+                          :prefix-icon="Search"
+                          :placeholder="wt('manifestSearch')"
+                          :aria-label="wt('manifestSearch')"
+                        />
+                        <span class="planner-manifest-count" role="status">{{
+                          wt("manifestMatches", {
+                            shown: filteredCargos.length,
+                            total: cargos.length
+                          })
+                        }}</span>
+                        <div class="planner-manifest-tools">
+                          <el-segmented
+                            v-model="cargoView"
+                            :options="cargoViewOptions"
+                            :aria-label="wt('cargoViewLabel')"
+                          />
+                          <el-button
+                            v-if="cargoView === 'list'"
+                            :disabled="!selectedCargoRows.length"
+                            :icon="Delete"
+                            @click="deleteSelectedCargos"
+                            >{{ ui("app.batchDelete") }}</el-button
+                          >
+                          <el-button type="danger" plain :icon="Delete" @click="clearCargos">{{
+                            ui("app.clearAll")
+                          }}</el-button>
+                        </div>
+                      </div>
                       <CargoOverviewSummary
-                        v-if="cargos.length && cargoView === 'overview'"
+                        v-if="filteredCargos.length && cargoView === 'overview'"
                         :cargos="cargos"
+                        :visible-ids="filteredCargoIds"
+                        :color-by-id="cargoColorById"
                         @edit="openCargoModal"
                       />
                       <el-table
                         data-i18n-ignore
-                        v-else-if="cargos.length"
-                        :data="cargos"
+                        v-else-if="filteredCargos.length"
+                        ref="cargoTable"
+                        :data="filteredCargos"
                         row-key="id"
                         class="cargo-overview-table"
                         size="large"
@@ -621,10 +676,12 @@
                         @selection-change="handleCargoSelectionChange"
                       >
                         <el-table-column type="selection" width="44" />
-                        <el-table-column :label="ui('common.cargo')" min-width="220">
-                          <template #default="{ row, $index }">
+                        <el-table-column :label="ui('common.cargo')" min-width="165">
+                          <template #default="{ row }">
                             <span class="cargo-name-cell">
-                              <i :style="{ background: row.color || systemColorFor($index) }"></i>
+                              <i
+                                :style="{ background: row.color || cargoColorById.get(row.id) }"
+                              ></i>
                               <b>{{ row.name }}</b>
                             </span>
                           </template>
@@ -632,27 +689,33 @@
                         <el-table-column prop="model" :label="ui('common.model')" width="92">
                           <template #default="{ row }">{{ row.model || "-" }}</template>
                         </el-table-column>
-                        <el-table-column :label="ui('common.dimensionsCm')" min-width="172">
+                        <el-table-column :label="ui('common.dimensionsCm')" min-width="140">
                           <template #default="{ row }"
                             >{{ row.lengthCm }} × {{ row.widthCm }} × {{ row.heightCm }}</template
                           >
                         </el-table-column>
-                        <el-table-column :label="ui('common.quantity')" width="144">
+                        <el-table-column
+                          :label="ui('common.quantity')"
+                          width="142"
+                          class-name="planner-quantity-cell"
+                        >
                           <template #default="{ row }">
                             <el-input-number
                               v-model="row.quantity"
                               :min="1"
                               :step="1"
-                              size="small"
-                              controls-position="right"
+                              :precision="0"
+                              value-on-clear="min"
+                              size="default"
+                              :aria-label="`${ui('common.quantity')} · ${row.name}`"
                               @change="touchCargoList"
                             />
                           </template>
                         </el-table-column>
-                        <el-table-column :label="ui('common.unitWeight')" width="132">
+                        <el-table-column :label="ui('common.unitWeight')" width="110">
                           <template #default="{ row }">{{ row.weightKg }} kg</template>
                         </el-table-column>
-                        <el-table-column :label="ui('common.subtotalVolume')" width="148">
+                        <el-table-column :label="ui('common.subtotalVolume')" width="112">
                           <template #default="{ row }"
                             >{{
                               fmt(
@@ -664,7 +727,7 @@
                             m³</template
                           >
                         </el-table-column>
-                        <el-table-column :label="ui('common.type')" min-width="230">
+                        <el-table-column :label="ui('common.type')" min-width="164">
                           <template #default="{ row }">
                             <div class="cargo-rule-tags">
                               <el-tag
@@ -679,7 +742,7 @@
                             </div>
                           </template>
                         </el-table-column>
-                        <el-table-column :label="ui('common.actions')" width="144" fixed="right">
+                        <el-table-column :label="ui('common.actions')" width="128" fixed="right">
                           <template #default="{ row }">
                             <el-button link type="primary" @click="openCargoModal(row)">{{
                               ui("common.edit")
@@ -690,15 +753,77 @@
                           </template>
                         </el-table-column>
                       </el-table>
-                      <el-empty v-else :description="ui('app.emptyCargoList')" />
-                    </el-card>
+                      <div
+                        v-else-if="cargos.length"
+                        class="planner-manifest-no-match"
+                        data-i18n-ignore
+                      >
+                        <el-icon><Search /></el-icon><strong>{{ wt("manifestNoMatches") }}</strong>
+                        <el-button link type="primary" @click="cargoSearch = ''">{{
+                          wt("manifestResetSearch")
+                        }}</el-button>
+                      </div>
+                      <div v-else class="planner-manifest-empty" data-i18n-ignore>
+                        <div class="planner-empty-graphic" aria-hidden="true">
+                          <svg viewBox="0 0 148 108" fill="none">
+                            <path
+                              d="m13 75 61 25 61-25M13 64l61 25 61-25"
+                              stroke="#c2d7f4"
+                              stroke-dasharray="3 4"
+                            />
+                            <path
+                              d="M35 35 74 18l39 17v37L74 89 35 72V35Z"
+                              fill="#e1eeff"
+                              stroke="#659af0"
+                              stroke-width="1.5"
+                              stroke-linejoin="round"
+                            />
+                            <path
+                              d="m35 35 39 17 39-17M74 52v37M54 27l39 17v17"
+                              stroke="#659af0"
+                              stroke-width="1.5"
+                              stroke-linejoin="round"
+                            />
+                            <path
+                              d="M44 64l15 7m-15-13 10 4"
+                              stroke="#3d77c8"
+                              stroke-width="1.5"
+                              stroke-linecap="round"
+                            />
+                            <path
+                              d="M117 19h12m-6-6v12M19 45h10m-5-5v10"
+                              stroke="#659af0"
+                              stroke-width="1.5"
+                              stroke-linecap="round"
+                            />
+                          </svg>
+                        </div>
+                        <div class="planner-empty-copy">
+                          <strong>{{ wt("manifestEmptyTitle") }}</strong>
+                          <p>{{ wt("manifestEmptyHint") }}</p>
+                          <div class="planner-empty-import-links">
+                            <RouterLink
+                              v-for="source in plannerImportSources"
+                              :key="source.mode"
+                              :to="`/smart-import/${source.mode}`"
+                            >
+                              <el-icon><component :is="source.icon" /></el-icon>{{ source.label }}
+                            </RouterLink>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
                     <details class="cargo-template-disclosure">
-                      <summary data-i18n-ignore>{{ wt("cargoTemplateTools") }}</summary>
+                      <summary data-i18n-ignore>
+                        <el-icon><Document /></el-icon>
+                        <span>{{ wt("cargoTemplateTools") }}</span>
+                        <el-icon class="planner-disclosure-chevron"><ArrowDown /></el-icon>
+                      </summary>
                       <el-card class="panel cargo-template-panel" shadow="never">
                         <template #header>
                           <WorkspacePageHeader compact class="section-head"
                             ><template #title>{{ ui("template.cargoTemplates") }}</template
-                            ><template #eyebrow>Templates</template
+                            ><template #eyebrow>{{ wt("manifestTemplatesEyebrow") }}</template
                             ><template #actions
                               ><el-button
                                 type="primary"
@@ -768,25 +893,50 @@
                     </details>
                   </section>
 
-                  <section v-else key="results-view" class="planner-section">
+                  <section v-else key="results-view" class="planner-section planner-review">
                     <WorkspacePageHeader
                       data-i18n-ignore
                       class="planner-results-head"
                       :title="wt('resultsTitle')"
+                      :eyebrow="wt('resultsEyebrow')"
                       :description="wt('resultsHint')"
                     >
                       <template #actions
                         ><div class="section-actions">
+                          <a
+                            class="planner-reference-link"
+                            href="#planner-comparison"
+                            @click.prevent="goToPlanComparison"
+                            >{{ wt("equipmentChoice") }} <span aria-hidden="true">↓</span></a
+                          >
                           <el-button :icon="Tickets" @click="goPlannerStep('cargos')">{{
                             wt("backToCargos")
                           }}</el-button>
                           <el-button :icon="Setting" @click="goPlannerStep('config')">{{
                             wt("configTitle")
                           }}</el-button>
+                          <el-button
+                            type="primary"
+                            :icon="Download"
+                            :loading="exportingReport"
+                            :disabled="!selectedPlanExportable"
+                            @click="exportCurrentReport('pdf')"
+                            >{{ wt("exportPlanPdf") }}</el-button
+                          >
                         </div></template
                       >
                     </WorkspacePageHeader>
                     <section class="panel result-summary-panel">
+                      <div
+                        v-if="loading"
+                        class="planner-context-band planner-calculation-status"
+                        role="status"
+                        data-i18n-ignore
+                      >
+                        <span
+                          ><el-icon><Operation /></el-icon>{{ tr(apiStatus) }}</span
+                        >
+                      </div>
                       <div class="planner-result-summary-band" data-i18n-ignore>
                         <div>
                           <span>{{ wt("compliantPlans") }}</span
@@ -936,7 +1086,7 @@
                         </template>
                       </ContainerScene>
                     </section>
-                    <section class="panel ranking-panel">
+                    <section id="planner-comparison" tabindex="-1" class="panel ranking-panel">
                       <WorkspacePageHeader compact class="section-head"
                         ><template #title>{{ ui("result.calculatedPlanComparison") }}</template
                         ><template #eyebrow>{{ wt("equipmentChoice") }}</template
@@ -1323,14 +1473,17 @@ import { wt } from "./components/workspace/workspaceCopy";
 import { useDialogFocus } from "./composables/useDialogFocus.js";
 import WorkspaceDialogTransition from "./components/workspace/WorkspaceDialogTransition.vue";
 import "./components/workspace/workspaceMotion.css";
+import "./components/workspace/plannerConsole.css";
 import PlannerSidebar from "./components/workspace/PlannerSidebar.vue";
 import { useWorkspaceTitle } from "./components/workspace/useWorkspaceTitle";
 import { computed, defineAsyncComponent, h, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { UploadFile } from "element-plus";
 import {
+  ArrowDown,
   ArrowLeft,
   Box,
+  Check,
   DataAnalysis,
   Delete,
   Document,
@@ -1339,10 +1492,13 @@ import {
   Fold,
   Grid,
   House,
+  InfoFilled,
+  Picture,
   MagicStick,
   Operation,
   Plus,
   Refresh,
+  Search,
   Setting,
   Star,
   Tickets,
@@ -1627,6 +1783,23 @@ watch(smartImportOpen, (open) => {
   if (!isImportPage.value) void router.push("/smart-import/excel");
 });
 const cargoView = ref(readCargoView());
+const cargoSearch = ref("");
+const filteredCargos = computed(() => {
+  const query = cargoSearch.value.trim().toLocaleLowerCase(currentLocale.value);
+  if (!query) return cargos.value;
+  return cargos.value.filter((cargo) =>
+    [cargo.name, cargo.model].some((field) =>
+      String(field ?? "")
+        .toLocaleLowerCase(currentLocale.value)
+        .includes(query)
+    )
+  );
+});
+const filteredCargoIds = computed(() => new Set(filteredCargos.value.map((cargo) => cargo.id)));
+const cargoColorById = computed(
+  () =>
+    new Map<string, string>(cargos.value.map((cargo, index) => [cargo.id, systemColorFor(index)]))
+);
 const cargoViewOptions = computed(() => [
   { label: wt("cargoListView"), value: "list" },
   { label: wt("cargoVisualView"), value: "overview" }
@@ -1637,6 +1810,11 @@ watch(pendingImportReview, (review) => {
   if (review) smartImportOpen.value = true;
 });
 const selectedCargoRows = ref<any[]>([]);
+const cargoTable = ref<{ clearSelection: () => void } | null>(null);
+watch(cargoSearch, () => {
+  cargoTable.value?.clearSelection();
+  selectedCargoRows.value = [];
+});
 const editingCargo = ref(null);
 const editingContainer = ref(null);
 const cargoTemplates = ref([]);
@@ -1931,6 +2109,50 @@ const plannerWorkflowSteps = computed(() => [
     disabled: !cargos.value.length
   }
 ]);
+const plannerImportMenu = ref<{ handleClose: () => void } | null>(null);
+const plannerImportSources = computed(() => [
+  { mode: "excel", label: wt("importWorkbook"), icon: Grid },
+  { mode: "image", label: wt("importImage"), icon: Picture },
+  { mode: "text", label: wt("importText"), icon: Document }
+]);
+const manifestMetrics = computed(() => {
+  const whole = new Intl.NumberFormat(currentLocale.value);
+  const decimal = new Intl.NumberFormat(currentLocale.value, { maximumFractionDigits: 3 });
+  return [
+    {
+      key: "lines",
+      label: wt("manifestLines"),
+      hint: wt("manifestLinesHint"),
+      value: whole.format(cargoTypeCount.value),
+      unit: "",
+      icon: Grid
+    },
+    {
+      key: "pieces",
+      label: wt("manifestPieces"),
+      hint: wt("manifestPiecesHint"),
+      value: whole.format(cargoTotalQuantity.value),
+      unit: "",
+      icon: Box
+    },
+    {
+      key: "weight",
+      label: wt("totalWeight"),
+      hint: wt("manifestWeightHint"),
+      value: decimal.format(cargoTotalWeightKg.value),
+      unit: "kg",
+      icon: Tickets
+    },
+    {
+      key: "volume",
+      label: wt("manifestVolume"),
+      hint: wt("manifestVolumeHint"),
+      value: decimal.format(cargoTotalVolumeM3.value),
+      unit: "m³",
+      icon: DataAnalysis
+    }
+  ];
+});
 
 function needsPlannerWorkspace(page) {
   return ["home", "planner", "algorithm", "containers"].includes(page);
@@ -2189,6 +2411,10 @@ function uniqueCargoTemplateName(baseName) {
   return candidate;
 }
 
+function openPlannerImport(mode: string) {
+  void router.push(`/smart-import/${mode}`);
+}
+
 function goPlannerStep(stepKey) {
   if (["results", "review"].includes(stepKey) && !cargos.value.length) {
     showToast("请先录入货物，再计算装箱方案。");
@@ -2202,6 +2428,15 @@ function goPlannerStep(stepKey) {
     review: "/planner/results"
   };
   router.push(routeMap[stepKey] || "/planner/cargos");
+}
+
+function goToPlanComparison() {
+  const comparison = document.getElementById("planner-comparison");
+  comparison?.focus({ preventScroll: true });
+  comparison?.scrollIntoView({
+    block: "start",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"
+  });
 }
 
 function handleMenuSelect(index) {

@@ -25,8 +25,10 @@ public class TrackingAdapterClient {
   private final RestClient restClient;
   private final RestClient agentRestClient;
   private final LocalTrackingQueueClient localQueueClient;
+  private final ShipmentTrackingProperties properties;
 
   public TrackingAdapterClient(ShipmentTrackingProperties properties) {
+    this.properties = properties;
     this.localQueueClient = properties.usesLocalQueue() ? new LocalTrackingQueueClient(properties) : null;
     SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
     requestFactory.setConnectTimeout(validDuration(properties.getConnectTimeout(), Duration.ofSeconds(5)));
@@ -65,7 +67,7 @@ public class TrackingAdapterClient {
     return queue.localCanary(new NormalizedTrackRequest(carrier, "AUTO", type, number));
   }
 
-  private LocalTrackingQueueClient requireLocalQueue() {
+  LocalTrackingQueueClient requireLocalQueue() {
     if (localQueueClient == null) throw new ApiException(HttpStatus.CONFLICT,
         "TRACKING_LOCAL_OPERATION_UNSUPPORTED", "The local tracking queue is not enabled");
     return localQueueClient;
@@ -243,6 +245,10 @@ public class TrackingAdapterClient {
     if (localQueueClient != null) {
       throw new ApiException(HttpStatus.CONFLICT, "TRACKING_LOCAL_OPERATION_UNSUPPORTED",
           "The desktop tracking API returns one complete result; separate COSCO supplemental queries are unavailable");
+    }
+    if (!properties.supportsLegacySupplemental()) {
+      throw new ApiException(HttpStatus.CONFLICT, "TRACKING_SUPPLEMENTAL_UNSUPPORTED",
+          "This tracking adapter uses a single result per shipment");
     }
   }
 

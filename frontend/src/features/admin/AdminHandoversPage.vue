@@ -62,7 +62,13 @@ function changeStatus(value: unknown) {
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="handoverCopy.title"
+      >
         <el-table
           :data="rows"
           row-key="requestId"
@@ -136,9 +142,13 @@ function changeStatus(value: unknown) {
               </div>
             </template>
           </BusinessColumn>
-          <template #empty
-            ><WorkspaceEmptyState>{{ handoverCopy.empty }}</WorkspaceEmptyState></template
-          >
+          <template #empty>
+            <WorkspaceEmptyState v-if="!busy" :title="handoverCopy.empty">
+              <template v-if="status" #actions>
+                <el-button @click="changeStatus('')">{{ handoverCopy.all }}</el-button>
+              </template>
+            </WorkspaceEmptyState>
+          </template>
         </el-table>
       </div>
       <el-pagination

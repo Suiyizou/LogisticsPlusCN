@@ -4,13 +4,6 @@
     :class="{ 'is-customer-mode': loginMode === 'customer' }"
     data-i18n-ignore
   >
-    <section class="app-login-photo" :aria-label="t('maritime.loginBrandAria')">
-      <PublicBrand />
-      <div class="app-login-photo-copy">
-        <h2>{{ t("maritime.loginHero") }}<br />{{ t("maritime.loginHeroSecond") }}</h2>
-        <p>{{ t("maritime.loginHeroDescription") }}</p>
-      </div>
-    </section>
     <section class="app-login-side">
       <header class="app-login-top">
         <PublicBrand class="app-login-mobile-brand" company compact /><a
@@ -31,11 +24,12 @@
           </div>
         </div>
 
-        <div class="app-login-route-switch" :aria-label="t('login.routeLabel')">
+        <div class="app-login-route-switch" role="group" :aria-label="t('login.routeLabel')">
           <button
             type="button"
             :class="{ 'is-active': loginMode === 'employee' }"
             :aria-pressed="loginMode === 'employee'"
+            :disabled="loading"
             @click="selectMode('employee')"
           >
             <span>{{ t("login.employeeRoute") }}</span>
@@ -44,11 +38,16 @@
             type="button"
             :class="{ 'is-active': loginMode === 'customer' }"
             :aria-pressed="loginMode === 'customer'"
+            :disabled="loading"
             @click="selectMode('customer')"
           >
             <span>{{ t("login.customerRoute") }}</span>
           </button>
         </div>
+
+        <p class="app-login-mode-hint">
+          {{ t(loginMode === "employee" ? "login.employeeModeHint" : "login.customerModeHint") }}
+        </p>
 
         <label v-if="loginMode === 'employee'" class="app-login-field">
           <span>{{ t("login.employeeNumberLabel") }}</span>
@@ -172,7 +171,6 @@
               :aria-label="t('login.customerCodeLabel')"
               :disabled="loading"
               required
-              autofocus
             />
           </div>
         </label>
@@ -197,11 +195,81 @@
         ><span>{{ t("login.accountNotice") }}</span>
       </footer>
     </section>
+    <section
+      class="app-login-photo"
+      :aria-label="t('maritime.loginBrandAria')"
+      @mouseenter="sceneHovered = true"
+      @mouseleave="sceneHovered = false"
+      @focusin="sceneFocused = true"
+      @focusout="sceneFocused = $event.currentTarget.contains($event.relatedTarget)"
+    >
+      <Transition name="login-scene">
+        <img
+          :key="activeSlide"
+          class="app-login-scene"
+          :src="scene.image"
+          alt=""
+          width="1586"
+          height="992"
+        />
+      </Transition>
+      <PublicBrand inverse />
+      <div class="app-login-photo-copy">
+        <div
+          class="app-login-photo-caption"
+          :aria-live="playScenes ? 'off' : 'polite'"
+          aria-atomic="true"
+        >
+          <span class="app-login-scene-index" aria-hidden="true"
+            >0{{ activeSlide + 1 }} / 0{{ slides.length }}</span
+          >
+          <h2>{{ scene.title }}<br v-if="scene.secondTitle" />{{ scene.secondTitle }}</h2>
+          <p>{{ scene.description }}</p>
+        </div>
+        <div class="app-login-scenes" role="group" :aria-label="t('login.sceneSelector')">
+          <button
+            class="app-login-scene-control"
+            type="button"
+            :aria-label="t('login.previousScene')"
+            @click="moveScene(-1)"
+          >
+            ‹
+          </button>
+          <button
+            v-for="(slide, index) in slides"
+            :key="slide.image"
+            type="button"
+            :aria-label="[slide.title, slide.secondTitle].filter(Boolean).join(' ')"
+            :aria-pressed="activeSlide === index"
+            @click="activeSlide = index"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+          <button
+            class="app-login-scene-control"
+            type="button"
+            :aria-label="t('login.nextScene')"
+            @click="moveScene(1)"
+          >
+            ›
+          </button>
+          <button
+            v-if="!reducedScenes"
+            class="app-login-scene-control app-login-scene-play"
+            type="button"
+            :aria-label="t(playScenes ? 'login.pauseScenes' : 'login.playScenes')"
+            @click="playScenes = !playScenes"
+          >
+            {{ playScenes ? "Ⅱ" : "▷" }}
+          </button>
+        </div>
+      </div>
+    </section>
   </main>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watchEffect } from "vue";
 import PublicBrand from "./public/PublicBrand.vue";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import { useI18n } from "vue-i18n";
@@ -212,6 +280,75 @@ import { clearCustomerSession, loginCustomer } from "../services/customerSession
 const emit = defineEmits(["logged-in"]);
 const { t } = useI18n();
 
+const activeSlide = ref(0);
+const playScenes = ref(false);
+const sceneHovered = ref(false);
+const sceneFocused = ref(false);
+const pageHidden = ref(false);
+const reducedScenes = ref(false);
+let motionPreference;
+function updateMotionPreference() {
+  reducedScenes.value = motionPreference.matches;
+  if (reducedScenes.value) playScenes.value = false;
+}
+function updatePageVisibility() {
+  pageHidden.value = document.hidden;
+}
+onMounted(() => {
+  motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  updateMotionPreference();
+  updatePageVisibility();
+  motionPreference.addEventListener("change", updateMotionPreference);
+  document.addEventListener("visibilitychange", updatePageVisibility);
+  for (const slide of slides.value.slice(1)) {
+    const image = new Image();
+    image.fetchPriority = "low";
+    image.src = slide.image;
+  }
+});
+onUnmounted(() => {
+  motionPreference?.removeEventListener("change", updateMotionPreference);
+  document.removeEventListener("visibilitychange", updatePageVisibility);
+});
+const slides = computed(() => [
+  {
+    image: "/brand/v4/night-port.webp",
+    title: t("maritime.loginHero"),
+    secondTitle: t("maritime.loginHeroSecond"),
+    description: t("maritime.loginHeroDescription")
+  },
+  {
+    image: "/brand/v4/loading-bay.webp",
+    title: t("login.planningScene"),
+    description: t("login.planningSceneBody")
+  },
+  {
+    image: "/brand/v4/open-voyage.webp",
+    title: t("login.voyageScene"),
+    description: t("login.voyageSceneBody")
+  },
+  {
+    image: "/brand/v4/dispatch-team.webp",
+    title: t("login.collaborationScene"),
+    description: t("login.collaborationSceneBody")
+  }
+]);
+const scene = computed(() => slides.value[activeSlide.value]);
+function moveScene(offset) {
+  activeSlide.value = (activeSlide.value + offset + slides.value.length) % slides.value.length;
+}
+watchEffect((onCleanup) => {
+  if (
+    !playScenes.value ||
+    sceneHovered.value ||
+    sceneFocused.value ||
+    pageHidden.value ||
+    reducedScenes.value
+  )
+    return;
+  const timer = setInterval(() => moveScene(1), 6500);
+  onCleanup(() => clearInterval(timer));
+});
 const loading = ref(false);
 const message = ref("");
 const success = ref(false);
@@ -229,6 +366,7 @@ const submitText = computed(() => {
 
 function selectMode(mode) {
   if (loading.value) return;
+  if (loginMode.value !== mode) showPassword.value = false;
   loginMode.value = mode;
   message.value = "";
   success.value = false;

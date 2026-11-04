@@ -6,8 +6,6 @@
       :class="{ 'is-contained': contained }"
       role="status"
       aria-live="polite"
-      :aria-label="message"
-      :aria-busy="visible"
     >
       <section class="system-wait-card">
         <BrandLockup compact />
@@ -34,7 +32,7 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
   place-items: center;
   padding: 24px;
   color: var(--color-foreground);
-  background: var(--color-background);
+  background: radial-gradient(ellipse at 50% 30%, #e4eeff, var(--color-background) 66%);
 }
 .system-wait-overlay.is-contained {
   position: absolute;
@@ -49,6 +47,8 @@ withDefaults(defineProps<{ visible: boolean; message: string; contained?: boolea
   align-items: center;
   text-align: center;
   border: 1px solid var(--color-border-strong);
+  border-top: 3px solid var(--color-accent);
+  box-shadow: 0 12px 30px rgb(13 35 60 / 7%);
   border-radius: var(--radius-card);
   background: white;
 }

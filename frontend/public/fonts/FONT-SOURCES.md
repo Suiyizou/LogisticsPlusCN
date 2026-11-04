@@ -4,6 +4,7 @@
 
 - Inter Variable：@fontsource-variable/inter 5.3.0。上游：[Inter](https://github.com/rsms/inter)、[OFL 许可证](https://github.com/rsms/inter/blob/master/LICENSE.txt)。随包许可证：inter-OFL.txt。
 - Noto Sans SC Variable：@fontsource-variable/noto-sans-sc 5.3.1。上游：[Noto CJK](https://github.com/notofonts/noto-cjk)、[Google Fonts OFL](https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt)。随包许可证：noto-sans-sc-OFL.txt。
+- Space Grotesk Variable：@fontsource-variable/space-grotesk 5.3.0。展示用 Latin 子集，包含英文字母与数字。上游：[Space Grotesk](https://github.com/floriankarsten/space-grotesk)。随包许可证：space-grotesk-OFL.txt。
 
 保留发行包全部正常字形 Unicode 子集：Inter 7 片、Noto Sans SC 101 片。没有按本项目文案裁剪中文字符。浏览器按 unicode-range 下载当前文字需要的分片；不覆盖的字符继续使用系统字体回退。font-display 为 swap，仅预加载小型 Inter Latin 分片，不预加载整套中文字体。正常运行不请求 Google Fonts 或其他字体 CDN。
 

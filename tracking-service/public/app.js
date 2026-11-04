@@ -22,11 +22,29 @@ import {
 
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
+  canonicalTrackingCarrier,
+  supportsTrackingQuery,
+  trackingQueryCarriers
+} from "./tracking-query-catalog.mjs";
+import {
+  usesLegacySupplementalDelivery,
   normalizeTrackingPayload,
   detailSections,
   createCarrierBadge
 } from "./tracking-v1-adapter.mjs";
-import { installLocalTrackingPreview } from "./tracking-json-preview.mjs";
+import {
+  installLocalTrackingPreview,
+  renderTrackingHistory
+} from "./tracking-json-preview.mjs?v=20261104-shipment-snapshot";
+import {
+  carrierReferenceForDisplay,
+  reportedRouteTime,
+  snapshotContainerCounts
+} from "./tracking-snapshot-presentation.mjs?v=20261104-reference-display";
+import {
+  resolveTrackingCountry,
+  normalizeTrackingLocation
+} from "./tracking-location-normalizer.mjs";
 let localTrackingPreview = null;
 let preLocalPreviewPayload = null;
 
@@ -69,8 +87,8 @@ const workspaceBridge = createTrackingWorkspaceBridge({
         channel: "AUTO"
       });
       const restored = showStoredTrackingQuery(requested, { clearWhenMissing: true });
-      await showView(view, { updateLocation: false });
-      if (!restored) form.requestSubmit();
+      const shown = await showView(view, { updateLocation: false });
+      if (shown && !restored) form.requestSubmit();
     } else if (view !== activeView) await showView(view, { updateLocation: false });
   }
 });
@@ -193,7 +211,6 @@ const batchStatusText = document.querySelector("#batch-status-text");
 const batchResultList = document.querySelector("#batch-result-list");
 const batchImportMessage = document.querySelector("#batch-import-message");
 const batchWorkspaceDialog = document.querySelector("#batch-workspace-dialog");
-const batchWorkspaceTrigger = document.querySelector("#batch-workspace-trigger");
 const batchLegacyNotice = document.querySelector("#batch-legacy-notice");
 const batchWorkspaceClose = document.querySelector("#batch-workspace-close");
 const batchColumnPreview = document.querySelector("#batch-column-preview");
@@ -375,26 +392,8 @@ const DOCUMENT_TYPES = Object.freeze([
   }
 ]);
 
-const CARRIERS = Object.freeze({
-  ...Object.fromEntries(
-    Object.values(MULTI_CARRIER_CATALOG).map(({ code, name }) => [
-      code,
-      { code, name, enabled: true, source: "OFFICIAL API / BROWSER AGENT" }
-    ])
-  ),
-  COSCO: {
-    code: "COSCO",
-    name: "COSCO SHIPPING",
-    enabled: true,
-    source: "COSCO · PUBLIC WEB"
-  },
-  CMA: {
-    code: "CMA",
-    name: "CMA CGM",
-    enabled: true,
-    source: "CMA CGM · SERVER HTML"
-  }
-});
+const LOCAL_TRACKING_QUEUE = document.documentElement.dataset.trackingAdapterMode === "LOCAL_QUEUE";
+const CARRIERS = trackingQueryCarriers(LOCAL_TRACKING_QUEUE);
 
 const CARRIER_BRAND_ASSETS = Object.freeze({
   COSCO: "./carriers/cosco-shipping-lines.png",
@@ -464,6 +463,7 @@ const MESSAGES = {
     "nav.websiteHome": "Platform home",
     "nav.confirmReturn": "Leave shipment tracking and return now?",
     "nav.overview": "Overview",
+    "nav.returnOverview": "Back to overview",
     "nav.agentShipments": "Assigned shipments",
     "nav.agentShipmentDetail": "Shipment details",
     "nav.tracking": "Shipment tracking",
@@ -489,16 +489,16 @@ const MESSAGES = {
     "sidebar.architecture": "OCEAN FREIGHT NETWORK",
     "breadcrumb.workspace": "Workspace",
     "overview.kicker": "SHIPMENT DASHBOARD",
-    "overview.title": "Your shipments, moving in plain sight.",
+    "overview.title": "Ocean freight overview",
     "overview.description":
       "See ports, sailing dates and arrival status at a glance, then expand any shipment for its latest movement.",
     "overview.startTracking": "Track a shipment",
     "overview.guestKicker": "OCEAN FREIGHT TRACKING",
-    "overview.guestTitle": "Follow your shipment, from port to port.",
+    "overview.guestTitle": "Track your ocean shipment",
     "overview.guestDescription":
       "Select a carrier and enter your shipment reference to check its progress. Sign in to view the shipment records assigned to your account.",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
-    "overview.agentTitle": "Your customer shipments, moving in plain sight.",
+    "overview.agentTitle": "Customer shipment overview",
     "overview.agentDescription":
       "Review every authorized shipment in one overview, then filter by customer code before updating that customer's tracking.",
     "overview.agentStartTracking": "Choose a customer code",
@@ -790,6 +790,9 @@ const MESSAGES = {
     "query.carrier": "Carrier",
     "query.channel": "Query channel",
     "query.type": "Shipment number type",
+    "query.localHelper": "Enter a booking number or bill of lading to query via local Chrome.",
+    "query.localCmaHelper": "Enter a CMA CGM booking number to query via local Chrome.",
+    "query.unsupportedReference": "Choose a carrier and a supported shipment number type.",
     "query.number": "Shipment No.",
     "query.numberPlaceholder": "Enter shipment reference",
     "query.enterNumber": "Enter a shipment number first.",
@@ -801,7 +804,7 @@ const MESSAGES = {
     "wait.home": "Returning to the logisticspluscn home page…",
     "wait.batch": "Processing the imported shipment queue…",
     "wait.complete": "Request completed",
-    "batch.excelTaskList": "Import Excel tracking tasks",
+    "batch.excelTaskList": "Excel tracking tasks",
     "batch.title": "Batch tracking import",
     "batch.subtitle": "Import an Excel or CSV list and process it as a background task",
     "batch.localBadge": "Background task",
@@ -932,9 +935,21 @@ const MESSAGES = {
       "Tracking failed. Please try again later or contact customer service.",
     "error.http": "Tracking failed (HTTP {status})",
     "notice.cacheTitle": "Live refresh unavailable",
-    "empty.title": "Ready when you are",
-    "empty.description": "Enter a booking or container number to begin.",
+    "query.searchTitle": "Find a shipment",
+    "query.searchDescription": "Use the reference shown on your carrier documents.",
+    "empty.booking": "Find it on the carrier’s booking confirmation.",
+    "empty.bill": "Use the bill number shown on the ocean transport document.",
+    "empty.container": "Use the equipment ID, usually four letters followed by seven digits.",
+    "empty.title": "What you can track",
+    "empty.description": "Check the reference type before searching.",
+    "map.link": "Route map",
+    "map.title": "Shipment route map",
+    "map.loading": "Loading route map…",
+    "map.unavailable":
+      "The route map could not be loaded. Reported locations are shown in the shipment details.",
     "metrics.actualDeparture": "Actual departure",
+    "metrics.reportedDeparture": "Carrier-reported departure",
+    "metrics.reportedArrival": "Carrier-reported arrival",
     "metrics.actualArrival": "Actual arrival",
     "metrics.estimatedDeparture": "Estimated departure",
     "metrics.estimatedArrival": "Estimated final arrival",
@@ -950,6 +965,9 @@ const MESSAGES = {
     "journey.delivered": "Final destination",
     "journey.progress": "{completed} of {total} milestones confirmed",
     "journey.awaiting": "Awaiting the next carrier event",
+    "journey.noLatest": "Latest event not provided",
+    "journey.noBusinessData": "No business data",
+    "references.empty": "No additional references supplied.",
     "route.title": "Shipment milestones",
     "route.origin": "Origin",
     "route.destination": "Destination",
@@ -1008,7 +1026,7 @@ const MESSAGES = {
     "routing.masterBill": "Master bill",
     "routing.empty": "The carrier did not provide enough data to compose routing legs.",
     "containers.title": "Transport details",
-    "containers.count": "{count} containers",
+    "containers.count": "{count} container records returned",
     "containers.number": "Container",
     "containers.type": "Type",
     "containers.mode": "Mode",
@@ -1022,14 +1040,17 @@ const MESSAGES = {
     "containers.noMilestones": "No container-specific milestones were returned.",
     "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
+    "containers.declared": "Carrier-declared containers",
+    "containers.returned": "Returned container records",
+    "supplemental.load": "Load additional transport details",
     "supplemental.loading":
       "Loading transport details and booking references. This may take about 20 seconds…",
     "supplemental.stale":
-      "The main route is current. Container and booking details are from {time} and are awaiting refresh.",
+      "The main route is current. Container and booking details are from {time} and can be refreshed below.",
     "supplemental.complete": "Transport details and booking references are up to date.",
     "supplemental.partial":
       "Available transport details were loaded; some carrier fields are temporarily unavailable.",
-    "supplemental.failed": "Transport details could not be loaded. Reopen the shipment to retry.",
+    "supplemental.failed": "Transport details could not be loaded. Try loading them again.",
     "documents.kicker": "SHIPMENT FILES",
     "documents.title": "Document details",
     "documents.open": "Documents",
@@ -1110,6 +1131,7 @@ const MESSAGES = {
     "nav.websiteHome": "返回官网",
     "nav.confirmReturn": "确定退出货物跟踪并返回吗？",
     "nav.overview": "总览",
+    "nav.returnOverview": "返回总览",
     "nav.agentShipments": "分配票单",
     "nav.agentShipmentDetail": "票单详情",
     "nav.tracking": "货物跟踪",
@@ -1133,15 +1155,15 @@ const MESSAGES = {
     "sidebar.architecture": "海运服务网络",
     "breadcrumb.workspace": "工作台",
     "overview.kicker": "运输看板",
-    "overview.title": "每一票货物，进度一眼可见。",
+    "overview.title": "海运货物总览",
     "overview.description": "直观看到港口、离港日期和到达状态，也可展开单条货物查看最新动态。",
     "overview.startTracking": "查询一票货物",
     "overview.guestKicker": "国际海运 / 货物追踪",
-    "overview.guestTitle": "从起运港到目的港，掌握运输进度。",
+    "overview.guestTitle": "查询海运货物进度",
     "overview.guestDescription":
       "选择船公司并输入货运参考号，即可查询运输进度。登录后可查看分配给您账户的票单记录。",
     "overview.agentKicker": "海外代理业务台",
-    "overview.agentTitle": "客户票单动态，一页尽览。",
+    "overview.agentTitle": "客户货物总览",
     "overview.agentDescription":
       "统一查看名下全部授权票单；需要更新时，先按客户码筛选，再更新该客户的运输进度。",
     "overview.agentStartTracking": "选择客户码",
@@ -1416,6 +1438,9 @@ const MESSAGES = {
     "query.carrier": "船司",
     "query.channel": "查询通道",
     "query.type": "运输单号类型",
+    "query.localHelper": "输入订舱号或提单号，通过本地 Chrome 查询。",
+    "query.localCmaHelper": "输入 CMA CGM 订舱号，通过本地 Chrome 查询。",
+    "query.unsupportedReference": "请选择船公司和支持的运输单号类型。",
     "query.number": "运输单号",
     "query.numberPlaceholder": "请输入货运参考号",
     "query.enterNumber": "请先输入运输单号。",
@@ -1427,7 +1452,7 @@ const MESSAGES = {
     "wait.home": "正在返回 logisticspluscn 首页…",
     "wait.batch": "正在逐条处理导入的货物队列…",
     "wait.complete": "请求已完成",
-    "batch.excelTaskList": "Excel 导入任务清单",
+    "batch.excelTaskList": "Excel 跟踪任务",
     "batch.title": "批量导入查询",
     "batch.subtitle": "导入 Excel 或 CSV 清单后，以后台任务逐票处理",
     "batch.localBadge": "后台任务",
@@ -1546,9 +1571,20 @@ const MESSAGES = {
     "error.customerFriendly": "查询失败，请稍后重试或联系客服。",
     "error.http": "查询失败（HTTP {status}）",
     "notice.cacheTitle": "实时刷新暂不可用",
-    "empty.title": "等待查询",
-    "empty.description": "输入订舱号或箱号即可开始。",
+    "query.searchTitle": "查询货物",
+    "query.searchDescription": "请使用船公司运输文件上的单号。",
+    "empty.booking": "请查阅船公司出具的订舱确认书。",
+    "empty.bill": "请使用海运提单上标明的提单号。",
+    "empty.container": "请使用集装箱编号，通常由四个字母和七位数字组成。",
+    "empty.title": "可用的查询单号",
+    "empty.description": "查询前请确认单号类型。",
+    "map.link": "航线地图",
+    "map.title": "运单航线地图",
+    "map.loading": "正在加载航线地图…",
+    "map.unavailable": "暂时无法加载航线地图，可在运单详情中查看已报告的地点。",
     "metrics.actualDeparture": "实际离港",
+    "metrics.reportedDeparture": "船司显示的离港时间",
+    "metrics.reportedArrival": "船司显示的到港时间",
     "metrics.actualArrival": "实际到港",
     "metrics.estimatedDeparture": "预计离港",
     "metrics.estimatedArrival": "预计最终到港",
@@ -1564,6 +1600,9 @@ const MESSAGES = {
     "journey.delivered": "最终目的地",
     "journey.progress": "已确认 {completed}/{total} 个主要节点",
     "journey.awaiting": "等待船司更新下一节点",
+    "journey.noLatest": "未提供最新节点",
+    "journey.noBusinessData": "无业务数据",
+    "references.empty": "未提供其他参考号。",
     "route.title": "运输节点",
     "route.origin": "起始地",
     "route.destination": "目的地",
@@ -1622,7 +1661,7 @@ const MESSAGES = {
     "routing.masterBill": "主提单",
     "routing.empty": "船司未提供可组成分段运输的数据。",
     "containers.title": "运输详情",
-    "containers.count": "{count} 个箱",
+    "containers.count": "返回 {count} 条箱明细",
     "containers.number": "箱号",
     "containers.type": "箱型",
     "containers.mode": "运输方式",
@@ -1636,11 +1675,14 @@ const MESSAGES = {
     "containers.noMilestones": "船司未返回该箱的独立轨迹。",
     "containers.enriched": "已通过箱号子查询补全",
     "containers.empty": "船司未提供箱级明细。",
+    "containers.declared": "船司声明箱数",
+    "containers.returned": "返回箱明细",
+    "supplemental.load": "补查运输详情",
     "supplemental.loading": "正在补查运输详情与订舱参考号，预计约需 20 秒…",
-    "supplemental.stale": "主路线已更新；箱动态与订舱参考信息沿用 {time} 的旧数据，正在等待补全。",
+    "supplemental.stale": "主路线已更新；箱动态与订舱参考信息沿用 {time} 的旧数据，可手动补查。",
     "supplemental.complete": "运输详情与订舱参考号已更新。",
     "supplemental.partial": "已载入可用运输详情，部分船司字段暂不可用。",
-    "supplemental.failed": "运输详情暂时无法载入，重新打开该票可重试。",
+    "supplemental.failed": "运输详情暂时无法载入，可重新补查。",
     "documents.kicker": "票单文件",
     "documents.title": "文件详情",
     "documents.open": "文件详情",
@@ -1711,7 +1753,7 @@ Object.assign(MESSAGES.en, {
   "overview.summaryLabel": "Shipment overview summary",
   "overview.summaryKicker": "ACCOUNT VISIBILITY",
   "overview.summaryTitle": "Current shipment scope",
-  "overview.summaryReady": "LIVE",
+  "overview.summaryReady": "Account",
   "overview.totalShipments": "All shipments",
   "overview.activeShipments": "Unfinished",
   "overview.visibleShipments": "Displayed",
@@ -1733,7 +1775,7 @@ Object.assign(MESSAGES.zh, {
   "overview.summaryLabel": "货运总览摘要",
   "overview.summaryKicker": "账户业务视图",
   "overview.summaryTitle": "当前货运范围",
-  "overview.summaryReady": "实时",
+  "overview.summaryReady": "账户范围",
   "overview.totalShipments": "全部业务",
   "overview.activeShipments": "未结束业务",
   "overview.visibleShipments": "当前展示",
@@ -1761,6 +1803,8 @@ const elements = Object.fromEntries(
     "result-traffic-term-fact",
     "result-traffic-term",
     "result-container-types-fact",
+    "result-vessel",
+    "result-vessel-fact",
     "result-container-types",
     "summary-booking-number",
     "summary-booking-reference",
@@ -1823,6 +1867,14 @@ const elements = Object.fromEntries(
     "container-table-body",
     "container-panel",
     "secondary-grid",
+    "snapshot-references-empty",
+    "snapshot-milestone-note",
+    "snapshot-container-counts",
+    "snapshot-declared-count",
+    "snapshot-returned-count",
+    "snapshot-containers-empty",
+    "snapshot-container-table",
+    "load-supplemental-details",
     "supplemental-details-status",
     "supplemental-details-message",
     "document-drawer-shipment",
@@ -1907,6 +1959,55 @@ let systemAnnouncementAutoOpenRequested = false;
 let systemAnnouncementSessionFingerprint = "";
 let customerAssignedHistory = [];
 let internalTrackedHistory = [];
+let shipmentLogisticsMap = null;
+let shipmentMapModule = null;
+let shipmentMapSequence = 0;
+let overviewScrollPosition = 0;
+
+async function renderShipmentMap(payload) {
+  const host = document.querySelector("#shipment-logistics-map");
+  const content = document.querySelector("#shipment-route-map-content");
+  const fallback = document.querySelector("#shipment-route-map-fallback");
+  const status = document.querySelector("#shipment-route-map-status");
+  const sequence = ++shipmentMapSequence;
+  const snapshot = payload.snapshot;
+  const records =
+    snapshot.noBusinessData || snapshot.sourceDetails?.noBusinessData ? [] : [payload];
+  host.hidden = false;
+  if (!shipmentLogisticsMap) {
+    content.hidden = true;
+    fallback.hidden = false;
+    status.textContent = t("map.loading");
+  }
+  try {
+    if (!shipmentLogisticsMap) {
+      shipmentMapModule ??= import("./logistics-network-map.mjs?v=20261104-route-map-entry").catch(
+        (error) => {
+          shipmentMapModule = null;
+          throw error;
+        }
+      );
+      const { createLogisticsNetworkMap } = await shipmentMapModule;
+      if (sequence !== shipmentMapSequence || currentPayload !== payload) return;
+      shipmentLogisticsMap ??= createLogisticsNetworkMap(content);
+    }
+    shipmentLogisticsMap.update(records, { language: currentLanguage, compact: true });
+    content.hidden = false;
+    fallback.hidden = true;
+  } catch {
+    if (sequence !== shipmentMapSequence || currentPayload !== payload) return;
+    content.hidden = true;
+    fallback.hidden = false;
+    status.textContent = t("map.unavailable");
+  }
+}
+
+document.querySelector("#snapshot-map-link").addEventListener("click", (event) => {
+  event.preventDefault();
+  const map = document.querySelector("#shipment-logistics-map");
+  map.focus({ preventScroll: true });
+  map.scrollIntoView({ block: "start" });
+});
 let historyLoadFailed = false;
 let relatedFilesExpiredSessionKind = "";
 let platformPrincipalAwaitingRefresh = false;
@@ -2178,6 +2279,11 @@ function clearFileSession(session = readFileSession(), { expired = false } = {})
   if (session.kind === "CUSTOMER") cleared = clearCustomerSession(session.token);
   if (session.kind === "INTERNAL") cleared = clearPlatformSession(session.token);
   if (!cleared) return false;
+
+  shipmentMapSequence += 1;
+  shipmentLogisticsMap?.update([], { language: currentLanguage });
+  const mapHost = document.querySelector("#shipment-logistics-map");
+  if (mapHost) mapHost.hidden = true;
   if (expired && session.kind === "INTERNAL") workspaceBridge.authExpired(session.token);
 
   synchronizeRelatedFilesSession(readFileSession(), {
@@ -4462,11 +4568,7 @@ async function deleteRelatedFile(file) {
 }
 
 function normalizeCountryCode(countryCode) {
-  const code = String(countryCode ?? "")
-    .trim()
-    .toUpperCase();
-  if (!/^[A-Z]{2}$/.test(code)) return "";
-  return code === "UK" ? "GB" : code;
+  return resolveTrackingCountry(countryCode);
 }
 
 function setCountryFlag(element, countryCode) {
@@ -4485,6 +4587,7 @@ function setCountryFlag(element, countryCode) {
     element.append(image);
   }
   element.dataset.countryCode = code;
+  element.hidden = !code;
   element.title = code || t("route.unknownLocation");
   element.setAttribute("aria-label", code || t("route.unknownLocation"));
 }
@@ -4531,19 +4634,11 @@ function normalizeQuery(query) {
     .trim()
     .toUpperCase();
   const normalized = {
-    carrier: String(query.carrier ?? "COSCO")
-      .trim()
-      .toUpperCase(),
+    carrier: canonicalTrackingCarrier(query.carrier ?? "COSCO"),
     channel: String(query.channel ?? "AUTO")
       .trim()
       .toUpperCase(),
-    type:
-      requestedType === "CONTAINER"
-        ? "CONTAINER"
-        : requestedType === "BILLOFLADING" &&
-            MULTI_CARRIER_CATALOG[String(query.carrier).toUpperCase()]
-          ? "BILLOFLADING"
-          : "BOOKING",
+    type: Object.hasOwn(TYPE_KEYS, requestedType) ? requestedType : "BOOKING",
     number: String(query.number ?? "")
       .trim()
       .replace(/\s+/g, "")
@@ -5169,6 +5264,7 @@ async function loadCustomerAssignedHistory() {
         };
       });
     renderHistory();
+
     if (!agentManagement && items.some((item) => !item?.dataAvailable)) {
       showError(customerFacingTrackingError(), "warning");
     }
@@ -5295,6 +5391,7 @@ async function loadInternalTrackedHistory() {
           boundCustomers: normalizeHistoryBoundCustomers(item.boundCustomers)
         };
       });
+
     renderHistory();
   } catch {
     internalTrackedHistory = [];
@@ -5319,7 +5416,9 @@ function setLoading(value) {
   submitButton.setAttribute("aria-busy", String(loading));
   const label = submitButton.querySelector(".button-label");
   if (label) label.textContent = t(loading ? "query.loading" : "query.submit");
-  submitButton.disabled = loading || !CARRIERS[carrierSelect.value]?.enabled;
+  submitButton.disabled =
+    loading ||
+    !supportsTrackingQuery(carrierSelect.value, trackingType.value, LOCAL_TRACKING_QUEUE);
   results.classList.toggle("is-refreshing", loading && !results.hidden);
 }
 
@@ -5904,7 +6003,9 @@ function canOpenBatchWorkspace(session = readFileSession()) {
 
 function renderBatchWorkspaceAccess(session = readFileSession()) {
   const allowed = canOpenBatchWorkspace(session);
-  if (batchWorkspaceTrigger) batchWorkspaceTrigger.hidden = !allowed;
+  document.querySelectorAll("[data-batch-access]").forEach((link) => {
+    link.hidden = !allowed;
+  });
   if (batchLegacyNotice) batchLegacyNotice.hidden = !allowed || !batchState?.items?.length;
   if (!allowed) closeBatchWorkspace();
 }
@@ -6347,12 +6448,17 @@ function renderPrimaryFacts(snapshot) {
     (snapshot.containers ?? []).find((container) => container?.trafficTerm)?.trafficTerm ??
     "";
   const containerTypes = containerTypeSummary(snapshot);
+  const vessel =
+    snapshot.summary?.vesselVoyage ||
+    [snapshot.sourceDetails?.vessel, snapshot.sourceDetails?.voyage].filter(Boolean).join(" / ");
 
+  elements["result-vessel"].textContent = valueOrDash(vessel);
+  elements["result-vessel-fact"].hidden = !hasText(vessel);
   elements["result-traffic-term"].textContent = valueOrDash(trafficTerm);
   elements["result-container-types"].textContent = valueOrDash(containerTypes);
   elements["result-traffic-term-fact"].hidden = !trafficTerm;
   elements["result-container-types-fact"].hidden = !containerTypes;
-  elements["result-primary-facts"].hidden = !trafficTerm && !containerTypes;
+  elements["result-primary-facts"].hidden = !trafficTerm && !containerTypes && !hasText(vessel);
 }
 
 function renderRoute(route) {
@@ -6360,6 +6466,7 @@ function renderRoute(route) {
   elements["route-flow"].replaceChildren();
   elements["route-flow"].style.setProperty("--route-columns", Math.max(route.length, 1));
   elements["route-count"].textContent = t("route.nodes", { count: route.length });
+  elements["route-count"].hidden = route.length === 0;
   // Discrete carrier milestones are evidence, not a measurable percentage.
   elements["route-summary-line"].removeAttribute("role");
   elements["route-summary-line"].setAttribute("aria-hidden", "true");
@@ -6542,20 +6649,20 @@ function uniqueTextValues(...sources) {
 }
 
 function bookingNumbersForSnapshot(snapshot) {
-  return uniqueTextValues(snapshot?.summary?.bookingNumbers, snapshot?.references?.bookingNumbers);
+  return uniqueTextValues(
+    snapshot?.summary?.bookingNumbers,
+    snapshot?.references?.bookingNumbers
+  ).filter((value) => carrierReferenceForDisplay(snapshot, value));
 }
 
 function renderReferences(snapshot) {
   const references = snapshot?.references ?? {};
-  const masterBill = hasText(references.masterBill) ? String(references.masterBill).trim() : "";
-  const identityValues = uniqueTextValues(
-    snapshot?.tracking?.originalNumber,
-    snapshot?.summary?.billOfLading,
-    references.originalBillOfLading,
-    snapshot?.tracking?.number
-  ).map((value) => value.replace(/[^a-z0-9]/gi, "").toUpperCase());
+  const masterBill = carrierReferenceForDisplay(snapshot, references.masterBill);
+  const displayedNumber = elements["result-number"].textContent
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase();
   const masterIdentity = masterBill.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  const showMasterBill = Boolean(masterBill) && !identityValues.includes(masterIdentity);
+  const showMasterBill = Boolean(masterBill) && masterIdentity !== displayedNumber;
   elements["master-bill"].textContent = masterBill || "—";
   elements["master-bill-reference"].hidden = !showMasterBill;
 
@@ -6664,32 +6771,30 @@ function renderContainerMilestones(cell, container) {
   cell.append(wrapper);
 }
 
-function renderContainers(containers) {
+function renderContainers(snapshot) {
+  const containers = snapshot.containers ?? [];
+  const { declared, returned } = snapshotContainerCounts(snapshot);
+  elements["snapshot-container-counts"].hidden = declared === null;
+  elements["snapshot-declared-count"].textContent = declared ?? "—";
+  elements["snapshot-returned-count"].textContent = returned;
+  elements["container-count"].hidden = declared !== null;
+  elements["snapshot-containers-empty"].hidden = returned > 0;
+  elements["snapshot-container-table"].hidden = returned === 0;
+
   const body = elements["container-table-body"];
   body.replaceChildren();
   elements["container-count"].textContent = t("containers.count", { count: containers.length });
 
-  if (containers.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 8;
-    cell.className = "table-empty";
-    cell.textContent = t("containers.empty");
-    row.append(cell);
-    body.append(row);
-    return;
-  }
+  if (containers.length === 0) return;
 
   const visibleColumns = [
     true,
-    ...[
-      "type",
-      "transportMode",
-      "trafficTerm",
-      "currentLocation",
-      "latestEvent",
-      "latestEventTime"
-    ].map((key) => containers.some((container) => hasText(container[key]))),
+    ...["type", "transportMode", "trafficTerm", "currentLocation", "latestEvent"].map((key) =>
+      containers.some((container) => hasText(container[key]))
+    ),
+    containers.some((container) =>
+      hasText(container.latestEventTime || container.reportedStatusTime)
+    ),
     containers.some((container) => (container.milestones ?? []).length > 0)
   ];
   document.querySelectorAll("#container-panel thead th").forEach((cell, index) => {
@@ -6703,7 +6808,7 @@ function renderContainers(containers) {
     appendCell(row, container.trafficTerm);
     appendCell(row, container.currentLocation);
     appendCell(row, container.latestEvent);
-    appendCell(row, formatDateTime(container.latestEventTime));
+    appendCell(row, formatDateTime(container.latestEventTime || container.reportedStatusTime));
     const actionCell = document.createElement("td");
     const detailsButton = document.createElement("button");
     detailsButton.type = "button";
@@ -6740,26 +6845,27 @@ function renderContainers(containers) {
 
 function renderJourney(snapshot) {
   const latest = snapshot.summary?.latestEvent;
-  const sourceEmpty = snapshot.sourceDetails?.noBusinessData
-    ? currentLanguage === "zh"
-      ? "无业务数据"
-      : "No business data"
-    : snapshot.sourceDetails
-      ? currentLanguage === "zh"
-        ? "未提供最新节点"
-        : "Latest event not provided"
-      : t("journey.awaiting");
+  const sourceEmpty =
+    snapshot.noBusinessData || snapshot.sourceDetails?.noBusinessData
+      ? t("journey.noBusinessData")
+      : snapshot.sourceDetails
+        ? t("journey.noLatest")
+        : t("journey.awaiting");
   journeyStage.textContent = valueOrDash(latest?.name, sourceEmpty);
 }
 
 function restartResultAnimation() {
   clearTimeout(resultAnimationTimer);
   results.classList.remove("is-revealing");
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   void results.offsetWidth;
+  elements["route-flow"].querySelectorAll(".route-node:nth-child(-n + 5)").forEach((node) => {
+    node.classList.add("is-arriving");
+  });
   results.classList.add("is-revealing");
   resultAnimationTimer = setTimeout(() => {
     results.classList.remove("is-revealing");
-  }, 1_300);
+  }, 480);
 }
 
 function setSummaryService(element, enabled) {
@@ -6812,32 +6918,18 @@ function metricRecordsMatch(left, right) {
 function shouldLoadSupplementalDetails(payload) {
   const snapshot = payload?.snapshot;
   const session = readFileSession();
-  if (!snapshot || session.kind !== "INTERNAL" || !session.token || !payload.shipmentId) {
-    return false;
-  }
-  const carrier = String(snapshot.provider?.code ?? snapshot.tracking?.carrier ?? "").toUpperCase();
-  const type = String(snapshot.tracking?.type ?? "").toUpperCase();
-  if (carrier !== "COSCO" || type === "CONTAINER" || snapshot.viewMode === "CONTAINER") {
-    return false;
-  }
-  if (snapshot.supplementalDetails?.updatedAt && !snapshot.supplementalDetails.partial) {
-    return false;
-  }
-  if (
-    snapshot.supplementalDetails?.carriedForward ||
-    snapshot.supplementalDetails?.pendingRefresh
-  ) {
-    return true;
-  }
-  const containersMissing = !Array.isArray(snapshot.containers) || snapshot.containers.length === 0;
-  const referencesMissing =
-    !Array.isArray(snapshot.references?.information) ||
-    snapshot.references.information.length === 0;
-  return containersMissing || referencesMissing;
+  return Boolean(
+    usesLegacySupplementalDelivery(snapshot) &&
+    !payload.localPreview &&
+    session.kind === "INTERNAL" &&
+    session.token &&
+    payload.shipmentId
+  );
 }
 
 function setSupplementalDetailsStatus(state = "idle", variables = {}) {
   window.clearTimeout(supplementalStatusTimer);
+  elements["load-supplemental-details"].disabled = state === "loading";
   elements["supplemental-details-status"].dataset.state = state;
   elements["supplemental-details-status"].hidden = state === "idle";
   if (state !== "idle") {
@@ -6851,9 +6943,10 @@ function setSupplementalDetailsStatus(state = "idle", variables = {}) {
 async function loadSupplementalDetails(payload) {
   if (!shouldLoadSupplementalDetails(payload)) return;
   const shipmentId = String(payload.shipmentId);
+  const carrier = payload.snapshot.provider?.code ?? payload.snapshot.tracking?.carrier;
   const key = `${shipmentId}:${trackingQueryKey(
     normalizeQuery({
-      carrier: payload.snapshot.provider?.code ?? "COSCO",
+      carrier,
       channel: "NETWORK",
       type: payload.snapshot.tracking?.type,
       number: payload.snapshot.tracking?.number
@@ -6864,8 +6957,6 @@ async function loadSupplementalDetails(payload) {
   const requestPayload = payload;
   const session = readFileSession();
   setSupplementalDetailsStatus("loading");
-  elements["container-panel"].hidden = false;
-  elements["secondary-grid"].hidden = false;
   const promise = (async () => {
     try {
       const response = await fetch(
@@ -6877,7 +6968,7 @@ async function loadSupplementalDetails(payload) {
             ...fileAuthHeaders(session)
           },
           body: JSON.stringify({
-            carrier: "COSCO",
+            carrier,
             channel: "NETWORK",
             type: requestPayload.snapshot.tracking?.type,
             number: requestPayload.snapshot.tracking?.number
@@ -6889,7 +6980,7 @@ async function loadSupplementalDetails(payload) {
         throw new Error(trackingResponseMessage(details, response));
       }
       if (!details?.snapshot) throw new Error("Supplemental snapshot is missing");
-      if (String(currentPayload?.shipmentId ?? "") !== shipmentId) return;
+      if (currentPayload !== requestPayload) return;
 
       currentPayload = {
         ...requestPayload,
@@ -6901,14 +6992,8 @@ async function loadSupplementalDetails(payload) {
       setSupplementalDetailsStatus(details.partial ? "partial" : "complete");
       await loadInternalTrackedHistory();
     } catch {
-      if (String(currentPayload?.shipmentId ?? "") !== shipmentId) return;
+      if (currentPayload !== requestPayload) return;
       setSupplementalDetailsStatus("failed");
-      // Empty container details are still a meaningful result. Keep the
-      // transport table and its fixed columns visible when the optional child
-      // query fails so the page can render its explicit empty-state row.
-      elements["container-panel"].hidden = false;
-      elements["secondary-grid"].hidden = false;
-      elements["secondary-grid"].classList.add("is-single-panel");
     } finally {
       supplementalDetailRequests.delete(key);
     }
@@ -6931,6 +7016,7 @@ function renderResult(payload) {
   const isContainerOnly = snapshot.viewMode === "CONTAINER";
 
   currentPayload = payload;
+  void renderShipmentMap(payload);
   setRelatedFilesContext(payload.localPreview ? null : payload);
   results.classList.toggle("is-local-json-preview", Boolean(payload.localPreview));
   form.hidden = Boolean(payload.localPreview);
@@ -6961,7 +7047,9 @@ function renderResult(payload) {
   document.querySelector("#result-carrier-brand").dataset.carrier = providerCode;
   elements["result-type"].textContent = trackingTypeLabel(snapshot.tracking.type);
   elements["result-number"].textContent = valueOrDash(
-    snapshot.tracking.originalNumber ?? summary.billOfLading ?? snapshot.tracking.number
+    snapshot.tracking.originalNumber ||
+      snapshot.tracking.number ||
+      carrierReferenceForDisplay(snapshot, summary.billOfLading)
   );
   elements["result-number"].title = elements["result-number"].textContent;
   renderPrimaryFacts(snapshot);
@@ -6981,12 +7069,19 @@ function renderResult(payload) {
   elements["summary-destination-name"].textContent = valueOrDash(
     [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
   );
+  for (const side of ["origin", "destination"]) {
+    const flag = document.querySelector(`#summary-${side}-flag`);
+    if (!flag) continue;
+    setCountryFlag(flag, summary[side]?.countryCode);
+    flag.hidden = !flag.dataset.countryCode;
+  }
   const summaryRoutePair = document.querySelector(".summary-route-pair");
   if (summaryRoutePair)
     summaryRoutePair.hidden = !summary.origin?.name && !summary.destination?.name;
   elements["summary-origin-name"].title = elements["summary-origin-name"].textContent;
   elements["summary-destination-name"].title = elements["summary-destination-name"].textContent;
-  const summaryLatestDetail = [latest?.location, formatDateTime(latest?.occurredAt)]
+  const latestTime = latest?.occurredAt || latest?.reportedTime;
+  const summaryLatestDetail = [latest?.location, formatDateTime(latestTime)]
     .filter((value) => value && value !== "—")
     .join(" · ");
   elements["summary-latest-detail"].textContent = summaryLatestDetail;
@@ -7034,11 +7129,18 @@ function renderResult(payload) {
   elements["fetched-at"].title =
     `${formatLocalDateTime(snapshot.fetchedAt)} · ${snapshot.fetchedAt || "—"}`;
 
-  const departureRecord = firstTimedRecord(keyTimes.actualDeparture, keyTimes.estimatedDeparture);
+  const reportedDeparture = reportedRouteTime(snapshot, "departure");
+  const reportedArrival = reportedRouteTime(snapshot, "arrival");
+  const departureRecord = firstTimedRecord(
+    keyTimes.actualDeparture,
+    keyTimes.estimatedDeparture,
+    reportedDeparture
+  );
   const arrivalRecord = firstTimedRecord(
     keyTimes.actualArrival,
     keyTimes.estimatedFinalArrival,
-    keyTimes.estimatedArrival
+    keyTimes.estimatedArrival,
+    reportedArrival
   );
   const deliveryRecord = firstTimedRecord(keyTimes.estimatedDelivery);
   const visibleMetrics = [];
@@ -7052,7 +7154,9 @@ function renderResult(payload) {
       labelKey:
         departureRecord === keyTimes.actualDeparture
           ? "metrics.actualDeparture"
-          : "metrics.estimatedDeparture"
+          : departureRecord === reportedDeparture
+            ? "metrics.reportedDeparture"
+            : "metrics.estimatedDeparture"
     })
   );
   visibleMetrics.push(
@@ -7065,7 +7169,9 @@ function renderResult(payload) {
       labelKey:
         arrivalRecord === keyTimes.actualArrival
           ? "metrics.actualArrival"
-          : "metrics.estimatedArrival"
+          : arrivalRecord === reportedArrival
+            ? "metrics.reportedArrival"
+            : "metrics.estimatedArrival"
     })
   );
   const showDelivery =
@@ -7080,17 +7186,14 @@ function renderResult(payload) {
       labelKey: deliveryRecord?.actualTime ? "metrics.actualDelivery" : "metrics.estimatedDelivery"
     })
   );
-  const hasLatestEvent = [
-    latest?.name,
-    latest?.location,
-    latest?.occurredAt,
-    latest?.transportMode
-  ].some(hasText);
+  const hasLatestEvent = [latest?.name, latest?.location, latestTime, latest?.transportMode].some(
+    hasText
+  );
   elements["latest-metric-card"].hidden = !hasLatestEvent;
   elements["latest-event"].textContent = hasText(latest?.name) ? String(latest.name) : "—";
   elements["latest-event-detail"].textContent = [
     latest?.location,
-    formatDateTime(latest?.occurredAt),
+    formatDateTime(latestTime),
     latest?.transportMode
   ]
     .filter((item) => item && item !== "—")
@@ -7107,12 +7210,12 @@ function renderResult(payload) {
 
   const route = selectDisplayRouteNodes(snapshot.route ?? []);
   const routingLegs = snapshot.routingLegs ?? [];
-  const containers = snapshot.containers ?? [];
-  elements["route-panel"].hidden = route.length === 0;
+  const { declared } = snapshotContainerCounts(snapshot);
+  const reportedHistoryCount = renderTrackingHistory(document, snapshot, currentLanguage);
   elements["routing-panel"].hidden = routingLegs.length === 0;
-  elements["container-panel"].hidden = !sections.containers;
-  elements["secondary-grid"].classList.toggle("is-single-panel", containers.length === 0);
-  elements["secondary-grid"].hidden = false;
+  elements["secondary-grid"].hidden = !sections.containers && declared === null;
+  elements["route-flow"].hidden = route.length === 0 && reportedHistoryCount > 0;
+  elements["snapshot-milestone-note"].hidden = route.length === 0;
 
   renderRoute(route);
   renderJourney(snapshot);
@@ -7120,17 +7223,12 @@ function renderResult(payload) {
   renderReferences(snapshot);
   renderBusinessReferences(snapshot);
   renderExtraInformation(snapshot);
-  const referencesPanel = document.querySelector(".references-panel");
-  if (referencesPanel)
-    referencesPanel.hidden =
-      Boolean(payload.localPreview) &&
-      [
-        "business-reference-grid",
-        "reference-core",
-        "reference-information",
-        "extra-information-section"
-      ].every((id) => elements[id]?.hidden !== false);
-  renderContainers(containers);
+  elements["snapshot-references-empty"].hidden =
+    !extraInformationSection.hidden ||
+    ["business-reference-grid", "reference-core", "reference-information"].some(
+      (id) => !elements[id].hidden
+    );
+  renderContainers(snapshot);
   if (!payload.localPreview) renderDocumentDrawer(snapshot);
   localTrackingPreview?.renderDetails(snapshot);
   elements["raw-json"].textContent = payload.raw
@@ -7140,11 +7238,10 @@ function renderResult(payload) {
   emptyState.hidden = true;
   results.hidden = false;
   results.classList.toggle("is-refreshing", loading);
-  restartResultAnimation();
-  if (
-    snapshot.supplementalDetails?.carriedForward ||
-    snapshot.supplementalDetails?.pendingRefresh
-  ) {
+  const canLoadSupplemental = shouldLoadSupplementalDetails(payload);
+  elements["load-supplemental-details"].hidden = !canLoadSupplemental;
+  setSupplementalDetailsStatus("idle");
+  if (canLoadSupplemental && snapshot.supplementalDetails?.carriedForward) {
     setSupplementalDetailsStatus("stale", {
       time: formatLocalDateTime(
         snapshot.supplementalDetails.sourceFetchedAt ??
@@ -7153,8 +7250,11 @@ function renderResult(payload) {
       )
     });
   }
-  if (!payload.localPreview) void loadSupplementalDetails(payload);
 }
+
+elements["load-supplemental-details"].addEventListener("click", () => {
+  void loadSupplementalDetails(currentPayload);
+});
 
 function formatShipmentDate(value) {
   if (!value) return "—";
@@ -7167,14 +7267,6 @@ function formatShipmentDate(value) {
   }).format(date);
 }
 
-function portCode(value) {
-  return (
-    String(value ?? "")
-      .toUpperCase()
-      .match(/\b[A-Z]{5}\b/)?.[0] ?? ""
-  );
-}
-
 function historyPort(snapshot, side) {
   const route = snapshot.route ?? [];
   const isOrigin = side === "origin";
@@ -7183,14 +7275,14 @@ function historyPort(snapshot, side) {
     preferredTypes.map((type) => route.find((item) => item.locationType === type)).find(Boolean) ??
     (isOrigin ? route[0] : route.at(-1));
   const summary = snapshot.summary?.[side] ?? {};
-  const name = node?.city ?? summary.name ?? t("route.unknownLocation");
-  const code = portCode(node?.facilityCode) || portCode(name);
-
-  return {
+  const name = node?.city || summary.name || t("route.unknownLocation");
+  const location = normalizeTrackingLocation({
+    ...summary,
+    ...node,
     name,
-    code,
-    countryCode: node?.countryCode ?? summary.countryCode ?? ""
-  };
+    countryCode: node?.countryCode || summary.countryCode || ""
+  });
+  return { name, code: location?.unLocationCode || "", countryCode: location?.countryCode || "" };
 }
 
 function historyTiming(snapshot) {
@@ -7202,7 +7294,8 @@ function historyTiming(snapshot) {
   const firstOceanLeg = oceanLegs[0] ?? firstLeg;
   const lastOceanLeg = oceanLegs.at(-1) ?? lastLeg;
   const actualDeparture = firstOceanLeg.actualDeparture ?? keyTimes.actualDeparture?.time ?? null;
-  const estimatedDeparture = firstOceanLeg.estimatedDeparture ?? null;
+  const estimatedDeparture =
+    firstOceanLeg.estimatedDeparture ?? keyTimes.estimatedDeparture?.time ?? null;
   const actualArrival =
     lastOceanLeg.actualArrival ??
     keyTimes.actualArrival?.time ??
@@ -8207,6 +8300,7 @@ function renderHistory() {
   const session = readFileSession();
   const agentManagement = isOverseaAgentSession(session);
   renderHistoryCustomerFilter(allHistory, session);
+
   const followedHistory =
     historyFollowingOnly && agentManagement
       ? allHistory.filter((entry) => entry.followed === true)
@@ -8558,7 +8652,7 @@ function setCmaSessionMessage(message = "", variant = "info") {
 }
 
 function renderCmaSessionPanel() {
-  const selected = carrierSelect.value === "CMA";
+  const selected = !LOCAL_TRACKING_QUEUE && carrierSelect.value === "CMA";
   const session = readFileSession();
   const canManage = canManageFileVisibility(session);
   cmaSessionPanel.hidden = !selected || !canManage;
@@ -8705,28 +8799,52 @@ async function clearCmaSession() {
 function updateCarrierUI({ resetResult = false } = {}) {
   const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
   const cmaSelected = carrier.code === "CMA";
-  const billOption = trackingType?.querySelector('option[value="BILLOFLADING"]');
-  if (billOption) billOption.hidden = ["COSCO", "CMA"].includes(carrier.code);
-  if (billOption?.hidden && trackingType.value === "BILLOFLADING") trackingType.value = "BOOKING";
+  for (const option of trackingType.options) {
+    option.hidden = option.disabled = !supportsTrackingQuery(
+      carrier.code,
+      option.value,
+      LOCAL_TRACKING_QUEUE
+    );
+  }
+  if (
+    resetResult &&
+    !supportsTrackingQuery(carrier.code, trackingType.value, LOCAL_TRACKING_QUEUE)
+  ) {
+    trackingType.value = "BOOKING";
+  }
   const channel = CHANNELS[queryChannel] ?? CHANNELS.AUTO;
-  sourceTag.textContent = carrier.code === "COSCO" ? t(channel.sourceKey) : carrier.source;
+  sourceTag.textContent = LOCAL_TRACKING_QUEUE
+    ? t(CHANNELS.LOCAL_CHROME.sourceKey)
+    : carrier.code === "COSCO"
+      ? t(channel.sourceKey)
+      : carrier.source;
   queryHelper.textContent = t(
-    cmaSelected
-      ? "query.cmaHelper"
-      : MULTI_CARRIER_CATALOG[carrier.code]
-        ? "query.multiCarrierHelper"
-        : "query.helper"
+    LOCAL_TRACKING_QUEUE
+      ? cmaSelected
+        ? "query.localCmaHelper"
+        : "query.localHelper"
+      : cmaSelected
+        ? "query.cmaHelper"
+        : MULTI_CARRIER_CATALOG[carrier.code]
+          ? "query.multiCarrierHelper"
+          : "query.helper"
   );
   if (carrierNotice) {
-    carrierNotice.hidden = carrier.enabled;
-    carrierNotice.textContent = carrier.enabled ? "" : t("carrier.cmaNotice");
+    const supported = supportsTrackingQuery(
+      carrierSelect.value,
+      trackingType.value,
+      LOCAL_TRACKING_QUEUE
+    );
+    carrierNotice.hidden = supported;
+    carrierNotice.textContent = supported ? "" : t("query.unsupportedReference");
   }
   carrierNavItems.forEach((item) => {
     item.classList.toggle("is-current", item.dataset.carrierSelect === carrier.code);
   });
   renderCmaSessionPanel();
   if (checkChannelsButton) {
-    checkChannelsButton.disabled = channelCheckLoading || carrier.code !== "COSCO";
+    checkChannelsButton.disabled =
+      LOCAL_TRACKING_QUEUE || channelCheckLoading || carrier.code !== "COSCO";
   }
   setLoading(loading);
   refreshTrackingControls();
@@ -8793,7 +8911,7 @@ function renderChannelCheck(result) {
 function setChannelCheckLoading(value) {
   channelCheckLoading = value;
   if (checkChannelsButton) {
-    checkChannelsButton.disabled = value || carrierSelect.value !== "COSCO";
+    checkChannelsButton.disabled = LOCAL_TRACKING_QUEUE || value || carrierSelect.value !== "COSCO";
     checkChannelsButton.classList.toggle("is-loading", value);
     const label = checkChannelsButton.querySelector("[data-i18n]");
     if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");
@@ -8857,7 +8975,10 @@ function updateUrl(query, { push = false } = {}) {
   notifyWorkspaceRoute("tracking");
 }
 
-function showView(name, { updateLocation = true, pushLocation = false } = {}) {
+function showView(
+  name,
+  { updateLocation = true, pushLocation = false, restoreOverview = false } = {}
+) {
   let nextView = ["overview", "shipments", "tracking", "profile"].includes(name)
     ? name
     : "overview";
@@ -8874,7 +8995,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
     return showView("overview", { updateLocation, pushLocation });
   }
   const incoming = document.querySelector(`[data-view="${nextView}"]`);
-  if (!incoming) return Promise.resolve();
+  if (!incoming) return Promise.resolve(false);
   const outgoing = document.querySelector(".app-view:not([hidden])");
   const transitionId = ++viewTransitionSequence;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -8883,6 +9004,7 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
     resolveShown = resolve;
   });
 
+  if (activeView === "overview" && nextView !== "overview") overviewScrollPosition = window.scrollY;
   activeView = nextView;
   document.querySelectorAll("[data-view-target]").forEach((link) => {
     link.classList.toggle("is-active", link.dataset.viewTarget === activeView);
@@ -8914,25 +9036,35 @@ function showView(name, { updateLocation = true, pushLocation = false } = {}) {
   }
 
   const revealIncoming = () => {
-    if (transitionId !== viewTransitionSequence) return;
+    if (transitionId !== viewTransitionSequence) {
+      resolveShown(false);
+      return;
+    }
     document.querySelectorAll(".app-view").forEach((view) => {
       view.hidden = view !== incoming;
       view.getAnimations().forEach((animation) => animation.cancel());
     });
     incoming.hidden = false;
-    if (!reduceMotion) {
+    if (!reduceMotion && outgoing !== incoming) {
       incoming.animate(
         [
-          { opacity: 0, transform: "translateY(10px)" },
-          { opacity: 1, transform: "translateY(0)" }
+          {
+            opacity: 0.6,
+            transform: nextView === "overview" ? "translateY(8px)" : "translateX(6px)"
+          },
+          { opacity: 1, transform: "translate(0)" }
         ],
         { duration: 220, easing: "cubic-bezier(.2,.75,.2,1)" }
       );
     }
     if (["overview", "shipments"].includes(activeView)) renderHistory();
     renderTrackingAccount();
-    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
-    resolveShown();
+    const restoreScroll = nextView === "overview" && restoreOverview;
+    window.scrollTo({
+      top: restoreScroll ? overviewScrollPosition : 0,
+      behavior: restoreScroll || reduceMotion ? "instant" : "smooth"
+    });
+    resolveShown(true);
   };
 
   if (outgoing && outgoing !== incoming && !reduceMotion) {
@@ -9009,9 +9141,13 @@ function showStoredTrackingQuery(
 
 function openHistoryEntry(entry) {
   if (isOverseaAgentSession()) agentShipmentDetailOpen = true;
-  showStoredTrackingQuery(entry.query, { entry });
+  const rendered = showStoredTrackingQuery(entry.query, { entry });
   updateUrl(entry.query, { push: true });
-  void showView("tracking", { updateLocation: false });
+  void showView("tracking", { updateLocation: false }).then((shown) => {
+    if (!shown || !rendered || activeView !== "tracking" || results.hidden) return;
+    restartResultAnimation();
+    elements["result-number"].focus({ preventScroll: true });
+  });
 }
 
 function markBatchItemResult(query, { status, source = null, error = null }) {
@@ -9055,7 +9191,8 @@ async function openBatchItem(item) {
   setBatchImportNotice();
   closeBatchWorkspace();
   updateUrl(query, { push: true });
-  await showView("tracking", { updateLocation: false });
+  const shown = await showView("tracking", { updateLocation: false });
+  if (shown && activeView === "tracking" && !results.hidden) restartResultAnimation();
 }
 
 function applyLanguage(language, { persist = true } = {}) {
@@ -9158,7 +9295,7 @@ async function requestTracking(query, options = {}) {
   const customerReadOnly = readFileSession().kind === "CUSTOMER";
   const platform = await postPublicShipmentTrackingRequest(query, options);
   if (customerReadOnly) return platform;
-  if (!isPublicTrackingRouteUnavailable(platform)) return platform;
+  if (LOCAL_TRACKING_QUEUE || !isPublicTrackingRouteUnavailable(platform)) return platform;
 
   const primary = await postTrackingRequest("/api/track", query, options);
   if (query.carrier === "COSCO" && [404, 405].includes(primary.response.status)) {
@@ -9170,8 +9307,7 @@ async function requestTracking(query, options = {}) {
 }
 
 checkChannelsButton?.addEventListener("click", async () => {
-  const carrier = CARRIERS[carrierSelect.value];
-  if (!carrier?.enabled || channelCheckLoading) return;
+  if (LOCAL_TRACKING_QUEUE || carrierSelect.value !== "COSCO" || channelCheckLoading) return;
   const shipmentNumber = trackingNumber.value.trim();
   if (!shipmentNumber) {
     channelCheckSummary.textContent = t("query.enterNumber");
@@ -9229,10 +9365,8 @@ form.addEventListener("submit", async (event) => {
       ? importedItem?.importedDetails
       : null
   });
-  const carrier = CARRIERS[query.carrier];
-
-  if (!carrier?.enabled) {
-    showError(t("carrier.cmaNotice"), "warning");
+  if (!supportsTrackingQuery(query.carrier, query.type, LOCAL_TRACKING_QUEUE)) {
+    showError(t("query.unsupportedReference"), "warning");
     return;
   }
 
@@ -9258,6 +9392,13 @@ form.addEventListener("submit", async (event) => {
     else renderHistory();
     if (requestSequence !== trackingRequestSequence) return;
     renderResult(payload);
+    restartResultAnimation();
+    if (
+      activeView === "tracking" &&
+      (document.activeElement === document.body || form.contains(document.activeElement))
+    ) {
+      elements["result-number"].focus({ preventScroll: true });
+    }
     completed = true;
   } catch (error) {
     if (requestSequence !== trackingRequestSequence) return;
@@ -9277,6 +9418,7 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+trackingType.addEventListener("change", () => updateCarrierUI());
 carrierSelect.addEventListener("change", () => {
   invalidateTrackingRequest();
   updateCarrierUI({ resetResult: true });
@@ -9569,12 +9711,19 @@ document.querySelectorAll("[data-view-target]").forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();
     if (link.dataset.viewTarget === activeView) return;
-    showView(link.dataset.viewTarget, { pushLocation: true });
+    showView(link.dataset.viewTarget, {
+      pushLocation: true,
+      restoreOverview: link.id === "return-overview"
+    });
   });
 });
 
 document.querySelectorAll("[data-home-link], [data-platform-link]").forEach((link) => {
   link.addEventListener("click", (event) => {
+    if (link.hasAttribute("data-batch-access") && !canOpenBatchWorkspace()) {
+      event.preventDefault();
+      return;
+    }
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
@@ -9593,7 +9742,6 @@ document.querySelectorAll("[data-home-link], [data-platform-link]").forEach((lin
       );
       return;
     }
-    if (link === batchWorkspaceTrigger && !canOpenBatchWorkspace()) return;
     if (document.body.classList.contains("is-page-leaving")) return;
     showPlatformRouteWait(
       link.hasAttribute("data-platform-link") ? "batch.workspaceOpening" : "wait.home"
@@ -9629,11 +9777,15 @@ document.querySelector("#portal-return-link")?.addEventListener("click", (event)
 document.querySelector("#start-tracking-button").addEventListener("click", () => {
   if (isOverseaAgentSession()) {
     historyCustomerFilterSelect?.focus();
-    historyCustomerFilterWrap?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    historyCustomerFilterWrap?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center"
+    });
     return;
   }
-  showView("tracking", { pushLocation: activeView !== "tracking" }).then(() => {
-    if (trackingNumber && !trackingNumber.hidden) {
+  showView("tracking", { pushLocation: activeView !== "tracking" }).then((shown) => {
+    if (shown && trackingNumber && !trackingNumber.hidden) {
       trackingNumber.focus();
       trackingNumber.select();
     }
@@ -9974,7 +10126,10 @@ localTrackingPreview = installLocalTrackingPreview({
     clearError();
     agentShipmentDetailOpen = true;
     renderResult(payload);
-    void showView("tracking", { updateLocation: false });
+    void showView("tracking", { updateLocation: false }).then((shown) => {
+      if (shown && activeView === "tracking" && currentPayload?.localPreview)
+        restartResultAnimation();
+    });
   },
   onExit() {
     invalidateTrackingRequest();
@@ -9993,6 +10148,9 @@ localTrackingPreview = installLocalTrackingPreview({
     void showView("overview", { updateLocation: false });
   }
 });
+carrierSelect.replaceChildren(
+  ...Object.values(CARRIERS).map(({ code, name }) => new Option(name, code))
+);
 clearLegacyBrowserSnapshots();
 batchState = restoreBatchState();
 if (batchState) persistBatchState();

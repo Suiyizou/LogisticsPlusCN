@@ -30,6 +30,10 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.http.HttpStatus;
 
 class ShipmentBatchTrackingServiceTest {
+  private void markLegacySupplemental(ObjectNode response) {
+    response.putObject("snapshot").put("deliveryMode", "LEGACY_SUPPLEMENTAL")
+        .putObject("supplementalDetails").put("pendingRefresh", true);
+  }
   private ExecutorService executor;
   private ShipmentBatchTrackingService service;
 
@@ -378,6 +382,7 @@ class ShipmentBatchTrackingServiceTest {
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "existing-shipment");
     tracked.put("cacheSource", "LIVE");
+    markLegacySupplemental(tracked);
     when(trackingService.track(any(), any())).thenReturn(tracked);
     ObjectNode supplemental = new ObjectMapper().createObjectNode();
     supplemental.putArray("containers");
@@ -443,6 +448,7 @@ class ShipmentBatchTrackingServiceTest {
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "existing-shipment");
     tracked.put("cacheSource", "LIVE");
+    markLegacySupplemental(tracked);
     when(trackingService.track(any(), any())).thenReturn(tracked);
     ObjectNode supplemental = new ObjectMapper().createObjectNode();
     supplemental.putArray("containers");
@@ -594,6 +600,7 @@ class ShipmentBatchTrackingServiceTest {
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "existing-shipment");
     tracked.put("cacheSource", "LIVE");
+    markLegacySupplemental(tracked);
     when(trackingService.track(any(), any())).thenReturn(tracked);
     String message = "Configured COSCO proxy is unavailable；代理池已尝试 3 个出口节点";
     when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
@@ -653,6 +660,7 @@ class ShipmentBatchTrackingServiceTest {
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "warning-shipment");
     tracked.put("cacheSource", "LIVE");
+    markLegacySupplemental(tracked);
     when(trackingService.track(any(), any())).thenReturn(tracked);
     when(trackingService.loadSupplementalDetails(any(), any(), any())).thenThrow(
         new ApiException(
@@ -716,18 +724,14 @@ class ShipmentBatchTrackingServiceTest {
   }
 
   @Test
-  void selectedRefreshUsesItsOwnModeAndForcesLiveRefresh() throws Exception {
+  void selectedRefreshConsumesOneLiveResponseWithoutSubtasks() throws Exception {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     ObjectNode tracked = new ObjectMapper().createObjectNode();
     tracked.put("shipmentId", "selected-shipment");
     tracked.put("cacheSource", "LIVE");
+    tracked.putObject("snapshot").put("deliveryMode", "SINGLE_RESPONSE")
+        .putObject("supplementalDetails").put("pendingRefresh", true);
     when(trackingService.track(any(), any())).thenReturn(tracked);
-    ObjectNode supplemental = new ObjectMapper().createObjectNode();
-    supplemental.putArray("containers");
-    supplemental.putObject("references");
-    supplemental.putArray("warnings");
-    when(trackingService.loadSupplementalDetails(any(), any(), any()))
-        .thenReturn(supplemental);
 
     executor = Executors.newSingleThreadExecutor();
     service = new ShipmentBatchTrackingService(
@@ -753,6 +757,7 @@ class ShipmentBatchTrackingServiceTest {
         ArgumentCaptor.forClass(ShipmentTrackRequest.class);
     verify(trackingService).track(requestCaptor.capture(), any());
     assertEquals(Boolean.TRUE, requestCaptor.getValue().forceRefresh());
+    verify(trackingService, never()).loadSupplementalDetails(any(), any(), any());
   }
 
   @Test

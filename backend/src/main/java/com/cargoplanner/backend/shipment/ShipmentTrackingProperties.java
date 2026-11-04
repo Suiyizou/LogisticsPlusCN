@@ -10,6 +10,7 @@ public class ShipmentTrackingProperties {
   public enum AdapterMode { LEGACY, LOCAL_QUEUE }
 
   private AdapterMode adapterMode = AdapterMode.LEGACY;
+  private boolean legacySupplementalEnabled;
   private String localBaseUrl = "http://127.0.0.1:8791";
   private String localToken = "";
   private Duration localJobTimeout = Duration.ofMinutes(7);
@@ -25,6 +26,9 @@ public class ShipmentTrackingProperties {
   public AdapterMode getAdapterMode() { return adapterMode; }
   public void setAdapterMode(AdapterMode value) { adapterMode = value; }
   public boolean usesLocalQueue() { return adapterMode == AdapterMode.LOCAL_QUEUE; }
+  public boolean isLegacySupplementalEnabled() { return legacySupplementalEnabled; }
+  public void setLegacySupplementalEnabled(boolean value) { legacySupplementalEnabled = value; }
+  boolean supportsLegacySupplemental() { return !usesLocalQueue() && legacySupplementalEnabled; }
   public String getLocalBaseUrl() { return localBaseUrl; }
   public void setLocalBaseUrl(String value) { localBaseUrl = value; }
   public String getLocalToken() { return localToken; }

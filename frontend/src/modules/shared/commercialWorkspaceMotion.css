@@ -1,0 +1,33 @@
+.commercial-reveal,
+.commercial-state {
+  animation: commercial-reveal var(--motion-fast, 180ms) var(--motion-ease, ease-out) backwards;
+}
+
+.commercial-table :deep(.el-table__body-wrapper) {
+  transition: opacity var(--motion-fast, 180ms) var(--motion-ease, ease-out);
+}
+.commercial-table.is-page-switching :deep(.el-table__body-wrapper) {
+  opacity: 0.72;
+}
+
+@keyframes commercial-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commercial-reveal,
+  .commercial-state {
+    animation: none;
+  }
+  .commercial-table :deep(.el-table__body-wrapper) {
+    transition: none;
+  }
+  .commercial-table.is-page-switching :deep(.el-table__body-wrapper) {
+    opacity: 1;
+  }
+}

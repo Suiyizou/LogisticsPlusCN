@@ -260,7 +260,6 @@ public class ShipmentBatchTrackingService {
     }
     List<BatchItem> items = new ArrayList<>(uniqueItems.values());
     if (forceRefresh && !List.of("IMPORT", "QUERY_ONLY").contains(mode)) {
-      items.forEach(this::initializeSupplementalSubtasks);
     }
     String taskId = "batch_" + UUID.randomUUID().toString().replace("-", "");
     Instant now = clock.instant();
@@ -392,8 +391,13 @@ public class ShipmentBatchTrackingService {
       markPendingAfterCancellation(task, item);
       return;
     }
+    ObjectNode payload = response.deepCopy();
+    if (!ShipmentTrackingService.LEGACY_SUPPLEMENTAL.equals(
+        payload.path("snapshot").path("deliveryMode").asText())) {
+      ShipmentTrackingService.markSingleResponse(payload);
+    }
     synchronized (task) {
-      item.payload = response.deepCopy();
+      item.payload = payload;
       item.status = "SUCCEEDED";
       item.mainStatus = "SUCCEEDED";
       item.source = "LIVE";
@@ -403,6 +407,37 @@ public class ShipmentBatchTrackingService {
       item.finishedAt = item.updatedAt;
       task.updatedAt = item.updatedAt;
     }
+  }
+
+  ShipmentBatchItemRequest validateDraftItem(ShipmentBatchItemRequest input, int index, String mode) {
+    if ("QUERY_ONLY".equals(mode)) {
+      BatchItem item = normalizeQueryItem(input, index);
+      if (item.validationError != null) throw item.validationError;
+      return item.request;
+    }
+    if (input != null && (hasText(input.recognitionErrorCode()) || hasText(input.recognitionError()))) {
+      throw new ApiException(HttpStatus.BAD_REQUEST,
+          clean(input.recognitionErrorCode(), 120, "INVALID_REFERENCE"),
+          clean(input.recognitionError(), 1000, "Reference could not be identified safely"));
+    }
+    BatchItem item = normalizeItem(input, index);
+    if (item.manualOnly && !Boolean.TRUE.equals(input.manualOnly())) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "UNSUPPORTED_CARRIER",
+          "Select a supported carrier or explicitly save the row for manual tracking");
+    }
+    ShipmentBatchItemRequest normalized = item.request;
+    if (item.manualOnly && (!"BOOKING".equals(normalized.type())
+        || !item.queryNumber.matches("[A-Z0-9./-]{4,128}"))) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
+          "A manual shipment requires a valid booking number");
+    }
+    return new ShipmentBatchItemRequest(normalized.id(), normalized.carrier(), normalized.type(),
+        normalized.number(), normalized.displayNumber(), normalized.manualOnly(),
+        normalized.importedDetails(), null, null, input.sourceRow(), clean(input.sourceReference(), 256, null));
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   private BatchItem normalizeQueryItem(ShipmentBatchItemRequest supplied, int index) {
@@ -495,7 +530,9 @@ public class ShipmentBatchTrackingService {
         }
         boolean automaticProxyFallback = "AUTO".equals(task.channel)
             && "PROXY".equals(response.path("strategy").path("used").asText());
-        boolean supplementalComplete = refreshSupplementalDetails(task, item);
+        boolean supplementalComplete =
+            !ShipmentTrackingService.hasPendingLegacySupplemental(response.path("snapshot"))
+                || refreshSupplementalDetails(task, item);
         synchronized (task) {
           item.status = supplementalComplete ? "SUCCEEDED" : "PARTIAL";
           item.source = automaticProxyFallback
@@ -631,8 +668,7 @@ public class ShipmentBatchTrackingService {
   }
 
   private boolean refreshSupplementalDetails(BatchTask task, BatchItem item) {
-    if (trackingService.usesLocalTrackingQueue() || !task.forceRefresh || "IMPORT".equals(task.mode)
-        || !"COSCO".equals(item.request.carrier())) return true;
+    if (trackingService.usesLocalTrackingQueue() || !task.forceRefresh || "IMPORT".equals(task.mode)) return true;
     if (item.shipmentId == null || item.shipmentId.isBlank()) {
       setFailedSupplementalSubtasks(
           task,
@@ -770,16 +806,6 @@ public class ShipmentBatchTrackingService {
       }
       return false;
     }
-  }
-
-  private void initializeSupplementalSubtasks(BatchItem item) {
-    if (trackingService.usesLocalTrackingQueue() || item.manualOnly
-        || !"COSCO".equals(item.request.carrier())
-        || "CONTAINER".equals(item.request.type())) {
-      return;
-    }
-    item.subtasks.add(subtask("BOOKING_REFERENCE", "PENDING", null));
-    item.subtasks.add(subtask("TRANSPORT_DETAILS", "PENDING", null));
   }
 
   private void markSupplementalSubtasksRunning(BatchTask task, BatchItem item) {
@@ -1597,7 +1623,7 @@ public class ShipmentBatchTrackingService {
     return cleaned.length() <= limit ? cleaned : cleaned.substring(0, limit);
   }
 
-  private String normalizeChannel(String value) {
+  String normalizeChannel(String value) {
     String channel = clean(value, 24, "AUTO").toUpperCase(Locale.ROOT);
     if (!SUPPORTED_CHANNELS.contains(channel)) {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported tracking channel");

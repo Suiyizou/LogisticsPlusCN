@@ -1,4 +1,4 @@
-import { cp, copyFile, mkdir, readdir } from "node:fs/promises";
+import { cp, copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +9,15 @@ const modules = join(root, "node_modules");
 // Require a fresh destination so removed/forbidden assets cannot survive a rebuild.
 await mkdir(output);
 await cp(join(root, "public"), output, { recursive: true });
+const adapterMode = process.env.APP_TRACKING_ADAPTER_MODE?.trim().toUpperCase() === "LEGACY"
+  ? "LEGACY"
+  : "LOCAL_QUEUE";
+const indexPath = join(output, "index.html");
+const index = await readFile(indexPath, "utf8");
+await writeFile(indexPath, index.replace(
+  'data-tracking-adapter-mode="LEGACY"',
+  `data-tracking-adapter-mode="${adapterMode}"`
+));
 
 async function copyAsset(source, relativeTarget) {
   const target = join(output, relativeTarget);

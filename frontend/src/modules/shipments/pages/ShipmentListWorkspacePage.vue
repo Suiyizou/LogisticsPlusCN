@@ -1,19 +1,7 @@
 <template>
   <section class="module-page" data-module="shipments">
-    <div
-      class="list-page list-page-full shipment-workspace"
-      :class="{ 'shipment-workspace--tasks': tasksOnly }"
-    >
-      <WorkspacePageHeader
-        v-if="tasksOnly"
-        :title="t('customers.trackingTaskList')"
-        :description="t('customers.trackingTaskHint')"
-      />
-      <p v-if="tasksOnly" class="tracking-task-example">
-        <a href="/tracking-task-example.csv" download>{{ t("customers.trackingTaskExample") }}</a
-        ><small>{{ t("customers.trackingTaskExampleHint") }}</small>
-      </p>
-      <div v-if="!tasksOnly" class="shipment-workspace-main">
+    <div class="list-page list-page-full shipment-workspace">
+      <div class="shipment-workspace-main">
         <ShipmentListPage :workspace="pages.list" :t="t" />
         <el-dialog
           :model-value="batchBusinessFieldsDialogOpen"
@@ -99,330 +87,22 @@
           </template>
         </el-dialog>
       </div>
-      <component
-        :is="tasksOnly ? 'section' : ElDialog"
+      <el-dialog
         v-model="batchTrackDialogOpen"
         :title="batchTrackDialogTitle"
         width="min(1280px, 96vw)"
         append-to-body
         :destroy-on-close="false"
-        class="batch-track-task-dialog"
-        :class="tasksOnly ? 'tracking-task-inline' : 'workspace-el-dialog business-comp-dialog'"
+        class="batch-track-task-dialog workspace-el-dialog business-comp-dialog"
       >
         <div class="batch-track-task-dialog-body">
           <div class="batch-track-panel">
-            <div v-show="!batchTrackRunning" class="batch-track-form">
-              <div v-if="!tasksOnly" class="assignment-customer-row">
-                <label>
-                  <span
-                    >{{ t("customers.selectCustomerFirst") }} <i class="required-star">*</i></span
-                  >
-                  <el-select
-                    popper-class="business-comp-select business-select-popper workspace-select-popper"
-                    v-model="batchTrackCustomerId"
-                    :disabled="batchTrackChecking"
-                    filterable
-                    class="business-select"
-                  >
-                    <el-option
-                      v-for="customer in assignableCustomers"
-                      :key="customer.id"
-                      :value="customer.id"
-                      :label="customerFilterOptionLabel(customer)"
-                    />
-                    <template #label="{ value }">
-                      <span class="business-select-value">{{
-                        selectedCustomerOptionLabel(value)
-                      }}</span>
-                    </template>
-                  </el-select>
-                </label>
-                <label>
-                  <span>{{ t("customers.trackingTaskDefaultCarrier") }}</span>
-                  <el-select
-                    v-model="batchTrackCarrier"
-                    :disabled="batchTrackChecking"
-                    class="business-select"
-                    popper-class="business-comp-select business-select-popper"
-                  >
-                    <el-option
-                      v-for="carrier in TRACKING_CARRIERS"
-                      :key="carrier.code"
-                      :value="carrier.code"
-                      :label="carrier.name"
-                    />
-                  </el-select>
-                </label>
-                <label>
-                  <span>{{ t("customers.referenceType") }}</span>
-                  <el-select
-                    popper-class="business-comp-select business-select-popper workspace-select-popper"
-                    v-model="batchTrackReferenceType"
-                    :disabled="batchTrackChecking"
-                    class="business-select"
-                  >
-                    <el-option value="BOOKING" :label="t('customers.referenceBooking')" />
-                    <el-option
-                      v-if="supportsShipmentReference(batchTrackCarrier, 'BILLOFLADING')"
-                      value="BILLOFLADING"
-                      :label="t('customers.referenceBill')"
-                    />
-                  </el-select>
-                </label>
-                <el-checkbox
-                  :model-value="batchTrackPublishToCustomer"
-                  :disabled="batchTrackChecking"
-                  @update:model-value="batchTrackPublishToCustomer = $event === true"
-                  >{{ t("customers.publishAfterCreate") }}</el-checkbox
-                >
-              </div>
-              <div
-                role="button"
-                tabindex="0"
-                @keydown.enter.prevent="batchTrackFileInput?.click()"
-                @keydown.space.prevent="batchTrackFileInput?.click()"
-                v-loading="batchTrackFileParsing"
-                :element-loading-text="t('app.loadingPage')"
-                class="customer-excel-dropzone batch-track-dropzone"
-                :class="{
-                  'has-file': batchTrackFileName,
-                  'is-dragover': batchTrackDropzoneActive
-                }"
-                @dragover.prevent="batchTrackDropzoneActive = true"
-                @dragleave.prevent="batchTrackDropzoneActive = false"
-                @drop.prevent="handleBatchTrackDrop"
-                @click="batchTrackFileInput?.click()"
-              >
-                <input
-                  :ref="actions.setBatchFileInput"
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  @change="handleBatchTrackWorkbook"
-                  style="display: none"
-                />
-                <b>{{ batchTrackFileName || t("customers.chooseTrackExcel") }}</b>
-                <small>{{
-                  batchTrackFileName
-                    ? t("customers.trackRowsReady", {
-                        count: batchTrackNumbers.length
-                      })
-                    : t("customers.trackExcelColumnsHint")
-                }}</small>
-                <small class="batch-track-excel-rule">{{ t("customers.trackExcelRule") }}</small>
-                <button
-                  v-if="batchTrackFileName"
-                  type="button"
-                  class="secondary"
-                  @click.stop="clearBatchTrackFile"
-                >
-                  {{ t("customers.clearFile") }}
-                </button>
-                <button v-else type="button" @click.stop="batchTrackFileInput?.click()">
-                  {{ t("customers.chooseFile") }}
-                </button>
-              </div>
-              <section v-if="batchTrackSelectedSheet" class="batch-track-preview">
-                <p v-if="tasksOnly" class="batch-track-preview-note">
-                  {{
-                    t("customers.trackingQueryRecognized", {
-                      count: batchTrackNumbers.length,
-                      ready: batchTrackImportPreview.items.length
-                    })
-                  }}
-                </p>
-                <details :open="!tasksOnly">
-                  <summary v-if="tasksOnly">{{ t("customers.trackingQueryAdvanced") }}</summary>
-                  <div class="batch-track-preview-controls">
-                    <label>
-                      <span>{{ t("customers.trackSheet") }}</span>
-                      <el-select
-                        v-model="batchTrackSelectedSheetName"
-                        class="business-select"
-                        popper-class="business-comp-select business-select-popper"
-                      >
-                        <el-option
-                          v-for="sheet in batchTrackSheets"
-                          :key="sheet.name"
-                          :value="sheet.name"
-                          :label="sheet.name"
-                        />
-                      </el-select>
-                    </label>
-                    <label>
-                      <span>{{ t("customers.trackColumn") }}</span>
-                      <el-select
-                        v-model="batchTrackSelectedColumnIndex"
-                        class="business-select"
-                        popper-class="business-comp-select business-select-popper"
-                      >
-                        <el-option
-                          v-for="column in batchTrackSelectedSheet.columns"
-                          :key="column.index"
-                          :value="column.index"
-                          :label="`${column.label} (${column.nonEmptyCount})`"
-                        />
-                      </el-select>
-                    </label>
-                  </div>
-                  <p class="batch-track-preview-note">
-                    {{
-                      t("customers.trackColumnDecision", {
-                        trackable: batchTrackTrackableCount,
-                        manual: batchTrackManualCount
-                      })
-                    }}
-                  </p>
-                  <p>
-                    {{
-                      t("customers.trackImportSummary", {
-                        ready: batchTrackImportPreview.items.length,
-                        blocked: batchTrackImportErrors.length,
-                        skipped: batchTrackImportPreview.skipped,
-                        duplicates: batchTrackImportPreview.duplicates
-                      })
-                    }}
-                  </p>
-                  <el-alert
-                    v-if="batchTrackImportErrors.length"
-                    type="error"
-                    :closable="false"
-                    :title="t('customers.trackImportBlocked')"
-                  />
-                  <ul v-if="batchTrackImportErrors.length">
-                    <li v-for="(issue, index) in batchTrackImportErrors" :key="index">
-                      {{ t("customers.trackImportRow", { row: issue.row }) }} ·
-                      {{ importIssueLabel(issue) }}
-                      <details>
-                        <summary>{{ t("customers.trackingTaskTechnicalDetails") }}</summary>
-                        {{ issue.code }}: {{ issue.message }}
-                      </details>
-                    </li>
-                  </ul>
-                  <details>
-                    <summary>{{ t("customers.trackFieldMapping") }}</summary>
-                    <ul>
-                      <li v-for="mapping in batchTrackImportPreview.mappings" :key="mapping.field">
-                        {{ mapping.header }} → {{ mapping.field }}
-                      </li>
-                    </ul>
-                  </details>
-                  <p>
-                    {{
-                      t("customers.trackingTaskScope", {
-                        window: batchTrackImportPreview.windowCount,
-                        total: batchTrackImportPreview.totalCandidates,
-                        outside: batchTrackImportPreview.outsideLimit,
-                        excluded: batchTrackImportPreview.excludedCount
-                      })
-                    }}
-                  </p>
-                </details>
-                <el-table :data="batchTrackImportPreview.rows" size="small" max-height="320" border>
-                  <el-table-column v-if="!tasksOnly" type="expand"
-                    ><template #default="{ row }"
-                      ><dl class="tracking-task-source-row">
-                        <div v-for="column in batchTrackSelectedSheet.columns" :key="column.index">
-                          <dt>{{ column.label }}</dt>
-                          <dd>{{ row.sourceCells[column.index] || "—" }}</dd>
-                        </div>
-                      </dl></template
-                    ></el-table-column
-                  >
-                  <el-table-column
-                    v-if="!tasksOnly"
-                    :label="t('customers.trackingTaskExclude')"
-                    width="100"
-                  >
-                    <template #default="{ row }"
-                      ><el-checkbox
-                        :aria-label="t('customers.trackingTaskExcludeRow', { row: row.sourceRow })"
-                        :model-value="batchTrackExcludedRows.includes(row.sourceRow)"
-                        :disabled="batchTrackRunning || batchTrackChecking"
-                        @update:model-value="
-                          (value) => setBatchTrackRowExcluded(row.sourceRow, value === true)
-                        "
-                    /></template>
-                  </el-table-column>
-                  <el-table-column
-                    prop="sourceRow"
-                    :label="t('customers.trackSourceRow')"
-                    width="75"
-                  />
-                  <el-table-column
-                    prop="originalReference"
-                    :label="t('customers.trackOriginalReference')"
-                    min-width="200"
-                  />
-                  <el-table-column
-                    v-if="!tasksOnly"
-                    prop="number"
-                    :label="t('customers.trackQueryReference')"
-                    min-width="180"
-                  />
-                  <el-table-column prop="carrier" :label="t('customers.carrier')" min-width="120" />
-                  <el-table-column
-                    prop="carrierSource"
-                    :label="t('customers.trackCarrierEvidence')"
-                    width="150"
-                    ><template #default="{ row }">{{
-                      tasksOnly
-                        ? t(`customers.trackingQueryEvidence${row.carrierSource || "unknown"}`)
-                        : row.carrierSource
-                    }}</template></el-table-column
-                  >
-                  <el-table-column
-                    v-if="!tasksOnly"
-                    prop="type"
-                    :label="t('customers.referenceType')"
-                    min-width="130"
-                  />
-                  <el-table-column prop="status" :label="t('customers.trackValidation')" width="110"
-                    ><template #default="{ row }">{{
-                      tasksOnly
-                        ? t(
-                            row.errors.length
-                              ? "customers.trackingQueryUnrecognized"
-                              : "customers.trackingQueryReady"
-                          )
-                        : row.status
-                    }}</template></el-table-column
-                  >
-                  <el-table-column :label="t('customers.trackingTaskIssues')" min-width="240"
-                    ><template #default="{ row }"
-                      ><span v-for="issue in row.errors" :key="issue.code"
-                        >{{ importIssueLabel(issue) }}; </span
-                      ><span v-if="!row.errors.length">—</span></template
-                    ></el-table-column
-                  >
-                </el-table>
-                <div v-if="!tasksOnly" class="batch-track-preview-table-wrap">
-                  <el-table
-                    :data="batchTrackPreviewRows"
-                    border
-                    size="small"
-                    class="standard-information-table batch-track-preview-table"
-                  >
-                    <el-table-column
-                      v-for="column in batchTrackSelectedSheet.columns"
-                      :key="column.index"
-                      min-width="150"
-                      :label="column.label"
-                      :class-name="column.index === batchTrackSelectedColumnIndex ? 'selected' : ''"
-                      :label-class-name="
-                        column.index === batchTrackSelectedColumnIndex ? 'selected' : ''
-                      "
-                    >
-                      <template #default="{ row }">{{ row[column.index] || "—" }}</template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </section>
-            </div>
-
             <div v-if="batchTrackRunning || batchTrackResults.length" class="batch-track-results">
               <div class="batch-track-progress">
                 <div class="batch-track-progress-summary">
-                  <span>{{ t("customers.batchTrackProgress", batchTrackProgress) }}</span>
+                  <span role="status">{{
+                    t("customers.batchTrackProgress", batchTrackProgress)
+                  }}</span>
                   <el-tag
                     v-if="batchTrackProgress.startedAt"
                     size="small"
@@ -555,15 +235,11 @@
                       }}
                     </el-tag>
                   </span>
-                  <small>{{
-                    tasksOnly
-                      ? importIssueLabel({ code: r.errorCode, message: r.message })
-                      : r.message
-                  }}</small>
-                  <details v-if="tasksOnly && r.payload?.snapshot" class="tracking-query-result">
+                  <small>{{ r.message }}</small>
+                  <details v-if="r.payload?.snapshot" class="tracking-query-result">
                     <summary>{{ t("customers.trackingQueryResult") }}</summary>
                     <dl>
-                      <div v-for="field in queryResultFields(r.payload.snapshot)" :key="field.key">
+                      <div v-for="field in queryResultFields(r.payload.snapshot, t)" :key="field.key">
                         <dt>{{ field.label }}</dt>
                         <dd>{{ field.value }}</dd>
                       </div>
@@ -572,7 +248,7 @@
                       t("customers.trackingQueryUnverified")
                     }}</small>
                     <details
-                      v-for="group in queryResultGroups(r.payload.snapshot)"
+                      v-for="group in queryResultGroups(r.payload.snapshot, t)"
                       :key="group.key"
                     >
                       <summary>{{ group.label }} ({{ group.rows.length }})</summary>
@@ -594,7 +270,7 @@
                   <details
                     v-if="batchDiagnosticText(r)"
                     class="batch-track-error-details"
-                    :open="!tasksOnly && ['failed', 'partial'].includes(r.status)"
+                    :open="['failed', 'partial'].includes(r.status)"
                   >
                     <summary>{{ t("customers.fullErrorDetails") }}</summary>
                     <pre>{{ batchDiagnosticText(r) }}</pre>
@@ -622,55 +298,9 @@
               </div>
             </div>
 
-            <p class="batch-track-close-hint">
-              {{
-                t(tasksOnly ? "customers.trackingTaskLeaveHint" : "customers.batchTrackCloseHint")
-              }}
-            </p>
-            <el-checkbox
-              v-if="!tasksOnly && !batchTrackRunning"
-              :model-value="batchTrackReviewed"
-              :disabled="
-                !batchTrackNumbers.length ||
-                batchTrackImportErrors.length > 0 ||
-                !batchTrackCustomerId
-              "
-              @update:model-value="batchTrackReviewed = $event === true"
-              >{{
-                t("customers.trackingTaskReview", { count: batchTrackNumbers.length })
-              }}</el-checkbox
-            >
+            <p class="batch-track-close-hint">{{ t("customers.batchTrackCloseHint") }}</p>
             <div class="batch-track-actions">
-              <button
-                class="customer-access-primary"
-                type="button"
-                :disabled="
-                  batchTrackRunning ||
-                  batchTrackChecking ||
-                  batchTrackFileParsing ||
-                  (!tasksOnly && !batchTrackCustomerId) ||
-                  (!tasksOnly && !batchTrackReviewed) ||
-                  !batchTrackSelectedSheet ||
-                  !batchTrackNumbers.length ||
-                  (!tasksOnly && batchTrackImportErrors.length > 0)
-                "
-                @click="startBatchTrack"
-              >
-                {{
-                  batchTrackRunning
-                    ? t("customers.batchTrackRunning")
-                    : batchTrackChecking
-                      ? t("customers.batchTrackChecking")
-                      : t(
-                          tasksOnly
-                            ? "customers.trackingQueryStart"
-                            : "customers.trackingTaskStart",
-                          { count: batchTrackNumbers.length }
-                        )
-                }}
-              </button>
               <el-button
-                v-if="!tasksOnly"
                 native-type="button"
                 @click="batchTrackDialogOpen = false"
               >
@@ -687,177 +317,36 @@
             </div>
           </div>
         </div>
-      </component>
+      </el-dialog>
     </div>
   </section>
 </template>
 <script setup lang="ts">
-import {
-  TRACKING_CARRIERS,
-  supportsShipmentReference
-} from "../../../services/trackingCarriers.js";
-import { toRefs, watch, onUnmounted } from "vue";
-import { ElDialog } from "element-plus";
-import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
-const props = defineProps<{ tasksOnly?: boolean }>();
+import { toRefs } from "vue";
+import { queryResultFields, queryResultGroups } from "../../../features/shipments/shipmentQueryResult.js";
 import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 import ShipmentListPage from "./ShipmentListPage.vue";
 const { t } = useI18n();
-function importIssueLabel(issue: { code: string; message: string }) {
-  const key = `customers.trackImportIssue${issue.code}`;
-  const label = t(key);
-  return label === key ? issue.message : label;
-}
 const pages = useModulePages("shipments");
 const workspace = pages.listDialogs;
 const {
-  assignableCustomers,
   batchBusinessFieldRows,
   batchBusinessFieldsDialogOpen,
   batchSavingBusinessFields,
   batchTrackCancelRequested,
-  batchTrackCarrier,
-  batchTrackReferenceType,
-  batchTrackChecking,
-  batchTrackCustomerId,
-  batchTrackQueryOnly,
   batchTrackDialogOpen,
   batchTrackDialogTitle,
-  batchTrackDropzoneActive,
-  batchTrackFileInput,
-  batchTrackFileName,
-  batchTrackFileParsing,
-  batchTrackManualCount,
-  batchTrackNumbers,
-  batchTrackImportPreview,
-  batchTrackImportErrors,
-  batchTrackPreviewRows,
   batchTrackProblemResults,
   batchTrackProblemsOnly,
   batchTrackProgress,
-  batchTrackPublishToCustomer,
-  batchTrackReviewed,
-  batchTrackExcludedRows,
   batchTrackResults,
   batchTrackRunning,
-  batchTrackSelectedColumnIndex,
-  batchTrackSelectedSheet,
-  batchTrackSelectedSheetName,
-  batchTrackSheets,
-  batchTrackTrackableCount,
   visibleBatchTrackResults
 } = toRefs(workspace.state);
-watch(
-  () => props.tasksOnly,
-  (value) => {
-    batchTrackQueryOnly.value = Boolean(value);
-  },
-  { immediate: true }
-);
-onUnmounted(() => {
-  batchTrackQueryOnly.value = false;
-});
-function queryResultFields(snapshot: Record<string, any>) {
-  const summary = snapshot.summary || {};
-  const source = snapshot.sourceDetails || {};
-  return [
-    ["status", "customers.trackingQueryStatus", summary.status || summary.transportStatus],
-    [
-      "origin",
-      "customers.trackingQueryOrigin",
-      summary.origin?.name || summary.portOfLoading || source.origin
-    ],
-    [
-      "destination",
-      "customers.trackingQueryDestination",
-      summary.destination?.name || summary.portOfDischarge || source.destination
-    ],
-    ["vessel", "customers.trackingQueryVessel", summary.vesselVoyage || source.vessel],
-    [
-      "etd",
-      "customers.trackingQueryEtd",
-      snapshot.keyTimes?.estimatedDeparture?.reportedTime ||
-        snapshot.keyTimes?.estimatedDeparture?.time ||
-        snapshot.keyTimes?.estimatedDeparture?.value ||
-        summary.estimatedDeparture
-    ],
-    [
-      "eta",
-      "customers.trackingQueryEta",
-      snapshot.keyTimes?.estimatedArrival?.reportedTime ||
-        snapshot.keyTimes?.estimatedArrival?.time ||
-        snapshot.keyTimes?.estimatedArrival?.value ||
-        summary.estimatedArrival
-    ]
-  ]
-    .filter(([, , value]) => value !== null && value !== undefined && value !== "")
-    .map(([key, label, value]) => ({
-      key,
-      label: t(label),
-      value: typeof value === "object" ? JSON.stringify(value) : String(value)
-    }));
-}
-function queryResultGroups(snapshot: Record<string, any>) {
-  const source = snapshot.sourceDetails || {};
-  const groups: [string, string, any[]][] = [
-    ["containers", "customers.trackingQueryContainers", snapshot.containers || []],
-    ["route", "customers.trackingQueryRoute", snapshot.routingLegs || []],
-    ["entries", "customers.trackingQueryEntries", snapshot.events || []],
-    [
-      "fields",
-      "customers.trackingQuerySourceFields",
-      [
-        ...(Array.isArray(source.fields) ? source.fields : []),
-        ...Object.entries(source.extraFields || {}).map(([key, value]) => ({ key, value }))
-      ]
-    ]
-  ];
-  return groups
-    .filter(([, , records]) => Array.isArray(records) && records.length)
-    .map(([key, label, records]) => ({
-      key,
-      label: t(label),
-      rows: records.slice(0, 200).map((record) =>
-        Object.entries(record || {})
-          .filter(
-            ([field, value]) =>
-              !/evidence|screenshot|text_path|token|cookie|secret/i.test(field) &&
-              value !== "" &&
-              value !== null &&
-              value !== undefined
-          )
-          .map(([field, value]) => ({ key: field, value: queryResultValue(value) }))
-      )
-    }));
-}
-function queryResultValue(value: unknown) {
-  const text =
-    typeof value === "object"
-      ? JSON.stringify(
-          value,
-          (key, entry) =>
-            /evidence|screenshot|text_path|token|cookie|secret/i.test(key) ? undefined : entry,
-          2
-        )
-      : String(value);
-  // Keep diagnostics in the owning API; this read-only view never presents local evidence paths.
-  return (text || "")
-    .replace(/(?:[A-Za-z]:[\\/]|file:\/\/)[^\s"<>]*/g, "[local file]")
-    .slice(0, 12000);
-}
 const actions = workspace.actions;
-const {
-  cancelBatchTrack,
-  clearBatchTrackFile,
-  handleBatchTrackDrop,
-  handleBatchTrackWorkbook,
-  saveBatchBusinessFields,
-  closeBatchBusinessFieldsEditor,
-  startBatchTrack,
-  setBatchTrackRowExcluded
-} = actions;
+const { cancelBatchTrack, saveBatchBusinessFields, closeBatchBusinessFieldsEditor } = actions;
 const {
   batchDiagnosticText,
   batchMainStageStatus,
@@ -865,9 +354,7 @@ const {
   batchStageTagType,
   batchSubtaskLabel,
   batchTrackElapsedText,
-  customerFilterOptionLabel,
-  formatDateTime,
-  selectedCustomerOptionLabel
+  formatDateTime
 } = workspace.formatters;
 </script>
 <style scoped>
@@ -1552,62 +1039,6 @@ const {
     flex-direction: column;
   }
 }
-.shipment-workspace.shipment-workspace--tasks {
-  flex-direction: column;
-  min-width: 0;
-}
-.shipment-workspace--tasks > * {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-.shipment-workspace--tasks .tracking-task-example {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 0;
-}
-.shipment-workspace--tasks .tracking-task-inline {
-  position: static;
-  display: block;
-  width: 100%;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  overflow: visible;
-}
-.shipment-workspace--tasks .batch-track-task-dialog-body {
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 24px;
-  box-sizing: border-box;
-}
-.shipment-workspace--tasks :is(.batch-track-panel, .batch-track-form, .batch-track-preview) {
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
-}
-.shipment-workspace--tasks .batch-track-form,
-.shipment-workspace--tasks .batch-track-preview {
-  grid-template-columns: minmax(0, 1fr);
-}
-.shipment-workspace--tasks .assignment-customer-row {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  min-width: 0;
-}
-.shipment-workspace--tasks .assignment-customer-row > *,
-.shipment-workspace--tasks .batch-track-preview > * {
-  min-width: 0;
-  max-width: 100%;
-}
-.shipment-workspace--tasks .batch-track-preview-table-wrap {
-  min-width: 0;
-  overflow-x: auto;
-}
-.shipment-workspace--tasks .batch-track-actions {
-  flex-wrap: wrap;
-}
 .tracking-query-result dl > div {
   display: grid;
   grid-template-columns: 140px minmax(0, 1fr);
@@ -1620,14 +1051,6 @@ const {
 }
 .tracking-query-result pre {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.shipment-workspace--tasks :deep(.el-checkbox) {
-  height: auto;
-  white-space: normal;
-}
-.shipment-workspace--tasks :deep(.el-checkbox__label) {
-  white-space: normal;
   overflow-wrap: anywhere;
 }
 </style>

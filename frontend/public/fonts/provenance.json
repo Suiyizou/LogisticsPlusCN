@@ -12,5 +12,12 @@
     "license": "OFL-1.1",
     "archiveSHA256": "95a11c5bbacd9995d94fc8cf964ee687307aacf20957ca6a4a16077519388163",
     "fontFiles": 101
+  },
+  {
+    "package": "@fontsource-variable/space-grotesk",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "archiveSHA256": "47d1b51d64ed541b7e74f38e9e682a8ff1bbfd1b68bfd7fff74ac9175058e73c",
+    "fontFiles": 1
   }
 ]

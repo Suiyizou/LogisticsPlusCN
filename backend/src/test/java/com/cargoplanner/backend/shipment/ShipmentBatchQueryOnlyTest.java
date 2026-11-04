@@ -62,15 +62,23 @@ class ShipmentBatchQueryOnlyTest {
   @Test
   void mixedRowsReturnCompletePayloadWithoutShipmentWritesAndReadsCreateNoJobs() throws Exception {
     when(tracking.usesLocalTrackingQueue()).thenReturn(true);
-    JsonNode payload = new ObjectMapper().readTree("{\"snapshot\":{\"provider\":{\"code\":\"COSCO\"},\"containers\":[]}}");
+    JsonNode payload = new ObjectMapper().readTree("""
+        {"snapshot":{"provider":{"code":"COSCO"},"containers":[{"number":"ABCD1234567"}],
+          "supplementalDetails":{"pendingRefresh":true}},
+          "enrichment":{"partial":true,"containerDetailsComplete":false}}
+        """);
     when(adapter.track(any())).thenAnswer(invocation -> {
       TrackingAdapterClient.NormalizedTrackRequest r = invocation.getArgument(0);
       if (r.number().equals("FAIL1234")) throw new ApiException(HttpStatus.BAD_GATEWAY, "SOURCE_FAILURE", "Carrier unavailable");
+      if (r.number().equals("GOOD2345")) return new ObjectMapper().readTree("""
+          {"snapshot":{"deliveryMode":"LEGACY_SUPPLEMENTAL","supplementalDetails":{"pendingRefresh":true}},
+            "enrichment":{"partial":true}}
+          """);
       return payload;
     });
     ShipmentBatchItemRequest conflict = new ShipmentBatchItemRequest("conflict", "COSCO", "BOOKING",
         "VALID123", "VALID123", false, null, "REFERENCE_CONFLICT", "Conflicting carrier", 8, "SOURCE123");
-    Map<String, Object> created = new ShipmentBatchTrackingController(service).start(request(Arrays.asList(
+    Map<String, Object> created = new ShipmentBatchTrackingController(service, null).start(request(Arrays.asList(
         row("good", "COSCO", "GOOD1234"), null, row("unknown", null, "UNKNOWN1"),
         row("failed", "COSCO", "FAIL1234"), conflict, row("also-good", "HMM", "GOOD2345"))), user).getBody();
     assertNotNull(created);
@@ -81,7 +89,15 @@ class ShipmentBatchQueryOnlyTest {
     assertEquals(4, task.get("failed"));
     assertEquals(null, task.get("customerId"));
     assertEquals(false, task.get("publishToCustomer"));
-    assertEquals(payload, items(task).get(0).get("payload"));
+    JsonNode itemPayload = (JsonNode) items(task).get(0).get("payload");
+    assertEquals("SINGLE_RESPONSE", itemPayload.path("snapshot").path("deliveryMode").asText());
+    assertEquals(payload.path("snapshot").path("containers"), itemPayload.path("snapshot").path("containers"));
+    assertEquals(false, itemPayload.path("snapshot").has("supplementalDetails"));
+    assertEquals(false, itemPayload.path("enrichment").has("partial"));
+    assertEquals(false, itemPayload.path("enrichment").path("containerDetailsComplete").booleanValue());
+    JsonNode legacyPayload = (JsonNode) items(task).get(5).get("payload");
+    assertEquals("LEGACY_SUPPLEMENTAL", legacyPayload.path("snapshot").path("deliveryMode").asText());
+    assertEquals(true, legacyPayload.path("enrichment").path("partial").asBoolean());
     assertEquals(null, items(task).get(0).get("shipmentId"));
     assertEquals("REFERENCE_CONFLICT", items(task).get(4).get("errorCode"));
     assertEquals(8, items(task).get(4).get("sourceRow"));

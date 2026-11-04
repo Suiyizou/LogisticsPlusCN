@@ -22,14 +22,54 @@
             </div></template
           ></WorkspacePageHeader
         >
+        <CommercialSummary v-if="transferAgentsLoaded" :metrics="metrics" />
+        <div class="agent-directory-toolbar">
+          <el-input
+            v-model="agentSearch"
+            :aria-label="commercialText('agentSearch')"
+            :placeholder="commercialText('agentSearch')"
+            :prefix-icon="Search"
+            clearable
+          />
+          <el-select v-model="agentStatus" :aria-label="t('customers.status')">
+            <el-option value="" :label="commercialText('anyStatus')" />
+            <el-option value="ACTIVE" :label="t('customers.statusActive')" />
+            <el-option value="DISABLED" :label="t('customers.statusDisabled')" />
+          </el-select>
+          <span>{{ wt("resultsCount", { count: filteredTransferAgents.length }) }}</span>
+        </div>
         <el-table
           :data="paginatedTransferAgents"
           border
           stripe
           v-loading="loadingTransferAgents"
-          class="standard-information-table"
+          class="standard-information-table commercial-table commercial-reveal"
           :class="{ 'is-page-switching': tablePageTransitioning }"
         >
+          <template #empty>
+            <WorkspaceEmptyState
+              class="commercial-state"
+              v-if="!loadingTransferAgents && transferAgentsLoaded"
+              :title="commercialText(isFiltered ? 'directorySearchEmpty' : 'agentEmpty')"
+              :description="
+                commercialText(isFiltered ? 'directorySearchEmptyHint' : 'agentEmptyHint')
+              "
+            >
+              <template #actions>
+                <el-button v-if="isFiltered" @click="clearFilters">{{
+                  commercialText("clearSearch")
+                }}</el-button>
+                <el-button
+                  v-else
+                  type="primary"
+                  :disabled="agentWriteBusy"
+                  @click="openAgentCreateDialog"
+                >
+                  {{ t("customers.createOverseaAgent") }}
+                </el-button>
+              </template>
+            </WorkspaceEmptyState>
+          </template>
           <el-table-column
             type="index"
             :index="agentRowIndex"
@@ -95,13 +135,13 @@
           </el-table-column>
         </el-table>
         <el-pagination
-          v-if="transferAgents.length"
+          v-if="filteredTransferAgents.length"
           class="shipment-pagination unified-pagination"
           background
           layout="prev, pager, next, total"
           :current-page="agentPage"
           :page-size="agentPageSize"
-          :total="transferAgents.length"
+          :total="filteredTransferAgents.length"
           @current-change="changeAgentPage"
         />
       </div>
@@ -111,14 +151,21 @@
 <script setup lang="ts">
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
-import { toRefs } from "vue";
+import { computed, toRefs } from "vue";
+import CommercialSummary from "../../shared/CommercialSummary.vue";
+import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
+import WorkspaceEmptyState from "../../../components/workspace/WorkspaceEmptyState.vue";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
-import { Refresh, Upload, Plus } from "@element-plus/icons-vue";
+import { Refresh, Upload, Plus, Search } from "@element-plus/icons-vue";
 import { useMediaQuery } from "../../../composables/useMediaQuery.js";
 const { t } = useI18n();
 const workspace = useModulePages("agents").page;
 const {
+  agentSearch,
+  agentStatus,
+  filteredTransferAgents,
+  transferAgentsLoaded,
   agentPage,
   agentPageSize,
   agentWriteBusy,
@@ -139,12 +186,55 @@ const {
   toggleAgentStatus
 } = actions;
 const { agentRowIndex, statusLabel } = workspace.formatters;
+const isFiltered = computed(() => Boolean(agentSearch.value.trim() || agentStatus.value));
+const activeAgents = computed(() =>
+  transferAgents.value.filter((agent) => agent.status === "ACTIVE")
+);
+const metrics = computed(() => [
+  { label: commercialText("agentAccounts"), value: transferAgents.value.length },
+  { label: commercialText("activeAccounts"), value: activeAgents.value.length },
+  {
+    label: commercialText("agentWithoutCustomers"),
+    value: activeAgents.value.filter((agent) => agent.linkedCustomerCount === 0).length,
+    hint: commercialText("agentWithoutCustomersHint")
+  }
+]);
+function clearFilters() {
+  agentSearch.value = "";
+  agentStatus.value = "";
+}
 const compact = useMediaQuery("(max-width: 680px)");
 </script>
 <style scoped>
-.is-page-switching :deep(.el-table__body-wrapper) {
-  opacity: 0.52;
-  transform: translateY(3px);
+.agent-directory-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+.agent-directory-toolbar :deep(.el-input) {
+  flex: 1 1 210px;
+  max-width: 360px;
+}
+.agent-directory-toolbar :deep(.el-select) {
+  width: 170px;
+  max-width: 100%;
+}
+.agent-directory-toolbar > span {
+  margin-inline-start: auto;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .agent-directory-toolbar :deep(.el-input) {
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 @keyframes shipment-updating-spin {
   to {
@@ -196,11 +286,6 @@ const compact = useMediaQuery("(max-width: 680px)");
   flex-wrap: wrap;
   max-width: 100%;
   min-width: 0;
-}
-.standard-information-table :deep(.el-table__body-wrapper) {
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
 }
 @keyframes business-kpi-in {
   from {
@@ -331,3 +416,4 @@ const compact = useMediaQuery("(max-width: 680px)");
 </style>
 
 <style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+<style scoped src="../../shared/commercialWorkspaceMotion.css"></style>

@@ -182,7 +182,7 @@ export function serviceEntry(service, role, trackingPath = "/workspace/tracking/
 }
 
 export const serviceImages = {
-  transport: "/brand/v2/maritime-640.webp",
-  planning: "/brand/v2/loading-640.webp",
-  collaboration: "/brand/v2/collaboration-640.webp"
+  transport: "/brand/v4/open-voyage.webp",
+  planning: "/brand/v4/loading-bay.webp",
+  collaboration: "/brand/v4/dispatch-team.webp"
 };

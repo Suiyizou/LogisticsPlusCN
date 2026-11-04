@@ -4,6 +4,7 @@ import com.cargoplanner.backend.auth.AuthenticatedUser;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.cargoplanner.backend.shipment.ShipmentTrackingProperties;
+import com.cargoplanner.backend.shipment.ShipmentTrackingService;
 import com.cargoplanner.backend.shipment.TrackingCarriers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -780,7 +781,9 @@ public class CustomerShipmentQueryService {
       try {
         JsonNode parsedSnapshot = objectMapper.readTree(snapshotJson);
         if (parsedSnapshot == null || !parsedSnapshot.isObject()) return value;
-        ObjectNode snap = (ObjectNode) parsedSnapshot;
+        ObjectNode snap = (ObjectNode) ShipmentTrackingService.projectSnapshotDelivery(
+            parsedSnapshot, trackingProperties);
+        value.put("snapshotJson", snap.toString());
         value.put("dataAvailable", true);
         JsonNode summary = snap.path("summary");
         JsonNode keyTimes = snap.path("keyTimes");

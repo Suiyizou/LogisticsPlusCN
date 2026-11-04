@@ -2,29 +2,21 @@
   <PublicSiteShell :current-user="currentUser">
     <main ref="page">
       <section id="landing-top" class="maritime-hero">
-        <picture class="maritime-hero__image"
-          ><source
-            type="image/webp"
-            srcset="
-              /brand/v2/maritime-640.webp   640w,
-              /brand/v2/maritime-1280.webp 1280w,
-              /brand/v2/maritime-1920.webp 1920w
-            "
-            sizes="100vw" />
+        <picture class="maritime-hero__image">
           <img
-            src="/brand/v2/maritime.png"
-            :alt="t('publicSite.transportImageAlt')"
-            width="1888"
-            height="833"
+            src="/brand/v4/open-voyage.webp"
+            alt=""
+            width="1586"
+            height="992"
             fetchpriority="high"
-        /></picture>
+          />
+        </picture>
         <div class="maritime-wrap maritime-hero__content">
+          <span class="maritime-eyebrow">{{ labels.homeEyebrow }}</span>
           <h1>
             {{ t("publicSite.heroTitle") }}<br /><span>{{ t("publicSite.heroSecond") }}</span>
           </h1>
-          <p>
-            {{ t("publicSite.heroDescription") }}<br />{{ t("publicSite.heroDescriptionSecond") }}
-          </p>
+          <p>{{ t("publicSite.heroDescription") }} {{ t("publicSite.heroDescriptionSecond") }}</p>
           <div class="maritime-hero__actions">
             <a class="maritime-button maritime-button--primary" :href="trackingPath"
               >{{ t("publicSite.heroTrack") }} <span aria-hidden="true">→</span></a
@@ -34,29 +26,14 @@
           </div>
         </div>
       </section>
-      <div class="maritime-wrap">
-        <PublicTrackingDock :tracking-path="trackingPath" /><PublicToolsSection
-          :tracking-path="trackingPath"
-        />
-      </div>
-      <section class="public-home-process maritime-wrap" data-public-reveal>
-        <div class="public-section-heading">
-          <span class="maritime-eyebrow">FROM INFORMATION TO ACTION</span>
-          <h2>{{ labels.approach }}</h2>
-          <p>{{ labels.approachBody }}</p>
+      <div class="public-tracking-band">
+        <div class="maritime-wrap">
+          <PublicTrackingDock :tracking-path="trackingPath" />
         </div>
-        <ol>
-          <li v-for="(item, index) in labels.pathways" :key="item">
-            <span class="public-row-number">0{{ index + 1 }}</span>
-            <h3>{{ item }}</h3>
-            <p>{{ labels.pathwayBodies[index] }}</p>
-            <RouterLink
-              :to="['/services/transport', '/services/planning', '/services/operations'][index]"
-              >{{ t("publicSite.details") }} <span aria-hidden="true">→</span></RouterLink
-            >
-          </li>
-        </ol>
-      </section>
+      </div>
+      <div class="maritime-wrap">
+        <PublicToolsSection />
+      </div>
       <section class="maritime-about" data-public-reveal>
         <figure>
           <img

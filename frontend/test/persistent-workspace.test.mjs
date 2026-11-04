@@ -75,6 +75,9 @@ function renderer() {
           this.messages.push({ data, origin });
         }
       },
+      querySelector() {
+        return null;
+      },
       setAttribute(k, v) {
         this.props[k] = v;
       },
@@ -181,6 +184,9 @@ test("actual workspace SFC preserves sidebar and iframe while its accordion foll
       "../brand/BrandLockup.vue": { default: stub },
       "../LanguageSwitcher.vue": { default: stub },
       "../../i18n": translation,
+      "../../i18n/workspaceNavigationMessages.js":
+        await import("../src/i18n/workspaceNavigationMessages.js"),
+      "../../composables/useMediaQuery.js": await import("../src/composables/useMediaQuery.js"),
       "../../features/admin/adminNavigation.js": { adminRouteTitle: () => "" }
     },
     win
@@ -412,6 +418,11 @@ test("task-list route reuses the protected business host and bridge navigation s
   assert.equal(router.currentRoute.value.name, "business-shipment-tasks");
   assert.equal(router.currentRoute.value.meta.workspace, "business");
   assert.equal(router.currentRoute.value.meta.section, "shipments");
+  assert.deepEqual(router.currentRoute.value.meta.roles, ["ADMIN", "BUSINESS"]);
+  assert.ok(router.currentRoute.value.matched.some((r) => r.name === "customers"));
+  await router.push("/workspace/tracking/task-management?taskId=published_example");
+  assert.equal(router.currentRoute.value.name, "business-shipment-task-management");
+  assert.equal(router.currentRoute.value.query.taskId, "published_example");
   assert.deepEqual(router.currentRoute.value.meta.roles, ["ADMIN", "BUSINESS"]);
   assert.ok(router.currentRoute.value.matched.some((r) => r.name === "customers"));
   const win = hostWindow();

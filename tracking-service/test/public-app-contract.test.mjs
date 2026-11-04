@@ -2,13 +2,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
-import { detailSections } from "../public/tracking-v1-adapter.mjs";
+import { detailSections, usesLegacySupplementalDelivery } from "../public/tracking-v1-adapter.mjs";
 import { presentBatchTask } from "../../frontend/src/features/shipments/batchTrackingPresentation.js";
 import { hasRefreshIssue } from "../../frontend/src/features/shipments/shipmentPresentation.js";
 import {
   trackingResponseMessage,
   isPublicTrackingRouteUnavailable
 } from "../public/tracking-response.mjs";
+
+import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "../public/carrier-catalog.mjs";
+import {
+  canonicalTrackingCarrier,
+  supportsTrackingQuery,
+  trackingQueryCarriers
+} from "../public/tracking-query-catalog.mjs";
+import {
+  supportsShipmentReference,
+  trackingCarriersForMode
+} from "../../frontend/src/services/trackingCarriers.js";
 
 const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const indexSource = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
@@ -42,6 +53,48 @@ function loadContractHelpers() {
   );
   return context.contract;
 }
+
+test("transport detail requests require an explicit legacy delivery marker and user action", () => {
+  const start = appSource.indexOf("function shouldLoadSupplementalDetails(");
+  const end = appSource.indexOf("function setSupplementalDetailsStatus(", start);
+  assert.ok(start >= 0 && end > start);
+  const context = vm.createContext({
+    readFileSession: () => ({ kind: "INTERNAL", token: "signed-in" }),
+    usesLegacySupplementalDelivery
+  });
+  const canLoad = vm.runInContext(
+    appSource.slice(start, end) + "\nshouldLoadSupplementalDetails;",
+    context
+  );
+  const snapshot = {
+    provider: { code: "COSCO" },
+    tracking: { type: "BOOKING", number: "UI-PREVIEW-BOOKING-001" },
+    supplementalDetails: { pendingRefresh: true, carriedForward: true },
+    containers: []
+  };
+  const savedShipment = { shipmentId: "42", snapshot };
+  assert.equal(canLoad(savedShipment), false);
+  assert.equal(
+    canLoad({
+      ...savedShipment,
+      snapshot: { ...snapshot, deliveryMode: "SINGLE_RESPONSE" }
+    }),
+    false
+  );
+  const legacy = {
+    ...savedShipment,
+    snapshot: { ...snapshot, deliveryMode: "LEGACY_SUPPLEMENTAL" }
+  };
+  assert.equal(canLoad(legacy), true);
+  assert.equal(canLoad({ ...legacy, localPreview: true }), false);
+  const render = appSource.slice(
+    appSource.indexOf("function renderResult("),
+    appSource.indexOf("function formatShipmentDate(")
+  );
+  const [result, action] = render.split('elements["load-supplemental-details"].addEventListener');
+  assert.doesNotMatch(result, /\bloadSupplementalDetails\(/);
+  assert.match(action, /\("click", \(\) => \{\s*void loadSupplementalDetails\(currentPayload\)/);
+});
 
 function response(status, { statusText = "", routeNotFound = false } = {}) {
   return {
@@ -768,13 +821,13 @@ test("opening shipment details never fetches files or silently re-tracks the shi
 test("view navigation keeps browser back-forward state and restores stored tracking details", () => {
   assert.match(
     appSource,
-    /function showView\(name, \{ updateLocation = true, pushLocation = false \} = \{\}\)[\s\S]*?window\.history\[pushLocation \? "pushState" : "replaceState"\]/
+    /function showView\([\s\S]*?updateLocation = true, pushLocation = false[\s\S]*?window\.history\[pushLocation \? "pushState" : "replaceState"\]/
   );
   assert.match(
     appSource,
     /function syncViewFromLocation\(\)[\s\S]*?trackingQueryFromLocation\(\)[\s\S]*?showStoredTrackingQuery\(query, \{ clearWhenMissing: true \}\)/
   );
-  assert.match(appSource, /showView\(link\.dataset\.viewTarget, \{ pushLocation: true \}\)/);
+  assert.match(appSource, /showView\(link\.dataset\.viewTarget, \{\s*pushLocation: true/);
 });
 
 test("tracking sidebar home entry uses an explicit role destination and accurate label", () => {
@@ -837,6 +890,102 @@ test("exposes real carrier selection and restricts CMA session maintenance to ma
     /fetch\("\/api\/tracking\/cma-session"[\s\S]*?method: "PATCH"[\s\S]*?fileAuthHeaders\(session\)/
   );
   assert.doesNotMatch(appSource, /localStorage\.setItem\([^\n]*cma[^\n]*sessionCookie/i);
+});
+
+test("query form matches the executable carriers and references for each deployment mode", () => {
+  for (const mode of ["LEGACY", "LOCAL_QUEUE"]) {
+    const localQueue = mode === "LOCAL_QUEUE";
+    const carriers = Object.keys(trackingQueryCarriers(localQueue));
+    assert.deepEqual(
+      carriers,
+      trackingCarriersForMode(mode).map(({ code }) => code)
+    );
+    for (const carrier of carriers) {
+      for (const type of ["BOOKING", "BILLOFLADING"]) {
+        assert.equal(
+          supportsTrackingQuery(carrier, type, localQueue),
+          supportsShipmentReference(carrier, type, mode)
+        );
+      }
+      assert.equal(supportsTrackingQuery(carrier, "CONTAINER", localQueue), !localQueue);
+    }
+    assert.equal(supportsTrackingQuery("HEDE", "BOOKING", localQueue), false);
+  }
+  assert.deepEqual(SUPPORTED_CARRIER_CODES, [
+    "COSCO",
+    "CMA",
+    "MAERSK",
+    "HAPAG_LLOYD",
+    "MSC",
+    "OOCL"
+  ]);
+  assert.equal(Object.hasOwn(MULTI_CARRIER_CATALOG, "HMM"), false);
+  assert.equal(canonicalTrackingCarrier(" cma   cgm "), "CMA");
+  assert.equal(canonicalTrackingCarrier(" WHZ "), "WAN_HAI");
+});
+
+test("local tracking deep links keep the carrier and bill type in the query form", () => {
+  function sourceBetween(startMarker, endMarker) {
+    const start = appSource.indexOf(startMarker);
+    const end = appSource.indexOf(endMarker, start);
+    assert.ok(start >= 0 && end > start);
+    return appSource.slice(start, end);
+  }
+
+  const context = vm.createContext({
+    LOCAL_TRACKING_QUEUE: true,
+    canonicalTrackingCarrier,
+    supportsTrackingQuery,
+    CARRIERS: trackingQueryCarriers(true),
+    TYPE_KEYS: { BOOKING: "", BILLOFLADING: "", CONTAINER: "" },
+    CHANNELS: { AUTO: { code: "AUTO" }, LOCAL_CHROME: { sourceKey: "source.localChrome" } },
+    URLSearchParams,
+    window: { location: {} },
+    carrierSelect: {},
+    trackingType: {
+      options: ["BOOKING", "BILLOFLADING", "CONTAINER"].map((value) => ({ value }))
+    },
+    trackingNumber: {},
+    queryChannel: "AUTO",
+    sourceTag: {},
+    queryHelper: {},
+    carrierNotice: null,
+    carrierNavItems: [],
+    checkChannelsButton: null,
+    loading: false,
+    normalizeImportedDetails: () => null,
+    invalidateTrackingRequest() {},
+    historyEntryForQuery: () => null,
+    renderCmaSessionPanel() {},
+    setLoading() {},
+    refreshTrackingControls() {},
+    t: (key) => key
+  });
+  vm.runInContext(
+    [
+      sourceBetween("function normalizeQuery(query)", "function trackingQueryKey"),
+      sourceBetween("function trackingQueryFromLocation()", "function syncViewFromLocation"),
+      sourceBetween("function showStoredTrackingQuery(", "function openHistoryEntry"),
+      sourceBetween("function updateCarrierUI(", "function probeElements")
+    ].join("\n"),
+    context
+  );
+
+  for (const carrier of ["HMM", "COSCO"]) {
+    context.window.location.search = `?carrier=${carrier}&type=BILLOFLADING&number=EXAMPLE001`;
+    vm.runInContext("showStoredTrackingQuery(trackingQueryFromLocation());", context);
+    assert.equal(context.carrierSelect.value, carrier);
+    assert.equal(context.trackingType.value, "BILLOFLADING");
+    assert.equal(context.trackingNumber.value, "EXAMPLE001");
+    assert.equal(context.trackingType.options[1].disabled, false);
+    assert.equal(context.trackingType.options[2].disabled, true);
+  }
+
+  context.carrierSelect.value = "CMA";
+  context.currentPayload = { snapshot: { provider: { code: "CMA" }, channel: "AUTO" } };
+  vm.runInContext("updateCarrierUI({ resetResult: true });", context);
+  assert.equal(context.trackingType.value, "BOOKING");
+  assert.equal(context.trackingType.options[1].disabled, true);
 });
 
 test("open details prefers structured facts and removes repeated spreadsheet fields", () => {
@@ -923,26 +1072,19 @@ test("open details prefers structured facts and removes repeated spreadsheet fie
     appSource,
     /\/api\/public\/shipments\/\$\{encodeURIComponent\(shipmentId\)\}\/supplemental-details/
   );
-  assert.match(
-    appSource,
-    /snapshot\.supplementalDetails\?\.carriedForward[\s\S]*?snapshot\.supplementalDetails\?\.pendingRefresh/
-  );
+  assert.match(appSource, /canLoadSupplemental && snapshot\.supplementalDetails\?\.carriedForward/);
   assert.match(appSource, /setSupplementalDetailsStatus\("stale",[\s\S]*?sourceFetchedAt/);
   assert.match(
     appSource,
     /"supplemental\.stale": "主路线已更新；箱动态与订舱参考信息沿用 \{time\} 的旧数据/
   );
   assert.match(stylesSource, /supplemental-details-status\[data-state="stale"\]/);
+  assert.match(appSource, /elements\["snapshot-containers-empty"\]\.hidden = returned > 0/);
   assert.match(
     appSource,
-    /if \(containers\.length === 0\) \{[\s\S]*?cell\.colSpan = 8;[\s\S]*?t\("containers\.empty"\)/
+    /elements\["secondary-grid"\]\.hidden = !sections\.containers && declared === null/
   );
-  assert.match(
-    appSource,
-    /const containers = snapshot\.containers \?\? \[\];[\s\S]*?elements\["container-panel"\]\.hidden = !sections\.containers;[\s\S]*?renderContainers\(containers\)/
-  );
-  // An empty returned-detail list hides its panel even when a shipment declares boxes.
-  // This capability does not remove the shipment summary or its declared count.
+  // Declared totals can be displayed without inventing container rows.
   const declaredOnly = { summary: { containerCount: { declared: 7 } }, containers: [] };
   assert.equal(detailSections(declaredOnly).containers, false);
   assert.equal(declaredOnly.summary.containerCount.declared, 7);

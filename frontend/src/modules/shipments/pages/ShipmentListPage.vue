@@ -11,7 +11,7 @@
             :disabled="
               savingShipment || loadingShipmentDetail || refreshingShipment || deletingShipment
             "
-            @click="toggleBatchTrackPanel"
+            @click="openTrackingTasks"
           >
             <el-icon><Operation /></el-icon>{{ batchTrackToolbarLabel }}
           </el-button>
@@ -159,53 +159,71 @@
       @selection-change="handleShipmentSelectionChange"
     >
       <el-table-column v-if="isManager" type="selection" width="44" align="center" />
-      <el-table-column type="expand" width="36">
+      <el-table-column type="expand" width="54" class-name="shipment-expand-column" align="center">
+        <template #expand>
+          <span class="shipment-expand-glyph" aria-hidden="true"><ArrowRight /></span>
+        </template>
         <template #default="{ row }">
-          <dl class="shipment-row-details">
-            <div>
-              <dt>{{ t("customers.boundUsers") }}</dt>
-              <dd>
-                <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
-                  <el-tag
-                    v-for="user in shipmentBoundUsers(row)"
-                    :key="user.id || `${user.name}-${user.role}`"
-                    size="small"
-                    effect="plain"
-                    >{{ boundUserLabel(user) }}</el-tag
-                  >
-                </div>
-                <span v-else>—</span>
-              </dd>
-            </div>
-            <div>
-              <dt>{{ t("customers.remark") }}</dt>
-              <dd>
-                <div class="shipment-remark-cell">
-                  <div class="shipment-today-tags">
+          <section class="shipment-row-details" :aria-label="bwt('rowDetails')">
+            <header class="shipment-row-details__heading">
+              <strong>{{ bwt("rowDetails") }}</strong>
+              <div class="shipment-today-tags">
+                <el-tag :type="shipmentBusinessStateTagType(row)" effect="plain" size="small">
+                  {{ shipmentBusinessStateLabel(row) }}
+                </el-tag>
+                <el-tag v-if="isCreatedToday(row)" type="danger" effect="plain" size="small">
+                  {{ t("customers.todayNewBusiness") }}
+                </el-tag>
+              </div>
+            </header>
+            <dl class="shipment-row-details__fields">
+              <div v-if="row.forwarderJobNumber">
+                <dt>{{ t("customers.jobNumber") }}</dt>
+                <dd>{{ row.forwarderJobNumber }}</dd>
+              </div>
+              <div v-if="row.clientPoNumber">
+                <dt>{{ t("customers.clientPoNumber") }}</dt>
+                <dd>{{ row.clientPoNumber }}</dd>
+              </div>
+              <div v-if="row.portOfLoading">
+                <dt>{{ t("customers.portOfLoading") }}</dt>
+                <dd>{{ row.portOfLoading }}</dd>
+              </div>
+              <div v-if="row.portOfDischarge">
+                <dt>{{ t("customers.portOfDischarge") }}</dt>
+                <dd>{{ row.portOfDischarge }}</dd>
+              </div>
+              <div v-if="row.vesselVoyage">
+                <dt>{{ t("customers.vesselVoyage") }}</dt>
+                <dd>{{ row.vesselVoyage }}</dd>
+              </div>
+              <div v-if="row.createdAt">
+                <dt>{{ t("customers.createdAt") }}</dt>
+                <dd>
+                  <time :datetime="row.createdAt">{{ compactShipmentDate(row.createdAt) }}</time>
+                </dd>
+              </div>
+              <div class="shipment-row-details__wide">
+                <dt>{{ t("customers.boundUsers") }}</dt>
+                <dd>
+                  <div v-if="shipmentBoundUsers(row).length" class="shipment-bound-user-tags">
                     <el-tag
-                      class="shipment-today-tag"
-                      :type="shipmentBusinessStateTagType(row)"
+                      v-for="user in shipmentBoundUsers(row)"
+                      :key="user.id || [user.name, user.role].join('-')"
+                      size="small"
                       effect="plain"
+                      >{{ boundUserLabel(user) }}</el-tag
                     >
-                      {{ shipmentBusinessStateLabel(row) }}
-                    </el-tag>
-                    <el-tag
-                      v-if="isCreatedToday(row)"
-                      class="shipment-today-tag is-created"
-                      type="danger"
-                      effect="plain"
-                    >
-                      {{ t("customers.todayNewBusiness") }}
-                    </el-tag>
                   </div>
-                </div>
-              </dd>
-            </div>
-            <div>
-              <dt>{{ t("customers.referenceType") }}</dt>
-              <dd>{{ referenceTypeLabel(row.referenceType) }}</dd>
-            </div>
-          </dl>
+                  <span v-else>{{ bwt("rowNoBoundUsers") }}</span>
+                </dd>
+              </div>
+              <div v-if="row.note" class="shipment-row-details__wide">
+                <dt>{{ t("customers.shipmentNote") }}</dt>
+                <dd class="shipment-row-note">{{ row.note }}</dd>
+              </div>
+            </dl>
+          </section>
         </template>
       </el-table-column>
       <el-table-column
@@ -293,17 +311,26 @@
                 popper-class="business-comp-select shipment-row-menu"
                 @command="(command) => onRowCommand(command, row)"
               >
-                <el-button size="small" text :aria-label="bwt('moreActions')" @click.stop>{{
-                  bwt("more")
-                }}</el-button>
+                <el-button
+                  class="shipment-row-menu-trigger"
+                  size="small"
+                  text
+                  :icon="MoreFilled"
+                  :aria-label="bwt('moreActions')"
+                  :title="bwt('moreActions')"
+                  @click.stop
+                />
                 <template #dropdown
                   ><el-dropdown-menu>
                     <el-dropdown-item command="update" :disabled="refreshingShipment">{{
                       t("customers.update")
                     }}</el-dropdown-item>
-                    <el-dropdown-item command="delete" class="shipment-row-menu-danger">{{
-                      t("customers.delete")
-                    }}</el-dropdown-item>
+                    <el-dropdown-item
+                      command="delete"
+                      class="shipment-row-menu-danger"
+                      :disabled="deletingShipment"
+                      >{{ t("customers.delete") }}</el-dropdown-item
+                    >
                   </el-dropdown-menu></template
                 >
               </el-dropdown>
@@ -332,12 +359,13 @@
 
 <script setup lang="ts">
 import { toRefs } from "vue";
+import { useRouter } from "vue-router";
 import CarrierBadge from "../../../components/brand/CarrierBadge.vue";
 import { compactShipmentDate } from "../../../features/shipments/compactShipmentPresentation.js";
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
 import { bwt } from "../../shared/businessWorkspaceCopy";
-import { Operation, Plus, Upload, Refresh } from "@element-plus/icons-vue";
+import { ArrowRight, MoreFilled, Operation, Plus, Upload, Refresh } from "@element-plus/icons-vue";
 
 // The host supplies one controlled workflow. This page owns no API calls or duplicate state.
 const props = defineProps({
@@ -387,6 +415,11 @@ const {
   changeShipmentPage,
   changeShipmentPageSize
 } = actions;
+const router = useRouter();
+function openTrackingTasks() {
+  if (batchTrackRunning.value) toggleBatchTrackPanel();
+  else void router.push({ name: "business-shipment-tasks" });
+}
 const {
   customerFilterOptionLabel,
   shipmentRowIndex,

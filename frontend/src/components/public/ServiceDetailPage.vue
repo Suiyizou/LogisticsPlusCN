@@ -6,8 +6,8 @@
           <img
             :src="heroImage"
             :alt="t('publicSite.' + service.image + 'ImageAlt')"
-            width="1280"
-            height="564"
+            width="1586"
+            height="992"
           />
         </figure>
         <div class="maritime-wrap">
@@ -48,6 +48,7 @@
           <a href="#service-overview">{{ labels.overview }}</a
           ><a href="#service-capabilities">{{ t("publicSite.editorial.capabilities") }}</a
           ><a href="#service-workflow">{{ t("publicSite.serviceSteps") }}</a
+          ><a href="#service-deliverables">{{ labels.outcomes }}</a
           ><a href="#service-faq">{{ labels.faq }}</a>
         </div>
       </nav>
@@ -57,21 +58,16 @@
         data-public-reveal
       >
         <div>
-          <span class="maritime-eyebrow">{{ labels.overview }}</span>
-          <h2>{{ copy.title }}</h2>
+          <h2>{{ labels.overview }}</h2>
           <p v-for="paragraph in detailContent?.overview" :key="paragraph">{{ paragraph }}</p>
         </div>
         <PublicLoadIllustration v-if="service.id === 'planning'" />
-        <figure v-else>
-          <img
-            :src="heroImage"
-            :alt="t('publicSite.' + service.image + 'ImageAlt')"
-            width="1280"
-            height="564"
-            loading="lazy"
-          />
-          <figcaption>{{ copy.boundary }}</figcaption>
-        </figure>
+        <aside v-else class="public-detail-access-panel">
+          <ServiceIcon :name="service.icon" />
+          <h3>{{ accessLabel }}</h3>
+          <p>{{ copy.scope }}</p>
+          <p>{{ copy.boundary }}</p>
+        </aside>
       </section>
       <PublicServiceWorkflow
         :planning="service.layout === 'planning'"
@@ -285,7 +281,6 @@
               <h2>{{ t("publicSite.editorial.before") }}</h2>
               <span></span>
             </header>
-            <p>{{ copy.scope }}</p>
             <div class="public-service-readiness">
               <article v-for="item in readiness" :key="item.title">
                 <ServiceIcon :name="item.icon" />
@@ -307,7 +302,9 @@
               {{ t("publicSite.serviceNoAccess") }}
             </p>
           </section>
-          <p class="public-service-boundary">{{ copy.boundary }}</p>
+          <p v-if="service.layout === 'planning'" class="public-service-boundary">
+            {{ copy.boundary }}
+          </p>
           <a v-if="service.layout === 'planning'" class="maritime-text-link" href="/algorithm"
             >{{ t("publicSite.planningAlgorithm") }} <span aria-hidden="true">→</span></a
           >
@@ -315,8 +312,6 @@
       </div>
       <PublicServiceEditorial
         :service-id="service.id"
-        :image="heroImage"
-        :image-alt="t('publicSite.' + service.image + 'ImageAlt')"
         :entry="entry"
         :action="entry.allowed ? copy.cta : t('publicSite.availableWorkspaces')"
       />
@@ -391,9 +386,7 @@ const entry = computed(() =>
     : { href: "/services", allowed: true, external: false }
 );
 const heroImage = computed(() =>
-  service.value
-    ? serviceImages[service.value.image as keyof typeof serviceImages].replace("-640.", "-1280.")
-    : ""
+  service.value ? serviceImages[service.value.image as keyof typeof serviceImages] : ""
 );
 const accessKinds: Record<string, string> = {
   public: "accessPublic",

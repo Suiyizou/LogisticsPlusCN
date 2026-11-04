@@ -3,6 +3,8 @@ package com.cargoplanner.backend.shipment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -47,6 +49,12 @@ class ShipmentAutoRefreshServiceTest {
     createSchema();
     objectMapper = new ObjectMapper();
     trackingService = mock(ShipmentTrackingService.class);
+    when(trackingService.canRefreshLegacySupplemental(anyString())).thenReturn(true);
+    when(trackingService.pendingLegacySupplementalSnapshotJson(anyString())).thenAnswer(invocation ->
+        jdbcTemplate.queryForObject("""
+            SELECT sn.snapshot_json FROM cp_shipments s
+            JOIN cp_tracking_snapshots sn ON sn.id = s.current_snapshot_id WHERE s.public_id = ?
+            """, String.class, invocation.getArgument(0, String.class)));
     properties = new ShipmentAutoRefreshProperties();
     properties.setDailyTime(LocalTime.MIDNIGHT);
     properties.setTimeZone(ZoneId.of("Asia/Shanghai"));
@@ -146,8 +154,9 @@ class ShipmentAutoRefreshServiceTest {
   }
 
   @Test
-  void localQueueConvertsExistingSupplementalRetryIntoCompleteTrackingAndClearsPendingSources() {
+  void obsoleteSupplementalRetryClearsPendingSourcesWithoutCallingTheAdapter() {
     when(trackingService.usesLocalTrackingQueue()).thenReturn(true);
+    when(trackingService.canRefreshLegacySupplemental(anyString())).thenReturn(false);
     String publicId = "00000000-0000-0000-0000-000000000001";
     insertShipment(1, publicId, "In transit");
     insertDueJob(1, NOW.minusSeconds(1));
@@ -161,7 +170,7 @@ class ShipmentAutoRefreshServiceTest {
     // The default schedule has daily refresh disabled but supplemental retries enabled.
     service.scheduledRefresh();
 
-    verify(trackingService).refreshAutomatically("COSCO", "BOOKING", "BK1");
+    verify(trackingService, never()).refreshAutomatically("COSCO", "BOOKING", "BK1");
     verify(trackingService, never()).refreshSupplementalAutomatically(
         publicId, "COSCO", "BOOKING", "BK1", List.of("containerInfo"));
     assertThat(jdbcTemplate.queryForObject(
@@ -176,6 +185,22 @@ class ShipmentAutoRefreshServiceTest {
     assertThat(jdbcTemplate.queryForObject(
         "SELECT lease_token FROM cp_tracking_refresh_jobs WHERE shipment_id = 1", String.class))
         .isNull();
+  }
+
+  @Test
+  void lateSupplementalEventCannotScheduleAJobOrWriteDiagnostics() {
+    String publicId = "00000000-0000-0000-0000-000000000001";
+    insertShipment(1, publicId, "In transit");
+    when(trackingService.pendingLegacySupplementalSnapshotJson(publicId))
+        .thenReturn("{\"deliveryMode\":\"LEGACY_SUPPLEMENTAL\",\"supplementalDetails\":{\"pendingRefresh\":true}}");
+    var late = new SupplementalTrackingRetryRequestedEvent(
+        publicId, List.of("containerInfo"), "OLD_FAILURE", "Old response", NOW);
+    service.onSupplementalRetryRequested(late);
+    assertThat(late.scheduled()).isFalse();
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_refresh_jobs", Integer.class))
+        .isZero();
+    verify(trackingService, never()).recordSupplementalRetryOutcome(
+        anyString(), anyBoolean(), any(), any(), any());
   }
 
   @Test
@@ -404,6 +429,7 @@ class ShipmentAutoRefreshServiceTest {
         {
           "snapshot":{
             "summary":{"latestEvent":{"name":"Discharged"}},
+            "deliveryMode":"LEGACY_SUPPLEMENTAL",
             "supplementalDetails":{"partial":true,"pendingRefresh":true}
           },
           "enrichment":{"warning":{
@@ -689,6 +715,7 @@ class ShipmentAutoRefreshServiceTest {
         {
           "snapshot":{
             "summary":{"latestEvent":{"name":"Discharged"}},
+            "deliveryMode":"LEGACY_SUPPLEMENTAL",
             "supplementalDetails":{"partial":true,"pendingRefresh":true}
           },
           "enrichment":{"warning":{"code":"COSCO_UPSTREAM_BLOCKED","message":"blocked"}},
@@ -729,6 +756,7 @@ class ShipmentAutoRefreshServiceTest {
     ObjectNode partialSnapshot = (ObjectNode) objectMapper.readTree("""
         {
           "summary":{"latestEvent":{"name":"Discharged"}},
+          "deliveryMode":"LEGACY_SUPPLEMENTAL",
           "supplementalDetails":{"partial":true,"pendingRefresh":true}
         }
         """);
@@ -843,7 +871,7 @@ class ShipmentAutoRefreshServiceTest {
     jdbcTemplate.execute("""
         CREATE TABLE cp_tracking_snapshots (
           id BIGINT PRIMARY KEY, shipment_id BIGINT NOT NULL, source_channel VARCHAR(32),
-          snapshot_json CLOB NOT NULL
+          snapshot_json CLOB NOT NULL, invalidated_at TIMESTAMP
         )
         """);
     jdbcTemplate.execute("""

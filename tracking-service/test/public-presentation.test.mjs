@@ -112,12 +112,14 @@ test("an asynchronous confirmation cannot delete against a changed session or sh
 test("carrier session maintenance is shown only for CMA and an existing maintenance permission", () => {
   const start = app.indexOf("function renderCmaSessionPanel() {");
   const end = app.indexOf("async function refreshCmaSessionStatus", start);
-  for (const [carrier, canManage, hidden] of [
-    ["CMA", false, true],
-    ["CMA", true, false],
-    ["COSCO", true, true]
+  for (const [carrier, canManage, localQueue, hidden] of [
+    ["CMA", false, false, true],
+    ["CMA", true, false, false],
+    ["COSCO", true, false, true],
+    ["CMA", true, true, true]
   ]) {
     const context = vm.createContext({
+      LOCAL_TRACKING_QUEUE: localQueue,
       carrierSelect: { value: carrier },
       readFileSession: () => ({}),
       canManageFileVisibility: () => canManage,
@@ -135,7 +137,7 @@ test("carrier session maintenance is shown only for CMA and an existing maintena
     });
     vm.runInContext(`${app.slice(start, end)}\nrenderCmaSessionPanel();`, context);
     assert.equal(context.cmaSessionPanel.hidden, hidden);
-    if (carrier === "CMA") assert.equal(context.cmaSessionForm.hidden, !canManage);
+    if (carrier === "CMA" && !localQueue) assert.equal(context.cmaSessionForm.hidden, !canManage);
   }
 });
 
@@ -428,7 +430,7 @@ test("an identity change during a refresh interrupts the queue before the next i
   assert.equal(result.reloads, 0);
 });
 
-test("the batch workbench entry is visible only for signed-in business managers", () => {
+test("all batch workbench entries are visible only for signed-in business managers", () => {
   for (const [kind, role, token, allowed] of [
     ["ANONYMOUS", "", "", false],
     ["CUSTOMER", "OVERSEA_AGENT", "customer", false],
@@ -441,7 +443,7 @@ test("the batch workbench entry is visible only for signed-in business managers"
     let focused = 0;
     let fileChoosers = 0;
     const session = { kind, token, user: { role } };
-    const trigger = { hidden: true, setAttribute() {} };
+    const links = [{ hidden: true }, { hidden: true }, { hidden: true }];
     const dialog = {
       open: false,
       showModal() {
@@ -454,7 +456,12 @@ test("the batch workbench entry is visible only for signed-in business managers"
     };
     const context = vm.createContext({
       readFileSession: () => session,
-      batchWorkspaceTrigger: trigger,
+      document: {
+        querySelectorAll(selector) {
+          assert.equal(selector, "[data-batch-access]");
+          return links;
+        }
+      },
       batchLegacyNotice: { hidden: true },
       batchWorkspaceDialog: dialog,
       batchState: null,
@@ -480,7 +487,10 @@ test("the batch workbench entry is visible only for signed-in business managers"
       context
     );
     context.renderBatchWorkspaceAccess();
-    assert.equal(trigger.hidden, !allowed, `${kind}/${role}`);
+    assert.ok(
+      links.every((link) => link.hidden === !allowed),
+      `${kind}/${role}`
+    );
     assert.equal(opened, 0);
     assert.equal(focused, 0);
     assert.equal(fileChoosers, 0, "rendering the workbench entry must not launch the old chooser");
@@ -489,7 +499,7 @@ test("the batch workbench entry is visible only for signed-in business managers"
     session.token = "";
     context.renderBatchWorkspaceAccess();
     assert.equal(dialog.open, false, "session loss closes the restricted workspace");
-    assert.equal(trigger.hidden, true);
+    assert.ok(links.every((link) => link.hidden));
   }
 });
 

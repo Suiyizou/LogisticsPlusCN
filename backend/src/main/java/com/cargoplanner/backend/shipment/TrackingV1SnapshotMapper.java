@@ -6,9 +6,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /** Maps source-reported facts without assigning guessed event or timezone semantics. */
 final class TrackingV1SnapshotMapper {
+  private static final int SOURCE_FIELD_LIMIT = 200;
+  private static final int SOURCE_VALUE_LIMIT = 8_192;
+  private static final Set<String> NON_BUSINESS_KEYS = Set.of(
+      "meta", "metadata", "evidence", "provenance", "textpath", "screenshotpath", "artifactpath",
+      "cookie", "cookies", "setcookie", "authorization", "headers", "password", "token",
+      "accesstoken", "refreshtoken", "sessiontoken", "idtoken", "apikey", "secret", "clientsecret");
   private final ObjectMapper mapper;
 
   TrackingV1SnapshotMapper(ObjectMapper mapper) {
@@ -34,6 +42,7 @@ final class TrackingV1SnapshotMapper {
     envelope.put("sourceSchema", "tracking.v1");
     ObjectNode snapshot = envelope.putObject("snapshot");
     snapshot.put("schemaVersion", "tracking.v1");
+    snapshot.put("deliveryMode", "SINGLE_RESPONSE");
     snapshot.put("channel", "LOCAL_CHROME");
     snapshot.put("fetchedAt", first(record.path("generated_at"), mapper.valueToTree(fetchedAt)));
     ObjectNode provider = snapshot.putObject("provider");
@@ -66,7 +75,7 @@ final class TrackingV1SnapshotMapper {
       event.put("reportedTime", first(status.path("latest_event_at"), fields.path("latest_event_at")));
     }
     if (shipment.path("container_count").isObject()) {
-      summary.set("containerCount", shipment.path("container_count").deepCopy());
+      summary.set("containerCount", businessValue(shipment.path("container_count")));
     } else {
       ObjectNode count = summary.putObject("containerCount");
       count.set("declared", valueOrNull(fields.path("container_count_declared")));
@@ -153,20 +162,97 @@ final class TrackingV1SnapshotMapper {
       if (value != null) warnings.add(value);
     }
     ArrayNode sourceFields = source.putArray("fields");
-    if (fields.isObject()) {
-      fields.fields().forEachRemaining(field -> {
-        if (field.getValue().isNull() || field.getValue().isMissingNode()) return;
-        ObjectNode entry = sourceFields.addObject();
-        entry.put("key", field.getKey());
-        entry.set("value", field.getValue().deepCopy());
-      });
+    appendSourceFields(sourceFields, fields, "shipment.fields", "");
+    appendSourceFields(sourceFields, shipment, "shipment",
+        "bill_of_lading booking container_count route status containers events legs fields fields_extra");
+    appendSourceFields(sourceFields, route, "shipment.route", "origin destination vessel");
+    appendSourceFields(sourceFields, vessel, "shipment.route.vessel", "name voyage");
+    appendSourceFields(sourceFields, status, "shipment.status", "state latest_event latest_event_at");
+    appendSourceRows(sourceFields, shipment.path("legs"), "shipment.legs",
+        "mode vessel_name voyage service load_port discharge_port origin destination etd eta atd ata");
+    appendSourceRows(sourceFields, shipment.path("events"), "shipment.events",
+        "sequence description status name raw time date time_raw location mode container_number containerNumber");
+    int containerIndex = 0;
+    for (JsonNode container : array(shipment.path("containers"))) {
+      String path = "shipment.containers." + ++containerIndex;
+      if (text(container.path("number")) == null) {
+        appendSourceFields(sourceFields, container, path, "");
+        continue;
+      }
+      appendSourceFields(sourceFields, container, path,
+          "number type movement terms position latest_status status_time seal seal_number weight events");
+      appendSourceRows(sourceFields, container.path("events"), path + ".events",
+          "description status name time date time_raw location mode");
+      if (sourceFields.size() >= SOURCE_FIELD_LIMIT) break;
     }
-    JsonNode extra = shipment.path("fields_extra");
-    source.set("extraFields", extra.isObject() ? extra.deepCopy() : mapper.createObjectNode());
+    JsonNode extra = businessValue(shipment.path("fields_extra"));
+    source.set("extraFields", extra.isObject() ? extra : mapper.createObjectNode());
     ArrayNode additional = source.putArray("additionalEvents");
     appendEvents(additional, extra.path("hmm_history"), "hmm_history", true);
     appendEvents(additional, extra.path("msc_events"), "msc_events", true);
     return envelope;
+  }
+
+  private void appendSourceRows(ArrayNode target, JsonNode rows, String path, String mapped) {
+    int index = 0;
+    for (JsonNode row : array(rows)) {
+      if (target.size() >= SOURCE_FIELD_LIMIT) return;
+      appendSourceFields(target, row, path + "." + ++index, mapped);
+    }
+  }
+
+  private void appendSourceFields(ArrayNode target, JsonNode values, String path, String mapped) {
+    if (!values.isObject()) return;
+    Set<String> mappedKeys = Set.of(mapped.split(" "));
+    var fields = values.fields();
+    while (fields.hasNext() && target.size() < SOURCE_FIELD_LIMIT) {
+      var field = fields.next();
+      if (!isBusinessKey(field.getKey())) continue;
+      JsonNode value = field.getValue();
+      if (value.isNull() || (value.isContainerNode() && value.isEmpty())
+          || (value.isTextual() && value.asText().isBlank())
+          || (mappedKeys.contains(field.getKey()) && !value.isContainerNode())) continue;
+      // These branches have their own typed fields or are traversed separately.
+      if ("shipment".equals(path) && mappedKeys.contains(field.getKey())) continue;
+      if ("shipment.route".equals(path) && "vessel".equals(field.getKey())) continue;
+      if (path.startsWith("shipment.containers.") && mappedKeys.contains("events")
+          && "events".equals(field.getKey())) continue;
+      value = businessValue(value);
+      if (value.isContainerNode() && value.isEmpty()) continue;
+      String rawText = value.isTextual() ? value.asText() : value.toString();
+      ObjectNode entry = target.addObject();
+      entry.put("key", field.getKey());
+      entry.put("source", path);
+      if (rawText.length() <= SOURCE_VALUE_LIMIT) {
+        entry.set("value", value);
+      } else {
+        String preview = rawText.substring(0, SOURCE_VALUE_LIMIT);
+        entry.put("value", preview);
+        entry.put("rawText", preview);
+        entry.put("structured", value.isContainerNode());
+        entry.put("truncated", true);
+      }
+    }
+  }
+
+  private boolean isBusinessKey(String key) {
+    return !NON_BUSINESS_KEYS.contains(key.toLowerCase(Locale.ROOT).replaceAll("[_ -]", ""));
+  }
+
+  private JsonNode businessValue(JsonNode value) {
+    if (value.isObject()) {
+      ObjectNode result = mapper.createObjectNode();
+      value.fields().forEachRemaining(field -> {
+        if (isBusinessKey(field.getKey())) result.set(field.getKey(), businessValue(field.getValue()));
+      });
+      return result;
+    }
+    if (value.isArray()) {
+      ArrayNode result = mapper.createArrayNode();
+      value.forEach(item -> result.add(businessValue(item)));
+      return result;
+    }
+    return value;
   }
 
   private void appendEvents(ArrayNode target, JsonNode values, String source, boolean joinDate) {

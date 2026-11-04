@@ -9,6 +9,11 @@ export function canonicalSmartImportLocation(to) {
   return { path: "/smart-import/excel", query, hash: to.hash, replace: true };
 }
 
+const trackingTaskRoutes = {
+  "business-shipment-tasks": ["/workspace/tracking/tasks", "customers.trackingTaskList"],
+  "business-shipment-task-management": ["/workspace/tracking/task-management", "shipmentTaskManagement.title"]
+};
+
 // Components are supplied by the composition root, so the registry can be tested without a browser.
 export function createApplicationRoutes(
   views,
@@ -46,23 +51,19 @@ export function createApplicationRoutes(
     .flatMap((module) =>
       module.pages.map((page) => {
         if (page.view && !views[page.view]) throw Error(`Missing module view: ${page.view}`);
+        const trackingTask = trackingTaskRoutes[page.name];
         return {
           path: [module.mount, page.path].filter(Boolean).join("/"),
           name: page.name,
-          ...(page.name === "business-shipment-tasks"
-            ? { alias: "/workspace/tracking/tasks" }
-            : {}),
+          ...(trackingTask ? { alias: trackingTask[0] } : {}),
           component: views[page.view || "legacyBusiness"],
           meta: {
             surface: "operations",
             workspace: "business",
             moduleId: module.id,
             section: module.id,
-            roles: page.name === "business-shipment-tasks" ? ["ADMIN", "BUSINESS"] : module.roles,
-            titleKey:
-              page.name === "business-shipment-tasks"
-                ? "customers.trackingTaskList"
-                : module.labelKey,
+            roles: trackingTask ? ["ADMIN", "BUSINESS"] : module.roles,
+            titleKey: trackingTask?.[1] || module.labelKey,
             selection: page.selection || ""
           }
         };

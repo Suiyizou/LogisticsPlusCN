@@ -6,11 +6,54 @@ import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRe
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class TrackingV1SnapshotMapperTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final TrackingV1SnapshotMapper mapper = new TrackingV1SnapshotMapper(objectMapper);
+
+  @Test
+  void retainsUnmappedShipmentDetailsWithTheirSourcePaths() throws Exception {
+    JsonNode record = objectMapper.readTree("""
+        {
+          "shipment":{
+            "status":{"state":"IN_TRANSIT","latest_event_raw":"Carrier status as reported"},
+            "route":{"vessel":{"name":"SOURCE VESSEL","raw":{"imo":1234,"chartered":false}}},
+            "containers":[{"number":"TEST0000001","raw":"Original carrier row",
+              "reefer":{"active":false,"temperature":0},"events":[{"name":"Loaded","terminal":"A"}]}],
+            "custom_details":{"freeDays":0,"guaranteed":false,
+              "nested":[{"accessToken":"private-nested","artifact_path":"D:/private/log"}]},
+            "fields_extra":{"detail":{"refreshToken":"private-refresh","freeDays":0}},
+            "legs":[{"voyage":"001E","terminal":"Pier 4"}]
+          },
+          "evidence":{"text_path":"D:/private/result.txt"},
+          "meta":{"provenance":{"host":"test-host"},"authorization":"private-auth"}
+        }
+        """);
+    JsonNode source = mapper.map(record,
+        new NormalizedTrackRequest("HMM", "AUTO", "BILLOFLADING", "00001234"),
+        "2026-10-30T10:00:00Z", "job-raw").path("snapshot").path("sourceDetails");
+    Map<String, JsonNode> values = new LinkedHashMap<>();
+    source.path("fields").forEach(field ->
+        values.put(field.path("source").asText() + "." + field.path("key").asText(),
+            field.path("value")));
+
+    assertThat(values.get("shipment.status.latest_event_raw").asText())
+        .isEqualTo("Carrier status as reported");
+    assertThat(values.get("shipment.route.vessel.raw").path("imo").asInt()).isEqualTo(1234);
+    assertThat(values.get("shipment.route.vessel.raw").path("chartered").booleanValue()).isFalse();
+    assertThat(values.get("shipment.containers.1.raw").asText()).isEqualTo("Original carrier row");
+    assertThat(values.get("shipment.containers.1.reefer").path("temperature").intValue()).isZero();
+    assertThat(values.get("shipment.containers.1.events.1.terminal").asText()).isEqualTo("A");
+    assertThat(values.get("shipment.legs.1.terminal").asText()).isEqualTo("Pier 4");
+    assertThat(values.get("shipment.custom_details").path("freeDays").intValue()).isZero();
+    assertThat(source.path("extraFields").path("detail").path("freeDays").intValue()).isZero();
+    assertThat(source.toString()).doesNotContain(
+        "D:/private/", "test-host", "private-auth", "private-nested", "private-refresh");
+    assertThat(source.path("businessVerified").booleanValue()).isFalse();
+  }
 
   @Test
   void preservesSourceFactsAndWarningsForExistingSnapshotConsumers() throws Exception {

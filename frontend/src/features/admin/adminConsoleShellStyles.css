@@ -373,6 +373,21 @@
   outline: 3px solid var(--color-ring);
   outline-offset: 3px;
 }
+.admin-console-shell :deep(.admin-table-wrap .el-table__body-wrapper) {
+  transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.admin-console-shell.is-table-page-switching :deep(.admin-table-wrap .el-table__body-wrapper) {
+  opacity: 0.72;
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-console-shell :deep(.admin-table-wrap .el-table__body-wrapper) {
+    transition: none;
+  }
+  .admin-console-shell.is-table-page-switching :deep(.admin-table-wrap .el-table__body-wrapper) {
+    opacity: 1;
+  }
+}
+
 .admin-nav-fold-enter-active,
 .admin-nav-fold-leave-active {
   transition: opacity 0.18s;

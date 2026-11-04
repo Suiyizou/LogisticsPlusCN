@@ -19,6 +19,7 @@ export interface AgentRecord {
   username?: string;
   displayName?: string;
   status?: string;
+  linkedCustomerCount?: number;
 }
 
 export interface ShipmentRecord {

@@ -7,6 +7,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { createStaticRouter } from "../lib/static-routes.mjs";
 import { setCommonHeaders } from "../lib/http-utils.mjs";
+import { supportsTrackingQuery } from "../public/tracking-query-catalog.mjs";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8").replace(
   /\r\n/g,
@@ -43,6 +44,8 @@ test("a late 401 from the previous token cannot clear or notify the parent about
   let current = { kind: "INTERNAL", token: "new-token" },
     clears = 0;
   const notifications = [];
+  const mapClears = [];
+  const mapHost = { hidden: false };
   const context = vm.createContext({
     readFileSession: () => current,
     fileSessionFingerprint: (session) => session.token,
@@ -54,6 +57,10 @@ test("a late 401 from the previous token cannot clear or notify the parent about
       return true;
     },
     workspaceBridge: { authExpired: (token) => notifications.push(token) },
+    shipmentMapSequence: 0,
+    shipmentLogisticsMap: { update: (records) => mapClears.push(records.length) },
+    document: { querySelector: () => mapHost },
+    currentLanguage: "en",
     synchronizeRelatedFilesSession() {},
     renderRelatedFilesDrawer() {}
   });
@@ -64,9 +71,14 @@ test("a late 401 from the previous token cannot clear or notify the parent about
   assert.equal(context.clear({ kind: "INTERNAL", token: "old-token" }, { expired: true }), false);
   assert.equal(clears, 0);
   assert.deepEqual(notifications, []);
+  assert.deepEqual(mapClears, []);
+  assert.equal(mapHost.hidden, false);
   assert.equal(context.clear({ kind: "INTERNAL", token: "new-token" }, { expired: true }), true);
   assert.equal(clears, 1);
   assert.deepEqual(notifications, ["new-token"]);
+  assert.deepEqual(mapClears, [0]);
+  assert.equal(mapHost.hidden, true);
+  assert.equal(context.shipmentMapSequence, 1);
 });
 
 test("opening a stored shipment URL reports the query view even while overview is the outgoing view", () => {
@@ -163,7 +175,8 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
     trackingType: { value: "BOOKING" },
     trackingNumber: { value: "A" },
     normalizeQuery: (query) => ({ ...query, channel: "AUTO" }),
-    CARRIERS: { COSCO: { enabled: true } },
+    supportsTrackingQuery,
+    LOCAL_TRACKING_QUEUE: false,
     batchItemForQuery: () => null,
     canManageFileVisibility: () => false,
     readFileSession: () => ({ kind: "ANONYMOUS" }),
@@ -191,7 +204,8 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
     customerFacingTrackingError: () => "error"
   });
   const start = source.indexOf('form.addEventListener("submit", async (event) => {');
-  const end = source.indexOf('\ncarrierSelect.addEventListener("change"', start);
+  const end = source.indexOf('\ntrackingType.addEventListener("change"', start);
+  assert.ok(start >= 0 && end > start);
   vm.runInContext(
     extractFunction("invalidateTrackingRequest") +
       "\n" +

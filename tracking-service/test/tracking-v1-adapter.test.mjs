@@ -22,6 +22,7 @@ for (const spec of expectedCarrierShapes)
     const { snapshot: s } = adaptTrackingV1(record);
     const sections = detailSections(s);
     assert.equal(s.provider.code, spec.code);
+    assert.equal(s.deliveryMode, "SINGLE_RESPONSE");
     assert.equal(s.containers.length, spec.containers);
     assert.equal(s.events.length, spec.events);
     assert.equal(s.routingLegs.length, spec.legs || 0);
@@ -215,7 +216,6 @@ test("source JSON display is depth and size bounded with explicit truncation not
     new URL("../public/tracking-json-preview.mjs", import.meta.url),
     "utf8"
   );
-  assert.match(renderer, /node\(doc, "pre", field.rawText\)/);
   assert.doesNotMatch(renderer, /innerHTML/);
 });
 
@@ -268,6 +268,7 @@ test("Java mapper sourceDetails fields and extraFields render typed source value
     constructor() {
       this.children = [];
       this.value = "";
+      this.listeners = new Map();
     }
     set textContent(value) {
       this.value = String(value);
@@ -278,6 +279,17 @@ test("Java mapper sourceDetails fields and extraFields render typed source value
         this.value + this.children.map((child) => child.textContent || String(child)).join(" ")
       );
     }
+    addEventListener(type, callback) {
+      this.listeners.set(type, callback);
+    }
+    removeEventListener(type) {
+      this.listeners.delete(type);
+    }
+    expandAll() {
+      this.open = true;
+      this.listeners.get("toggle")?.();
+      this.children.forEach((child) => child.expandAll());
+    }
     append(...children) {
       this.children.push(...children);
     }
@@ -286,24 +298,19 @@ test("Java mapper sourceDetails fields and extraFields render typed source value
       this.value = "";
     }
   }
-  const target = new TextNode(),
-    summary = new TextNode();
+  const target = new TextNode();
   const doc = {
     createElement: () => new TextNode(),
-    querySelector: (selector) =>
-      selector === "#reported-tracking-details"
-        ? target
-        : selector === "#tracking-json-source-summary"
-          ? summary
-          : null
+    querySelector: (selector) => (selector === "#reported-tracking-details" ? target : null)
   };
   renderReportedTrackingDetails(doc, normalized.snapshot, "zh");
+  target.expandAll();
   assert.match(target.textContent, /SYNTHETIC-SEAL/);
   assert.match(target.textContent, /shipment.fields_extra.board_date/);
   assert.match(target.textContent, /SOURCE DATE WITHOUT CONVERSION/);
   assert.match(target.textContent, /SOURCE LOAD DETAIL/);
   assert.doesNotMatch(target.textContent, /\[object Object\]/);
-  assert.match(summary.textContent, /尚未验证/);
+  assert.match(target.textContent, /尚未验证/);
   assert.deepEqual(normalizeTrackingPayload(normalized), normalized);
 });
 
@@ -332,4 +339,46 @@ test("normalizing Java source fields preserves the request session fingerprint f
   assert.equal(fingerprints.get(normalized), "SYNTHETIC-SESSION");
   assert.equal(fingerprints.get(payload), "SYNTHETIC-SESSION");
   assert.equal(normalized.snapshot.sourceDetails.fields[0].structured, true);
+});
+
+test("preserves raw source values beside mapped descriptions and prefers declared schedule fields", () => {
+  const record = structuredClone(syntheticByCarrier.by_carrier.HMM[0]);
+  record.shipment.route.origin = "Shanghai";
+  record.shipment.route.destination = null;
+  record.shipment.route.vessel.raw = "RAW VESSEL LINE";
+  record.shipment.status.latest_event_raw = "RAW STATUS LINE";
+  record.shipment.fields = {
+    POL: "Ningbo",
+    POD: "Long Beach",
+    etd: "First ETD",
+    ETD: "Fallback ETD",
+    ETA: "Reported ETA"
+  };
+  record.shipment.events[0].raw = "RAW EVENT LINE";
+  record.shipment.containers[0].raw = { flags: false, count: 0 };
+  const snapshot = adaptTrackingV1(record).snapshot;
+  assert.equal(snapshot.summary.origin.name, "Shanghai");
+  assert.equal(snapshot.summary.destination.name, "Long Beach");
+  assert.equal(snapshot.keyTimes.estimatedDeparture.time, "First ETD");
+  assert.equal(snapshot.keyTimes.estimatedArrival.time, "Reported ETA");
+  assert.equal(snapshot.keyTimes.actualArrival, undefined);
+  assert.equal(snapshot.events[0].raw, "RAW EVENT LINE");
+  assert.equal(snapshot.events[0].occurredAt, null);
+  assert.deepEqual(snapshot.containers[0].raw, { flags: false, count: 0 });
+  for (const [source, key, value] of [
+    ["shipment.route.vessel", "raw", "RAW VESSEL LINE"],
+    ["shipment.status", "latest_event_raw", "RAW STATUS LINE"]
+  ]) {
+    assert.equal(
+      snapshot.sourceDetails.fields.find((field) => field.source === source && field.key === key)
+        .rawText,
+      value
+    );
+  }
+  assert.match(
+    snapshot.sourceDetails.fields.find(
+      (field) => field.source === "shipment.containers" && field.key === "1"
+    ).rawText,
+    /"count": 0/
+  );
 });

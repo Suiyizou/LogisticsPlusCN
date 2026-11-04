@@ -46,7 +46,13 @@ const emit = defineEmits<{
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="platformCopy.customerTitle"
+      >
         <el-table
           :data="rows"
           :row-key="presentation.platformRowKey"
@@ -117,7 +123,9 @@ const emit = defineEmits<{
             </template>
           </BusinessColumn>
           <template #empty
-            ><WorkspaceEmptyState>{{ platformCopy.empty }}</WorkspaceEmptyState></template
+            ><WorkspaceEmptyState v-if="!busy">{{
+              platformCopy.empty
+            }}</WorkspaceEmptyState></template
           >
         </el-table>
       </div>

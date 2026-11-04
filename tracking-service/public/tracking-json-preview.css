@@ -211,3 +211,11 @@
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
+
+#snapshot-reported-history .tracking-json-history {
+  margin: 12px 16px 16px;
+}
+
+#reported-tracking-details {
+  margin: 0;
+}

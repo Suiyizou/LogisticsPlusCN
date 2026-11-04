@@ -39,7 +39,7 @@ const {
 const { announcementImageUrl, announcementExcerpt } = props.presentation;
 </script>
 <template>
-  <section class="admin-page-pane">
+  <section class="admin-page-pane" :aria-busy="busy">
     <article class="admin-panel admin-announcement-panel">
       <WorkspacePageHeader compact class="admin-panel-head"
         ><template #title>{{ copy.listTitle }}</template
@@ -56,7 +56,13 @@ const { announcementImageUrl, announcementExcerpt } = props.presentation;
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="copy.listTitle"
+      >
         <el-table
           :data="rows"
           row-key="id"
@@ -138,9 +144,13 @@ const { announcementImageUrl, announcementExcerpt } = props.presentation;
               </div>
             </template>
           </AnnouncementColumn>
-          <template #empty
-            ><WorkspaceEmptyState>{{ copy.empty }}</WorkspaceEmptyState></template
-          >
+          <template #empty>
+            <WorkspaceEmptyState v-if="!busy" :title="copy.empty">
+              <template #actions>
+                <el-button type="primary" @click="emit('create')">{{ copy.create }}</el-button>
+              </template>
+            </WorkspaceEmptyState>
+          </template>
         </el-table>
       </div>
       <el-pagination

@@ -133,8 +133,9 @@
   padding: 20px;
   min-height: 104px;
   transition:
-    background 160ms ease,
-    border-color 160ms ease;
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
 }
 .admin-file-scope-tabs button.active {
   border-color: var(--color-primary);
@@ -154,6 +155,12 @@
 .admin-file-scope-tabs small {
   font-size: 13px;
 }
+@media (prefers-reduced-motion: reduce) {
+  .admin-file-scope-tabs button {
+    transition: none;
+  }
+}
+
 @media (max-width: 600px) {
   .admin-file-scope-tabs {
     grid-template-columns: 1fr;

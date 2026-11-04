@@ -22,6 +22,8 @@ export function useServiceCatalog(
   const loading = ref(false),
     saving = ref(false),
     visible = ref(false);
+  const appliedQuery = ref("");
+  const hasLoaded = ref(false);
   const query = ref(""),
     page = ref(0),
     pageSize = ref(20),
@@ -48,19 +50,21 @@ export function useServiceCatalog(
           ? failure.message
           : t("serviceCatalog.error");
   }
-  async function refresh(): Promise<boolean> {
+  async function refresh(
+    requestedPage = page.value,
+    requestedQuery = query.value.trim()
+  ): Promise<boolean> {
     if (disposed) return false;
     currentRead?.abort();
     const operation = new AbortController();
     currentRead = operation;
-    const requestedPage = page.value;
     loading.value = true;
     error.value = "";
     try {
       const result = await api.list(
         requestedPage,
         pageSize.value,
-        query.value.trim(),
+        requestedQuery,
         operation.signal
       );
       if (disposed || currentRead !== operation) return false;
@@ -74,12 +78,13 @@ export function useServiceCatalog(
       )
         throw Error(t("serviceCatalog.error"));
       if (result.total > 0 && requestedPage >= result.totalPages) {
-        page.value = Math.max(0, result.totalPages - 1);
-        return refresh();
+        return refresh(Math.max(0, result.totalPages - 1), requestedQuery);
       }
       rows.value = result.items;
       total.value = result.total;
-      if (!result.total) page.value = 0;
+      page.value = result.total ? requestedPage : 0;
+      appliedQuery.value = requestedQuery;
+      hasLoaded.value = true;
       return true;
     } catch (failure) {
       if (!disposed && currentRead === operation) describe(failure);
@@ -134,7 +139,7 @@ export function useServiceCatalog(
       else await api.create(values, operation.signal);
       if (disposed || currentWrite !== operation) return false;
       visible.value = false;
-      await refresh();
+      await refresh(page.value, appliedQuery.value);
       return true;
     } catch (failure) {
       if (!disposed && currentWrite === operation) describe(failure);
@@ -146,13 +151,11 @@ export function useServiceCatalog(
   async function changePage(next: number) {
     if (disposed || saving.value || !Number.isInteger(next) || next < 0 || next === page.value)
       return false;
-    page.value = next;
-    return refresh();
+    return refresh(next, appliedQuery.value);
   }
   async function search() {
     if (disposed) return false;
-    page.value = 0;
-    return refresh();
+    return refresh(0);
   }
   onScopeDispose(() => {
     disposed = true;
@@ -165,6 +168,8 @@ export function useServiceCatalog(
     saving,
     visible,
     query,
+    appliedQuery,
+    hasLoaded,
     page,
     pageSize,
     total,

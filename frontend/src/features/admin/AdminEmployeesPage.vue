@@ -35,7 +35,7 @@ function lastLogin(value: string | null | undefined) {
 }
 </script>
 <template>
-  <section class="admin-page-pane">
+  <section class="admin-page-pane" :aria-busy="busy">
     <article class="admin-panel admin-employee-panel">
       <WorkspacePageHeader compact class="admin-panel-head"
         ><template #title>{{ t("adminWorkflow.employeeHeading") }}</template
@@ -52,7 +52,13 @@ function lastLogin(value: string | null | undefined) {
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="t('adminWorkflow.employeeHeading')"
+      >
         <el-table :data="rows" row-key="id" stripe class="standard-information-table">
           <EmployeeColumn
             prop="username"
@@ -122,9 +128,15 @@ function lastLogin(value: string | null | undefined) {
               </div>
             </template>
           </EmployeeColumn>
-          <template #empty
-            ><WorkspaceEmptyState>{{ t("admin.employee.empty") }}</WorkspaceEmptyState></template
-          >
+          <template #empty>
+            <WorkspaceEmptyState v-if="!busy" :title="t('admin.employee.empty')">
+              <template #actions>
+                <el-button type="primary" @click="emit('create')">{{
+                  t("adminWorkflow.newEmployee")
+                }}</el-button>
+              </template>
+            </WorkspaceEmptyState>
+          </template>
         </el-table>
       </div>
       <el-pagination

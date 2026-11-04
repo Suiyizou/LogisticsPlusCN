@@ -40,8 +40,8 @@ export const publicSiteMessages = {
         }
       },
       homeEyebrow: "YOUR CARGO. CONNECTED.",
-      heroTitle: "连接每一程。",
-      heroSecond: "让交付，更有把握。",
+      heroTitle: "掌握运输进度，",
+      heroSecond: "提前准备下一步。",
       heroDescription: "从货物追踪到装箱规划，从客户管理到业务交接。",
       heroDescriptionSecond: "为运输中的每一个角色，提供清晰的下一步。",
       heroTrack: "追踪我的货物",
@@ -478,8 +478,8 @@ export const publicSiteMessages = {
         }
       },
       homeEyebrow: "YOUR CARGO. CONNECTED.",
-      heroTitle: "Every journey, connected.",
-      heroSecond: "Every next step, clearer.",
+      heroTitle: "Follow the shipment.",
+      heroSecond: "Plan the next move.",
       heroDescription: "Cargo tracking. Load planning. Customer relationships.",
       heroDescriptionSecond: "Clearer information for everyone behind your shipment.",
       heroTrack: "Track my shipment",

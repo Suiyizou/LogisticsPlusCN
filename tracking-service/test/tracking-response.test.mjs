@@ -208,6 +208,7 @@ test("production request routing retains customer restrictions and legacy COSCO 
       paths: []
     },
     { kind: "INTERNAL", publicStatus: 405, primaryStatus: 200, paths: ["/api/track"] },
+    { kind: "INTERNAL", publicStatus: 405, localQueue: true, paths: [] },
     {
       kind: "INTERNAL",
       publicStatus: 405,
@@ -232,6 +233,7 @@ test("production request routing retains customer restrictions and legacy COSCO 
     const paths = [];
     const context = vm.createContext({
       readFileSession: () => ({ kind: scenario.kind }),
+      LOCAL_TRACKING_QUEUE: scenario.localQueue === true,
       isPublicTrackingRouteUnavailable,
       postPublicShipmentTrackingRequest: async () => ({
         response: response(scenario.publicStatus),

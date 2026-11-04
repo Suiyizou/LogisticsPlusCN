@@ -57,7 +57,7 @@ Compose 和 `.env.example` 默认使用 `LOCAL_QUEUE`；Java 单独运行时保�
 
 `items[].status` 的 `human_required`、`no_business_data`、`carrier_not_implemented`、`failed` 会在取结果前直接转成对应错误，哪怕 job 仍为 `running` 或返回的结果状态看似成功，也不会覆盖条目失败。`pending/running` 继续等待，`done` 再检查结果。结果 `query.status` 仍保留第二层校验，并统一处理大小写；不依赖失败条目一定生成 `result.json`。
 
-本地模式不调用单独的 COSCO 补全/箱号发现端点。完整结果中的箱号、运输分段和扩展信息一次映射；直接调用旧补全接口返回 `TRACKING_LOCAL_OPERATION_UNSUPPORTED`。
+Java 从同一个任务的结果包中一次映射箱号、运输分段、事件和扩展信息。`POST /jobs`、状态轮询及读取结果属于同一条查询。缺少字段时，页面按来源已返回的信息展示。本地队列的单次结果不会触发订舱或箱号子查询。
 
 ## 健康判断与手动 canary
 
@@ -80,7 +80,7 @@ canary 请求示例：
 
 可由运维按约 10 分钟、使用仍有效的已知单号调用 canary；本次只提供手动接口，没有创建定时任务，也不会在 GET 健康检查时自动启动 Chrome 查询。
 
-本机排查时应绕过环境 HTTP 代理，例如 PowerShell `Invoke-RestMethod -NoProxy http://127.0.0.1:8791/health`，避免把代理返回的 502 误判成本地服务故障。本次只读检查确认该端点无需 Bearer 即返回 200，且当时 `chrome.connected=true`、`concurrency=2`；后者仍须由本地服务启动配置改为 1 并重启队列，本文及 Java 单实例串行限制不会自动修改已运行的本地队列并发数。HTTP 可达与 Chrome 已连接仍不等于完成了 canary。
+本机排查时应绕过环境 HTTP 代理，例如 PowerShell `Invoke-RestMethod -NoProxy http://127.0.0.1:8791/health`，避免把代理返回的 502 误判成本地服务故障。最简联调配置保持无业务令牌、`DISABLE_UI=1`，不启用定时 canary。本地服务、安装脚本和已注册启动任务的默认并发已调整为 1；队列重启后 `/health` 已确认 `concurrency=1`，UI 入口返回 403，frpc 客户端仍有已建立连接。HTTP 可达和隧道连接不等于完成了真实查单 canary。
 
 ## 给渲染进程的现有页面契约
 
@@ -95,6 +95,7 @@ canary 请求示例：
 | 字段 | 含义 |
 |---|---|
 | `schemaVersion`, `channel` | `tracking.v1`、`LOCAL_CHROME` |
+| `deliveryMode` | `SINGLE_RESPONSE` 表示一次交付，适用于本地队列，也是平台默认模式 |
 | `provider`, `tracking` | 平台船司编码、原请求类型与单号 |
 | `summary`, `references` | 提单/订舱引用、起终点、船名航次、最新状态和声明/抽取箱量 |
 | `containers`, `routingLegs` | 箱级信息及实际返回的运输分段 |
@@ -103,6 +104,18 @@ canary 请求示例：
 | `sourceDetails` | `queryStatus`、`strategy`、`referenceSubmitted`、`referenceType`、`durationSeconds`、`warnings`、`fields`、`extraFields`、`additionalEvents`、`jobId`、`confidence` |
 
 `sourceDetails.businessVerified` 固定 `false`。缺失字段不猜测，起终点名称不会被生成成事件节点。本地截图/文本证据路径不返回页面，仅提供 `evidenceAvailable` 布尔值。前端无需直接访问本地端口、处理隧道 token 或轮询桌面任务。
+
+打开已保存票单时，页面直接使用当前或历史快照。缺少 `deliveryMode` 的历史快照仍可查看，旧的 `pendingRefresh` 或 `carriedForward` 标记不会触发补拉。
+
+旧适配器的拆分补充模式需显式开启 `app.shipment-tracking.legacy-supplemental-enabled`（环境变量 `APP_TRACKING_LEGACY_SUPPLEMENTAL_ENABLED=true`），并且适用的旧适配器明确报告结果需要补充。这类新快照标记为 `LEGACY_SUPPLEMENTAL`。本地队列始终采用单包交付。
+
+调度器遇到不再适用的旧补充任务时会清除待补来源，按正常的全量刷新策略重新安排，无需立即查询船司。
+
+## 船司差异字段与数据库
+
+当前无需按船司增加数据库列。`cp_tracking_snapshots.snapshot_json` 为 `LONGTEXT`，保存整个映射后的快照。`sourceDetails.fields` 保留 `shipment.fields` 和其他未映射的业务字段及来源路径，`sourceDetails.extraFields` 保留 `shipment.fields_extra` 的业务扩展信息。
+
+这不等于完整保存原始 API 响应：箱级、运输分段和事件采用映射白名单，`raw` 为 null。后续新增 `fields/fields_extra` 字段通常不需要改表；新增箱级或其他结构字段要补映射及渲染；只有需要按该字段做数据库筛选、排序或统计时，再评估标准列、生成列或索引。本轮没有执行数据库迁移。
 
 ## 失败语义
 
@@ -120,4 +133,4 @@ canary 请求示例：
 | carrier/schema/原始单号不匹配 | 502 `TRACKING_LOCAL_INVALID_RESPONSE` |
 | 已取消 | 409 `TRACKING_CANCELLED` |
 
-`completed_with_gaps` 不直接视为成功，先检查进度 `items[].status`，再检查结果 `query.status`。失败不写入成功快照；有旧快照时沿用原后端的降级保留规则。本次验证只使用模拟 HTTP 与 H2，没有触发真实 canary 或船司查询。
+`completed_with_gaps` 不直接视为成功，先检查进度 `items[].status`，再检查结果 `query.status`。失败不写入成功快照；有旧快照时沿用原后端的降级保留规则。写入和调度回归使用模拟 HTTP 与 H2；部署后另通过本地真实业务列表/详情 GET 与浏览器验证历史快照投影、零自动补拉及国旗布局，没有触发真实船司查询。

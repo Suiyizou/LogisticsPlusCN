@@ -184,6 +184,9 @@ public class ShipmentAutoRefreshService {
         || event.shipmentPublicId() == null || event.shipmentPublicId().isBlank()) {
       return;
     }
+    String shipmentPublicId = event.shipmentPublicId().trim();
+    String expectedSnapshot = trackingService.pendingLegacySupplementalSnapshotJson(shipmentPublicId);
+    if (expectedSnapshot == null) return;
     List<String> requestedSources = (event.sources() == null
         ? List.<String>of()
         : event.sources()).stream()
@@ -200,7 +203,7 @@ public class ShipmentAutoRefreshService {
         event.shipmentPublicId() + ":" + String.join(",", requestedSources)
     );
     String sources = String.join(",", requestedSources);
-    jdbcTemplate.update(
+    int updated = jdbcTemplate.update(
         """
         INSERT INTO cp_tracking_refresh_jobs (
           shipment_id, auto_refresh_enabled, refresh_scope, supplemental_sources,
@@ -208,7 +211,8 @@ public class ShipmentAutoRefreshService {
         )
         SELECT s.id, TRUE, 'SUPPLEMENTAL', ?, ?, 0, ?, ?, ?
         FROM cp_shipments s
-        WHERE s.public_id = ?
+        JOIN cp_tracking_snapshots sn ON sn.id = s.current_snapshot_id
+        WHERE s.public_id = ? AND sn.invalidated_at IS NULL AND sn.snapshot_json = ?
         ON DUPLICATE KEY UPDATE
           auto_refresh_enabled = CASE
             WHEN terminal_status = 'EMPTY_RETURNED' THEN auto_refresh_enabled ELSE TRUE END,
@@ -239,8 +243,10 @@ public class ShipmentAutoRefreshService {
         trim(event.errorMessage(), 500),
         timestamp(requestedAt),
         timestamp(requestedAt),
-        event.shipmentPublicId().trim()
+        shipmentPublicId,
+        expectedSnapshot
     );
+    if (updated == 0) return;
     Integer scheduled = jdbcTemplate.queryForObject(
         """
         SELECT COUNT(*)
@@ -290,8 +296,7 @@ public class ShipmentAutoRefreshService {
     Instant now = clock.instant();
     boolean terminal = TrackingTerminalState.isEmptyReturned(event.snapshot());
     boolean supplementalPending = event.snapshot() != null
-        && event.snapshot().path("supplementalDetails")
-            .path("pendingRefresh").asBoolean(false);
+        && ShipmentTrackingService.hasPendingLegacySupplemental(event.snapshot());
     Instant nextAttempt = terminal ? null : nextRegularAttempt(now, event.shipmentPublicId());
     int updated;
     if (terminal) {
@@ -439,9 +444,12 @@ public class ShipmentAutoRefreshService {
   }
 
   private void refreshClaim(RefreshClaim claim) {
-    boolean supplemental = !trackingService.usesLocalTrackingQueue()
-        && "SUPPLEMENTAL".equalsIgnoreCase(claim.candidate().refreshScope());
+    boolean supplemental = "SUPPLEMENTAL".equalsIgnoreCase(claim.candidate().refreshScope());
     try {
+      if (supplemental && !trackingService.canRefreshLegacySupplemental(claim.candidate().publicId())) {
+        retireSupplementalClaim(claim);
+        return;
+      }
       RefreshReference reference = claim.reference();
       ObjectNode response = supplemental
           ? trackingService.refreshSupplementalAutomatically(
@@ -461,8 +469,8 @@ public class ShipmentAutoRefreshService {
         throw new IllegalStateException("Carrier refresh did not return a new valid snapshot");
       }
       boolean preservePendingSources = false;
-      if (!supplemental && response.path("snapshot").path("supplementalDetails")
-          .path("pendingRefresh").asBoolean(false)) {
+      if (!supplemental
+          && ShipmentTrackingService.hasPendingLegacySupplemental(response.path("snapshot"))) {
         String errorCode = response.path("enrichment").path("warning")
             .path("code").asText("COSCO_SUPPLEMENTAL_PARTIAL");
         String errorMessage = supplementalPendingMessage(response);
@@ -488,6 +496,10 @@ public class ShipmentAutoRefreshService {
       completeClaim(claim, terminal, preservePendingSources);
     } catch (RuntimeException error) {
       if (supplemental) {
+        if (!trackingService.canRefreshLegacySupplemental(claim.candidate().publicId())) {
+          retireSupplementalClaim(claim);
+          return;
+        }
         try {
           trackingService.recordSupplementalRetryOutcome(
               claim.candidate().publicId(),
@@ -549,6 +561,20 @@ public class ShipmentAutoRefreshService {
         claim.candidate().shipmentId(),
         terminalStatus
     );
+  }
+
+  private void retireSupplementalClaim(RefreshClaim claim) {
+    Instant now = clock.instant();
+    jdbcTemplate.update("""
+        UPDATE cp_tracking_refresh_jobs
+        SET refresh_scope = 'FULL', supplemental_sources = NULL,
+            next_attempt_at = CASE WHEN terminal_status IS NULL AND auto_refresh_enabled = TRUE
+              THEN ? ELSE NULL END,
+            lease_token = NULL, lease_until = NULL, failure_count = 0, last_error = NULL, updated_at = ?
+        WHERE shipment_id = ? AND lease_token = ?
+        """,
+        timestamp(nextRegularAttempt(now, claim.candidate().publicId())), timestamp(now),
+        claim.candidate().shipmentId(), claim.token());
   }
 
   private void completeClaim(

@@ -43,12 +43,19 @@ const groups = computed(() => {
           : [
               {
                 key: "tracking-batch",
-                label: copy.value.batchTasks,
+                label: copy.value.trackingTasks,
                 children: [
                   {
                     key: "tracking-tasks",
                     label: copy.value.taskList,
-                    to: "/workspace/tracking/tasks"
+                    to: "/workspace/tracking/tasks",
+                    routeName: "business-shipment-tasks"
+                  },
+                  {
+                    key: "tracking-task-management",
+                    label: copy.value.taskManagement,
+                    to: "/workspace/tracking/task-management",
+                    routeName: "business-shipment-task-management"
                   }
                 ]
               }
@@ -116,8 +123,17 @@ const currentPath = computed(() => props.activeIndex || route.path);
 function isCurrent(item) {
   if (props.activeAdminPage && item.adminKey) return item.adminKey === props.activeAdminPage;
   if (item.children) return item.children.some(isCurrent);
+  if (item.routeName && route.name === item.routeName) return true;
   if (item.key === "cargos" && route.query.import === "smart") return false;
   return item.to && (currentPath.value === item.to || currentPath.value.startsWith(`${item.to}/`));
+}
+function childDestination(child) {
+  const fromTaskPage = groups.value[0]?.items.some((item) =>
+    item.children?.some((entry) => entry.routeName === route.name)
+  );
+  return child.routeName && fromTaskPage && typeof route.query.taskId === "string"
+    ? { path: child.to, query: { taskId: route.query.taskId } }
+    : child.to;
 }
 const openGroups = ref(new Set());
 const mobileOpen = ref(false);
@@ -234,56 +250,66 @@ function keydown(event) {
           @click="toggle(group.key)"
         >
           <WorkspaceIcon :name="group.icon" /><span>{{ copy[group.key] }}</span
-          ><WorkspaceIcon name="chevron" class="workspace-navigation__chevron" />
+          ><span class="workspace-navigation__indicator" aria-hidden="true"
+            ><WorkspaceIcon name="chevron" class="workspace-navigation__chevron"
+          /></span>
         </button>
         <div
           :id="`${id}-${group.key}`"
-          v-show="openGroups.has(group.key)"
+          :class="{ 'is-open': openGroups.has(group.key) }"
+          :inert="!openGroups.has(group.key)"
           class="workspace-navigation__children"
         >
-          <template v-for="item in group.items" :key="item.key">
-            <div v-if="item.children" class="workspace-navigation__subgroup">
-              <button
-                type="button"
-                class="workspace-navigation__subtrigger"
-                :aria-expanded="openGroups.has(item.key)"
-                :aria-controls="`${id}-${item.key}`"
-                @click="toggle(item.key)"
-              >
-                <span>{{ item.label }}</span
-                ><WorkspaceIcon name="chevron" :class="{ 'is-open': openGroups.has(item.key) }" />
-              </button>
-              <div
-                v-show="openGroups.has(item.key)"
-                :id="`${id}-${item.key}`"
-                class="workspace-navigation__subchildren"
-              >
-                <RouterLink
-                  v-for="child in item.children"
-                  :key="child.key"
-                  :to="child.to"
-                  class="workspace-navigation__link"
-                  :class="{ 'is-active': isCurrent(child) }"
-                  :aria-current="isCurrent(child) ? 'page' : undefined"
-                  >{{ child.label }}</RouterLink
+          <div class="workspace-navigation__rail">
+            <template v-for="item in group.items" :key="item.key">
+              <div v-if="item.children" class="workspace-navigation__subgroup">
+                <button
+                  type="button"
+                  class="workspace-navigation__subtrigger"
+                  :aria-expanded="openGroups.has(item.key)"
+                  :aria-controls="`${id}-${item.key}`"
+                  @click="toggle(item.key)"
                 >
+                  <span>{{ item.label }}</span
+                  ><span class="workspace-navigation__indicator" aria-hidden="true"
+                    ><WorkspaceIcon name="chevron" class="workspace-navigation__chevron"
+                  /></span>
+                </button>
+                <div
+                  :class="{ 'is-open': openGroups.has(item.key) }"
+                  :inert="!openGroups.has(item.key)"
+                  :id="`${id}-${item.key}`"
+                  class="workspace-navigation__subchildren"
+                >
+                  <div class="workspace-navigation__rail">
+                    <RouterLink
+                      v-for="child in item.children"
+                      :key="child.key"
+                      :to="childDestination(child)"
+                      class="workspace-navigation__link"
+                      :class="{ 'is-active': isCurrent(child) }"
+                      :aria-current="isCurrent(child) ? 'page' : undefined"
+                      >{{ child.label }}</RouterLink
+                    >
+                  </div>
+                </div>
               </div>
-            </div>
-            <a
-              v-else
-              :href="router.resolve(item.to).href"
-              class="workspace-navigation__link"
-              :class="{
-                'is-active': isCurrent(item),
-                'is-disabled': item.disabled || (item.adminKey && busy)
-              }"
-              :aria-current="isCurrent(item) ? 'page' : undefined"
-              :aria-disabled="item.disabled || (item.adminKey && busy) ? 'true' : undefined"
-              :tabindex="item.disabled || (item.adminKey && busy) ? -1 : undefined"
-              @click="navigate($event, item)"
-              >{{ item.label }}</a
-            >
-          </template>
+              <a
+                v-else
+                :href="router.resolve(item.to).href"
+                class="workspace-navigation__link"
+                :class="{
+                  'is-active': isCurrent(item),
+                  'is-disabled': item.disabled || (item.adminKey && busy)
+                }"
+                :aria-current="isCurrent(item) ? 'page' : undefined"
+                :aria-disabled="item.disabled || (item.adminKey && busy) ? 'true' : undefined"
+                :tabindex="item.disabled || (item.adminKey && busy) ? -1 : undefined"
+                @click="navigate($event, item)"
+                >{{ item.label }}</a
+              >
+            </template>
+          </div>
         </div>
       </section>
     </nav>
@@ -336,26 +362,68 @@ function keydown(event) {
 .workspace-navigation__home {
   margin-bottom: 4px !important;
 }
-.workspace-navigation__trigger > span {
+.workspace-navigation__trigger > span:not(.workspace-navigation__indicator),
+.workspace-navigation__subtrigger > span:not(.workspace-navigation__indicator) {
   flex: 1;
+  min-width: 0;
 }
-.workspace-navigation__trigger > .workspace-navigation__chevron {
-  flex-basis: 12px !important;
-  width: 12px !important;
-  height: 12px !important;
-  transition: transform 180ms ease;
+.workspace-navigation__indicator {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 6px;
+  transition:
+    background-color var(--motion-fast),
+    color var(--motion-fast);
 }
-.workspace-navigation__trigger[aria-expanded="true"] .workspace-navigation__chevron {
+.workspace-navigation__indicator > .workspace-navigation__chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+.workspace-navigation button[aria-expanded="true"] .workspace-navigation__indicator {
+  color: var(--color-primary);
+  background: var(--color-accent-soft);
+}
+.workspace-navigation button[aria-expanded="true"] .workspace-navigation__chevron {
   transform: rotate(90deg);
 }
 .workspace-navigation__group.is-current > .workspace-navigation__trigger {
   color: var(--color-primary);
   font-weight: 600;
 }
-.workspace-navigation__children {
+.workspace-navigation :is(.workspace-navigation__children, .workspace-navigation__subchildren) {
   display: grid;
-  gap: 2px;
-  padding: 3px 0 5px;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--motion-normal) var(--motion-ease),
+    opacity var(--motion-fast),
+    visibility 0s var(--motion-normal);
+}
+.workspace-navigation
+  :is(.workspace-navigation__children, .workspace-navigation__subchildren).is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.workspace-navigation__rail {
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-navigation__children > .workspace-navigation__rail {
+  position: relative;
+}
+.workspace-navigation__children > .workspace-navigation__rail::before {
+  content: "";
+  position: absolute;
+  inset: 10px auto 10px 29px;
+  width: 1px;
+  background: var(--color-border-strong);
+  pointer-events: none;
 }
 .workspace-navigation a.workspace-navigation__link {
   display: flex;
@@ -408,17 +476,6 @@ function keydown(event) {
   text-align: left;
   cursor: pointer;
 }
-.workspace-navigation__subtrigger span {
-  flex: 1;
-}
-.workspace-navigation__subtrigger svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 180ms ease;
-}
-.workspace-navigation__subtrigger svg.is-open {
-  transform: rotate(90deg);
-}
 .workspace-navigation__subchildren a.workspace-navigation__link {
   padding-left: 70px;
   font-size: 14px;
@@ -428,7 +485,7 @@ function keydown(event) {
   overflow-wrap: anywhere;
 }
 @media (min-width: 761px) {
-  .is-compact .workspace-navigation__trigger > span,
+  .is-compact .workspace-navigation__trigger > span:not(.workspace-navigation__indicator),
   .is-compact .workspace-navigation__home > span {
     display: none;
   }
@@ -452,6 +509,9 @@ function keydown(event) {
   }
   .is-compact .workspace-navigation__group {
     position: relative;
+  }
+  .is-compact .workspace-navigation__children > .workspace-navigation__rail::before {
+    display: none;
   }
 }
 @media (max-width: 850px) {
@@ -499,6 +559,9 @@ function keydown(event) {
     padding-left: 18px;
     white-space: normal;
   }
+  .workspace-navigation__children > .workspace-navigation__rail::before {
+    display: none;
+  }
 }
 @media (max-width: 480px) {
   .workspace-navigation__nav.is-mobile-open {
@@ -507,7 +570,8 @@ function keydown(event) {
 }
 @media (prefers-reduced-motion: reduce) {
   .workspace-navigation__chevron,
-  .workspace-navigation__subtrigger svg {
+  .workspace-navigation__indicator,
+  .workspace-navigation :is(.workspace-navigation__children, .workspace-navigation__subchildren) {
     transition: none !important;
   }
 }

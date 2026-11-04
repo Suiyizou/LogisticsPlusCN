@@ -46,6 +46,7 @@ class ShipmentTrackingServiceTest {
   private AuthenticatedUser employee;
   private AuthenticatedUser business;
   private ShipmentTrackingProperties properties;
+  private ObjectNode adapterResponse;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -66,7 +67,7 @@ class ShipmentTrackingServiceTest {
     objectMapper = new ObjectMapper();
     adapterClient = mock(TrackingAdapterClient.class);
     cmaTrackingSessionService = mock(CmaTrackingSessionService.class);
-    JsonNode adapterResponse = objectMapper.readTree("""
+    adapterResponse = (ObjectNode) objectMapper.readTree("""
         {
           "snapshot": {
             "channel": "NETWORK",
@@ -104,6 +105,106 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void delayedPublishedResultPreservesAndReturnsTheNewerCurrentSnapshot() {
+    ShipmentTrackRequest request = new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false);
+    ObjectNode latest = service.track(request, business);
+    ObjectNode older = adapterResponse.deepCopy();
+    ((ObjectNode) older.path("snapshot")).put("fetchedAt", "2026-07-15T10:00:00Z");
+    ((ObjectNode) older.path("snapshot").path("summary").path("latestEvent")).put("name", "Previous event");
+
+    ObjectNode response = service.persistPublishedResult(request, older, business);
+
+    assertThat(response.path("shipmentId").asText()).isEqualTo(latest.path("shipmentId").asText());
+    assertThat(response.path("fetchedAt").asText()).isEqualTo(latest.path("fetchedAt").asText());
+    assertThat(response.path("snapshot").path("summary").path("latestEvent").path("name").asText())
+        .isEqualTo("Loaded on board");
+    assertThat(response.path("dataChanged").asBoolean(true)).isFalse();
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cp_tracking_snapshots", Integer.class)).isEqualTo(1);
+  }
+
+  private void enableLegacySupplemental() {
+    properties.setLegacySupplementalEnabled(true);
+    adapterResponse.putObject("enrichment").put("partial", true);
+  }
+
+  @Test
+  void supplementalContainerDeltaRetainsNestedFactsAndDeduplicatesMilestones() throws Exception {
+    enableLegacySupplemental();
+    ObjectNode parent = service.track(
+        new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false), business
+    );
+    String shipmentId = parent.path("shipmentId").asText();
+    ShipmentTrackRequest input = new ShipmentTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001", false
+    );
+    NormalizedTrackRequest request = new NormalizedTrackRequest(
+        "COSCO", "NETWORK", "BOOKING", "BK-10001"
+    );
+    when(adapterClient.loadSupplementalDetails(request)).thenReturn(objectMapper.readTree("""
+        {
+          "containers":[{
+            "number":"AAAA1234567","currentLocation":"Shanghai",
+            "equipment":{"type":"40HC","dimensions":{"height":9,"length":40},"powered":true},
+            "tags":["original"],
+            "milestones":[
+              {"source":"carrier","name":"Loaded","time":"2026-07-15","location":"Shanghai","terminal":"A"},
+              {"source":"carrier","name":"Gate in","time":"2026-07-14","location":"Shanghai"},
+              {"source":"carrier","name":"Arrived","estimatedAt":"2026-07-17","location":"Shanghai"}
+            ]
+          }],
+          "references":{"business":{"shipping":{"prepaid":true,"branch":"Shanghai"}}}
+        }
+        """));
+    service.loadSupplementalDetails(shipmentId, input, business);
+    when(adapterClient.loadSupplementalDetails(request)).thenReturn(objectMapper.readTree("""
+        {
+          "containers":[{
+            "number":"AAAA1234567","currentLocation":" ",
+            "equipment":{"type":null,"dimensions":{"height":0,"length":null},"powered":false},
+            "tags":[null," "],
+            "milestones":[
+              {"source":"carrier","name":"Loaded","time":"2026-07-15","location":"Shanghai","sequence":3},
+              {"source":"carrier","name":"Departed","time":"2026-07-16","location":"Shanghai"},
+              {"source":"carrier","name":"Arrived","estimatedAt":"2026-07-18","location":"Shanghai"},
+              {"source":"carrier","name":"Arrived","occurredAt":"2026-07-18","location":"Shanghai"}
+            ]
+          }],
+          "references":{"business":{"shipping":{"prepaid":false}}}
+        }
+        """));
+    ShipmentTrackingService laterService = new ShipmentTrackingService(
+        jdbcTemplate,
+        objectMapper,
+        adapterClient,
+        cmaTrackingSessionService,
+        new ShipmentAccessService(jdbcTemplate),
+        properties,
+        new TransactionTemplate(new DataSourceTransactionManager(jdbcTemplate.getDataSource())),
+        Clock.fixed(Instant.parse("2026-07-16T10:02:00Z"), ZoneOffset.UTC)
+    );
+    JsonNode snapshot = laterService.loadSupplementalDetails(shipmentId, input, business).path("snapshot");
+    JsonNode container = snapshot.path("containers").get(1);
+    assertThat(container.path("number").asText()).isEqualTo("AAAA1234567");
+    assertThat(container.path("currentLocation").asText()).isEqualTo("Shanghai");
+    assertThat(container.path("equipment").path("type").asText()).isEqualTo("40HC");
+    assertThat(container.path("equipment").path("dimensions").path("height").intValue()).isZero();
+    assertThat(container.path("equipment").path("dimensions").path("length").intValue()).isEqualTo(40);
+    assertThat(container.path("equipment").path("powered").booleanValue()).isFalse();
+    assertThat(container.path("tags").get(0).asText()).isEqualTo("original");
+    assertThat(container.path("milestones").findValuesAsText("name"))
+        .containsExactly("Loaded", "Gate in", "Arrived", "Departed", "Arrived", "Arrived");
+    assertThat(container.path("milestones").findValuesAsText("estimatedAt"))
+        .containsExactly("2026-07-17", "2026-07-18");
+    assertThat(container.path("milestones").findValuesAsText("occurredAt"))
+        .containsExactly("2026-07-18");
+    assertThat(container.path("milestones").get(0).path("terminal").asText()).isEqualTo("A");
+    assertThat(container.path("milestones").get(0).path("sequence").intValue()).isEqualTo(3);
+    JsonNode shipping = snapshot.path("references").path("business").path("shipping");
+    assertThat(shipping.path("branch").asText()).isEqualTo("Shanghai");
+    assertThat(shipping.path("prepaid").booleanValue()).isFalse();
+  }
+
+  @Test
   void newCarrierTrackingRequiresAnAuthenticatedWorkspace() {
     assertThatThrownBy(() -> service.track(
         new ShipmentTrackRequest("MAERSK", "AUTO", "BILLOFLADING", "TEST-BL-10001", false), null
@@ -135,14 +236,17 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
-  void localCoscoBillAndEventsOnlyRemainIntactAcrossPersistenceAndCacheReads() throws Exception {
+  void localCoscoSingleResponsePersistsLegsContainersAndEventsWithoutSubqueries() throws Exception {
     properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
+    properties.setLegacySupplementalEnabled(true);
     NormalizedTrackRequest query = new NormalizedTrackRequest("COSCO", "AUTO", "BILLOFLADING", "COSU000010001");
     JsonNode record = objectMapper.readTree("""
         {"schema":"tracking.v1","carrier":{"code":"COSCO"},
          "query":{"reference_input":"COSU000010001","status":"QUERY_COMPLETED"},
-         "shipment":{"bill_of_lading":"COSU000010001","events":[
-           {"description":"Carrier source entry","time_raw":"2026-07-15 08:00"}]},"meta":{}}
+         "shipment":{"bill_of_lading":"COSU000010001",
+           "legs":[{"vessel":"SOURCE VESSEL","load_port":"SHANGHAI","discharge_port":"LONG BEACH","eta":"2026-08-08"}],
+           "containers":[{"number":"CSNU1234567","type":"40HC","events":[{"name":"Gate in","time_raw":"2026-07-14"}]}],
+           "events":[{"description":"Carrier source entry","time_raw":"2026-07-15 08:00"}]},"meta":{}}
         """);
     when(adapterClient.track(query)).thenReturn(new TrackingV1SnapshotMapper(objectMapper)
         .map(record, query, "2026-07-16T10:00:00Z", "local-job-cosco"));
@@ -151,11 +255,78 @@ class ShipmentTrackingServiceTest {
     ObjectNode cached = service.track(input, business);
     assertThat(live.path("shipmentId").asText()).isNotBlank();
     assertThat(cached.path("snapshot").path("route")).isEmpty();
-    assertThat(cached.path("snapshot").path("supplementalDetails").path("pendingRefresh").asBoolean()).isFalse();
+    assertThat(cached.path("snapshot").path("deliveryMode").asText()).isEqualTo("SINGLE_RESPONSE");
+    assertThat(cached.path("snapshot").has("supplementalDetails")).isFalse();
+    assertThat(cached.path("snapshot").path("routingLegs").get(0).path("vesselName").asText())
+        .isEqualTo("SOURCE VESSEL");
+    assertThat(cached.path("snapshot").path("containers").get(0).path("milestones")
+        .get(0).path("name").asText()).isEqualTo("Gate in");
     assertThat(cached.path("snapshot").path("events").get(0).path("occurredAt").isNull()).isTrue();
     assertThat(cached.path("snapshot").path("events").get(0).path("reportedTime").asText())
         .isEqualTo("2026-07-15 08:00");
     verify(adapterClient, times(1)).track(query);
+    assertThatThrownBy(() -> service.loadSupplementalDetails(
+        live.path("shipmentId").asText(), input, business
+    )).isInstanceOfSatisfying(ApiException.class,
+        error -> assertThat(error.code()).isEqualTo("TRACKING_SUPPLEMENTAL_UNSUPPORTED"));
+    org.mockito.Mockito.verifyNoMoreInteractions(adapterClient);
+  }
+
+  @Test
+  void oldSupplementalFlagsStayOutOfReadsAndFullBatchRefreshDoesNotCarryOldData() throws Exception {
+    ShipmentTrackRequest input = new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false);
+    ObjectNode live = service.track(input, business);
+    String shipmentId = live.path("shipmentId").asText();
+    ObjectNode old = ((ObjectNode) live.path("snapshot")).deepCopy();
+    old.remove("deliveryMode");
+    old.putObject("supplementalDetails").put("pendingRefresh", true).put("carriedForward", true);
+    jdbcTemplate.update("UPDATE cp_tracking_snapshots SET snapshot_json = ?", old.toString());
+    ObjectNode stored = service.track(input, business);
+    assertThat(stored.path("snapshot").path("deliveryMode").asText()).isEqualTo("SINGLE_RESPONSE");
+    assertThat(stored.path("snapshot").has("supplementalDetails")).isFalse();
+    verify(adapterClient).track(new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001"));
+    org.mockito.Mockito.verifyNoMoreInteractions(adapterClient);
+
+    String taskId = "batch_1234567890abcdef";
+    var batch = new NormalizedTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", taskId);
+    ObjectNode batchEnvelope = adapterResponse.deepCopy();
+    batchEnvelope.putObject("enrichment").put("partial", true)
+        .put("containerDetailsComplete", false)
+        .putObject("warning").put("code", "CARRIER_DATA_GAP");
+    ObjectNode batchSnapshot = (ObjectNode) batchEnvelope.path("snapshot");
+    batchSnapshot.putArray("containers").addObject().put("number", "ABCD1234567");
+    when(adapterClient.track(batch, true)).thenReturn(batchEnvelope);
+    ObjectNode refreshed = service.track(new ShipmentTrackRequest(
+        "COSCO", "AUTO", "BOOKING", "BK-10001", true, null, taskId
+    ), business);
+    assertThat(refreshed.path("shipmentId").asText()).isEqualTo(shipmentId);
+    assertThat(refreshed.path("dataChanged").asBoolean()).isTrue();
+    JsonNode snapshot = refreshed.path("snapshot");
+    assertThat(snapshot.path("deliveryMode").asText()).isEqualTo("SINGLE_RESPONSE");
+    assertThat(snapshot.has("supplementalDetails")).isFalse();
+    assertThat(snapshot.path("containers").findValuesAsText("number")).containsExactly("ABCD1234567");
+    assertThat(refreshed.path("enrichment").has("partial")).isFalse();
+    assertThat(refreshed.path("enrichment").path("containerDetailsComplete").isBoolean()).isTrue();
+    assertThat(refreshed.path("enrichment").path("warning").path("code").asText())
+        .isEqualTo("CARRIER_DATA_GAP");
+  }
+
+  @Test
+  void staleSupplementalDiagnosticDoesNotOverwriteASingleResponseOutcome() {
+    enableLegacySupplemental();
+    ShipmentTrackRequest input = new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false);
+    String shipmentId = service.track(input, business).path("shipmentId").asText();
+    service.recordSupplementalRetryOutcome(shipmentId, false, "LEGACY", "Retry needed", null);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT last_refresh_result FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
+    )).isEqualTo("PARTIAL");
+    jdbcTemplate.update("UPDATE cp_tracking_snapshots SET snapshot_json = ?",
+        "{\"deliveryMode\":\"SINGLE_RESPONSE\"}");
+    jdbcTemplate.update("UPDATE cp_shipments SET last_refresh_result = 'SUCCEEDED'");
+    service.recordSupplementalRetryOutcome(shipmentId, false, "STALE", "Stale retry", null);
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT last_refresh_result FROM cp_shipments WHERE public_id = ?", String.class, shipmentId
+    )).isEqualTo("SUCCEEDED");
   }
 
   @Test
@@ -1327,6 +1498,7 @@ class ShipmentTrackingServiceTest {
 
   @Test
   void discoversAndMergesContainerSubqueriesIntoTheParentShipment() throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
@@ -1391,6 +1563,7 @@ class ShipmentTrackingServiceTest {
 
   @Test
   void loadsAndPersistsSupplementalTransportAndBookingDetails() throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
@@ -1443,6 +1616,7 @@ class ShipmentTrackingServiceTest {
   @Test
   void batchMainRefreshCarriesForwardOlderSupplementalDataAsStalePending()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
@@ -1494,7 +1668,8 @@ class ShipmentTrackingServiceTest {
             "containers": [],
             "references": {"external": [], "business": {}, "information": []}
           },
-          "strategy": {"requested": "AUTO", "used": "NETWORK"}
+          "strategy": {"requested": "AUTO", "used": "NETWORK"},
+          "enrichment": {"partial": true}
         }
         """));
 
@@ -1523,6 +1698,7 @@ class ShipmentTrackingServiceTest {
   @Test
   void automaticMainRefreshPreservesOlderSupplementalDataWhenEnrichmentIsPartial()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode initial = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
@@ -1604,13 +1780,14 @@ class ShipmentTrackingServiceTest {
   @Test
   void concurrentSupplementalMergesAcrossServiceInstancesPreserveBothResults()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
     );
     String shipmentId = parent.path("shipmentId").asText();
     TrackingAdapterClient competingAdapter = mock(TrackingAdapterClient.class);
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingProperties properties = this.properties;
     properties.setCacheTtl(Duration.ofMinutes(15));
     ShipmentTrackingService competingService = new ShipmentTrackingService(
         jdbcTemplate,
@@ -1704,13 +1881,14 @@ class ShipmentTrackingServiceTest {
   @Test
   void olderSupplementalResponseCannotOverwriteANewerCommittedResponse()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
     );
     String shipmentId = parent.path("shipmentId").asText();
     TrackingAdapterClient newerAdapter = mock(TrackingAdapterClient.class);
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingProperties properties = this.properties;
     properties.setCacheTtl(Duration.ofMinutes(15));
     ShipmentTrackingService newerService = new ShipmentTrackingService(
         jdbcTemplate,
@@ -1732,7 +1910,8 @@ class ShipmentTrackingServiceTest {
         {
           "fetchedAt":"2026-07-16T10:01:30Z",
           "partial":false,
-          "containers":[{"number":"AAAA1234567","latestEvent":"Loaded"}],
+          "containers":[{"number":"AAAA1234567","latestEvent":"Loaded",
+            "equipment":{"type":"20GP","powered":true}}],
           "references":{"external":[],"business":{},"information":[]}
         }
         """);
@@ -1740,7 +1919,8 @@ class ShipmentTrackingServiceTest {
         {
           "fetchedAt":"2026-07-16T10:02:30Z",
           "partial":false,
-          "containers":[{"number":"AAAA1234567","latestEvent":"Discharged"}],
+          "containers":[{"number":"AAAA1234567","latestEvent":"Discharged",
+            "equipment":{"type":"40HC","powered":false}}],
           "references":{"external":[],"business":{},"information":[]}
         }
         """);
@@ -1784,6 +1964,10 @@ class ShipmentTrackingServiceTest {
     ));
     JsonNode container = stored.path("containers").findValue("latestEvent");
     assertThat(container.asText()).isEqualTo("Discharged");
+    assertThat(stored.path("containers").findValue("equipment").path("type").asText())
+        .isEqualTo("40HC");
+    assertThat(stored.path("containers").findValue("equipment").path("powered").booleanValue())
+        .isFalse();
     assertThat(stored.path("supplementalDetails").path("lastSuccessfulAt").asText())
         .isEqualTo("2026-07-16T10:02:30Z");
     assertThat(stored.path("supplementalDetails").path("lastAppliedRequestStartedAt").asText())
@@ -1793,12 +1977,13 @@ class ShipmentTrackingServiceTest {
   @Test
   void mainCarryForwardKeepsTheBarrierAgainstAnOlderSupplementalResponse()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
     );
     String shipmentId = parent.path("shipmentId").asText();
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingProperties properties = this.properties;
     properties.setCacheTtl(Duration.ofMinutes(15));
     TrackingAdapterClient mainAdapter = mock(TrackingAdapterClient.class);
     ShipmentTrackingService mainService = new ShipmentTrackingService(
@@ -1924,6 +2109,7 @@ class ShipmentTrackingServiceTest {
   @Test
   void supplementalMergeRollsBackSnapshotAndShipmentWhenEventPublicationFails()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
@@ -1949,7 +2135,7 @@ class ShipmentTrackingServiceTest {
           "references":{"external":["REF-ROLLBACK"],"business":{},"information":[]}
         }
         """));
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingProperties properties = this.properties;
     ShipmentTrackingService failingService = new ShipmentTrackingService(
         jdbcTemplate,
         objectMapper,
@@ -1985,13 +2171,14 @@ class ShipmentTrackingServiceTest {
   @Test
   void mainRefreshCarriesForwardSupplementalDataCommittedWhileCarrierCallWasInFlight()
       throws Exception {
+    enableLegacySupplemental();
     ObjectNode parent = service.track(
         new ShipmentTrackRequest("COSCO", "AUTO", "BOOKING", "BK-10001", false),
         business
     );
     String shipmentId = parent.path("shipmentId").asText();
     TrackingAdapterClient competingAdapter = mock(TrackingAdapterClient.class);
-    ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+    ShipmentTrackingProperties properties = this.properties;
     properties.setCacheTtl(Duration.ofMinutes(15));
     ShipmentTrackingService competingService = new ShipmentTrackingService(
         jdbcTemplate,
@@ -2441,6 +2628,10 @@ class ShipmentTrackingServiceTest {
     jdbcTemplate.execute("""
         CREATE TABLE cp_shipments (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          last_refresh_result VARCHAR(16),
+          last_refresh_error_code VARCHAR(120),
+          last_refresh_error VARCHAR(1000),
+          last_refresh_at TIMESTAMP,
           public_id CHAR(36) NOT NULL UNIQUE,
           carrier_code VARCHAR(32) NOT NULL,
           current_snapshot_id BIGINT,

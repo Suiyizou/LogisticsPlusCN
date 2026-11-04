@@ -10,6 +10,37 @@ import { HttpError } from "../lib/http-utils.mjs";
 const input = { type: "BOOKING", number: "6502077380", carrier: "COSCO", channel: "NETWORK" };
 const snapshot = { snapshot: { tracking: input, summary: { containers: [] }, containers: [] } };
 
+test("single-response data gaps are cached without losing route, event or extension fields", async (t) => {
+  let calls = 0;
+  const packet = {
+    ...snapshot.snapshot,
+    summary: { containers: [{ quantity: 7 }] },
+    routingLegs: [{ vesselName: "Carrier reported vessel" }],
+    events: [{ name: "Discharged", reportedTime: "2026-11-01" }],
+    sourceDetails: { fields: [{ key: "carrier_note", value: "Source details" }] }
+  };
+  const h = await fixture(t, {
+    cosco: {
+      runTracking: async () => {
+        calls++;
+        return { snapshot: packet };
+      },
+      fetchSupplementalDetails: () => assert.fail("single response does not request child data")
+    }
+  });
+  const first = await h.post("/api/track", { ...input, batchTaskId: "full-packet-test" });
+  assert.equal(first.status, 200);
+  assert.equal(first.data.snapshot.deliveryMode, "SINGLE_RESPONSE");
+  const second = await h.post();
+  assert.equal(second.data.cached, true);
+  assert.equal(calls, 1);
+  assert.deepEqual(second.data.snapshot, { ...packet, deliveryMode: "SINGLE_RESPONSE" });
+  assert.equal(packet.deliveryMode, undefined, "adapter-owned snapshot is not mutated");
+  const refreshed = await h.post("/api/track", { ...input, forceRefresh: true });
+  assert.equal(refreshed.data.cached, false);
+  assert.equal(calls, 2);
+});
+
 async function fixture(t, options = {}) {
   const calls = [];
   const batchTaskRegistry = createBatchTaskRegistry({ minIntervalMs: 0, maxIntervalMs: 0 });

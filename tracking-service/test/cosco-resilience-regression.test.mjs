@@ -555,7 +555,8 @@ test("shipment queries never start per-container enrichment", async () => {
   assert.doesNotMatch(network, /enrichCoscoShipmentContainers\(/);
   assert.doesNotMatch(playwright, /enrichCoscoShipmentContainers\(/);
   assert.match(network, /fetchCoscoShipmentContainers\(request, options\)/);
-  assert.match(playwright, /partial:\s*Boolean\(options\.batch \|\| enrichmentWarning\)/);
+  assert.match(playwright, /partial:\s*Boolean\(enrichmentWarning\)/);
+  assert.doesNotMatch(network, /if \(!options\.batch\)/);
 });
 
 test("forced refresh bypasses the Node cache and in-flight reuse", async () => {

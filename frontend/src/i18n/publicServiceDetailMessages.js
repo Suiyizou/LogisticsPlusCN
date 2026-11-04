@@ -799,7 +799,21 @@ export const publicDetailLabels = {
     nextBody: "了解所需资料与访问范围后，进入服务继续处理你的业务。",
     more: "更多详细信息",
     company: "关于我们",
-    indexTitle: "一个平台，串起货物的每一步。",
+    homeEyebrow: "国际物流数字工作台",
+    capabilityEyebrow: "平台核心能力",
+    homeOutputs: [
+      ["运输节点时间线", "预计与实际时间", "查询来源与更新时间"],
+      ["三维摆放视图", "未装货物与约束提示", "可导出的配载资料"],
+      ["关联客户与票单", "授权范围内的业务文件", "可追溯的交接记录"]
+    ],
+    homeActions: ["了解运输追踪", "了解装箱规划", "浏览协作与管理"],
+    indexJump: "按工作范围浏览",
+    indexSearch: "查找服务",
+    indexPlaceholder: "例如：装箱、票单、交接",
+    indexResults: "找到 {count} 项相关服务",
+    indexEmpty: "未找到相关服务，请尝试其他关键词。",
+    companyEntries: "按工作环节了解服务",
+    indexTitle: "服务目录",
     indexBody:
       "从运输查询与装载准备，到客户资料、票单与交接协作。按你的工作场景了解工具，找到需要准备的资料、可以获得的结果与正确入口。",
     approach: "从业务出发，连接工具与协作",
@@ -839,7 +853,29 @@ export const publicDetailLabels = {
     nextBody: "Review the information and account scope you need, then continue with your work.",
     more: "More information",
     company: "About us",
-    indexTitle: "One platform. Connected shipment work.",
+    homeEyebrow: "International logistics workspace",
+    capabilityEyebrow: "Platform capabilities",
+    homeOutputs: [
+      ["Shipment milestone timeline", "Estimated and actual dates", "Query source and update time"],
+      [
+        "3D placement view",
+        "Unplaced cargo and constraint notices",
+        "Exportable load plan material"
+      ],
+      [
+        "Linked customers and shipments",
+        "Documents within your access scope",
+        "Traceable handover records"
+      ]
+    ],
+    homeActions: ["Explore shipment tracking", "Explore load planning", "Browse collaboration"],
+    indexJump: "Browse by scope",
+    indexSearch: "Find a service",
+    indexPlaceholder: "Try tracking, load planning or handover",
+    indexResults: "{count} matching services",
+    indexEmpty: "No matching services. Try another term.",
+    companyEntries: "Explore by workflow",
+    indexTitle: "Service catalogue",
     indexBody:
       "From transport visibility and load preparation to customers, shipments and handovers. Explore each workflow, understand the information it needs and find the right entry.",
     approach: "Connect tools around the work",

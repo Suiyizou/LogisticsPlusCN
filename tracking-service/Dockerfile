@@ -8,6 +8,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci --omit=dev --omit=optional --ignore-scripts
 COPY public ./public
 COPY scripts/prepare-cloud-assets.mjs ./scripts/prepare-cloud-assets.mjs
+ARG APP_TRACKING_ADAPTER_MODE=LOCAL_QUEUE
 RUN node scripts/prepare-cloud-assets.mjs /cloud-assets
 
 FROM nginx:alpine

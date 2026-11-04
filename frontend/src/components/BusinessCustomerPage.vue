@@ -516,7 +516,7 @@ const {
   refreshTrackingResponse,
   cancelRefreshShipment
 } = shipmentOperations.detail;
-const { restoreBatchTrackTask, toggleBatchTrackPanel } = shipmentOperations.batch;
+const { restoreBatchTrackTask } = shipmentOperations.batch;
 
 const businessNavigation = useBusinessNavigation({
   modules: configuredBusinessModules,
@@ -673,7 +673,7 @@ onMounted(() => {
 });
 function navigateTo(item) {
   if (item === "batch-tracking") {
-    if (businessNavigation.navigate("shipments")) toggleBatchTrackPanel();
+    void router.push({ name: "business-shipment-tasks" });
     return;
   }
   businessNavigation.navigate(item);
@@ -701,7 +701,7 @@ async function loadMenuData(item, preferredCustomerId = "", { isCurrent = () => 
     if (!customersLoaded.value && isManager.value) {
       jobs.push(loadCustomers("", { selectFirst: false, isCurrent }));
     }
-    if (!shipmentsLoaded.value) jobs.push(loadAvailableShipments());
+    if (!shipmentsLoaded.value || route.name === "business-shipments") jobs.push(loadAvailableShipments());
     await Promise.all(jobs);
     return;
   }

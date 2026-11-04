@@ -4,7 +4,13 @@
       :title="ui('algorithm.title')"
       :eyebrow="ui('algorithm.eyebrow')"
       :description="wt('readingHint')"
-    />
+    >
+      <template #actions>
+        <RouterLink class="planner-reference-link" to="/planner/config"
+          >{{ wt("configTitle") }} <span aria-hidden="true">↗</span></RouterLink
+        >
+      </template>
+    </WorkspacePageHeader>
 
     <div class="algorithm-note trace-card">
       <strong>{{ ui("algorithm.whereRuns") }}</strong>

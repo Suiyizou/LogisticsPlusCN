@@ -8,6 +8,10 @@ export function createAgentModulePages({ operations, formatters, ui }) {
   /** @type {ReturnType<typeof import("../workspace/useCustomerOperations.js").useCustomerOperations>} */
   const typedOperations = operations;
   const {
+    agentSearch,
+    agentStatus,
+    filteredTransferAgents,
+    transferAgentsLoaded,
     agentPage,
     agentPageSize,
     agentWriteBusy,
@@ -55,6 +59,10 @@ export function createAgentModulePages({ operations, formatters, ui }) {
     page: {
       permissions: reactive({}),
       state: reactive({
+        agentSearch,
+        agentStatus,
+        filteredTransferAgents,
+        transferAgentsLoaded,
         agentPage,
         agentPageSize,
         agentWriteBusy,

@@ -39,6 +39,9 @@ services:
   tracking:
     container_name: cargo-ui-preview-tracking
     image: cargo-ui-preview-tracking:local
+    build:
+      args:
+        APP_TRACKING_ADAPTER_MODE: LEGACY
   frontend:
     container_name: cargo-ui-preview-frontend
     image: cargo-ui-preview-frontend:local

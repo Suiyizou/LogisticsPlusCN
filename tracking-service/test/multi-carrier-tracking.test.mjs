@@ -30,6 +30,11 @@ for (const carrier of Object.keys(MULTI_CARRIER_CATALOG)) {
     assert.equal(snapshot.summary.latestEvent.name, "Departed");
     assert.equal(snapshot.containers[0].latestEventTime, "2026-10-24T12:00:00+08:00");
     assert.equal(snapshot.containers[0].milestones[1].occurredAt, null);
+    assert.deepEqual(snapshot.keyTimes.estimatedArrival, {
+      time: "2026-11-04T12:00:00+08:00",
+      location: "Los Angeles"
+    });
+    assert.equal(snapshot.keyTimes.estimatedDelivery, null);
     assert.equal(snapshot.keyTimes.actualArrival, null);
     assert.equal(snapshot.route[0].countryCode, null);
     assert.equal(snapshot.references.masterBill, query.number);

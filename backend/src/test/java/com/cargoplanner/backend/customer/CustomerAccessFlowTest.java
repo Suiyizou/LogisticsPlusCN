@@ -2182,6 +2182,33 @@ class CustomerAccessFlowTest {
   }
 
   @Test
+  void businessSnapshotListAndDetailProjectOldDeliveryFlagsWithoutUpdatingStorage() throws Exception {
+    String stored = """
+        {"summary":{"billOfLading":"BL-90001"},"containers":[{"number":"ABCD1234567"}],
+          "supplementalDetails":{"pendingRefresh":true,"carriedForward":true}}
+        """;
+    jdbcTemplate.update("UPDATE cp_tracking_snapshots SET snapshot_json = ? WHERE shipment_id = 10", stored);
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> items =
+        (List<Map<String, Object>>) customerService.listShipmentSnapshots(business).get("items");
+    Map<String, Object> listed = items.stream()
+        .filter(item -> "shipment-public-id".equals(item.get("shipmentId"))).findFirst().orElseThrow();
+    Map<String, Object> detail = customerService.getShipmentSnapshot(business, "shipment-public-id");
+    for (Map<String, Object> result : List.of(listed, detail)) {
+      JsonNode snapshot = (JsonNode) result.get("snapshot");
+      assertThat(snapshot.path("deliveryMode").asText()).isEqualTo("SINGLE_RESPONSE");
+      assertThat(snapshot.has("supplementalDetails")).isFalse();
+      assertThat(snapshot.path("containers").get(0).path("number").asText()).isEqualTo("ABCD1234567");
+      JsonNode fallback = new ObjectMapper().readTree((String) result.get("snapshotJson"));
+      assertThat(fallback.path("deliveryMode").asText()).isEqualTo("SINGLE_RESPONSE");
+      assertThat(fallback.has("supplementalDetails")).isFalse();
+    }
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT snapshot_json FROM cp_tracking_snapshots WHERE shipment_id = 10", String.class
+    )).isEqualTo(stored);
+  }
+
+  @Test
   void batchBusinessFieldUpdateDoesNotMutateCarrierSnapshot() {
     String before = jdbcTemplate.queryForObject(
         "SELECT snapshot_json FROM cp_tracking_snapshots WHERE shipment_id = 10",

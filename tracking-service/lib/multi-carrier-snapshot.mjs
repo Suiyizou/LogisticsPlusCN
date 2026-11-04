@@ -72,6 +72,8 @@ export function normalizeMultiCarrierSnapshot(result, carrier, request, source =
     .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];
   const origin = { name: text(shipment.origin), countryCode: null };
   const destination = { name: text(shipment.destination), countryCode: null };
+  const etd = safeDate(shipment.etd);
+  const eta = safeDate(shipment.eta);
   const booking = text(shipment.bookingNumber);
   const bill = text(shipment.billOfLading);
   const route = [
@@ -97,9 +99,11 @@ export function normalizeMultiCarrierSnapshot(result, carrier, request, source =
       latestEvent: latest ?? (text(shipment.status) ? { name: text(shipment.status), occurredAt: null, location: null } : null)
     },
     keyTimes: {
+      estimatedDeparture: etd ? { time: etd, location: origin.name } : null,
       actualDeparture: safeDate(shipment.actualDeparture) ? { time: safeDate(shipment.actualDeparture), location: origin.name } : null,
+      estimatedArrival: eta ? { time: eta, location: destination.name } : null,
       actualArrival: safeDate(shipment.actualArrival) ? { time: safeDate(shipment.actualArrival), location: destination.name } : null,
-      estimatedDelivery: safeDate(shipment.eta) ? { time: safeDate(shipment.eta), actualTime: safeDate(shipment.actualArrival), location: destination.name, timezone: null } : null
+      estimatedDelivery: null
     },
     route, transportStatuses: events, sailingSchedule: [],
     routingLegs: origin.name || destination.name ? [{ sequence: 1, mode: "SEA", vesselName: text(shipment.vessel), voyage: text(shipment.voyage), loadPort: origin.name, dischargePort: destination.name, estimatedDeparture: safeDate(shipment.etd), actualDeparture: safeDate(shipment.actualDeparture), estimatedArrival: safeDate(shipment.eta), actualArrival: safeDate(shipment.actualArrival), masterBill: bill }] : [],

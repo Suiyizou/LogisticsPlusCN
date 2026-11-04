@@ -43,7 +43,13 @@ const emit = defineEmits<{ refresh: []; page: [page: number] }>();
           </div></template
         ></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="ticketCopy.title"
+      >
         <el-table :data="rows" row-key="shipmentId" stripe class="standard-information-table">
           <BusinessColumn :label="ticketCopy.referenceNo" min-width="170" show-overflow-tooltip>
             <template #default="{ row }">
@@ -89,7 +95,9 @@ const emit = defineEmits<{ refresh: []; page: [page: number] }>();
             </template>
           </BusinessColumn>
           <template #empty
-            ><WorkspaceEmptyState>{{ ticketCopy.empty }}</WorkspaceEmptyState></template
+            ><WorkspaceEmptyState v-if="!busy">{{
+              ticketCopy.empty
+            }}</WorkspaceEmptyState></template
           >
         </el-table>
       </div>

@@ -54,13 +54,6 @@
   max-width: 650px;
   margin: 14px 0 24px;
 }
-.app-login-shell .app-login-photo > div::after {
-  content: "";
-  display: block;
-  width: 46px;
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-accent) 0 60%, #90aabb 60%);
-}
 .app-login-shell .app-login-side {
   min-width: 0;
   padding: 32px 48px 28px;

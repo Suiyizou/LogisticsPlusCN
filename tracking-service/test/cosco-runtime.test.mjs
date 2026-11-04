@@ -107,18 +107,19 @@ test("network runtime assembles a complete booking without per-container child r
   assert.equal(result.enrichment.partial, false);
 });
 
-test("batch core queries skip supplemental requests and retain incomplete-detail metadata", async (t) => {
+test("batch queries aggregate all available sources before returning one response", async (t) => {
   const calls = [];
   const instance = runtime(t, {
     fetchDirect: async (url) => {
-      calls.push(url.split("/").at(-1));
-      return upstream(detail);
+      const endpoint = url.split("/").at(-1);
+      calls.push(endpoint);
+      return upstream({ detail, bookingInfo: {}, containerInfo: containers }[endpoint]);
     }
   });
   const result = await instance.runTracking(request, COSCO_QUERY_CHANNELS.NETWORK, { batch: true });
-  assert.deepEqual(calls, ["detail"]);
-  assert.equal(result.enrichment.partial, true);
-  assert.equal(result.enrichment.containerDetailsComplete, false);
+  assert.deepEqual(calls, ["detail", "bookingInfo", "containerInfo"]);
+  assert.equal(result.enrichment.partial, false);
+  assert.equal(result.enrichment.containerDetailsComplete, true);
 });
 
 test("browser runtime applies the same snapshot completeness rule as network runtime", async (t) => {
@@ -184,7 +185,7 @@ test("main and supplemental runtime queries serialize through the original share
   assert.deepEqual(calls, ["detail"]);
   release();
   const [mainResult, supplementalResult] = await Promise.all([main, supplemental]);
-  assert.deepEqual(calls, ["detail", "bookingInfo"]);
+  assert.deepEqual(calls, ["detail", "bookingInfo", "containerInfo", "bookingInfo"]);
   assert.equal(mainResult.snapshot.tracking.number, request.number);
   assert.equal(supplementalResult.references.business.clientPoNumber, "PO-001");
 });

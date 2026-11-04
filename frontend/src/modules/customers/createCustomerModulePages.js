@@ -20,6 +20,8 @@ export function createCustomerModulePages({
   const manualShipmentEntry = shipmentOperations.entry;
   const { openShipmentCreateDialog } = shipmentOperations.entry;
   const {
+    customers,
+    customersLoaded,
     customerPage,
     customerPageSize,
     customerSearch,
@@ -143,6 +145,8 @@ export function createCustomerModulePages({
     directory: {
       permissions: reactive({ isManager }),
       state: reactive({
+        customers,
+        customersLoaded,
         customerPage,
         customerPageSize,
         customerSearch,

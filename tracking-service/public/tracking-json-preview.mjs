@@ -21,7 +21,7 @@ const labels = {
     limit: "Select a JSON file smaller than 20 MB.",
     empty: "No tracking file selected.",
     count: "records",
-    details: "Carrier information",
+    details: "Additional carrier information",
     vessel: "Vessel / voyage",
     noData: "The source reports no business data for this reference.",
     warnings: "Source warnings",
@@ -90,7 +90,7 @@ const labels = {
     limit: "请选择小于20 MB的 JSON 文件。",
     empty: "尚未选择货踪结果文件。",
     count: "条记录",
-    details: "船司信息",
+    details: "船司附加信息",
     vessel: "船名 / 航次",
     noData: "源文件明确报告：此单号没有业务数据。",
     warnings: "源数据告警",
@@ -145,6 +145,19 @@ function node(doc, tag, text, className) {
   if (className) n.className = className;
   return n;
 }
+function buildOnOpen(details, build) {
+  function onToggle() {
+    if (!details.open) return;
+    details.removeEventListener("toggle", onToggle);
+    build();
+  }
+  details.addEventListener("toggle", onToggle);
+}
+
+function rawSourceText(value) {
+  return typeof value === "string" ? value : (JSON.stringify(value, null, 2) ?? String(value));
+}
+
 function table(doc, headers) {
   const wrap = node(doc, "div", undefined, "tracking-json-table-wrap"),
     t = node(doc, "table"),
@@ -172,15 +185,61 @@ export function trackingSourceSummary(snapshot, language) {
     .filter(Boolean)
     .join(" · ");
 }
+function eventTable(doc, entries, l) {
+  const { wrap, body } = table(doc, [l.time, l.event, l.location]);
+  for (const event of entries) {
+    if (!event) continue;
+    const row = node(doc, "tr");
+    const description = node(doc, "td", event.name || "—");
+    if (event.raw != null || event.source) {
+      const original = node(doc, "details");
+      original.append(node(doc, "summary", l.expandSource));
+      buildOnOpen(original, () => {
+        if (event.source) original.append(node(doc, "p", event.source));
+        if (event.raw != null) {
+          const text = rawSourceText(event.raw);
+          original.append(node(doc, "pre", text.slice(0, 65536)));
+          if (text.length > 65536) original.append(node(doc, "small", l.sourceLimited));
+        }
+      });
+      description.append(original);
+    }
+    row.append(
+      node(doc, "td", event.reportedTime || event.occurredAt || "—"),
+      description,
+      node(doc, "td", event.location || "—")
+    );
+    body.append(row);
+  }
+  return wrap;
+}
+
+export function renderTrackingHistory(doc, snapshot, language) {
+  const target = doc.querySelector("#snapshot-reported-history");
+  const history = Array.isArray(snapshot?.sourceDetails?.additionalEvents)
+    ? snapshot.sourceDetails.additionalEvents
+    : [];
+  if (target) {
+    target.replaceChildren();
+    target.hidden = history.length === 0;
+    if (history.length) {
+      const l = copy(language);
+      const section = node(doc, "div", undefined, "tracking-json-history");
+      section.append(
+        node(doc, "h4", l.additionalEvents),
+        node(doc, "p", l.historyHint),
+        eventTable(doc, history, l)
+      );
+      target.append(section);
+    }
+  }
+  return history.length;
+}
+
 export function renderReportedTrackingDetails(doc, snapshot, language) {
   const target = doc.querySelector("#reported-tracking-details");
   if (!target) return;
   target.replaceChildren();
-  const sourceSummary = doc.querySelector("#tracking-json-source-summary");
-  if (sourceSummary) {
-    sourceSummary.textContent = trackingSourceSummary(snapshot, language);
-    sourceSummary.hidden = !snapshot?.sourceDetails;
-  }
   const details = snapshot?.sourceDetails,
     events = Array.isArray(snapshot?.events) ? snapshot.events : [];
   target.hidden = !details && !events.length;
@@ -220,58 +279,42 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
       target.append(warning);
     }
   }
-  function eventTable(entries) {
-    const { wrap, body } = table(doc, [l.time, l.event, l.location]);
-    for (const event of entries) {
-      const row = node(doc, "tr");
-      [
-        event.reportedTime || event.occurredAt || "—",
-        event.name || "—",
-        event.location || "—"
-      ].forEach((value) => row.append(node(doc, "td", value)));
-      body.append(row);
-    }
-    return wrap;
-  }
-  const history = details?.additionalEvents || [];
-  if (history.length) {
-    const section = node(doc, "section", undefined, "tracking-json-history");
-    section.append(
-      node(doc, "h4", `${l.additionalEvents} (${history.length})`),
-      node(doc, "p", l.historyHint),
-      eventTable(history)
-    );
-    target.append(section);
-  }
   if (events.length) {
     const section = node(doc, "details", undefined, "tracking-json-disclosure");
-    section.append(
-      node(doc, "summary", `${l.eventTitle} (${events.length})`),
-      node(doc, "p", l.untypedTime),
-      eventTable(events)
+    section.append(node(doc, "summary", `${l.eventTitle} (${events.length})`));
+    buildOnOpen(section, () =>
+      section.append(node(doc, "p", l.untypedTime), eventTable(doc, events, l))
     );
     target.append(section);
   }
   if (details?.fields?.length) {
     const section = node(doc, "details", undefined, "tracking-json-disclosure");
     section.append(node(doc, "summary", `${l.fields} (${details.fields.length})`));
-    const dl = node(doc, "dl", undefined, "tracking-json-source-fields");
-    for (const field of details.fields) {
-      const row = node(doc, "div");
-      const term = node(doc, "dt", l.fieldLabels[field.key] || field.key);
-      const description = node(doc, "dd", field.value);
-      const original = node(doc, "details");
-      original.append(node(doc, "summary", l.sourceDetails));
-      if (field.source) original.append(node(doc, "p", `${field.source}.${field.key}`));
-      if (field.structured || field.rawText?.length > 1200) {
-        original.append(node(doc, "pre", field.rawText));
+    buildOnOpen(section, () => {
+      const dl = node(doc, "dl", undefined, "tracking-json-source-fields");
+      for (const field of details.fields) {
+        const row = node(doc, "div");
+        const label = Object.hasOwn(l.fieldLabels, field.key)
+          ? l.fieldLabels[field.key]
+          : field.key;
+        const term = node(doc, "dt", label);
+        const preview = field.value == null ? "" : rawSourceText(field.value);
+        const description = node(doc, "dd", preview);
+        const original = node(doc, "details");
+        original.append(node(doc, "summary", l.sourceDetails));
+        buildOnOpen(original, () => {
+          if (field.source) original.append(node(doc, "p", `${field.source}.${field.key}`));
+          if (field.structured || (field.rawText != null && field.rawText !== preview)) {
+            original.append(node(doc, "pre", field.rawText ?? preview));
+          }
+        });
+        description.append(original);
+        if (field.truncated) description.append(node(doc, "small", l.sourceLimited));
+        row.append(term, description);
+        dl.append(row);
       }
-      description.append(original);
-      if (field.truncated) description.append(node(doc, "small", l.sourceLimited));
-      row.append(term, description);
-      dl.append(row);
-    }
-    section.append(dl);
+      section.append(dl);
+    });
     target.append(section);
   }
   if (details) {
@@ -284,15 +327,16 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
       row.append(node(doc, "dt", key), node(doc, "dd", String(details[key])));
       metadata.append(row);
     }
+    const history = Array.isArray(details.additionalEvents) ? details.additionalEvents : [];
     const sources = [
-      ...new Set([...events, ...history].map((event) => event.source).filter(Boolean))
+      ...new Set([...events, ...history].map((event) => event?.source).filter(Boolean))
     ];
     if (sources.length) {
       const row = node(doc, "div");
       row.append(node(doc, "dt", l.source), node(doc, "dd", sources.join(" · ")));
       metadata.append(row);
     }
-    section.append(metadata);
+    section.append(node(doc, "p", trackingSourceSummary(snapshot, language)), metadata);
     if (details.evidenceAvailable) section.append(node(doc, "p", l.evidence));
     target.append(section);
   }
@@ -341,14 +385,6 @@ export function installLocalTrackingPreview({
   exit.type = "button";
   banner.append(bannerLabel, exit);
   results.prepend(banner);
-  const sourceSummary = node(doc, "p", undefined, "tracking-json-notice");
-  sourceSummary.id = "tracking-json-source-summary";
-  sourceSummary.hidden = true;
-  results.querySelector(".shipment-summary-card")?.prepend(sourceSummary);
-  const supplemental = node(doc, "section", undefined, "panel tracking-json-reported");
-  supplemental.id = "reported-tracking-details";
-  supplemental.hidden = true;
-  results.querySelector(".shipment-summary-card")?.after(supplemental);
   function open(index) {
     activeIndex = index;
     banner.hidden = false;

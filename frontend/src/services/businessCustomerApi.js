@@ -146,8 +146,41 @@ export function createShipmentBatchTask(payload) {
   return request("/business/shipment-batch-tasks", { method: "POST", body: payload });
 }
 
-export function fetchShipmentBatchTask(taskId) {
-  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}`);
+export function fetchShipmentBatchTasks() {
+  return request("/business/shipment-batch-tasks");
+}
+
+export function fetchShipmentBatchTaskSummaries(options = {}) {
+  return request("/business/shipment-batch-tasks/management?limit=50", options);
+}
+
+export function createShipmentBatchDraft(payload) {
+  return request("/business/shipment-batch-tasks/drafts", { method: "POST", body: payload });
+}
+
+export function updateShipmentBatchDraft(taskId, payload) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/draft`, {
+    method: "PATCH",
+    body: payload
+  });
+}
+
+export function publishShipmentBatchDraft(taskId, expectedRevision) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/publish`, {
+    method: "POST",
+    body: { expectedRevision }
+  });
+}
+
+export function fetchShipmentBatchTask(taskId, options = {}) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}`, options);
+}
+
+export function retryShipmentBatchTask(taskId) {
+  return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/retry`, {
+    method: "POST",
+    body: {}
+  });
 }
 
 export function cancelShipmentBatchTask(taskId) {

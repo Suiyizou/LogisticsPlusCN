@@ -27,6 +27,8 @@ export function useAgentManagement({
   confirm = (message) => window.confirm(message),
   prompt = (message, value) => window.prompt(message, value)
 }) {
+  const agentSearch = ref("");
+  const agentStatus = ref("");
   const agentPage = ref(1);
   const agentPageSize = ref(10);
   const transferAgentsLoaded = ref(false);
@@ -91,13 +93,25 @@ export function useAgentManagement({
     transferAgents.value.filter((agent) => agent.status === "ACTIVE")
   );
   const activeAgentCount = computed(() => activeTransferAgents.value.length);
+  const filteredTransferAgents = computed(() => {
+    const query = agentSearch.value.trim().toLowerCase();
+    return transferAgents.value.filter(
+      (agent) =>
+        (!agentStatus.value || agent.status === agentStatus.value) &&
+        (!query ||
+          [agent.username, agent.displayName].some((value) => value?.toLowerCase().includes(query)))
+    );
+  });
   const paginatedTransferAgents = computed(() =>
-    pageSlice(transferAgents.value, agentPage.value, agentPageSize.value)
+    pageSlice(filteredTransferAgents.value, agentPage.value, agentPageSize.value)
   );
-  watch([transferAgents, agentPageSize], () => {
+  watch([agentSearch, agentStatus], () => {
+    agentPage.value = 1;
+  });
+  watch([filteredTransferAgents, agentPageSize], () => {
     agentPage.value = boundedPage(
       agentPage.value,
-      transferAgents.value.length,
+      filteredTransferAgents.value.length,
       agentPageSize.value
     );
   });
@@ -129,7 +143,11 @@ export function useAgentManagement({
   function changeAgentPage(page) {
     if (!disposed)
       runTablePageTransition(() => {
-        agentPage.value = boundedPage(page, transferAgents.value.length, agentPageSize.value);
+        agentPage.value = boundedPage(
+          page,
+          filteredTransferAgents.value.length,
+          agentPageSize.value
+        );
       });
   }
   function selectedAgentOptionLabel(value) {
@@ -457,6 +475,9 @@ export function useAgentManagement({
     agentCreateForm.password = "";
   });
   return {
+    agentSearch,
+    agentStatus,
+    filteredTransferAgents,
     agentPage,
     agentPageSize,
     transferAgentsLoaded,

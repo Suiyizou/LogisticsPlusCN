@@ -39,6 +39,7 @@
   >
     <component
       :is="activeAdminComponent"
+      class="commercial-reveal"
       :key="activeAdminPage"
       v-bind="activeAdminBinding.props"
       v-on="activeAdminBinding.events"
@@ -944,3 +945,4 @@ function ui(key, params) {
   gap: 16px;
 }
 </style>
+<style scoped src="../modules/shared/commercialWorkspaceMotion.css"></style>

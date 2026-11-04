@@ -1,5 +1,5 @@
 import { createDefaultCarrierAdapters } from "../services/default-carrier-adapters.mjs";
-import { snapshotHasCompleteContainerDetails } from "../lib/snapshot-completeness.mjs";
+import { snapshotHasReusableResponse } from "../lib/snapshot-completeness.mjs";
 import { normalizeCoscoContainerList } from "../lib/cosco-normalize.mjs";
 import {
   COSCO_QUERY_CHANNELS,
@@ -99,7 +99,7 @@ export function createTrackingController({
         !forceRefresh &&
         cached &&
         cached.expiresAt > Date.now() &&
-        snapshotHasCompleteContainerDetails(cached.value?.snapshot, trackingRequest)
+        snapshotHasReusableResponse(cached.value?.snapshot, trackingRequest)
       ) {
         sendJson(response, 200, { ...cached.value, cached: true });
         return;
@@ -121,6 +121,18 @@ export function createTrackingController({
       let value;
       try {
         value = await requestPromise;
+        if (value?.snapshot && typeof value.snapshot === "object") {
+          value = {
+            ...value,
+            snapshot: {
+              ...value.snapshot,
+              deliveryMode:
+                value.snapshot.deliveryMode === "LEGACY_SUPPLEMENTAL"
+                  ? "LEGACY_SUPPLEMENTAL"
+                  : "SINGLE_RESPONSE"
+            }
+          };
+        }
       } finally {
         if (!batchTaskId && !forceRefresh) {
           trackingCache.clearInFlight(cacheKey, requestPromise);

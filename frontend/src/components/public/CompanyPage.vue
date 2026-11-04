@@ -4,10 +4,10 @@
       <section class="public-detail-hero public-company-hero">
         <figure class="public-detail-hero__image">
           <img
-            src="/brand/v2/maritime-1920.webp"
-            :alt="t('publicSite.transportImageAlt')"
-            width="1888"
-            height="833"
+            src="/brand/v4/dispatch-team.webp"
+            :alt="t('publicSite.collaborationImageAlt')"
+            width="1586"
+            height="992"
             fetchpriority="high"
           />
         </figure>
@@ -49,10 +49,10 @@
         <div class="maritime-wrap public-company-scope">
           <figure>
             <img
-              src="/brand/v2/collaboration-1280.webp"
-              :alt="t('publicSite.collaborationImageAlt')"
-              width="1280"
-              height="564"
+              src="/brand/v4/open-voyage.webp"
+              :alt="t('publicSite.transportImageAlt')"
+              width="1586"
+              height="992"
               loading="lazy"
             />
           </figure>
@@ -60,9 +60,13 @@
             <span class="maritime-eyebrow">CONNECTED SERVICES</span>
             <h2>{{ labels.companyScope }}</h2>
             <p>{{ labels.companyScopeBody }}</p>
-            <RouterLink class="maritime-text-link" to="/services"
-              >{{ labels.companyAction }} <span aria-hidden="true">→</span></RouterLink
-            >
+            <ul class="public-company-links" :aria-label="labels.companyEntries">
+              <li v-for="(path, index) in entryPaths" :key="path">
+                <RouterLink :to="path"
+                  >{{ labels.pathways[index] }} <span aria-hidden="true">→</span></RouterLink
+                >
+              </li>
+            </ul>
           </div>
         </div>
       </section>
@@ -88,6 +92,7 @@ import { getPublicDetailLabels } from "../../i18n/publicServiceDetailMessages.js
 import PublicSiteShell from "./PublicSiteShell.vue";
 import { usePublicReveal } from "./usePublicReveal.js";
 defineProps<{ currentUser?: { role?: string } | null }>();
+const entryPaths = ["/services/transport", "/services/planning", "/services#scope-collaboration"];
 const page = ref<HTMLElement | null>(null);
 const labels = computed(() => getPublicDetailLabels(currentLocale.value));
 usePublicReveal(page);

@@ -14,10 +14,12 @@
           </div></template
         ></WorkspacePageHeader
       >
+      <CommercialSummary v-if="customersLoaded" :metrics="metrics" />
       <section class="customer-directory-toolbar">
         <div v-if="isManager" class="customer-directory-search">
           <el-input
             v-model="customerSearch"
+            :aria-label="t('customers.searchCustomerPlaceholder')"
             :placeholder="t('customers.searchCustomerPlaceholder')"
             prefix-icon="Search"
             clearable
@@ -62,10 +64,35 @@
         stripe
         v-loading="loadingCustomers"
         style="width: 100%"
-        class="customer-directory-table"
+        class="customer-directory-table commercial-table commercial-reveal"
         :class="{ 'is-page-switching': tablePageTransitioning }"
         @selection-change="handleCustomerSelectionChange"
       >
+        <template #empty>
+          <WorkspaceEmptyState
+            v-if="!loadingCustomers && customersLoaded"
+            class="commercial-state"
+            :title="
+              commercialText(customerSearch.trim() ? 'directorySearchEmpty' : 'customerEmpty')
+            "
+            :description="
+              customerSearch.trim()
+                ? commercialText('directorySearchEmptyHint')
+                : isManager
+                  ? commercialText('customerEmptyHint')
+                  : undefined
+            "
+          >
+            <template v-if="customerSearch.trim() || isManager" #actions>
+              <el-button v-if="customerSearch.trim()" @click="customerSearch = ''">
+                {{ commercialText("clearSearch") }}
+              </el-button>
+              <el-button v-else type="primary" @click="openCreateCustomer">{{
+                t("customers.openCreate")
+              }}</el-button>
+            </template>
+          </WorkspaceEmptyState>
+        </template>
         <el-table-column v-if="isManager" type="selection" width="44" />
         <el-table-column
           type="index"
@@ -168,7 +195,10 @@
 <script setup lang="ts">
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
-import { toRefs } from "vue";
+import { computed, toRefs } from "vue";
+import CommercialSummary from "../../shared/CommercialSummary.vue";
+import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
+import WorkspaceEmptyState from "../../../components/workspace/WorkspaceEmptyState.vue";
 import type { CustomerRecord } from "../../../types/businessRecords";
 import { useMediaQuery } from "../../../composables/useMediaQuery.js";
 import { useI18n } from "vue-i18n";
@@ -180,6 +210,8 @@ const pages = useModulePages("customers");
 const workspace = pages.directory;
 const { isManager } = toRefs(workspace.permissions);
 const {
+  customers,
+  customersLoaded,
   customerPage,
   customerPageSize,
   customerSearch,
@@ -211,6 +243,21 @@ const {
   statusLabel
 } = workspace.formatters;
 
+const metrics = computed(() => [
+  { label: commercialText("customerAccounts"), value: customers.value.length },
+  {
+    label: commercialText("activeAccounts"),
+    value: customers.value.filter((row) => row.status === "ACTIVE").length
+  },
+  {
+    label: commercialText("awaitingAgent"),
+    value: customers.value.filter(
+      (row) => isTransferableCustomer(row) && !row.overseaAgentDisplayName
+    ).length,
+    hint: commercialText("awaitingAgentHint")
+  }
+]);
+
 // Resolve the UI library's broad slot payload to the workflow-owned typed row.
 function directoryCustomer(row: unknown): CustomerRecord | undefined {
   if (!row || typeof row !== "object" || !("id" in row)) return undefined;
@@ -233,10 +280,6 @@ function selectCustomerRow(row: unknown) {
 .module-page {
   min-width: 0;
   width: 100%;
-}
-.is-page-switching :deep(.el-table__body-wrapper) {
-  opacity: 0.52;
-  transform: translateY(3px);
 }
 @keyframes shipment-updating-spin {
   to {
@@ -281,11 +324,6 @@ function selectCustomerRow(row: unknown) {
   flex-wrap: wrap;
   max-width: 100%;
   min-width: 0;
-}
-.customer-directory-table :deep(.el-table__body-wrapper) {
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
 }
 @keyframes business-kpi-in {
   from {
@@ -457,7 +495,7 @@ function selectCustomerRow(row: unknown) {
 }
 .customer-directory-search {
   flex: 1;
-  min-width: 220px;
+  min-width: min(220px, 100%);
   max-width: 420px;
 }
 .customer-directory-search > .el-input {
@@ -498,3 +536,4 @@ function selectCustomerRow(row: unknown) {
 </style>
 
 <style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
+<style scoped src="../../shared/commercialWorkspaceMotion.css"></style>

@@ -1,3 +1,8 @@
+import {
+  normalizeTrackingLocation,
+  normalizeTrackingSnapshotLocations
+} from "./tracking-location-normalizer.mjs";
+
 /** Read-only compatibility for supplied tracking.v1 JSON. No network or persistence. */
 const text = (value) =>
   typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
@@ -32,17 +37,34 @@ export const CARRIER_LOGOS = Object.freeze({
 
 function normalizeEvent(value, index, source) {
   const e = object(value);
-  const description = first(e.description, e.status, e.name, e.raw);
-  if (!description && !first(e.time, e.date, e.location)) return null;
+  const description = first(
+    e.description,
+    e.status,
+    e.name,
+    e.eventName,
+    e.event_name,
+    e.raw,
+    value
+  );
+  const place = normalizeTrackingLocation({
+    ...object(e.location),
+    name: first(e.location, e.locationName, e.location_name, e.city, e.location?.name),
+    countryCode: first(e.countryCode, e.country_code, e.location?.countryCode),
+    country: first(e.country, e.countryName, e.country_name, e.location?.country)
+  });
+  const time = first(e.time, e.date, e.occurredAt, e.occurred_at);
+  if (!description && !time && !place?.name) return null;
   return {
     sequence: e.sequence ?? index + 1,
     name: description,
-    occurredAt: isoTime(first(e.time, e.date)),
-    reportedTime: first(e.time_raw, e.time, e.date),
-    location: text(e.location),
-    transportMode: text(e.mode),
+    occurredAt: isoTime(time),
+    reportedTime: first(e.time_raw, e.reportedTime, time),
+    location: place?.name ?? "",
+    countryCode: place?.countryCode || undefined,
+    transportMode: first(e.mode, e.transportMode, e.transport_mode),
     containerNumber: first(e.container_number, e.containerNumber),
-    source
+    source,
+    ...(e.raw != null ? { raw: e.raw } : {})
   };
 }
 function shipmentEvents(shipment) {
@@ -72,7 +94,27 @@ function additionalEvents(shipment) {
 }
 function timeRecord(value, location) {
   const time = text(value);
-  return time ? { time, location: text(location) || null } : null;
+  return time ? { time, location: location?.name || null } : null;
+}
+
+function endpoint(countryCode, ...candidates) {
+  const value = candidates.find((entry) => entry && (typeof entry === "object" || text(entry)));
+  if (!value && !countryCode) return null;
+  return normalizeTrackingLocation({
+    ...(value && typeof value === "object" ? value : { name: value }),
+    countryCode: first(value?.countryCode, value?.country_code, value?.country, countryCode)
+  });
+}
+
+function supplementary(value, knownKeys) {
+  const known = new Set(knownKeys.split(" "));
+  return Object.fromEntries(Object.entries(object(value)).filter(([name]) => !known.has(name)));
+}
+
+function supplementaryRows(rows, knownKeys) {
+  return Object.fromEntries(
+    list(rows).map((row, index) => [String(index + 1), supplementary(row, knownKeys)])
+  );
 }
 
 const SOURCE_VALUE_LIMIT = 65536;
@@ -168,6 +210,7 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
     throw new Error("Carrier group conflicts with record.carrier.code");
   const shipment = object(record.shipment),
     fields = object(shipment.fields),
+    extra = object(shipment.fields_extra),
     route = object(shipment.route),
     vessel = object(route.vessel),
     query = object(record.query),
@@ -188,21 +231,55 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
     }[text(query.reference_type).toUpperCase()] ||
     text(query.reference_type) ||
     "UNKNOWN";
-  const origin = first(route.origin, fields.origin),
-    destination = first(route.destination, fields.destination);
+  const origin = endpoint(
+    first(
+      route.originCountryCode,
+      route.origin_country_code,
+      fields.origin_country_code,
+      fields.origin_country
+    ),
+    route.origin,
+    fields.origin,
+    route.POL,
+    fields.POL,
+    fields.pol,
+    fields.load_port,
+    extra.load_port
+  );
+  const destination = endpoint(
+    first(
+      route.destinationCountryCode,
+      route.destination_country_code,
+      fields.destination_country_code,
+      fields.destination_country
+    ),
+    route.destination,
+    fields.destination,
+    route.POD,
+    fields.POD,
+    fields.pod,
+    fields.discharge_port,
+    extra.discharge_port
+  );
   const events = shipmentEvents(shipment);
   const containers = list(shipment.containers)
     .map((c) => ({
-      number: text(c.number),
-      type: text(c.type),
-      transportMode: text(c.movement),
-      trafficTerm: text(c.terms),
-      currentLocation: text(c.position),
-      latestEvent: text(c.latest_status),
-      latestEventTime: text(c.status_time) || null,
-      reportedStatusTime: text(c.status_time),
+      number: first(c.number, c.container_number, c.containerNumber),
+      type: first(c.type, c.container_type, c.containerType),
+      transportMode: first(c.movement, c.transportMode, c.transport_mode),
+      trafficTerm: first(c.terms, c.trafficTerm, c.traffic_term),
+      currentLocation: c.position ?? c.currentLocation ?? c.current_location ?? "",
+      currentLocationCountryCode: first(
+        c.currentLocationCountryCode,
+        c.current_location_country_code,
+        c.country_code
+      ),
+      latestEvent: first(c.latest_status, c.latestEvent, c.latest_event),
+      latestEventTime: first(c.status_time, c.latestEventTime, c.latest_event_time) || null,
+      reportedStatusTime: first(c.status_time, c.reportedStatusTime, c.reported_status_time),
       seal: first(c.seal, c.seal_number),
       weight: text(c.weight),
+      ...(c.raw != null ? { raw: c.raw } : {}),
       milestones: list(c.events)
         .map((e, i) => normalizeEvent(e, i, "container.events"))
         .filter(Boolean)
@@ -211,29 +288,73 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
           time: e.occurredAt,
           reportedTime: e.reportedTime,
           location: e.location,
-          transportMode: e.transportMode
+          countryCode: e.countryCode,
+          transportMode: e.transportMode,
+          ...(e.raw != null ? { raw: e.raw } : {})
         }))
     }))
     .filter((c) => c.number);
   const routingLegs = list(shipment.legs).map((l, i) => ({
-    sequence: i + 1,
-    mode: text(l.mode),
+    sequence: l.sequence ?? i + 1,
+    mode: first(l.mode, l.transportMode, l.transport_mode),
     vesselName: first(l.vessel, l.vessel_name),
     voyage: text(l.voyage),
     service: text(l.service),
-    loadPort: first(l.load_port, l.origin),
-    dischargePort: first(l.discharge_port, l.destination),
-    estimatedDeparture: text(l.etd) || null,
-    estimatedArrival: text(l.eta) || null,
-    actualDeparture: text(l.atd) || null,
-    actualArrival: text(l.ata) || null
+    loadPort: l.load_port ?? l.loadPort ?? l.origin ?? "",
+    dischargePort: l.discharge_port ?? l.dischargePort ?? l.destination ?? "",
+    loadCountryCode: first(
+      l.loadCountryCode,
+      l.load_country_code,
+      l.load_country,
+      l.origin_country_code
+    ),
+    dischargeCountryCode: first(
+      l.dischargeCountryCode,
+      l.discharge_country_code,
+      l.discharge_country,
+      l.destination_country_code
+    ),
+    estimatedDeparture: first(l.etd, l.estimatedDeparture, l.estimated_departure, l.ETD) || null,
+    estimatedArrival: first(l.eta, l.estimatedArrival, l.estimated_arrival, l.ETA) || null,
+    actualDeparture: first(l.atd, l.actualDeparture, l.actual_departure) || null,
+    actualArrival: first(l.ata, l.actualArrival, l.actual_arrival) || null
   }));
   const keyTimes = Object.fromEntries(
     [
-      ["estimatedDeparture", fields.etd, origin],
-      ["estimatedArrival", fields.eta, destination],
-      ["actualDeparture", fields.atd, origin],
-      ["actualArrival", fields.ata, destination]
+      [
+        "estimatedDeparture",
+        first(
+          fields.etd,
+          fields.estimatedDeparture,
+          fields.estimated_departure,
+          fields.ETD,
+          extra.etd,
+          extra.ETD
+        ),
+        origin
+      ],
+      [
+        "estimatedArrival",
+        first(
+          fields.eta,
+          fields.estimatedArrival,
+          fields.estimated_arrival,
+          fields.ETA,
+          extra.eta,
+          extra.ETA
+        ),
+        destination
+      ],
+      [
+        "actualDeparture",
+        first(fields.atd, fields.actualDeparture, fields.actual_departure, fields.ATD),
+        origin
+      ],
+      [
+        "actualArrival",
+        first(fields.ata, fields.actualArrival, fields.actual_arrival, fields.ATA),
+        destination
+      ]
     ]
       .map(([key, value, location]) => [key, timeRecord(value, location)])
       .filter(([, value]) => value)
@@ -242,10 +363,45 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
   const warnings = list(record.meta?.warnings).map(text).filter(Boolean);
   const sourceFields = [
     ...collectSourceFields(fields, "shipment.fields"),
-    ...collectSourceFields(shipment.fields_extra, "shipment.fields_extra")
+    ...collectSourceFields(shipment.fields_extra, "shipment.fields_extra"),
+    ...collectSourceFields(
+      supplementary(
+        shipment,
+        "bill_of_lading booking container_count route status containers events legs fields fields_extra"
+      ),
+      "shipment"
+    ),
+    ...collectSourceFields(supplementary(route, "origin destination vessel"), "shipment.route"),
+    ...collectSourceFields(supplementary(vessel, "name voyage"), "shipment.route.vessel"),
+    ...collectSourceFields(
+      supplementary(status, "state latest_event latest_event_at"),
+      "shipment.status"
+    ),
+    ...collectSourceFields(
+      supplementaryRows(
+        shipment.legs,
+        "sequence mode vessel vessel_name voyage service load_port discharge_port origin destination etd eta atd ata"
+      ),
+      "shipment.legs"
+    ),
+    ...collectSourceFields(
+      supplementaryRows(
+        shipment.containers,
+        "number type movement terms position latest_status status_time seal seal_number weight"
+      ),
+      "shipment.containers"
+    ),
+    ...collectSourceFields(
+      supplementaryRows(
+        shipment.events,
+        "sequence description status name time date time_raw location mode container_number containerNumber"
+      ),
+      "shipment.events"
+    )
   ];
   const snapshot = {
     schemaVersion: "tracking.v1",
+    deliveryMode: "SINGLE_RESPONSE",
     provider: carrier,
     channel: "NODE_JSON",
     fetchedAt: text(record.generated_at) || null,
@@ -253,8 +409,8 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
     summary: {
       billOfLading: text(shipment.bill_of_lading) || null,
       bookingNumbers: [text(shipment.booking)].filter(Boolean),
-      origin: origin ? { name: origin } : null,
-      destination: destination ? { name: destination } : null,
+      origin,
+      destination,
       vesselVoyage: [first(vessel.name, fields.vessel), first(vessel.voyage, fields.voyage)]
         .filter(Boolean)
         .join(" / "),
@@ -293,7 +449,12 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
     }
   };
   // Endpoint names are summary facts, never fabricated milestone nodes.
-  return { snapshot, raw: null, cached: false, sourceSchema: "tracking.v1" };
+  return {
+    snapshot: normalizeTrackingSnapshotLocations(snapshot),
+    raw: null,
+    cached: false,
+    sourceSchema: "tracking.v1"
+  };
 }
 
 export function normalizeSourceDetails(details) {
@@ -340,15 +501,18 @@ export function normalizeSourceDetails(details) {
   return normalized;
 }
 
+export function usesLegacySupplementalDelivery(snapshot) {
+  return snapshot?.deliveryMode === "LEGACY_SUPPLEMENTAL";
+}
+
 export function normalizeTrackingPayload(payload) {
   if (payload?.snapshot && typeof payload.snapshot === "object") {
-    if (!payload.snapshot.sourceDetails) return payload;
+    const snapshot = normalizeTrackingSnapshotLocations(payload.snapshot);
+    if (!snapshot.sourceDetails)
+      return snapshot === payload.snapshot ? payload : { ...payload, snapshot };
     return {
       ...payload,
-      snapshot: {
-        ...payload.snapshot,
-        sourceDetails: normalizeSourceDetails(payload.snapshot.sourceDetails)
-      }
+      snapshot: { ...snapshot, sourceDetails: normalizeSourceDetails(snapshot.sourceDetails) }
     };
   }
   if (payload?.schema === "tracking.v1" && payload.shipment) return adaptTrackingV1(payload);

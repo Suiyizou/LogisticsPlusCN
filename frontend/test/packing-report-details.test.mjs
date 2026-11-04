@@ -23,15 +23,21 @@ const placement = (extra = {}) => ({
 test("planner metrics keep Vue-owned values outside legacy DOM translation", () => {
   const source = readFileSync(new URL("../src/App.vue", import.meta.url), "utf8");
   const metrics = source.match(
-    /<div class="planner-metrics" data-i18n-ignore>([\s\S]*?)<\/div>/
-  )?.[1];
+    /<dl\s+class="planner-metrics planner-manifest-metrics"[\s\S]*?<\/dl>/
+  )?.[0];
   assert.ok(metrics);
-  assert.equal((metrics.match(/:title="(?:tr|wt|ui)\(/g) || []).length, 4);
-  assert.equal((metrics.match(/<el-statistic/g) || []).length, 4);
-  assert.ok(metrics.includes(':value="cargoTypeCount"'));
-  assert.ok(metrics.includes(':value="cargoTotalQuantity"'));
-  assert.ok(metrics.includes(':value="cargoTotalWeightKg / 1000"'));
-  assert.ok(metrics.includes(':value="cargoTotalVolumeM3"'));
+  assert.ok(metrics.includes("data-i18n-ignore"));
+  assert.ok(metrics.includes('v-for="metric in manifestMetrics"'));
+  assert.ok(metrics.includes("{{ metric.value }}"));
+  const summary = source.match(/const manifestMetrics = computed\([\s\S]*?\n\}\);/)?.[0];
+  assert.ok(summary);
+  for (const total of [
+    "cargoTypeCount",
+    "cargoTotalQuantity",
+    "cargoTotalWeightKg",
+    "cargoTotalVolumeM3"
+  ])
+    assert.match(summary, new RegExp(`value: \\w+\\.format\\(${total}\\.value\\)`));
 });
 
 test("report totals count grouped pieces once, preserve per-box payloads and missing data", () => {

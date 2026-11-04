@@ -14,6 +14,10 @@
               </el-button></template
             ></WorkspacePageHeader
           >
+          <p v-if="error" class="business-overview-warning" role="status">
+            {{ error }}
+            <span v-if="usingCache">{{ t("customers.overviewCachedFallback") }}</span>
+          </p>
           <div class="business-kpi-grid">
             <article
               v-for="metric in kpis"
@@ -33,6 +37,27 @@
               </div>
             </article>
           </div>
+          <section class="overview-workflows" aria-labelledby="overview-workflows-title">
+            <h2 id="overview-workflows-title">{{ commercialText("workflowTitle") }}</h2>
+            <div class="overview-workflows__grid">
+              <RouterLink
+                v-for="workflow in workflows"
+                :key="workflow.route"
+                :to="{ name: workflow.route }"
+              >
+                <span class="overview-workflows__icon" aria-hidden="true">
+                  <el-icon><component :is="workflow.icon" /></el-icon>
+                </span>
+                <span class="overview-workflows__copy">
+                  <strong>{{ t(workflow.label) }}</strong>
+                  <small>{{ commercialText(workflow.description) }}</small>
+                </span>
+                <span class="overview-workflows__arrow" aria-hidden="true"
+                  ><el-icon><ArrowRight /></el-icon
+                ></span>
+              </RouterLink>
+            </div>
+          </section>
           <BusinessOverviewCharts
             ref="overviewChartsRef"
             :trend="model.trend"
@@ -41,19 +66,16 @@
             :status="model.status"
             :loading="loading"
           />
-          <p v-if="error" class="business-overview-warning" role="status">
-            {{ error }}
-            <span v-if="usingCache">{{ t("customers.overviewCachedFallback") }}</span>
-          </p>
         </div>
-      </div>
-    </div></transition
-  >
+      </div></div
+  ></transition>
 </template>
 <script setup lang="ts">
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
 import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
+import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
 import { useI18n } from "vue-i18n";
 import {
   Refresh,
@@ -61,7 +83,10 @@ import {
   RefreshRight,
   FolderOpened,
   ChatDotRound,
-  UserFilled
+  UserFilled,
+  ArrowRight,
+  Document,
+  User
 } from "@element-plus/icons-vue";
 import BusinessOverviewCharts from "../../../features/overview/BusinessOverviewCharts.vue";
 import { useModulePages } from "../../moduleContext.js";
@@ -78,6 +103,26 @@ const { model, loading, error, reload, usingCache } = useOverviewMetrics({
   t,
   locale
 });
+const workflows = [
+  {
+    route: "business-shipments",
+    label: "customers.tabShipmentManagement",
+    description: "workflowShipments",
+    icon: Document
+  },
+  {
+    route: "business-customers",
+    label: "customers.directoryTitle",
+    description: "workflowCustomers",
+    icon: User
+  },
+  {
+    route: "business-agents",
+    label: "customers.overseaAgentManagement",
+    description: "workflowAgents",
+    icon: UserFilled
+  }
+] as const;
 const icons = { CirclePlusFilled, RefreshRight, FolderOpened, ChatDotRound, UserFilled };
 const kpis = computed(() =>
   model.value.kpis.map((item) => ({
@@ -92,6 +137,80 @@ onMounted(() => {
 });
 </script>
 <style scoped>
+.overview-workflows h2 {
+  margin: 0 0 10px;
+  color: var(--color-foreground);
+  font-family: var(--font-display, var(--font-ui));
+  font-size: 19px;
+  font-weight: 650;
+}
+.overview-workflows__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 10px;
+}
+.overview-workflows a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 75px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+.overview-workflows a:hover,
+.overview-workflows a:focus-visible {
+  border-color: var(--color-ring);
+  background: var(--color-surface-subtle);
+}
+.overview-workflows__icon {
+  display: grid;
+  flex: 0 0 34px;
+  height: 34px;
+  place-items: center;
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-control);
+  color: var(--color-primary);
+  font-size: 17px;
+}
+.overview-workflows__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.overview-workflows__copy strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+.overview-workflows__copy small {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.overview-workflows__arrow {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--color-primary);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+.overview-workflows a:is(:hover, :focus-visible) .overview-workflows__arrow {
+  transform: translateX(3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .overview-workflows a,
+  .overview-workflows__arrow {
+    transition: none;
+  }
+  .overview-workflows a:is(:hover, :focus-visible) .overview-workflows__arrow {
+    transform: none;
+  }
+}
 .list-page {
   max-width: none;
   width: 100%;
@@ -214,12 +333,10 @@ onMounted(() => {
   gap: 10px;
 }
 .business-kpi-card__top > span:last-child {
-  overflow: hidden;
   color: #536f88;
   font-size: 12px;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .business-kpi-card__icon {
   display: grid;
@@ -245,11 +362,10 @@ onMounted(() => {
   line-height: 1;
 }
 .business-kpi-card__value > small {
-  overflow: hidden;
-  color: #8a9daf;
+  color: var(--color-muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .business-kpi-card.is-amber::before {
   background: #e4a83d;
@@ -318,8 +434,8 @@ onMounted(() => {
 }
 .overview-fade-enter-active {
   transition:
-    opacity 180ms ease,
-    transform 180ms ease;
+    opacity var(--motion-normal) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
 }
 .overview-fade-enter-from {
   opacity: 0;
@@ -377,6 +493,7 @@ onMounted(() => {
 }
 .business-kpi-card__value > b {
   color: var(--color-primary);
+  font-family: var(--font-display, var(--font-ui));
   font-weight: 500;
 }
 .business-overview-kicker {

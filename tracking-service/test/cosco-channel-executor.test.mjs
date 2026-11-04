@@ -75,7 +75,7 @@ test("proxy execution preserves injected request context and proxy timeout budge
   assert.deepEqual(result.strategy, { requested: "PROXY", used: "PROXY", fallbackUsed: false });
 });
 
-test("AUTO executes only network; batch mode avoids both enrichment endpoints", async () => {
+test("AUTO batch requests aggregate the same booking and container packet as individual queries", async () => {
   const calls = [];
   const { client } = executor({
     endpoints: {
@@ -83,14 +83,21 @@ test("AUTO executes only network; batch mode avoids both enrichment endpoints", 
         calls.push(name);
         return detail;
       },
-      optionalCoscoEndpoint: () => assert.fail("batch enrichment"),
-      fetchCoscoShipmentContainers: () => assert.fail("batch containers")
+      optionalCoscoEndpoint: async (name) => {
+        calls.push(name);
+        return {};
+      },
+      fetchCoscoShipmentContainers: async () => {
+        calls.push("containers");
+        return containers;
+      }
     },
     fetchBrowser: () => assert.fail("AUTO must not jump directly to browser")
   });
   const result = await client.fetchCoscoTracking(request, channels.AUTO, { batch: true });
-  assert.deepEqual(calls, ["detail"]);
-  assert.equal(result.enrichment.partial, true);
+  assert.deepEqual(calls, ["detail", "bookingInfo", "containers"]);
+  assert.equal(result.enrichment.partial, false);
+  assert.equal(result.snapshot.containers[0].number, "TEMU6003424");
   assert.equal(result.strategy.used, "NETWORK");
 });
 

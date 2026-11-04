@@ -61,6 +61,7 @@ app:
     allowed-extensions: ${APP_ANNOUNCEMENT_IMAGE_ALLOWED_EXTENSIONS:jpg,jpeg,png,gif}
   shipment-tracking:
     adapter-mode: ${APP_TRACKING_ADAPTER_MODE:LEGACY}
+    legacy-supplemental-enabled: ${APP_TRACKING_LEGACY_SUPPLEMENTAL_ENABLED:false}
     local-base-url: ${APP_TRACKING_LOCAL_BASE_URL:http://127.0.0.1:8791}
     local-token: ${APP_TRACKING_LOCAL_TOKEN:}
     local-job-timeout: ${APP_TRACKING_LOCAL_JOB_TIMEOUT:7m}

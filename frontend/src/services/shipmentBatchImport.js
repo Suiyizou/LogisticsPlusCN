@@ -88,6 +88,14 @@ const PREFIXES = [
   [/^ZIMU[A-Z0-9]+$/i, "ZIM"]
 ];
 
+export function identifyShipmentCarrier(reference) {
+  return PREFIXES.find(([pattern]) => pattern.test(reference))?.[1] || "";
+}
+
+export function validShipmentBatchReference(reference) {
+  return /^[A-Za-z0-9][A-Za-z0-9./-]{3,127}$/.test(reference) && /[0-9]/.test(reference);
+}
+
 export function parseShipmentBatchWorkbook(workbook, xlsx) {
   xlsx = xlsx.default || xlsx;
   return (workbook?.SheetNames || [])
@@ -292,6 +300,18 @@ export function buildShipmentBatchPreview(
     );
     return merge ? sheet.rows[merge.s.r - sheet.headerRow + 1]?.[c] || "" : "";
   };
+  const importedFields = (r) => {
+    const fields = Object.fromEntries(
+      Object.entries(fieldIndexes)
+        .filter(([field]) => field !== "carrier")
+        .map(([field, c]) => [field, c >= 0 ? mergedValue(r, c) : ""])
+    );
+    if (normalizeHeader(fields.volume) === "VOLUME") fields.volume = "";
+    return fields;
+  };
+  const headerType = BILL_HEADERS.includes(normalizeHeader(headers[col]))
+    ? "BILLOFLADING"
+    : referenceType;
   for (let r = 1; r < sheet.rows.length; r++) {
     const cells = sheet.rows[r];
     const row = sheet.sourceRowNumbers[r];
@@ -307,13 +327,32 @@ export function buildShipmentBatchPreview(
         (m) => m.s.c === col && m.e.c === col && m.s.r < row - 1 && m.e.r >= row - 1
       );
       const meaningful = cells.some((v, i) => v && i !== fieldIndexes.carrier);
-      if (meaningful && !merged)
-        preview.errors.push({
+      if (meaningful && !merged) {
+        const error = {
           row,
           code: "MISSING_REFERENCE",
           message: "Non-empty row has no tracking reference"
+        };
+        preview.errors.push(error);
+        const explicit = cellText(cells[fieldIndexes.carrier]);
+        preview.rows.push({
+          sourceRow: row,
+          originalReference: "",
+          number: "",
+          carrier: normalizeCarrier(explicit),
+          carrierSource: explicit ? "cell" : "selection",
+          type: headerType,
+          sourceReference: {
+            raw: "",
+            normalized: "",
+            type: headerType,
+            address: columnLetter(col) + row
+          },
+          importedDetails: importedFields(r),
+          errors: [error],
+          status: "BLOCKED"
         });
-      else preview.skipped++;
+      } else preview.skipped++;
       continue;
     }
     if (
@@ -339,7 +378,7 @@ export function buildShipmentBatchPreview(
       rowErrors.push(error);
       preview.errors.push(error);
     };
-    if (!/^[A-Za-z0-9][A-Za-z0-9./-]{3,127}$/.test(rawReference) || !/[0-9]/.test(rawReference))
+    if (!validShipmentBatchReference(rawReference))
       add("INVALID_REFERENCE", "Reference contains unrecognized text or multiple identifiers");
     if (sheet.unsafeCells.some((c) => c.r === row - 1 && c.c === col))
       add(
@@ -347,16 +386,16 @@ export function buildShipmentBatchPreview(
         "Numeric reference or formula cannot be preserved precisely; use a text cell"
       );
     const carrierCell = cellText(cells[fieldIndexes.carrier]);
-    // Query-only workbooks often put delivery notes in CARRIER cells. Only a known
-    // carrier alias is binding here; IMPORT keeps its original strict validation.
+    const inferred = identifyShipmentCarrier(rawReference);
+    const vessel = cellText(cells[fieldIndexes.vesselVoyage]);
+    const vesselCarrier = /^SM\s+(?:SEOUL|KWANGYANG|YANTIAN)\b/i.test(vessel) ? "SML" : "";
+    // A carrier cell may contain a delivery remark. Preserve it as source text
+    // when independent evidence identifies the carrier. Known aliases still bind.
     const explicit =
-      options.queryOnly && !RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(carrierCell))
+      !RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(carrierCell)) &&
+      (options.queryOnly || inferred || vesselCarrier)
         ? ""
         : carrierCell;
-    const inferred = PREFIXES.find(([pattern]) => pattern.test(rawReference))?.[1] || "";
-    const vessel = cellText(cells[fieldIndexes.vesselVoyage]);
-    const vesselCarrier =
-      options.queryOnly && /^SM\s+(?:SEOUL|KWANGYANG|YANTIAN)\b/i.test(vessel) ? "SML" : "";
     const carrier = normalizeCarrier(
       explicit || inferred || vesselCarrier || (options.queryOnly ? "" : defaultCarrier)
     );
@@ -374,9 +413,6 @@ export function buildShipmentBatchPreview(
           "Carrier is missing or unrecognized; choose an explicit carrier or correct the source cell"
         );
     }
-    const headerType = BILL_HEADERS.includes(normalizeHeader(headers[col]))
-      ? "BILLOFLADING"
-      : referenceType;
     // Only the legacy COSCO route converts a bill to its numeric BOOKING query.
     // LOCAL_QUEUE receives the original bill identity; CMA still requires BOOKING.
     const type = carrier === "CMA" || (carrier === "COSCO" && !localQueue) ? "BOOKING" : headerType;
@@ -394,12 +430,7 @@ export function buildShipmentBatchPreview(
       !localQueue && carrier === "COSCO" && /^COSU\d+$/i.test(rawReference)
         ? rawReference.slice(4)
         : rawReference;
-    const importedDetails = Object.fromEntries(
-      Object.entries(fieldIndexes)
-        .filter(([field]) => field !== "carrier")
-        .map(([field, c]) => [field, c >= 0 ? mergedValue(r, c) : ""])
-    );
-    if (normalizeHeader(importedDetails.volume) === "VOLUME") importedDetails.volume = "";
+    const importedDetails = importedFields(r);
     if (headerType === "BILLOFLADING") importedDetails.originalBillOfLading = rawReference;
     const item = {
       id: `${sheet.name}-row-${row}`,
@@ -431,6 +462,7 @@ export function buildShipmentBatchPreview(
       },
       adapterMode,
       type,
+      importedDetails: { ...importedDetails },
       errors: rowErrors,
       status: rowErrors.length ? "BLOCKED" : "READY"
     };

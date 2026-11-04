@@ -52,7 +52,9 @@ export function createCoscoChannelExecutor({ endpoints, upstream, fetchBrowser, 
     let bookingInfo = {};
     let containerInfo = [];
     let enrichmentWarning = null;
-    if (!options.batch) {
+    // Batch IDs control scheduling and cancellation, never the response's shape.
+    // The legacy collector aggregates its upstream calls before returning one packet.
+    {
       try {
         bookingInfo = await optionalCoscoEndpoint(
           "bookingInfo",
@@ -96,7 +98,7 @@ export function createCoscoChannelExecutor({ endpoints, upstream, fetchBrowser, 
       snapshot,
       enrichment: {
         containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request),
-        partial: Boolean(options.batch || enrichmentWarning),
+        partial: Boolean(enrichmentWarning),
         warning: enrichmentWarning
       },
       raw: {
@@ -226,8 +228,7 @@ export function createCoscoChannelExecutor({ endpoints, upstream, fetchBrowser, 
       enrichment: {
         containerDetailsComplete: snapshotHasCompleteContainerDetails(snapshot, request),
         partial:
-          Boolean(options.batch || enrichmentWarning) ||
-          !snapshotHasCompleteContainerDetails(snapshot, request),
+          Boolean(enrichmentWarning) || !snapshotHasCompleteContainerDetails(snapshot, request),
         warning: enrichmentWarning
       },
       raw: {

@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { adaptTrackingV1 } from "../public/tracking-v1-adapter.mjs";
-import { renderReportedTrackingDetails } from "../public/tracking-json-preview.mjs";
+import {
+  renderReportedTrackingDetails,
+  renderTrackingHistory
+} from "../public/tracking-json-preview.mjs";
 import { syntheticByCarrier } from "./fixtures/tracking-v1-carriers.mjs";
 
 class Element {
@@ -9,6 +12,7 @@ class Element {
     this.tag = tag;
     this.children = [];
     this.value = "";
+    this.listeners = new Map();
   }
   set textContent(value) {
     this.value = String(value);
@@ -16,6 +20,16 @@ class Element {
   }
   get textContent() {
     return this.value + this.children.map((child) => child.textContent).join(" ");
+  }
+  addEventListener(type, callback) {
+    this.listeners.set(type, callback);
+  }
+  removeEventListener(type) {
+    this.listeners.delete(type);
+  }
+  expand() {
+    this.open = true;
+    this.listeners.get("toggle")?.();
   }
   append(...children) {
     this.children.push(...children);
@@ -32,14 +46,15 @@ const visibleText = (element) => {
   return element.value + element.children.map(visibleText).join(" ");
 };
 function render(snapshot) {
-  const target = new Element(),
-    summary = new Element();
+  const target = new Element();
+  const history = new Element();
   const doc = {
     createElement: (tag) => new Element(tag),
-    querySelector: (selector) => (selector === "#reported-tracking-details" ? target : summary)
+    querySelector: (selector) => (selector === "#reported-tracking-details" ? target : history)
   };
   renderReportedTrackingDetails(doc, snapshot, "zh");
-  return { target, summary, visible: visibleText(target) };
+  renderTrackingHistory(doc, snapshot, "zh");
+  return { target, history, visible: visibleText(target) };
 }
 
 test("carrier history is readable while raw records and technical provenance start collapsed", () => {
@@ -59,18 +74,22 @@ test("carrier history is readable while raw records and technical provenance sta
     snapshot.sourceDetails.strategy = "BROWSER_PAGE_TEXT";
     snapshot.sourceDetails.confidence = "LOW";
     const before = JSON.stringify(snapshot);
-    const { target, summary, visible } = render(snapshot);
-    assert.match(visible, /船司报告的历史/);
+    const { target, history, visible } = render(snapshot);
+    const visibleHistory = visibleText(history);
+    assert.match(visibleHistory, /船司报告的历史/);
     for (const value of ["CARRIER DESCRIPTION", "ORIGINAL TIME", "ORIGINAL PORT"])
-      assert.ok(visible.includes(value));
+      assert.ok(visibleHistory.includes(value));
+    assert.doesNotMatch(visible, /船司报告的历史|CARRIER DESCRIPTION/);
     assert.match(visible, /船司原始记录/);
     assert.doesNotMatch(
       visible,
       /RAW PAGE ENTRY|RAW TIME|BROWSER_PAGE_TEXT|hmm_history|msc_events/
     );
+    assert.doesNotMatch(target.textContent, /RAW PAGE ENTRY/);
+    target.children.find((entry) => entry.textContent.includes("船司原始记录")).expand();
     assert.match(target.textContent, /RAW PAGE ENTRY/);
     assert.match(target.textContent, /BROWSER_PAGE_TEXT/);
-    assert.match(summary.textContent, /尚未验证/);
+    assert.match(target.textContent, /尚未验证/);
     assert.doesNotMatch(visible, /尚未验证/);
     assert.equal(JSON.stringify(snapshot), before);
   }
@@ -99,6 +118,43 @@ test("original fields retain values and paths behind disclosures without repeati
   ];
   const { target, visible } = render(snapshot);
   assert.doesNotMatch(visible, /SOURCE SEAL|shipment.fields_extra|SUMMARY VESSEL|SUMMARY VOYAGE/);
+  assert.doesNotMatch(target.textContent, /SOURCE SEAL/);
+  const section = target.children.find((entry) => entry.textContent.includes("原始字段与扩展字段"));
+  section.expand();
   assert.match(target.textContent, /SOURCE SEAL/);
+  assert.doesNotMatch(target.textContent, /shipment.fields_extra.seal_numbers/);
+  section.children[1].children[0].children[1].children[0].expand();
   assert.match(target.textContent, /shipment.fields_extra.seal_numbers/);
+});
+
+test("opening an event builds its raw value and source as text once", () => {
+  const { target } = render({
+    events: [
+      {
+        name: "Mapped event",
+        source: "shipment.events",
+        raw: { count: 0, flag: false, markup: "<img src=x>" }
+      }
+    ]
+  });
+  const find = (element, tag) =>
+    element.tag === tag ? element : element.children.map((child) => find(child, tag)).find(Boolean);
+  const events = find(target, "details");
+  assert.equal(find(events, "table"), undefined);
+  events.expand();
+  assert.match(events.textContent, /Mapped event/);
+  const source = find(find(events, "table"), "details");
+  assert.equal(find(source, "pre"), undefined);
+  source.expand();
+  assert.match(source.textContent, /shipment.events/);
+  assert.deepEqual(JSON.parse(find(source, "pre").textContent), {
+    count: 0,
+    flag: false,
+    markup: "<img src=x>"
+  });
+  assert.equal(find(source, "img"), undefined);
+  const childCount = source.children.length;
+  source.open = false;
+  source.expand();
+  assert.equal(source.children.length, childCount);
 });

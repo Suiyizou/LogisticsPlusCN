@@ -50,6 +50,7 @@ class TrackingAdapterClientTest {
     server.start();
     try {
       ShipmentTrackingProperties properties = new ShipmentTrackingProperties();
+      properties.setLegacySupplementalEnabled(true);
       properties.setAdapterBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
       properties.setConnectTimeout(Duration.ofSeconds(2));
       properties.setReadTimeout(Duration.ofSeconds(2));

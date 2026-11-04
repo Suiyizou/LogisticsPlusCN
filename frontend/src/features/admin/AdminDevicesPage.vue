@@ -22,7 +22,7 @@ const emit = defineEmits<{
 }>();
 </script>
 <template>
-  <section class="admin-page-pane">
+  <section class="admin-page-pane" :aria-busy="busy">
     <div class="admin-metrics compact">
       <div>
         <span>{{ t("adminWorkflow.onlineOnPage") }}</span>
@@ -46,7 +46,13 @@ const emit = defineEmits<{
         ><template #title>{{ t("adminWorkflow.deviceHeading") }}</template
         ><template #eyebrow>Login Devices</template></WorkspacePageHeader
       >
-      <div class="admin-table-wrap">
+      <div
+        class="admin-table-wrap"
+        v-loading="busy"
+        tabindex="0"
+        role="region"
+        :aria-label="t('adminWorkflow.deviceHeading')"
+      >
         <el-table :data="rows" row-key="id" stripe class="standard-information-table devices">
           <DeviceColumn :label="t('admin.list.user')" min-width="150" show-overflow-tooltip>
             <template #default="{ row: device }"
@@ -102,7 +108,9 @@ const emit = defineEmits<{
             </template>
           </DeviceColumn>
           <template #empty
-            ><WorkspaceEmptyState>{{ t("admin.list.noDevices") }}</WorkspaceEmptyState></template
+            ><WorkspaceEmptyState v-if="!busy">{{
+              t("admin.list.noDevices")
+            }}</WorkspaceEmptyState></template
           >
         </el-table>
       </div>

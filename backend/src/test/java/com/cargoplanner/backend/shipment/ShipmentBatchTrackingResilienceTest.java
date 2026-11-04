@@ -190,7 +190,7 @@ class ShipmentBatchTrackingResilienceTest {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     AtomicInteger shipmentSequence = new AtomicInteger();
     when(trackingService.track(any(), any())).thenAnswer(invocation ->
-        successfulResponse("shipment-" + shipmentSequence.incrementAndGet())
+        legacySupplementalResponse("shipment-" + shipmentSequence.incrementAndGet())
     );
     ObjectNode blockedSupplemental = new ObjectMapper().createObjectNode();
     blockedSupplemental.putArray("warnings")
@@ -241,7 +241,7 @@ class ShipmentBatchTrackingResilienceTest {
     ShipmentTrackingService trackingService = mock(ShipmentTrackingService.class);
     AtomicInteger shipmentSequence = new AtomicInteger();
     when(trackingService.track(any(), any())).thenAnswer(invocation ->
-        successfulResponse("shipment-reset-" + shipmentSequence.incrementAndGet())
+        legacySupplementalResponse("shipment-reset-" + shipmentSequence.incrementAndGet())
     );
     AtomicInteger supplementalSequence = new AtomicInteger();
     when(trackingService.loadSupplementalDetails(any(), any(), any())).thenAnswer(invocation -> {
@@ -404,6 +404,13 @@ class ShipmentBatchTrackingResilienceTest {
     ObjectNode response = new ObjectMapper().createObjectNode();
     response.put("shipmentId", shipmentId);
     response.put("cacheSource", "LIVE");
+    return response;
+  }
+
+  private ObjectNode legacySupplementalResponse(String shipmentId) {
+    ObjectNode response = successfulResponse(shipmentId);
+    response.putObject("snapshot").put("deliveryMode", "LEGACY_SUPPLEMENTAL")
+        .putObject("supplementalDetails").put("pendingRefresh", true);
     return response;
   }
 

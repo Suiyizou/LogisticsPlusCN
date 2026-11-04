@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -46,6 +47,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class ShipmentTrackingService {
   private static final List<String> SUPPORTED_TYPES = List.of("BILLOFLADING", "BOOKING", "CONTAINER");
+  static final String SINGLE_RESPONSE = "SINGLE_RESPONSE";
+  static final String LEGACY_SUPPLEMENTAL = "LEGACY_SUPPLEMENTAL";
   private static final List<String> SUPPORTED_CHANNELS = List.of(
       "AUTO", "NETWORK", "PLAYWRIGHT", "PROXY", "AGENT"
   );
@@ -128,6 +131,45 @@ public class ShipmentTrackingService {
 
   public boolean usesLocalTrackingQueue() {
     return properties.usesLocalQueue();
+  }
+
+  static boolean hasPendingLegacySupplemental(JsonNode snapshot) {
+    return LEGACY_SUPPLEMENTAL.equals(snapshot.path("deliveryMode").asText())
+        && snapshot.path("supplementalDetails").path("pendingRefresh").asBoolean(false);
+  }
+
+  static void markSingleResponse(ObjectNode envelope) {
+    ObjectNode snapshot = (ObjectNode) envelope.path("snapshot");
+    snapshot.put("deliveryMode", SINGLE_RESPONSE);
+    snapshot.remove("supplementalDetails");
+    if (envelope.path("enrichment") instanceof ObjectNode enrichment) {
+      enrichment.remove("partial");
+      if (enrichment.isEmpty()) envelope.remove("enrichment");
+    }
+  }
+
+  boolean canRefreshLegacySupplemental(String shipmentPublicId) {
+    return pendingLegacySupplementalSnapshotJson(shipmentPublicId) != null;
+  }
+
+  String pendingLegacySupplementalSnapshotJson(String shipmentPublicId) {
+    if (!properties.supportsLegacySupplemental()) return null;
+    String json = currentSnapshotJsonForSupplemental(shipmentPublicId);
+    return json != null && hasPendingLegacySupplemental(readJson(json)) ? json : null;
+  }
+
+  private String currentSnapshotJsonForSupplemental(String shipmentPublicId) {
+    return jdbcTemplate.queryForList("""
+        SELECT sn.snapshot_json FROM cp_shipments s
+        JOIN cp_tracking_snapshots sn ON sn.id = s.current_snapshot_id
+        WHERE s.public_id = ? AND sn.invalidated_at IS NULL
+        """, String.class, shipmentPublicId).stream()
+        .findFirst().orElse(null);
+  }
+
+  private JsonNode currentSnapshotForSupplemental(String shipmentPublicId) {
+    String json = currentSnapshotJsonForSupplemental(shipmentPublicId);
+    return json == null ? objectMapper.createObjectNode() : readJson(json);
   }
 
   /**
@@ -807,7 +849,7 @@ public class ShipmentTrackingService {
       if (available) {
         item.set(
             "snapshot",
-            overlayStoredBusinessFields(readJson(cached.snapshotJson()), record.businessFields())
+            overlayStoredBusinessFields(readDeliverySnapshot(cached.snapshotJson()), record.businessFields())
         );
       }
     }
@@ -1473,6 +1515,32 @@ public class ShipmentTrackingService {
       );
     }
 
+    return completeTrack(request, upstream, cached, importedDetails, user, trustedAutomaticRefresh, now, false);
+  }
+
+  NormalizedTrackRequest validatePublishedRequest(ShipmentTrackRequest input, AuthenticatedUser user,
+      boolean verifyShipmentAccess) {
+    NormalizedTrackRequest request = normalize(input);
+    normalizeImportedDetails(input, request, user);
+    if (verifyShipmentAccess) {
+      ShipmentIdentity existing = findShipmentByAnyReference(List.of(new ShipmentReference(
+          request.carrier(), request.type(), request.number(), request.number(), true)));
+      if (existing != null && !accessService.hasAccess(existing.publicId(), user)) {
+        throw new ApiException(HttpStatus.FORBIDDEN, "Shipment import access has not been granted");
+      }
+    }
+    return request;
+  }
+
+  ObjectNode persistPublishedResult(ShipmentTrackRequest input, ObjectNode upstream, AuthenticatedUser owner) {
+    NormalizedTrackRequest request = normalize(input);
+    return completeTrack(request, upstream, findCached(request), normalizeImportedDetails(input, request, owner),
+        owner, false, clock.instant(), true);
+  }
+
+  private ObjectNode completeTrack(NormalizedTrackRequest request, JsonNode upstream, CachedShipment cached,
+      ShipmentImportDetails importedDetails, AuthenticatedUser user, boolean trustedAutomaticRefresh,
+      Instant now, boolean verifyShipmentAccess) {
     JsonNode snapshot = upstream.path("snapshot");
     if (!snapshot.isObject()) {
       throw new ApiException(
@@ -1482,7 +1550,24 @@ public class ShipmentTrackingService {
     }
     upstream = enrichWithImportedDetails(upstream, importedDetails);
     if (!properties.usesLocalQueue()) upstream = ensureRouteFallback(upstream, importedDetails);
-    snapshot = upstream.path("snapshot");
+    upstream = upstream.deepCopy();
+    ObjectNode deliverySnapshot = (ObjectNode) upstream.path("snapshot");
+    snapshot = deliverySnapshot;
+    boolean legacySupplemental = properties.supportsLegacySupplemental()
+        && "COSCO".equals(request.carrier()) && "BOOKING".equals(request.type())
+        && !SINGLE_RESPONSE.equals(snapshot.path("deliveryMode").asText())
+        && (LEGACY_SUPPLEMENTAL.equals(snapshot.path("deliveryMode").asText())
+            || upstream.path("enrichment").path("partial").asBoolean(false));
+    if (legacySupplemental) {
+      deliverySnapshot.put("deliveryMode", LEGACY_SUPPLEMENTAL);
+      ObjectNode supplemental = deliverySnapshot.putObject("supplementalDetails");
+      supplemental.put("partial", true);
+      supplemental.put("pendingRefresh", true);
+      supplemental.put("lastAppliedRequestStartedAt", now.toString());
+      supplemental.put("lastAppliedRequestId", "main-" + UUID.randomUUID());
+    } else {
+      markSingleResponse((ObjectNode) upstream);
+    }
     if (!hasMeaningfulTrackingData(snapshot)) {
       if (cached != null) {
         if (request.batchTaskId() != null) {
@@ -1515,35 +1600,25 @@ public class ShipmentTrackingService {
       return transientLiveResponse(upstream);
     }
 
-    boolean supplementalIncomplete = !properties.usesLocalQueue() && (request.batchTaskId() != null
-        || upstream.path("enrichment").path("partial").asBoolean(false));
-    if (supplementalIncomplete && snapshot.isObject()) {
-      ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
-      supplemental.put("partial", true);
-      supplemental.put("pendingRefresh", true);
-      // The carry-forward base is deliberately resolved later, after persist() acquires the
-      // shipment lock. A supplemental request may complete while the main carrier call is in
-      // flight, so the pre-request cache is not a safe merge base.
-      supplemental.remove(List.of("carriedForward", "sourceFetchedAt"));
-    }
-    if (!properties.usesLocalQueue() && "COSCO".equals(request.carrier()) && "BOOKING".equals(request.type())
-        && snapshot.isObject()) {
-      ObjectNode supplemental = childObject((ObjectNode) snapshot, "supplementalDetails");
-      supplemental.put("lastAppliedRequestStartedAt", now.toString());
-      supplemental.put("lastAppliedRequestId", "main-" + UUID.randomUUID());
-    }
-
     boolean dataChanged = cached == null
         || !mainTrackingFingerprint(snapshot).equals(
             mainTrackingFingerprint(readJson(cached.snapshotJson()))
         );
     PersistedShipment persisted = persistAtomically(
-        request, upstream, cached, importedDetails, user, now
+        request, upstream, cached, importedDetails, user, now, verifyShipmentAccess
     );
     if (persisted == null) {
       throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist tracking result");
     }
     matchImportedClientCode(persisted, importedDetails, user, now);
+    if (persisted.retainedSnapshot() != null) {
+      CachedShipment retained = persisted.retainedSnapshot();
+      ObjectNode response = cachedResponse(retained, user,
+          retained.freshUntil() == null || retained.freshUntil().isBefore(now));
+      response.put("persisted", true);
+      response.put("dataChanged", false);
+      return response;
+    }
     ObjectNode response = liveResponse(upstream, persisted, user);
     response.put("dataChanged", dataChanged);
     return response;
@@ -1695,10 +1770,17 @@ public class ShipmentTrackingService {
           "keyTimes",
           "route",
           "routingLegs",
+          "containers",
+          "events",
+          "references",
           "transportStatuses",
           "sailingSchedule"
       )) {
         if (snapshot.has(field)) stable.set(field, snapshot.path(field));
+      }
+      JsonNode source = snapshot.path("sourceDetails");
+      for (String field : List.of("fields", "extraFields", "additionalEvents")) {
+        if (source.has(field)) stable.set(field, source.path(field));
       }
     }
     return writeJson(stable);
@@ -1865,7 +1947,8 @@ public class ShipmentTrackingService {
       String errorCode,
       String errorMessage
   ) {
-    if (shipmentPublicId == null || shipmentPublicId.isBlank()) return false;
+    if (shipmentPublicId == null || shipmentPublicId.isBlank()
+        || !canRefreshLegacySupplemental(shipmentPublicId.trim())) return false;
     List<String> normalizedSources = (sources == null ? List.<String>of() : sources).stream()
         .map(value -> value == null ? "" : value.trim())
         .filter(value -> value.equals("bookingInfo") || value.equals("containerInfo"))
@@ -1901,6 +1984,7 @@ public class ShipmentTrackingService {
       List<String> supplementalSources
   ) {
     if (!trustedAutomaticRefresh) requireBatchShipmentAccess(shipmentPublicId, user);
+    requireLegacySupplemental();
     NormalizedTrackRequest request = normalize(input);
     if (!"COSCO".equals(request.carrier()) || !"BOOKING".equals(request.type())) {
       throw new ApiException(
@@ -1928,6 +2012,7 @@ public class ShipmentTrackingService {
           "The requested carrier reference does not belong to this shipment"
       );
     }
+    requireLegacySupplementalSnapshot(currentSnapshotForSupplemental(shipmentPublicId.trim()));
 
     Instant supplementalRequestStartedAt = clock.instant();
     String supplementalRequestId = "supplemental-" + UUID.randomUUID();
@@ -2000,7 +2085,13 @@ public class ShipmentTrackingService {
       String errorMessage,
       String expectedLeaseToken
   ) {
-    if (shipmentPublicId == null || shipmentPublicId.isBlank()) return;
+    if (!properties.supportsLegacySupplemental()
+        || shipmentPublicId == null || shipmentPublicId.isBlank()) return;
+    String currentJson = currentSnapshotJsonForSupplemental(shipmentPublicId.trim());
+    if (currentJson == null) return;
+    JsonNode current = readJson(currentJson);
+    if (!LEGACY_SUPPLEMENTAL.equals(current.path("deliveryMode").asText())
+        || (!succeeded && !hasPendingLegacySupplemental(current))) return;
     String ownershipClause = expectedLeaseToken == null || expectedLeaseToken.isBlank()
         ? ""
         : " AND EXISTS (SELECT 1 FROM cp_tracking_refresh_jobs j "
@@ -2011,6 +2102,7 @@ public class ShipmentTrackingService {
     arguments.add(succeeded ? null : trim(errorMessage, 1000));
     arguments.add(timestamp(clock.instant()));
     arguments.add(shipmentPublicId.trim());
+    arguments.add(currentJson);
     if (!ownershipClause.isEmpty()) arguments.add(expectedLeaseToken);
     jdbcTemplate.update(
         """
@@ -2018,6 +2110,9 @@ public class ShipmentTrackingService {
         SET last_refresh_result = ?, last_refresh_error_code = ?, last_refresh_error = ?,
             last_refresh_at = ?, updated_at = updated_at
         WHERE public_id = ?
+          AND EXISTS (SELECT 1 FROM cp_tracking_snapshots sn
+            WHERE sn.id = cp_shipments.current_snapshot_id AND sn.invalidated_at IS NULL
+              AND sn.snapshot_json = ?)
         """ + ownershipClause,
         arguments.toArray()
     );
@@ -2030,6 +2125,8 @@ public class ShipmentTrackingService {
       AuthenticatedUser user
   ) {
     requireBatchShipmentAccess(shipmentPublicId, user);
+    requireLegacySupplemental();
+    requireLegacySupplementalSnapshot(currentSnapshotForSupplemental(shipmentPublicId.trim()));
     NormalizedTrackRequest request = normalize(new ShipmentTrackRequest(
         "COSCO", "AUTO", "BOOKING", bookingNumber, false, null, batchTaskId
     ));
@@ -2055,6 +2152,8 @@ public class ShipmentTrackingService {
       AuthenticatedUser user
   ) {
     requireBatchShipmentAccess(shipmentPublicId, user);
+    requireLegacySupplemental();
+    requireLegacySupplementalSnapshot(currentSnapshotForSupplemental(shipmentPublicId.trim()));
     ObjectNode response = track(
         new ShipmentTrackRequest(
             "COSCO", "AUTO", "CONTAINER", containerNumber, false, null, batchTaskId
@@ -2081,6 +2180,20 @@ public class ShipmentTrackingService {
     if (shipmentPublicId == null || shipmentPublicId.isBlank()
         || !accessService.hasAccess(shipmentPublicId, user)) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Shipment access has not been granted");
+    }
+  }
+
+  private void requireLegacySupplemental() {
+    if (!properties.supportsLegacySupplemental()) {
+      throw new ApiException(HttpStatus.CONFLICT, "TRACKING_SUPPLEMENTAL_UNSUPPORTED",
+          "This tracking adapter uses a single result per shipment");
+    }
+  }
+
+  private void requireLegacySupplementalSnapshot(JsonNode snapshot) {
+    if (!LEGACY_SUPPLEMENTAL.equals(snapshot.path("deliveryMode").asText())) {
+      throw new ApiException(HttpStatus.CONFLICT, "TRACKING_SUPPLEMENTAL_UNSUPPORTED",
+          "The current shipment snapshot does not use legacy supplemental tracking");
     }
   }
 
@@ -2199,6 +2312,7 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
     }
     ObjectNode snapshot = (ObjectNode) parsed;
+    requireLegacySupplementalSnapshot(snapshot);
     Map<String, ObjectNode> mergedByNumber = new LinkedHashMap<>();
     JsonNode currentContainers = snapshot.path("containers");
     if (currentContainers.isArray()) {
@@ -2216,7 +2330,7 @@ public class ShipmentTrackingService {
           number,
           ignored -> objectMapper.createObjectNode().put("number", number)
       );
-      mergeUsefulContainerFields(target, (ObjectNode) incoming);
+      mergeContainerDelta(target, (ObjectNode) incoming, true);
       if (detailed) target.put("detailSource", "CONTAINER_SUBQUERY");
     }
 
@@ -2295,6 +2409,7 @@ public class ShipmentTrackingService {
       throw new ApiException(HttpStatus.CONFLICT, "Shipment tracking snapshot is invalid");
     }
     ObjectNode snapshot = (ObjectNode) parsed;
+    requireLegacySupplementalSnapshot(snapshot);
     ObjectNode enrichment = childObject(snapshot, "supplementalDetails");
     Instant lastAppliedStartedAt = parseInstant(
         enrichment.path("lastAppliedRequestStartedAt").asText(null), null
@@ -2323,7 +2438,7 @@ public class ShipmentTrackingService {
           number,
           ignored -> objectMapper.createObjectNode().put("number", number)
       );
-      mergeUsefulContainerFields(target, (ObjectNode) incoming, !superseded);
+      mergeContainerDelta(target, (ObjectNode) incoming, !superseded);
     }
     ArrayNode mergedContainers = objectMapper.createArrayNode();
     containersByNumber.values().forEach(mergedContainers::add);
@@ -2334,7 +2449,7 @@ public class ShipmentTrackingService {
     mergeReferenceArray(references, incomingReferences, "external");
     JsonNode incomingBusiness = incomingReferences.path("business");
     if (incomingBusiness.isObject()) {
-      mergeUsefulContainerFields(
+      mergeUsefulFields(
           childObject(references, "business"),
           (ObjectNode) incomingBusiness,
           !superseded
@@ -2452,26 +2567,96 @@ public class ShipmentTrackingService {
     return normalized.matches("[A-Z]{4}[0-9]{7}") ? normalized : null;
   }
 
-  private void mergeUsefulContainerFields(ObjectNode target, ObjectNode incoming) {
-    mergeUsefulContainerFields(target, incoming, true);
+  private void mergeContainerDelta(
+      ObjectNode target,
+      ObjectNode incoming,
+      boolean overwriteExisting
+  ) {
+    ObjectNode fields = incoming.deepCopy();
+    JsonNode milestones = fields.remove("milestones");
+    mergeUsefulFields(target, fields, overwriteExisting);
+    if (milestones == null || !milestones.isArray() || milestones.isEmpty()) return;
+    JsonNode previous = target.path("milestones");
+    if (!overwriteExisting && !previous.isArray() && usefulField(previous)) return;
+    Map<List<JsonNode>, JsonNode> byEvent = new LinkedHashMap<>();
+    if (previous.isArray()) {
+      for (JsonNode event : previous) {
+        mergeMilestone(byEvent, event, false);
+      }
+    }
+    for (JsonNode event : milestones) {
+      if (!usefulField(event)) continue;
+      mergeMilestone(byEvent, event, overwriteExisting);
+    }
+    if (byEvent.isEmpty()) return;
+    ArrayNode merged = target.putArray("milestones");
+    byEvent.values().forEach(merged::add);
   }
 
-  private void mergeUsefulContainerFields(
+  private void mergeMilestone(
+      Map<List<JsonNode>, JsonNode> byEvent, JsonNode event, boolean overwriteExisting
+  ) {
+    JsonNode existing = byEvent.putIfAbsent(milestoneIdentity(event), event.deepCopy());
+    if (existing instanceof ObjectNode storedEvent && event instanceof ObjectNode newEvent) {
+      mergeUsefulFields(storedEvent, newEvent, overwriteExisting);
+    }
+  }
+
+  private List<JsonNode> milestoneIdentity(JsonNode event) {
+    JsonNode name = firstUsefulField(event, "name", "description", "status");
+    JsonNode time = firstUsefulField(event, "occurredAt", "estimatedAt", "time", "reportedTime");
+    JsonNode location = firstUsefulField(event, "location", "locationName");
+    if (!usefulField(name) && !usefulField(time) && !usefulField(location)) {
+      return List.of(event);
+    }
+    JsonNode actual = event.path("actual");
+    boolean estimated = actual.isBoolean() ? !actual.booleanValue()
+        : !usefulField(event.path("occurredAt")) && usefulField(event.path("estimatedAt"));
+    return List.of(firstUsefulField(event, "source"), name, time, BooleanNode.valueOf(estimated), location,
+        firstUsefulField(event, "containerNumber", "container_number"));
+  }
+
+  private JsonNode firstUsefulField(JsonNode event, String... keys) {
+    for (String key : keys) {
+      JsonNode value = event.path(key);
+      if (usefulField(value)) return value;
+    }
+    return objectMapper.nullNode();
+  }
+
+  private void mergeUsefulFields(
       ObjectNode target,
       ObjectNode incoming,
       boolean overwriteExisting
   ) {
     incoming.fields().forEachRemaining(entry -> {
       JsonNode value = entry.getValue();
-      if (value == null || value.isNull() || value.isMissingNode()) return;
-      if (value.isTextual() && value.asText().isBlank()) return;
-      if ((value.isArray() || value.isObject()) && value.isEmpty()) return;
+      if (!usefulField(value)) return;
       JsonNode existing = target.get(entry.getKey());
-      if (!overwriteExisting && existing != null && !existing.isNull()
-          && !(existing.isTextual() && existing.asText().isBlank())
-          && !((existing.isArray() || existing.isObject()) && existing.isEmpty())) return;
-      target.set(entry.getKey(), value.deepCopy());
+      if (value instanceof ObjectNode incomingObject && existing instanceof ObjectNode storedObject) {
+        mergeUsefulFields(storedObject, incomingObject, overwriteExisting);
+      } else if (overwriteExisting || !usefulField(existing)) {
+        if (value instanceof ObjectNode incomingObject) {
+          ObjectNode newObject = objectMapper.createObjectNode();
+          mergeUsefulFields(newObject, incomingObject, overwriteExisting);
+          if (!newObject.isEmpty()) target.set(entry.getKey(), newObject);
+        } else {
+          target.set(entry.getKey(), value.deepCopy());
+        }
+      }
     });
+  }
+
+  private boolean usefulField(JsonNode value) {
+    if (value != null && value.isArray()) {
+      for (JsonNode element : value) {
+        if (usefulField(element)) return true;
+      }
+      return false;
+    }
+    return value != null && !value.isNull() && !value.isMissingNode()
+        && !(value.isTextual() && value.asText().isBlank())
+        && !(value.isContainerNode() && value.isEmpty());
   }
 
   private String trackingFailureCode(ApiException error) {
@@ -2540,17 +2725,18 @@ public class ShipmentTrackingService {
       CachedShipment existingQuery,
       ShipmentImportDetails importedDetails,
       AuthenticatedUser user,
-      Instant now
+      Instant now,
+      boolean verifyShipmentAccess
   ) {
     try {
       return transactionTemplate.execute(
-          status -> persist(request, upstream, existingQuery, importedDetails, user, now)
+          status -> persist(request, upstream, existingQuery, importedDetails, user, now, verifyShipmentAccess)
       );
     } catch (DuplicateKeyException race) {
       CachedShipment winner = findCached(request);
       if (winner == null) throw race;
       return transactionTemplate.execute(
-          status -> persist(request, upstream, winner, importedDetails, user, now)
+          status -> persist(request, upstream, winner, importedDetails, user, now, verifyShipmentAccess)
       );
     }
   }
@@ -2561,7 +2747,8 @@ public class ShipmentTrackingService {
       CachedShipment existingQuery,
       ShipmentImportDetails importedDetails,
       AuthenticatedUser user,
-      Instant now
+      Instant now,
+      boolean verifyShipmentAccess
   ) {
     JsonNode snapshot = upstream.path("snapshot");
     if (!snapshot.isObject()) {
@@ -2571,21 +2758,35 @@ public class ShipmentTrackingService {
     ShipmentIdentity shipment = existingQuery == null
         ? findShipmentByAnyReference(references)
         : new ShipmentIdentity(existingQuery.shipmentId(), existingQuery.shipmentPublicId());
-    if (shipment == null) {
-      shipment = createShipment(request.carrier(), user, now);
-    }
+    boolean created = shipment == null;
+    if (created) shipment = createShipment(request.carrier(), user, now);
     jdbcTemplate.queryForObject(
         "SELECT id FROM cp_shipments WHERE id = ? FOR UPDATE",
         Long.class,
         shipment.id()
     );
+    if (verifyShipmentAccess && !created && !accessService.hasAccess(shipment.publicId(), user)) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "Shipment import access has not been granted");
+    }
+    Instant fetchedAt = parseInstant(snapshot.path("fetchedAt").asText(null), now);
+    CachedShipment newer = created ? null : findNewerSnapshot(shipment, fetchedAt);
+    if (newer != null) {
+      if (importedDetails != null) {
+        persistImportedBusinessFields(shipment.id(), importedDetails, now);
+        if (mergeImportedDetailsIntoCurrentSnapshot(shipment.id(), importedDetails, now)) {
+          newer = findNewerSnapshot(shipment, fetchedAt);
+        }
+      }
+      return new PersistedShipment(shipment.id(), shipment.publicId(),
+          newer.fetchedAt(), newer.freshUntil(), newer);
+    }
     for (ShipmentReference reference : references) {
       attachReference(shipment.id(), reference);
     }
     persistImportedBusinessFields(shipment.id(), importedDetails, now);
     invalidateUnusableCurrentSnapshot(shipment.id(), user, now);
 
-    if (snapshot.path("supplementalDetails").path("pendingRefresh").asBoolean(false)) {
+    if (hasPendingLegacySupplemental(snapshot)) {
       MutableSnapshot latest = lockCurrentSnapshotByShipmentId(shipment.id(), false);
       boolean carriedForward = latest != null && carryForwardSupplementalData(
           (ObjectNode) snapshot,
@@ -2603,7 +2804,6 @@ public class ShipmentTrackingService {
     String snapshotJson = writeJson(snapshot);
     JsonNode strategy = upstream.path("strategy");
     String strategyJson = strategy.isMissingNode() || strategy.isNull() ? null : writeJson(strategy);
-    Instant fetchedAt = parseInstant(snapshot.path("fetchedAt").asText(null), now);
     Instant freshUntil = now.plus(cacheTtl());
     long snapshotId = insertSnapshot(
         shipment.id(),
@@ -2637,6 +2837,23 @@ public class ShipmentTrackingService {
         shipment.id(), shipment.publicId(), snapshot.deepCopy(), now
     ));
     return new PersistedShipment(shipment.id(), shipment.publicId(), fetchedAt, freshUntil);
+  }
+
+  private CachedShipment findNewerSnapshot(ShipmentIdentity shipment, Instant fetchedAt) {
+    return jdbcTemplate.query("""
+        SELECT t.fetched_at, t.fresh_until, t.snapshot_json, t.strategy_json
+        FROM cp_shipments s
+        JOIN cp_tracking_snapshots t ON t.id = s.current_snapshot_id
+        WHERE s.id = ? AND t.invalidated_at IS NULL AND t.fetched_at > ?
+        FOR UPDATE
+        """, (rs, row) -> {
+          Timestamp freshUntil = rs.getTimestamp("fresh_until");
+          return new CachedShipment(shipment.id(), shipment.publicId(), rs.getString("snapshot_json"),
+              rs.getString("strategy_json"), rs.getTimestamp("fetched_at").toInstant(),
+              freshUntil == null ? null : freshUntil.toInstant());
+        }, shipment.id(), timestamp(fetchedAt)).stream()
+        .filter(cached -> hasMeaningfulTrackingData(readJson(cached.snapshotJson())))
+        .findFirst().orElse(null);
   }
 
   private CachedShipment findCached(NormalizedTrackRequest request) {
@@ -3036,9 +3253,26 @@ public class ShipmentTrackingService {
     if (value != null && !value.isBlank()) target.put(field, value);
   }
 
+  private JsonNode readDeliverySnapshot(String snapshotJson) {
+    return projectSnapshotDelivery(readJson(snapshotJson), properties);
+  }
+
+  /** Applies the delivery contract to a freshly parsed stored snapshot. */
+  public static JsonNode projectSnapshotDelivery(
+      JsonNode snapshot, ShipmentTrackingProperties properties
+  ) {
+    if (snapshot instanceof ObjectNode saved
+        && (!properties.supportsLegacySupplemental()
+            || !LEGACY_SUPPLEMENTAL.equals(saved.path("deliveryMode").asText()))) {
+      saved.remove("supplementalDetails");
+      saved.put("deliveryMode", SINGLE_RESPONSE);
+    }
+    return snapshot;
+  }
+
   private ObjectNode cachedResponse(CachedShipment cached, AuthenticatedUser user, boolean stale) {
     ObjectNode response = objectMapper.createObjectNode();
-    response.set("snapshot", readJson(cached.snapshotJson()));
+    response.set("snapshot", readDeliverySnapshot(cached.snapshotJson()));
     JsonNode routed = ensureRouteFallback(response, null);
     if (routed.path("snapshot").isObject()) {
       response.set("snapshot", routed.path("snapshot").deepCopy());
@@ -3606,6 +3840,11 @@ public class ShipmentTrackingService {
       long shipmentId,
       String shipmentPublicId,
       Instant fetchedAt,
-      Instant freshUntil
-  ) {}
+      Instant freshUntil,
+      CachedShipment retainedSnapshot
+  ) {
+    private PersistedShipment(long shipmentId, String shipmentPublicId, Instant fetchedAt, Instant freshUntil) {
+      this(shipmentId, shipmentPublicId, fetchedAt, freshUntil, null);
+    }
+  }
 }

@@ -13,19 +13,26 @@ type Cargo = {
   quantity: number;
   weightKg: number;
 };
-const props = defineProps<{ cargos: Cargo[] }>();
+const props = defineProps<{
+  cargos: Cargo[];
+  visibleIds?: Set<string>;
+  colorById?: Map<string, string>;
+}>();
 const emit = defineEmits<{ edit: [cargo: Cargo] }>();
 const colors = ["#1684a3", "#e88c39", "#43a49a", "#6581bc", "#bb7e9b", "#859c4a"];
 const rows = computed(() => {
   const total = props.cargos.reduce((sum, item) => sum + volume(item), 0);
   return props.cargos.map((cargo, index) => ({
     cargo,
-    color: cargo.color || colors[index % colors.length],
+    color: cargo.color || props.colorById?.get(cargo.id) || colors[index % colors.length],
     volume: volume(cargo),
     share: total > 0 ? (volume(cargo) / total) * 100 : 0,
     size: Math.max(cargo.lengthCm, cargo.widthCm, cargo.heightCm, 1)
   }));
 });
+const visibleRows = computed(() =>
+  props.visibleIds ? rows.value.filter((row) => props.visibleIds?.has(row.cargo.id)) : rows.value
+);
 function volume(cargo: Cargo) {
   return (cargo.lengthCm * cargo.widthCm * cargo.heightCm * cargo.quantity) / 1000000;
 }
@@ -49,7 +56,7 @@ const number = (value: number, digits = 1) =>
     </div>
     <div class="cargo-overview-grid">
       <button
-        v-for="row in rows"
+        v-for="row in visibleRows"
         :key="row.cargo.id"
         class="cargo-overview-item"
         type="button"

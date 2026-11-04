@@ -287,6 +287,11 @@ public class BusinessCustomerService {
         overseaAgentPublicId, request, actor, ipAddress);
   }
 
+  public void requireShipmentImportCustomer(String customerPublicId, AuthenticatedUser actor) {
+    accessGuard.requireManager(actor);
+    lookupService.requireManaged(customerPublicId, actor);
+  }
+
   public Map<String, Object> listShipments(String customerPublicId, AuthenticatedUser actor) {
     return bindingService.listShipments(customerPublicId, actor);
   }

@@ -72,13 +72,17 @@
     </header>
 
     <section class="portal-content">
-      <WorkspacePageHeader
-        :title="t('portal.greeting', { name: displayName })"
-        :description="t('portal.heroDescription')"
-        ><template #meta
-          ><span class="portal-today">{{ todayText }}</span></template
-        ></WorkspacePageHeader
-      >
+      <div class="portal-masthead">
+        <WorkspacePageHeader
+          :title="t('portal.mastheadTitle')"
+          :description="t('portal.heroDescription')"
+          ><template #meta
+            ><span class="portal-today">{{ displayName }}</span>
+            <span class="portal-today" aria-hidden="true">·</span>
+            <span class="portal-today">{{ todayText }}</span></template
+          ></WorkspacePageHeader
+        >
+      </div>
 
       <button class="portal-task-row" type="button" @click="emit('open-announcements')">
         <span
@@ -92,6 +96,8 @@
         <b>{{ announcementCount }}</b>
         <svg viewBox="0 0 22 22" aria-hidden="true"><path d="M4 11h13m-5-5 5 5-5 5" /></svg>
       </button>
+
+      <WorkbenchJourneys :role="currentUser?.role" />
 
       <section class="portal-workbench-section" :aria-label="t('portal.sectionAria')">
         <header class="portal-section-head">
@@ -287,6 +293,7 @@ import { wt } from "./workspace/workspaceCopy";
 import WorkspaceNavigation from "./workspace/WorkspaceNavigation.vue";
 import WorkspacePageHeader from "./workspace/WorkspacePageHeader.vue";
 import WorkbenchEntryCard from "./workspace/WorkbenchEntryCard.vue";
+import WorkbenchJourneys from "./workspace/WorkbenchJourneys.vue";
 import BrandLockup from "./brand/BrandLockup.vue";
 import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
@@ -1242,14 +1249,35 @@ async function submitPasswordChange() {
 </style>
 
 <style scoped>
-/* The portal shares the quiet white surfaces and blue accents of the reference workspace. */
+/* A flat heading and a ruled directory give the workspace a readable rhythm. */
+.portal-masthead {
+  display: grid;
+  align-items: center;
+  min-height: 160px;
+  margin-bottom: 18px;
+  padding: 20px min(28%, 360px) 20px 22px;
+  border-block-end: 1px solid var(--color-border-strong);
+  background:
+    linear-gradient(90deg, var(--color-background) 48%, transparent 94%),
+    url("/brand/v4/open-voyage.webp") right 47% / 60% auto no-repeat;
+}
+.portal-masthead :deep(.workspace-page-header) {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .portal-masthead {
+    min-height: 0;
+    padding: 4px 0 16px;
+    background: none;
+  }
+}
 .is-content-only .portal-content {
   padding: 28px;
 }
 .is-content-only .portal-content :deep(.workspace-page-header__title) {
-  font-size: 32px;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: clamp(30px, 3.2vw, 42px);
+  font-weight: 700;
+  line-height: 1.18;
   color: var(--color-foreground);
 }
 .portal-content :deep(.workspace-page-header__description) {
@@ -1257,7 +1285,7 @@ async function submitPasswordChange() {
 }
 .portal-task-row {
   border-color: #dce8fa;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: #edf4ff;
   min-height: 56px;
   padding: 12px 20px;
@@ -1281,8 +1309,13 @@ async function submitPasswordChange() {
   gap: 18px;
 }
 .portal-quick-links {
-  padding: 20px;
+  padding: 18px 0 0;
   margin-top: 24px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  box-shadow: none;
 }
 .portal-quick-links h2 {
   margin-bottom: 14px;
@@ -1291,7 +1324,10 @@ async function submitPasswordChange() {
 }
 .portal-quick-links a {
   padding: 13px 30px 13px 14px;
-  border-color: var(--color-border);
+  border: 0;
+  border-left: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-foreground);
 }
 .portal-quick-links small {
@@ -1317,7 +1353,7 @@ async function submitPasswordChange() {
     gap: 14px;
   }
   .portal-quick-links {
-    padding: 16px;
+    padding: 16px 0 0;
   }
 }
 </style>

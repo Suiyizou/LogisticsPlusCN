@@ -26,6 +26,7 @@ html:root {
   --font-ui:
     "Inter Variable", "Noto Sans SC Variable", "Segoe UI", "Microsoft YaHei", "PingFang SC",
     sans-serif;
+  --font-display: "Space Grotesk Variable", "Noto Sans SC Variable", var(--font-ui);
   --font-data: var(--font-ui);
   --space-1: 4px;
   --space-2: 8px;

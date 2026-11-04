@@ -4,6 +4,8 @@ import { createI18n } from "vue-i18n";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import en from "element-plus/es/locale/lang/en";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, localeOptions, messages } from "./messages";
+import { shipmentTaskManagementMessages } from "./shipmentTaskManagementMessages.js";
+import { shipmentTaskPublisherMessages } from "./shipmentTaskPublisherMessages.js";
 import { shipmentBatchMessages } from "./shipmentBatchMessages";
 import { customerWorkflowMessages } from "./customerWorkflowMessages.js";
 import { adminWorkflowMessages } from "./adminWorkflowMessages.js";
@@ -12,6 +14,8 @@ import { publicSiteMessages } from "./publicSiteMessages.js";
 
 for (const locale of SUPPORTED_LOCALES) {
   messages[locale].publicSite = publicSiteMessages[locale].publicSite;
+  messages[locale].shipmentTask = shipmentTaskPublisherMessages[locale];
+  messages[locale].shipmentTaskManagement = shipmentTaskManagementMessages[locale];
   messages[locale].adminWorkflow = adminWorkflowMessages[locale];
   messages[locale].moduleExample = moduleExampleMessages[locale];
   Object.assign(messages[locale].customers, shipmentBatchMessages[locale]);

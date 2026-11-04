@@ -3,84 +3,97 @@
     <section class="business-chart-card business-chart-card--trend">
       <header>
         <div>
-          <b>{{ t("customers.overviewSevenDayTrend") }}</b>
+          <h2>{{ t("customers.overviewSevenDayTrend") }}</h2>
           <small>{{ t("customers.overviewTrendHint") }}</small>
         </div>
+        <span class="business-chart-index" aria-hidden="true">01</span>
       </header>
       <div class="business-chart-body" v-loading="loading">
         <div
+          v-if="trendHasData"
           ref="overviewTrendChartRef"
-          class="business-echart"
+          class="business-echart commercial-reveal"
           role="img"
           :aria-label="t('customers.overviewSevenDayTrend')"
         ></div>
-        <div v-if="!loading && !trendHasData" class="business-chart-empty">
-          <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
-        </div>
+        <p v-else-if="!loading" class="business-chart-empty commercial-state">
+          <span aria-hidden="true">—</span>
+          {{ commercialText("overviewTrendEmpty") }}
+        </p>
       </div>
     </section>
     <section class="business-chart-card">
       <header>
         <div>
-          <b>{{ t("customers.overviewTodayCompositionTitle") }}</b>
+          <h2>{{ t("customers.overviewTodayCompositionTitle") }}</h2>
           <small>{{ t("customers.overviewTodayCompositionHint") }}</small>
         </div>
+        <span class="business-chart-index" aria-hidden="true">02</span>
       </header>
       <div class="business-chart-body" v-loading="loading">
         <div
+          v-if="todayHasData"
           ref="overviewTodayChartRef"
-          class="business-echart"
+          class="business-echart commercial-reveal"
           role="img"
           :aria-label="t('customers.overviewTodayCompositionTitle')"
         ></div>
-        <div v-if="!loading && !todayHasData" class="business-chart-empty">
-          <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
-        </div>
+        <p v-else-if="!loading" class="business-chart-empty commercial-state">
+          <span aria-hidden="true">—</span>
+          {{ commercialText("overviewTodayEmpty") }}
+        </p>
       </div>
     </section>
     <section class="business-chart-card business-chart-card--resources">
       <header>
         <div>
-          <b>{{ t("customers.overviewResourceTitle") }}</b>
+          <h2>{{ t("customers.overviewResourceTitle") }}</h2>
           <small>{{ t("customers.overviewDataSource") }}</small>
         </div>
+        <span class="business-chart-index" aria-hidden="true">03</span>
       </header>
       <div class="business-chart-body" v-loading="loading">
         <div
+          v-if="resourcesHaveData"
           ref="overviewResourcesChartRef"
-          class="business-echart"
+          class="business-echart commercial-reveal"
           role="img"
           :aria-label="t('customers.overviewResourceTitle')"
         ></div>
-        <div v-if="!loading && !resourcesHaveData" class="business-chart-empty">
-          <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
-        </div>
+        <p v-else-if="!loading" class="business-chart-empty commercial-state">
+          <span aria-hidden="true">—</span>
+          {{ commercialText("overviewResourcesEmpty") }}
+        </p>
       </div>
     </section>
     <section class="business-chart-card">
       <header>
         <div>
-          <b>{{ t("customers.overviewShipmentStatusTitle") }}</b>
+          <h2>{{ t("customers.overviewShipmentStatusTitle") }}</h2>
           <small>{{ t("customers.overviewShipmentStatusHint") }}</small>
         </div>
+        <span class="business-chart-index" aria-hidden="true">04</span>
       </header>
       <div class="business-chart-body" v-loading="loading">
         <div
+          v-if="statusHasData"
           ref="overviewStatusChartRef"
-          class="business-echart"
+          class="business-echart commercial-reveal"
           role="img"
           :aria-label="t('customers.overviewShipmentStatusTitle')"
         ></div>
-        <div v-if="!loading && !statusHasData" class="business-chart-empty">
-          <el-empty :image-size="68" :description="t('customers.overviewNoData')" />
-        </div>
+        <p v-else-if="!loading" class="business-chart-empty commercial-state">
+          <span aria-hidden="true">—</span>
+          {{ commercialText("overviewStatusEmpty") }}
+        </p>
       </div>
     </section>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, onScopeDispose, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { commercialText } from "../../i18n/commercialWorkspaceMessages";
 import { init, use } from "echarts/core";
 import type { EChartsType } from "echarts/core";
 import type { OverviewTrendDatum, OverviewChartDatum } from "../../types/featureComponents";
@@ -166,15 +179,14 @@ function render() {
       : null
   );
 }
-onMounted(() => {
-  group.mount({
-    trend: overviewTrendChartRef.value,
-    today: overviewTodayChartRef.value,
-    resources: overviewResourcesChartRef.value,
-    status: overviewStatusChartRef.value
-  });
-  render();
-});
+watch(
+  [overviewTrendChartRef, overviewTodayChartRef, overviewResourcesChartRef, overviewStatusChartRef],
+  ([trend, today, resources, status]) => {
+    group.mount({ trend, today, resources, status });
+    render();
+  },
+  { flush: "post" }
+);
 watch(
   [
     () => props.trend,
@@ -195,20 +207,21 @@ defineExpose({ resize: group.resize });
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);
   gap: 14px;
+  align-items: start;
 }
 .business-chart-card {
   min-width: 0;
   padding: 17px 18px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  background: #fff;
+  background: var(--color-surface);
   box-shadow: none;
   overflow: hidden;
 }
 .business-chart-card > header {
-  min-height: 48px;
-  padding-bottom: 14px;
-  margin-bottom: 12px;
+  min-height: 42px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: flex-start;
@@ -219,10 +232,20 @@ defineExpose({ resize: group.resize });
   display: grid;
   gap: 3px;
 }
-.business-chart-card header b {
-  color: var(--color-primary);
-  font-size: 16px;
+.business-chart-card h2 {
+  margin: 0;
+  color: var(--color-foreground);
+  font-family: var(--font-display, var(--font-ui));
+  font-size: 19px;
   font-weight: 600;
+  line-height: 1.2;
+}
+.business-chart-index {
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font: 600 12px/1.5 var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
 }
 .business-chart-card header small {
   color: var(--color-muted);
@@ -231,30 +254,28 @@ defineExpose({ resize: group.resize });
 }
 .business-chart-body {
   position: relative;
-  min-height: 280px;
-  margin-top: 6px;
+  min-height: 56px;
 }
 .business-echart {
   width: 100%;
   height: 280px;
 }
 .business-chart-empty {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.94);
-  place-items: center;
-}
-.business-chart-empty :deep(.el-empty) {
-  padding: 16px 0;
-}
-.business-chart-empty :deep(.el-empty__description) {
-  margin-top: 4px;
-}
-.business-chart-empty :deep(.el-empty__description p) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  margin: 0;
+  padding: 9px 12px;
+  border-inline-start: 2px solid var(--color-border-strong);
+  background: var(--color-surface-subtle);
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.business-chart-empty > span {
+  flex: none;
+  color: var(--color-primary);
 }
 .business-chart-body :deep(.el-loading-mask) {
   background: rgba(255, 255, 255, 0.82);
@@ -270,10 +291,9 @@ defineExpose({ resize: group.resize });
   }
 }
 @media (max-width: 680px) {
-  .business-chart-body,
   .business-echart {
     height: 252px;
-    min-height: 252px;
   }
 }
 </style>
+<style scoped src="../../modules/shared/commercialWorkspaceMotion.css"></style>

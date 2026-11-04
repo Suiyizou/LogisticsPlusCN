@@ -7,50 +7,90 @@
   background: #f4f7fc;
 }
 .app-login-shell .app-login-photo {
-  padding: 0;
+  padding: clamp(30px, 4vw, 64px);
   gap: 40px;
-  background-image: url("/brand/v3/login-port-reference.webp");
-  background-position: center;
+  overflow: hidden;
+  background: #0b203b;
+}
+.app-login-shell .app-login-scene {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 .app-login-shell .app-login-photo::before {
-  inset: 82px 0 0;
-  background: linear-gradient(180deg, #0c1c3a00 65%, #0c1c3a1a);
+  inset: 0;
+  background: linear-gradient(180deg, #081b34ad, #081b3426 28%, #081b3494 56%, #081b34fa 100%);
 }
 .app-login-shell .app-login-photo > .public-brand {
-  min-height: 82px;
-  flex: none;
-  padding: 20px 40px;
-  background: #fff;
+  align-self: flex-start;
+  background: transparent;
 }
 .app-login-shell .app-login-photo-copy {
-  width: min(500px, calc(100% - 80px));
-  margin: 0 40px 44px;
-  padding: 30px 34px;
-  border: 1px solid #e2e9f3;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 8px 35px #0c1c3a0a;
+  max-width: 33rem;
+  margin: 0;
 }
 .app-login-shell .app-login-photo h2 {
-  color: #0c1c3a;
-  font-size: clamp(36px, 2.6vw, 40px);
-  font-weight: 700;
-  line-height: 1.4;
-}
-.app-login-shell .app-login-photo h2 br {
-  display: block;
+  color: white;
+  font: 500 clamp(33px, 4vw, 58px)/1.15 var(--font-display);
+  text-wrap: balance;
 }
 .app-login-shell .app-login-photo p {
-  color: #6b7d99;
-  font-size: 14px;
-  line-height: 1.75;
-  margin: 16px 0 0;
+  color: #dae7f5;
+  font-size: 15px;
+  margin: 14px 0 0;
 }
-.app-login-shell .app-login-photo-copy::after {
-  width: 34px;
+.app-login-scene-index {
+  display: block;
+  margin-bottom: 12px;
+  color: #b2d3ff;
+  font: 500 13px/1 var(--font-display);
+  letter-spacing: 0.15em;
+}
+.app-login-scenes {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+}
+.app-login-scenes button {
+  width: 46px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.app-login-scenes button span {
+  display: block;
+  width: 30px;
   height: 3px;
-  margin-top: 20px;
-  background: #0866e8;
+  background: #aac5e285;
+}
+.app-login-scenes button[aria-pressed="true"] span,
+.app-login-scenes button:hover span {
+  background: #fff;
+}
+.app-login-shell .app-login-photo :is(a, button):focus-visible {
+  outline-color: white;
+}
+.login-scene-enter-active,
+.login-scene-leave-active {
+  transition: opacity 420ms ease;
+}
+.login-scene-enter-from,
+.login-scene-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-scene-enter-active,
+  .login-scene-leave-active {
+    transition: none;
+  }
 }
 .app-login-shell .app-login-side {
   background: #fff;
@@ -157,16 +197,6 @@
   color: #6b7d99;
   font-size: 13px;
 }
-@media (max-width: 900px) {
-  .app-login-shell .app-login-photo > .public-brand {
-    padding-inline: 28px;
-  }
-  .app-login-shell .app-login-photo-copy {
-    width: calc(100% - 48px);
-    margin: 0 24px 28px;
-    padding: 24px;
-  }
-}
 @media (max-width: 760px) {
   .app-login-shell {
     display: block;
@@ -177,5 +207,61 @@
   }
   .app-login-shell .app-login-title h1 {
     font-size: 32px;
+  }
+}
+
+.app-login-shell .app-login-mode-hint {
+  margin: -9px 0 18px;
+  color: #526882;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.app-login-shell .app-login-route-switch button:disabled {
+  cursor: wait;
+}
+.app-login-shell :is(a, button, input):focus-visible {
+  outline: 2px solid #0755d0;
+  outline-offset: 3px;
+}
+
+.app-login-shell .app-login-photo {
+  grid-area: 1 / 1;
+}
+.app-login-shell .app-login-side {
+  grid-area: 1 / 2;
+}
+@media (max-width: 760px) {
+  .app-login-shell .app-login-photo {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 270px;
+    padding: 26px 24px 18px;
+  }
+  .app-login-shell .app-login-photo > .public-brand {
+    display: none;
+  }
+  .app-login-shell .app-login-photo h2 {
+    font-size: clamp(24px, 6.4vw, 34px);
+  }
+}
+
+.app-login-scenes .app-login-scene-control {
+  width: 44px;
+  color: #e0edff;
+  font: 500 24px/1 var(--font-display);
+}
+.app-login-scenes .app-login-scene-control:hover {
+  color: white;
+  background: #ffffff20;
+}
+.app-login-scenes .app-login-scene-play {
+  font-size: 18px;
+}
+@media (max-width: 380px) {
+  .app-login-scenes {
+    gap: 1px;
+  }
+  .app-login-scenes button {
+    width: 44px;
   }
 }

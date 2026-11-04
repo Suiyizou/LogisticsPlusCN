@@ -103,6 +103,8 @@ services:
     build:
       context: ./tracking-service
       dockerfile: Dockerfile
+      args:
+        APP_TRACKING_ADAPTER_MODE: ${APP_TRACKING_ADAPTER_MODE:-LOCAL_QUEUE}
     image: cargo-platform-tracking:${IMAGE_TAG:-0.1.0}
     container_name: cargo-platform-tracking
     expose:
