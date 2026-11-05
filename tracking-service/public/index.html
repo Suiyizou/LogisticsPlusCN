@@ -1241,6 +1241,28 @@
                 <span id="supplemental-details-message">Loading transport details…</span>
               </div>
 
+              <section
+                class="panel carrier-facts-panel"
+                id="carrier-facts-panel"
+                aria-labelledby="carrier-facts-title"
+                hidden
+              >
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M4 7h16M4 12h16M4 17h10" />
+                      </svg>
+                    </span>
+                    <strong id="carrier-facts-title" data-i18n="carrierFacts.title"
+                      >Carrier key details</strong
+                    >
+                  </div>
+                  <span class="carrier-facts-note" id="carrier-facts-note" hidden></span>
+                </div>
+                <div class="carrier-facts-grid" id="carrier-facts-grid"></div>
+              </section>
+
               <div class="snapshot-route-context" id="snapshot-route-context">
                 <aside class="panel references-panel">
                   <div class="panel-header">

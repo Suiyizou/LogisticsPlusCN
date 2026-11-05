@@ -1,0 +1,112 @@
+.task-batch-picker {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-batch-picker-caption {
+  color: var(--color-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+:is(.task-batch-picker, .task-workbench, .shipment-task-management) .el-select__wrapper {
+  min-height: 38px;
+  border-radius: var(--radius-control);
+}
+
+.task-batch-picker-options .el-select-dropdown__item {
+  height: auto;
+  min-height: 56px;
+  padding-block: 8px;
+  line-height: 1.5;
+}
+
+.task-batch-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task-batch-icon {
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 19px;
+}
+
+.task-batch-content { min-width: 0; }
+
+.task-batch-name-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+  min-width: 0;
+}
+
+.task-batch-identity .task-batch-name {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.task-batch-identity.is-compact .task-batch-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-batch-status {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--task-batch-tone) 10%, var(--color-surface));
+  color: var(--task-batch-tone);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.task-batch-meta, .task-batch-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 11px;
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.task-batch-meta code { color: var(--color-secondary); }
+.task-batch-meta .task-batch-file { overflow-wrap: anywhere; }
+.task-batch-counts { color: var(--color-secondary); font-variant-numeric: tabular-nums; }
+
+.task-batch-delete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.task-batch-delete .task-danger { color: var(--color-destructive); }
+.task-batch-delete .task-danger:hover:not(:disabled) {
+  border-color: var(--color-destructive);
+  background: var(--color-destructive-soft);
+  color: var(--color-destructive);
+}
+.task-batch-delete small { color: var(--color-muted); font-size: 12px; }

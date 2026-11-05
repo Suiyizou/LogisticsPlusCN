@@ -11769,3 +11769,80 @@ body.is-oversea-agent-session .shipment-dashboard-panel .panel-header {
     justify-content: flex-start;
   }
 }
+
+/* Carrier key facts: the row set is declared per carrier, so the grid must
+   tolerate anywhere from three to nine rows without leaving holes. */
+.carrier-facts-panel {
+  margin-top: 18px;
+}
+
+.carrier-facts-note {
+  color: #71849c;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.carrier-facts-grid {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.carrier-fact-group {
+  min-width: 0;
+  padding: 12px 14px 13px;
+  border: 1px solid #d7e5f4;
+  border-radius: 10px;
+  background: #f7fbff;
+}
+
+.carrier-fact-group > h4 {
+  margin: 0 0 9px;
+  color: #173d69;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.carrier-fact-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.carrier-fact-list > div {
+  display: grid;
+  grid-template-columns: minmax(64px, 38%) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.carrier-fact-list dt {
+  color: #71849c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.carrier-fact-list dd {
+  margin: 0;
+  color: #173d69;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .carrier-facts-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px;
+  }
+  .carrier-fact-list > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+  }
+}

@@ -5,6 +5,7 @@ import java.util.List;
 
 public record ShipmentBatchDraftRequest(
     String sourceFileName,
+    String taskName,
     String channel,
     List<ShipmentBatchItemRequest> items,
     String customerId,

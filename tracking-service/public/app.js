@@ -20,6 +20,10 @@ import {
   requestTrackingConfirmation
 } from "./tracking-presentation.mjs?v=maritime-v2-20261028-r3";
 
+import {
+  carrierFactsProvenance,
+  carrierKeyFacts
+} from "./tracking-carrier-fields.mjs?v=carrier-fields-20261104";
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
@@ -989,6 +993,7 @@ const MESSAGES = {
     "route.stage.arrival": "Arrival port",
     "route.stage.destination": "Final destination",
     "route.stage.waypoint": "Route waypoint",
+    "carrierFacts.title": "Carrier key details",
     "references.title": "Booking information & references",
     "references.masterBill": "Master bill",
     "references.booking": "Booking number",
@@ -1624,6 +1629,7 @@ const MESSAGES = {
     "route.stage.arrival": "到港节点",
     "route.stage.destination": "最终目的地",
     "route.stage.waypoint": "运输节点",
+    "carrierFacts.title": "船司关键信息",
     "references.title": "订舱信息及参考号",
     "references.masterBill": "主提单号",
     "references.booking": "订舱号",
@@ -1800,6 +1806,10 @@ const elements = Object.fromEntries(
     "result-type",
     "result-number",
     "result-primary-facts",
+    "carrier-facts-panel",
+    "carrier-facts-grid",
+    "carrier-facts-note",
+    "carrier-facts-title",
     "result-traffic-term-fact",
     "result-traffic-term",
     "result-container-types-fact",
@@ -6843,6 +6853,50 @@ function renderContainers(snapshot) {
   }
 }
 
+/**
+ * Per-carrier fact sheet. Each carrier returns a different subset of shipment
+ * facts, so the rows are declared by carrier instead of shared: ONE sends four
+ * milestones but no route, COSCO sends terminals plus client/PO references, MSC
+ * sends declared-versus-returned counts. Empty values are dropped, and the
+ * panel hides itself when a carrier returned nothing beyond the header.
+ */
+function renderCarrierFacts(snapshot) {
+  const panel = elements["carrier-facts-panel"];
+  const grid = elements["carrier-facts-grid"];
+  grid.replaceChildren();
+  const groups = carrierKeyFacts(snapshot, currentLanguage);
+  panel.hidden = groups.length === 0;
+  if (!groups.length) return;
+
+  elements["carrier-facts-title"].textContent = t("carrierFacts.title");
+  const provenance = carrierFactsProvenance(snapshot, currentLanguage);
+  elements["carrier-facts-note"].textContent = provenance;
+  elements["carrier-facts-note"].hidden = !provenance;
+
+  for (const group of groups) {
+    const section = document.createElement("section");
+    section.className = "carrier-fact-group";
+    section.dataset.group = group.id;
+    const heading = document.createElement("h4");
+    heading.textContent = group.title;
+    const list = document.createElement("dl");
+    list.className = "carrier-fact-list";
+    for (const item of group.items) {
+      const row = document.createElement("div");
+      row.dataset.field = item.key;
+      const term = document.createElement("dt");
+      term.textContent = item.label;
+      const value = document.createElement("dd");
+      value.textContent = item.value;
+      value.title = item.value;
+      row.append(term, value);
+      list.append(row);
+    }
+    section.append(heading, list);
+    grid.append(section);
+  }
+}
+
 function renderJourney(snapshot) {
   const latest = snapshot.summary?.latestEvent;
   const sourceEmpty =
@@ -7219,6 +7273,7 @@ function renderResult(payload) {
 
   renderRoute(route);
   renderJourney(snapshot);
+  renderCarrierFacts(snapshot);
   renderRoutingLegs(routingLegs);
   renderReferences(snapshot);
   renderBusinessReferences(snapshot);

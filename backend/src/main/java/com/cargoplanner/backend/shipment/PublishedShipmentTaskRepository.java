@@ -30,15 +30,18 @@ class PublishedShipmentTaskRepository {
     jdbc.update("""
         INSERT INTO cp_shipment_batch_tasks
           (task_id, owner_id, status, revision, draft_json, created_at, updated_at,
-           source_file_name, tracking_channel, task_mode, customer_public_id, publish_to_customer, draft_item_count)
-        VALUES (?, ?, 'DRAFT', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           source_file_name, task_name, tracking_channel, task_mode, customer_public_id, publish_to_customer,
+           draft_item_count)
+        VALUES (?, ?, 'DRAFT', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, id, ownerId, encode(draft), timestamp(now), timestamp(now), draft.sourceFileName(),
-        draft.channel(), draft.mode(), draft.customerId(), draft.publishToCustomer(), draft.items().size());
+        draft.taskName(), draft.channel(), draft.mode(), draft.customerId(), draft.publishToCustomer(),
+        draft.items().size());
   }
 
   Task findTask(String id, boolean lock) {
     return jdbc.query(
-        "SELECT * FROM cp_shipment_batch_tasks WHERE task_id = ?" + (lock ? " FOR UPDATE" : ""),
+        "SELECT * FROM cp_shipment_batch_tasks WHERE task_id = ? AND deleted_at IS NULL"
+            + (lock ? " FOR UPDATE" : ""),
         (rs, row) -> readTask(rs), id
     ).stream().findFirst().orElse(null);
   }
@@ -46,24 +49,25 @@ class PublishedShipmentTaskRepository {
   List<Task> listTasks(long ownerId, int limit) {
     return jdbc.query("""
         SELECT * FROM cp_shipment_batch_tasks
-        WHERE owner_id = ?
+        WHERE owner_id = ? AND deleted_at IS NULL
         ORDER BY created_at DESC, task_id DESC LIMIT ?
         """, (rs, row) -> readTask(rs), ownerId, limit);
   }
 
   List<Overview> listOverviews(long ownerId, int limit) {
     return jdbc.query("""
-        SELECT t.task_id, t.status, t.revision, t.source_file_name, t.tracking_channel, t.task_mode,
+        SELECT t.task_id, t.status, t.revision, t.source_file_name, t.task_name, t.tracking_channel, t.task_mode,
                t.customer_public_id, t.publish_to_customer, t.draft_item_count, t.cancel_requested,
                t.created_at, t.updated_at, t.published_at, t.started_at, t.finished_at,
                (SELECT i.next_attempt_at FROM cp_shipment_batch_items i
                 WHERE i.task_id = t.task_id AND i.next_attempt_at IS NOT NULL
                 ORDER BY i.row_no LIMIT 1) AS next_attempt_at
         FROM cp_shipment_batch_tasks t
-        WHERE t.owner_id = ?
+        WHERE t.owner_id = ? AND t.deleted_at IS NULL
         ORDER BY t.created_at DESC, t.task_id DESC LIMIT ?
         """, (rs, row) -> new Overview(rs.getString("task_id"), rs.getString("status"), rs.getInt("revision"),
-        rs.getString("source_file_name"), rs.getString("tracking_channel"), rs.getString("task_mode"),
+        rs.getString("source_file_name"), rs.getString("task_name"), rs.getString("tracking_channel"),
+        rs.getString("task_mode"),
         rs.getString("customer_public_id"), rs.getBoolean("publish_to_customer"), rs.getInt("draft_item_count"),
         rs.getBoolean("cancel_requested"), instant(rs, "created_at"), instant(rs, "updated_at"),
         instant(rs, "published_at"), instant(rs, "started_at"), instant(rs, "finished_at"),
@@ -89,10 +93,10 @@ class PublishedShipmentTaskRepository {
   void updateDraft(Task task, ShipmentBatchDraftRequest draft, Instant now) {
     jdbc.update("""
         UPDATE cp_shipment_batch_tasks
-        SET revision = revision + 1, draft_json = ?, updated_at = ?, source_file_name = ?,
+        SET revision = revision + 1, draft_json = ?, updated_at = ?, source_file_name = ?, task_name = ?,
             tracking_channel = ?, task_mode = ?, customer_public_id = ?, publish_to_customer = ?, draft_item_count = ?
         WHERE task_id = ?
-        """, encode(draft), timestamp(now), draft.sourceFileName(), draft.channel(), draft.mode(),
+        """, encode(draft), timestamp(now), draft.sourceFileName(), draft.taskName(), draft.channel(), draft.mode(),
         draft.customerId(), draft.publishToCustomer(), draft.items().size(), task.id());
   }
 
@@ -109,6 +113,17 @@ class PublishedShipmentTaskRepository {
           VALUES (?, ?, ?, 'PENDING', ?, ?)
           """, task.id(), row, encode(items.get(row)), timestamp(now), timestamp(now));
     }
+  }
+
+  boolean hasUnfinishedItems(String taskId) {
+    return !jdbc.queryForList("""
+        SELECT row_no FROM cp_shipment_batch_items
+        WHERE task_id = ? AND status NOT IN (%s) LIMIT 1 FOR UPDATE
+        """.formatted(TERMINAL_ITEMS), Integer.class, taskId).isEmpty();
+  }
+
+  void markDeleted(Task task, Instant now) {
+    jdbc.update("UPDATE cp_shipment_batch_tasks SET deleted_at = ? WHERE task_id = ?", timestamp(now), task.id());
   }
 
   void cancel(Task task, Instant now) {
@@ -182,7 +197,7 @@ class PublishedShipmentTaskRepository {
         SELECT i.task_id, i.row_no
         FROM cp_shipment_batch_items i
         JOIN cp_shipment_batch_tasks t ON t.task_id = i.task_id
-        WHERE t.status IN ('QUEUED', 'WAITING', 'RUNNING', 'STOPPING')
+        WHERE t.deleted_at IS NULL AND t.status IN ('QUEUED', 'WAITING', 'RUNNING', 'STOPPING')
           AND i.next_attempt_at <= ? AND (i.lease_until IS NULL OR i.lease_until <= ?)
           AND NOT EXISTS (
             SELECT 1 FROM cp_shipment_batch_items earlier
@@ -322,14 +337,14 @@ class PublishedShipmentTaskRepository {
   record Task(String id, long ownerId, String status, int revision, ShipmentBatchDraftRequest draft,
       boolean cancelled, Instant created, Instant updated, Instant published, Instant started, Instant finished) {
     Overview overview(Instant nextAttempt) {
-      return new Overview(id, status, revision, draft.sourceFileName(), draft.channel(), draft.mode(),
+      return new Overview(id, status, revision, draft.sourceFileName(), draft.taskName(), draft.channel(), draft.mode(),
           draft.customerId(), Boolean.TRUE.equals(draft.publishToCustomer()), draft.items().size(),
           cancelled, created, updated, published, started, finished, nextAttempt);
     }
   }
 
-  record Overview(String id, String status, int revision, String sourceFileName, String channel, String mode,
-      String customerId, boolean publishToCustomer, int draftItemCount, boolean cancelled,
+  record Overview(String id, String status, int revision, String sourceFileName, String taskName, String channel,
+      String mode, String customerId, boolean publishToCustomer, int draftItemCount, boolean cancelled,
       Instant created, Instant updated, Instant published, Instant started, Instant finished, Instant nextAttempt) {}
 
   record ItemKey(String taskId, int row) {}

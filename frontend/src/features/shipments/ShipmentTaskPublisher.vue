@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, onMounted, onScopeDispose, ref, useId, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   Download,
-  Document,
+  Connection,
+  Delete,
   FolderOpened,
   Plus,
   Refresh,
@@ -17,16 +18,27 @@ import {
   cancelShipmentBatchTask,
   createShipmentBatchDraft,
   fetchShipmentBatchTask,
-  fetchShipmentBatchTasks,
+  deleteShipmentBatchTask,
+  fetchShipmentBatchTaskSummaries,
   inspectBusinessShipmentImportConflicts,
   publishShipmentBatchDraft,
+  recognizeShipmentImportSchema,
   retryShipmentBatchTask,
   updateShipmentBatchDraft
 } from "../../services/businessCustomerApi";
-import { parseShipmentBatchWorkbook } from "../../services/shipmentBatchImport.js";
+import { recognizeShipmentBatchSchemas } from "../../services/shipmentBatchImport.js";
 import { ALL_TRACKING_CARRIERS } from "../../services/trackingCarriers.js";
+import ShipmentTaskBatchIdentity from "./ShipmentTaskBatchIdentity.vue";
+import ShipmentTaskBatchPicker from "./ShipmentTaskBatchPicker.vue";
+import {
+  canDeleteShipmentTask,
+  shipmentTaskSourceName,
+  shortShipmentTaskId,
+  taskWasRemoved
+} from "./shipmentTaskBatch.js";
+import { confirmShipmentTask, confirmShipmentTaskDeletion } from "./shipmentTaskConfirm.js";
 import { queryResultFields, queryResultGroups } from "./shipmentQueryResult.js";
-import { recognizeTaskWorkbook, taskRuns } from "./shipmentTaskDraft.js";
+import { readTaskWorkbook, recognizeTaskWorkbook, taskRuns } from "./shipmentTaskDraft.js";
 import { taskIdFromQuery } from "./shipmentTaskNetworkModel.js";
 import { useShipmentTaskPublisher } from "./useShipmentTaskPublisher.js";
 
@@ -39,13 +51,22 @@ const { t, te, locale } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const copy = (key, params = {}) => t(`shipmentTask.${key}`, params);
-const confirmAction = (key) => window.confirm(copy(key));
-const confirmDiscard = () => confirmAction("discard");
+let discardPrompt;
+async function confirmDiscard() {
+  if (!dirty.value) return true;
+  discardPrompt ??= confirmShipmentTask(t, "discardTitle", copy("discard"));
+  try {
+    return await discardPrompt;
+  } finally {
+    discardPrompt = undefined;
+  }
+}
 const {
   tasks,
   selected,
   editor,
   dirty,
+  hasDraft,
   reviewed,
   busy,
   loading,
@@ -63,19 +84,23 @@ const {
   save,
   publish,
   cancel,
-  retry
+  retry,
+  remove,
+  forget
 } = useShipmentTaskPublisher({
   api: {
-    list: fetchShipmentBatchTasks,
+    list: fetchShipmentBatchTaskSummaries,
     get: fetchShipmentBatchTask,
     create: createShipmentBatchDraft,
     update: updateShipmentBatchDraft,
     publish: publishShipmentBatchDraft,
     cancel: cancelShipmentBatchTask,
-    retry: retryShipmentBatchTask
+    retry: retryShipmentBatchTask,
+    remove: deleteShipmentBatchTask
   },
   reportError: markApiErrorHandled,
-  confirmDiscard,
+  confirmTaskAction: (action) => confirmShipmentTask(t, action),
+  confirmDelete: (task, isDirty) => confirmShipmentTaskDeletion(t, task, isDirty),
   confirmPublish: confirmExistingShipments,
   onCompleted: props.onCompleted
 });
@@ -83,13 +108,26 @@ const fileInput = ref(null);
 const sheets = ref([]);
 const dragOver = ref(false);
 const fileError = ref("");
+const schemaChecking = ref(false);
+const fileSchemaStatus = ref("");
+const locationError = ref("");
+const mappingPending = ref(false);
+const selectedId = computed(() => taskIdFromQuery(route.query.taskId));
+const managementLocation = computed(() => ({
+  path: "/workspace/tracking/task-management",
+  query: selected.value ? { taskId: selected.value.taskId } : {}
+}));
+const mayDelete = computed(() => canDeleteShipmentTask(selected.value));
 const problemsOnly = ref(false);
+const taskNameId = useId();
 const sheet = computed(() =>
   sheets.value.find(({ name }) => name === editor.value.sourceMeta?.sheetName)
 );
-const isEditor = computed(
-  () => selected.value?.status === "DRAFT" || Boolean(editor.value.rows.length)
+const schemaStatus = computed(
+  () => (schemaChecking.value ? "CHECKING" : fileSchemaStatus.value || editor.value.sourceMeta?.schemaStatus)
 );
+const defaultTaskName = computed(() => shipmentTaskSourceName(editor.value.sourceFileName));
+const sourceFormat = computed(() => editor.value.sourceFileName.match(/\.(xlsx|xls|csv)$/i)?.[1].toUpperCase());
 const excludedCount = computed(() => review.value.length - itemCount.value);
 const statusLabel = (status) =>
   te(`shipmentTask.status.${status}`) ? copy(`status.${status}`) : status;
@@ -111,8 +149,10 @@ const blockedReview = computed(
   () => dirty.value || issueCount.value || serverErrors.value.length || !itemCount.value
 );
 const errorMessage = computed(() => {
+  if (locationError.value) return locationError.value;
   if (fileError.value) return fileError.value;
   if (!error.value) return "";
+  if (error.value.cause?.code === "INVALID_TASK_NAME") return copy("taskNameLength");
   if (["DRAFT_REVISION_CONFLICT", "DRAFT_CLOSED", "DRAFT_FROZEN"].includes(error.value.cause?.code))
     return copy("staleRevision");
   return error.value.cause?.message || t("app.requestFailed");
@@ -143,35 +183,74 @@ function statusTone(status) {
   return "neutral";
 }
 
-let restoringLocation = false;
-function syncTaskLocation(taskId) {
-  if (restoringLocation || route.name !== "business-shipment-tasks" || (route.query.taskId || "") === taskId) return;
+function taskLocation(taskId) {
   const query = { ...route.query };
   if (taskId) query.taskId = taskId;
   else delete query.taskId;
-  void router.replace({ path: route.path, query });
+  return { path: route.path, query };
 }
 
-watch(
-  () => selected.value?.taskId,
-  (taskId) => syncTaskLocation(taskId || ""),
-  { flush: "sync" }
-);
+function rememberLocation() {
+  const id = selected.value?.taskId || "";
+  if (route.name === "business-shipment-tasks" && selectedId.value !== id)
+    return router.replace(taskLocation(id));
+}
 
-function newTask() {
-  if (!startNew()) return false;
+function resetExtras() {
   sheets.value = [];
   fileError.value = "";
+  fileSchemaStatus.value = "";
   problemsOnly.value = false;
+}
+
+async function newTask() {
+  if (busy.value) return false;
+  if (selectedId.value && selected.value) return router.push(taskLocation(""));
+  if (!(await confirmDiscard()) || !startNew({ discardConfirmed: true })) return false;
+  locationError.value = "";
+  resetExtras();
+  if (selectedId.value) return router.push(taskLocation(""));
   return true;
 }
 
+function selectTask(taskId) {
+  if (!busy.value && taskId !== selectedId.value) return router.push(taskLocation(taskId));
+}
+
+let missingId = "";
 async function openTask(id) {
-  if (!(await open(id))) return false;
-  sheets.value = [];
-  fileError.value = "";
-  problemsOnly.value = false;
-  return true;
+  locationError.value = "";
+  if (await open(id, { discardConfirmed: true })) {
+    resetExtras();
+    return true;
+  }
+  if (taskWasRemoved(error.value?.cause)) {
+    forget(id);
+    startNew({ discardConfirmed: true });
+    resetExtras();
+    missingId = id;
+    locationError.value = copy("missingTask");
+    return true;
+  }
+  return false;
+}
+
+function recoverMissingLocation() {
+  if (!missingId || selectedId.value !== missingId) return;
+  missingId = "";
+  void router.replace(taskLocation(""));
+}
+
+async function saveTask() {
+  if (await save()) await rememberLocation();
+}
+
+async function deleteTask() {
+  if (!(await remove())) return;
+  resetExtras();
+  locationError.value = "";
+  await rememberLocation();
+  void list();
 }
 
 async function readFile(file) {
@@ -185,11 +264,19 @@ async function readFile(file) {
     fileError.value = copy("fileLimit");
     return;
   }
-  await importFile(async () => {
+  if ((hasDraft.value && !(await confirmDiscard())) || busy.value) return;
+  locationError.value = "";
+  fileSchemaStatus.value = "";
+  if (await importFile(async () => {
     try {
       const [xlsx, bytes] = await Promise.all([import("xlsx"), file.arrayBuffer()]);
-      const workbook = xlsx.read(bytes, { type: "array", cellDates: false, cellNF: true });
-      const parsed = parseShipmentBatchWorkbook(workbook, xlsx);
+      const parsed = await recognizeShipmentBatchSchemas(
+        readTaskWorkbook(bytes, xlsx, file.name),
+        (payload, options) => {
+          schemaChecking.value = true;
+          return recognizeShipmentImportSchema(payload, options);
+        }
+      );
       const best = parsed
         .filter(
           ({ resultSheet, suggestedColumnIndex }) => !resultSheet && suggestedColumnIndex !== null
@@ -199,6 +286,10 @@ async function readFile(file) {
             b.columns[b.suggestedColumnIndex].score - a.columns[a.suggestedColumnIndex].score
         )[0];
       if (!best) {
+        if (parsed.some(({ schemaStatus }) => schemaStatus === "UNAVAILABLE"))
+          fileSchemaStatus.value = "UNAVAILABLE";
+        else if (parsed.some(({ schemaStatus }) => schemaStatus === "NO_MATCH"))
+          fileSchemaStatus.value = "NO_MATCH";
         const invalid = parsed[0];
         if (invalid) {
           const problem = recognizeTaskWorkbook(invalid, invalid.suggestedColumnIndex).problems[0];
@@ -215,8 +306,10 @@ async function readFile(file) {
       return { sourceFileName: file.name, rows, sourceMeta };
     } catch (cause) {
       throw new Error(cause instanceof Error ? cause.message : copy("fileError"));
+    } finally {
+      schemaChecking.value = false;
     }
-  });
+  }, { discardConfirmed: true })) await rememberLocation();
 }
 
 function chooseFile(event) {
@@ -230,18 +323,19 @@ function dropFile(event) {
   void readFile(event.dataTransfer?.files?.[0]);
 }
 
-function changeMapping(event, sheetName, column) {
+async function changeMapping(sheetName, column) {
   const targetSheet = sheets.value.find(({ name }) => name === sheetName);
-  if (!targetSheet) return;
+  if (!targetSheet || busy.value || mappingPending.value) return;
   const targetColumn = column ?? targetSheet.suggestedColumnIndex;
   if (
     editor.value.sourceMeta?.sheetName === sheetName &&
     editor.value.sourceMeta.column === targetColumn
   )
     return;
-  const previous = event.target.value;
-  event.target.value = event.target.dataset.current;
-  if (!window.confirm(copy("replaceReview"))) return;
+  mappingPending.value = true;
+  const confirmed = await confirmShipmentTask(t, "replaceTitle", copy("replaceReview"));
+  mappingPending.value = false;
+  if (!confirmed || busy.value || !sheets.value.includes(targetSheet)) return;
   const { rows, sourceMeta, problems } = recognizeTaskWorkbook(targetSheet, targetColumn);
   if (problems.length || !rows.length) {
     fileError.value = problems.length ? issueLabel(problems[0]) : copy("noRows");
@@ -249,7 +343,6 @@ function changeMapping(event, sheetName, column) {
   }
   fileError.value = "";
   Object.assign(editor.value, { rows, sourceMeta });
-  event.target.value = previous;
 }
 
 async function confirmExistingShipments(task) {
@@ -263,7 +356,9 @@ async function confirmExistingShipments(task) {
   );
   const conflicts = response?.conflicts || [];
   if (!conflicts.length) return true;
-  return window.confirm(
+  return confirmShipmentTask(
+    t,
+    "overwriteTitle",
     t("customers.batchTrackExistingConfirm", {
       count: conflicts.length,
       references: conflicts
@@ -285,25 +380,34 @@ function preventUnload(event) {
   event.returnValue = "";
 }
 
-onBeforeRouteUpdate(async (to, from) => {
+onBeforeRouteUpdate((to, from) => {
   const taskId = taskIdFromQuery(to.query.taskId);
   if (taskId === taskIdFromQuery(from.query.taskId) || taskId === (selected.value?.taskId || "")) return;
-  restoringLocation = true;
-  try {
-    return taskId ? await openTask(taskId) : newTask();
-  } finally {
-    restoringLocation = false;
+  return !busy.value && confirmDiscard();
+});
+
+watch(selectedId, async (id) => {
+  if (route.name !== "business-shipment-tasks" || id === (selected.value?.taskId || "")) return;
+  if (!startNew({ discardConfirmed: true })) return;
+  resetExtras();
+  locationError.value = "";
+  if (id) {
+    await openTask(id);
+    recoverMissingLocation();
   }
 });
 
-onMounted(() => {
+function refreshTasks() {
   void list();
-  const taskId = taskIdFromQuery(route.query.taskId);
-  if (taskId) void openTask(taskId);
+  if (selectedId.value && !selected.value) void openTask(selectedId.value).then(recoverMissingLocation);
+}
+
+onMounted(() => {
+  refreshTasks();
   window.addEventListener("beforeunload", preventUnload);
 });
 onScopeDispose(() => window.removeEventListener("beforeunload", preventUnload));
-onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
+onBeforeRouteLeave(() => !busy.value && confirmDiscard());
 </script>
 
 <template>
@@ -315,131 +419,148 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
     >
       <template #actions>
         <RouterLink
-          :to="{ path: '/workspace/tracking/task-management', query: selected ? { taskId: selected.taskId } : {} }"
+          :to="managementLocation"
           class="task-button"
         >
-          {{ t("shipmentTaskManagement.title") }}
+          <el-icon><Connection /></el-icon>{{ t("shipmentTaskManagement.title") }}
         </RouterLink>
         <RouterLink :to="{ name: 'business-shipments' }" class="task-button">
           <el-icon><FolderOpened /></el-icon>{{ copy("openPanel") }}
         </RouterLink>
+      </template>
+    </WorkspacePageHeader>
+
+    <div class="task-layout">
+      <div class="task-toolbar">
+        <ShipmentTaskBatchPicker
+          :model-value="selectedId"
+          :tasks="tasks"
+          :current="selected"
+          :loading="loading"
+          :disabled="Boolean(busy)"
+          history
+          @update:model-value="selectTask"
+        />
         <button
           type="button"
-          class="task-button task-primary"
+          class="task-button task-icon-button"
+          :aria-label="copy('refresh')"
+          :title="copy('refresh')"
+          :disabled="loading || Boolean(busy)"
+          @click="refreshTasks"
+        >
+          <el-icon><Refresh /></el-icon>
+        </button>
+        <button
+          type="button"
+          class="task-button task-primary task-toolbar-new"
           :disabled="Boolean(busy)"
           @click="newTask"
         >
           <el-icon><Plus /></el-icon>{{ copy("new") }}
         </button>
-      </template>
-    </WorkspacePageHeader>
-
-    <div class="task-layout">
-      <aside class="task-history task-card">
-        <header>
-          <div>
-            <h2>{{ copy("history") }}</h2>
-            <p>{{ copy("historyHint") }}</p>
-          </div>
-          <button
-            type="button"
-            class="task-button task-icon-button"
-            :aria-label="copy('refresh')"
-            :title="copy('refresh')"
-            :disabled="loading || Boolean(busy)"
-            @click="list"
-          >
-            <el-icon><Refresh /></el-icon>
-          </button>
-        </header>
-        <p v-if="loading && !tasks.length" class="task-empty">{{ t("app.loadingPage") }}</p>
-        <p v-else-if="!tasks.length" class="task-empty">{{ copy("emptyHistory") }}</p>
-        <ul v-else>
-          <li v-for="task in tasks" :key="task.taskId">
-            <button
-              type="button"
-              class="task-history-item"
-              :class="{ 'is-selected': selected?.taskId === task.taskId }"
-              :aria-current="selected?.taskId === task.taskId ? 'true' : undefined"
-              :disabled="Boolean(busy)"
-              @click="openTask(task.taskId)"
-            >
-              <span class="task-history-name"
-                ><el-icon><Document /></el-icon
-                ><b>{{ task.sourceFileName || task.taskId }}</b></span
-              >
-              <span class="task-history-meta">
-                <span class="task-pill" :data-tone="statusTone(task.status)">{{
-                  statusLabel(task.status)
-                }}</span>
-                <small>{{ formatTime(task.createdAt) }}</small>
-              </span>
-            </button>
-          </li>
-        </ul>
-      </aside>
+      </div>
 
       <div class="task-workbench">
         <p v-if="errorMessage" class="task-alert" role="alert">{{ errorMessage }}</p>
-        <p v-if="notice === 'published'" class="task-alert task-notice" role="status">
-          {{ copy("publishQueued") }}
-        </p>
+        <div v-if="notice === 'published'" class="task-alert task-notice">
+          <span role="status">{{ copy("publishQueued") }}</span>
+          <RouterLink :to="managementLocation" class="task-button task-primary">
+            <el-icon><Connection /></el-icon>{{ copy("viewProgress") }}
+          </RouterLink>
+        </div>
         <p v-if="pollError" class="task-alert" role="status">{{ copy("pollError") }}</p>
+        <p v-if="schemaStatus && te(`shipmentTask.schema${schemaStatus}`)" class="task-alert" role="status">
+          {{ copy(`schema${schemaStatus}`) }}
+        </p>
 
-        <section v-if="!selected && !isEditor" class="task-card task-upload">
-          <div
-            class="task-drop"
-            :class="{ 'is-over': dragOver }"
-            @dragover.prevent="dragOver = true"
-            @dragleave.prevent="dragOver = false"
-            @drop.prevent="dropFile"
-          >
-            <span class="task-upload-icon"
-              ><el-icon><UploadFilled /></el-icon
-            ></span>
-            <h2>{{ copy("upload") }}</h2>
-            <p>{{ copy("uploadHint") }}</p>
-            <div class="task-actions">
-              <button
-                type="button"
-                class="task-button task-primary"
-                :disabled="Boolean(busy)"
-                @click="fileInput?.click()"
-              >
-                {{ busy === "file" ? t("app.loadingPage") : copy("pickFile") }}
-              </button>
-              <a class="task-button" href="/tracking-task-example.csv" download>
-                <el-icon><Download /></el-icon>{{ copy("template") }}
-              </a>
+        <p v-if="busy === 'open'" class="task-alert" role="status">{{ t("app.loadingPage") }}</p>
+        <section v-else-if="!selected || hasDraft" class="task-card task-settings">
+          <header>
+            <div>
+              <h2>{{ copy(hasDraft ? "draft" : "new") }}</h2>
+              <p v-if="!hasDraft">{{ copy("newTaskHint") }}</p>
+              <p v-else-if="selected" class="task-draft-meta">
+                <span v-if="selected.createdAt">{{ copy("batchCreatedAt", { time: formatTime(selected.createdAt) }) }}</span>
+                <code :title="selected.taskId">#{{ shortShipmentTaskId(selected.taskId) }}</code>
+              </p>
             </div>
-            <input
-              ref="fileInput"
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              hidden
-              @change="chooseFile"
-            />
-          </div>
-        </section>
-
-        <template v-else-if="isEditor">
-          <section class="task-card task-settings">
-            <header>
-              <div>
-                <h2>{{ copy("draft") }}</h2>
-                <p>{{ editor.sourceFileName }}</p>
-              </div>
+            <div v-if="hasDraft" class="task-draft-actions">
               <span class="task-pill" :data-tone="dirty ? 'warning' : 'success'" role="status">
                 {{ dirty ? copy("unsaved") : copy("stored") }}
               </span>
-            </header>
+              <div v-if="selected" class="task-batch-delete">
+                <button type="button" class="task-button task-danger" :disabled="Boolean(busy)" @click="deleteTask">
+                  <el-icon><Delete /></el-icon>{{ copy("deleteTask") }}
+                </button>
+              </div>
+            </div>
+          </header>
+          <div class="task-intake">
+            <div class="task-name-field">
+              <label :for="taskNameId"><b>{{ copy("taskName") }}</b></label>
+              <input
+                :id="taskNameId"
+                v-model="editor.taskName"
+                type="text"
+                maxlength="120"
+                :placeholder="defaultTaskName || copy('taskNamePlaceholder')"
+                :aria-describedby="`${taskNameId}-hint`"
+                :disabled="Boolean(busy)"
+              />
+              <small :id="`${taskNameId}-hint`">{{ copy("taskNameHint") }}</small>
+            </div>
+            <dl v-if="hasDraft" class="task-source-meta">
+              <div>
+                <dt>{{ copy("sourceFile") }}</dt>
+                <dd :title="editor.sourceFileName">{{ editor.sourceFileName || "—" }}</dd>
+              </div>
+              <div>
+                <dt>{{ copy("sourceFormat") }}</dt>
+                <dd>{{ sourceFormat || "—" }}</dd>
+              </div>
+              <div>
+                <dt>{{ copy("sourceRowCount") }}</dt>
+                <dd>{{ editor.sourceMeta?.total ?? review.length }}</dd>
+              </div>
+            </dl>
+            <div
+              v-else
+              class="task-drop"
+              :class="{ 'is-over': dragOver }"
+              @dragover.prevent="dragOver = true"
+              @dragleave.prevent="dragOver = false"
+              @drop.prevent="dropFile"
+            >
+              <span class="task-upload-icon" aria-hidden="true"><el-icon><UploadFilled /></el-icon></span>
+              <div>
+                <h3>{{ copy("upload") }}</h3>
+                <p>{{ copy("uploadHint") }}</p>
+                <div class="task-actions">
+                  <button
+                    type="button"
+                    class="task-button task-primary"
+                    :disabled="Boolean(busy)"
+                    @click="fileInput?.click()"
+                  >
+                    {{ busy === "file" ? t("app.loadingPage") : copy("pickFile") }}
+                  </button>
+                  <a class="task-button" href="/tracking-task-example.csv" download>
+                    <el-icon><Download /></el-icon>{{ copy("template") }}
+                  </a>
+                </div>
+              </div>
+              <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden @change="chooseFile" />
+            </div>
+          </div>
+          <template v-if="hasDraft">
             <div class="task-settings-grid">
               <label
                 ><b>{{ copy("mode") }}</b>
-                <select v-model="editor.mode" :disabled="Boolean(busy)">
-                  <option value="IMPORT">{{ copy("import") }}</option>
-                  <option value="QUERY_ONLY">{{ copy("query") }}</option>
-                </select>
+                <el-select v-model="editor.mode" :aria-label="copy('mode')" :disabled="Boolean(busy)">
+                  <el-option value="IMPORT" :label="copy('import')" />
+                  <el-option value="QUERY_ONLY" :label="copy('query')" />
+                </el-select>
                 <small>{{ copy(editor.mode === "IMPORT" ? "importHint" : "queryHint") }}</small>
               </label>
               <label v-if="editor.mode === 'IMPORT'"
@@ -462,12 +583,15 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
                 <small v-if="!editor.customerId">{{ copy("missingCustomer") }}</small>
               </label>
             </div>
-            <label v-if="editor.mode === 'IMPORT'" class="task-check">
-              <input v-model="editor.publishToCustomer" type="checkbox" :disabled="Boolean(busy)" />
-              {{ copy("visibility") }}
-            </label>
-          </section>
+            <div v-if="editor.mode === 'IMPORT'" class="task-check-row">
+              <el-checkbox v-model="editor.publishToCustomer" class="task-check" :disabled="Boolean(busy)">
+                {{ copy("visibility") }}
+              </el-checkbox>
+            </div>
+          </template>
+        </section>
 
+        <template v-if="hasDraft">
           <section class="task-card task-review">
             <header>
               <div>
@@ -493,37 +617,28 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
             <div v-if="editor.sourceMeta" class="task-mapping">
               <label
                 ><span>{{ t("customers.trackSheet") }}</span>
-                <select
-                  v-if="sheets.length > 1"
-                  :value="editor.sourceMeta.sheetName"
-                  :data-current="editor.sourceMeta.sheetName"
-                  :disabled="Boolean(busy)"
-                  @change="changeMapping($event, $event.target.value, null)"
+                <el-select
+                  v-if="sheets.length > 1" :model-value="editor.sourceMeta.sheetName"
+                  :aria-label="t('customers.trackSheet')" :disabled="Boolean(busy) || mappingPending"
+                  filterable @change="changeMapping($event, null)"
                 >
-                  <option v-for="entry in sheets" :key="entry.name" :value="entry.name">
-                    {{ entry.name }}
-                  </option>
-                </select>
+                  <el-option v-for="entry in sheets" :key="entry.name" :value="entry.name" :label="entry.name" />
+                </el-select>
                 <b v-else>{{ editor.sourceMeta.sheetName }}</b>
               </label>
               <label
                 ><span>{{ t("customers.trackColumn") }}</span>
-                <select
-                  v-if="sheet"
-                  :value="editor.sourceMeta.column"
-                  :data-current="editor.sourceMeta.column"
-                  :disabled="Boolean(busy)"
-                  @change="changeMapping($event, sheet.name, Number($event.target.value))"
+                <el-select
+                  v-if="sheet" :model-value="editor.sourceMeta.column" :aria-label="t('customers.trackColumn')"
+                  :disabled="Boolean(busy) || mappingPending" filterable @change="changeMapping(sheet.name, $event)"
                 >
-                  <option
+                  <el-option
                     v-for="column in sheet.columns.filter(({ score }) => score > 0)"
-                    :key="column.index"
-                    :value="column.index"
-                  >
-                    {{ column.label }}
-                  </option>
-                </select>
+                    :key="column.index" :value="column.index" :label="column.label"
+                  />
+                </el-select>
                 <b v-else>{{ editor.sourceMeta.columnLabel }}</b>
+                <small v-if="editor.sourceMeta.referenceSuggested">{{ copy("schemaReference") }}</small>
               </label>
             </div>
             <div class="task-table-wrap">
@@ -559,46 +674,36 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
                       </details>
                     </th>
                     <td>
-                      <select
-                        v-model="row.carrier"
-                        :aria-label="t('customers.carrier') + ' ' + row.sourceRow"
-                        :disabled="Boolean(busy) || row.disposition === 'EXCLUDE'"
+                      <el-select
+                        v-model="row.carrier" :aria-label="t('customers.carrier') + ' ' + row.sourceRow"
+                        :placeholder="copy('chooseCarrier')" :disabled="Boolean(busy) || row.disposition === 'EXCLUDE'"
+                        filterable clearable :value-on-clear="''"
                       >
-                        <option value="">{{ copy("chooseCarrier") }}</option>
-                        <option
-                          v-if="
-                            row.carrier &&
-                            !ALL_TRACKING_CARRIERS.some(({ code }) => code === row.carrier)
-                          "
-                          :value="row.carrier"
-                        >
-                          {{ row.carrier }}
-                        </option>
-                        <option
-                          v-for="carrier in ALL_TRACKING_CARRIERS"
-                          :key="carrier.code"
-                          :value="carrier.code"
-                        >
-                          {{ carrier.name }}
-                        </option>
-                      </select>
-                      <small v-if="row.originalCarrier" :title="row.originalCarrier"
+                        <el-option
+                          v-if="row.carrier && !ALL_TRACKING_CARRIERS.some(({ code }) => code === row.carrier)"
+                          :value="row.carrier" :label="row.carrier"
+                        />
+                        <el-option
+                          v-for="carrier in ALL_TRACKING_CARRIERS" :key="carrier.code"
+                          :value="carrier.code" :label="carrier.name"
+                        />
+                      </el-select>
+                      <small v-if="row.originalCarrier" :title="row.sourceCarrierLabel || row.originalCarrier"
                         >{{
                           t(`customers.trackingQueryEvidence${row.carrierEvidence || "unknown"}`)
                         }}
-                        · {{ row.originalCarrier }}</small
+                        · {{ row.sourceCarrierLabel || row.originalCarrier }}</small
                       >
                     </td>
                     <td>
-                      <select
-                        v-model="row.type"
-                        :aria-label="t('customers.referenceType') + ' ' + row.sourceRow"
-                        :disabled="Boolean(busy) || row.disposition === 'EXCLUDE'"
+                      <el-select
+                        v-model="row.type" :aria-label="t('customers.referenceType') + ' ' + row.sourceRow"
+                        :placeholder="copy('chooseType')" :disabled="Boolean(busy) || row.disposition === 'EXCLUDE'"
+                        clearable :value-on-clear="''"
                       >
-                        <option value="">{{ copy("chooseType") }}</option>
-                        <option value="BOOKING">{{ typeLabel("BOOKING") }}</option>
-                        <option value="BILLOFLADING">{{ typeLabel("BILLOFLADING") }}</option>
-                      </select>
+                        <el-option value="BOOKING" :label="typeLabel('BOOKING')" />
+                        <el-option value="BILLOFLADING" :label="typeLabel('BILLOFLADING')" />
+                      </el-select>
                     </td>
                     <td>
                       <input
@@ -615,20 +720,13 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
                       >
                     </td>
                     <td>
-                      <select
-                        v-model="row.disposition"
-                        :aria-label="copy('disposition') + ' ' + row.sourceRow"
-                        :disabled="Boolean(busy)"
+                      <el-select
+                        v-model="row.disposition" :aria-label="copy('disposition') + ' ' + row.sourceRow" :disabled="Boolean(busy)"
                       >
-                        <option value="QUERY">{{ copy("include") }}</option>
-                        <option
-                          v-if="editor.mode === 'IMPORT' || row.disposition === 'MANUAL'"
-                          value="MANUAL"
-                        >
-                          {{ copy("manual") }}
-                        </option>
-                        <option value="EXCLUDE">{{ copy("exclude") }}</option>
-                      </select>
+                        <el-option value="QUERY" :label="copy('include')" />
+                        <el-option v-if="editor.mode === 'IMPORT' || row.disposition === 'MANUAL'" value="MANUAL" :label="copy('manual')" />
+                        <el-option value="EXCLUDE" :label="copy('exclude')" />
+                      </el-select>
                     </td>
                     <td>
                       <ul v-if="errors.length" class="task-row-errors">
@@ -653,14 +751,9 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
           </section>
 
           <footer class="task-card task-submit">
-            <label class="task-check">
-              <input
-                v-model="reviewed"
-                type="checkbox"
-                :disabled="Boolean(busy || blockedReview)"
-              />
+            <el-checkbox v-model="reviewed" class="task-check" :disabled="Boolean(busy || blockedReview)">
               {{ copy("review") }}
-            </label>
+            </el-checkbox>
             <p>
               {{
                 blockedReview
@@ -675,7 +768,7 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
                 type="button"
                 class="task-button"
                 :disabled="!dirty || Boolean(busy)"
-                @click="save"
+                @click="saveTask"
               >
                 {{ copy("save") }}
               </button>
@@ -694,15 +787,12 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
         <section v-else-if="selected" class="task-card task-results">
           <header>
             <div>
-              <h2>{{ selected.sourceFileName || t("customers.trackingTaskStatus") }}</h2>
-              <p>
-                {{ copy(selected.mode === "QUERY_ONLY" ? "query" : "import") }} ·
-                {{ formatTime(selected.publishedAt || selected.createdAt) }}
-              </p>
+              <ShipmentTaskBatchIdentity :task="selected" />
+              <p>{{ copy(selected.mode === "QUERY_ONLY" ? "query" : "import") }}</p>
             </div>
-            <span class="task-pill" :data-tone="statusTone(selected.status)" role="status">{{
-              statusLabel(selected.status)
-            }}</span>
+            <RouterLink :to="managementLocation" class="task-button">
+              <el-icon><Connection /></el-icon>{{ copy("viewProgress") }}
+            </RouterLink>
           </header>
           <dl class="task-metrics">
             <div>
@@ -733,15 +823,15 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
           </p>
           <p v-if="taskRuns.has(selected.status)">{{ copy("returnHint") }}</p>
           <div class="task-result-actions">
-            <label v-if="selected.items?.length" class="task-check">
-              <input v-model="problemsOnly" type="checkbox" />{{ copy("problemsOnly") }}
-            </label>
+            <el-checkbox v-if="selected.items?.length" v-model="problemsOnly" class="task-check" :disabled="Boolean(busy)">
+              {{ copy("problemsOnly") }}
+            </el-checkbox>
             <button
               v-if="mayCancel"
               class="task-button"
               type="button"
               :disabled="Boolean(busy)"
-              @click="confirmAction('cancelConfirm') && cancel()"
+              @click="cancel"
             >
               {{ copy("cancel") }}
             </button>
@@ -750,10 +840,16 @@ onBeforeRouteLeave(() => !busy.value && (!dirty.value || confirmDiscard()));
               class="task-button"
               type="button"
               :disabled="Boolean(busy)"
-              @click="confirmAction('retryConfirm') && retry()"
+              @click="retry"
             >
               {{ copy("retry") }}
             </button>
+            <div class="task-batch-delete">
+              <button type="button" class="task-button task-danger" :disabled="Boolean(busy) || !mayDelete" @click="deleteTask">
+                <el-icon><Delete /></el-icon>{{ copy("deleteTask") }}
+              </button>
+              <small v-if="!mayDelete">{{ copy("deleteActiveHint") }}</small>
+            </div>
           </div>
           <p v-if="!results.length" class="task-empty">{{ copy("noResult") }}</p>
           <ul v-else class="task-result-list">

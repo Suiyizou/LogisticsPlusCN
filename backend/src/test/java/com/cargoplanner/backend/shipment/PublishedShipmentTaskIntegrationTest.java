@@ -7,7 +7,10 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,9 +19,11 @@ import com.cargoplanner.backend.auth.UserAuthInterceptor;
 import com.cargoplanner.backend.common.ApiException;
 import com.cargoplanner.backend.common.ApiExceptionHandler;
 import com.cargoplanner.backend.customer.BusinessCustomerService;
+import com.cargoplanner.backend.customer.CustomerShipmentBindingRequest;
 import com.cargoplanner.backend.shipment.TrackingAdapterClient.NormalizedTrackRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -33,6 +38,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,11 +47,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionTemplate;
 
 public class PublishedShipmentTaskIntegrationTest {
   private static final ObjectMapper MIGRATION_JSON = new ObjectMapper();
@@ -52,6 +61,9 @@ public class PublishedShipmentTaskIntegrationTest {
       new AuthenticatedUser(1, "owner", "Owner", "BUSINESS", "ACTIVE");
   private static final AuthenticatedUser OTHER =
       new AuthenticatedUser(2, "other", "Other", "BUSINESS", "ACTIVE");
+  private static final AuthenticatedUser ADMIN =
+      new AuthenticatedUser(3, "admin", "Admin", "ADMIN", "ACTIVE");
+  private static final String TASK_ROUTE = "/api/business/shipment-batch-tasks";
   private static final String NUMBER = "BK-10001";
 
   private final ObjectMapper json = new ObjectMapper();
@@ -79,8 +91,14 @@ public class PublishedShipmentTaskIntegrationTest {
   void setUp() throws IOException {
     DriverManagerDataSource dataSource = createV6Database();
     migrateSummaryColumns(dataSource);
+    migrateDeletion(dataSource);
+    migrateTaskName(dataSource);
     jdbc = new JdbcTemplate(dataSource);
     jdbc.execute("CREATE TABLE test_saved_shipments (id VARCHAR(64) PRIMARY KEY)");
+    jdbc.execute("""
+        CREATE TABLE test_saved_customer_bindings (customer_id VARCHAR(64), shipment_id VARCHAR(64),
+          PRIMARY KEY (customer_id, shipment_id))
+        """);
     transactionManager = new DataSourceTransactionManager(dataSource);
     when(tracking.usesLocalTrackingQueue()).thenReturn(true);
     when(tracking.validatePublishedRequest(any(), any(), anyBoolean())).thenAnswer(call -> {
@@ -94,6 +112,9 @@ public class PublishedShipmentTaskIntegrationTest {
     });
     when(customers.bindShipment(anyString(), any(), any(), anyString())).thenAnswer(call -> {
       if (rejectBusinessWrite.getAndSet(false)) throw new TransientDataAccessResourceException("Test outage");
+      CustomerShipmentBindingRequest binding = call.getArgument(1);
+      jdbc.update("INSERT INTO test_saved_customer_bindings VALUES (?, ?)",
+          call.getArgument(0, String.class), binding.shipmentId());
       return Map.of();
     });
     server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -131,6 +152,16 @@ public class PublishedShipmentTaskIntegrationTest {
     jdbc.execute("CREATE ALIAS JSON_VALUE FOR '" + functions + ".mysqlJsonValue'");
     jdbc.execute("CREATE ALIAS JSON_LENGTH FOR '" + functions + ".mysqlJsonLength'");
     new ResourceDatabasePopulator(new ClassPathResource("db/migration/V7__shipment_task_management_summary.sql"))
+        .execute(dataSource);
+  }
+
+  private void migrateDeletion(DriverManagerDataSource dataSource) {
+    new ResourceDatabasePopulator(new ClassPathResource("db/migration/V8__shipment_task_deletion.sql"))
+        .execute(dataSource);
+  }
+
+  private void migrateTaskName(DriverManagerDataSource dataSource) {
+    new ResourceDatabasePopulator(new ClassPathResource("db/migration/V9__shipment_task_name.sql"))
         .execute(dataSource);
   }
 
@@ -181,15 +212,74 @@ public class PublishedShipmentTaskIntegrationTest {
   }
 
   @Test
+  void createsAndRenamesDraftsIndependentlyOfTheirSourceFileAndFreezesTheNameOnPublish() throws Exception {
+    var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiExceptionHandler()).build();
+    String sourceFileName = "source.2026.xlsx";
+    ObjectNode input = json.valueToTree(draft(item(), null, "IMPORT"));
+    input.put("sourceFileName", sourceFileName).put("taskName", "  First name  ");
+    String created = mvc.perform(post(TASK_ROUTE + "/drafts").contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(input)).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.taskName").value("First name"))
+        .andExpect(jsonPath("$.sourceFileName").value(sourceFileName))
+        .andReturn().getResponse().getContentAsString();
+    String id = json.readTree(created).path("taskId").asText();
+    String route = TASK_ROUTE + "/" + id + "/draft";
+    String newName = "A".repeat(120);
+
+    input.put("expectedRevision", 1).put("taskName", newName + "A");
+    mvc.perform(patch(route).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input))
+            .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_TASK_NAME"));
+
+    input.put("taskName", " " + newName + " ");
+    mvc.perform(patch(route).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input))
+            .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.revision").value(2))
+        .andExpect(jsonPath("$.taskName").value(newName))
+        .andExpect(jsonPath("$.sourceFileName").value(sourceFileName));
+    restartWorker();
+    assertThat(service.status(id, OWNER)).containsEntry("taskName", newName)
+        .containsEntry("sourceFileName", sourceFileName);
+    assertThat(service.publish(id, 2, OWNER)).containsEntry("taskName", newName)
+        .containsEntry("sourceFileName", sourceFileName);
+    input.put("expectedRevision", 2).put("taskName", "Late rename");
+    mvc.perform(patch(route).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input))
+            .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DRAFT_FROZEN"));
+    assertThat(service.management(OWNER, 20)).singleElement().satisfies(task -> assertThat(task)
+        .containsEntry("taskName", newName).containsEntry("sourceFileName", sourceFileName));
+  }
+
+  @Test
+  void blankNamesDeriveFromTheFullFileStem() {
+    String fileStem = "A".repeat(121) + ".2026";
+    String sourceFileName = fileStem + ".xlsx";
+    var input = new ShipmentBatchDraftRequest(sourceFileName, "Custom name", "AUTO", List.of(item()),
+        null, false, "QUERY_ONLY", null, null);
+    String id = (String) service.create(input, OWNER).get("taskId");
+
+    var cleared = new ShipmentBatchDraftRequest(sourceFileName, " \t ", "AUTO", List.of(item()),
+        null, false, "QUERY_ONLY", null, 1);
+    assertThat(service.update(id, cleared, OWNER)).containsEntry("taskName", fileStem)
+        .containsEntry("sourceFileName", sourceFileName);
+    assertThat(service.management(OWNER, 20)).singleElement().satisfies(task -> assertThat(task)
+        .containsEntry("taskName", fileStem).containsEntry("sourceFileName", sourceFileName));
+  }
+
+  @Test
   void managementListsOnlyOwnedSummariesWithoutReadingDraftOrItemPayloads() throws Exception {
     String draftId = (String) service.create(draft(item(), null, "IMPORT"), OWNER).get("taskId");
     List<ShipmentBatchItemRequest> rows = java.util.stream.IntStream.range(0, 8)
         .mapToObj(row -> new ShipmentBatchItemRequest("row-" + row, "COSCO", "BOOKING",
             "BK-2000" + row, null, false, null)).toList();
-    service.update(draftId, new ShipmentBatchDraftRequest("review.xlsx", "PROXY", rows.subList(0, 2),
+    service.update(draftId, new ShipmentBatchDraftRequest("review.xlsx", "Review draft", "PROXY", rows.subList(0, 2),
         "updated-customer", true, "IMPORT", null, 1), OWNER);
     clock.advance(1);
-    ShipmentBatchDraftRequest input = new ShipmentBatchDraftRequest("published.xlsx", "AUTO", rows,
+    ShipmentBatchDraftRequest input = new ShipmentBatchDraftRequest("published.xlsx", null, "AUTO", rows,
         null, false, "QUERY_ONLY", null, null);
     String publishedId = (String) service.create(input, OWNER).get("taskId");
     service.publish(publishedId, 1, OWNER);
@@ -212,6 +302,7 @@ public class PublishedShipmentTaskIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].taskId").value(publishedId))
+        .andExpect(jsonPath("$[0].taskName").value("published"))
         .andExpect(jsonPath("$[0].total").value(8))
         .andExpect(jsonPath("$[0].pending").value(4))
         .andExpect(jsonPath("$[0].running").value(1))
@@ -224,6 +315,7 @@ public class PublishedShipmentTaskIntegrationTest {
         .andExpect(jsonPath("$[1].taskId").value(draftId))
         .andExpect(jsonPath("$[1].revision").value(2))
         .andExpect(jsonPath("$[1].total").value(2))
+        .andExpect(jsonPath("$[1].taskName").value("Review draft"))
         .andExpect(jsonPath("$[1].sourceFileName").value("review.xlsx"))
         .andExpect(jsonPath("$[1].customerId").value("updated-customer"))
         .andExpect(jsonPath("$[1].channel").value("PROXY"))
@@ -248,18 +340,23 @@ public class PublishedShipmentTaskIntegrationTest {
   void managementMigrationBackfillsExistingDraftMetadata() throws Exception {
     DriverManagerDataSource dataSource = createV6Database();
     JdbcTemplate oldJdbc = new JdbcTemplate(dataSource);
-    var existing = new ShipmentBatchDraftRequest("legacy.xlsx", "PROXY", List.of(item()), "old-customer",
+    var existing = new ShipmentBatchDraftRequest("legacy.xlsx", null, "PROXY", List.of(item()), "old-customer",
         true, "IMPORT", null, null);
+    ObjectNode legacyDraft = json.valueToTree(existing);
+    legacyDraft.remove("taskName");
     var now = java.sql.Timestamp.from(clock.instant());
     oldJdbc.update("""
         INSERT INTO cp_shipment_batch_tasks
           (task_id, owner_id, status, revision, draft_json, created_at, updated_at)
         VALUES (?, ?, 'DRAFT', 4, ?, ?, ?)
-        """, "published_legacy", OWNER.id(), json.writeValueAsString(existing), now, now);
+        """, "published_legacy", OWNER.id(), json.writeValueAsString(legacyDraft), now, now);
 
     migrateSummaryColumns(dataSource);
+    migrateDeletion(dataSource);
+    migrateTaskName(dataSource);
 
-    var overviews = new PublishedShipmentTaskRepository(oldJdbc, json).listOverviews(OWNER.id(), 20);
+    var legacyRepository = new PublishedShipmentTaskRepository(oldJdbc, json);
+    var overviews = legacyRepository.listOverviews(OWNER.id(), 20);
     assertThat(overviews).singleElement().satisfies(task -> {
       assertThat(task.sourceFileName()).isEqualTo("legacy.xlsx");
       assertThat(task.revision()).isEqualTo(4);
@@ -269,6 +366,155 @@ public class PublishedShipmentTaskIntegrationTest {
       assertThat(task.channel()).isEqualTo("PROXY");
       assertThat(task.mode()).isEqualTo("IMPORT");
     });
+    var legacyService = new PublishedShipmentTaskService(legacyRepository, legacy, tracking, customers,
+        new DataSourceTransactionManager(dataSource), clock);
+    assertThat(legacyService.status("published_legacy", OWNER)).containsEntry("taskName", "legacy");
+    assertThat(legacyService.management(OWNER, 20)).singleElement().satisfies(task -> assertThat(task)
+        .containsEntry("taskName", "legacy").containsEntry("sourceFileName", "legacy.xlsx"));
+  }
+
+  @Test
+  void deletesOnlyWithManagerAccessAndHidesTheTaskFromEveryReadRoute() throws Exception {
+    String id = (String) service.create(draft(item(), null, "IMPORT"), OWNER).get("taskId");
+    service.update(id, draft(item(), 1, "IMPORT"), OWNER);
+    var mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new ApiExceptionHandler()).build();
+    String taskRoute = TASK_ROUTE + "/" + id;
+    AuthenticatedUser nonManager = new AuthenticatedUser(OWNER.id(), "owner", "Owner", "OVERSEA_AGENT", "ACTIVE");
+
+    mvc.perform(delete(taskRoute).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, nonManager))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete(taskRoute).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OTHER))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete(taskRoute).param("expectedRevision", "1")
+            .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("DRAFT_REVISION_CONFLICT"));
+    assertThat(service.management(OWNER, 20)).singleElement().satisfies(task -> assertThat(task)
+        .containsEntry("taskId", id).containsEntry("revision", 2));
+
+    mvc.perform(delete(taskRoute).param("expectedRevision", "2")
+            .requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, ADMIN))
+        .andExpect(status().isNoContent());
+    for (String route : List.of(TASK_ROUTE, TASK_ROUTE + "/management")) {
+      mvc.perform(get(route).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+          .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+    }
+    mvc.perform(get(taskRoute).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OWNER))
+        .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+    mvc.perform(delete(taskRoute).requestAttr(UserAuthInterceptor.CURRENT_USER_ATTRIBUTE, OTHER))
+        .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("TASK_NOT_FOUND"));
+    assertThat(jdbc.queryForObject("SELECT draft_json FROM cp_shipment_batch_tasks WHERE task_id = ?",
+        String.class, id)).contains("sample.xlsx", "original");
+  }
+
+  @Test
+  void rejectsDeletionWhileTrackingIsActiveOrAnItemHasNotSettled() {
+    String id = publish("IMPORT");
+    assertActiveTaskCannotBeDeleted(id, "QUEUED");
+
+    jdbc.update("UPDATE cp_shipment_batch_tasks SET status = 'COMPLETED' WHERE task_id = ?", id);
+    assertActiveTaskCannotBeDeleted(id, "COMPLETED");
+    jdbc.update("UPDATE cp_shipment_batch_tasks SET status = 'QUEUED' WHERE task_id = ?", id);
+
+    offline.set(true);
+    worker.runDue();
+    assertActiveTaskCannotBeDeleted(id, "WAITING");
+    offline.set(false);
+    clock.advance(6);
+    worker.runDue();
+    assertActiveTaskCannotBeDeleted(id, "RUNNING");
+    assertThat(service.cancel(id, OWNER)).containsEntry("status", "STOPPING");
+    assertActiveTaskCannotBeDeleted(id, "STOPPING");
+    worker.runDue();
+    assertThat(service.status(id, OWNER)).containsEntry("status", "STOPPED");
+    service.delete(id, null, OWNER);
+    worker.runDue();
+    assertThat(cancellationCalls).isEqualTo(1);
+    assertThat(service.management(OWNER, 20)).isEmpty();
+  }
+
+  @Test
+  void deletingCompletedTasksPreservesShipmentsBindingsAndTrackingResults() {
+    queryResult = "JOB_FAILED";
+    String importId = publish("IMPORT");
+    worker.runDue();
+    clock.advance(1);
+    worker.runDue();
+
+    queryResult = "QUERY_COMPLETED";
+    service.retry(importId, List.of(0), OWNER);
+    worker.runDue();
+    clock.advance(1);
+    worker.runDue();
+    worker.runDue();
+    assertThat(service.status(importId, OWNER)).containsEntry("status", "COMPLETED");
+    service.delete(importId, null, OWNER);
+    assertThat(savedShipments()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("SELECT shipment_id FROM test_saved_customer_bindings WHERE customer_id = ?",
+        String.class, "customer-1")).isEqualTo("shipment-1");
+    assertThat(jdbc.queryForObject("SELECT result_json FROM cp_shipment_batch_items WHERE task_id = ?",
+        String.class, importId)).contains("tracking.v1", "job_2");
+    assertThat(jdbc.queryForObject("SELECT local_job_id FROM cp_shipment_batch_item_attempts WHERE task_id = ?",
+        String.class, importId)).isEqualTo("job_1");
+
+    String queryId = publish("QUERY_ONLY");
+    worker.runDue();
+    clock.advance(1);
+    worker.runDue();
+    worker.runDue();
+    service.delete(queryId, null, OWNER);
+    assertThat(jdbc.queryForObject("SELECT payload_json FROM cp_shipment_batch_items WHERE task_id = ?",
+        String.class, queryId)).contains("SINGLE_RESPONSE", "job_3");
+    assertThat(service.management(OWNER, 20)).isEmpty();
+    assertThat(cancellationCalls).isZero();
+  }
+
+  @Test
+  void concurrentPublicationAndRetryCannotBringBackADeletedTask() {
+    String draftId = (String) service.create(draft(item(), null, "QUERY_ONLY"), OWNER).get("taskId");
+    deleteDuringMutation(draftId, () -> service.publish(draftId, 1, OWNER));
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cp_shipment_batch_items WHERE task_id = ?",
+        Integer.class, draftId)).isZero();
+
+    queryResult = "JOB_FAILED";
+    String failedId = publish("QUERY_ONLY");
+    worker.runDue();
+    clock.advance(1);
+    worker.runDue();
+    deleteDuringMutation(failedId, () -> service.retry(failedId, List.of(0), OWNER));
+    worker.runDue();
+    assertThat(sentKeys).containsExactly(failedId + ":row:0:run:1");
+    assertThat(jdbc.queryForObject("SELECT status FROM cp_shipment_batch_items WHERE task_id = ?",
+        String.class, failedId)).isEqualTo("FAILED");
+    assertThat(service.management(OWNER, 20)).isEmpty();
+  }
+
+  private void assertActiveTaskCannotBeDeleted(String id, String status) {
+    assertThat(service.status(id, OWNER)).containsEntry("status", status);
+    assertThatThrownBy(() -> service.delete(id, null, OWNER)).isInstanceOfSatisfying(ApiException.class, error -> {
+      assertThat(error.status()).isEqualTo(HttpStatus.CONFLICT);
+      assertThat(error.code()).isEqualTo("TASK_ACTIVE");
+    });
+  }
+
+  private void deleteDuringMutation(String taskId, Runnable mutation) {
+    var repository = new PublishedShipmentTaskRepository(jdbc, json);
+    CompletableFuture<Void> competing = new TransactionTemplate(transactionManager).execute(transaction -> {
+      assertThat(repository.findTask(taskId, true)).isNotNull();
+      CompletableFuture<Void> started = new CompletableFuture<>();
+      CompletableFuture<Void> request = CompletableFuture.runAsync(() -> {
+        started.complete(null);
+        mutation.run();
+      });
+      started.orTimeout(5, TimeUnit.SECONDS).join();
+      service.delete(taskId, null, OWNER);
+      return request;
+    });
+    assertThatThrownBy(() -> competing.get(5, TimeUnit.SECONDS)).cause()
+        .isInstanceOfSatisfying(ApiException.class, error -> {
+          assertThat(error.status()).isEqualTo(HttpStatus.NOT_FOUND);
+          assertThat(error.code()).isEqualTo("TASK_NOT_FOUND");
+        });
   }
 
   @Test
@@ -417,7 +663,7 @@ public class PublishedShipmentTaskIntegrationTest {
   }
 
   private ShipmentBatchDraftRequest draft(ShipmentBatchItemRequest item, Integer revision, String mode) {
-    return new ShipmentBatchDraftRequest("sample.xlsx", "AUTO", List.of(item), "customer-1", false, mode,
+    return new ShipmentBatchDraftRequest("sample.xlsx", null, "AUTO", List.of(item), "customer-1", false, mode,
         json.valueToTree(List.of(Map.of("row", 3, "reference", "original"))), revision);
   }
 

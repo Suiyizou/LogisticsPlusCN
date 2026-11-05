@@ -1,4 +1,4 @@
-import { requestJson } from "./apiClient";
+import { markApiErrorHandled, requestJson } from "./apiClient";
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL;
 
@@ -158,6 +158,19 @@ export function createShipmentBatchDraft(payload) {
   return request("/business/shipment-batch-tasks/drafts", { method: "POST", body: payload });
 }
 
+export async function recognizeShipmentImportSchema(payload, { signal } = {}) {
+  try {
+    return await requestJson(
+      "/business/shipment-import/recognize-schema",
+      { method: "POST", body: payload, signal },
+      configuredBase
+    );
+  } catch (error) {
+    markApiErrorHandled(error);
+    return { status: "UNAVAILABLE" };
+  }
+}
+
 export function updateShipmentBatchDraft(taskId, payload) {
   return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/draft`, {
     method: "PATCH",
@@ -174,6 +187,12 @@ export function publishShipmentBatchDraft(taskId, expectedRevision) {
 
 export function fetchShipmentBatchTask(taskId, options = {}) {
   return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}`, options);
+}
+
+export function deleteShipmentBatchTask(taskId, expectedRevision) {
+  const path = "/business/shipment-batch-tasks/" + encodeURIComponent(taskId);
+  const query = expectedRevision == null ? "" : "?" + new URLSearchParams({ expectedRevision });
+  return request(path + query, { method: "DELETE" });
 }
 
 export function retryShipmentBatchTask(taskId) {

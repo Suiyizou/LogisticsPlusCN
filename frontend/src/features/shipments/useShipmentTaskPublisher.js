@@ -7,12 +7,15 @@ import {
   taskMayPublish,
   taskRuns
 } from "./shipmentTaskDraft.js";
+import { canDeleteShipmentTask, taskWasRemoved } from "./shipmentTaskBatch.js";
 
 export function useShipmentTaskPublisher({
   api,
   reportError,
-  confirmDiscard,
+  confirmDiscard = () => false,
   confirmPublish = () => true,
+  confirmTaskAction = () => true,
+  confirmDelete = () => true,
   onCompleted = () => {},
   scheduler = globalThis
 }) {
@@ -27,6 +30,7 @@ export function useShipmentTaskPublisher({
   const pollError = ref(null);
   const notice = ref("");
   const dirty = computed(() => JSON.stringify(editor.value) !== baseline.value);
+  const hasDraft = computed(() => selected.value?.status === "DRAFT" || editor.value.rows.length > 0);
   const review = computed(() => reviewTaskRows(editor.value));
   const itemCount = computed(() => review.value.filter(({ item }) => item).length);
   const issueCount = computed(() =>
@@ -47,6 +51,7 @@ export function useShipmentTaskPublisher({
   let sequence = 0;
   let listRequest = 0;
   const completed = new Set();
+  const removed = new Set();
 
   watch(
     editor,
@@ -91,8 +96,8 @@ export function useShipmentTaskPublisher({
     return !dirty.value || confirmDiscard();
   }
 
-  function startNew() {
-    if (busy.value || !discardAllowed()) return false;
+  function startNew({ discardConfirmed = false } = {}) {
+    if (busy.value || (!discardConfirmed && !discardAllowed())) return false;
     sequence++;
     error.value = null;
     pollError.value = null;
@@ -109,10 +114,10 @@ export function useShipmentTaskPublisher({
       const result = await api.list();
       if (disposed || request !== listRequest || !Array.isArray(result)) return;
       if (before === sequence) {
-        tasks.value = result;
+        tasks.value = result.filter(({ taskId }) => !removed.has(taskId));
       } else {
         const seen = new Set(tasks.value.map(({ taskId }) => taskId));
-        tasks.value.push(...result.filter(({ taskId }) => !seen.has(taskId)));
+        tasks.value.push(...result.filter(({ taskId }) => !seen.has(taskId) && !removed.has(taskId)));
       }
       if (error.value?.action === "list") error.value = null;
     } catch (cause) {
@@ -177,19 +182,20 @@ export function useShipmentTaskPublisher({
     return run("save", saveInput);
   }
 
-  function importFile(load) {
-    if (!discardAllowed()) return false;
+  function importFile(load, { discardConfirmed = false } = {}) {
+    if (hasDraft.value && !discardConfirmed && !discardAllowed()) return false;
+    const taskName = !selected.value && !hasDraft.value ? editor.value.taskName : "";
     return run("file", async (valid) => {
       const input = await load();
       if (!valid() || !input) return false;
       reset();
-      Object.assign(editor.value, input);
+      Object.assign(editor.value, input, { taskName });
       return saveInput(valid);
     });
   }
 
-  function open(taskId) {
-    if (!discardAllowed()) return false;
+  function open(taskId, { discardConfirmed = false } = {}) {
+    if (!discardConfirmed && !discardAllowed()) return false;
     return run("open", async (valid) => {
       const task = await api.get(taskId);
       if (!valid()) return false;
@@ -226,6 +232,7 @@ export function useShipmentTaskPublisher({
     const task = selected.value;
     if (!taskRuns.has(task?.status) || task.status === "STOPPING") return false;
     return run("cancel", async (valid) => {
+      if (!(await confirmTaskAction("cancel")) || !valid()) return false;
       const result = await api.cancel(task.taskId);
       if (!valid()) return false;
       apply(result);
@@ -238,6 +245,7 @@ export function useShipmentTaskPublisher({
     if (task?.status !== "COMPLETED" || !task.items?.some(({ status }) => status === "FAILED"))
       return false;
     return run("retry", async (valid) => {
+      if (!(await confirmTaskAction("retry")) || !valid()) return false;
       const result = await api.retry(task.taskId);
       if (!valid()) return false;
       completed.delete(task.taskId);
@@ -246,16 +254,39 @@ export function useShipmentTaskPublisher({
     });
   }
 
+  function forget(taskId) {
+    removed.add(taskId);
+    completed.delete(taskId);
+    tasks.value = tasks.value.filter((task) => task.taskId !== taskId);
+    if (selected.value?.taskId === taskId) reset();
+  }
+
+  function remove() {
+    const task = selected.value;
+    if (!canDeleteShipmentTask(task)) return false;
+    return run("delete", async (valid) => {
+      if (!(await confirmDelete(task, dirty.value)) || !valid()) return false;
+      try {
+        await api.remove(task.taskId, task.status === "DRAFT" ? task.revision : undefined);
+      } catch (cause) {
+        if (!taskWasRemoved(cause)) throw cause;
+        reportError(cause);
+      }
+      if (!valid()) return false;
+      forget(task.taskId);
+      return true;
+    });
+  }
+
   async function poll() {
     const task = selected.value;
-    if (disposed || busy.value || !taskRuns.has(task?.status)) return;
+    if (disposed || busy.value || globalThis.document?.hidden || !taskRuns.has(task?.status)) return;
     const before = sequence;
     try {
       const fresh = await api.get(task.taskId);
       if (disposed || before !== sequence) return;
       remember(fresh);
       selected.value = fresh;
-      if (fresh.status !== "QUEUED") notice.value = "";
       pollError.value = null;
     } catch (cause) {
       reportError(cause);
@@ -268,7 +299,7 @@ export function useShipmentTaskPublisher({
       pollTimer = scheduler.setTimeout(async () => {
         await poll();
         schedulePoll();
-      }, 3000);
+      }, 3500);
   }
   schedulePoll();
   onScopeDispose(() => {
@@ -281,6 +312,7 @@ export function useShipmentTaskPublisher({
     selected,
     editor,
     dirty,
+    hasDraft,
     reviewed,
     busy,
     loading,
@@ -298,6 +330,8 @@ export function useShipmentTaskPublisher({
     save,
     publish,
     cancel,
-    retry
+    retry,
+    remove,
+    forget
   };
 }

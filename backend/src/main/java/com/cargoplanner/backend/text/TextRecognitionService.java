@@ -1587,14 +1587,14 @@ public class TextRecognitionService {
     body.putIfAbsent("temperature", 0.1);
     body.putIfAbsent("stream", false);
     body.putIfAbsent("max_tokens", 8192);
-    if (cleanCell(settings.baseUrl()).toLowerCase(Locale.ROOT).contains("deepseek.com")) {
+    if (OpenAiCompatibleEndpoint.isDeepSeek(cleanCell(settings.baseUrl()))) {
       body.put("thinking", Map.of("type", "disabled"));
     }
 
     for (int attempt = 1; attempt <= LLM_MAX_TRANSIENT_ATTEMPTS; attempt++) {
       try {
         ResponseEntity<Map> response = restTemplate.postForEntity(
-            URI.create(chatCompletionsUrl(settings.baseUrl())),
+            URI.create(OpenAiCompatibleEndpoint.chatCompletionsUrl(cleanCell(settings.baseUrl()))),
             new HttpEntity<>(body, headers),
             Map.class
         );
@@ -1659,23 +1659,6 @@ public class TextRecognitionService {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("LLM retry interrupted", error);
     }
-  }
-
-  private String chatCompletionsUrl(String baseUrl) {
-    String url = cleanCell(baseUrl).replaceAll("/+$", "");
-    if (url.isBlank()) {
-      url = "https://api.deepseek.com";
-    }
-    if (url.endsWith("/chat/completions")) {
-      return url;
-    }
-    if (url.toLowerCase(Locale.ROOT).contains("deepseek.com")) {
-      return url.endsWith("/v1") ? url + "/chat/completions" : url + "/chat/completions";
-    }
-    if (url.endsWith("/v1")) {
-      return url + "/chat/completions";
-    }
-    return url + "/v1/chat/completions";
   }
 
   private String extractAssistantContent(Map<?, ?> payload) {

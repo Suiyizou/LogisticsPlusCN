@@ -28,6 +28,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 class PublishedShipmentTaskService {
   private static final String PREFIX = "published_";
+  private static final String DEFAULT_SOURCE_FILE_NAME = "Imported spreadsheet";
+  private static final int TASK_NAME_MAX_LENGTH = 120;
+  private static final Set<String> DELETABLE_STATUSES = Set.of("DRAFT", "COMPLETED", "STOPPED");
   private static final Set<String> NEW_QUERY_RETRY_CODES = Set.of(
       "TRACKING_HUMAN_REQUIRED", "TRACKING_NO_BUSINESS_DATA", "TRACKING_QUERY_FAILED",
       "TRACKING_LOCAL_JOB_FAILED", "TRACKING_CANCELLED", "UPSTREAM_EMPTY", "UNSUPPORTED_CARRIER"
@@ -117,6 +120,20 @@ class PublishedShipmentTaskService {
     return status(id, user);
   }
 
+  void delete(String id, Integer expectedRevision, AuthenticatedUser user) {
+    requireManager(user);
+    transactions.executeWithoutResult(transaction -> {
+      Task task = owned(id, user, true);
+      if (!DELETABLE_STATUSES.contains(task.status()) || repository.hasUnfinishedItems(id)) {
+        throw new ApiException(HttpStatus.CONFLICT, "TASK_ACTIVE", "Stop the shipment task before deleting it");
+      }
+      if (expectedRevision != null && "DRAFT".equals(task.status())) {
+        requireRevision(task, expectedRevision);
+      }
+      repository.markDeleted(task, clock.instant());
+    });
+  }
+
   Map<String, Object> retry(String id, List<Integer> rowNumbers, AuthenticatedUser user) {
     requireManager(user);
     transactions.executeWithoutResult(transaction -> {
@@ -202,7 +219,8 @@ class PublishedShipmentTaskService {
       throw new ApiException(HttpStatus.BAD_REQUEST, "Source rows must be an array of at most 2000 rows");
     }
     ShipmentBatchDraftRequest draft = new ShipmentBatchDraftRequest(
-        clean(input.sourceFileName(), 255, "Imported spreadsheet"), batch.normalizeChannel(input.channel()),
+        clean(input.sourceFileName(), 255, DEFAULT_SOURCE_FILE_NAME), normalizeTaskName(input.taskName()),
+        batch.normalizeChannel(input.channel()),
         items, "IMPORT".equals(mode) ? clean(input.customerId(), 64, null) : null,
         "IMPORT".equals(mode) && Boolean.TRUE.equals(input.publishToCustomer()), mode,
         input.sourceRows(), null);
@@ -210,6 +228,16 @@ class PublishedShipmentTaskService {
       throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Shipment draft exceeds 4 MB");
     }
     return draft;
+  }
+
+  private static String normalizeTaskName(String input) {
+    if (input == null || input.isBlank()) return null;
+    String name = input.strip();
+    if (name.length() > TASK_NAME_MAX_LENGTH) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TASK_NAME",
+          "Task name must be at most " + TASK_NAME_MAX_LENGTH + " characters");
+    }
+    return name;
   }
 
   private Review review(ShipmentBatchDraftRequest draft, AuthenticatedUser user, boolean publishing) {
@@ -262,14 +290,14 @@ class PublishedShipmentTaskService {
 
   private Task owned(String id, AuthenticatedUser user, boolean lock) {
     Task task = repository.findTask(id, lock);
-    if (task == null) throw new ApiException(HttpStatus.NOT_FOUND, "Batch task not found");
+    if (task == null) throw new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "Batch task not found");
     if (task.ownerId() != user.id() && !user.isAdmin()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Batch task access has not been granted");
     }
     return task;
   }
 
-  private void requireManager(AuthenticatedUser user) {
+  static void requireManager(AuthenticatedUser user) {
     if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "Sign in is required");
     if (!user.canManageShipmentFiles()) {
       throw new ApiException(HttpStatus.FORBIDDEN, "Business user or administrator permission is required");
@@ -313,6 +341,7 @@ class PublishedShipmentTaskService {
     result.put("taskId", task.id());
     result.put("status", task.status());
     result.put("revision", task.revision());
+    result.put("taskName", task.taskName() == null ? defaultTaskName(task.sourceFileName()) : task.taskName());
     result.put("sourceFileName", task.sourceFileName());
     result.put("channel", task.channel());
     result.put("mode", task.mode());
@@ -339,6 +368,14 @@ class PublishedShipmentTaskService {
     result.put("elapsedMs", elapsed(task.started(), task.finished()));
     result.put("nextAttemptAt", iso(task.nextAttempt()));
     return result;
+  }
+
+  private static String defaultTaskName(String fileName) {
+    if (fileName == null || fileName.isBlank()) return DEFAULT_SOURCE_FILE_NAME;
+    int extension = fileName.lastIndexOf('.');
+    if (extension <= 0 || extension == fileName.length() - 1) return fileName;
+    String stem = fileName.substring(0, extension).strip();
+    return stem.isEmpty() ? fileName : stem;
   }
 
   private Map<String, Object> itemSnapshot(Item item) {

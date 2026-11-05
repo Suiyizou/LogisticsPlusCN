@@ -151,7 +151,7 @@ class PublishedShipmentTaskWorker {
     if (submitting) {
       boolean mayDispatch = Boolean.TRUE.equals(transactions.execute(transaction -> {
         Task current = repository.findTask(task.id(), true);
-        if (current.cancelled() || !ownsLease(item)) return false;
+        if (current == null || current.cancelled() || !ownsLease(item)) return false;
         repository.markDispatchStarted(item, clock.instant());
         return true;
       }));
@@ -184,7 +184,7 @@ class PublishedShipmentTaskWorker {
     Item item = work.item();
     transactions.executeWithoutResult(transaction -> {
       Task task = repository.findTask(work.task().id(), true);
-      if (!ownsLease(item)) return;
+      if (task == null || !ownsLease(item)) return;
       if (task.cancelled()) {
         advance(task, item, new Outcome("CANCELLED", null, null, null, null, null, null, 0, null));
         return;
@@ -270,7 +270,7 @@ class PublishedShipmentTaskWorker {
   private void record(Work work, Outcome outcome) {
     transactions.executeWithoutResult(transaction -> {
       Task task = repository.findTask(work.task().id(), true);
-      if (ownsLease(work.item())) advance(task, work.item(), outcome);
+      if (task != null && ownsLease(work.item())) advance(task, work.item(), outcome);
     });
   }
 

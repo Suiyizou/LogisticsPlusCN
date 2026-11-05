@@ -1,6 +1,7 @@
 import {
   buildShipmentBatchReview,
   identifyShipmentCarrier,
+  parseShipmentBatchWorkbook,
   validShipmentBatchReference
 } from "../../services/shipmentBatchImport.js";
 import {
@@ -8,10 +9,19 @@ import {
   supportsShipmentReference,
   trackingCarriersForMode
 } from "../../services/trackingCarriers.js";
+import { shipmentTaskSourceName } from "./shipmentTaskBatch.js";
 
 const knownCarriers = new Set(ALL_TRACKING_CARRIERS.map(({ code }) => code));
 export const taskRuns = new Set(["QUEUED", "RUNNING", "WAITING", "STOPPING", "RETRY_WAIT"]);
 const issue = (code, message = "") => ({ code, message });
+
+export function readTaskWorkbook(bytes, xlsx, fileName) {
+  const workbook = /\.csv$/i.test(fileName)
+    // Preserve references with leading zeros and decode Chinese headers with or without a BOM.
+    ? xlsx.read(new TextDecoder().decode(bytes), { type: "string", raw: true })
+    : xlsx.read(bytes, { type: "array", cellDates: false, cellNF: true });
+  return parseShipmentBatchWorkbook(workbook, xlsx);
+}
 
 export function recognizeTaskWorkbook(sheet, column) {
   const recognized = buildShipmentBatchReview(sheet, column);
@@ -20,6 +30,8 @@ export function recognizeTaskWorkbook(sheet, column) {
     column,
     columnLabel: sheet?.columns.find((entry) => entry.index === column)?.label || "",
     headers: sheet?.columns.map(({ label }) => label) || [],
+    schemaStatus: sheet?.schemaStatus || "",
+    referenceSuggested: Number.isInteger(column) && sheet?.schemaSuggestion?.referenceColumnIndex === column,
     total: recognized.totalCandidates
   };
   return {
@@ -32,6 +44,7 @@ export function recognizeTaskWorkbook(sheet, column) {
       originalReference: row.originalReference,
       originalCarrier: row.carrier || "",
       carrierEvidence: row.carrierSource || "unknown",
+      ...(row.carrierSource === "ai" ? { sourceCarrierLabel: row.carrierRemark } : {}),
       originalType: row.sourceReference?.type || row.type || "",
       sourceAddress: row.sourceReference?.address || "",
       sourceIssues: row.errors,
@@ -47,6 +60,7 @@ export function recognizeTaskWorkbook(sheet, column) {
 
 export function createTaskEditor() {
   return {
+    taskName: "",
     sourceFileName: "",
     channel: "AUTO",
     mode: "IMPORT",
@@ -59,9 +73,12 @@ export function createTaskEditor() {
 
 export function restoreTaskEditor(task) {
   const rows = task.sourceRows || [];
+  const sourceFileName = task.sourceFileName || "";
+  const taskName = task.taskName || "";
   const editor = {
     ...createTaskEditor(),
-    sourceFileName: task.sourceFileName || "",
+    taskName: taskName === shipmentTaskSourceName(sourceFileName) ? "" : taskName,
+    sourceFileName,
     channel: task.channel || "AUTO",
     mode: task.mode || "IMPORT",
     customerId: task.customerId || "",
@@ -142,6 +159,7 @@ export function reviewTaskRows(editor, adapterMode) {
 export function taskDraftPayload(editor, review) {
   const imports = editor.mode === "IMPORT";
   return {
+    taskName: editor.taskName?.trim() || null,
     sourceFileName: editor.sourceFileName,
     channel: editor.channel,
     mode: editor.mode,
