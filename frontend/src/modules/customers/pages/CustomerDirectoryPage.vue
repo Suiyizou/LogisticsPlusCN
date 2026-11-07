@@ -155,7 +155,8 @@
         </el-table-column>
         <el-table-column
           :label="t('customers.actions')"
-          :width="isManager ? 192 : 88"
+          :width="isManager ? 304 : 88"
+          :fixed="compactLayout ? false : 'right'"
           align="right"
           class-name="customer-actions-column"
         >
@@ -165,6 +166,12 @@
                 t("customers.detail")
               }}</el-button>
               <template v-if="isManager">
+                <el-button size="small" type="primary" text :disabled="mutatingCustomer" @click.stop="openEditCustomer(row)">
+                  {{ t("customers.edit") }}
+                </el-button>
+                <el-button class="customer-delete-action" size="small" type="danger" text :disabled="mutatingCustomer" @click.stop="deleteCustomerRow(row)">
+                  {{ t("customers.deleteCustomer") }}
+                </el-button>
                 <el-dropdown
                   trigger="click"
                   placement="bottom-end"
@@ -180,9 +187,6 @@
                   >
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item :disabled="mutatingCustomer" @click="openEditCustomer(row)">
-                        {{ t("customers.edit") }}
-                      </el-dropdown-item>
                       <el-dropdown-item
                         :disabled="mutatingCustomer || !isTransferableCustomer(row)"
                         @click="openCustomerTransfer(row)"
@@ -190,14 +194,6 @@
                       >
                       <el-dropdown-item :disabled="mutatingCustomer" @click="openResetPassword(row)">
                         {{ t("customers.resetPassword") }}
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        divided
-                        class="customer-row-menu-danger"
-                        :disabled="mutatingCustomer"
-                        @click="deleteCustomerRow(row)"
-                      >
-                        {{ t("customers.deleteCustomer") }}
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -231,10 +227,12 @@ import { toRefs } from "vue";
 import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
 import WorkspaceEmptyState from "../../../components/workspace/WorkspaceEmptyState.vue";
 import type { CustomerRecord } from "../../../types/businessRecords";
+import { useMediaQuery } from "../../../composables/useMediaQuery.js";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
 import { ArrowDown, Plus, Refresh, Search, Upload } from "@element-plus/icons-vue";
 const { t } = useI18n();
+const compactLayout = useMediaQuery("(max-width: 680px)");
 const pages = useModulePages("customers");
 const workspace = pages.directory;
 const { isManager } = toRefs(workspace.permissions);
