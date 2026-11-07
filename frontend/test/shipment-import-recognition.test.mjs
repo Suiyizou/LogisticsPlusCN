@@ -10,6 +10,7 @@ import * as XLSX from "xlsx";
 import {
   prepareSheet,
   parseShipmentBatchWorkbook,
+  recognizeShipmentBatchSchemas,
   buildShipmentBatchPreview,
   buildShipmentBatchReview
 } from "../src/services/shipmentBatchImport.js";
@@ -142,6 +143,80 @@ test("operational workbook uses actual bill column and current schedule, keeps j
   assert.ok(
     buildShipmentBatchPreview(sheet, 0).errors.some((e) => e.code === "BUSINESS_ID_COLUMN")
   );
+});
+test("operational model review receives the real bill header without the identically named job column", async () => {
+  const sheet = prepareSheet("Operations", [
+    operationalHeaders,
+    ["LJSH26000001", "", "", "", "", "", "", "", "COSU0012345678", "COSCO"],
+    ["LJSH26000002", "", "", "", "", "", "", "", "HDMUTEST123456", "HMM"]
+  ]);
+  let calls = 0;
+  const [recognized] = await recognizeShipmentBatchSchemas([sheet], async ({ headers, carrierLabels }) => {
+    calls++;
+    assert.deepEqual(headers, [{ index: 8, label: "提单号" }, { index: 9, label: "CARRIER" }]);
+    assert.deepEqual(carrierLabels, []);
+    return {
+      status: "SUGGESTED", recognitionSource: "LLM", modelVerified: true,
+      referenceColumnIndex: headers.find(({ label }) => label === "提单号").index,
+      referenceType: "BILLOFLADING", carrierColumnIndex: 9, carrierMappings: []
+    };
+  });
+  assert.equal(calls, 1);
+  assert.equal(recognized.modelVerified, true);
+  assert.equal(recognized.schemaStatus, "SUGGESTED");
+  const result = buildShipmentBatchPreview(recognized, recognized.suggestedColumnIndex, "", "BOOKING", {
+    adapterMode: "LOCAL_QUEUE", autoReferenceColumns: true
+  });
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.items.map(({ carrier, type, number }) => [carrier, type, number]), [
+    ["COSCO", "BILLOFLADING", "COSU0012345678"],
+    ["HMM", "BILLOFLADING", "HDMUTEST123456"]
+  ]);
+  assert.equal(result.items[0].importedDetails.forwarderJobNumber, "LJSH26000001");
+  assert.deepEqual(result.rows[0].sourceReference, {
+    raw: "COSU0012345678", normalized: "COSU0012345678", type: "BILLOFLADING", address: "I2"
+  });
+});
+test("operational model review rejects an excluded job column or a changed explicit bill type", async () => {
+  const sheet = prepareSheet("Operations", [
+    operationalHeaders,
+    ["LJSH26000001", "", "", "", "", "", "", "", "COSU0012345678", "COSCO"]
+  ]);
+  for (const [referenceColumnIndex, referenceType] of [[0, "BILLOFLADING"], [8, "BOOKING"]]) {
+    const [recognized] = await recognizeShipmentBatchSchemas([sheet], async () => ({
+      status: "SUGGESTED", recognitionSource: "LLM", modelVerified: true,
+      referenceColumnIndex, referenceType, carrierColumnIndex: 9, carrierMappings: []
+    }));
+    assert.equal(recognized.modelVerified, false);
+    assert.equal(recognized.modelRequired, true);
+    assert.equal(recognized.schemaStatus, "NO_MATCH");
+    assert.equal(recognized.schemaReasonCode, "AMBIGUOUS_COLUMNS");
+  }
+});
+test("automatic reference selection never falls back to an operational job number when the bill is absent", () => {
+  const sheet = prepareSheet("Operations", [
+    operationalHeaders,
+    ["LJSH26000001", "", "", "", "", "", "", "", "COSU0012345678", "COSCO"],
+    ["LJSH26000002", "", "", "", "", "", "", "", "", "COSCO"]
+  ]);
+  const review = buildShipmentBatchReview(sheet, sheet.suggestedColumnIndex, "", "BOOKING", {
+    adapterMode: "LOCAL_QUEUE", autoReferenceColumns: true
+  });
+  assert.equal(review.items.length, 1);
+  assert.deepEqual(review.errors.map(({ row, code }) => [row, code]), [[3, "MISSING_REFERENCE"]]);
+  assert.equal(review.rows[1].sourceReference.address, "I3");
+  assert.equal(review.rows[1].number, "");
+  assert.equal(review.rows[1].importedDetails.forwarderJobNumber, "LJSH26000002");
+  const ordinary = prepareSheet("Mixed references", [
+    ["提单号", "订舱号", "CARRIER"],
+    ["", "BKG000001", "CMA"]
+  ]);
+  const fallback = buildShipmentBatchPreview(ordinary, 0, "", "BOOKING", {
+    adapterMode: "LOCAL_QUEUE", autoReferenceColumns: true
+  });
+  assert.deepEqual(fallback.errors, []);
+  assert.equal(fallback.items[0].type, "BOOKING");
+  assert.equal(fallback.items[0].number, "BKG000001");
 });
 test("unknown and carrier conflict block instead of creating manual placeholders", () => {
   const { result } = preview([

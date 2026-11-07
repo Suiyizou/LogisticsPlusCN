@@ -406,13 +406,17 @@ export async function recognizeShipmentBatchSchemas(sheets, recognize) {
     }
     const plausibleReferenceColumns = new Set(
       sheet.columns.filter(({ index, header, score }) =>
+        // This operational template labels its internal job number and ocean
+        // bill alike. The verified template mapping identifies the real bill.
+        (!sheet.operational || index === sheet.referenceColumn) &&
         safeReferenceHeader(header) && (score > 0 || referenceHeaderHint.test(header)) &&
         sheet.rows.slice(1).some((row) => validShipmentBatchReference(row[index]))
       ).map(({ index }) => index)
     );
     const headers = (plausibleReferenceColumns.size ? sheet.columns : []).filter(({ index, header }) =>
       index <= 16383 && safeSchemaLabel(header.replace(/[:：]\s*$/, "")) &&
-      (plausibleReferenceColumns.has(index) || validModelCarrierColumn(sheet, index, null))
+      (plausibleReferenceColumns.has(index) ||
+        ((!sheet.operational || index !== 0) && validModelCarrierColumn(sheet, index, null)))
     ).map(({ index, header }) => ({ index, label: header.replace(/[:：]\s*$/, "").trim() }));
     const base = { ...sheet, modelRequired: true, recognitionSource: "LLM", modelVerified: false };
     if (!headers.length || headers.length > schemaLabelLimit) {
