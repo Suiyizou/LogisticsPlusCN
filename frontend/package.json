@@ -9,6 +9,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5177",
     "build": "npm run i18n:scan && vite build",
+    "build:local-queue": "node scripts/build-for-tracking.mjs LOCAL_QUEUE",
+    "build:legacy": "node scripts/build-for-tracking.mjs LEGACY",
+    "verify:tracking-build": "node scripts/verify-tracking-build.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "typecheck": "tsc -p tsconfig.json && npm run typecheck:sfc && npm run typecheck:ports && node scripts/check-api-contract-types.mjs",
     "i18n:scan": "node scripts/check-i18n-hardcoded.js",

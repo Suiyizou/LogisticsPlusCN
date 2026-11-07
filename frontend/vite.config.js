@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
+import { trackingBuildMetadataPlugin } from "./scripts/tracking-build-metadata.mjs";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -12,6 +13,7 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_BACKEND_DEV_TARGET || env.VITE_BACKEND_DEV_TARGET || "http://127.0.0.1:8080";
   return {
     plugins: [
+      trackingBuildMetadataPlugin(),
       vue(),
       Components({
         dirs: [],

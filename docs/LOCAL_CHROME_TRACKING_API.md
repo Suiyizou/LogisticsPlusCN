@@ -18,6 +18,15 @@ APP_TRACKING_LOCAL_REQUEST_TIMEOUT=15s
 
 Compose 和 `.env.example` 默认使用 `LOCAL_QUEUE`；Java 单独运行时保留 `LEGACY` 默认值供旧适配器本地开发兼容。云端静态镜像已经不含旧适配器，已有 `.env` 若设为 `LEGACY` 须改成 `LOCAL_QUEUE`。实时查询不会在隧道断开时回落到云端 Chrome。token 仅保存在后端环境变量中，不传给页面，也不使用 `X-Tracking-Adapter-Key` 替代。
 
+手工构建前端发布包时，在 `frontend` 目录使用明确的模式，并在上传前与后端模式核对：
+
+```sh
+npm run build:local-queue
+npm run verify:tracking-build -- dist LOCAL_QUEUE
+```
+
+每次 Vite 构建都会生成 `tracking-build.json`，记录实际编译模式和可执行的船司/单号类型清单。当前 `LOCAL_QUEUE` 为 15 家，`LEGACY` 为 6 家；未设置模式的普通 `npm run build` 保留旧预览兼容行为，因此不能直接作为 `LOCAL_QUEUE` 线上发布包。发布脚本应拒绝模式或能力不匹配的包。旧适配器环境可使用 `npm run build:legacy` 并按 `LEGACY` 校验。Docker 前端构建继续通过 `VITE_TRACKING_ADAPTER_MODE` 明确传入模式。
+
 云端 `tracking` 服务现为纯静态 Nginx，保留 3000 端口和 `/api/health`，服务存活不代表本地 API 已连通。旧 `/tracking/api/track*` 与通道检查端点返回 410；页面应继续调用 Spring 的 `/api/public/shipments/track`。正在使用旧 Node 基底的预览容器和 `docker/dev-preview/tracking-static-update.Dockerfile` 只用于过渡预览，新静态镜像直接通过 `tracking-service/Dockerfile` 构建，不复用旧预览覆盖镜像。
 
 本地服务使用 `npm run chrome` 和 `npm run serve`；配置 `TRACK_TOKEN`（若同时设置 `TOKEN`，本地服务优先使用 `TOKEN`）。当前本地队列共享一个浏览器工作页，请设置 `CONCURRENCY=1`。后端实例内也串行提交，多个后端副本应共用这个单并发本地队列。
