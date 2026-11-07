@@ -8,6 +8,7 @@ import { configuredPlatformModules } from "../../modules/configuredRegistry.js";
 import { modulesForRole } from "../../modules/registry.js";
 import { modulesForSurface } from "../../modules/moduleCatalog.js";
 import { adminNavigation } from "../../features/admin/adminNavigation.js";
+import { consolidateCustomerNavigation } from "../../modules/customerManagementNavigation.js";
 
 const props = defineProps({
   role: { type: String, default: "" },
@@ -31,7 +32,7 @@ const groups = computed(() => {
   if (!["ADMIN", "BUSINESS", "OVERSEA_AGENT"].includes(role.value)) return [];
   const business = modulesForRole(role.value, configuredPlatformModules);
   const admin = modulesForSurface(configuredPlatformModules, "admin", role.value);
-  return [
+  return consolidateCustomerNavigation([
     {
       key: "tracking",
       icon: "tracking",
@@ -117,7 +118,7 @@ const groups = computed(() => {
           }
         ]
       : [])
-  ];
+  ], role.value, configuredPlatformModules);
 });
 const currentPath = computed(() => props.activeIndex || route.path);
 function isCurrent(item) {

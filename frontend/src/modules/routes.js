@@ -1,5 +1,6 @@
 import { businessModules, validateModules } from "./registry.js";
 import { createPublicServiceRoutes } from "../public/routes.js";
+import { customerDirectoryEntry } from "./customerManagementNavigation.js";
 
 // Canonicalize legacy inline-import links before mounting the cargo-list page.
 export function canonicalSmartImportLocation(to) {
@@ -37,6 +38,7 @@ export function createApplicationRoutes(
   )
     throw Error(`Invalid business workspace path: ${businessPath}`);
   validateModules(modules);
+  const customerDirectory = customerDirectoryEntry(modules);
   for (const name of [
     "planner",
     "operations",
@@ -78,6 +80,9 @@ export function createApplicationRoutes(
           return {
             path: [module.mount, page.path].filter(Boolean).join("/"),
             name: page.name,
+            ...(module.id === "admin-platform" && page.path === "" && customerDirectory
+              ? { redirect: (to) => ({ name: customerDirectory.name, query: { ...to.query }, hash: to.hash }) }
+              : {}),
             component: views[page.view],
             meta: {
               surface,
