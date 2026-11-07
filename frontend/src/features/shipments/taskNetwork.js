@@ -612,7 +612,7 @@ export class TaskNetwork {
         }
         if (!node.round) node.labelElement.textContent = compactText(node.label,node.width - 34,12,true);
         node.metaElement.textContent = '';
-        node.titleElement.textContent = `${this.carrierLabel(node.carrier)} · ${node.label}\n${this.statusLabel(item.status)}`;
+        node.titleElement.textContent = `${this.carrierLabel(node.carrier)} · ${node.label}\n${this.statusLabel(item.status, item.item)}`;
       } else if (node.kind === 'carrier') {
         const identity = carrierIdentity(node.carrier);
         const label = node.round && this.groups.length > 6 && identity.logo ? identity.code : node.label;

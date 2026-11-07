@@ -1,4 +1,5 @@
 import { markApiErrorHandled, requestJson } from "./apiClient";
+import { shipmentTaskRetryBody } from "./shipmentTaskRetry.js";
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL;
 
@@ -195,10 +196,10 @@ export function deleteShipmentBatchTask(taskId, expectedRevision) {
   return request(path + query, { method: "DELETE" });
 }
 
-export function retryShipmentBatchTask(taskId) {
+export function retryShipmentBatchTask(taskId, rowNumbers) {
   return request(`/business/shipment-batch-tasks/${encodeURIComponent(taskId)}/retry`, {
     method: "POST",
-    body: {}
+    body: shipmentTaskRetryBody(rowNumbers)
   });
 }
 

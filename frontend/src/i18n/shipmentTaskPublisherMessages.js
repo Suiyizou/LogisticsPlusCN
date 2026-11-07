@@ -104,6 +104,16 @@ export const shipmentTaskPublisherMessages = {
     nextAttempt: "预计下次尝试 {time}",
     retry: "重试失败行",
     retryConfirm: "重新执行此任务中的失败行？",
+    retryRow: "重试此行",
+    retryRowConfirm: "重新查询「{reference}」这一行？其他行不会重新执行。",
+    failure: {
+      verification: { label: "需要官网验证", message: "船司要求安全验证，本次未取得物流结果；完成验证后再重试。" },
+      noData: { label: "官网无匹配数据", message: "船司官网未返回匹配的物流数据，请核对单号、类型及官网可查询期限。" },
+      query: { label: "查询未完成", message: "本次船司查询未完成，未取得物流结果，可稍后重试此行。" },
+      unstructured: { label: "未解析出物流数据", message: "已访问船司页面，但未解析出物流数据，请核对官网结果后重试。" },
+      unavailable: { label: "查询服务暂不可用", message: "暂时无法连接查询执行端，请恢复连接后重试。" },
+      timeout: { label: "查询超时", message: "本次查询超过等待时限，请稍后重试。" }
+    },
     problemsOnly: "仅看异常",
     staleRevision: "服务器上的任务已更新。重新打开此任务可读取最新版本。",
     pollError: "暂时无法刷新进度，系统会再次尝试。",
@@ -241,6 +251,16 @@ export const shipmentTaskPublisherMessages = {
     nextAttempt: "Next attempt around {time}",
     retry: "Retry failed rows",
     retryConfirm: "Run the failed rows in this task again?",
+    retryRow: "Retry this row",
+    retryRowConfirm: "Query only “{reference}” again? Other rows will not run again.",
+    failure: {
+      verification: { label: "Carrier verification required", message: "The carrier requires a security check. No tracking result was obtained. Complete verification before retrying." },
+      noData: { label: "No matching carrier data", message: "The carrier returned no matching tracking data. Check the reference, its type and the carrier's available query period." },
+      query: { label: "Query not completed", message: "The carrier query did not complete and returned no tracking result. You can retry this row later." },
+      unstructured: { label: "Tracking data not parsed", message: "The carrier page was reached, but no tracking data could be parsed. Check the carrier result before retrying." },
+      unavailable: { label: "Query service unavailable", message: "The tracking runner cannot be reached. Restore the connection before retrying." },
+      timeout: { label: "Query timed out", message: "The query exceeded its waiting time. Try again later." }
+    },
     problemsOnly: "Show exceptions",
     staleRevision: "The task changed on the server. Reopen this task to load the latest version.",
     pollError: "Progress could not be refreshed. The page will try again.",

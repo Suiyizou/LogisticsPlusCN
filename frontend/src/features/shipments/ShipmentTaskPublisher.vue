@@ -41,6 +41,7 @@ import { queryResultFields, queryResultGroups } from "./shipmentQueryResult.js";
 import { readTaskWorkbook, recognizeTaskWorkbook, taskNeedsModelRecognition, taskRuns } from "./shipmentTaskDraft.js";
 import { taskIdFromQuery } from "./shipmentTaskNetworkModel.js";
 import { useShipmentTaskPublisher } from "./useShipmentTaskPublisher.js";
+import { shipmentTaskErrorMessage, shipmentTaskFailurePresentation } from "./shipmentTaskFeedback.js";
 
 const props = defineProps({
   customers: { type: Array, default: () => [] },
@@ -133,8 +134,8 @@ const schemaStatus = computed(
 const defaultTaskName = computed(() => shipmentTaskSourceName(editor.value.sourceFileName));
 const sourceFormat = computed(() => editor.value.sourceFileName.match(/\.(xlsx|xls|csv)$/i)?.[1].toUpperCase());
 const excludedCount = computed(() => review.value.length - itemCount.value);
-const statusLabel = (status) =>
-  te(`shipmentTask.status.${status}`) ? copy(`status.${status}`) : status;
+const statusLabel = (status, item) => shipmentTaskFailurePresentation(item, t)?.label ||
+  (te(`shipmentTask.status.${status}`) ? copy(`status.${status}`) : status);
 const statusesWithProblems = new Set(["FAILED", "PARTIAL", "MANUAL", "CANCELLED"]);
 const results = computed(() => {
   const rows = selected.value?.items || [];
@@ -185,7 +186,9 @@ function reviewableSheet(sheet) {
     ((sheet.modelVerified && sheet.schemaStatus === "SUGGESTED") || sheet.schemaStatus === "REVIEW_HEADERS");
 }
 
-function statusTone(status) {
+function statusTone(status, item) {
+  const failure = shipmentTaskFailurePresentation(item, t);
+  if (failure) return failure.tone;
   if (["SUCCEEDED", "COMPLETED"].includes(status)) return "success";
   if (["FAILED", "PARTIAL"].includes(status)) return "danger";
   if (["MANUAL", "WAITING", "RETRY_WAIT"].includes(status)) return "warning";
@@ -887,8 +890,8 @@ onBeforeRouteLeave(() => !busy.value && confirmDiscard());
                   >
                 </div>
                 <CarrierBadge v-if="item.carrier" :carrier="item.carrier" />
-                <span class="task-pill" :data-tone="statusTone(item.status)">{{
-                  statusLabel(item.status)
+                <span class="task-pill" :data-tone="statusTone(item.status, item)">{{
+                  statusLabel(item.status, item)
                 }}</span>
                 <RouterLink
                   v-if="item.shipmentId"
@@ -901,8 +904,8 @@ onBeforeRouteLeave(() => !busy.value && confirmDiscard());
                   {{ copy("openShipment") }}
                 </RouterLink>
               </div>
-              <p v-if="item.error || item.mainError" class="task-result-error">
-                {{ item.error || item.mainError }}
+              <p v-if="shipmentTaskErrorMessage(item, t)" class="task-result-error">
+                {{ shipmentTaskErrorMessage(item, t) }}
                 <small v-if="item.errorCode">({{ item.errorCode }})</small>
               </p>
               <p v-if="item.nextRetryAt && item.status === 'WAITING'">

@@ -15,6 +15,8 @@ import ShipmentTaskBatchPicker from "./ShipmentTaskBatchPicker.vue";
 import { canDeleteShipmentTask, formatShipmentTaskTime, taskWasRemoved } from "./shipmentTaskBatch.js";
 import { confirmShipmentTask, confirmShipmentTaskDeletion } from "./shipmentTaskConfirm.js";
 import { queryResultFields, queryResultGroups } from "./shipmentQueryResult.js";
+import { shipmentTaskErrorMessage, shipmentTaskFailurePresentation } from "./shipmentTaskFeedback.js";
+import { shipmentTaskRetryRows } from "../../services/shipmentTaskRetry.js";
 import {
   groupTaskStates, isTaskActive, shouldLoadTaskDetail, stateOf, taskIdFromQuery, taskStateColors,
   toShipmentTaskNetwork
@@ -27,7 +29,9 @@ const router = useRouter();
 const { t, te, locale } = useI18n();
 const copy = (key, params = {}) => t(`shipmentTaskManagement.${key}`, params);
 const taskCopy = (key) => t(`shipmentTask.${key}`);
-const statusLabel = (status) => {
+const statusLabel = (status, item) => {
+  const failure = shipmentTaskFailurePresentation(item, t);
+  if (failure) return failure.label;
   if (status === "EXCLUDED") return copy("state.excluded");
   if (!status || status === "UNKNOWN") return copy("state.unknown");
   return te(`shipmentTask.status.${status}`) ? taskCopy(`status.${status}`) : status;
@@ -88,6 +92,8 @@ const missing = ref(false);
 const mayDelete = computed(() => canDeleteShipmentTask(task.value));
 const mayCancel = computed(() => isTaskActive(task.value?.status) && task.value?.status !== "STOPPING");
 const mayRetry = computed(() => task.value?.status === "COMPLETED" && task.value?.items.some(({ status }) => status === "FAILED"));
+const selectedRetryRows = computed(() => shipmentTaskRetryRows(task.value, selectedItem.value, Boolean(busy.value)));
+const selectedFailure = computed(() => shipmentTaskFailurePresentation(selectedItem.value, t));
 const listLocation = computed(() => ({
   path: "/workspace/tracking/tasks",
   query: selectedId.value ? { taskId: selectedId.value } : {}
@@ -195,25 +201,33 @@ async function refresh({ force = false, list = true } = {}) {
   }
 }
 
-async function changeTask(action) {
+async function changeTask(action, retryItem) {
   const currentTask = task.value;
   const id = currentTask?.taskId;
   const allowed = { cancel: mayCancel.value, retry: mayRetry.value, delete: mayDelete.value };
   if (!id || !allowed[action] || busy.value) return;
+  const rowNumbers = retryItem === undefined ? undefined : shipmentTaskRetryRows(currentTask, retryItem);
+  if (retryItem !== undefined && !rowNumbers) return;
   busy.value = action;
   actionError.value = "";
   stopReads();
   try {
     const confirmed = await (action === "delete"
       ? confirmShipmentTaskDeletion(t, currentTask)
-      : confirmShipmentTask(t, action));
+      : retryItem !== undefined
+        ? confirmShipmentTask(t, "retryRow", [
+          t("shipmentTask.retryRowConfirm", { reference: retryItem.displayNumber || retryItem.number || "—" }),
+          shipmentTaskErrorMessage(retryItem, t)
+        ].filter(Boolean).join(" "))
+        : confirmShipmentTask(t, action));
     if (!confirmed || disposed || selectedId.value !== id) return;
+    if (retryItem !== undefined && !shipmentTaskRetryRows(task.value, retryItem)) return;
     if (action === "delete") {
       await deleteShipmentBatchTask(id, currentTask.status === "DRAFT" ? currentTask.revision : undefined);
       if (!disposed) await removeBatchFromView(id);
       return;
     }
-    const response = await (action === "cancel" ? cancelShipmentBatchTask(id) : retryShipmentBatchTask(id));
+    const response = await (action === "cancel" ? cancelShipmentBatchTask(id) : retryShipmentBatchTask(id, rowNumbers));
     if (!disposed && selectedId.value === id) {
       detail.value = response;
       observedTimestamp = response.updatedAt;
@@ -407,8 +421,8 @@ onBeforeUnmount(() => {
         </header>
 
         <template v-if="selectedEntry && selectedItem">
-          <span class="stm-pill" :style="{ '--stm-state': taskStateColors[stateOf(selectedEntry.status)] }">
-            {{ statusLabel(selectedEntry.status) }}
+          <span class="stm-pill" :style="{ '--stm-state': taskStateColors[selectedFailure?.tone === 'warning' ? 'attention' : stateOf(selectedEntry.status)] }">
+            {{ statusLabel(selectedEntry.status, selectedItem) }}
           </span>
           <dl>
             <dt>{{ copy("carrier") }}</dt>
@@ -438,9 +452,12 @@ onBeforeUnmount(() => {
               <dt>{{ copy("updated") }}</dt><dd>{{ formatTime(selectedItem.updatedAt) }}</dd>
             </template>
           </dl>
-          <p v-if="selectedItem.error || selectedItem.errorCode" class="stm-alert">
-            {{ selectedItem.error || selectedItem.errorCode }}
+          <p v-if="shipmentTaskErrorMessage(selectedItem, t)" class="stm-alert">
+            {{ shipmentTaskErrorMessage(selectedItem, t) }}
+            <small v-if="selectedItem.errorCode">({{ selectedItem.errorCode }})</small>
           </p>
+          <button type="button" class="stm-button" :disabled="!selectedRetryRows"
+            @click="changeTask('retry', selectedItem)">{{ taskCopy("retryRow") }}</button>
           <p v-if="selectedItem.recognitionErrorCode && batch?.status === 'DRAFT'" class="stm-alert">
             {{ te(`shipmentTask.issue${selectedItem.recognitionErrorCode}`) ? taskCopy(`issue${selectedItem.recognitionErrorCode}`) : selectedItem.recognitionErrorCode }}
           </p>
