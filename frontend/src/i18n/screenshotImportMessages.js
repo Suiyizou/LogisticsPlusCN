@@ -12,6 +12,10 @@ export const screenshotImportMessages = {
     identityReview:
       "独立包装编号/唛头对应一件实物包装，不可重复、使用区间或搭配多件数量。请对照原图修正；成组包装信息可保留在来源依据中。",
     sourceConfirm: "我已核实来源单位、包装尺寸、数量、重量及表格区间，并确认以上结果。",
+    weightBasisUnproven:
+      "这行有多个包装。请核实原表毛重是每包重量还是整行总重，再确认预览中的单包毛重。",
+    weightBasisConflict:
+      "原表毛重表头与识别出的单包或整行口径冲突。请标明单包毛重或整行总毛重后重新识别。",
     unitUnproven: "原文件未明确证明候选单位，必须核实单位并更正或确认。",
     unitConflict: "候选单位与原文件明确单位冲突，请更正映射或分开导入不同单位的表格区间。",
     controlExcluded: "已从货物中排除重复标题或合计行，请确认表格区间。",
@@ -66,6 +70,10 @@ export const screenshotImportMessages = {
       "An individual package ID/mark must identify one physical package, without duplicates or ranges. Correct it against the source; group labels may be retained in the visible source evidence.",
     sourceConfirm:
       "I verified source units, outer dimensions, package counts, gross weights and table boundaries, and confirm these values.",
+    weightBasisUnproven:
+      "This row has multiple packages. Verify whether the source weight is per package or for the whole row, then confirm the per-package weight in the preview.",
+    weightBasisConflict:
+      "The proposed weight basis conflicts with the column heading. Clarify whether the column is per-package or row-total gross weight and run recognition again.",
     unitUnproven:
       "The original source does not prove the proposed unit. Verify and correct or confirm it.",
     unitConflict:

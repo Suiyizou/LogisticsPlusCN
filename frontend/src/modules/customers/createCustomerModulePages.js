@@ -27,6 +27,7 @@ export function createCustomerModulePages({
     customerSearch,
     filteredCustomers,
     loadingCustomers,
+    loadCustomers,
     paginatedCustomers,
     selectedCustomerRows,
     changeCustomerPage,
@@ -44,6 +45,7 @@ export function createCustomerModulePages({
   } = typedOperations.workspace.directory;
   const {
     mutatingCustomer,
+    deleteCustomerRow,
     deleteSelectedCustomers,
     openCreateCustomer,
     openEditCustomer,
@@ -159,7 +161,9 @@ export function createCustomerModulePages({
       }),
       actions: {
         changeCustomerPage,
+        deleteCustomerRow,
         deleteSelectedCustomers,
+        refreshCustomers: () => loadCustomers("", { selectFirst: false }),
         handleCustomerSelectionChange,
         openBatchImport,
         openCreateCustomer,

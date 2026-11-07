@@ -88,6 +88,31 @@ test("customer page filters, selection, view and table handles use the live dire
   assert.equal(h.customers.detail.state.selectedCustomer.id, "A");
 });
 
+test("directory refresh retains its search and the row delete entry still enforces manager permission", async (context) => {
+  let loads = 0, deletes = 0;
+  const h = pages(context, {
+    fetchBusinessCustomers: async () => {
+      loads++;
+      return { items: [{ ...customer, overseaAgentDisplayName: "Pacific Desk", remark: "Priority account" }] };
+    },
+    deleteBusinessCustomer: async () => { deletes++; }
+  });
+  await h.customers.directory.actions.refreshCustomers();
+  h.customers.directory.state.customerSearch = "Pacific Desk";
+  assert.equal(h.customers.directory.state.paginatedCustomers.length, 1);
+  await h.customers.directory.actions.refreshCustomers();
+  assert.equal(loads, 2);
+  assert.equal(h.customers.directory.state.customerSearch, "Pacific Desk");
+  assert.equal(h.workspace.directory.selectedCustomerId.value, "");
+  h.canManage.value = false;
+  await h.customers.directory.actions.deleteCustomerRow(customer);
+  assert.equal(deletes, 0);
+  h.customers.directory.state.customerSearch = "Priority account";
+  assert.equal(h.customers.directory.state.paginatedCustomers.length, 1);
+  h.customers.directory.state.customerSearch = "Outside assigned scope";
+  assert.equal(h.customers.directory.state.paginatedCustomers.length, 0);
+});
+
 test("customer page submission blocks agent and handover pages until the shared write finishes", async (context) => {
   const pending = deferred(),
     h = pages(context, { createBusinessCustomer: () => pending.promise });

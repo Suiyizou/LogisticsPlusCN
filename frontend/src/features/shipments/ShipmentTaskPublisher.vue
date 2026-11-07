@@ -38,7 +38,7 @@ import {
 } from "./shipmentTaskBatch.js";
 import { confirmShipmentTask, confirmShipmentTaskDeletion } from "./shipmentTaskConfirm.js";
 import { queryResultFields, queryResultGroups } from "./shipmentQueryResult.js";
-import { readTaskWorkbook, recognizeTaskWorkbook, taskRuns } from "./shipmentTaskDraft.js";
+import { readTaskWorkbook, recognizeTaskWorkbook, taskNeedsModelRecognition, taskRuns } from "./shipmentTaskDraft.js";
 import { taskIdFromQuery } from "./shipmentTaskNetworkModel.js";
 import { useShipmentTaskPublisher } from "./useShipmentTaskPublisher.js";
 
@@ -123,8 +123,12 @@ const taskNameId = useId();
 const sheet = computed(() =>
   sheets.value.find(({ name }) => name === editor.value.sourceMeta?.sheetName)
 );
+const fileModelRecognitionRequired = computed(
+  () => selected.value?.status === "DRAFT" && taskNeedsModelRecognition(selected.value)
+);
 const schemaStatus = computed(
-  () => (schemaChecking.value ? "CHECKING" : fileSchemaStatus.value || editor.value.sourceMeta?.schemaStatus)
+  () => (schemaChecking.value ? "CHECKING" : fileModelRecognitionRequired.value ? "" :
+    fileSchemaStatus.value || editor.value.sourceMeta?.schemaStatus)
 );
 const defaultTaskName = computed(() => shipmentTaskSourceName(editor.value.sourceFileName));
 const sourceFormat = computed(() => editor.value.sourceFileName.match(/\.(xlsx|xls|csv)$/i)?.[1].toUpperCase());
@@ -146,7 +150,7 @@ const mayRetry = computed(
 );
 const serverErrors = computed(() => (dirty.value ? [] : selected.value?.validationErrors || []));
 const blockedReview = computed(
-  () => dirty.value || issueCount.value || serverErrors.value.length || !itemCount.value
+  () => dirty.value || issueCount.value || serverErrors.value.length || !itemCount.value || fileModelRecognitionRequired.value
 );
 const errorMessage = computed(() => {
   if (locationError.value) return locationError.value;
@@ -172,7 +176,13 @@ function issueLabel({ code, message }) {
 }
 
 function typeLabel(type) {
+  if (type === "CONTAINER") return t("customers.referenceContainer");
   return t(type === "BOOKING" ? "customers.referenceBooking" : "customers.referenceBill");
+}
+
+function reviewableSheet(sheet) {
+  return !sheet.resultSheet && Number.isInteger(sheet.suggestedColumnIndex) &&
+    ((sheet.modelVerified && sheet.schemaStatus === "SUGGESTED") || sheet.schemaStatus === "REVIEW_HEADERS");
 }
 
 function statusTone(status) {
@@ -278,9 +288,7 @@ async function readFile(file) {
         }
       );
       const best = parsed
-        .filter(
-          ({ resultSheet, suggestedColumnIndex }) => !resultSheet && suggestedColumnIndex !== null
-        )
+        .filter(reviewableSheet)
         .sort(
           (a, b) =>
             b.columns[b.suggestedColumnIndex].score - a.columns[a.suggestedColumnIndex].score
@@ -297,12 +305,11 @@ async function readFile(file) {
         }
         throw new Error(copy("noRows"));
       }
-      const { rows, sourceMeta, problems } = recognizeTaskWorkbook(best, best.suggestedColumnIndex);
+      const { rows, sourceMeta, problems } = recognizeTaskWorkbook(best, best.suggestedColumnIndex, { autoReferenceColumns: true });
+      sourceMeta.workbookSheetNames = parsed.map(({ name }) => name);
       if (problems.length || !rows.length)
         throw new Error(problems.length ? issueLabel(problems[0]) : copy("noRows"));
-      sheets.value = parsed.filter(
-        ({ resultSheet, suggestedColumnIndex }) => !resultSheet && suggestedColumnIndex !== null
-      );
+      sheets.value = parsed.filter(reviewableSheet);
       return { sourceFileName: file.name, rows, sourceMeta };
     } catch (cause) {
       throw new Error(cause instanceof Error ? cause.message : copy("fileError"));
@@ -326,17 +333,20 @@ function dropFile(event) {
 async function changeMapping(sheetName, column) {
   const targetSheet = sheets.value.find(({ name }) => name === sheetName);
   if (!targetSheet || busy.value || mappingPending.value) return;
-  const targetColumn = column ?? targetSheet.suggestedColumnIndex;
+  const autoReferenceColumns = column === null || column === "AUTO";
+  const targetColumn = autoReferenceColumns ? targetSheet.suggestedColumnIndex : column;
   if (
     editor.value.sourceMeta?.sheetName === sheetName &&
-    editor.value.sourceMeta.column === targetColumn
+    editor.value.sourceMeta.column === targetColumn &&
+    Boolean(editor.value.sourceMeta.autoReferenceColumns) === autoReferenceColumns
   )
     return;
   mappingPending.value = true;
   const confirmed = await confirmShipmentTask(t, "replaceTitle", copy("replaceReview"));
   mappingPending.value = false;
   if (!confirmed || busy.value || !sheets.value.includes(targetSheet)) return;
-  const { rows, sourceMeta, problems } = recognizeTaskWorkbook(targetSheet, targetColumn);
+  const { rows, sourceMeta, problems } = recognizeTaskWorkbook(targetSheet, targetColumn, { autoReferenceColumns });
+  sourceMeta.workbookSheetNames = editor.value.sourceMeta?.workbookSheetNames || sheets.value.map(({ name }) => name);
   if (problems.length || !rows.length) {
     fileError.value = problems.length ? issueLabel(problems[0]) : copy("noRows");
     return;
@@ -348,7 +358,7 @@ async function changeMapping(sheetName, column) {
 async function confirmExistingShipments(task) {
   if (task.mode !== "IMPORT") return true;
   const response = await inspectBusinessShipmentImportConflicts(
-    (task.items || []).map((item) => ({
+    (task.items || []).filter((item) => item.type !== "CONTAINER").map((item) => ({
       carrier: item.carrier,
       referenceType: item.type,
       referenceNo: item.number
@@ -472,6 +482,15 @@ onBeforeRouteLeave(() => !busy.value && confirmDiscard());
         <p v-if="pollError" class="task-alert" role="status">{{ copy("pollError") }}</p>
         <p v-if="schemaStatus && te(`shipmentTask.schema${schemaStatus}`)" class="task-alert" role="status">
           {{ copy(`schema${schemaStatus}`) }}
+        </p>
+        <p v-if="fileModelRecognitionRequired" class="task-alert" role="alert">
+          {{ copy("issueMODEL_RECOGNITION_REQUIRED") }}
+        </p>
+        <p v-if="editor.sourceMeta?.workbookSheetNames?.length > 1" class="task-alert" role="status">
+          {{ copy("worksheetScope", {
+            selected: editor.sourceMeta.sheetName,
+            others: editor.sourceMeta.workbookSheetNames.filter((name) => name !== editor.sourceMeta.sheetName).join(" / ")
+          }) }}
         </p>
 
         <p v-if="busy === 'open'" class="task-alert" role="status">{{ t("app.loadingPage") }}</p>
@@ -629,9 +648,10 @@ onBeforeRouteLeave(() => !busy.value && confirmDiscard());
               <label
                 ><span>{{ t("customers.trackColumn") }}</span>
                 <el-select
-                  v-if="sheet" :model-value="editor.sourceMeta.column" :aria-label="t('customers.trackColumn')"
+                  v-if="sheet" :model-value="editor.sourceMeta.autoReferenceColumns ? 'AUTO' : editor.sourceMeta.column" :aria-label="t('customers.trackColumn')"
                   :disabled="Boolean(busy) || mappingPending" filterable @change="changeMapping(sheet.name, $event)"
                 >
+                  <el-option value="AUTO" :label="copy('autoColumns')" />
                   <el-option
                     v-for="column in sheet.columns.filter(({ score }) => score > 0)"
                     :key="column.index" :value="column.index" :label="column.label"
@@ -703,7 +723,9 @@ onBeforeRouteLeave(() => !busy.value && confirmDiscard());
                       >
                         <el-option value="BOOKING" :label="typeLabel('BOOKING')" />
                         <el-option value="BILLOFLADING" :label="typeLabel('BILLOFLADING')" />
+                        <el-option value="CONTAINER" :label="typeLabel('CONTAINER')" />
                       </el-select>
+                      <small v-if="row.defaultedBooking && row.type === 'BOOKING'">{{ copy("defaultBooking") }}</small>
                     </td>
                     <td>
                       <input

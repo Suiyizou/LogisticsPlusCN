@@ -202,6 +202,34 @@ class WorkbookPlanExecutorTest {
   }
 
   @Test
+  void multiCartonWeightNeedsEvidenceForPerCartonOrGroupedTotal() {
+    List<List<Object>> source = simpleRows("", "GROUP1", "", "36", "40*30*20", "3", "", "", "");
+    source.get(0).set(8, "Outer carton dimensions cm");
+    Map<String, Object> mapping = plan(2, 2);
+    mapping.put("innerQuantityColumn", null);
+    mapping.put("packageQuantityColumn", "J");
+    mapping.put("quantityBasis", "quantity-column");
+    mapping.put("weightBasis", "group-total");
+    source.get(0).set(7, "Total gross weight (kg)");
+    Map<String, Object> grouped = execute(source, mapping);
+    assertEquals(12.0, rows(grouped).get(0).get("weightKg"));
+    Map<String, Object> reconciliation = map(grouped.get("reconciliation"));
+    assertEquals("matched", reconciliation.get("status"), reconciliation::toString);
+    assertEquals(Map.of(), reconciliation.get("declaredTotals"));
+    assertEquals(null, map(reconciliation.get("actual")).get("netWeightKg"));
+    assertFalse(map(rows(grouped).get(0).get("packageInfo")).containsKey("packageNetWeightKg"));
+    source.get(0).set(7, "Gross weight per carton (kg)");
+    assertTrue(hasIssue(execute(source, mapping), "PACKAGE_WEIGHT_BASIS_CONFLICT"));
+    mapping.put("weightBasis", "per-package");
+    assertEquals(36.0, rows(execute(source, mapping)).get(0).get("weightKg"));
+    source.get(0).set(7, "G.W. (kg)");
+    Map<String, Object> unclear = map(execute(source, mapping).get("reconciliation"));
+    assertEquals("review-required", unclear.get("status"));
+    assertTrue(WorkbookEvidenceService.list(unclear.get("warnings")).stream()
+        .anyMatch(issue -> "PACKAGE_WEIGHT_BASIS_UNPROVEN".equals(issue.get("code"))));
+  }
+
+  @Test
   void repeatedHeadersAndExplicitTotalsNeverBecomePhysicalPackages() {
     List<List<Object>> source = simpleRows("1", "PACK#1", "10", "100", "110*110*115", "", "", "", "");
     source.add(new ArrayList<>(source.get(0)));

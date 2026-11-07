@@ -7,7 +7,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { createStaticRouter } from "../lib/static-routes.mjs";
 import { setCommonHeaders } from "../lib/http-utils.mjs";
-import { supportsTrackingQuery } from "../public/tracking-query-catalog.mjs";
+import { formatTrackingReference, parseTrackingReference } from "../public/tracking-query-catalog.mjs";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8").replace(
   /\r\n/g,
@@ -171,11 +171,10 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
     trackingRequestSequence: 0,
     currentPayload: null,
     queryChannel: "AUTO",
-    carrierSelect: { value: "COSCO" },
-    trackingType: { value: "BOOKING" },
-    trackingNumber: { value: "A" },
+    selectedQuery: {},
+    trackingNumber: { value: "COSCO:A1234" },
     normalizeQuery: (query) => ({ ...query, channel: "AUTO" }),
-    supportsTrackingQuery,
+    formatTrackingReference, parseTrackingReference,
     LOCAL_TRACKING_QUEUE: false,
     batchItemForQuery: () => null,
     canManageFileVisibility: () => false,
@@ -191,7 +190,7 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
     markBatchItemResult() {},
     renderHistory() {},
     historyEntryForQuery: (query) =>
-      query.number === "B" ? { snapshot: { tracking: { number: "B" } } } : null,
+      query.number === "B1234" ? { snapshot: { tracking: { number: "B1234" } } } : null,
     updateCarrierUI() {},
     renderResult: (payload) => rendered.push(payload.snapshot.tracking.number),
     setRelatedFilesContext() {},
@@ -204,7 +203,7 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
     customerFacingTrackingError: () => "error"
   });
   const start = source.indexOf('form.addEventListener("submit", async (event) => {');
-  const end = source.indexOf('\ntrackingType.addEventListener("change"', start);
+  const end = source.indexOf('\ncarrierNavItems.forEach(', start);
   assert.ok(start >= 0 && end > start);
   vm.runInContext(
     extractFunction("invalidateTrackingRequest") +
@@ -217,11 +216,11 @@ test("restoring cached shipment B invalidates an in-flight A request before its 
   );
   const requestA = submit({ preventDefault() {} });
   assert.equal(loads.at(-1), true);
-  assert.equal(context.restore({ carrier: "COSCO", type: "BOOKING", number: "B" }), true);
+  assert.equal(context.restore({ carrier: "COSCO", type: "BOOKING", number: "B1234" }), true);
   assert.equal(loads.at(-1), false);
   assert.deepEqual(cleared, ["tracking"]);
   resolveRequest({ response: { ok: true }, payload: { snapshot: { tracking: { number: "A" } } } });
   await requestA;
-  assert.deepEqual(rendered, ["B"]);
-  assert.equal(context.trackingNumber.value, "B");
+  assert.deepEqual(rendered, ["B1234"]);
+  assert.equal(context.trackingNumber.value, "COSCO:B1234");
 });

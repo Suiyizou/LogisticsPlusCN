@@ -55,6 +55,18 @@ const task = (changes = {}) => ({
   ...changes
 });
 
+test("printed source totals stay separate from mapped row sums and ambiguous weights need confirmation", () => {
+  const reviewed = task();
+  reviewed.reconciliation.declaredTotals = {};
+  reviewed.reconciliation.warnings = [{ code: "PACKAGE_WEIGHT_BASIS_UNPROVEN" }];
+  assert.deepEqual(reviewPackingTask(reviewed).declaredTotals, {});
+  assert.equal(reviewPackingTask(reviewed).canImport, false);
+  assert.equal(
+    reviewPackingTask(reviewed, reviewed.cleanedRows, { volumeConfirmed: true }).canImport,
+    true
+  );
+});
+
 test("successful package recognition reports pending source confirmation instead of zero auto-approved issues", () => {
   const source = readFileSync(
     new URL("../src/components/ExcelTemplatePage.vue", import.meta.url),

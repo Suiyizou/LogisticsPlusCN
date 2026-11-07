@@ -5,6 +5,7 @@ export function packingResumeFingerprint(container = {}, request = {}) {
     version: PACKING_RESUME_FINGERPRINT_VERSION,
     container,
     cargos: request.cargos || [],
+    optimizationGoal: request.optimizationGoal,
     utilizationPercent: request.utilizationPercent,
     globalGapCm: request.globalGapCm,
     balanceSettings: request.balanceSettings,

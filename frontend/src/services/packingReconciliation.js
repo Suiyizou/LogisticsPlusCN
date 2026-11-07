@@ -280,6 +280,7 @@ export function reviewPackingTask(
     strict,
     visible: strict,
     expected,
+    declaredTotals: reconciliation?.declaredTotals ?? expected,
     actual,
     blockingIssues,
     warnings,
@@ -376,8 +377,8 @@ export function reviewCargoPreview(preview, rows = preview?.aggregated || [], op
   });
   if (rows.some((cargo) => cargo.packageInfo?.sourceReconciliation == null))
     extraBlocks.push({ code: "PACKAGE_SOURCE_INVALID" });
-  const sumExpected = (field) => {
-    const values = groups.map((group) => numeric(group.expected[field]));
+  const sumMetric = (field, source) => {
+    const values = groups.map((group) => numeric(group[source]?.[field]));
     return values.length && values.every((value) => value != null)
       ? values.reduce((sum, value) => sum + value, 0)
       : null;
@@ -389,7 +390,7 @@ export function reviewCargoPreview(preview, rows = preview?.aggregated || [], op
       "grossWeightKg",
       "calculatedVolumeM3",
       "declaredVolumeM3"
-    ].map((field) => [field, sumExpected(field)])
+    ].map((field) => [field, sumMetric(field, "expected")])
   );
   const blockingIssues = [...extraBlocks, ...groups.flatMap((group) => group.blockingIssues)];
   const warnings = groups.flatMap((group) => group.warnings);
@@ -399,6 +400,9 @@ export function reviewCargoPreview(preview, rows = preview?.aggregated || [], op
     visible: true,
     expected,
     actual: calculatePackingTotals(rows),
+    declaredTotals: Object.fromEntries(
+      Object.keys(expected).map((field) => [field, sumMetric(field, "declaredTotals")])
+    ),
     declaredVolumeM3: expected.declaredVolumeM3,
     blockingIssues,
     warnings,

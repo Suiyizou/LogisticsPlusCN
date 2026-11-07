@@ -40,7 +40,7 @@ const rows = [
 ];
 
 const sheet = prepareSheet("Sheet1", rows);
-assert.equal(sheet.suggestedColumnIndex, 2);
+assert.equal(sheet.suggestedColumnIndex, 10); // Explicit master bill first; column 2 remains selectable for bookings.
 assert.equal(sheet.columns[8].label, "VOLUME");
 assert.equal(sheet.previewRows.length, 9);
 

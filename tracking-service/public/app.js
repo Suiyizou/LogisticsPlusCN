@@ -12,6 +12,7 @@ import {
 } from "./tracking-milestones.mjs";
 import { renderTrackingWorkspaceNavigation } from "./workspace-navigation.mjs";
 import { createFilePreviewLifecycle } from "./file-preview-lifecycle.mjs";
+import { shipmentListIndicators } from "./shipment-list-status.mjs?v=20261105";
 import { createPdfCanvasPreview, pdfPreviewErrorKey } from "./pdf-canvas-preview.mjs";
 const filePreviewLifecycle = createFilePreviewLifecycle();
 import {
@@ -27,9 +28,11 @@ import {
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
+  formatTrackingReference,
+  parseTrackingReference,
   supportsTrackingQuery,
   trackingQueryCarriers
-} from "./tracking-query-catalog.mjs";
+} from "./tracking-query-catalog.mjs?v=20261106";
 import {
   usesLegacySupplementalDelivery,
   normalizeTrackingPayload,
@@ -54,7 +57,7 @@ let preLocalPreviewPayload = null;
 
 const form = document.querySelector("#tracking-form");
 const submitButton = document.querySelector("#submit-button");
-const carrierSelect = document.querySelector("#carrier-select");
+let selectedQuery = { carrier: "COSCO", type: "BOOKING", number: "" };
 const carrierNavItems = Array.from(document.querySelectorAll("[data-carrier-select]"));
 // Channel remains a request protocol detail; it is not a customer form field.
 let queryChannel = "AUTO";
@@ -100,7 +103,6 @@ function notifyWorkspaceRoute(view = activeView) {
   const query = Object.fromEntries(new URLSearchParams(window.location.search));
   workspaceBridge.routeChanged(view, query);
 }
-const trackingType = document.querySelector("#tracking-type");
 const trackingNumber = document.querySelector("#tracking-number");
 const carrierNotice = document.querySelector("#carrier-notice");
 const sourceTag = document.querySelector("#source-tag");
@@ -500,7 +502,7 @@ const MESSAGES = {
     "overview.guestKicker": "OCEAN FREIGHT TRACKING",
     "overview.guestTitle": "Track your ocean shipment",
     "overview.guestDescription":
-      "Select a carrier and enter your shipment reference to check its progress. Sign in to view the shipment records assigned to your account.",
+      "Enter your prefixed shipment reference to check its progress. Sign in to view the shipment records assigned to your account.",
     "overview.agentKicker": "OVERSEAS AGENT DESK",
     "overview.agentTitle": "Customer shipment overview",
     "overview.agentDescription":
@@ -635,6 +637,8 @@ const MESSAGES = {
     "history.reference": "Shipment No.",
     "history.route": "Route",
     "history.latestStatus": "Latest status",
+    "history.emptyReturned": "Empty returned",
+    "history.updatedToday": "Updated today",
     "history.queriedAt": "Queried at",
     "history.open": "Open details",
     "history.departed": "Departed",
@@ -652,7 +656,7 @@ const MESSAGES = {
     "tracking.kicker": "OCEAN FREIGHT TRACKING",
     "tracking.title": "Shipment tracking",
     "tracking.description":
-      "Follow your shipment from origin to destination. Select the carrier and enter your shipment reference.",
+      "Track your shipment from origin to destination using its reference.",
     "account.menu": "Open account menu",
     "account.home": "Platform home",
     "account.workbench": "Workbench",
@@ -796,9 +800,11 @@ const MESSAGES = {
     "query.type": "Shipment number type",
     "query.localHelper": "Enter a booking number or bill of lading to query via local Chrome.",
     "query.localCmaHelper": "Enter a CMA CGM booking number to query via local Chrome.",
-    "query.unsupportedReference": "Choose a carrier and a supported shipment number type.",
+    "query.unsupportedReference": "This carrier or reference type is unavailable in the current tracking service.",
     "query.number": "Shipment No.",
-    "query.numberPlaceholder": "Enter shipment reference",
+    "query.numberPlaceholder": "e.g. COSU6466209120",
+    "query.invalidReference": "Enter a valid reference. To specify its type, use CARRIER:BL:number, CARRIER:BK:number or CARRIER:CN:number.",
+    "query.carrierPrefixRequired": "Add the operating carrier before the number, for example COSCO:TEMU1234567 or MSC:177QBWBWS017777.",
     "query.enterNumber": "Enter a shipment number first.",
     "query.submit": "Track",
     "query.loading": "Tracking…",
@@ -940,10 +946,10 @@ const MESSAGES = {
     "error.http": "Tracking failed (HTTP {status})",
     "notice.cacheTitle": "Live refresh unavailable",
     "query.searchTitle": "Find a shipment",
-    "query.searchDescription": "Use the reference shown on your carrier documents.",
-    "empty.booking": "Find it on the carrier’s booking confirmation.",
-    "empty.bill": "Use the bill number shown on the ocean transport document.",
-    "empty.container": "Use the equipment ID, usually four letters followed by seven digits.",
+    "query.searchDescription": "Enter a prefixed bill (COSU6466209120), or add the carrier to a booking or container (COSCO:6466209120, COSCO:TEMU1234567).",
+    "empty.booking": "Use the number on the booking confirmation, e.g. COSCO:6466209120.",
+    "empty.bill": "Use the full bill number, e.g. COSU6466209120. For an unprefixed bill, use CARRIER:BL:number.",
+    "empty.container": "Add the operating carrier to the equipment number, e.g. COSCO:TEMU1234567.",
     "empty.title": "What you can track",
     "empty.description": "Check the reference type before searching.",
     "map.link": "Route map",
@@ -1166,7 +1172,7 @@ const MESSAGES = {
     "overview.guestKicker": "国际海运 / 货物追踪",
     "overview.guestTitle": "查询海运货物进度",
     "overview.guestDescription":
-      "选择船公司并输入货运参考号，即可查询运输进度。登录后可查看分配给您账户的票单记录。",
+      "输入带前缀的票单号即可查询运输进度。登录后可查看分配给您账户的票单记录。",
     "overview.agentKicker": "海外代理业务台",
     "overview.agentTitle": "客户货物总览",
     "overview.agentDescription":
@@ -1294,6 +1300,8 @@ const MESSAGES = {
     "history.reference": "运输单号",
     "history.route": "路线",
     "history.latestStatus": "最新状态",
+    "history.emptyReturned": "还空箱",
+    "history.updatedToday": "今日更新",
     "history.queriedAt": "查询时间",
     "history.open": "打开详情",
     "history.departed": "已离港",
@@ -1311,7 +1319,7 @@ const MESSAGES = {
     "tracking.kicker": "国际海运 / 货物追踪",
     "tracking.title": "货物跟踪",
     "tracking.description":
-      "从起运港到目的港，掌握货物运输进展。请选择船公司，并输入对应的货运参考号。",
+      "输入票单号，查看货物从起运港到目的港的运输进展。",
     "account.menu": "打开账户菜单",
     "account.home": "返回平台首页",
     "account.workbench": "返回工作台",
@@ -1445,9 +1453,11 @@ const MESSAGES = {
     "query.type": "运输单号类型",
     "query.localHelper": "输入订舱号或提单号，通过本地 Chrome 查询。",
     "query.localCmaHelper": "输入 CMA CGM 订舱号，通过本地 Chrome 查询。",
-    "query.unsupportedReference": "请选择船公司和支持的运输单号类型。",
+    "query.unsupportedReference": "当前追踪服务暂不支持该船司或单号类型。",
     "query.number": "运输单号",
-    "query.numberPlaceholder": "请输入货运参考号",
+    "query.numberPlaceholder": "例如 COSU6466209120",
+    "query.invalidReference": "请核对票号格式。需要指定类型时，可输入 船司:BL:提单号、船司:BK:订舱号 或 船司:CN:箱号。",
+    "query.carrierPrefixRequired": "请在号码前加上实际承运船司，如 COSCO:TEMU1234567 或 MSC:177QBWBWS017777。",
     "query.enterNumber": "请先输入运输单号。",
     "query.submit": "查询",
     "query.loading": "查询中…",
@@ -1577,10 +1587,10 @@ const MESSAGES = {
     "error.http": "查询失败（HTTP {status}）",
     "notice.cacheTitle": "实时刷新暂不可用",
     "query.searchTitle": "查询货物",
-    "query.searchDescription": "请使用船公司运输文件上的单号。",
-    "empty.booking": "请查阅船公司出具的订舱确认书。",
-    "empty.bill": "请使用海运提单上标明的提单号。",
-    "empty.container": "请使用集装箱编号，通常由四个字母和七位数字组成。",
+    "query.searchDescription": "提单可直接输入带船司前缀的完整号码，如 COSU6466209120。订舱号和箱号可写成 COSCO:6466209120、COSCO:TEMU1234567。",
+    "empty.booking": "使用订舱确认书上的号码，如 COSCO:6466209120。",
+    "empty.bill": "输入完整提单号，如 COSU6466209120。无船司前缀时可用 船司:BL:提单号。",
+    "empty.container": "在箱号前加实际承运船司，如 COSCO:TEMU1234567。",
     "empty.title": "可用的查询单号",
     "empty.description": "查询前请确认单号类型。",
     "map.link": "航线地图",
@@ -5262,6 +5272,7 @@ async function loadCustomerAssignedHistory() {
           }),
           snapshot,
           savedAt: lastTrackedAt,
+          businessUpdatedAt: item.updatedAt || item.lastTrackedAt || serverSnapshot?.fetchedAt || null,
           shipmentId: item.shipmentId,
           customerReadOnly: payload?.customerReadOnly !== false,
           trackingStatus,
@@ -5395,6 +5406,7 @@ async function loadInternalTrackedHistory() {
           }),
           snapshot,
           savedAt: lastTrackedAt,
+          businessUpdatedAt: item.updatedAt || item.lastTrackedAt || serverSnapshot?.fetchedAt || null,
           shipmentId: item.shipmentId,
           trackingStatus: pendingStatus,
           boundShipment: true,
@@ -5426,9 +5438,7 @@ function setLoading(value) {
   submitButton.setAttribute("aria-busy", String(loading));
   const label = submitButton.querySelector(".button-label");
   if (label) label.textContent = t(loading ? "query.loading" : "query.submit");
-  submitButton.disabled =
-    loading ||
-    !supportsTrackingQuery(carrierSelect.value, trackingType.value, LOCAL_TRACKING_QUEUE);
+  submitButton.disabled = loading;
   results.classList.toggle("is-refreshing", loading && !results.hidden);
 }
 
@@ -6070,8 +6080,8 @@ function hideBatchColumnPreview({ clearFile = true } = {}) {
 }
 
 function startImportedBatch(fileName, imported) {
-  const selectedCarrier = SUPPORTED_CARRIER_CODES.includes(carrierSelect.value)
-    ? carrierSelect.value
+  const selectedCarrier = SUPPORTED_CARRIER_CODES.includes(selectedQuery.carrier)
+    ? selectedQuery.carrier
     : "COSCO";
   const items = Array.isArray(imported?.items)
     ? imported.items.map((item) => ({
@@ -7734,6 +7744,7 @@ async function refreshOverseaAgentShipment(
       entry.snapshot = payload.snapshot;
       entry.savedAt = payload.fetchedAt || payload.snapshot?.fetchedAt || new Date().toISOString();
       entry.agentLastRefreshedAt = entry.savedAt;
+      entry.businessUpdatedAt = entry.savedAt;
     }
     updated = true;
   } catch (error) {
@@ -8516,31 +8527,50 @@ function renderHistory() {
     identityLabel.textContent = businessReferences.clientNameCode
       ? `${t("business.clientCode")} · ${businessReferences.clientNameCode}`
       : t("history.reference");
+    const indicators = shipmentListIndicators(entry);
+    if (indicators.emptyReturned || indicators.updatedToday) {
+      identityLabel.classList.add("shipment-identity-label");
+      const tags = document.createElement("span");
+      tags.className = "shipment-list-tags";
+      for (const [visible, kind, label] of [
+        [indicators.emptyReturned, "empty-returned", "history.emptyReturned"],
+        [indicators.updatedToday, "updated-today", "history.updatedToday"]
+      ]) {
+        if (!visible) continue;
+        const tag = document.createElement("span");
+        tag.className = `shipment-list-tag is-${kind}`;
+        tag.textContent = t(label);
+        tags.append(tag);
+      }
+      identityLabel.append(tags);
+    }
     const number = document.createElement("strong");
     number.textContent = entry.query.number;
     const identityMeta = document.createElement("small");
-    identityMeta.textContent = [
+    identityMeta.className = "shipment-carrier-meta";
+    const referenceType = document.createElement("span");
+    referenceType.textContent = trackingTypeLabel(entry.query.type);
+    identityMeta.append(
+      createCarrierBadge(document, entry.query.carrier || snapshot.provider?.code, snapshot.provider?.name),
+      referenceType
+    );
+    identity.append(identityLabel, number, identityMeta);
+    const businessMeta = document.createElement("span");
+    businessMeta.className = "shipment-business-meta";
+    for (const value of [
       businessReferences.clientPoNumber
         ? `${t("business.clientPo")} ${businessReferences.clientPoNumber}`
         : null,
       businessReferences.forwarderJobNumber
         ? `${t("business.forwarderJob")} ${businessReferences.forwarderJobNumber}`
         : null,
-      normalizeHistoryBoundCustomers(entry.boundCustomers).map(historyCustomerLabel).join(" / "),
-      trackingTypeLabel(entry.query.type),
-      entry.query.carrier
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    identityMeta.prepend(
-      createCarrierBadge(
-        document,
-        entry.query.carrier || snapshot.provider?.code,
-        snapshot.provider?.name
-      ),
-      document.createTextNode(" ")
-    );
-    identity.append(identityLabel, number, identityMeta);
+      normalizeHistoryBoundCustomers(entry.boundCustomers).map(historyCustomerLabel).join(" / ")
+    ].filter(Boolean)) {
+      const field = document.createElement("span");
+      field.textContent = value;
+      businessMeta.append(field);
+    }
+    businessMeta.hidden = !businessMeta.childElementCount;
 
     const journey = document.createElement("span");
     journey.className = "shipment-journey-dates";
@@ -8574,7 +8604,8 @@ function renderHistory() {
       createHistoryPort(origin, "origin"),
       journey,
       createHistoryPort(destination, "destination"),
-      current
+      current,
+      businessMeta
     );
 
     const details = document.createElement("div");
@@ -8707,7 +8738,7 @@ function setCmaSessionMessage(message = "", variant = "info") {
 }
 
 function renderCmaSessionPanel() {
-  const selected = !LOCAL_TRACKING_QUEUE && carrierSelect.value === "CMA";
+  const selected = !LOCAL_TRACKING_QUEUE && selectedQuery.carrier === "CMA";
   const session = readFileSession();
   const canManage = canManageFileVisibility(session);
   cmaSessionPanel.hidden = !selected || !canManage;
@@ -8852,21 +8883,8 @@ async function clearCmaSession() {
 }
 
 function updateCarrierUI({ resetResult = false } = {}) {
-  const carrier = CARRIERS[carrierSelect.value] ?? CARRIERS.COSCO;
+  const carrier = CARRIERS[selectedQuery.carrier] ?? CARRIERS.COSCO;
   const cmaSelected = carrier.code === "CMA";
-  for (const option of trackingType.options) {
-    option.hidden = option.disabled = !supportsTrackingQuery(
-      carrier.code,
-      option.value,
-      LOCAL_TRACKING_QUEUE
-    );
-  }
-  if (
-    resetResult &&
-    !supportsTrackingQuery(carrier.code, trackingType.value, LOCAL_TRACKING_QUEUE)
-  ) {
-    trackingType.value = "BOOKING";
-  }
   const channel = CHANNELS[queryChannel] ?? CHANNELS.AUTO;
   sourceTag.textContent = LOCAL_TRACKING_QUEUE
     ? t(CHANNELS.LOCAL_CHROME.sourceKey)
@@ -8886,8 +8904,8 @@ function updateCarrierUI({ resetResult = false } = {}) {
   );
   if (carrierNotice) {
     const supported = supportsTrackingQuery(
-      carrierSelect.value,
-      trackingType.value,
+      selectedQuery.carrier,
+      selectedQuery.type,
       LOCAL_TRACKING_QUEUE
     );
     carrierNotice.hidden = supported;
@@ -8966,7 +8984,7 @@ function renderChannelCheck(result) {
 function setChannelCheckLoading(value) {
   channelCheckLoading = value;
   if (checkChannelsButton) {
-    checkChannelsButton.disabled = LOCAL_TRACKING_QUEUE || value || carrierSelect.value !== "COSCO";
+    checkChannelsButton.disabled = LOCAL_TRACKING_QUEUE || value || selectedQuery.carrier !== "COSCO";
     checkChannelsButton.classList.toggle("is-loading", value);
     const label = checkChannelsButton.querySelector("[data-i18n]");
     if (label) label.textContent = t(value ? "workbench.checking" : "workbench.check");
@@ -9076,10 +9094,8 @@ function showView(
       url.searchParams.delete("number");
     } else if (currentPayload?.snapshot?.tracking?.number) {
       const query = normalizeQuery({
-        carrier: carrierSelect.value,
-        channel: queryChannel,
-        type: trackingType.value,
-        number: trackingNumber.value
+        ...selectedQuery,
+        channel: queryChannel
       });
       url.searchParams.set("carrier", query.carrier);
       url.searchParams.set("channel", query.channel);
@@ -9162,10 +9178,9 @@ function showStoredTrackingQuery(
 ) {
   const normalized = normalizeQuery(query);
   invalidateTrackingRequest();
-  carrierSelect.value = normalized.carrier;
+  selectedQuery = normalized;
   queryChannel = normalized.channel ?? "AUTO";
-  trackingType.value = normalized.type;
-  trackingNumber.value = normalized.number;
+  trackingNumber.value = formatTrackingReference(normalized, LOCAL_TRACKING_QUEUE);
   updateCarrierUI();
   const storedEntry = entry ?? historyEntryForQuery(normalized);
   const payload = storedEntry?.snapshot
@@ -9362,10 +9377,10 @@ async function requestTracking(query, options = {}) {
 }
 
 checkChannelsButton?.addEventListener("click", async () => {
-  if (LOCAL_TRACKING_QUEUE || carrierSelect.value !== "COSCO" || channelCheckLoading) return;
-  const shipmentNumber = trackingNumber.value.trim();
-  if (!shipmentNumber) {
-    channelCheckSummary.textContent = t("query.enterNumber");
+  if (LOCAL_TRACKING_QUEUE || selectedQuery.carrier !== "COSCO" || channelCheckLoading) return;
+  const query = parseTrackingReference(trackingNumber.value, LOCAL_TRACKING_QUEUE);
+  if (query.error || query.carrier !== "COSCO") {
+    channelCheckSummary.textContent = t(query.error || "query.unsupportedReference");
     trackingNumber.focus();
     return;
   }
@@ -9379,8 +9394,8 @@ checkChannelsButton?.addEventListener("click", async () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: trackingType.value || "BOOKING",
-          number: shipmentNumber
+          type: query.type,
+          number: query.number
         })
       })
     );
@@ -9407,12 +9422,15 @@ form.addEventListener("submit", async (event) => {
   clearError();
 
   queryChannel = "AUTO";
-  const baseQuery = normalizeQuery({
-    carrier: carrierSelect.value,
-    channel: "AUTO",
-    type: trackingType.value,
-    number: trackingNumber.value
-  });
+  const parsed = parseTrackingReference(trackingNumber.value, LOCAL_TRACKING_QUEUE);
+  if (parsed.error) {
+    showError(t(parsed.error), "warning");
+    trackingNumber.focus();
+    return;
+  }
+  selectedQuery = parsed;
+  updateCarrierUI();
+  const baseQuery = normalizeQuery({ ...parsed, channel: "AUTO" });
   const importedItem = batchItemForQuery(baseQuery);
   const query = normalizeQuery({
     ...baseQuery,
@@ -9420,10 +9438,6 @@ form.addEventListener("submit", async (event) => {
       ? importedItem?.importedDetails
       : null
   });
-  if (!supportsTrackingQuery(query.carrier, query.type, LOCAL_TRACKING_QUEUE)) {
-    showError(t("query.unsupportedReference"), "warning");
-    return;
-  }
 
   const requestSequence = ++trackingRequestSequence;
   setLoading(true);
@@ -9473,15 +9487,11 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-trackingType.addEventListener("change", () => updateCarrierUI());
-carrierSelect.addEventListener("change", () => {
-  invalidateTrackingRequest();
-  updateCarrierUI({ resetResult: true });
-});
 carrierNavItems.forEach((item) => {
   const selectCarrier = () => {
-    carrierSelect.value = item.dataset.carrierSelect;
-    carrierSelect.dispatchEvent(new Event("change"));
+    selectedQuery.carrier = item.dataset.carrierSelect;
+    invalidateTrackingRequest();
+    updateCarrierUI({ resetResult: true });
     void showView("tracking", { pushLocation: activeView !== "tracking" });
   };
   item.addEventListener("click", selectCarrier);
@@ -10203,9 +10213,6 @@ localTrackingPreview = installLocalTrackingPreview({
     void showView("overview", { updateLocation: false });
   }
 });
-carrierSelect.replaceChildren(
-  ...Object.values(CARRIERS).map(({ code, name }) => new Option(name, code))
-);
 clearLegacyBrowserSnapshots();
 batchState = restoreBatchState();
 if (batchState) persistBatchState();

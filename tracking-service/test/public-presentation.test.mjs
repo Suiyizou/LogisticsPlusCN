@@ -120,7 +120,7 @@ test("carrier session maintenance is shown only for CMA and an existing maintena
   ]) {
     const context = vm.createContext({
       LOCAL_TRACKING_QUEUE: localQueue,
-      carrierSelect: { value: carrier },
+      selectedQuery: { carrier },
       readFileSession: () => ({}),
       canManageFileVisibility: () => canManage,
       cmaSessionPanel: {},

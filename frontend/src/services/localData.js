@@ -340,7 +340,7 @@ export function effectiveContainerHeight(container = {}) {
 }
 
 export function normalizeContainerHeightFields(container = {}) {
-  const heightCm = Math.max(1, effectiveContainerHeight(container));
+  const heightCm = effectiveContainerHeight(container);
   return {
     ...container,
     heightCm,

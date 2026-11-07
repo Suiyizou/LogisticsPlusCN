@@ -458,7 +458,8 @@ public class ShipmentBatchTrackingService {
           normalized.recognitionErrorCode() == null ? "INVALID_REFERENCE" : normalized.recognitionErrorCode(),
           normalized.recognitionError() == null ? "Reference could not be identified safely" : normalized.recognitionError());
     } else if (supplied == null || Boolean.TRUE.equals(request.manualOnly())
-        || !TrackingCarriers.supportsReference(carrier, type, trackingService.usesLocalTrackingQueue())
+        || !TrackingCarriers.supportsTaskQuery(carrier, type, trackingService.usesLocalTrackingQueue())
+        || ("CONTAINER".equals(type) && !number.matches("[A-Z]{3}[UJZ][0-9]{7}"))
         || !number.matches("[A-Z0-9-]{4,35}")) {
       item.validationError = new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
           "Shipment row " + (index + 1) + " has no supported carrier and reference");
@@ -1370,11 +1371,11 @@ public class ShipmentBatchTrackingService {
     }
     String type = clean(request.type(), 24, "BOOKING").toUpperCase(Locale.ROOT);
     String requestedCarrier = TrackingCarriers.canonicalCode(clean(request.carrier(), 32, ""));
-    if (!"BOOKING".equals(type) && !TrackingCarriers.supportsReference(
+    if (!"BOOKING".equals(type) && !TrackingCarriers.supportsTaskQuery(
         requestedCarrier, type, trackingService.usesLocalTrackingQueue())) {
       throw new ApiException(
           HttpStatus.BAD_REQUEST,
-          "Shipment row " + (index + 1) + " must use a booking number"
+          "Shipment row " + (index + 1) + " has an unsupported carrier or reference type"
       );
     }
     String carrier = requestedCarrier.isBlank() ? null : requestedCarrier;
@@ -1384,6 +1385,9 @@ public class ShipmentBatchTrackingService {
         compact(clean(request.number(), 128, null))
     );
     String displayNumber = clean(request.displayNumber(), 128, null);
+    if ("CONTAINER".equals(type) && !number.matches("[A-Z]{3}[UJZ][0-9]{7}")) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CONTAINER", "Enter the full container number");
+    }
     ShipmentImportDetails details = sanitizeImportedDetails(request.importedDetails());
     if (displayNumber == null || displayNumber.isBlank()) {
       displayNumber = number;

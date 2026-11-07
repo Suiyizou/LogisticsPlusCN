@@ -206,9 +206,9 @@ export const messages = {
         "",
         "cargo:",
         "E-Houses",
-        "2 skids - each 31.200 kgs / 1080 x 200 x 340 cm",
-        "3 skids - each 18.100 kgs / 660 x 200 x 340 cm",
-        "2 skids - each 33.700 kgs / 1.210 x 230 x 340 cm"
+        "2 skids - each 31200 kgs / 1080 x 200 x 340 cm",
+        "3 skids - each 18100 kgs / 660 x 200 x 340 cm",
+        "2 skids - each 33700 kgs / 1210 x 230 x 340 cm"
       ].join("\n"),
       sampleLoadedMessage: "已填入示例文本，点击智能识别后会由后端流程提取中文和英文 skid 明细。"
     },
@@ -324,7 +324,7 @@ export const messages = {
       customerHoldText: "正在汇总 {scope} 的第 {hold} 货舱结果：{detail}",
       customerBoxProgressText:
         "当前正在进行 {scope} 的第 {hold} 个货舱装箱计算，剩余 {remaining} 个搜索单元。",
-      customerRecommendationText: "正在汇总当前搜索候选；全部约束合规后优先按箱数最少排序。",
+      customerRecommendationText: "正在按所选利用率目标比较整票可装的候选方案。",
       customerPrepareTitle: "装箱数据准备",
       customerPrepareText: "正在整理货物、箱型和装箱规则，准备开始本机计算。",
       customerDetailFallback: "持续计算中",
@@ -366,7 +366,7 @@ export const messages = {
         },
         recommendation: {
           label: "方案排序",
-          description: "全部约束合规后，先按箱数最少，再按综合参考运价和利用率排序"
+          description: "通过整票校验后，按选定的箱容利用率目标排序"
         }
       }
     },
@@ -613,9 +613,9 @@ export const messages = {
         "",
         "cargo:",
         "E-Houses",
-        "2 skids - each 31.200 kgs / 1080 x 200 x 340 cm",
-        "3 skids - each 18.100 kgs / 660 x 200 x 340 cm",
-        "2 skids - each 33.700 kgs / 1.210 x 230 x 340 cm"
+        "2 skids - each 31200 kgs / 1080 x 200 x 340 cm",
+        "3 skids - each 18100 kgs / 660 x 200 x 340 cm",
+        "2 skids - each 33700 kgs / 1210 x 230 x 340 cm"
       ].join("\n"),
       sampleLoadedMessage:
         "Sample text inserted. Click Smart Recognition to let the backend extract the mixed cargo and skid details."
@@ -740,7 +740,7 @@ export const messages = {
       customerBoxProgressText:
         "Calculating hold {hold} for {scope}; {remaining} search units remain.",
       customerRecommendationText:
-        "Summarizing current search candidates and ranking fewer containers first after all constraints pass.",
+        "Comparing complete, feasible plans by the selected volume utilization goal.",
       customerPrepareTitle: "Packing Data Preparation",
       customerPrepareText:
         "Preparing cargo, container types, and packing rules before local calculation starts.",
@@ -784,8 +784,7 @@ export const messages = {
         },
         recommendation: {
           label: "Plan Ranking",
-          description:
-            "After all constraints pass, rank by fewer containers first, then composite reference freight and utilization"
+          description: "Rank complete, verified plans by the selected volume utilization goal"
         }
       }
     },
@@ -2505,6 +2504,10 @@ Object.assign(messages["zh-CN"].customers, {
   assignAgent: "为该客户分配代理",
   changeAgent: "为客户更换代理",
   deleteCustomer: "删除客户",
+  customerMoreActions: "更多操作",
+  directoryShipper: "发货人",
+  directoryConsignee: "收货人",
+  directoryAgent: "海外代理",
   confirmDeleteCustomer: "确认删除客户“{name}”吗？删除后将撤销登录权限，历史业务记录仍会保留。",
   customerArchived: "客户已删除。",
   deleteCustomerFailed: "客户删除失败。",
@@ -2539,6 +2542,10 @@ Object.assign(messages["en-US"].customers, {
   assignAgent: "Assign agent",
   changeAgent: "Change agent",
   deleteCustomer: "Delete customer",
+  customerMoreActions: "More actions",
+  directoryShipper: "Shipper",
+  directoryConsignee: "Consignee",
+  directoryAgent: "Overseas agent",
   confirmDeleteCustomer:
     "Delete “{name}”? Sign-in access will be revoked while historical business records remain available.",
   customerArchived: "Customer deleted.",

@@ -177,12 +177,12 @@ const uiText = {
   "result.cacheHit": { zh: "已复用上次计算", en: "Reused Last Result" },
   "result.optimizationEyebrow": { zh: "搜索依据", en: "Search Basis" },
   "result.optimizationTitle": {
-    zh: "合规后优先搜索最少箱数",
-    en: "Search for the Fewest Containers After Compliance"
+    zh: "方案推荐依据",
+    en: "How plans are ranked"
   },
   "result.optimizationBasis": {
-    zh: "最终候选同时通过尺寸、支撑、载重和偏载门槛后，优先选择箱数更少的方案；箱数相同时再比较综合参考运价和利用率。本结论只覆盖本次有界搜索，不表示已证明任意规模下的全局最优。",
-    en: "Final candidates must jointly pass dimensions, support, payload, and balance gates; fewer containers rank first, followed by composite reference freight and utilization for equal-count plans. This conclusion covers the bounded search and is not a proof of global optimality at arbitrary scale."
+    zh: "先逐箱核对整票货物、尺寸、载重、支撑和偏载，再按所选目标比较已找到的可行方案。整票利用率为货物原始体积之和除以各箱装载容积之和；单箱目标取其中装得最满的一箱。平板柜按设置的装载限高计算容积。",
+    en: "Each recommended plan accounts for the whole manifest and passes placement, payload, support and balance checks. Overall fill divides cargo volume by the combined container volume. Peak fill uses the fullest individual container. Flat racks use the configured loading height."
   },
   "result.optimizationBest": { zh: "当前搜索最优方案", en: "Best Plan Found" },
   "result.optimizationCompare": { zh: "对比方案", en: "Compared Plan" },
@@ -211,8 +211,8 @@ const uiText = {
     en: "Only configured, same-currency reference prices are summed; this is not a live booking price"
   },
   "result.priceFirstBasis": {
-    zh: "全部约束合规后先按箱数最少排序，同箱数再比较运价",
-    en: "Ranked by fewer containers first after all constraints pass, then by freight for equal counts"
+    zh: "先通过整票装载核验，再按所选利用率目标排名",
+    en: "Complete verified loads are ranked by the selected utilization goal"
   },
   "result.planFallback": { zh: "方案", en: "Plan" },
   "result.remainingReportEmpty": {
@@ -618,8 +618,8 @@ const uiText = {
   "algorithm.step.support": { zh: "5. 支撑约束", en: "5. Support Constraints" },
   "algorithm.step.recommend": { zh: "6. 组合方案搜索", en: "6. Combination Search" },
   "algorithm.step.recommendText": {
-    zh: "参与计算箱型先生成可装候选，再在受控规模内搜索单一或混合箱型组合。最终候选必须同时通过尺寸、支撑、载重和偏载门槛；先按箱数最少排序，箱数相同时再由已设置价格的方案比较综合参考运价和利用率。",
-    en: "Selected container types first produce feasible packing candidates, then a bounded search compares single- and mixed-container combinations. Final candidates must jointly pass dimensions, support, payload, and balance gates; fewer containers rank first, followed by composite reference freight and utilization for equal-count priced plans."
+    zh: "比较单一和混合箱型。整票装完且满足尺寸、支撑、载重和偏载条件后，根据选择的目标优先提高整票箱容利用率或单箱最高利用率。",
+    en: "Compare single-type and mixed plans. After the complete manifest passes geometry, support, payload and balance checks, rank candidates by overall or peak container volume utilization."
   },
   "algorithm.coreFormulas": { zh: "核心计算公式", en: "Core Formulas" },
   "algorithm.currentTrace": { zh: "当前计算留痕", en: "Current Calculation Trace" },

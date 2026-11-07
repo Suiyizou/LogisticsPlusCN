@@ -245,6 +245,7 @@ function traceProgress(entry) {
 export function calculate(request = {}, options = {}) {
   const globalGapCm = safeGlobalGapCm(request.globalGapCm);
   const cargos = request.cargos || [];
+  const optimizationGoal = ["overall", "peak"].includes(request.optimizationGoal) ? request.optimizationGoal : null;
   const total = totals(request.cargos || []);
   const utilization = safeUtilizationPercent(request.utilizationPercent);
   const balanceSettings = normalizeBalanceSettings(request.balanceSettings);
@@ -269,7 +270,7 @@ export function calculate(request = {}, options = {}) {
 
   for (let i = 0; i < orderedContainers.length; i += 1) {
     const container = orderedContainers[i];
-    const runtimeContainer = { ...container, balanceSettings, supportSettings };
+    const runtimeContainer = { ...container, balanceSettings, supportSettings, optimizationGoal };
     traceProgress({
       phase: "container",
       totalContainers: orderedContainers.length,
@@ -325,6 +326,7 @@ export function calculate(request = {}, options = {}) {
         .every((candidate) => completedContainerIds.has(String(candidate.id)));
       options.onStageResult(buildCalculationResult(evaluations, {
         partial: true,
+        optimizationGoal,
         stage: primaryComplete ? "primary" : "container",
         completedContainers: completedContainerIds.size,
         completedContainerIds: [...completedContainerIds],
@@ -347,7 +349,7 @@ export function calculate(request = {}, options = {}) {
   }
 
   const mixedEvaluation = shouldBuildMixedContainerEvaluation(allOrderedContainers, total)
-    ? safeBuildMixedContainerEvaluation(allOrderedContainers, cargos, total, utilization, globalGapCm, balanceSettings, supportSettings, evaluations)
+    ? safeBuildMixedContainerEvaluation(allOrderedContainers, cargos, total, utilization, globalGapCm, balanceSettings, supportSettings, evaluations, optimizationGoal)
     : null;
   if (mixedEvaluation) {
     evaluations.push(mixedEvaluation);
@@ -372,6 +374,7 @@ export function calculate(request = {}, options = {}) {
   });
   return buildCalculationResult(evaluations, {
     partial: false,
+    optimizationGoal,
     completedContainers: completedContainerIds.size,
     completedContainerIds: [...completedContainerIds],
     pendingContainers: 0,
@@ -435,7 +438,13 @@ function containerCalculationRank(container) {
 
 function evaluateContainer(container, units, total, utilizationPercent, globalGapCm) {
   const multi = packMultiple(container, units);
-  return buildEvaluation(container, units, total, utilizationPercent, globalGapCm, multi);
+  const chosen = buildEvaluation(container, units, total, utilizationPercent, globalGapCm, multi);
+  if (container.optimizationGoal !== "peak" || chosen.missingBoxDimensions || chosen.fitStatus === FIT_STATUS.FIT) return chosen;
+  // Concentrating the first load can strand awkward pieces. Try the ordinary
+  // remaining-cargo strategy before marking this container incomplete.
+  const fallback = packMultiple({ ...container, optimizationGoal: null }, units);
+  const alternative = buildEvaluation(container, units, total, utilizationPercent, globalGapCm, fallback);
+  return compareEvaluation(alternative, chosen) < 0 ? alternative : chosen;
 }
 
 function evaluateContainerFromReusable(container, units, total, utilizationPercent, globalGapCm, reusable) {
@@ -462,7 +471,8 @@ function buildEvaluation(container, units, total, utilizationPercent, globalGapC
   const firstPackedRawVolume = sumCargoVolumeM3(multi.firstBox.placed);
   const firstPackedOccupiedVolume = firstPackedRawVolume;
   const fillPercent = usage.firstFillPercent;
-  const rawFillPercent = usableVolume > 0 ? firstPackedRawVolume / usableVolume * 100 : 0;
+  const rawFillPercent = container.optimizationGoal ? usage.firstFillPercent
+    : usableVolume > 0 ? firstPackedRawVolume / usableVolume * 100 : 0;
   const remainingVolume = usableVolume - firstPackedOccupiedVolume;
   const weightBoxes = container.payloadKg > 0 ? Math.ceil(total.totalWeightKg / container.payloadKg) : 0;
   const packedBoxBalances = multi.packedBoxes.map((box) => box.balanceValidation || validateWeightBalance(box.container || container, box.placed));
@@ -472,7 +482,14 @@ function buildEvaluation(container, units, total, utilizationPercent, globalGapC
     || packedBoxBalances.some((validation) => validation?.severity === "red")
     || multi.firstBox?.strategySummary?.complianceBlocked
   );
-  const geometryFeasible = multi.boxes > 0 && multi.firstBox?.placed?.length > 0 && !placementConstraintsBlocked;
+  const verifiedCargo = Array(total.quantityByRow.length).fill(0);
+  for (const box of multi.packedBoxes) {
+    for (const unit of box.placed) verifiedCargo[unit.cargoIndex] += unitQuantity(unit);
+  }
+  const completeManifest = verifiedCargo.length === total.quantityByRow.length
+    && total.quantityByRow.every((quantity, index) => verifiedCargo[index] === quantity);
+  const missingBoxDimensions = !boxEnvelopeVolume(container) || multi.packedBoxes.some((box) => !boxEnvelopeVolume(box.container || container));
+  const geometryFeasible = !missingBoxDimensions && (multi.estimated || (completeManifest && multi.boxes === multi.packedBoxes.length)) && multi.boxes > 0 && multi.firstBox?.placed?.length > 0 && !placementConstraintsBlocked;
   const boxes = geometryFeasible ? Math.max(multi.boxes, weightBoxes) : -1;
   const fitStatus = !geometryFeasible
     ? FIT_STATUS.OVERSIZE
@@ -482,11 +499,15 @@ function buildEvaluation(container, units, total, utilizationPercent, globalGapC
         ? FIT_STATUS.ESTIMATED
         : FIT_STATUS.FIT;
   const averageFillPercent = geometryFeasible && boxes > 0
-    ? averageUsagePercentForBoxCount(container, multi.packedBoxes, utilizationPercent, boxes, total)
+    ? container.optimizationGoal && !multi.estimated ? usage.averageFillPercent
+      : averageUsagePercentForBoxCount(container, multi.packedBoxes, utilizationPercent, boxes, total)
     : 0;
 
   const evaluation = {
     container,
+    optimizationGoal: container.optimizationGoal,
+    volumeUtilization: fitStatus === FIT_STATUS.FIT ? physicalVolumeUtilization(container, multi.packedBoxes) : null,
+    missingBoxDimensions,
     feasible: fitStatus === FIT_STATUS.FIT,
     geometryFeasible,
     complianceFeasible: fitStatus === FIT_STATUS.FIT,
@@ -599,7 +620,10 @@ function packMultiple(container, allUnits) {
       && !box.strategySummary?.complianceBlocked
     );
   const baselineComplete = baseline.packedBoxes.reduce((sum, box) => sum + sumUnitQuantity(box.placed), 0) === sumUnitQuantity(allUnits);
-  const useDeferred = deferredComplete && (!baselineComplete || deferred.boxes <= baseline.boxes);
+  const preferPeak = container.optimizationGoal === "peak";
+  const useDeferred = deferredComplete && (!baselineComplete || baseline.balanceBlocked || (preferPeak
+    ? compareVolumeUtilization(physicalVolumeUtilization(container, deferred.packedBoxes), physicalVolumeUtilization(container, baseline.packedBoxes), "peak") <= 0
+    : deferred.boxes <= baseline.boxes));
   return preferMinimumBoxColumnRescue(
     container,
     allUnits,
@@ -616,7 +640,9 @@ function preferMinimumBoxColumnRescue(container, allUnits, plan, mode, compariso
     && rescued.boxes < plan.boxes
     && !rescued.estimated
     && !rescued.fatalOversize
-    && !rescued.balanceBlocked;
+    && !rescued.balanceBlocked
+    && (container.optimizationGoal !== "peak" || plan.balanceBlocked ||
+      compareVolumeUtilization(physicalVolumeUtilization(container, rescued.packedBoxes), physicalVolumeUtilization(container, plan.packedBoxes), "peak") <= 0);
   return orderPackedBoxesForNonStackLoading(
     container,
     useRescue ? rescued : plan,
@@ -1657,9 +1683,9 @@ function orderPackedBoxesForNonStackLoading(container, plan, mode, comparison = 
   };
 }
 
-function safeBuildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations = []) {
+function safeBuildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations = [], optimizationGoal = null) {
   try {
-    return buildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations);
+    return buildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations, optimizationGoal);
   } catch (error) {
     return null;
   }
@@ -1671,12 +1697,13 @@ function shouldBuildMixedContainerEvaluation(containers, total) {
   return true;
 }
 
-function buildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations = []) {
+function buildMixedContainerEvaluation(containers, cargos, total, utilizationPercent, globalGapCm, balanceSettings, supportSettings, baseEvaluations = [], optimizationGoal = null) {
   if (!Array.isArray(containers) || containers.length < 2 || !total.totalQuantity) return null;
-  const runtimeContainers = containers.map((container) => ({ ...container, balanceSettings, supportSettings }));
-  const priceEligibleContainers = runtimeContainers.filter((container) => equipmentMeta(container).priceAvailable);
-  const priceCurrencies = new Set(priceEligibleContainers.map((container) => equipmentMeta(container).referenceCurrency));
-  if (!priceEligibleContainers.length || priceCurrencies.size > 1) return null;
+  const runtimeContainers = containers.filter((container) => boxEnvelopeVolume(container) > 0)
+    .map((container) => ({ ...container, balanceSettings, supportSettings, optimizationGoal }));
+  const candidateContainers = optimizationGoal ? runtimeContainers : runtimeContainers.filter((container) => equipmentMeta(container).priceAvailable);
+  const priceCurrencies = new Set(candidateContainers.map((container) => equipmentMeta(container).referenceCurrency));
+  if (!candidateContainers.length || (!optimizationGoal && priceCurrencies.size > 1)) return null;
   const allowMixedRepack = Number(total.totalQuantity || 0) <= 60;
   const upgradedFromSinglePlans = buildMixedContainerEvaluationFromSinglePlans(
     runtimeContainers,
@@ -1684,12 +1711,12 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
     total,
     utilizationPercent,
     globalGapCm,
-    { allowRepack: allowMixedRepack }
+    { allowRepack: allowMixedRepack, optimizationGoal }
   );
   const mixedCandidates = upgradedFromSinglePlans ? [upgradedFromSinglePlans] : [];
   if (!allowMixedRepack) return mixedCandidates.sort(compareEvaluation)[0] || null;
 
-  const seedContainer = pickMixedSeedContainer(priceEligibleContainers);
+  const seedContainer = pickMixedSeedContainer(candidateContainers);
   let remaining = buildUnits(cargos, globalGapCm, seedContainer, total).map(copyUnit);
   if (remaining.length > MIXED_PLAN_MAX_SOLVER_UNITS) return mixedCandidates.sort(compareEvaluation)[0] || null;
   if (!remaining.length) return mixedCandidates.sort(compareEvaluation)[0] || null;
@@ -1699,7 +1726,7 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
   let fatalOversize = false;
 
   for (let boxIndex = 0; remaining.length && boxIndex < MAX_DETAILED_BOXES; boxIndex += 1) {
-    const candidates = priceEligibleContainers
+    const candidates = candidateContainers
       .map((container) => {
         const packed = packContainer(container, remaining);
         const placedQuantity = sumUnitQuantity(packed.placed);
@@ -1718,7 +1745,7 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
             remaining,
             utilizationPercent,
             fitStatus,
-            priceEligibleContainers
+            candidateContainers
           )
         };
       })
@@ -1745,57 +1772,7 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
   if (fatalOversize || combinationDuplicatesBasePlan(packedBoxes, baseEvaluations)) {
     return mixedCandidates.sort(compareEvaluation)[0] || null;
   }
-  const mixedFreight = mixedPlanFreightCost(packedBoxes);
-
-  const mixedContainer = {
-    id: "mixed-plan",
-    name: "智能组合方案",
-    lengthCm: packedBoxes[0].container.lengthCm,
-    widthCm: packedBoxes[0].container.widthCm,
-    heightCm: packedBoxes[0].container.heightCm,
-    payloadKg: packedBoxes.reduce((sum, box) => sum + Number(box.container.payloadKg || 0), 0),
-    equipmentClass: "MIX",
-    priceTier: "mixed",
-    costFactor: mixedPlanCost(packedBoxes),
-    referencePrice: Number.isFinite(mixedFreight) ? mixedFreight : undefined,
-    mixedPlan: true
-  };
-  const multi = {
-    boxes: fatalOversize ? -1 : packedBoxes.length,
-    firstBox: packedBoxes[0],
-    packedBoxes,
-    detailedBoxLimit: MAX_DETAILED_BOXES,
-    remainingUnitCountAfterDetailed: sumUnitQuantity(remaining),
-    estimated: false,
-    fatalOversize,
-    balanceBlocked
-  };
-  const units = packedBoxes.flatMap((box) => box.placed.map(copyUnit));
-  const evaluation = buildEvaluation(mixedContainer, units, total, utilizationPercent, globalGapCm, multi);
-  evaluation.isMixedPlan = true;
-  const totalUsableVolume = packedBoxes.reduce((sum, box) => sum + volumeM3(box.container) * utilizationPercent / 100, 0);
-  const totalOccupiedVolume = packedBoxes.reduce((sum, box) => sum + sumCargoVolumeM3(box.placed), 0);
-  const usage = usageMetricsForPackedBoxes(mixedContainer, packedBoxes, utilizationPercent);
-  evaluation.usableVolumeM3 = round(totalUsableVolume);
-  evaluation.firstBoxOccupiedVolumeM3 = round(totalOccupiedVolume);
-  evaluation.firstBoxRemainingVolumeM3 = round(Math.max(0, totalUsableVolume - totalOccupiedVolume));
-  evaluation.usageMode = usage.mode;
-  evaluation.firstBoxFillPercent = round(usage.averageFillPercent);
-  evaluation.firstBoxRawFillPercent = evaluation.firstBoxFillPercent;
-  evaluation.averageFillPercent = evaluation.firstBoxFillPercent;
-  evaluation.firstBoxDeckAreaPercent = round(usage.firstDeckAreaPercent);
-  evaluation.firstBoxLengthPercent = round(usage.firstLengthPercent);
-  evaluation.averageDeckAreaPercent = round(usage.averageDeckAreaPercent);
-  evaluation.mixedPlan = {
-    summary: mixedPlanSummary(packedBoxes),
-    boxes: packedBoxes.map((box, index) => ({
-      index: index + 1,
-      containerId: box.container.id,
-      containerName: box.container.name,
-      placedCount: sumUnitQuantity(box.placed)
-    }))
-  };
-  evaluation.recommendation = buildRecommendation(evaluation);
+  const evaluation = buildMixedEvaluationFromPackedBoxes(packedBoxes, total, utilizationPercent, globalGapCm, fatalOversize, balanceBlocked);
   mixedCandidates.push(evaluation);
   return mixedCandidates.sort(compareEvaluation)[0] || null;
 }
@@ -1803,7 +1780,7 @@ function buildMixedContainerEvaluation(containers, cargos, total, utilizationPer
 function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEvaluations, total, utilizationPercent, globalGapCm, options = {}) {
   const candidates = [];
   const usableContainers = runtimeContainers
-    .filter((container) => (isPrimaryCalculationContainer(container) || container?.usagePriority === "special") && equipmentMeta(container).priceAvailable)
+    .filter((container) => (isPrimaryCalculationContainer(container) || container?.usagePriority === "special") && (options.optimizationGoal || equipmentMeta(container).priceAvailable))
     .sort((a, b) => {
       const priceDiff = equipmentMeta(a).referencePrice - equipmentMeta(b).referencePrice;
       if (Math.abs(priceDiff) > EPS) return priceDiff;
@@ -1826,7 +1803,7 @@ function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEva
       for (const state of beam) {
         for (const replacement of replacements) {
           const meta = equipmentMeta(replacement.container);
-          if (state.currency && state.currency !== meta.referenceCurrency) continue;
+          if (!options.optimizationGoal && state.currency && state.currency !== meta.referenceCurrency) continue;
           expanded.push({
             boxes: [...state.boxes, replacement],
             freight: state.freight + meta.referencePrice,
@@ -1834,7 +1811,7 @@ function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEva
           });
         }
       }
-      beam = retainMixedCombinationStates(expanded);
+      beam = retainMixedCombinationStates(expanded, options.optimizationGoal);
       if (!beam.length) {
         failed = true;
         break;
@@ -1844,7 +1821,7 @@ function buildMixedContainerEvaluationFromSinglePlans(runtimeContainers, baseEva
     for (const state of beam) {
       if (combinationDuplicatesBasePlan(state.boxes, baseEvaluations)) continue;
       const mixedFreight = mixedPlanFreightCost(state.boxes);
-      if (!(mixedFreight < estimatedFreightCost(baseEvaluation) - EPS)) continue;
+      if (!options.optimizationGoal && !(mixedFreight < estimatedFreightCost(baseEvaluation) - EPS)) continue;
       const evaluation = buildMixedEvaluationFromPackedBoxes(state.boxes, total, utilizationPercent, globalGapCm);
       evaluation.mixedPlan = {
         ...evaluation.mixedPlan,
@@ -1872,6 +1849,9 @@ function combinationDuplicatesBasePlan(packedBoxes, baseEvaluations) {
     && !evaluation.estimatedBoxes
   );
   if (!base || Number(base.boxes || 0) !== packedBoxes.length) return false;
+  if (base.optimizationGoal) {
+    return compareVolumeUtilization(physicalVolumeUtilization(null, packedBoxes), base.volumeUtilization, base.optimizationGoal) >= 0;
+  }
   const combinationFreight = mixedPlanFreightCost(packedBoxes);
   const baseFreight = estimatedFreightCost(base);
   return Number.isFinite(combinationFreight)
@@ -1927,10 +1907,11 @@ function unitFromResumePlacementDto(placement = {}) {
   return unit;
 }
 
-function retainMixedCombinationStates(states) {
+function retainMixedCombinationStates(states, optimizationGoal) {
   const unique = new Map();
   [...states]
-    .sort((a, b) => a.freight - b.freight)
+    .map((state) => ({ ...state, metrics: optimizationGoal ? physicalVolumeUtilization(null, state.boxes) : null }))
+    .sort((a, b) => (optimizationGoal && compareVolumeUtilization(a.metrics, b.metrics, optimizationGoal)) || a.freight - b.freight)
     .forEach((state) => {
       const signature = `${state.currency}:${state.boxes.map((box) => box.container?.id || "unknown").join("|")}`;
       if (!unique.has(signature)) unique.set(signature, state);
@@ -1964,7 +1945,7 @@ function containerCandidatesForPackedBox(containers, sourceBox, utilizationPerce
     if (!packed?.placed?.length || packed.unplaced?.length || sumUnitQuantity(packed.placed) < sourceQuantity) continue;
     if (packed.balanceValidation?.severity === "red" || packed.strategySummary?.complianceBlocked) continue;
     const meta = equipmentMeta(container);
-    if (!meta.priceAvailable) continue;
+    if (!options.optimizationGoal && !meta.priceAvailable) continue;
     const capacity = Math.max(EPS, usageCapacity(container, utilizationPercent));
     const fillPercent = usageUsedCapacity(container, packed.placed) / capacity * 100;
     candidates.push({
@@ -1973,10 +1954,12 @@ function containerCandidatesForPackedBox(containers, sourceBox, utilizationPerce
       price: meta.referencePrice,
       volume: volumeM3(container),
       fillPercent,
+      volumeFill: sumCargoVolumeM3(packed.placed) / boxEnvelopeVolume(container),
       specialPenalty: meta.equipmentClass === "FR" ? 3 : meta.equipmentClass === "RF" ? 2 : 0
     });
   }
   const selected = candidates.sort((a, b) => {
+    if (options.optimizationGoal) return b.volumeFill - a.volumeFill;
     const priceDiff = a.price - b.price;
     if (Math.abs(priceDiff) > EPS) return priceDiff;
     const specialDiff = a.specialPenalty - b.specialPenalty;
@@ -2018,6 +2001,7 @@ function buildMixedEvaluationFromPackedBoxes(packedBoxes, total, utilizationPerc
   const mixedFreight = mixedPlanFreightCost(packedBoxes);
   const mixedContainer = {
     id: "mixed-plan",
+    optimizationGoal: packedBoxes[0].container.optimizationGoal,
     name: "智能组合方案",
     lengthCm: packedBoxes[0].container.lengthCm,
     widthCm: packedBoxes[0].container.widthCm,
@@ -2049,9 +2033,9 @@ function buildMixedEvaluationFromPackedBoxes(packedBoxes, total, utilizationPerc
   evaluation.firstBoxOccupiedVolumeM3 = round(totalOccupiedVolume);
   evaluation.firstBoxRemainingVolumeM3 = round(Math.max(0, totalUsableVolume - totalOccupiedVolume));
   evaluation.usageMode = usage.mode;
-  evaluation.firstBoxFillPercent = round(usage.averageFillPercent);
+  evaluation.firstBoxFillPercent = round(usage.firstFillPercent);
   evaluation.firstBoxRawFillPercent = evaluation.firstBoxFillPercent;
-  evaluation.averageFillPercent = evaluation.firstBoxFillPercent;
+  evaluation.averageFillPercent = round(usage.averageFillPercent);
   evaluation.firstBoxDeckAreaPercent = round(usage.firstDeckAreaPercent);
   evaluation.firstBoxLengthPercent = round(usage.firstLengthPercent);
   evaluation.averageDeckAreaPercent = round(usage.averageDeckAreaPercent);
@@ -2088,9 +2072,12 @@ function mixedBoxCandidateScore(container, packed, remaining, utilizationPercent
   const remainingLowerBound = unplaced.length
     ? Math.min(...candidateContainers.map((candidate) => residualPlanMetrics(candidate, unplaced).remainingBoxLowerBound))
     : 0;
+  const volumeFill = sumCargoVolumeM3(packed.placed) / boxEnvelopeVolume(container);
   return [
     fitStatusRank(fitStatus),
+    ...(container.optimizationGoal === "peak" ? [-volumeFill] : []),
     1 + remainingLowerBound,
+    ...(container.optimizationGoal === "overall" ? [-volumeFill] : []),
     sumCargoVolumeM3(unplaced),
     sumUnitQuantity(unplaced),
     priceScore,
@@ -5580,6 +5567,10 @@ function comparePackAttempt(container) {
   return (a, b) => {
     const balanceRankDiff = balanceSeverityRank(a.balanceValidation) - balanceSeverityRank(b.balanceValidation);
     if (balanceRankDiff) return balanceRankDiff;
+    if (container.optimizationGoal === "peak") {
+      const volumeDiff = sumCargoVolumeM3(b.placed) - sumCargoVolumeM3(a.placed);
+      if (Math.abs(volumeDiff) > EPS) return volumeDiff;
+    }
     if (isFlatRackUsage(container)) {
       const aPlacedCount = sumUnitQuantity(a.placed);
       const bPlacedCount = sumUnitQuantity(b.placed);
@@ -5993,9 +5984,8 @@ function containerHeightLimit(container) {
   const explicitLimit = Number(container?.heightLimitCm ?? container?.oogHeightLimitCm);
   if (isHeightUnlimited(container) || isFlatRackLike(container)) {
     if (Number.isFinite(explicitLimit) && explicitLimit > 0) return explicitLimit;
-    return Math.max(1, Number(container?.heightCm || 0));
   }
-  return Math.max(1, Number(container?.heightCm || 0));
+  return Math.max(0, Number(container?.heightCm || 0));
 }
 
 function placedWeightKg(placed = []) {
@@ -6389,12 +6379,16 @@ function usageMetricsForPackedBoxes(container, packedBoxes, utilizationPercent) 
   const firstContainer = firstBox.container || container;
   const modes = new Set(boxes.map((box) => usageMode(box.container || container)));
   const mode = modes.size === 1 ? [...modes][0] : "mixed";
-  const firstUsed = usageUsedCapacity(firstContainer, firstBox.placed || []);
-  const firstCapacity = usageCapacity(firstContainer, utilizationPercent);
+  // Deck square meters and closed-container cubic meters cannot be summed.
+  // For mixed equipment, express both using the configured volumetric envelope.
+  const useVolume = Boolean(container.optimizationGoal) || mode === "mixed";
+  const volumeFraction = container.optimizationGoal ? 1 : utilizationPercent / 100;
+  const firstUsed = useVolume ? sumCargoVolumeM3(firstBox.placed || []) : usageUsedCapacity(firstContainer, firstBox.placed || []);
+  const firstCapacity = useVolume ? boxEnvelopeVolume(firstContainer) * volumeFraction : usageCapacity(firstContainer, utilizationPercent);
   const totals = boxes.reduce((acc, box) => {
     const boxContainer = box.container || container;
-    acc.used += usageUsedCapacity(boxContainer, box.placed || []);
-    acc.capacity += usageCapacity(boxContainer, utilizationPercent);
+    acc.used += useVolume ? sumCargoVolumeM3(box.placed || []) : usageUsedCapacity(boxContainer, box.placed || []);
+    acc.capacity += useVolume ? boxEnvelopeVolume(boxContainer) * volumeFraction : usageCapacity(boxContainer, utilizationPercent);
     if (usageMode(boxContainer) === "deck") {
       acc.deckUsed += placementDeckAreaM2(box.placed || []);
       acc.deckCapacity += deckAreaM2(boxContainer);
@@ -6403,7 +6397,7 @@ function usageMetricsForPackedBoxes(container, packedBoxes, utilizationPercent) 
   }, { used: 0, capacity: 0, deckUsed: 0, deckCapacity: 0 });
 
   return {
-    mode,
+    mode: container.optimizationGoal && mode === "deck" ? "volume" : mode,
     firstFillPercent: firstCapacity > 0 ? firstUsed / firstCapacity * 100 : 0,
     averageFillPercent: totals.capacity > 0 ? totals.used / totals.capacity * 100 : 0,
     firstDeckAreaPercent: deckAreaPercent(firstContainer, firstBox.placed || []),
@@ -6473,11 +6467,13 @@ function maxTop(units) {
 
 function totals(cargos) {
   return cargos.reduce((acc, cargo) => {
-    acc.totalQuantity += Math.max(0, Math.floor(Number(cargo.quantity || 0)));
+    const quantity = Math.max(0, Math.floor(Number(cargo.quantity || 0)));
+    acc.quantityByRow.push(quantity);
+    acc.totalQuantity += quantity;
     acc.totalRawVolumeM3 += Number(cargo.lengthCm) * Number(cargo.widthCm) * Number(cargo.heightCm) * Number(cargo.quantity || 0) / 1_000_000;
     acc.totalWeightKg += Number(cargo.weightKg || 0) * Number(cargo.quantity || 0);
     return acc;
-  }, { totalQuantity: 0, totalRawVolumeM3: 0, totalWeightKg: 0 });
+  }, { totalQuantity: 0, totalRawVolumeM3: 0, totalWeightKg: 0, quantityByRow: [] });
 }
 
 function cargoDisplayName(cargo) {
@@ -6486,9 +6482,48 @@ function cargoDisplayName(cargo) {
   return model ? `${name} ${model}` : name;
 }
 
+function boxEnvelopeVolume(container) {
+  const dimensions = [container.lengthCm, container.widthCm, container.heightCm].map(Number);
+  return dimensions.every((value) => Number.isFinite(value) && value > 0)
+    ? dimensions[0] * dimensions[1] * dimensions[2] / 1_000_000 : 0;
+}
+
+function physicalVolumeUtilization(container, packedBoxes) {
+  let cargoVolume = 0;
+  let boxVolume = 0;
+  let peakPercent = 0;
+  let peakBoxIndex = 0;
+  for (const [index, box] of packedBoxes.entries()) {
+    const capacity = boxEnvelopeVolume(box.container || container);
+    const used = sumCargoVolumeM3(box.placed);
+    const percent = capacity > 0 ? 100 * used / capacity : 0;
+    cargoVolume += used;
+    boxVolume += capacity;
+    if (percent > peakPercent) {
+      peakPercent = percent;
+      peakBoxIndex = index + 1;
+    }
+  }
+  return { overallPercent: boxVolume > 0 ? 100 * cargoVolume / boxVolume : 0, peakPercent, peakBoxIndex };
+}
+
+function compareVolumeUtilization(a, b, goal) {
+  if (!a || !b) return 0;
+  const overall = b.overallPercent - a.overallPercent;
+  const peak = b.peakPercent - a.peakPercent;
+  const primary = goal === "peak" ? peak : overall;
+  if (Math.abs(primary) > EPS) return primary;
+  const secondary = goal === "peak" ? overall : peak;
+  return Math.abs(secondary) > EPS ? secondary : 0;
+}
+
 function compareEvaluation(a, b) {
   const statusDiff = fitStatusRank(a.fitStatus) - fitStatusRank(b.fitStatus);
   if (statusDiff) return statusDiff;
+  if (a.optimizationGoal && a.optimizationGoal === b.optimizationGoal && a.fitStatus === FIT_STATUS.FIT) {
+    const volumeDiff = compareVolumeUtilization(a.volumeUtilization, b.volumeUtilization, a.optimizationGoal);
+    if (volumeDiff) return volumeDiff;
+  }
   const boxDiff = normalizedBoxCount(a) - normalizedBoxCount(b);
   if (boxDiff) return boxDiff;
   const priceStatusA = evaluationPriceStatus(a);
@@ -6741,7 +6776,7 @@ function buildTrace(container, units, total, multi, metrics) {
       "候选落位必须满足边界、不相交、底面支撑和不可重压货物不承载上层货物",
       "首轮失败时执行局部搜索，移出一小组已摆货物与剩余货物重排，而不是立刻开启第二箱",
       "同一箱型选择已摆数量更多、占用体积更高、承重支撑面更好的方案",
-      PACKING_WORKER_TEXT.recommendationPipeline
+      container.optimizationGoal ? PACKING_WORKER_TEXT.volumeGoalPipeline : PACKING_WORKER_TEXT.recommendationPipeline
     ],
     strategies: SEARCH_STRATEGIES.map((strategy) => strategy.name),
     selectedStrategy: firstBox.strategyName || "",

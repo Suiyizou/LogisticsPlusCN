@@ -13,6 +13,8 @@ import {
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "../public/carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
+  formatTrackingReference,
+  parseTrackingReference,
   supportsTrackingQuery,
   trackingQueryCarriers
 } from "../public/tracking-query-catalog.mjs";
@@ -874,11 +876,11 @@ test("signed-in overview loads account-bound snapshot objects and never offers b
   );
 });
 
-test("exposes real carrier selection and restricts CMA session maintenance to managers", () => {
-  assert.match(
-    indexSource,
-    /<label for="carrier-select"[^>]*data-i18n="query\.carrier"[\s\S]*?<select id="carrier-select" name="carrier">[\s\S]*?<option value="COSCO">[\s\S]*?<option value="CMA">/
-  );
+test("single shipment search takes one reference and keeps CMA session maintenance restricted to managers", () => {
+  const form = indexSource.match(/<form id="tracking-form">([\s\S]+?)<\/form>/)[1];
+  assert.doesNotMatch(form, /<select/);
+  assert.equal(form.match(/<input/g)?.length, 1);
+  assert.match(form, /id="tracking-number"/);
   assert.match(indexSource, /data-carrier-select="COSCO"/);
   assert.match(indexSource, /data-carrier-select="CMA"/);
   assert.match(
@@ -907,7 +909,7 @@ test("query form matches the executable carriers and references for each deploym
           supportsShipmentReference(carrier, type, mode)
         );
       }
-      assert.equal(supportsTrackingQuery(carrier, "CONTAINER", localQueue), !localQueue);
+      assert.equal(supportsTrackingQuery(carrier, "CONTAINER", localQueue), !localQueue || carrier !== "KMTC");
     }
     assert.equal(supportsTrackingQuery("HEDE", "BOOKING", localQueue), false);
   }
@@ -922,6 +924,28 @@ test("query form matches the executable carriers and references for each deploym
   assert.equal(Object.hasOwn(MULTI_CARRIER_CATALOG, "HMM"), false);
   assert.equal(canonicalTrackingCarrier(" cma   cgm "), "CMA");
   assert.equal(canonicalTrackingCarrier(" WHZ "), "WAN_HAI");
+});
+
+test("one reference resolves bills, containers and bookings without guessing the carrier from equipment ownership", () => {
+  for (const [value, carrier, type, number] of [
+    ["cosu6466209120", "COSCO", "BILLOFLADING", "COSU6466209120"],
+    ["maeu802356593", "MAERSK", "BILLOFLADING", "MAEU802356593"],
+    ["TJN0940917", "CMA", "BOOKING", "TJN0940917"],
+    ["MSC:177QBWBWS017777", "MSC", "BOOKING", "177QBWBWS017777"],
+    ["COSCO：TEMU123456-7", "COSCO", "CONTAINER", "TEMU1234567"],
+    ["COSU:TEMU1234567", "COSCO", "CONTAINER", "TEMU1234567"],
+    ["COSCO:BL:6466209120", "COSCO", "BILLOFLADING", "6466209120"],
+    ["MSC:BK:MEDUW8444954", "MSC", "BOOKING", "MEDUW8444954"]
+  ]) {
+    assert.deepEqual(parseTrackingReference(value, true), { carrier, type, number }, value);
+  }
+  for (const invalid of ["TEMU1234567", "OOLU1234567", "6466209120", "BAD:123456789", "COSCO:XXX:123456789", "COSCO:CN:123456789"]) {
+    assert.ok(parseTrackingReference(invalid, true).error, invalid);
+  }
+  assert.deepEqual(parseTrackingReference("COSU6466209120", false), {
+    carrier: "COSCO", type: "BOOKING", number: "6466209120"
+  });
+  assert.deepEqual(parseTrackingReference("KMTC:TEMU1234567", true), { error: "query.unsupportedReference" });
 });
 
 test("local tracking deep links keep the carrier and bill type in the query form", () => {
@@ -941,10 +965,8 @@ test("local tracking deep links keep the carrier and bill type in the query form
     CHANNELS: { AUTO: { code: "AUTO" }, LOCAL_CHROME: { sourceKey: "source.localChrome" } },
     URLSearchParams,
     window: { location: {} },
-    carrierSelect: {},
-    trackingType: {
-      options: ["BOOKING", "BILLOFLADING", "CONTAINER"].map((value) => ({ value }))
-    },
+    selectedQuery: {},
+    formatTrackingReference,
     trackingNumber: {},
     queryChannel: "AUTO",
     sourceTag: {},
@@ -974,18 +996,13 @@ test("local tracking deep links keep the carrier and bill type in the query form
   for (const carrier of ["HMM", "COSCO"]) {
     context.window.location.search = `?carrier=${carrier}&type=BILLOFLADING&number=EXAMPLE001`;
     vm.runInContext("showStoredTrackingQuery(trackingQueryFromLocation());", context);
-    assert.equal(context.carrierSelect.value, carrier);
-    assert.equal(context.trackingType.value, "BILLOFLADING");
-    assert.equal(context.trackingNumber.value, "EXAMPLE001");
-    assert.equal(context.trackingType.options[1].disabled, false);
-    assert.equal(context.trackingType.options[2].disabled, true);
+    assert.equal(context.selectedQuery.carrier, carrier);
+    assert.equal(context.selectedQuery.type, "BILLOFLADING");
+    assert.equal(context.trackingNumber.value, carrier + ":BL:EXAMPLE001");
+    assert.deepEqual(parseTrackingReference(context.trackingNumber.value, true), {
+      carrier, type: "BILLOFLADING", number: "EXAMPLE001"
+    });
   }
-
-  context.carrierSelect.value = "CMA";
-  context.currentPayload = { snapshot: { provider: { code: "CMA" }, channel: "AUTO" } };
-  vm.runInContext("updateCarrierUI({ resetResult: true });", context);
-  assert.equal(context.trackingType.value, "BOOKING");
-  assert.equal(context.trackingType.options[1].disabled, true);
 });
 
 test("open details prefers structured facts and removes repeated spreadsheet fields", () => {

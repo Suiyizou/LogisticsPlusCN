@@ -1522,7 +1522,7 @@ public class ShipmentTrackingService {
       boolean verifyShipmentAccess) {
     NormalizedTrackRequest request = normalize(input);
     normalizeImportedDetails(input, request, user);
-    if (verifyShipmentAccess) {
+    if (verifyShipmentAccess && isDurableReferenceType(request.type())) {
       ShipmentIdentity existing = findShipmentByAnyReference(List.of(new ShipmentReference(
           request.carrier(), request.type(), request.number(), request.number(), true)));
       if (existing != null && !accessService.hasAccess(existing.publicId(), user)) {
@@ -1534,7 +1534,8 @@ public class ShipmentTrackingService {
 
   ObjectNode persistPublishedResult(ShipmentTrackRequest input, ObjectNode upstream, AuthenticatedUser owner) {
     NormalizedTrackRequest request = normalize(input);
-    return completeTrack(request, upstream, findCached(request), normalizeImportedDetails(input, request, owner),
+    CachedShipment cached = isDurableReferenceType(request.type()) ? findCached(request) : null;
+    return completeTrack(request, upstream, cached, normalizeImportedDetails(input, request, owner),
         owner, false, clock.instant(), true);
   }
 

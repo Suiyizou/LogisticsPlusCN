@@ -26,8 +26,50 @@ const BILL_HEADERS = [
   "\u63d0\u5355\u53f7\u7801",
   "\u4e3b\u63d0\u5355\u53f7"
 ];
+const CONTAINER_HEADERS = ["CONTAINER", "CONTAINERNO", "CONTAINERNUMBER", "CONTAINERID", "CNTRNO", "CNTRNUMBER", "\u7bb1\u53f7", "\u67dc\u53f7", "\u96c6\u88c5\u7bb1\u53f7", "\u96c6\u88c5\u7bb1\u7f16\u53f7", "\u8d27\u67dc\u53f7"];
+const GENERIC_HEADERS = ["REFERENCE", "REFERENCENO", "REFERENCENUMBER", "SHIPMENTREF", "SHIPMENTREFERENCE", "SHIPMENTNO", "TRACKINGNO", "TRACKINGNUMBER", "\u5355\u53f7", "\u8fd0\u5355\u53f7", "\u7968\u53f7", "\u8d27\u8fd0\u5355\u53f7", "\u8d27\u8fd0\u53c2\u8003\u53f7", "\u8fd0\u8f93\u5355\u53f7", "\u8ffd\u8e2a\u5355\u53f7"];
+const TYPE_HEADERS = ["REFERENCETYPE", "SHIPMENTNUMBERTYPE", "DOCUMENTTYPE", "\u5355\u53f7\u7c7b\u578b", "\u53f7\u7801\u7c7b\u578b", "\u7968\u53f7\u7c7b\u578b", "\u8fd0\u8f93\u5355\u53f7\u7c7b\u578b"];
+const headerTypes = new Map([
+  ...BILL_HEADERS.concat(["BL", "BOL", "MBL", "OCEANBILL", "BILLOFLADINGNO", "BILLOFLADINGNUMBER", "\u6d77\u8fd0\u63d0\u5355\u53f7", "\u6d77\u8fd0\u4e3b\u5355\u7f16\u53f7"]).map(key => [key, "BILLOFLADING"]),
+  ...BOOKING_HEADERS.concat(["BOOKINGREF", "BKG", "BKGNO", "\u8ba2\u8231\u5355\u53f7", "\u6d77\u8fd0\u8ba2\u8231\u7f16\u53f7"]).map(key => [key, "BOOKING"]),
+  ...CONTAINER_HEADERS.concat(["\u7bb1\u5b50\u53f7", "\u7bb1\u5b50\u53f7\u7801", "\u67dc\u53f7\u7801"]).map(key => [key, "CONTAINER"]),
+  ...GENERIC_HEADERS.map(key => [key, "GENERIC"])
+]);
+const typeRank = { BILLOFLADING: 3, BOOKING: 2, CONTAINER: 1, GENERIC: 0 };
+for (const key of ["\u53c2\u8003\u53f7", "\u53c2\u8003\u53f7\u7801", "\u53c2\u8003\u7f16\u53f7"]) headerTypes.set(key, "GENERIC");
+function referenceHeaderKind(value) {
+  const header = cellText(value);
+  if (!safeReferenceHeader(header)) return null;
+  const exact = headerTypes.get(normalizeHeader(header));
+  if (exact) return exact;
+  // A bilingual label must describe the same type on both sides. Keep B/L
+  // intact when splitting separate translations on a spaced slash.
+  const labels = header.split(/[()（）\n]+|\s+[/／]\s+/u).map(label => label.trim()).filter(Boolean);
+  if (labels.length < 2) return null;
+  const types = labels.map(label => headerTypes.get(normalizeHeader(label)));
+  return types.every(type => type === types[0]) ? types[0] : null;
+}
+const equipmentShape = /^[A-Z]{3}[UJZ][0-9]{6}-?[0-9]$/i;
+export function isShipmentContainerNumber(value) {
+  return equipmentShape.test(value);
+}
+function rowReferenceType(value) {
+  const key = normalizeHeader(value);
+  if (["BL", "BOL", "MBL", "\u63d0\u5355", "\u4e3b\u63d0\u5355", "BILLOFLADING"].includes(key)) return "BILLOFLADING";
+  if (["BK", "BKG", "\u8ba2\u8231"].includes(key)) return "BOOKING";
+  if (["CN", "CNTR", "\u7bb1", "\u67dc"].includes(key)) return "CONTAINER";
+  const type = headerTypes.get(key);
+  return type === "GENERIC" ? null : type;
+}
+
+function plausibleUnlabelledNumber(value) {
+  const text = cellText(value);
+  return /^[A-Z0-9][A-Z0-9-]{3,34}$/i.test(text) && /\d/.test(text) &&
+    !/^(?:\d{4}-\d{1,2}-\d{1,2}|(?:PO|JOB|SEAL|ORDER|INVOICE)[-_]?\d+)$/i.test(text);
+}
 const FIELD_ALIASES = {
   carrier: [
+    "\u627f\u8fd0\u8239\u53f8",
     "CARRIER",
     "CARRIERCODE",
     "\u627f\u8fd0\u4eba",
@@ -93,6 +135,13 @@ const RECOGNIZED_IMPORT_CARRIERS = new Set([
 ]);
 const PREFIXES = [
   [/^COSU\d+$/i, "COSCO"],
+  [/^MAEU[A-Z0-9]+$/i, "MAERSK"],
+  [/^MEDU[A-Z0-9]+$/i, "MSC"],
+  [/^(?:CMDU|TJN)[A-Z0-9]+$/i, "CMA"],
+  [/^ONEY[A-Z0-9]+$/i, "ONE"],
+  [/^(?:YMJ|YMLU)[A-Z0-9]+$/i, "YML"],
+  [/^WHLC[A-Z0-9]+$/i, "WAN_HAI"],
+  [/^SMLM[A-Z0-9]+$/i, "SML"],
   [/^OOLU[A-Z0-9]+$/i, "OOCL"],
   [/^HLCU[A-Z0-9]+$/i, "HAPAG_LLOYD"],
   [/^HDMU[A-Z0-9]+$/i, "HMM"],
@@ -108,6 +157,20 @@ export function identifyShipmentCarrier(reference) {
 
 export function validShipmentBatchReference(reference) {
   return /^[A-Za-z0-9][A-Za-z0-9./-]{3,127}$/.test(reference) && /[0-9]/.test(reference);
+}
+
+export function isShipmentContainerReference(reference) {
+  const value = String(reference).toUpperCase();
+  if (!/^[A-Z]{3}[UJZ]\d{7}$/.test(value)) return false;
+  const checksum = [...value.slice(0, 10)].reduce((total, character, index) => {
+    let number = Number(character);
+    if (/[A-Z]/.test(character)) {
+      number = character.charCodeAt(0) - 55;
+      number += Math.floor((number - 1) / 10);
+    }
+    return total + number * 2 ** index;
+  }, 0);
+  return checksum % 11 % 10 === Number(value[10]);
 }
 
 export function parseShipmentBatchWorkbook(workbook, xlsx) {
@@ -154,23 +217,40 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
     row.reduce(
       (score, value) =>
         score +
-        (Object.values(FIELD_ALIASES)
+        (referenceHeaderKind(value) || Object.values(FIELD_ALIASES)
           .flat()
-          .concat(BOOKING_HEADERS)
+          .concat([...headerTypes.keys()])
           .some((alias) => normalizeHeader(value) === normalizeHeader(alias))
           ? 1
           : 0),
       0
     );
+  const headerless = scoreHeader(sourceRows[first]) === 0 &&
+    !sourceRows[first].some(value => referenceHeaderHint.test(cellText(value)) || carrierHeaderHint.test(cellText(value))) &&
+    sourceRows[first].some(plausibleUnlabelledNumber) &&
+    sourceRows[first].every(value => !cellText(value) || plausibleUnlabelledNumber(value) ||
+      RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(value)));
   let headerIndex = first;
   for (let r = first; r <= Math.min(last, first + 30); r++)
     if (scoreHeader(sourceRows[r] || []) > scoreHeader(sourceRows[headerIndex] || []))
       headerIndex = r;
   const width = Math.max(...sourceRows.slice(first, last + 1).map((row) => row.length));
+  const hasHeader = !headerless || headerIndex !== first;
   const rows = sourceRows
     .slice(headerIndex, last + 1)
     .map((row) => Array.from({ length: width }, (_, c) => cellText(row[c])));
+  if (!hasHeader) {
+    rows.unshift(Array(width).fill(""));
+    headerIndex--;
+  }
   const headers = rows[0];
+  const carrierColumns = headers.flatMap((header, index) => {
+    if (header) return [];
+    const values = rows.slice(1).map(row => row[index]).filter(Boolean);
+    return values.length && values.every(value => RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(value))) ? [index] : [];
+  });
+  const carrierColumn = carrierColumns.length === 1 ? carrierColumns[0] : -1;
+  const carrierContext = carrierColumn >= 0 || findHeaderIndex(headers, FIELD_ALIASES.carrier) >= 0;
   const operational =
     headers.includes("\u539fETD") &&
     headers.includes("\u73b0ETD") &&
@@ -183,15 +263,11 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
       .slice(1)
       .map((row) => row[index])
       .filter(Boolean);
-    const reference = BOOKING_HEADERS.concat(BILL_HEADERS).includes(normalizeHeader(header));
-    const score =
-      index === referenceColumn
-        ? 30000
-        : BOOKING_HEADERS.includes(normalizeHeader(header))
-          ? 20000
-          : reference
-            ? 10000
-            : 0;
+    const unlabelled = !header && index !== carrierColumn && (carrierContext || (!hasHeader && width === 1)) &&
+      values.some(plausibleUnlabelledNumber);
+    const referenceKind = unlabelled ? "GENERIC" : referenceHeaderKind(header);
+    const score = index === referenceColumn ? 30000
+      : unlabelled ? 1 : referenceKind ? (typeRank[referenceKind] + 1) * 5000 : 0;
     const label =
       header ||
       (normalizeHeader(values[0]) === "VOLUME" ? "VOLUME" : `Column ${columnLetter(index)}`);
@@ -201,10 +277,13 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
       label,
       nonEmptyCount: values.length,
       score,
+      unlabelled,
+      referenceKind,
       cosuCount: values.filter((v) => /^COSU\s*\d+$/.test(v)).length
     };
   });
-  const suggested = [...columns].filter((c) => c.score > 0).sort((a, b) => b.score - a.score)[0];
+  const ranked = [...columns].filter(c => c.score > 0).sort((a, b) => b.score - a.score);
+  const suggested = ranked.find(c => c.nonEmptyCount) ?? ranked[0];
   return {
     name,
     headers,
@@ -213,6 +292,8 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
     headerRow: headerIndex + 1,
     sourceRowNumbers: rows.map((_, i) => headerIndex + i + 1),
     operational,
+    carrierColumn,
+    needsColumnSelection: Boolean(suggested?.unlabelled && ranked.filter(c => c.unlabelled).length > 1),
     referenceColumn,
     merges: metadata.merges || [],
     unsafeCells: metadata.unsafeCells || [],
@@ -229,12 +310,9 @@ export function prepareSheet(name, sourceRows, metadata = {}) {
 }
 
 const schemaLabelLimit = 32;
-const schemaSampleLimit = 60;
-const schemaTimeout = 7000;
-const schemaCallLimit = 3;
-const ruleHeaders = new Set(
-  [...Object.values(FIELD_ALIASES).flat(), ...BOOKING_HEADERS].map(normalizeHeader)
-);
+const schemaSampleLimit = 500;
+const schemaTimeout = 45000;
+const schemaCallLimit = 8;
 const referenceHeaderHint =
   /\b(?:b\s*\/\s*l|bol|mbl|bkg|booking|lading|waybill|master bill|shipment ref(?:erence)?|ocean ref(?:erence)?|transport document|connaissement|conocimiento de embarque)\b|\u63d0\u5355|\u8ba2\u8231|\u8ba2\u8239|\u8231\u4f4d|\u6d77\u8fd0.*(?:\u5355|\u7f16\u53f7)|\u8fd0\u8f93\u5355\u636e/iu;
 const carrierHeaderHint =
@@ -250,6 +328,9 @@ function safeSchemaLabel(label) {
   );
 }
 
+function safeReferenceHeader(header) {
+  return !/house\s*(?:bill|b\s*\/\s*l)|\bhbl\b|\u5206\u63d0\u5355|\u8d27\u4ee3\u63d0\u5355|container\s*(?:type|size|count|quantity)|\u5c01\u53f7|\u94c5\u5c01|\u7bb1\u578b|\u7bb1\u91cf|\u67dc\u578b|\u67dc\u91cf/iu.test(header);
+}
 function validModelCarrierColumn(sheet, index, referenceIndex) {
   return (
     index !== referenceIndex &&
@@ -277,148 +358,131 @@ function schemaPreviewRows(sheet) {
   }).rows;
 }
 
-/** Request only sanitized labels. The workbook and all reference values stay in the local parser. */
+/** The model selects sanitized column labels; identifiers are always read from source cells. */
 export async function recognizeShipmentBatchSchemas(sheets, recognize) {
   const ruleSheets = sheets
     .filter(({ resultSheet, suggestedColumnIndex }) => !resultSheet && suggestedColumnIndex !== null)
     .sort((a, b) => b.columns[b.suggestedColumnIndex].score - a.columns[a.suggestedColumnIndex].score);
-  // Once a task sheet is known, unrelated tabs are outside the recognition scope.
-  const candidates = ruleSheets.length ? ruleSheets : sheets.filter(({ resultSheet }) => !resultSheet);
-  const controller = new AbortController();
-  let timeout;
+  const candidates = [
+    ...ruleSheets,
+    ...sheets.filter((sheet) => !sheet.resultSheet && !ruleSheets.includes(sheet))
+  ];
   let calls = 0;
   async function request(headers, carrierLabels) {
-    if ((!headers.length && !carrierLabels.length) || calls >= schemaCallLimit || controller.signal.aborted)
-      return null;
+    if ((!headers.length && !carrierLabels.length) || calls >= schemaCallLimit)
+      return { status: "UNAVAILABLE", reasonCode: "RECOGNITION_LIMIT", modelVerified: false };
     calls++;
+    const controller = new AbortController();
+    let timeout;
     try {
       const timedOut = new Promise((resolve) => {
-        if (!timeout) timeout = setTimeout(() => controller.abort(), schemaTimeout);
-        controller.signal.addEventListener("abort", () => resolve({ status: "UNAVAILABLE" }), {
-          once: true
-        });
+        timeout = setTimeout(() => {
+          controller.abort();
+          resolve({ status: "UNAVAILABLE", reasonCode: "MODEL_TIMEOUT", modelVerified: false });
+        }, schemaTimeout);
       });
-      return await Promise.race([
+      const result = await Promise.race([
         recognize({ headers, carrierLabels }, { signal: controller.signal }),
         timedOut
       ]);
+      if (result?.recognitionSource !== "LLM" || result.modelVerified !== true)
+        return { status: "UNAVAILABLE", reasonCode: result?.reasonCode || "MODEL_UNAVAILABLE", modelVerified: false };
+      return result;
     } catch {
-      return { status: "UNAVAILABLE" };
+      return { status: "UNAVAILABLE", reasonCode: "MODEL_UNAVAILABLE", modelVerified: false };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
   const enriched = new Map();
-  try {
-    for (const sheet of candidates) {
-      if (calls >= schemaCallLimit || controller.signal.aborted) break;
-      let resolved = sheet;
-      let status = "";
-      const ruleCarrierIndex = findHeaderIndex(sheet.headers, FIELD_ALIASES.carrier);
-      const ruleReferenceIndex = sheet.suggestedColumnIndex;
-      const missingCarrier =
-        ruleReferenceIndex !== null &&
-        ruleCarrierIndex < 0 &&
-        schemaPreviewRows(sheet).some((row) => row.errors.some(({ code }) => code === "UNKNOWN_CARRIER"));
-      if (ruleReferenceIndex === null || missingCarrier) {
-        const plausibleReferenceColumns = new Set(
-          sheet.columns
-            .filter(({ index, header }) =>
-              referenceHeaderHint.test(header) &&
-              sheet.rows.slice(1, schemaSampleLimit + 1).some((row) => validShipmentBatchReference(row[index]))
-            )
-            .map(({ index }) => index)
-        );
-        const headers = ruleReferenceIndex === null && !plausibleReferenceColumns.size
-          ? []
-          : sheet.columns
-          .filter(({ index, header }) =>
-            index <= 16383 &&
-            safeSchemaLabel(header) &&
-            !ruleHeaders.has(normalizeHeader(header)) &&
-            !RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(header)) &&
-            (plausibleReferenceColumns.has(index) || validModelCarrierColumn(sheet, index, ruleReferenceIndex))
-          )
-          .slice(0, schemaLabelLimit)
-          .map(({ index, header }) => ({ index, label: header }));
-        const suggestion = await request(headers, []);
-        if (suggestion) {
-          status = suggestion.status === "UNAVAILABLE" ? "UNAVAILABLE" : "NO_MATCH";
-          const nominated = suggestion.referenceColumnIndex;
-          const type = suggestion.referenceType;
-          const eligible = (index) => Number.isInteger(index) && headers.some((entry) => entry.index === index);
-          const referenceColumnIndex =
-            suggestion.status === "SUGGESTED" &&
-            ruleReferenceIndex === null &&
-            eligible(nominated) &&
-            ["BOOKING", "BILLOFLADING"].includes(type) &&
-            plausibleReferenceColumns.has(nominated)
-              ? nominated
-              : null;
-          const referenceIndex = ruleReferenceIndex ?? referenceColumnIndex;
-          const nominatedCarrier = suggestion.carrierColumnIndex;
-          const carrierColumnIndex =
-            suggestion.status === "SUGGESTED" &&
-            referenceIndex !== null &&
-            ruleCarrierIndex < 0 &&
-            eligible(nominatedCarrier) &&
-            validModelCarrierColumn(sheet, nominatedCarrier, referenceIndex)
-              ? nominatedCarrier
-              : null;
-          if (referenceColumnIndex !== null || carrierColumnIndex !== null) {
-            resolved = {
-              ...sheet,
-              columns: sheet.columns.map((column) =>
-                column.index === referenceColumnIndex ? { ...column, score: 1 } : column
-              ),
-              suggestedColumnIndex: referenceIndex,
-              schemaSuggestion: { referenceColumnIndex, referenceType: type, carrierColumnIndex }
-            };
-            status = "SUGGESTED";
-          }
-        }
-      }
-      const carrierIndex =
-        ruleCarrierIndex >= 0 ? ruleCarrierIndex : resolved.schemaSuggestion?.carrierColumnIndex;
-      if (resolved.suggestedColumnIndex !== null && Number.isInteger(carrierIndex)) {
-        const unresolvedLabels = schemaPreviewRows(resolved)
-          .filter(({ errors }) => errors.length === 1 && errors[0].code === "UNKNOWN_CARRIER")
-          .map(({ sourceRow }) => sheet.rows[sourceRow - sheet.headerRow]?.[carrierIndex])
-          .filter((label) => label && safeCarrierLabel(label));
-        const carrierLabels = [...new Set(unresolvedLabels)].slice(0, schemaLabelLimit);
-        const suggestion = await request([], carrierLabels);
-        if (suggestion) {
-          const mappings = Array.isArray(suggestion.carrierMappings) ? suggestion.carrierMappings : [];
-          const carrierMappings = Object.fromEntries(
-            carrierLabels.flatMap((label) => {
-              const matches = mappings.filter((entry) => entry?.label === label);
-              const carrier = matches[0]?.carrier;
-              return suggestion.status === "SUGGESTED" &&
-                matches.length === 1 &&
-                RECOGNIZED_IMPORT_CARRIERS.has(carrier)
-                ? [[label, carrier]]
-                : [];
-            })
-          );
-          if (Object.keys(carrierMappings).length) {
-            resolved = {
-              ...resolved,
-              schemaSuggestion: { ...resolved.schemaSuggestion, carrierMappings }
-            };
-            status = "SUGGESTED";
-          } else if (status !== "SUGGESTED") {
-            status = suggestion.status === "UNAVAILABLE" ? "UNAVAILABLE" : "NO_MATCH";
-          }
-        }
-      }
-      if (status) enriched.set(sheet, { ...resolved, schemaStatus: status });
+  for (const sheet of candidates) {
+    if (sheet.columns[sheet.suggestedColumnIndex]?.unlabelled) {
+      // There are no reference headers for an LLM to classify. Keep the raw
+      // identifiers on this machine and make ambiguous column choices explicit.
+      enriched.set(sheet, { ...sheet, modelVerified: false, modelRequired: false,
+        recognitionSource: "HEADERS", schemaStatus: "REVIEW_HEADERS" });
+      continue;
     }
-    return sheets.map((sheet) => enriched.get(sheet) || sheet);
-  } finally {
-    clearTimeout(timeout);
+    const plausibleReferenceColumns = new Set(
+      sheet.columns.filter(({ index, header, score }) =>
+        safeReferenceHeader(header) && (score > 0 || referenceHeaderHint.test(header)) &&
+        sheet.rows.slice(1).some((row) => validShipmentBatchReference(row[index]))
+      ).map(({ index }) => index)
+    );
+    const headers = (plausibleReferenceColumns.size ? sheet.columns : []).filter(({ index, header }) =>
+      index <= 16383 && safeSchemaLabel(header.replace(/[:：]\s*$/, "")) &&
+      (plausibleReferenceColumns.has(index) || validModelCarrierColumn(sheet, index, null))
+    ).map(({ index, header }) => ({ index, label: header.replace(/[:：]\s*$/, "").trim() }));
+    const base = { ...sheet, modelRequired: true, recognitionSource: "LLM", modelVerified: false };
+    if (!headers.length || headers.length > schemaLabelLimit) {
+      enriched.set(sheet, { ...base, schemaStatus: "NO_MATCH", schemaReasonCode: "NO_SAFE_COLUMNS" });
+      continue;
+    }
+    const suggestion = await request(headers, []);
+    const eligible = (index) => Number.isInteger(index) && headers.some((entry) => entry.index === index);
+    const referenceColumnIndex = suggestion.referenceColumnIndex;
+    const type = suggestion.referenceType;
+    const carrierColumnIndex = suggestion.carrierColumnIndex;
+    const ruleCarrierIndex = findHeaderIndex(sheet.headers, FIELD_ALIASES.carrier);
+    const headerKind = sheet.columns[referenceColumnIndex]?.referenceKind;
+    const knownReferenceType = headerKind === "GENERIC" ? "BOOKING" : headerKind;
+    if (suggestion.status !== "SUGGESTED" || !eligible(referenceColumnIndex) ||
+        !plausibleReferenceColumns.has(referenceColumnIndex) ||
+        !["BOOKING", "BILLOFLADING", "CONTAINER"].includes(type) ||
+        (knownReferenceType && knownReferenceType !== type) ||
+        (sheet.operational && referenceColumnIndex !== sheet.referenceColumn) ||
+        (ruleCarrierIndex >= 0 && carrierColumnIndex != null && carrierColumnIndex !== ruleCarrierIndex) ||
+        (carrierColumnIndex != null && (!eligible(carrierColumnIndex) ||
+          !validModelCarrierColumn(sheet, carrierColumnIndex, referenceColumnIndex)))) {
+      if (suggestion.status === "UNAVAILABLE" && sheet.columns[sheet.suggestedColumnIndex]?.referenceKind) {
+        enriched.set(sheet, { ...sheet, modelVerified: false, modelRequired: false, recognitionSource: "HEADERS",
+          schemaStatus: "REVIEW_HEADERS", schemaReasonCode: suggestion.reasonCode });
+        continue;
+      }
+      enriched.set(sheet, { ...base,
+        schemaStatus: suggestion.status === "UNAVAILABLE" ? "UNAVAILABLE" : "NO_MATCH",
+        schemaReasonCode: suggestion.reasonCode || "AMBIGUOUS_COLUMNS"
+      });
+      continue;
+    }
+    let resolved = {
+      ...base,
+      modelVerified: true,
+      schemaStatus: "SUGGESTED",
+      columns: sheet.columns.map((column) => column.index === referenceColumnIndex ? { ...column, score: Math.max(1, column.score) } : column),
+      suggestedColumnIndex: sheet.suggestedColumnIndex ?? referenceColumnIndex,
+      schemaSuggestion: { referenceColumnIndex, referenceType: type, carrierColumnIndex }
+    };
+    const carrierIndex = ruleCarrierIndex >= 0 ? ruleCarrierIndex : carrierColumnIndex;
+    if (Number.isInteger(carrierIndex) && carrierIndex >= 0) {
+      const unresolvedLabels = schemaPreviewRows(resolved)
+        .filter(({ errors }) => errors.length === 1 && errors[0].code === "UNKNOWN_CARRIER")
+        .map(({ sourceRow }) => sheet.rows[sourceRow - sheet.headerRow]?.[carrierIndex])
+        .filter((label) => label && safeCarrierLabel(label));
+      const carrierLabels = [...new Set(unresolvedLabels)];
+      const carrierMappings = {};
+      for (let offset = 0; offset < carrierLabels.length; offset += schemaLabelLimit) {
+        const labels = carrierLabels.slice(offset, offset + schemaLabelLimit);
+        const mapped = await request([], labels);
+        if (mapped.status === "UNAVAILABLE") {
+          resolved = { ...resolved, modelVerified: false, schemaStatus: "UNAVAILABLE", schemaReasonCode: mapped.reasonCode };
+          break;
+        }
+        const mappings = Array.isArray(mapped.carrierMappings) ? mapped.carrierMappings : [];
+        for (const label of labels) {
+          const matches = mappings.filter((entry) => entry?.label === label);
+          if (mapped.status === "SUGGESTED" && matches.length === 1 && RECOGNIZED_IMPORT_CARRIERS.has(matches[0].carrier))
+            carrierMappings[label] = matches[0].carrier;
+        }
+      }
+      resolved.schemaSuggestion.carrierMappings = carrierMappings;
+    }
+    enriched.set(sheet, resolved);
   }
+  return sheets.map((sheet) => enriched.get(sheet) || sheet);
 }
-
-/** @param {{ adapterMode?: string, includedSourceRows?: number[], queryOnly?: boolean }} [options] */
+/** @param {{ adapterMode?: string, includedSourceRows?: number[], queryOnly?: boolean, autoReferenceColumns?: boolean }} [options] */
 export function buildShipmentBatchPreview(
   sheet,
   selectedColumnIndex,
@@ -464,7 +528,7 @@ export function buildShipmentBatchPreview(
     !Number.isInteger(Number(selectedColumnIndex))
   )
     return preview;
-  const col = Number(selectedColumnIndex);
+  const selected = Number(selectedColumnIndex);
   const headers = sheet.headers;
   const fieldIndexes = Object.fromEntries(
     Object.entries(FIELD_ALIASES).map(([field, aliases]) => [
@@ -476,6 +540,7 @@ export function buildShipmentBatchPreview(
     fieldIndexes.originalBillOfLading = sheet.referenceColumn;
     fieldIndexes.forwarderJobNumber = 0;
   }
+  if (fieldIndexes.carrier < 0 && sheet.carrierColumn >= 0) fieldIndexes.carrier = sheet.carrierColumn;
   const suggestion = sheet.schemaSuggestion;
   const suggestedCarrierColumn =
     fieldIndexes.carrier < 0 && Number.isInteger(suggestion?.carrierColumnIndex);
@@ -491,7 +556,7 @@ export function buildShipmentBatchPreview(
       index,
       header: headers[index] || sheet.columns[index].label
     }));
-  if (sheet.operational && col !== sheet.referenceColumn)
+  if (sheet.operational && selected !== sheet.referenceColumn)
     preview.errors.push({
       row: sheet.headerRow,
       code: "BUSINESS_ID_COLUMN",
@@ -517,16 +582,27 @@ export function buildShipmentBatchPreview(
     if (normalizeHeader(fields.volume) === "VOLUME") fields.volume = "";
     return fields;
   };
-  const headerType = BILL_HEADERS.includes(normalizeHeader(headers[col]))
-    ? "BILLOFLADING"
-    : suggestion?.referenceColumnIndex === col
-      ? suggestion.referenceType
-      : referenceType;
+  const fallbackColumns = options.autoReferenceColumns && !sheet.operational
+    ? [...sheet.columns].filter(column => column.referenceKind && !column.unlabelled && column.index !== selected)
+        .sort((a, b) => b.score - a.score).map(column => column.index)
+    : [];
+  const typeColumn = findHeaderIndex(headers, TYPE_HEADERS);
   for (let r = 1; r < sheet.rows.length; r++) {
     const cells = sheet.rows[r];
     const row = sheet.sourceRowNumbers[r];
     if (includedSourceRows && !includedSourceRows.has(row)) continue;
+    // A merged reference owns its continuation rows; never import an extra ticket
+    // for the container or booking printed alongside such a continuation.
+    const col = [selected, ...fallbackColumns].find(index => mergedValue(r, index)) ?? selected;
     const original = cellText(cells[col]);
+    const kind = sheet.columns[col]?.referenceKind;
+    const declared = typeColumn >= 0 ? mergedValue(r, typeColumn) : "";
+    const rowType = declared ? rowReferenceType(declared) : null;
+    const generic = kind === "GENERIC";
+    const selectedType = generic ? "BOOKING"
+      : kind || (suggestion?.referenceColumnIndex === col ? suggestion.referenceType : referenceType);
+    const headerType = generic && declared ? rowType || "" : selectedType;
+    const defaultedBooking = generic && !declared;
     if (!cells.some(Boolean)) {
       preview.skipped++;
       continue;
@@ -536,15 +612,14 @@ export function buildShipmentBatchPreview(
       const merged = sheet.merges.some(
         (m) => m.s.c === col && m.e.c === col && m.s.r < row - 1 && m.e.r >= row - 1
       );
-      const meaningful = cells.some((v, i) => v && i !== fieldIndexes.carrier);
-      if (meaningful && !merged) {
+      if (!merged) {
         const error = {
           row,
           code: "MISSING_REFERENCE",
           message: "Non-empty row has no tracking reference"
         };
         preview.errors.push(error);
-        const carrierCell = cellText(cells[fieldIndexes.carrier]);
+        const carrierCell = cellText(mergedValue(r, fieldIndexes.carrier));
         const explicit =
           suggestedCarrierColumn && !RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(carrierCell))
             ? ""
@@ -586,7 +661,8 @@ export function buildShipmentBatchPreview(
       .replace(/\s*[(\uff08](?:\u4e3b|\u5206)[)\uff09]\s*(?:\u653e\u884c)?\s*$/u, "")
       .replace(/\s+\u653e\u884c\s*$/u, "")
       .trim();
-    const rawReference = cleaned.replace(/^COSU\s+(\d+)$/i, "COSU$1");
+    let rawReference = cleaned.replace(/^COSU\s+(\d+)$/i, "COSU$1");
+    if (headerType === "CONTAINER" && isShipmentContainerNumber(rawReference)) rawReference = rawReference.replace("-", "").toUpperCase();
     const rowErrors = [];
     const add = (code, message) => {
       const error = { row, code, message };
@@ -595,15 +671,20 @@ export function buildShipmentBatchPreview(
     };
     if (!validShipmentBatchReference(rawReference))
       add("INVALID_REFERENCE", "Reference contains unrecognized text or multiple identifiers");
+    if (generic && declared && !rowType) add("MISSING_TYPE", "Unknown reference type in the source type column");
+    if (headerType === "CONTAINER" && !isShipmentContainerNumber(rawReference))
+      add("INVALID_CONTAINER", "Container references require the full equipment number");
+    if (headerType !== "CONTAINER" && !defaultedBooking && isShipmentContainerReference(rawReference))
+      add("CONTAINER_REFERENCE", "A container identifier must not be submitted as a booking or ocean bill");
     if (sheet.unsafeCells.some((c) => c.r === row - 1 && c.c === col))
       add(
         "UNSAFE_REFERENCE",
         "Numeric reference or formula cannot be preserved precisely; use a text cell"
       );
-    const carrierCell = cellText(cells[fieldIndexes.carrier]);
-    const inferred = identifyShipmentCarrier(rawReference);
+    const carrierCell = cellText(mergedValue(r, fieldIndexes.carrier));
+    const inferred = headerType === "CONTAINER" || isShipmentContainerNumber(rawReference) ? "" : identifyShipmentCarrier(rawReference);
     const vessel = cellText(cells[fieldIndexes.vesselVoyage]);
-    const vesselCarrier = /^SM\s+(?:SEOUL|KWANGYANG|YANTIAN)\b/i.test(vessel) ? "SML" : "";
+    const vesselCarrier = headerType !== "CONTAINER" && /^SM\s+(?:SEOUL|KWANGYANG|YANTIAN)\b/i.test(vessel) ? "SML" : "";
     // A carrier cell may contain a delivery remark. Preserve it as source text
     // when independent evidence identifies the carrier. Known aliases still bind.
     const knownExplicit = RECOGNIZED_IMPORT_CARRIERS.has(normalizeCarrier(carrierCell));
@@ -637,8 +718,8 @@ export function buildShipmentBatchPreview(
     }
     // Only the legacy COSCO route converts a bill to its numeric BOOKING query.
     // LOCAL_QUEUE receives the original bill identity; CMA still requires BOOKING.
-    const type = carrier === "CMA" || (carrier === "COSCO" && !localQueue) ? "BOOKING" : headerType;
-    if (localQueue && carrier === "COSCO" && type === "BOOKING" && /^COSU\d+$/i.test(rawReference))
+    const type = !localQueue && headerType === "BILLOFLADING" && ["CMA", "COSCO"].includes(carrier) ? "BOOKING" : headerType;
+    if (!defaultedBooking && localQueue && carrier === "COSCO" && type === "BOOKING" && /^COSU\d+$/i.test(rawReference))
       add(
         "REFERENCE_TYPE_CONFLICT",
         "A COSU-prefixed bill must use BILLOFLADING in LOCAL_QUEUE; select the bill column or reference type"
@@ -665,6 +746,7 @@ export function buildShipmentBatchPreview(
     };
     const view = {
       sourceRow: row,
+      defaultedBooking,
       originalReference: original,
       number,
       carrier,
@@ -716,7 +798,7 @@ export function buildShipmentBatchPreview(
 }
 
 /** Local-only review scope; every parsing pass uses the same production parser.
- * @param {{adapterMode?:string,sourceCandidateLimit?:number,excludedSourceRows?:number[],queryOnly?:boolean}} [options]
+ * @param {{adapterMode?:string,sourceCandidateLimit?:number,excludedSourceRows?:number[],queryOnly?:boolean,autoReferenceColumns?:boolean}} [options]
  */
 export function buildShipmentBatchReview(
   sheet,
@@ -734,7 +816,7 @@ export function buildShipmentBatchReview(
         .map((issue) => issue.row)
     ])
   ].sort((a, b) => a - b);
-  const sourceLimit = Math.max(1, Math.min(60, Number(options.sourceCandidateLimit) || 60));
+  const sourceLimit = Math.max(1, Math.min(500, Number(options.sourceCandidateLimit) || 60));
   const windowRows = candidates.slice(0, sourceLimit);
   const excluded = new Set(
     (options.excludedSourceRows || []).filter((row) => windowRows.includes(row))

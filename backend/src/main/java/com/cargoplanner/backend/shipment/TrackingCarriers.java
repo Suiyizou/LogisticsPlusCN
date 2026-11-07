@@ -41,6 +41,16 @@ public final class TrackingCarriers {
     return supportsReference(carrier, type, false);
   }
 
+  // Published tasks may query equipment, while stored shipment identities
+  // and manual placeholders still require a booking or bill.
+  public static boolean supportsTaskQuery(String carrier, String type, boolean localQueue) {
+    String code = canonicalCode(carrier);
+    if ("CONTAINER".equals(type)) {
+      return localQueue && CODES.contains(code) && !"KMTC".equals(code) && !"HEDE".equals(code);
+    }
+    return supportsReference(code, type, localQueue);
+  }
+
   public static boolean supportsReference(String carrier, String type, boolean localQueue) {
     String code = canonicalCode(carrier);
     return CODES.contains(code) && ("BOOKING".equals(type)

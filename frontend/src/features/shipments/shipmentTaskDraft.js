@@ -2,7 +2,9 @@ import {
   buildShipmentBatchReview,
   identifyShipmentCarrier,
   parseShipmentBatchWorkbook,
-  validShipmentBatchReference
+  validShipmentBatchReference,
+  isShipmentContainerReference,
+  isShipmentContainerNumber
 } from "../../services/shipmentBatchImport.js";
 import {
   ALL_TRACKING_CARRIERS,
@@ -23,20 +25,29 @@ export function readTaskWorkbook(bytes, xlsx, fileName) {
   return parseShipmentBatchWorkbook(workbook, xlsx);
 }
 
-export function recognizeTaskWorkbook(sheet, column) {
-  const recognized = buildShipmentBatchReview(sheet, column);
+export function recognizeTaskWorkbook(sheet, column, { autoReferenceColumns = false, adapterMode } = {}) {
+  const recognized = buildShipmentBatchReview(sheet, column, "", "BOOKING", { sourceCandidateLimit: 500, autoReferenceColumns, adapterMode });
   const sourceMeta = {
     sheetName: sheet?.name || "",
     column,
+    autoReferenceColumns,
+    needsColumnSelection: Boolean(autoReferenceColumns && sheet?.needsColumnSelection),
     columnLabel: sheet?.columns.find((entry) => entry.index === column)?.label || "",
     headers: sheet?.columns.map(({ label }) => label) || [],
     schemaStatus: sheet?.schemaStatus || "",
+    modelRequired: Boolean(sheet?.modelRequired),
+    modelVerified: Boolean(sheet?.modelVerified),
+    recognitionSource: sheet?.recognitionSource || "",
     referenceSuggested: Number.isInteger(column) && sheet?.schemaSuggestion?.referenceColumnIndex === column,
     total: recognized.totalCandidates
   };
   return {
     sourceMeta,
-    problems: recognized.errors.filter(({ row }) => row <= (sheet?.headerRow || 0)),
+    problems: [
+      ...recognized.errors.filter(({ row }) => row <= (sheet?.headerRow || 0)),
+      ...(sheet?.modelRequired && !sheet.modelVerified ? [issue("MODEL_RECOGNITION_REQUIRED")] : []),
+      ...(recognized.outsideLimit ? [issue("BATCH_LIMIT")] : [])
+    ],
     rows: recognized.rows.map((row, index) => ({
       id: recognized.queryItems[index]?.id || `${sheet.name}-row-${row.sourceRow}`,
       sourceRow: row.sourceRow,
@@ -46,6 +57,7 @@ export function recognizeTaskWorkbook(sheet, column) {
       carrierEvidence: row.carrierSource || "unknown",
       ...(row.carrierSource === "ai" ? { sourceCarrierLabel: row.carrierRemark } : {}),
       originalType: row.sourceReference?.type || row.type || "",
+      defaultedBooking: Boolean(row.defaultedBooking),
       sourceAddress: row.sourceReference?.address || "",
       sourceIssues: row.errors,
       importedDetails: row.importedDetails || {},
@@ -112,22 +124,28 @@ export function reviewTaskRows(editor, adapterMode) {
     const type = row.type || "";
     const manual = row.disposition === "MANUAL";
     if (row.disposition === "EXCLUDE") return { row, errors, item: null };
+    if (editor.sourceMeta?.needsColumnSelection) errors.push(issue("CHOOSE_COLUMN"));
     if (!validShipmentBatchReference(number))
       errors.push(issue(number ? "INVALID_REFERENCE" : "MISSING_REFERENCE"));
+    if (type === "CONTAINER" && !isShipmentContainerNumber(number)) errors.push(issue("INVALID_CONTAINER"));
+    if (type !== "CONTAINER" && !(type === "BOOKING" && row.defaultedBooking) && isShipmentContainerReference(number))
+      errors.push(issue("CONTAINER_REFERENCE"));
+    if (editor.sourceMeta?.modelRequired && !editor.sourceMeta.modelVerified)
+      errors.push(issue("MODEL_RECOGNITION_REQUIRED"));
     if (!row.referenceEdited && row.sourceIssues?.some(({ code }) => code === "UNSAFE_REFERENCE"))
       errors.push(issue("UNSAFE_REFERENCE"));
     if (!knownCarriers.has(carrier)) errors.push(issue("UNKNOWN_CARRIER"));
     else if (!manual && !configured.has(carrier)) errors.push(issue("CARRIER_NOT_CONFIGURED"));
-    const inferred = identifyShipmentCarrier(number);
+    const inferred = type === "CONTAINER" || isShipmentContainerNumber(number) ? "" : identifyShipmentCarrier(number);
     if (inferred && carrier && inferred !== carrier) errors.push(issue("CARRIER_CONFLICT"));
-    if (!["BILLOFLADING", "BOOKING"].includes(type)) errors.push(issue("MISSING_TYPE"));
+    if (!["BILLOFLADING", "BOOKING", "CONTAINER"].includes(type)) errors.push(issue("MISSING_TYPE"));
     else if (
       !manual &&
       configured.has(carrier) &&
       !supportsShipmentReference(carrier, type, adapterMode)
     )
       errors.push(issue("UNSUPPORTED_REFERENCE"));
-    if (carrier === "COSCO" && type === "BOOKING" && /^COSU\d+$/i.test(number))
+    if (!row.defaultedBooking && carrier === "COSCO" && type === "BOOKING" && /^COSU\d+$/i.test(number))
       errors.push(issue("REFERENCE_TYPE_CONFLICT"));
     if (manual && type !== "BOOKING") errors.push(issue("MANUAL_REQUIRES_BOOKING"));
     if (manual && editor.mode !== "IMPORT") errors.push(issue("MANUAL_REQUIRES_IMPORT"));
@@ -173,6 +191,14 @@ export function taskDraftPayload(editor, review) {
   };
 }
 
+export function taskNeedsModelRecognition(task) {
+  const sourceMeta = task?.sourceRows?.[0]?.sourceMeta || task?.sourceMeta;
+  const fileSource = Boolean(task?.sourceFileName?.trim() || sourceMeta?.sheetName ||
+    sourceMeta?.workbookSheetNames?.length || sourceMeta?.sourceFileName);
+  const reviewedHeaders = sourceMeta?.recognitionSource === "HEADERS" && sourceMeta?.schemaStatus === "REVIEW_HEADERS";
+  return fileSource && !reviewedHeaders && !(sourceMeta?.modelVerified === true && sourceMeta?.recognitionSource === "LLM");
+}
+
 export function taskMayPublish(task, { dirty, reviewed, issues, items }) {
   return Boolean(
     task?.status === "DRAFT" &&
@@ -181,6 +207,7 @@ export function taskMayPublish(task, { dirty, reviewed, issues, items }) {
     reviewed &&
     !issues &&
     !task.validationErrors?.length &&
+    !taskNeedsModelRecognition(task) &&
     items &&
     (task.mode === "QUERY_ONLY" || task.customerId)
   );

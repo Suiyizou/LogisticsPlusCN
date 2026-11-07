@@ -94,6 +94,30 @@ class LocalTrackingQueueClientTest {
   }
 
   @Test
+  void kmtcContainerIsRejectedBeforeCreatingAJob() throws Exception {
+    try (QueueServer server = completedServer("KMTC", "TEMU1234567", "QUERY_COMPLETED")) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      assertCode(() -> client.track(new NormalizedTrackRequest("KMTC", "AUTO", "CONTAINER", "TEMU1234567")),
+          "INVALID_REFERENCE");
+      assertThat(server.requests).isEmpty();
+    }
+  }
+
+  @Test
+  void sendsTheContainerTypeAndOriginalEquipmentNumberToTheOperatingCarrier() throws Exception {
+    String number = "TEMU1234567";
+    try (QueueServer server = completedServer("COSCO", number, "QUERY_COMPLETED")) {
+      TrackingAdapterClient client = new TrackingAdapterClient(properties(server));
+      JsonNode response = client.track(new NormalizedTrackRequest("COSCO", "AUTO", "CONTAINER", number));
+      JsonNode item = server.requests.get(0).body().path("items").get(0);
+      assertThat(item.path("reference_type").asText()).isEqualTo("CONTAINER");
+      assertThat(item.path("reference").asText()).isEqualTo(number);
+      assertThat(item.path("carrier").asText()).isEqualTo("COSCO");
+      assertThat(response.path("snapshot").path("tracking").path("type").asText()).isEqualTo("CONTAINER");
+    }
+  }
+
+  @Test
   void canonicalizesCarrierAliasesBeforeSubmittingAndCheckingTheResult() throws Exception {
     Map<String, String> outbound = Map.of(
         "CMA_CGM", "CMA_CGM",

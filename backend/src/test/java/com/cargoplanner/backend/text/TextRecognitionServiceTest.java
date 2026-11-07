@@ -43,6 +43,19 @@ class TextRecognitionServiceTest {
   }
 
   @Test
+  void ambiguousPastedWeightCannotBecomeAnImportableOrRescaledCargo() {
+    for (String value : List.of("29.200 kgs", "29,200 kg")) {
+      Object result = ReflectionTestUtils.invokeMethod(service, "recognize",
+          "QA crate, 40x30x20 cm, 3 cartons, each " + value, "en");
+      assertEquals(List.of(), ReflectionTestUtils.invokeMethod(result, "cleanedRows"));
+      List<Map<String, Object>> issues = ReflectionTestUtils.invokeMethod(result, "issues");
+      assertEquals("WEIGHT_NOTATION_AMBIGUOUS", issues.get(0).get("code"));
+    }
+    assertEquals(0.125, (double) ReflectionTestUtils.invokeMethod(service, "parseFlexibleNumber", "0.125"));
+    assertEquals(29.2, (double) ReflectionTestUtils.invokeMethod(service, "parseFlexibleNumber", "29.2"));
+  }
+
+  @Test
   void rejectsCartonDimensionsAsLoadedPalletDimensions() {
     String input = String.join("\n",
         "EXCEL_AGENT_BATCH",

@@ -1,6 +1,11 @@
 export const workspaceRefinementMessages = {
   "zh-CN": {
     workspaceV2: {
+      packingGoal: "装箱目标",
+      boxDimensionsRequired: "请补齐箱内尺寸或平板柜装载限高",
+      goalOverall: "整票箱容利用率",
+      goalPeak: "单箱最高利用率",
+      goalComparison: "整票 {overall}%，第 {index} 箱最高 {peak}%",
       pdfNavigation: "PDF 阅读工具",
       pdfPrevious: "上一页",
       pdfNext: "下一页",
@@ -239,6 +244,11 @@ export const workspaceRefinementMessages = {
   },
   "en-US": {
     workspaceV2: {
+      packingGoal: "Planning goal",
+      boxDimensionsRequired: "Enter the container dimensions or flat-rack loading height",
+      goalOverall: "Overall volume utilization",
+      goalPeak: "Highest single-container utilization",
+      goalComparison: "Overall {overall}%. Container {index} has the highest fill at {peak}%.",
       pdfNavigation: "PDF reading tools",
       pdfPrevious: "Previous",
       pdfNext: "Next",

@@ -164,7 +164,11 @@ public class CustomerShipmentMutationService {
     for (CreateBusinessShipmentRequest shipment : shipments) {
       if (shipment == null) continue;
       String carrier = normalizeCarrier(shipment.carrier());
-      String referenceType = normalizeReferenceType(shipment.referenceType(), carrier);
+      String referenceType = inputRules.normalizeCode(shipment.referenceType(), "BOOKING");
+      if ("CONTAINER".equals(referenceType)) continue; // Reusable equipment is not a durable conflict key.
+      if (!com.cargoplanner.backend.shipment.TrackingCarriers.supportsReference(carrier, referenceType, true)) {
+        throw new ApiException(HttpStatus.BAD_REQUEST, "Unsupported shipment reference");
+      }
       String referenceNo = normalizeShipmentReference(
           carrier, referenceType, shipment.referenceNo()
       );

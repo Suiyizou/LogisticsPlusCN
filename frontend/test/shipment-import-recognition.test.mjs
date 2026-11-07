@@ -298,16 +298,16 @@ test("local queue keeps source COSCO bills and canonical backend carrier codes",
     ["JOB-004", "", "", "", "", "", "", "", "CMDUTEST123456", "CMA CGM"]
   ]);
   const local = buildShipmentBatchPreview(sheet, 8, "", "BOOKING", { adapterMode: "LOCAL_QUEUE" });
-  assert.equal(local.errors.length, 0);
+  assert.deepEqual(local.errors.map(error => error.code), ["UNSUPPORTED_REFERENCE"]);
   assert.deepEqual(
     local.items.map((i) => [i.carrier, i.type, i.number]),
     [
       ["COSCO", "BILLOFLADING", "COSU0012345678"],
       ["WAN_HAI", "BILLOFLADING", "WHZTEST123456"],
-      ["HMM", "BILLOFLADING", "HDMUTEST123456"],
-      ["CMA", "BOOKING", "CMDUTEST123456"]
+      ["HMM", "BILLOFLADING", "HDMUTEST123456"]
     ]
   );
+  assert.equal(local.rows[3].type, "BILLOFLADING");
   assert.equal(local.items[0].importedDetails.originalBillOfLading, "COSU0012345678");
   assert.deepEqual(local.rows[0].sourceReference, {
     raw: "COSU0012345678",

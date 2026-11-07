@@ -1,11 +1,11 @@
 <template>
-  <section class="module-page" data-module="customers">
-    <div class="list-page list-page-full">
+  <section class="module-page customer-directory-page" data-module="customers">
+    <div class="list-page list-page-full customer-directory-layout">
       <WorkspacePageHeader class="list-page-header" :description="wt('directoryHint')"
         ><template #title>{{ t("customers.directoryTitle") }}</template
         ><template #actions
           ><div v-if="isManager" class="list-page-actions">
-            <el-button type="primary" @click="openCreateCustomer"
+            <el-button type="primary" :disabled="mutatingCustomer" @click="openCreateCustomer"
               ><el-icon><Plus /></el-icon>{{ t("customers.openCreate") }}</el-button
             >
             <el-button @click="openBatchImport"
@@ -14,20 +14,22 @@
           </div></template
         ></WorkspacePageHeader
       >
-      <CommercialSummary v-if="customersLoaded" :metrics="metrics" />
-      <section class="customer-directory-toolbar">
-        <div v-if="isManager" class="customer-directory-search">
+      <section class="customer-directory-surface">
+      <section class="customer-directory-toolbar" :aria-label="t('customers.directoryTitle')">
+        <div class="customer-directory-search">
           <el-input
             v-model="customerSearch"
             :aria-label="t('customers.searchCustomerPlaceholder')"
             :placeholder="t('customers.searchCustomerPlaceholder')"
-            prefix-icon="Search"
+            :prefix-icon="Search"
             clearable
             style="width: 240px"
           />
         </div>
-        <span>{{ wt("resultsCount", { count: filteredCustomers.length }) }}</span
-        ><Transition name="workspace-state"
+        <el-button class="customer-directory-refresh" :aria-label="t('customers.refresh')" :loading="loadingCustomers" :disabled="mutatingCustomer" text @click="refreshCustomers">
+          <el-icon><Refresh /></el-icon><span class="customer-refresh-label">{{ t("customers.refresh") }}</span>
+        </el-button>
+        <Transition name="workspace-state"
           ><div
             v-if="isManager && selectedCustomerRows.length"
             class="customer-directory-selection"
@@ -61,11 +63,12 @@
       <el-table
         :ref="actions.setTableRef"
         :data="paginatedCustomers"
-        stripe
+        row-key="id"
         v-loading="loadingCustomers"
         style="width: 100%"
-        class="customer-directory-table commercial-table commercial-reveal"
+        class="customer-directory-table"
         :class="{ 'is-page-switching': tablePageTransitioning }"
+        scrollbar-always-on
         @selection-change="handleCustomerSelectionChange"
       >
         <template #empty>
@@ -93,22 +96,30 @@
             </template>
           </WorkspaceEmptyState>
         </template>
-        <el-table-column v-if="isManager" type="selection" width="44" />
-        <el-table-column
-          type="index"
-          :index="customerRowIndex"
-          :label="t('customers.index')"
-          width="76"
-          align="center"
-          header-align="center"
-        />
-        <el-table-column :label="t('customers.displayName')" min-width="168">
+        <el-table-column v-if="isManager" type="selection" width="40" />
+        <el-table-column type="expand" width="40" class-name="customer-expand-column">
+          <template #default="{ row }">
+            <section class="customer-row-details" :aria-label="t('customers.detail')">
+              <dl>
+                <div>
+                  <dt>{{ t("customers.createdAt") }}</dt>
+                  <dd>{{ formatDateTime(row.createdAt) }}</dd>
+                </div>
+                <div>
+                  <dt>{{ t("customers.remark") }}</dt>
+                  <dd>{{ row.remark || "—" }}</dd>
+                </div>
+              </dl>
+            </section>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('customers.displayName')" min-width="260">
           <template #default="{ row }">
             <div class="customer-name-cell">
               <span class="customer-table-avatar">{{ customerRowInitial(row) }}</span>
               <div>
-                <b>{{ row.displayName || row.username }}</b>
-                <small>@{{ row.username }}</small>
+                <b :title="row.displayName || row.username">{{ row.displayName || row.username }}</b>
+                <small :title="row.username">@{{ row.username }}</small>
               </div>
             </div>
           </template>
@@ -116,101 +127,118 @@
         <el-table-column
           prop="clientCode"
           :label="t('customers.clientCode')"
-          width="138"
+          min-width="108"
           class-name="customer-code-column"
-        />
+        ><template #default="{ row }"><span class="customer-code" :title="row.clientCode">{{ row.clientCode || '—' }}</span></template></el-table-column>
         <el-table-column
           prop="overseaAgentDisplayName"
           :label="t('customers.targetAgent')"
-          min-width="142"
-          show-overflow-tooltip
+          min-width="140"
+          class-name="customer-agent-column"
         >
-          <template #default="{ row }">{{
-            row.overseaAgentDisplayName || t("customers.unassigned")
-          }}</template>
+          <template #default="{ row }"><span class="customer-agent-name" :class="{ 'is-unassigned': !row.overseaAgentDisplayName }" :title="row.overseaAgentDisplayName">{{
+              row.overseaAgentDisplayName || t("customers.unassigned")
+            }}</span></template>
         </el-table-column>
-        <el-table-column :label="t('customers.partyRole')" width="156">
-          <template #default="{ row }">{{ partyRoleLabel(row.partyRole) }}</template>
+        <el-table-column :label="t('customers.partyRole')" width="100">
+          <template #default="{ row }"><span class="customer-role" :title="partyRoleLabel(row.partyRole)">{{ customerRoleCaption(row.partyRole) }}</span></template>
         </el-table-column>
-        <el-table-column :label="t('customers.shipmentCount')" width="100" align="center">
-          <template #default="{ row }">{{ row.shipmentCount || 0 }}</template>
+        <el-table-column :label="t('customers.shipmentCount')" width="88" align="center" class-name="customer-count-column">
+          <template #default="{ row }"><span class="customer-shipment-count" :class="{ 'is-zero': !row.shipmentCount }">{{ row.shipmentCount || 0 }}</span></template>
         </el-table-column>
-        <el-table-column :label="t('customers.remark')" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.remark || "—" }}</template>
-        </el-table-column>
-        <el-table-column :label="t('customers.status')" width="100">
+        <el-table-column :label="t('customers.status')" width="82">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'" size="small">{{
+            <span class="customer-status" :class="row.status === 'ACTIVE' ? 'is-active' : 'is-inactive'"><i aria-hidden="true"></i>{{
               statusLabel(row.status)
-            }}</el-tag>
+            }}</span>
           </template>
-        </el-table-column>
-        <el-table-column :label="t('customers.createdAt')" width="152">
-          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
         <el-table-column
           :label="t('customers.actions')"
-          :width="isManager ? 318 : 110"
-          :fixed="compactLayout ? false : 'right'"
+          :width="isManager ? 192 : 88"
+          align="right"
+          class-name="customer-actions-column"
         >
           <template #default="{ row }">
             <div class="table-action-buttons table-action-buttons--single-line">
-              <el-button size="small" type="primary" plain @click.stop="selectCustomerRow(row)">{{
+              <el-button class="customer-detail-action" size="small" type="primary" text @click.stop="selectCustomerRow(row)">{{
                 t("customers.detail")
               }}</el-button>
               <template v-if="isManager">
-                <el-button
-                  size="small"
-                  type="success"
-                  plain
-                  :disabled="!isTransferableCustomer(row)"
-                  @click.stop="openCustomerTransfer(row)"
-                  >{{ t("customers.assignAgentShort") }}</el-button
+                <el-dropdown
+                  trigger="click"
+                  placement="bottom-end"
+                  popper-class="business-comp-select customer-row-menu customer-directory-menu"
                 >
-                <el-button size="small" type="primary" plain @click.stop="openEditCustomer(row)">{{
-                  t("customers.edit")
-                }}</el-button>
-
-                <el-button size="small" type="warning" plain @click.stop="openResetPassword(row)">{{
-                  t("customers.resetPassword")
-                }}</el-button>
+                  <el-button
+                    size="small"
+                    class="customer-more-trigger"
+                    text
+                    :disabled="mutatingCustomer"
+                    @click.stop
+                    >{{ t("customers.customerMoreActions") }}<el-icon><ArrowDown /></el-icon></el-button
+                  >
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item :disabled="mutatingCustomer" @click="openEditCustomer(row)">
+                        {{ t("customers.edit") }}
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        :disabled="mutatingCustomer || !isTransferableCustomer(row)"
+                        @click="openCustomerTransfer(row)"
+                        >{{ t("customers.assignAgentShort") }}</el-dropdown-item
+                      >
+                      <el-dropdown-item :disabled="mutatingCustomer" @click="openResetPassword(row)">
+                        {{ t("customers.resetPassword") }}
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        divided
+                        class="customer-row-menu-danger"
+                        :disabled="mutatingCustomer"
+                        @click="deleteCustomerRow(row)"
+                      >
+                        {{ t("customers.deleteCustomer") }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </template>
             </div>
           </template>
         </el-table-column>
       </el-table>
+      <footer class="customer-directory-footer">
+      <span class="customer-directory-results" aria-live="polite">{{ wt("resultsCount", { count: filteredCustomers.length }) }}</span>
       <el-pagination
         v-if="filteredCustomers.length"
         class="shipment-pagination unified-pagination"
         background
-        layout="prev, pager, next, total"
+        layout="prev, pager, next"
         :current-page="customerPage"
         :page-size="customerPageSize"
         :total="filteredCustomers.length"
         @current-change="changeCustomerPage"
       />
+      </footer>
+      </section>
     </div>
   </section>
 </template>
 <script setup lang="ts">
 import WorkspacePageHeader from "../../../components/workspace/WorkspacePageHeader.vue";
 import { wt } from "../../../components/workspace/workspaceCopy";
-import { computed, toRefs } from "vue";
-import CommercialSummary from "../../shared/CommercialSummary.vue";
+import { toRefs } from "vue";
 import { commercialText } from "../../../i18n/commercialWorkspaceMessages";
 import WorkspaceEmptyState from "../../../components/workspace/WorkspaceEmptyState.vue";
 import type { CustomerRecord } from "../../../types/businessRecords";
-import { useMediaQuery } from "../../../composables/useMediaQuery.js";
 import { useI18n } from "vue-i18n";
 import { useModulePages } from "../../moduleContext.js";
-import { Plus, Upload } from "@element-plus/icons-vue";
+import { ArrowDown, Plus, Refresh, Search, Upload } from "@element-plus/icons-vue";
 const { t } = useI18n();
-const compactLayout = useMediaQuery("(max-width: 680px)");
 const pages = useModulePages("customers");
 const workspace = pages.directory;
 const { isManager } = toRefs(workspace.permissions);
 const {
-  customers,
   customersLoaded,
   customerPage,
   customerPageSize,
@@ -225,7 +253,9 @@ const {
 const actions = workspace.actions;
 const {
   changeCustomerPage,
+  deleteCustomerRow,
   deleteSelectedCustomers,
+  refreshCustomers,
   handleCustomerSelectionChange,
   openBatchImport,
   openCreateCustomer,
@@ -236,27 +266,11 @@ const {
 } = actions;
 const {
   customerInitial,
-  customerRowIndex,
   formatDateTime,
   isTransferableCustomer,
   partyRoleLabel,
   statusLabel
 } = workspace.formatters;
-
-const metrics = computed(() => [
-  { label: commercialText("customerAccounts"), value: customers.value.length },
-  {
-    label: commercialText("activeAccounts"),
-    value: customers.value.filter((row) => row.status === "ACTIVE").length
-  },
-  {
-    label: commercialText("awaitingAgent"),
-    value: customers.value.filter(
-      (row) => isTransferableCustomer(row) && !row.overseaAgentDisplayName
-    ).length,
-    hint: commercialText("awaitingAgentHint")
-  }
-]);
 
 // Resolve the UI library's broad slot payload to the workflow-owned typed row.
 function directoryCustomer(row: unknown): CustomerRecord | undefined {
@@ -271,269 +285,17 @@ function customerRowInitial(row: unknown) {
   return customer ? customerInitial(customer) : "C";
 }
 
+function customerRoleCaption(role: unknown) {
+  if (role === "SHIPPER") return t("customers.directoryShipper");
+  if (role === "CONSIGNEE") return t("customers.directoryConsignee");
+  if (role === "OVERSEA_AGENT") return t("customers.directoryAgent");
+  return partyRoleLabel(typeof role === "string" ? role : "");
+}
+
 function selectCustomerRow(row: unknown) {
   const customer = directoryCustomer(row);
   if (customer) selectCustomerFromList(customer);
 }
 </script>
-<style scoped>
-.module-page {
-  min-width: 0;
-  width: 100%;
-}
-@keyframes shipment-updating-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.list-page {
-  max-width: none;
-  width: 100%;
-}
-.list-page-full {
-  max-width: none;
-  width: 100%;
-  padding: 20px 22px 22px;
-  box-sizing: border-box;
-}
-.list-page-full :deep(.el-table) {
-  width: 100% !important;
-}
-.list-page-full :deep(.el-table__body-wrapper),
-.list-page-full :deep(.el-table__header-wrapper) {
-  width: 100%;
-}
-.list-page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.list-page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--color-primary);
-  letter-spacing: -0.02em;
-}
-.list-page-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  max-width: 100%;
-  min-width: 0;
-}
-@keyframes business-kpi-in {
-  from {
-    opacity: 0;
-    transform: translateY(9px);
-  }
-}
-.customer-table-avatar {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-control);
-  color: var(--color-primary);
-  background: #bfdbfe;
-  font-weight: 600;
-  font-size: 12px;
-}
-.customer-name-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.customer-name-cell > div {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.4;
-}
-.customer-name-cell small {
-  color: #6b7e96;
-  font-size: 12px;
-}
-.table-action-buttons {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.table-action-buttons--single-line {
-  flex-wrap: nowrap;
-  gap: 6px;
-}
-.table-action-buttons--single-line .el-button {
-  min-width: 0;
-  margin: 0;
-  padding-inline: 11px;
-}
-.customer-directory-table :deep(.customer-code-column .cell) {
-  color: #1d5f91;
-  font:
-    700 12px/1.4 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-}
-.shipment-pagination {
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  justify-content: flex-end;
-  padding: 18px 2px 4px;
-  overflow: hidden;
-  flex-wrap: wrap;
-  row-gap: 8px;
-}
-.shipment-pagination :deep(.el-pagination__sizes),
-.shipment-pagination :deep(.el-select) {
-  width: 96px;
-  max-width: 96px;
-}
-.shipment-pagination :deep(.el-pagination__sizes) {
-  margin: 0 6px 0 8px;
-}
-.shipment-pagination :deep(.el-pagination__sizes .el-select__wrapper) {
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: var(--radius-control);
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--color-border-strong) inset;
-}
-.shipment-pagination :deep(.el-pagination__sizes .el-select__selected-item) {
-  color: #28445e;
-  font-size: 13px;
-  font-weight: 600;
-}
-.shipment-pagination :deep(.btn-prev),
-.shipment-pagination :deep(.btn-next),
-.shipment-pagination :deep(.el-pager li) {
-  min-width: 32px;
-  height: 32px;
-  border-radius: var(--radius-control) !important;
-  font-size: 13px;
-}
-.shipment-pagination :deep(.el-pager li.is-active) {
-  background: var(--color-primary);
-  box-shadow: none;
-
-  color: var(--color-on-primary);
-}
-.shipment-pagination :deep(.el-pagination__total) {
-  margin-right: 8px;
-  color: #60758a;
-  font-size: 13px;
-}
-.business-handover-page .list-page-header p {
-  margin: 6px 0 0;
-  color: #71869a;
-  font-size: 13px;
-}
-@keyframes operations-overlay-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes operations-dialog-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes customer-batch-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-@keyframes customer-rule-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@media (max-width: 900px) {
-  .shipment-pagination :deep(.el-pagination__total) {
-    display: none;
-  }
-}
-@keyframes batch-subtask-pulse {
-  50% {
-    opacity: 0.35;
-    transform: scale(0.75);
-  }
-}
-.customer-directory-table :deep(th.el-table__cell .cell),
-.customer-directory-table :deep(td.el-table__cell .cell) {
-  white-space: nowrap;
-  word-break: keep-all;
-}
-.customer-directory-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 18px;
-  margin-bottom: 20px;
-  padding: 18px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-subtle);
-}
-.customer-directory-search {
-  flex: 1;
-  min-width: min(220px, 100%);
-  max-width: 420px;
-}
-.customer-directory-search > .el-input {
-  width: 100% !important;
-}
-.customer-directory-toolbar > span {
-  margin-left: auto;
-  color: var(--color-muted);
-  font-size: 13px;
-}
-.customer-directory-selection {
-  display: flex;
-  flex-basis: 100%;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
-}
-.customer-directory-selection strong {
-  margin-right: auto;
-  color: var(--color-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-.customer-directory-selection .el-button {
-  margin: 0;
-}
-@media (max-width: 600px) {
-  .customer-directory-search {
-    flex-basis: 100%;
-    max-width: none;
-  }
-  .customer-directory-toolbar > span {
-    margin-left: 0;
-  }
-}
-</style>
-
 <style scoped src="../../../components/workspace/workspacePageStyles.css"></style>
-<style scoped src="../../shared/commercialWorkspaceMotion.css"></style>
+<style scoped src="./customerDirectoryStyles.css"></style>

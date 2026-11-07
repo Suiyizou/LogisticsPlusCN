@@ -48,6 +48,7 @@ export function supportsShipmentReference(carrier, type, mode = TRACKING_ADAPTER
   return (
     trackingCarriersForMode(mode).some((item) => item.code === carrier) &&
     (type === "BOOKING" ||
+      (local && type === "CONTAINER" && carrier !== "KMTC") ||
       (carrier !== "CMA" && (local || carrier !== "COSCO") && type === "BILLOFLADING"))
   );
 }

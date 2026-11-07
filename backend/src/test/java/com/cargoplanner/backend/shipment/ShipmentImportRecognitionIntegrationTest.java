@@ -98,7 +98,8 @@ class ShipmentImportRecognitionIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().json("""
             {"referenceColumnIndex":2,"referenceType":"BILLOFLADING","carrierColumnIndex":5,
-             "carrierMappings":[{"label":"Hapag-Lloyd","carrier":"HAPAG_LLOYD"}],"status":"SUGGESTED"}
+             "carrierMappings":[{"label":"Hapag-Lloyd","carrier":"HAPAG_LLOYD"}],"status":"SUGGESTED",
+             "recognitionSource":"LLM","modelVerified":true,"reasonCode":null}
             """, true));
     model.verify();
   }
@@ -114,7 +115,8 @@ class ShipmentImportRecognitionIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().json("""
             {"referenceColumnIndex":null,"referenceType":null,"carrierColumnIndex":null,
-             "carrierMappings":[],"status":"NO_MATCH"}
+             "carrierMappings":[],"status":"NO_MATCH",
+             "recognitionSource":"LLM","modelVerified":true,"reasonCode":null}
             """, true));
     model.verify();
   }
@@ -130,6 +132,20 @@ class ShipmentImportRecognitionIntegrationTest {
   }
 
   @Test
+  void acceptsAnExplicitEquipmentColumnFromTheConfiguredModel() throws Exception {
+    model.expect(once(), requestTo(ENDPOINT))
+        .andRespond(withSuccess(completion("""
+            {"referenceColumnIndex":1,"referenceType":"CONTAINER","carrierColumnIndex":0,"carrierMappings":[]}
+            """), MediaType.APPLICATION_JSON));
+    recognize("""
+        {"headers":[{"index":0,"label":"船司"},{"index":1,"label":"箱号"}],"carrierLabels":[]}
+        """, BUSINESS)
+        .andExpect(status().isOk()).andExpect(jsonPath("$.referenceType").value("CONTAINER"))
+        .andExpect(jsonPath("$.modelVerified").value(true));
+    model.verify();
+  }
+
+  @Test
   void rejectsUnexpectedRequestFieldsAndOversizedCandidateLists() throws Exception {
     recognize("{\"headers\":[],\"orderNumber\":\"BK10000\"}", BUSINESS)
         .andExpect(status().isBadRequest());
@@ -140,7 +156,9 @@ class ShipmentImportRecognitionIntegrationTest {
     recognize(json.writeValueAsString(Map.of("carrierLabels", java.util.Collections.nCopies(33, "Name"))), BUSINESS)
         .andExpect(status().isBadRequest());
     recognize("{\"headers\":[{\"index\":0,\"label\":\"ref number " + "A".repeat(60) + "\"}]}", BUSINESS)
-        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("NO_MATCH"));
+        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("NO_MATCH"))
+        .andExpect(jsonPath("$.modelVerified").value(false))
+        .andExpect(jsonPath("$.reasonCode").value("NO_SAFE_CANDIDATES"));
     verifyNoInteractions(settings);
     model.verify();
   }
@@ -168,10 +186,10 @@ class ShipmentImportRecognitionIntegrationTest {
   @Test
   void fallsBackForDisabledMissingOrUnreadableConfiguration() throws Exception {
     when(settings.runtimeSettings()).thenReturn(new LlmRuntimeSettings(false, ENDPOINT, "model", "fake-key"));
-    expectUnavailable(recognize(SAFE_REQUEST, BUSINESS));
+    expectUnavailable(recognize(SAFE_REQUEST, BUSINESS), "MODEL_NOT_CONFIGURED");
 
     when(settings.runtimeSettings()).thenReturn(new LlmRuntimeSettings(true, ENDPOINT, "model", ""));
-    expectUnavailable(recognize(SAFE_REQUEST, BUSINESS));
+    expectUnavailable(recognize(SAFE_REQUEST, BUSINESS), "MODEL_NOT_CONFIGURED");
 
     when(settings.runtimeSettings()).thenThrow(new IllegalStateException("fake-key from inaccessible configuration"));
     expectUnavailable(recognize(SAFE_REQUEST, BUSINESS));
@@ -203,9 +221,14 @@ class ShipmentImportRecognitionIntegrationTest {
   }
 
   private static void expectUnavailable(ResultActions result) throws Exception {
+    expectUnavailable(result, "MODEL_UNAVAILABLE");
+  }
+
+  private static void expectUnavailable(ResultActions result, String reasonCode) throws Exception {
     result.andExpect(status().isOk()).andExpect(content().json("""
         {"referenceColumnIndex":null,"referenceType":null,"carrierColumnIndex":null,
-         "carrierMappings":[],"status":"UNAVAILABLE"}
-        """, true));
+         "carrierMappings":[],"status":"UNAVAILABLE","recognitionSource":"LLM",
+         "modelVerified":false,"reasonCode":"%s"}
+        """.formatted(reasonCode), true));
   }
 }

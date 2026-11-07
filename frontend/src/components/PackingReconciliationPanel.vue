@@ -78,6 +78,7 @@ const sourceWarnings = computed(() =>
   props.review.warnings.some((issue) =>
     [
       "PACKAGE_UNIT_UNPROVEN",
+      "PACKAGE_WEIGHT_BASIS_UNPROVEN",
       "PACKAGE_CONTROL_ROW_EXCLUDED",
       "IMAGE_SOURCE_TOTALS_UNKNOWN",
       "IMAGE_SOURCE_CONFIRMATION_REQUIRED"
@@ -93,7 +94,7 @@ const metrics = computed(() =>
   ].map((metric) => ({
     ...metric,
     actual: props.review.actual[metric.field],
-    expected: props.review.expected[metric.field]
+    expected: (props.review.declaredTotals ?? props.review.expected)[metric.field]
   }))
 );
 function display(value) {
@@ -107,6 +108,8 @@ function issueText(issue) {
   const code = String(issue?.code || "");
   const sourceMessage = {
     PACKAGE_UNIT_UNPROVEN: "unitUnproven",
+    PACKAGE_WEIGHT_BASIS_UNPROVEN: "weightBasisUnproven",
+    PACKAGE_WEIGHT_BASIS_CONFLICT: "weightBasisConflict",
     PACKAGE_UNIT_CONFLICT: "unitConflict",
     PACKAGE_CONTROL_ROW_EXCLUDED: "controlExcluded",
     IMAGE_SOURCE_TOTALS_UNKNOWN: "totalsUnknown",

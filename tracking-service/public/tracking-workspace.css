@@ -206,7 +206,12 @@ body.is-embedded #overview-view .overview-hero .primary-action.el-button {
   line-height: 1.5;
 }
 
+#tracking-view .query-panel form {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 #tracking-view .query-panel #submit-button {
+  grid-column: auto;
   background: var(--ocean-blue);
   border-color: var(--ocean-blue);
 }
@@ -470,6 +475,180 @@ body.is-embedded #overview-view .overview-hero .primary-action.el-button {
   max-width: none;
   height: 34px;
   object-position: left center;
+}
+
+#overview-view .shipment-identity-label,
+#overview-view .shipment-list-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#overview-view .shipment-list-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+#overview-view .shipment-list-tag.is-empty-returned {
+  color: #176534;
+  background: #e8f7ed;
+  border-color: #b8dec5;
+}
+
+#overview-view .shipment-list-tag.is-updated-today {
+  color: #a5232e;
+  background: #fff0f0;
+  border-color: #f0bdc3;
+}
+
+/* Identity, route, status and references get independent space in every row. */
+#overview-view .shipment-row-toggle {
+  min-height: 0;
+  padding: 18px 22px;
+  gap: 12px 18px;
+  grid-template-columns: 36px minmax(250px, 1.2fr) minmax(130px, .8fr) minmax(210px, 1.1fr) minmax(130px, .8fr);
+  grid-template-areas:
+    "icon identity origin timing destination"
+    "icon identity status status status"
+    ". business business business business";
+  align-items: center;
+}
+
+#overview-view .shipment-identity {
+  min-width: 0;
+  gap: 6px;
+}
+
+#overview-view .shipment-identity > .shipment-field-label {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+#overview-view .shipment-identity > strong {
+  line-height: 1.5;
+}
+
+#overview-view .shipment-carrier-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+#overview-view .shipment-carrier-meta > .tracking-carrier-badge {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+#overview-view .shipment-business-meta {
+  display: flex;
+  grid-area: business;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  padding-top: 9px;
+  border-top: 1px solid var(--ocean-line);
+  color: var(--ocean-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#overview-view .shipment-business-meta[hidden] {
+  display: none;
+}
+
+#overview-view .shipment-business-meta > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+#overview-view .shipment-current-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 0;
+  background: transparent;
+}
+
+#overview-view .shipment-current-status > .shipment-field-label,
+#overview-view .shipment-current-status > small {
+  margin: 0;
+  line-height: 1.6;
+}
+
+#overview-view .shipment-current-status > strong {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  -webkit-line-clamp: unset;
+}
+
+#overview-view .shipment-port > span {
+  gap: 3px;
+}
+
+#overview-view .shipment-port > span > small,
+#overview-view .shipment-port .shipment-field-label {
+  margin: 0;
+}
+
+#overview-view .shipment-port .flag-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1050px) {
+  #overview-view .shipment-row-toggle {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 1.2fr) minmax(0, 1fr);
+    grid-template-areas:
+      "identity identity identity"
+      "origin timing destination"
+      "status status status"
+      "business business business";
+    gap: 16px;
+  }
+  #overview-view .shipment-transport-icon { display: none; }
+  #overview-view .shipment-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 16px;
+  }
+  #overview-view .shipment-identity > .shipment-field-label { grid-column: 1 / -1; }
+}
+
+@media (max-width: 600px) {
+  #overview-view .shipment-row-toggle {
+    padding: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "identity identity"
+      "origin destination"
+      "timing timing"
+      "status status"
+      "business business";
+    gap: 16px 12px;
+  }
+  #overview-view .shipment-identity { display: flex; align-items: stretch; gap: 8px; }
+  #overview-view .shipment-current-status { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  #overview-view .shipment-date-labels small { white-space: normal; }
+  #overview-view .shipment-business-meta { flex-direction: column; gap: 6px; }
 }
 
 #tracking-view .snapshot-route-context {

@@ -72,6 +72,7 @@ public class PublishedShipmentTaskIntegrationTest {
   private final ShipmentTrackingService tracking = mock(ShipmentTrackingService.class);
   private final BusinessCustomerService customers = mock(BusinessCustomerService.class);
   private final List<String> sentKeys = new ArrayList<>();
+  private final List<JsonNode> sentItems = new ArrayList<>();
   private final Map<String, DesktopJob> jobs = new LinkedHashMap<>();
   private final AtomicBoolean rejectBusinessWrite = new AtomicBoolean(false);
   private final AtomicBoolean offline = new AtomicBoolean(false);
@@ -434,6 +435,21 @@ public class PublishedShipmentTaskIntegrationTest {
   }
 
   @Test
+  void publishedContainerQuerySendsOriginalEquipmentNumberTypeAndOperatingCarrier() {
+    String number = "CSQU3054383";
+    ShipmentBatchItemRequest source = new ShipmentBatchItemRequest("row-1", "MSC", "CONTAINER", number,
+        number, false, null, null, null, 2, number);
+    String id = (String) service.create(draft(source, null, "QUERY_ONLY"), OWNER).get("taskId");
+    service.publish(id, 1, OWNER);
+    worker.runDue();
+    assertThat(sentItems).singleElement().satisfies(item -> {
+      assertThat(item.path("carrier").asText()).isEqualTo("MSC");
+      assertThat(item.path("reference").asText()).isEqualTo(number);
+      assertThat(item.path("reference_type").asText()).isEqualTo("CONTAINER");
+    });
+  }
+
+  @Test
   void deletingCompletedTasksPreservesShipmentsBindingsAndTrackingResults() {
     queryResult = "JOB_FAILED";
     String importId = publish("IMPORT");
@@ -701,6 +717,7 @@ public class PublishedShipmentTaskIntegrationTest {
     if ("POST".equals(exchange.getRequestMethod()) && "/jobs".equals(path)) {
       String key = exchange.getRequestHeaders().getFirst("Idempotency-Key");
       JsonNode request = json.readTree(exchange.getRequestBody());
+      sentItems.add(request.path("items").path(0));
       sentKeys.add(key);
       if (offline.get()) {
         send(exchange, 503, Map.of("error", "OFFLINE"));

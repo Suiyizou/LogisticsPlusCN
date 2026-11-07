@@ -55,10 +55,14 @@ final class LocalTrackingQueueClient {
   JsonNode track(NormalizedTrackRequest request) {
     request = new NormalizedTrackRequest(TrackingCarriers.canonicalCode(request.carrier()),
         request.channel(), request.type(), request.number(), request.batchTaskId());
-    if (!TrackingCarriers.CODES.contains(request.carrier())
-        || !List.of("BOOKING", "BILLOFLADING").contains(request.type())) {
+    if ("KMTC".equals(request.carrier()) && "CONTAINER".equals(request.type())) {
       throw failure(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
-          "Local tracking requires a supported carrier and booking or bill of lading reference", null);
+          "KMTC's tracking page accepts a booking or bill of lading number", null);
+    }
+    if (!TrackingCarriers.CODES.contains(request.carrier())
+        || !List.of("BOOKING", "BILLOFLADING", "CONTAINER").contains(request.type())) {
+      throw failure(HttpStatus.BAD_REQUEST, "INVALID_REFERENCE",
+          "Local tracking requires a supported carrier and booking, bill of lading or container reference", null);
     }
     long deadline = System.nanoTime() + properties.getLocalJobTimeout().toNanos();
     String batch = request.batchTaskId();
@@ -74,7 +78,7 @@ final class LocalTrackingQueueClient {
       checkCancelled(batch);
       String carrier = desktopCarrier(request.carrier());
       JsonNode accepted = exchange("POST", "jobs", Map.of(
-          "items", List.of(Map.of("carrier", carrier, "reference", request.number())),
+          "items", List.of(Map.of("carrier", carrier, "reference", request.number(), "reference_type", request.type())),
           "source", "LogisticsPlusCN"
       ), deadline);
       job = accepted.path("job_id").asText("");
@@ -151,7 +155,8 @@ final class LocalTrackingQueueClient {
 
   String submitPublished(NormalizedTrackRequest request, String key) {
     JsonNode accepted = exchange("POST", "jobs", Map.of(
-        "items", List.of(Map.of("carrier", desktopCarrier(request.carrier()), "reference", request.number())),
+        "items", List.of(Map.of("carrier", desktopCarrier(request.carrier()), "reference", request.number(),
+            "reference_type", request.type())),
         "source", publishedSource(key)
     ), requestDeadline(), key);
     return validatedJobId(accepted.path("job_id").asText(""));

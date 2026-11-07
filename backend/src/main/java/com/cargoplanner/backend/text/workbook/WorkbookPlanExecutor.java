@@ -25,6 +25,13 @@ public final class WorkbookPlanExecutor {
       "typeColumn", "nonStackColumn", "keepUprightColumn", "remarkColumn");
   private static final Pattern IDENTITY_RANGE = Pattern.compile("(?iu)\\d+\\s*(?:[-–—~～]|\\.\\.|\\bto\\b|至|到)\\s*#?\\s*\\d+");
 
+  private static final String PACKAGE_NOUN = "(?:ctns?|cartons?|pallets?|packages?|packs?|units?|boxes|box|cases?|crates?|pcs?)";
+  private static final Pattern GROUP_WEIGHT_HEADER = Pattern.compile(
+      "(?iu)\\b(?:grand\\s+total|total|combined|aggregate)\\b|合计|总计|总毛重|总重量|整批|整行");
+  private static final Pattern UNIT_WEIGHT_HEADER = Pattern.compile(
+      "(?iu)\\beach\\b|\\bunit\\s+(?:gross|weight)|(?:\\bper\\s+|/)\\s*" + PACKAGE_NOUN
+          + "\\b|(?:每|单)\\s*(?:件|箱|托|包|重)|/\\s*(?:件|箱|托|包)");
+
   public WorkbookPlanExecutor(ObjectMapper objectMapper) {
     // Same construction contract as the other workbook components; no model or IO dependency.
   }
@@ -41,6 +48,7 @@ public final class WorkbookPlanExecutor {
       Source source = new Source(WorkbookEvidenceService.findSheet(document, text(plan.get("sheet"))));
       validatePlan(source, plan);
       int first = integer(plan.get("firstDataRow")), last = integer(plan.get("lastDataRow"));
+      int firstCargo = cargos.size();
       List<Integer> group = new ArrayList<>();
       for (int row = first; row <= last; row++) {
         if (!coveredRows.add(source.name + ":" + row)) throw new IllegalArgumentException("Workbook plans overlap source rows");
@@ -68,6 +76,9 @@ public final class WorkbookPlanExecutor {
       }
       if (!group.isEmpty()) cargos.add(packageCargo(source, plan, group, identities, blocks));
       checkUnitEvidence(source, plan, blocks, warnings);
+      if (cargos.subList(firstCargo, cargos.size()).stream().anyMatch(cargo -> integer(cargo.get("quantity")) > 1)) {
+        checkGroupWeightBasis(source, plan, blocks, warnings);
+      }
       Map<String, Object> totals = map(plan.get("totals"));
       for (String metric : List.of("packageCount", "innerQuantity", "grossWeight", "netWeight", "volume")) {
         String address = text(totals.get(metric + "Cell"));
@@ -88,7 +99,9 @@ public final class WorkbookPlanExecutor {
     }
     blocks.addAll(WorkbookPlanCoverage.issues(document, proposed));
     Map<String, Object> actual = totals(cargos);
+    // The mapped detail rows are the edit baseline. Only printed control cells are source totals.
     Map<String, Object> expected = new LinkedHashMap<>(actual);
+    Map<String, Object> declaredTotals = new LinkedHashMap<>();
     for (Map.Entry<String, Double> entry : declared.entrySet()) {
       String metric = switch (entry.getKey()) {
         case "grossWeight" -> "grossWeightKg";
@@ -97,6 +110,7 @@ public final class WorkbookPlanExecutor {
         default -> entry.getKey();
       };
       expected.put(metric, entry.getValue());
+      declaredTotals.put(metric, entry.getValue());
       if (!entry.getKey().equals("volume")) {
         Object observedValue = actual.get(metric);
         if (!(observedValue instanceof Number observed)
@@ -120,6 +134,7 @@ public final class WorkbookPlanExecutor {
     reconciliation.put("blockingIssues", blocks);
     reconciliation.put("warnings", warnings);
     reconciliation.put("expected", expected);
+    reconciliation.put("declaredTotals", declaredTotals);
     reconciliation.put("actual", actual);
     reconciliation.put("reconstructedPackageCount", cargos.size());
     List<Map<String, Object>> issues = new ArrayList<>(blocks);
@@ -175,6 +190,26 @@ public final class WorkbookPlanExecutor {
         "Source does not prove " + field + "=" + expected + "; inspect the original file and explicitly confirm or correct preview values", source.name, integer(plan.get("firstDataRow"))));
     else if (proven.size() != 1 || !proven.contains(expected)) blocks.add(issue("PACKAGE_UNIT_CONFLICT",
         "Mapped " + field + "=" + expected + " conflicts with source unit evidence " + proven + "; split mixed-unit regions or correct the mapping", source.name, integer(plan.get("firstDataRow"))));
+  }
+
+  private void checkGroupWeightBasis(Source source, Map<String, Object> plan,
+      List<Map<String, Object>> blocks, List<Map<String, Object>> warnings) {
+    int first = integer(plan.get("firstDataRow"));
+    Object column = plan.get("grossWeightColumn");
+    StringBuilder header = new StringBuilder();
+    for (int row = Math.max(1, first - 4); row < first; row++) {
+      header.append(' ').append(source.mergedText(row, column));
+    }
+    boolean perPackage = UNIT_WEIGHT_HEADER.matcher(header).find();
+    // A carton’s total gross weight still refers to one carton. Strip this common
+    // qualification before looking for an independent group-total heading.
+    boolean groupTotal = GROUP_WEIGHT_HEADER.matcher(header.toString()
+        .replaceAll("(?:单|每)(?:件|箱|托盘?|包)总(?:毛重|重量)", "")).find();
+    if (!perPackage && !groupTotal) {
+      warnings.add(issue("PACKAGE_WEIGHT_BASIS_UNPROVEN", "Verify whether the gross weight is per package or the whole group before importing", source.name, first));
+    } else if ((perPackage && groupTotal) || groupTotal != "group-total".equals(plan.get("weightBasis"))) {
+      blocks.add(issue("PACKAGE_WEIGHT_BASIS_CONFLICT", "The proposed weight basis conflicts with the gross-weight header", source.name, first));
+    }
   }
 
   private void validatePlan(Source source, Map<String, Object> plan) {
@@ -309,12 +344,12 @@ public final class WorkbookPlanExecutor {
     BigDecimal net = uniqueNumber(source, plan.get("netWeightColumn"), rows, "", blocks);
     BigDecimal factor = weightFactor(text(plan.get("weightUnit")));
     gross = gross == null ? BigDecimal.ZERO : gross.multiply(factor);
-    net = net == null ? BigDecimal.ZERO : net.multiply(factor);
+    if (net != null) net = net.multiply(factor);
     if ("group-total".equals(plan.get("weightBasis")) && quantity > 0) {
       gross = gross.divide(BigDecimal.valueOf(quantity), 12, RoundingMode.HALF_UP);
-      net = net.divide(BigDecimal.valueOf(quantity), 12, RoundingMode.HALF_UP);
+      if (net != null) net = net.divide(BigDecimal.valueOf(quantity), 12, RoundingMode.HALF_UP);
     }
-    if (net.compareTo(gross) > 0) blocks.add(issue("PACKAGE_WEIGHT_CONFLICT", "Package net weight exceeds its gross weight", source.name, anchor));
+    if (net != null && net.compareTo(gross) > 0) blocks.add(issue("PACKAGE_WEIGHT_CONFLICT", "Package net weight exceeds its gross weight", source.name, anchor));
     List<BigDecimal> dimensions = dimensions(source, plan, rows, blocks);
     List<Map<String, Object>> inner = new ArrayList<>();
     Set<String> seenQuantityCells = new HashSet<>();
@@ -361,7 +396,7 @@ public final class WorkbookPlanExecutor {
     packageInfo.put("sourceRange", "R" + anchor + ":R" + rows.get(rows.size() - 1));
     packageInfo.put("packageQuantity", quantity);
     packageInfo.put("packageGrossWeightKg", gross.doubleValue());
-    packageInfo.put("packageNetWeightKg", net.doubleValue());
+    if (net != null) packageInfo.put("packageNetWeightKg", net.doubleValue());
     packageInfo.put("dimensionSource", "explicit");
     packageInfo.put("handlingUnitDimensionsExplicit", dimensions.stream().allMatch(value -> value.signum() > 0));
     Map<String, Object> contents = new LinkedHashMap<>();
@@ -454,7 +489,7 @@ public final class WorkbookPlanExecutor {
   private Map<String, Object> totals(List<Map<String, Object>> cargos) {
     BigDecimal gross = BigDecimal.ZERO, net = BigDecimal.ZERO, volume = BigDecimal.ZERO;
     long quantity = 0, innerQuantity = 0;
-    boolean innerQuantityKnown = true;
+    boolean innerQuantityKnown = true, netWeightKnown = true;
     for (Map<String, Object> cargo : cargos) {
       int count = integer(cargo.get("quantity"));
       quantity += count;
@@ -463,14 +498,18 @@ public final class WorkbookPlanExecutor {
       if (innerCount instanceof Number number) innerQuantity += number.longValue();
       else innerQuantityKnown = false;
       gross = gross.add(BigDecimal.valueOf(((Number) cargo.get("weightKg")).doubleValue()).multiply(BigDecimal.valueOf(count)));
-      net = net.add(BigDecimal.valueOf(((Number) info.get("packageNetWeightKg")).doubleValue()).multiply(BigDecimal.valueOf(count)));
+      if (info.get("packageNetWeightKg") instanceof Number weight) {
+        net = net.add(BigDecimal.valueOf(weight.doubleValue()).multiply(BigDecimal.valueOf(count)));
+      } else {
+        netWeightKnown = false;
+      }
       volume = volume.add(BigDecimal.valueOf(((Number) cargo.get("lengthCm")).doubleValue())
           .multiply(BigDecimal.valueOf(((Number) cargo.get("widthCm")).doubleValue()))
           .multiply(BigDecimal.valueOf(((Number) cargo.get("heightCm")).doubleValue())).multiply(BigDecimal.valueOf(count)));
     }
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("packageCount", quantity); result.put("innerQuantity", innerQuantityKnown ? innerQuantity : null);
-    result.put("grossWeightKg", gross.doubleValue()); result.put("netWeightKg", net.doubleValue());
+    result.put("grossWeightKg", gross.doubleValue()); result.put("netWeightKg", netWeightKnown ? net.doubleValue() : null);
     result.put("calculatedVolumeM3", volume.movePointLeft(6).doubleValue());
     return result;
   }

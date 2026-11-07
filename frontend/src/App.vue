@@ -95,7 +95,7 @@
                 class="planner-page planner-console"
               >
                 <ol
-                  v-if="!isImportPage"
+                  v-if="!isImportPage && plannerMode !== 'config'"
                   class="planner-workflow"
                   :aria-label="wt('workbenchPlannerTitle')"
                   data-i18n-ignore
@@ -519,11 +519,10 @@
                       class="planner-page-head planner-manifest-head"
                       :description="wt('manifestDescription')"
                       ><template #title>{{ wt("cargoOverviewTitle") }}</template
-                      ><template #eyebrow>
-                        <span class="planner-manifest-index" aria-hidden="true">01 / 03</span>
-                        {{ wt("manifestEyebrow") }} </template
+                      ><template #eyebrow> {{ wt("manifestEyebrow") }} </template
                       ><template #actions
                         ><div class="section-actions page-head-actions">
+                          <PackingGoalSelect v-model="optimizationGoal" />
                           <el-button
                             data-i18n-ignore
                             :icon="Setting"
@@ -903,6 +902,7 @@
                     >
                       <template #actions
                         ><div class="section-actions">
+                          <PackingGoalSelect v-model="optimizationGoal" />
                           <a
                             class="planner-reference-link"
                             href="#planner-comparison"
@@ -952,18 +952,24 @@
                           >
                         </div>
                         <div>
-                          <span>{{ wt("spaceUtilization") }}</span
-                          ><strong
+                          <span>{{ wt("goalOverall") }}</span>
+                          <strong
                             >{{
-                              selectedEvaluation
-                                ? fmt(evaluationAverageFill(selectedEvaluation), 1)
+                              selectedEvaluation?.volumeUtilization
+                                ? fmt(selectedEvaluation.volumeUtilization.overallPercent, 1)
                                 : "—"
                             }}<small>%</small></strong
                           >
                         </div>
                         <div>
-                          <span>{{ wt("totalWeight") }}</span
-                          ><strong>{{ fmt(cargoTotalWeightKg, 0) }}<small>kg</small></strong>
+                          <span>{{ wt("goalPeak") }}</span>
+                          <strong
+                            >{{
+                              selectedEvaluation?.volumeUtilization
+                                ? fmt(selectedEvaluation.volumeUtilization.peakPercent, 1)
+                                : "—"
+                            }}<small>%</small></strong
+                          >
                         </div>
                         <div>
                           <span>{{ wt("planStatus") }}</span
@@ -1115,7 +1121,9 @@
                               <th>{{ wt("equipmentDimensions") }}</th>
                               <th>{{ wt("equipmentPayload") }}</th>
                               <th>{{ wt("boxesUnit") }}</th>
-                              <th>{{ wt("spaceUtilization") }}</th>
+                              <th>
+                                {{ wt(optimizationGoal === "peak" ? "goalPeak" : "goalOverall") }}
+                              </th>
                               <th>{{ wt("referencePrice") }}</th>
                               <th>{{ wt("planStatus") }}</th>
                               <th>{{ wt("auditAction") }}</th>
@@ -1141,7 +1149,18 @@
                               </td>
                               <td>{{ fmt(evaluation.container.payloadKg || 0, 0) }} kg</td>
                               <td>{{ evaluation.boxes || "—" }}</td>
-                              <td>{{ fmt(evaluationAverageFill(evaluation), 1) }}%</td>
+                              <td>
+                                {{
+                                  evaluation.volumeUtilization
+                                    ? fmt(
+                                        optimizationGoal === "peak"
+                                          ? evaluation.volumeUtilization.peakPercent
+                                          : evaluation.volumeUtilization.overallPercent,
+                                        1
+                                      ) + "%"
+                                    : "—"
+                                }}
+                              </td>
                               <td>{{ evaluationFreightText(evaluation) }}</td>
                               <td>
                                 {{ tr(evaluationFitText(evaluation))
@@ -1470,6 +1489,7 @@ import { workspaceContextKey } from "./modules/workspaceContext.js";
 import { planSummaryStatus } from "./components/workspace/planSummaryStatus.js";
 import WorkspacePageHeader from "./components/workspace/WorkspacePageHeader.vue";
 import { wt } from "./components/workspace/workspaceCopy";
+import PackingGoalSelect from "./components/workspace/PackingGoalSelect.vue";
 import { useDialogFocus } from "./composables/useDialogFocus.js";
 import WorkspaceDialogTransition from "./components/workspace/WorkspaceDialogTransition.vue";
 import "./components/workspace/workspaceMotion.css";
@@ -1682,21 +1702,14 @@ const importMode = computed(() =>
       : "excel"
 );
 const isImportPage = computed(() => routeName.value.startsWith("planner-import-"));
-const activePlannerStep = computed(() =>
-  plannerMode.value === "results" && selectedEvaluation.value ? "review" : plannerMode.value
-);
-const activeStepIndex = computed(() =>
-  plannerMode.value === "results" ? (selectedEvaluation.value ? 2 : 1) : 0
-);
+const activeStepIndex = computed(() => (plannerMode.value === "results" ? 1 : 0));
 const activePlannerStepLabel = computed(() =>
   wt(
     plannerMode.value === "config"
       ? "configTitle"
-      : activePlannerStep.value === "review"
-        ? "reviewExport"
-        : plannerMode.value === "results"
-          ? "calculatePlan"
-          : "cargoOverviewTitle"
+      : plannerMode.value === "results"
+        ? "resultsTitle"
+        : "cargoOverviewTitle"
   )
 );
 const activeMenuIndex = computed(() => {
@@ -1760,6 +1773,7 @@ const result = ref(null);
 const selectedContainerId = ref("");
 const priorityContainerIds = ref<string[]>([]);
 const selectedBoxIndex = ref(1);
+const optimizationGoal = ref<"overall" | "peak">("overall");
 const utilizationPercent = ref(90);
 const globalGapCm = ref(1);
 const supportRatioPercent = ref(80);
@@ -2097,14 +2111,7 @@ const plannerWorkflowSteps = computed(() => [
   {
     key: "results",
     no: "02",
-    label: wt("calculatePlan"),
-    description: wt("calculateStepHint"),
-    disabled: !cargos.value.length
-  },
-  {
-    key: "review",
-    no: "03",
-    label: wt("reviewExport"),
+    label: wt("resultsTitle"),
     description: wt("reviewStepHint"),
     disabled: !cargos.value.length
   }
@@ -2194,6 +2201,7 @@ watch(
     cargos,
     containers,
     priorityContainerIds,
+    optimizationGoal,
     utilizationPercent,
     globalGapCm,
     supportRatioPercent,
@@ -2209,6 +2217,11 @@ watch(
 );
 
 watch([showRemaining, showMassBalance], persistState);
+watch(optimizationGoal, () => {
+  calcSeq++;
+  result.value = null;
+  selectedBoxIndex.value = 1;
+});
 watch([activePage, currentUser], initializePlannerWorkspace);
 watch([workspaceReady, activePage, plannerMode, cargoTypeCount], () => {
   if (
@@ -2309,6 +2322,7 @@ function restoreState() {
     const saved = JSON.parse(raw || "{}");
     cargos.value = saved.cargos || [];
     containers.value = mergeDefaultContainers(saved.containers || []);
+    optimizationGoal.value = saved.optimizationGoal === "peak" ? "peak" : "overall";
     utilizationPercent.value = saved.utilizationPercent || 90;
     globalGapCm.value = saved.globalGapCm ?? 1;
     supportRatioPercent.value = clampNumber(saved.supportRatioPercent, 50, 100, 80);
@@ -2347,6 +2361,7 @@ function persistState() {
     JSON.stringify({
       cargos: cargos.value,
       containers: containers.value,
+      optimizationGoal: optimizationGoal.value,
       utilizationPercent: utilizationPercent.value,
       globalGapCm: globalGapCm.value,
       supportRatioPercent: supportRatioPercent.value,
@@ -2484,6 +2499,7 @@ function buildPackingPayload(activeContainers = calculationContainers.value) {
   return {
     cargos: cargos.value,
     containers: activeContainers,
+    optimizationGoal: optimizationGoal.value,
     utilizationPercent: utilizationPercent.value,
     globalGapCm: globalGapCm.value,
     supportRatioPercent: supportRatioPercent.value,
@@ -2557,50 +2573,31 @@ function restorePackingResult(key) {
 function buildResultOptimizationRows(evaluations = []) {
   const best = evaluations.find((evaluation) => evaluation?.fitStatus === "fit");
   if (!best) return [];
+  const detail = (evaluation) =>
+    wt("goalComparison", {
+      overall: fmt(evaluation.volumeUtilization.overallPercent, 1),
+      peak: fmt(evaluation.volumeUtilization.peakPercent, 1),
+      index: evaluation.volumeUtilization.peakBoxIndex
+    });
+  if (!best.volumeUtilization) return [];
   const rows = [
     {
       key: "best",
       label: ui("result.optimizationBest"),
       value: evaluationPlanName(best),
-      detail: `${evaluationFitText(best)} / ${evaluationFreightText(best)}`
+      detail: detail(best)
     }
   ];
-  const bestComparable = evaluationPriceComparisonEligible(best);
-  const bestBoxes = normalizedEvaluationBoxes(best);
-  const baseline = bestComparable
-    ? evaluations.find(
-        (item) =>
-          item &&
-          item !== best &&
-          !item.isMixedPlan &&
-          !item.container?.mixedPlan &&
-          item.fitStatus === "fit" &&
-          normalizedEvaluationBoxes(item) === bestBoxes &&
-          evaluationPriceComparisonEligible(item)
-      ) ||
-      evaluations.find(
-        (item) =>
-          item &&
-          item !== best &&
-          item.fitStatus === "fit" &&
-          normalizedEvaluationBoxes(item) === bestBoxes &&
-          evaluationPriceComparisonEligible(item)
-      )
-    : null;
-  if (baseline) {
-    const saving = evaluationFreightValue(baseline) - evaluationFreightValue(best);
+  const alternative = evaluations.find(
+    (item) => item !== best && item.fitStatus === "fit" && item.volumeUtilization
+  );
+  if (alternative)
     rows.push({
       key: "compare",
       label: ui("result.optimizationCompare"),
-      value: evaluationPlanName(baseline),
-      detail:
-        saving > 0
-          ? ui("result.optimizationSaving", {
-              amount: formatCurrency(saving, evaluationFreightCurrency(best))
-            })
-          : ui("result.optimizationNoSaving")
+      value: evaluationPlanName(alternative),
+      detail: detail(alternative)
     });
-  }
   if (best.isMixedPlan || best.container?.mixedPlan) {
     rows.push({
       key: "mixed",
@@ -2665,7 +2662,7 @@ async function recalculate(force = false, resumeEvaluations = []) {
       result.value.bestContainerId ||
       result.value.evaluations[0]?.container.id ||
       selectedContainerId.value;
-    selectedBoxIndex.value = 1;
+    selectedBoxIndex.value = preferredBoxIndex();
     loading.value = false;
     packingTimeoutDialogOpen.value = false;
     stopPackingElapsedTimer();
@@ -2703,7 +2700,7 @@ async function recalculate(force = false, resumeEvaluations = []) {
           result.value.bestContainerId ||
           result.value.evaluations[0]?.container.id ||
           selectedContainerId.value;
-        selectedBoxIndex.value = 1;
+        selectedBoxIndex.value = preferredBoxIndex();
       }
     });
     if (seq !== calcSeq) return;
@@ -2715,7 +2712,7 @@ async function recalculate(force = false, resumeEvaluations = []) {
       result.value.bestContainerId ||
       result.value.evaluations[0]?.container.id ||
       selectedContainerId.value;
-    selectedBoxIndex.value = 1;
+    selectedBoxIndex.value = preferredBoxIndex();
   } catch (error) {
     if (seq !== calcSeq) return;
     apiStatus.value = "计算异常";
@@ -3341,41 +3338,13 @@ function compactDecisionText(text) {
 }
 
 function normalizeResult(nextResult) {
-  const evaluations = [...(nextResult?.evaluations || [])].sort(compareEvaluationForUi);
-  return {
-    ...nextResult,
-    bestContainerId:
-      evaluations.find((evaluation) => evaluation?.fitStatus === "fit")?.container?.id || null,
-    evaluations
-  };
+  return { ...nextResult, evaluations: nextResult?.evaluations || [] };
 }
 
-function compareEvaluationForUi(a, b) {
-  const statusDiff = evaluationStatusRank(a) - evaluationStatusRank(b);
-  if (statusDiff) return statusDiff;
-  const boxDiff = normalizedEvaluationBoxes(a) - normalizedEvaluationBoxes(b);
-  if (boxDiff) return boxDiff;
-  const comparableDiff =
-    (evaluationPriceComparisonEligible(a) ? 0 : 1) - (evaluationPriceComparisonEligible(b) ? 0 : 1);
-  if (comparableDiff) return comparableDiff;
-  const priceAvailabilityDiff =
-    (evaluationPriceConfigured(a) ? 0 : 1) - (evaluationPriceConfigured(b) ? 0 : 1);
-  if (priceAvailabilityDiff) return priceAvailabilityDiff;
-  if (
-    evaluationPriceComparisonEligible(a) &&
-    evaluationPriceComparisonEligible(b) &&
-    evaluationFreightCurrency(a) === evaluationFreightCurrency(b)
-  ) {
-    const freightDiff = compareFiniteNumbers(evaluationFreightValue(a), evaluationFreightValue(b));
-    if (freightDiff) return freightDiff;
-  }
-  const fillDiff = evaluationAverageFill(b) - evaluationAverageFill(a);
-  if (fillDiff) return fillDiff;
-  const scoreA = Number(a?.recommendation?.score);
-  const scoreB = Number(b?.recommendation?.score);
-  if (Number.isFinite(scoreA) && Number.isFinite(scoreB) && scoreA !== scoreB)
-    return scoreA - scoreB;
-  return 0;
+function preferredBoxIndex() {
+  return optimizationGoal.value === "peak"
+    ? selectedEvaluation.value?.volumeUtilization?.peakBoxIndex || 1
+    : 1;
 }
 
 function defaultPriorityContainers() {
@@ -3436,7 +3405,7 @@ function selectAllPriorityContainers() {
 
 function selectContainer(id) {
   selectedContainerId.value = id;
-  selectedBoxIndex.value = 1;
+  selectedBoxIndex.value = preferredBoxIndex();
   persistState();
 }
 
@@ -4098,6 +4067,13 @@ function evaluationCardTitle(evaluation) {
 }
 
 function evaluationCardMetric(evaluation) {
+  if (evaluation?.volumeUtilization) {
+    return wt("goalComparison", {
+      overall: fmt(evaluation.volumeUtilization.overallPercent, 1),
+      peak: fmt(evaluation.volumeUtilization.peakPercent, 1),
+      index: evaluation.volumeUtilization.peakBoxIndex
+    });
+  }
   const fill = evaluationAverageFill(evaluation);
   if (evaluation?.usageMode === "deck") {
     const lengthPercent = Number(evaluation?.firstBoxLengthPercent || 0);
@@ -4209,17 +4185,8 @@ function formatCurrency(value, currency = "USD") {
   return `${String(currency || "USD").toUpperCase()} ${formatted}`;
 }
 
-function compareFiniteNumbers(left, right) {
-  const a = Number(left);
-  const b = Number(right);
-  const aFinite = Number.isFinite(a);
-  const bFinite = Number.isFinite(b);
-  if (aFinite && bFinite && Math.abs(a - b) > 0.01) return a - b;
-  if (aFinite !== bFinite) return aFinite ? -1 : 1;
-  return 0;
-}
-
 function evaluationCardStatus(evaluation) {
+  if (evaluation?.missingBoxDimensions) return wt("boxDimensionsRequired");
   if (!evaluation || evaluation.fitStatus === "fit") return "";
   if (evaluation.fitStatus === "estimated") return ui("result.estimatedCandidate");
   if (evaluation.fitStatus === "oversize") return tr("不可装");
@@ -4359,13 +4326,6 @@ function utilizationBandText(value) {
       tight: "偏紧利用"
     }[value] || "利用率待评估"
   );
-}
-
-function evaluationStatusRank(evaluation) {
-  if (evaluation?.fitStatus === "fit") return 0;
-  if (evaluation?.fitStatus === "estimated") return 1;
-  if (evaluation?.fitStatus === "balance-blocked") return 2;
-  return 3;
 }
 
 function evaluationBalanceLevel(evaluation) {

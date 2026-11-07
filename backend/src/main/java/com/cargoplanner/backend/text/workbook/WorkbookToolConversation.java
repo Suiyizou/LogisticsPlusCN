@@ -69,6 +69,11 @@ public final class WorkbookToolConversation {
       quantityBasis is per-identity when each identity is one physical package; use quantity-column only for explicit
       counts of identical outer packages, never for product counts. weightBasis is per-package for each outer package's
       own gross/net weight; group-total only when the source explicitly totals that package group's weight.
+      Read multi-row and merged headers together and distinguish shipment control totals from the goods below each header.
+      Example: 3 identical cartons, outer 400 x 300 x 200 mm, row total gross 36 kg means quantity=3, weightBasis=group-total,
+      dimensionUnit=mm; the program produces 40 x 30 x 20 cm and 12 kg per carton. A per-carton gross of 36 kg means
+      weightBasis=per-package instead. For a multi-package row, G.W. or kg alone provides no per-unit/total basis.
+      Never use a grand total as a line weight, or sum copied merged values across continuation rows.
       Use final OUTER package dimensions and package gross weight. A product's single net weight is innerUnitWeightColumn.
       Never replace absent outer/pallet dimensions with inner carton or product dimensions. Leave missing columns null.
       Preserve source handling constraints: optional typeColumn, nonStackColumn, keepUprightColumn and remarkColumn

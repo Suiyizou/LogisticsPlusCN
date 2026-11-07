@@ -53,7 +53,9 @@ export function useCustomerDirectory({
             customer.displayName,
             customer.clientCode,
             customer.contactEmail,
-            customer.responsibleAgentDisplayName
+            customer.responsibleAgentDisplayName,
+            customer.overseaAgentDisplayName,
+            customer.remark
           ].some((value) =>
             String(value || "")
               .toLowerCase()

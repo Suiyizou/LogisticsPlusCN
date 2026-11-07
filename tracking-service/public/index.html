@@ -29,9 +29,9 @@
     <link rel="stylesheet" href="./tracking-milestones.css?v=reference-fidelity-20261029-r2" />
     <link rel="stylesheet" href="./workspace-navigation.css?v=carrier-workspace-20261029" />
     <link rel="stylesheet" href="./tracking-json-preview.css?v=20261104-shipment-snapshot" />
-    <link rel="stylesheet" href="./tracking-workspace.css?v=20261104-route-map-entry" />
+    <link rel="stylesheet" href="./tracking-workspace.css?v=20261106-tracking-reference" />
     <link rel="stylesheet" href="./logistics-network-map.css?v=20261104-route-map-entry" />
-    <script src="./app.js?v=20261104-route-map-entry" type="module"></script>
+    <script src="./app.js?v=20261106-tracking-reference" type="module"></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -657,8 +657,7 @@
                 <p class="kicker" data-i18n="tracking.kicker">OCEAN FREIGHT TRACKING</p>
                 <h1 data-i18n="tracking.title">Shipment tracking</h1>
                 <p data-i18n="tracking.description">
-                  Follow your shipment from origin to destination. Select the carrier and enter your
-                  shipment reference.
+                  Track your shipment from origin to destination using its reference.
                 </p>
               </div>
               <div class="tracking-heading-actions">
@@ -702,39 +701,21 @@
               <header class="tracking-query-header">
                 <div>
                   <h2 id="tracking-search-title" data-i18n="query.searchTitle">Find a shipment</h2>
-                  <p data-i18n="query.searchDescription">
-                    Use the reference shown on your carrier documents.
+                  <p id="tracking-reference-help" data-i18n="query.searchDescription">
+                    Enter a prefixed bill (COSU6466209120), or add the carrier to a booking or container (COSCO:6466209120, COSCO:TEMU1234567).
                   </p>
                 </div>
               </header>
               <form id="tracking-form">
-                <div class="field carrier-field">
-                  <label for="carrier-select" data-i18n="query.carrier">Carrier</label>
-                  <select id="carrier-select" name="carrier">
-                    <option value="COSCO">COSCO SHIPPING</option>
-                    <option value="CMA">CMA CGM</option>
-                    <option value="MAERSK">Maersk</option>
-                    <option value="HAPAG_LLOYD">Hapag-Lloyd</option>
-                    <option value="MSC">MSC</option>
-                    <option value="OOCL">OOCL</option>
-                  </select>
-                </div>
-                <div class="field type-field">
-                  <label for="tracking-type" data-i18n="query.type">Shipment number type</label>
-                  <select id="tracking-type" name="type">
-                    <option value="BOOKING" data-i18n="type.booking">Booking number</option>
-                    <option value="BILLOFLADING" data-i18n="type.bill">Bill of lading</option>
-                    <option value="CONTAINER" data-i18n="type.container">Container number</option>
-                  </select>
-                </div>
                 <div class="field number-field">
                   <label for="tracking-number" data-i18n="query.number">Shipment No.</label>
                   <input
                     id="tracking-number"
+                    aria-describedby="tracking-reference-help"
                     name="number"
                     placeholder="Enter shipment reference"
                     data-i18n-placeholder="query.numberPlaceholder"
-                    maxlength="35"
+                    maxlength="64"
                     autocomplete="off"
                     spellcheck="false"
                     required

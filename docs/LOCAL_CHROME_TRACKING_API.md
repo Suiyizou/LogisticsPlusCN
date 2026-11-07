@@ -9,7 +9,7 @@
 ```dotenv
 APP_TRACKING_ADAPTER_MODE=LOCAL_QUEUE
 APP_TRACKING_LOCAL_BASE_URL=http://host.docker.internal:18791
-# 当前本地未启用业务鉴权时留空；启用时填写与本机一致的令牌。
+# 从工作机的受限 runtime.env 同步 TRACK_TOKEN 的实际值。
 APP_TRACKING_LOCAL_TOKEN=
 APP_TRACKING_LOCAL_JOB_TIMEOUT=7m
 APP_TRACKING_LOCAL_POLL_INTERVAL=2s
@@ -22,7 +22,7 @@ Compose 和 `.env.example` 默认使用 `LOCAL_QUEUE`；Java 单独运行时保�
 
 本地服务使用 `npm run chrome` 和 `npm run serve`；配置 `TRACK_TOKEN`（若同时设置 `TOKEN`，本地服务优先使用 `TOKEN`）。当前本地队列共享一个浏览器工作页，请设置 `CONCURRENCY=1`。后端实例内也串行提交，多个后端副本应共用这个单并发本地队列。
 
-当前联调环境由服务维护者配置为 `DISABLE_UI=1`、未设置业务令牌。关闭 UI 与 API 鉴权是独立的：本地有效 `TOKEN`/`TRACK_TOKEN` 为空时不校验 Authorization，Java 即使发送任意 Bearer 也不会因此得到 401；Java 配置留空即可。生产启用时，在本机设置非空 `TRACK_TOKEN`（或优先级更高的 `TOKEN`）并重启队列服务，同时更新 Java 的 `APP_TRACKING_LOCAL_TOKEN` 并重建后端。只有本地已启用鉴权且 Java 令牌缺失/不一致才返回 401，云端映射为 502 `TRACKING_LOCAL_UNAUTHORIZED`；此时 `/health` 同样要求 Bearer。
+工作机和线上 backend 已启用业务令牌。迁移工作机时复用受限的 `runtime.env`。`/health` 和 `/jobs` 都要求 Bearer，令牌不一致时工作机返回 401。轮换令牌时需同时更新工作机和 Java 的 `APP_TRACKING_LOCAL_TOKEN`。
 
 地址必须是**后端实际可访问**的隧道 HTTP 地址。Java 直接运行在云主机上时可使用 `http://127.0.0.1:18791`；Docker 内的 `127.0.0.1` 指容器自身。Compose 已添加 `host.docker.internal:host-gateway`；使用此域名时，隧道业务监听地址需允许 Docker 网桥访问，仅监听宿主机回环地址无法通过该域名访问。也可配置容器可访问的 HTTPS 反代地址。
 
@@ -30,9 +30,13 @@ Compose 和 `.env.example` 默认使用 `LOCAL_QUEUE`；Java 单独运行时保�
 
 维护者给出的当前耗时参考是普通单条约 3–15 秒、SML/MSC 约 40–60 秒、COSCO 首次切换查询模式约 18 秒；这是联调参考而非 SLA。15 秒限制的是单次 HTTP 提交/取状态/取结果，不是整条浏览器查询；现有 7 分钟总期限无需因这些正常耗时调大。
 
-如果 frps 的 18791 对公网监听且业务无鉴权，外部请求也可以提交查单。部署时应将云安全组/主机防火墙的 18791 限制到 Java 后端实际来源 IP/网段，或启用业务令牌；同机部署优先使用容器可达的宿主机内部监听或受控反代。开启 `DISABLE_UI=1` 不会关闭 `/jobs`，不能替代端口限制或鉴权。本次代码调整没有改动运行中的令牌、监听地址或安全组。
+当前 backend 在服务器内部通过宿主机 18791 端口访问工作机。人工验收时先 SSH 登录服务器，再从 backend 容器内使用其已配置的令牌访问该地址。
 
 ## 云端到本地的契约
+
+Excel 任务优先使用明确的提单、订舱或箱号表头。通用单号列默认按订舱号查询，有单独的类型列时按行读取。自动模式在一行内依次选择非空的提单、订舱、箱号、通用参考号；同一行只生成一次任务。原始单号、前导零和单元格地址可在草稿中复核。箱号需要实际承运船司。模型负责辨认列和承运人标签，号码从工作簿原单元格读取。
+
+本地新版详情页使用一个输入框。带签发船司前缀的提单可以直接输入，例如 `HLCUBO2260433677`。订舱号和箱号可写为 `COSCO:9508236200`、`COSCO:CSNU5895608`。箱号前的船司指实际承运人。需指定类型时可使用 `船司:BL:提单号`、`船司:BK:订舱号` 或 `船司:CN:箱号`。单条请求将解析后的船司、原票号、`reference_type` 传给工作机。KMTC 支持提单号和订舱号。
 
 1. `POST /jobs`，请求 `{"items":[{"carrier":"COSCO","reference":"COSU000010001"}],"source":"LogisticsPlusCN"}`；正常返回 **202 Accepted**，读取 `job_id`，不能要求仅 200 成功。空 items 返回 `400 NO_ITEMS`，云端映射成 `400 INVALID_REFERENCE`。
 2. `GET /jobs/{job_id}`，读取 job 状态与唯一 `items[0]` 的状态；job 的 `queued/running/completed/completed_with_gaps/failed/cancelled` 与 item 的状态分开处理。

@@ -635,6 +635,7 @@ const exactEn = {
   "每个 LAFF 层内使用 Extreme Point 候选点回填底部、顶部和侧边空隙": "Each LAFF layer uses Extreme Point candidates to backfill bottom, top, and side gaps.",
   "每个箱型独立运行固定高度带 LAFF 搜索，分别尝试大底面积、同层行填充、高度、承重、不可重压基础优先和不可重压最后策略": "Each container runs fixed-band LAFF searches with footprint, same-layer row-fill, height, support, non-stack foundation-first, and non-stack-last variants.",
   "每个箱型先保留含不可重压基础回填的高利用率基线，再尝试跨柜后放方案；后放方案只有在不增加货柜数时才采用": "Each container first keeps a high-utilization baseline that may reserve support decks for non-stackable cargo, then tries a cross-container deferred plan; the deferred plan is used only when it does not increase the container count.",
+  "整票货物均有合规装载位置后，按所选箱容利用率目标比较各方案。": "Complete, verified loads are compared by the selected volume utilization goal.",
   "所有最终候选同时通过尺寸、支撑、载重和偏载门槛后，先按箱数最少排序；箱数相同时再比较综合参考运价和利用率。": "After final candidates pass dimensions, support, payload, and balance gates, fewer containers rank first; composite reference freight and utilization break ties between equal-count plans.",
   "每个 LAFF 层固定目标层顶，按 P0 扩展层底、P1 补齐目标顶面、P2 层内补高的硬顺序穷尽 Extreme Point 候选后才开启下一层": "Each LAFF layer keeps a fixed target top and exhausts Extreme Point candidates in the hard order P0 extend the layer floor, P1 complete the target top, and P2 top up within the band before opening the next layer.",
   "候选落位必须满足边界、不相交、底面支撑和不可重压货物不承载上层货物": "Candidate placements must satisfy bounds, no intersections, base support, and the rule that non-stackable cargo cannot support upper cargo.",
