@@ -1,4 +1,4 @@
-import { readTrackingPreview, createCarrierBadge } from "./tracking-v1-adapter.mjs";
+import { readTrackingPreview, createCarrierBadge, reportedTrackingHistory } from "./tracking-v1-adapter.mjs?v=20261108-shipment-detail";
 const labels = {
   en: {
     title: "Preview tracking JSON",
@@ -21,7 +21,7 @@ const labels = {
     limit: "Select a JSON file smaller than 20 MB.",
     empty: "No tracking file selected.",
     count: "records",
-    details: "Additional carrier information",
+    details: "View carrier source data",
     vessel: "Vessel / voyage",
     noData: "The source reports no business data for this reference.",
     warnings: "Source warnings",
@@ -32,6 +32,7 @@ const labels = {
     time: "Reported time",
     event: "Source entry",
     location: "Location",
+    transport: "Vessel / transport details",
     source: "Source",
     sourceDetails: "Source details",
     historyHint: "Original times, locations and descriptions as reported by the carrier.",
@@ -43,6 +44,8 @@ const labels = {
       "Source entries may contain page labels, summaries or transport descriptions. They do not establish that an event occurred or completed. Original order and reported times are retained.",
     evidence: "The source lists local evidence paths. They are not opened by this preview.",
     unknown: "Unknown",
+    verificationNeeded: "The carrier requires verification before this query can finish.",
+    queryIncomplete: "This carrier query has not completed.",
     fieldLabels: {
       bill_of_lading: "Bill of lading",
       booking: "Booking",
@@ -90,7 +93,7 @@ const labels = {
     limit: "请选择小于20 MB的 JSON 文件。",
     empty: "尚未选择货踪结果文件。",
     count: "条记录",
-    details: "船司附加信息",
+    details: "查看船司原始资料",
     vessel: "船名 / 航次",
     noData: "源文件明确报告：此单号没有业务数据。",
     warnings: "源数据告警",
@@ -101,6 +104,7 @@ const labels = {
     time: "源数据时间",
     event: "源条目",
     location: "地点",
+    transport: "船名 / 运输说明",
     source: "来源",
     sourceDetails: "来源详情",
     historyHint: "保留船司报告的原始时间、地点与描述。",
@@ -111,6 +115,8 @@ const labels = {
       "源条目可能包含页面标签、摘要或运输描述，不代表事件已发生或已完成；保留原始顺序与源数据时间。",
     evidence: "源文件含本地证据路径；此预览不会打开这些路径。",
     unknown: "未知",
+    verificationNeeded: "船司要求完成验证后才能继续查询。",
+    queryIncomplete: "本次船司查询尚未完成。",
     fieldLabels: {
       bill_of_lading: "提单号",
       booking: "订舱号",
@@ -186,7 +192,8 @@ export function trackingSourceSummary(snapshot, language) {
     .join(" · ");
 }
 function eventTable(doc, entries, l) {
-  const { wrap, body } = table(doc, [l.time, l.event, l.location]);
+  const hasTransport = entries.some((entry) => entry?.transportMode);
+  const { wrap, body } = table(doc, [l.time, l.event, l.location, ...(hasTransport ? [l.transport] : [])]);
   for (const event of entries) {
     if (!event) continue;
     const row = node(doc, "tr");
@@ -209,6 +216,7 @@ function eventTable(doc, entries, l) {
       description,
       node(doc, "td", event.location || "—")
     );
+    if (hasTransport) row.append(node(doc, "td", event.transportMode || "—"));
     body.append(row);
   }
   return wrap;
@@ -216,9 +224,9 @@ function eventTable(doc, entries, l) {
 
 export function renderTrackingHistory(doc, snapshot, language) {
   const target = doc.querySelector("#snapshot-reported-history");
-  const history = Array.isArray(snapshot?.sourceDetails?.additionalEvents)
-    ? snapshot.sourceDetails.additionalEvents
-    : [];
+  const history = reportedTrackingHistory(snapshot);
+  const panel = doc.querySelector("#reported-history-panel");
+  if (panel) panel.hidden = history.length === 0;
   if (target) {
     target.replaceChildren();
     target.hidden = history.length === 0;
@@ -245,15 +253,18 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
   target.hidden = !details && !events.length;
   if (target.hidden) return;
   const l = copy(language);
-  const carrier = snapshot.provider?.name || snapshot.provider?.code;
-  target.append(node(doc, "h3", carrier ? `${carrier} · ${l.details}` : l.details));
   if (details?.noBusinessData) target.append(node(doc, "p", l.noData, "tracking-json-notice"));
   const criticalStatus = /HUMAN_REQUIRED|NO_BUSINESS_DATA|ERROR|FAILED|BLOCKED/.test(
     details?.queryStatus || ""
   );
   if (criticalStatus && !(details.noBusinessData && details.queryStatus === "NO_BUSINESS_DATA")) {
-    target.append(node(doc, "p", `${l.status}: ${details.queryStatus}`, "tracking-json-notice"));
+    target.append(node(doc, "p", details.queryStatus === "HUMAN_REQUIRED" ? l.verificationNeeded : l.queryIncomplete, "tracking-json-notice"));
   }
+  const archive = node(doc, "details", undefined, "tracking-source-archive");
+  archive.append(node(doc, "summary", l.details));
+  const archiveBody = node(doc, "div", undefined, "tracking-source-archive-body");
+  archive.append(archiveBody);
+  target.append(archive);
   if (details?.warnings?.length) {
     const critical = details.warnings.filter((warning) =>
       /HUMAN_REQUIRED|NO_BUSINESS_DATA|ERROR|FAILED|BLOCKED/.test(warning)
@@ -276,7 +287,7 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
       const ul = node(doc, "ul");
       warnings.forEach((w) => ul.append(node(doc, "li", w)));
       warning.append(ul);
-      target.append(warning);
+      archiveBody.append(warning);
     }
   }
   if (events.length) {
@@ -285,7 +296,7 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     buildOnOpen(section, () =>
       section.append(node(doc, "p", l.untypedTime), eventTable(doc, events, l))
     );
-    target.append(section);
+    archiveBody.append(section);
   }
   if (details?.fields?.length) {
     const section = node(doc, "details", undefined, "tracking-json-disclosure");
@@ -315,7 +326,7 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
       }
       section.append(dl);
     });
-    target.append(section);
+    archiveBody.append(section);
   }
   if (details) {
     const section = node(doc, "details", undefined, "tracking-json-disclosure");
@@ -338,7 +349,7 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     }
     section.append(node(doc, "p", trackingSourceSummary(snapshot, language)), metadata);
     if (details.evidenceAvailable) section.append(node(doc, "p", l.evidence));
-    target.append(section);
+    archiveBody.append(section);
   }
 }
 export function installLocalTrackingPreview({

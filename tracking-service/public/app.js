@@ -24,7 +24,7 @@ import {
 import {
   carrierFactsProvenance,
   carrierKeyFacts
-} from "./tracking-carrier-fields.mjs?v=carrier-fields-20261104";
+} from "./tracking-carrier-fields.mjs?v=20261108-shipment-detail";
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
@@ -36,13 +36,14 @@ import {
 import {
   usesLegacySupplementalDelivery,
   normalizeTrackingPayload,
+  trackingProgressNodes,
   detailSections,
   createCarrierBadge
-} from "./tracking-v1-adapter.mjs";
+} from "./tracking-v1-adapter.mjs?v=20261108-shipment-detail";
 import {
   installLocalTrackingPreview,
   renderTrackingHistory
-} from "./tracking-json-preview.mjs?v=20261104-shipment-snapshot";
+} from "./tracking-json-preview.mjs?v=20261108-shipment-detail";
 import {
   carrierReferenceForDisplay,
   reportedRouteTime,
@@ -482,6 +483,7 @@ const MESSAGES = {
     "profile.active": "Active",
     "profile.username": "Login account",
     "profile.code": "Customer code",
+    "profile.notProvided": "Not provided",
     "profile.verified": "Verified",
     "profile.role": "Freight identity",
     "profile.help":
@@ -1037,6 +1039,12 @@ const MESSAGES = {
     "routing.masterBill": "Master bill",
     "routing.empty": "The carrier did not provide enough data to compose routing legs.",
     "containers.title": "Transport details",
+    "containers.seal": "Seal number",
+    "containers.weight": "Weight as reported",
+    "route.time.reported": "Reported",
+    "route.evidence.reported": "Carrier report",
+    "route.event.departure": "Vessel departure",
+    "route.event.arrival": "Vessel arrival",
     "containers.count": "{count} container records returned",
     "containers.number": "Container",
     "containers.type": "Type",
@@ -1154,6 +1162,7 @@ const MESSAGES = {
     "profile.active": "正常",
     "profile.username": "登录账号",
     "profile.code": "客户 CODE",
+    "profile.notProvided": "未提供",
     "profile.verified": "已验证",
     "profile.role": "货运身份",
     "profile.help": "如需修改账号信息或重置登录凭证，请联系您的业务员。",
@@ -1677,6 +1686,12 @@ const MESSAGES = {
     "routing.masterBill": "主提单",
     "routing.empty": "船司未提供可组成分段运输的数据。",
     "containers.title": "运输详情",
+    "containers.seal": "封条号",
+    "containers.weight": "重量（船司原值）",
+    "route.time.reported": "船司报告时间",
+    "route.evidence.reported": "船司报告节点",
+    "route.event.departure": "船舶离港",
+    "route.event.arrival": "船舶到港",
     "containers.count": "返回 {count} 条箱明细",
     "containers.number": "箱号",
     "containers.type": "箱型",
@@ -2771,7 +2786,7 @@ function renderTrackingAccount(session = readFileSession()) {
       principal.customerCodePrefix ??
       principal.codePrefix ??
       principal.customerCode ??
-      t("profile.verified");
+      t("profile.notProvided");
     const customerProfileName = document.querySelector("#customer-profile-name");
     if (customerProfileName) customerProfileName.textContent = name;
     const customerProfileUsername = document.querySelector("#customer-profile-username");
@@ -6536,11 +6551,15 @@ function renderRoute(route) {
 
     const event = document.createElement("span");
     event.className = "route-event-name";
-    event.textContent = valueOrDash(node.event, t("route.noEvent"));
+    event.textContent = node.typedEvent
+      ? t(`route.event.${node.typedEvent}`)
+      : valueOrDash(node.event, t("route.noEvent"));
 
     const evidence = document.createElement("span");
     evidence.className = "route-evidence";
-    evidence.textContent = t(`route.evidence.${timing.state}`);
+    const reportedOnly = node.semanticKind === "CARRIER_REPORTED" && node.reportedTime;
+    evidence.textContent = t(`route.evidence.${reportedOnly ? "reported" : timing.state}`);
+    if (reportedOnly) item.classList.add("is-reported");
     const times = document.createElement("div");
     times.className = "route-node-times";
     const appendTime = (kind, value) => {
@@ -6556,7 +6575,8 @@ function renderRoute(route) {
     };
     if (timing.actual) appendTime("actual", timing.actual);
     if (timing.estimated) appendTime("estimated", timing.estimated);
-    if (timing.state === "unknown") {
+    if (reportedOnly) appendTime("reported", node.reportedTime);
+    if (timing.state === "unknown" && !reportedOnly) {
       const unknown = document.createElement("span");
       unknown.className = "route-time-unknown";
       unknown.textContent = t("route.time.unknown");
@@ -6794,10 +6814,11 @@ function renderContainerMilestones(cell, container) {
 function renderContainers(snapshot) {
   const containers = snapshot.containers ?? [];
   const { declared, returned } = snapshotContainerCounts(snapshot);
-  elements["snapshot-container-counts"].hidden = declared === null;
+  const countsDiffer = declared !== null && declared !== returned;
+  elements["snapshot-container-counts"].hidden = !countsDiffer;
   elements["snapshot-declared-count"].textContent = declared ?? "—";
   elements["snapshot-returned-count"].textContent = returned;
-  elements["container-count"].hidden = declared !== null;
+  elements["container-count"].hidden = countsDiffer;
   elements["snapshot-containers-empty"].hidden = returned > 0;
   elements["snapshot-container-table"].hidden = returned === 0;
 
@@ -6809,7 +6830,7 @@ function renderContainers(snapshot) {
 
   const visibleColumns = [
     true,
-    ...["type", "transportMode", "trafficTerm", "currentLocation", "latestEvent"].map((key) =>
+    ...["type", "seal", "weight", "transportMode", "trafficTerm", "currentLocation", "latestEvent"].map((key) =>
       containers.some((container) => hasText(container[key]))
     ),
     containers.some((container) =>
@@ -6824,6 +6845,8 @@ function renderContainers(snapshot) {
     const row = document.createElement("tr");
     appendCell(row, container.number);
     appendCell(row, container.type);
+    appendCell(row, container.seal);
+    appendCell(row, container.weight);
     appendCell(row, container.transportMode);
     appendCell(row, container.trafficTerm);
     appendCell(row, container.currentLocation);
@@ -6874,7 +6897,23 @@ function renderCarrierFacts(snapshot) {
   const panel = elements["carrier-facts-panel"];
   const grid = elements["carrier-facts-grid"];
   grid.replaceChildren();
-  const groups = carrierKeyFacts(snapshot, currentLanguage);
+  const repeated = new Set(["origin", "destination", "containerNumbers", "containerVolume", "eventCount", "latestEvent"]);
+  const identity = (value) => String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+  if (!elements["master-bill-reference"].hidden ||
+      identity(snapshot.references?.masterBill) === identity(elements["result-number"].textContent))
+    repeated.add("masterBill");
+  if (!elements["summary-booking-reference"].hidden ||
+      bookingNumbersForSnapshot(snapshot).some((value) => identity(value) === identity(elements["result-number"].textContent)))
+    repeated.add("booking");
+  if (!elements["result-container-types-fact"].hidden) repeated.add("containerMix");
+  if (!elements["result-vessel-fact"].hidden) {
+    repeated.add("vesselVoyage");
+    repeated.add("vessel");
+    repeated.add("voyage");
+  }
+  const groups = carrierKeyFacts(snapshot, currentLanguage)
+    .map((group) => ({ ...group, items: group.items.filter((item) => !repeated.has(item.key)) }))
+    .filter((group) => group.items.length);
   panel.hidden = groups.length === 0;
   if (!groups.length) return;
 
@@ -7193,18 +7232,14 @@ function renderResult(payload) {
   elements["fetched-at"].title =
     `${formatLocalDateTime(snapshot.fetchedAt)} · ${snapshot.fetchedAt || "—"}`;
 
-  const reportedDeparture = reportedRouteTime(snapshot, "departure");
-  const reportedArrival = reportedRouteTime(snapshot, "arrival");
   const departureRecord = firstTimedRecord(
     keyTimes.actualDeparture,
-    keyTimes.estimatedDeparture,
-    reportedDeparture
+    keyTimes.estimatedDeparture
   );
   const arrivalRecord = firstTimedRecord(
     keyTimes.actualArrival,
     keyTimes.estimatedFinalArrival,
-    keyTimes.estimatedArrival,
-    reportedArrival
+    keyTimes.estimatedArrival
   );
   const deliveryRecord = firstTimedRecord(keyTimes.estimatedDelivery);
   const visibleMetrics = [];
@@ -7218,9 +7253,7 @@ function renderResult(payload) {
       labelKey:
         departureRecord === keyTimes.actualDeparture
           ? "metrics.actualDeparture"
-          : departureRecord === reportedDeparture
-            ? "metrics.reportedDeparture"
-            : "metrics.estimatedDeparture"
+          : "metrics.estimatedDeparture"
     })
   );
   visibleMetrics.push(
@@ -7233,9 +7266,7 @@ function renderResult(payload) {
       labelKey:
         arrivalRecord === keyTimes.actualArrival
           ? "metrics.actualArrival"
-          : arrivalRecord === reportedArrival
-            ? "metrics.reportedArrival"
-            : "metrics.estimatedArrival"
+          : "metrics.estimatedArrival"
     })
   );
   const showDelivery =
@@ -7272,20 +7303,21 @@ function renderResult(payload) {
   elements["destination-name"].textContent = valueOrDash(summary.destination?.name);
   elements["destination-code"].textContent = valueOrDash(summary.destination?.countryCode);
 
-  const route = selectDisplayRouteNodes(snapshot.route ?? []);
+  const route = selectDisplayRouteNodes(trackingProgressNodes(snapshot));
   const routingLegs = snapshot.routingLegs ?? [];
   const { declared } = snapshotContainerCounts(snapshot);
   const reportedHistoryCount = renderTrackingHistory(document, snapshot, currentLanguage);
+  elements["route-panel"].hidden = route.length === 0;
   elements["routing-panel"].hidden = routingLegs.length === 0;
   elements["secondary-grid"].hidden = !sections.containers && declared === null;
-  elements["route-flow"].hidden = route.length === 0 && reportedHistoryCount > 0;
+  elements["route-flow"].hidden = route.length === 0;
   elements["snapshot-milestone-note"].hidden = route.length === 0;
 
   renderRoute(route);
   renderJourney(snapshot);
-  renderCarrierFacts(snapshot);
   renderRoutingLegs(routingLegs);
   renderReferences(snapshot);
+  renderCarrierFacts(snapshot);
   renderBusinessReferences(snapshot);
   renderExtraInformation(snapshot);
   elements["snapshot-references-empty"].hidden =
@@ -7293,6 +7325,8 @@ function renderResult(payload) {
     ["business-reference-grid", "reference-core", "reference-information"].some(
       (id) => !elements[id].hidden
     );
+  const referencesPanel = document.querySelector(".references-panel");
+  if (referencesPanel) referencesPanel.hidden = !elements["snapshot-references-empty"].hidden && !canManageFileVisibility(readFileSession());
   renderContainers(snapshot);
   if (!payload.localPreview) renderDocumentDrawer(snapshot);
   localTrackingPreview?.renderDetails(snapshot);

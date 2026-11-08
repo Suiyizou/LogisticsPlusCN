@@ -55,7 +55,7 @@ function keyTime(snapshot, name) {
 }
 
 const CHROME_WORDS =
-  /^(?:number|confirmed|n\/?a|none|null|unknown|—|-|search|track|tracking)$/i;
+  /^(?:number|confirmed|n\/?a|none|null|unknown|—|-|search|track|tracking|no\.|booking no\.|bill of lading no\.)$/i;
 
 /**
  * Scrapers sometimes capture page chrome instead of a reference ("Number",
@@ -177,6 +177,67 @@ function latestEvent(snapshot) {
   return time ? `${name} · ${time}` : name;
 }
 
+/** Read only named, bounded source values. Unknown extensions remain in the
+ * source disclosure; they must not become customer-facing labels by accident. */
+function reportedValue(snapshot, keys) {
+  for (const key of keys) {
+    const field = sourceFields(snapshot).find((entry) => entry?.key === key && !entry.truncated);
+    if (!field) continue;
+    let value = field.rawText ?? field.value;
+    if (field.structured) {
+      try { value = JSON.parse(value); } catch { continue; }
+    }
+    if (Array.isArray(value)) {
+      if (!value.every((entry) => typeof entry === "string" || typeof entry === "number")) continue;
+      value = [...new Set(value.map(text).filter(Boolean))].slice(0, 30).join(" · ");
+    } else if (value && typeof value === "object") {
+      if ((key === "weight" || key.endsWith("_weight")) && text(value.value) && text(value.unit))
+        value = `${text(value.value)} ${text(value.unit)}`;
+      else continue;
+    }
+    value = safeCarrierLabel(value);
+    if (value && value.length <= 1600) return value;
+  }
+  return "";
+}
+
+const REPORTED_CARGO = [
+  ["containerType", LABEL("船司箱型描述", "Reported container type"), ["container_type"]],
+  ["sealNumbers", LABEL("封条号", "Seal numbers"), ["seal_numbers", "seal_number", "seal"]],
+  ["weight", LABEL("重量（船司原值）", "Weight as reported"), ["weight", "gross_weight", "cargo_weight"]],
+  ["commodity", LABEL("货物描述", "Cargo description"), ["commodity", "cargo_description"]],
+  ["service", LABEL("航线服务", "Service"), ["service", "service_name"]]
+];
+
+function reportedCargo(snapshot, language) {
+  return REPORTED_CARGO.flatMap(([key, label, keys]) => {
+    const value = reportedValue(snapshot, keys);
+    // A per-container type is already shown in the main summary/table.
+    if (!value || (key === "containerType" && list(snapshot?.containers).some((entry) => text(entry.type))))
+      return [];
+    return [{ key, label: label[language], value }];
+  });
+}
+
+function labelledCarrierTimes(snapshot, language) {
+  if (text(snapshot?.provider?.code).toUpperCase() !== "OOCL") return [];
+  const seen = new Set();
+  return list(snapshot?.events).flatMap((entry, index) => {
+    const match = text(entry?.name).match(/^(ATA|ATD|Cargo Available):\s*([A-Z]{2,5})?$/i);
+    if (!match || !text(entry.reportedTime)) return [];
+    const kind = match[1].toUpperCase();
+    const source = typeof entry.raw === "string" ? entry.raw.trim() : "";
+    const value = source.replace(/^(?:ATA|ATD|Cargo Available):\s*/i, "") ||
+      [text(entry.reportedTime), match[2]].filter(Boolean).join(" ");
+    if (value.length > 240 || seen.has(kind + "|" + value)) return [];
+    seen.add(kind + "|" + value);
+    const label = kind === "CARGO AVAILABLE"
+      ? (language === "en" ? "Cargo available (reported)" : "货物可用时间（船司报告）")
+      : (language === "en" ? `Reported ${kind}` : `船司 ${kind} 时间`);
+    return [{ key: `reportedTime${index}`, label, value }];
+  });
+}
+
 function eventCount(snapshot) {
   const count = list(snapshot?.events).length;
   return count > 0 ? String(count) : "";
@@ -254,6 +315,18 @@ const FACTS = {
 };
 
 const field = (key, zh, en = zh) => ({ key, label: LABEL(zh, en) });
+
+const TRANSPORT_STATES = {
+  IN_TRANSIT: LABEL("运输中", "In transit"),
+  RETURNED: LABEL("已返还", "Returned"),
+  ON_BOARD: LABEL("已装船", "On board"),
+  LOADED: LABEL("已装船", "Loaded"),
+  DEPARTED: LABEL("已离港", "Departed"),
+  ARRIVED: LABEL("已到港", "Arrived"),
+  DISCHARGED: LABEL("已卸船", "Discharged"),
+  DELIVERED: LABEL("已交付", "Delivered"),
+  BOOKED: LABEL("已订舱", "Booked")
+};
 
 /**
  * Declarative per-carrier layout. `fields` reference FACTS keys; a field whose
@@ -584,28 +657,37 @@ export function carrierKeyFacts(snapshot, language = "zh") {
         value = "";
       }
       value = text(value);
-      if (!value) continue;
+      if (!value || CHROME_WORDS.test(value)) continue;
+      if (entry.key === "status") {
+        if (/^(?:QUERY_COMPLETED|HUMAN_REQUIRED|NO_BUSINESS_DATA|FAILED|ERROR|BLOCKED)$/i.test(value)) continue;
+        value = TRANSPORT_STATES[value.toUpperCase()]?.[key] || value;
+      }
       if (items.some((item) => item.key === entry.key)) continue;
       items.push({ key: entry.key, label: entry.label[key], value });
     }
     if (items.length) groups.push({ id: group.id, title: group.title[key], items });
   }
+  const cargo = reportedCargo(snapshot, key);
+  if (cargo.length) {
+    const existing = groups.find((group) => group.id === "containers");
+    if (existing) existing.items.push(...cargo);
+    else groups.push({ id: "containers", title: key === "en" ? "Cargo information" : "货物信息", items: cargo });
+  }
+  const reportedTimes = labelledCarrierTimes(snapshot, key);
+  if (reportedTimes.length)
+    groups.push({ id: "reported-times", title: key === "en" ? "Carrier-reported times" : "船司报告时间", items: reportedTimes });
   return groups;
 }
 
 /** Short provenance line, so a thin result never looks like a system fault. */
 export function carrierFactsProvenance(snapshot, language = "zh") {
   const details = object(snapshot?.sourceDetails);
-  const parts = [];
   const status = text(details.queryStatus);
-  if (status && status !== "SUCCESS") parts.push(language === "en" ? `Query: ${status}` : `查询状态：${status}`);
-  const confidence = text(details.confidence);
-  if (confidence) parts.push(language === "en" ? `Confidence: ${confidence}` : `置信度：${confidence}`);
-  if (details.businessVerified === true)
-    parts.push(language === "en" ? "Business verified" : "业务已核验");
-  else if (details.businessVerified === false)
-    parts.push(language === "en" ? "Not business verified yet" : "业务未核验");
-  if (details.noBusinessData === true)
-    parts.push(language === "en" ? "Carrier returned no business data" : "船司未返回业务数据");
-  return parts.join(" · ");
+  if (status === "HUMAN_REQUIRED")
+    return language === "en" ? "The carrier requires verification before this query can finish." : "船司要求完成验证后才能继续查询。";
+  if (details.noBusinessData === true || status === "NO_BUSINESS_DATA")
+    return language === "en" ? "The carrier returned no matching shipment data." : "船司未返回匹配的物流数据。";
+  if (/ERROR|FAILED|BLOCKED/.test(status))
+    return language === "en" ? "This carrier query has not completed." : "本次船司查询尚未完成。";
+  return "";
 }

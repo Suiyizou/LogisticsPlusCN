@@ -97,6 +97,75 @@ function timeRecord(value, location) {
   return time ? { time, location: location?.name || null } : null;
 }
 
+/** Only explicitly typed leg dates can become progress nodes. Summary ports
+ * and generic page-text records are not evidence that a milestone occurred. */
+function typedLegRoute(legs) {
+  return legs.flatMap((leg) => {
+    const nodes = [];
+    for (const [kind, location, countryCode, actualTime, estimatedTime] of [
+      ["departure", leg.loadPort, leg.loadCountryCode, leg.actualDeparture, leg.estimatedDeparture],
+      ["arrival", leg.dischargePort, leg.dischargeCountryCode, leg.actualArrival, leg.estimatedArrival]
+    ]) {
+      const city = typeof location === "string" ? location : first(location?.name, location?.city);
+      if (!city || (!actualTime && !estimatedTime)) continue;
+      nodes.push({
+        city,
+        countryCode,
+        locationType: kind === "departure" ? "POL" : "POD",
+        event: "",
+        typedEvent: kind,
+        actualTime: actualTime || null,
+        estimatedTime: estimatedTime || null,
+        source: "shipment.legs"
+      });
+    }
+    return nodes;
+  });
+}
+
+/** Display progress from native milestones, typed sailing legs, or the
+ * carrier's separate history table. Generic source entries stay in archives. */
+export function reportedTrackingHistory(snapshot) {
+  return list(snapshot?.sourceDetails?.additionalEvents).filter((entry) => {
+    if (!entry || !text(entry.name) || !text(entry.reportedTime || entry.occurredAt)) return false;
+    const name = text(entry.name);
+    const place = text(entry.location);
+    if (/^(?:containers?|type|weight|POD ETA)$/i.test(name) || /^[A-Z]{4}\d{7}$/i.test(name) ||
+        /price calculation date|\bindicative\b/i.test(name + " " + place) ||
+        /^(?:container|type)$/i.test(place)) return false;
+    if (entry.source === "hmm_history") return true;
+    if (entry.source !== "msc_events") return false;
+    // The MSC extractor also emits table headers and container rows here.
+    // Only an explicit transport movement may be presented as history.
+    return /\b(?:gate[ -]?(?:in|out)|load(?:ed|ing)?|discharg(?:e|ed|ing)|depart(?:ure|ed)?|arriv(?:al|ed)|deliver(?:y|ed)|empty return(?:ed)?|return(?:ed)? (?:of )?empty|received|cargo available)\b|还空箱|装船|卸船|进场|出场|提箱|交付|离港|到港/i.test(name);
+  });
+}
+
+export function trackingProgressNodes(snapshot) {
+  if (Array.isArray(snapshot?.route) && snapshot.route.length) return snapshot.route;
+  const typed = typedLegRoute(list(snapshot?.routingLegs));
+  if (typed.length) return typed;
+  return reportedTrackingHistory(snapshot).flatMap((entry) => {
+    if (entry?.source !== "hmm_history") return [];
+    const name = text(entry.name);
+    const location = text(entry.location);
+    const reportedTime = text(entry.reportedTime || entry.occurredAt);
+    if (!name || !location || !reportedTime) return [];
+    return [{
+      city: location,
+      countryCode: text(entry.countryCode),
+      locationType: /departure.*POL|depart.*port of loading/i.test(name) ? "POL" :
+        /arrival.*POD|arriv.*port of discharge/i.test(name) ? "POD" : "REPORTED",
+      event: name,
+      actualTime: null,
+      estimatedTime: null,
+      reportedTime,
+      semanticKind: "CARRIER_REPORTED",
+      source: entry.source
+    }];
+  });
+}
+
 function endpoint(countryCode, ...candidates) {
   const value = candidates.find((entry) => entry && (typeof entry === "object" || text(entry)));
   if (!value && !countryCode) return null;

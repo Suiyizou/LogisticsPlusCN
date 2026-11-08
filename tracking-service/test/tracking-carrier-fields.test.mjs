@@ -102,7 +102,7 @@ test("ONE renders the four milestones it actually returns", () => {
   assert.equal(rows["milestones.departure"], "2026-07-25 12:42");
   assert.equal(rows["milestones.arrival"], "2026-08-14 07:26");
   assert.equal(rows["milestones.delivery"], "2026-08-19 13:39");
-  assert.equal(rows["milestones.status"], "RETURNED");
+  assert.equal(rows["milestones.status"], "已返还");
   assert.equal(rows["route.vessel"], "MOL EXPERIENCE");
   assert.equal(rows["route.voyage"], "105E");
 });
@@ -170,7 +170,7 @@ test("scraped page chrome is never presented as a reference", () => {
     sourceDetails: { fields: [] }
   });
   assert.equal(rows["reference.booking"], undefined);
-  assert.equal(rows["milestones.status"], "ON_BOARD");
+  assert.equal(rows["milestones.status"], "已装船");
 });
 
 test("carrier time formatting keeps carrier wording but normalises ISO stamps", () => {
@@ -190,10 +190,13 @@ test("carrier time formatting keeps carrier wording but normalises ISO stamps", 
   });
 });
 
-test("provenance line reports query status, confidence and verification", () => {
+test("customer provenance omits implementation codes and describes exceptional outcomes", () => {
   assert.equal(
     carrierFactsProvenance(oneBooking(), "zh"),
-    "查询状态：QUERY_COMPLETED · 置信度：PAGE_TEXT · 业务未核验"
+    ""
   );
   assert.equal(carrierFactsProvenance(coscoShipment(), "en"), "");
+  assert.equal(carrierFactsProvenance({ sourceDetails: { queryStatus: "HUMAN_REQUIRED" } }, "zh"),
+    "船司要求完成验证后才能继续查询。");
+  assert.match(carrierFactsProvenance({ sourceDetails: { queryStatus: "NO_BUSINESS_DATA" } }, "en"), /no matching shipment/);
 });

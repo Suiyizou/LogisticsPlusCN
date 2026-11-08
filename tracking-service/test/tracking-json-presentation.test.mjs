@@ -45,6 +45,12 @@ const visibleText = (element) => {
     return element.children.find((child) => child.tag === "summary")?.textContent || "";
   return element.value + element.children.map(visibleText).join(" ");
 };
+const disclosure = (element, label) => {
+  if (element.tag === "details" &&
+      element.children.find((child) => child.tag === "summary")?.textContent.startsWith(label))
+    return element;
+  return element.children.map((child) => disclosure(child, label)).find(Boolean);
+};
 function render(snapshot) {
   const target = new Element();
   const history = new Element();
@@ -65,7 +71,7 @@ test("carrier history is readable while raw records and technical provenance sta
     ];
     snapshot.sourceDetails.additionalEvents = [
       {
-        name: "CARRIER DESCRIPTION",
+        name: code === "MSC" ? "Gate in empty depot" : "CARRIER DESCRIPTION",
         reportedTime: "ORIGINAL TIME",
         location: "ORIGINAL PORT",
         source: code === "HMM" ? "hmm_history" : "msc_events"
@@ -77,16 +83,17 @@ test("carrier history is readable while raw records and technical provenance sta
     const { target, history, visible } = render(snapshot);
     const visibleHistory = visibleText(history);
     assert.match(visibleHistory, /船司报告的历史/);
-    for (const value of ["CARRIER DESCRIPTION", "ORIGINAL TIME", "ORIGINAL PORT"])
+    for (const value of [code === "MSC" ? "Gate in empty depot" : "CARRIER DESCRIPTION", "ORIGINAL TIME", "ORIGINAL PORT"])
       assert.ok(visibleHistory.includes(value));
     assert.doesNotMatch(visible, /船司报告的历史|CARRIER DESCRIPTION/);
-    assert.match(visible, /船司原始记录/);
+    assert.match(visible, /查看船司原始资料/);
+    assert.doesNotMatch(visible, /船司原始记录|原始字段与扩展字段|来源详情/);
     assert.doesNotMatch(
       visible,
       /RAW PAGE ENTRY|RAW TIME|BROWSER_PAGE_TEXT|hmm_history|msc_events/
     );
     assert.doesNotMatch(target.textContent, /RAW PAGE ENTRY/);
-    target.children.find((entry) => entry.textContent.includes("船司原始记录")).expand();
+    disclosure(target, "船司原始记录").expand();
     assert.match(target.textContent, /RAW PAGE ENTRY/);
     assert.match(target.textContent, /BROWSER_PAGE_TEXT/);
     assert.match(target.textContent, /尚未验证/);
@@ -104,7 +111,8 @@ test("no-data and human intervention remain visible while ordinary warnings can 
   ];
   const { target, visible } = render(snapshot);
   assert.match(visible, /没有业务数据/);
-  assert.match(visible, /HUMAN_REQUIRED/);
+  assert.match(visible, /船司要求完成验证/);
+  assert.doesNotMatch(visible, /HUMAN_REQUIRED/);
   assert.doesNotMatch(visible, /NON_BLOCKING_SOURCE_WARNING|船司报告的历史/);
   assert.match(target.textContent, /NON_BLOCKING_SOURCE_WARNING/);
 });
@@ -119,7 +127,7 @@ test("original fields retain values and paths behind disclosures without repeati
   const { target, visible } = render(snapshot);
   assert.doesNotMatch(visible, /SOURCE SEAL|shipment.fields_extra|SUMMARY VESSEL|SUMMARY VOYAGE/);
   assert.doesNotMatch(target.textContent, /SOURCE SEAL/);
-  const section = target.children.find((entry) => entry.textContent.includes("原始字段与扩展字段"));
+  const section = disclosure(target, "原始字段与扩展字段");
   section.expand();
   assert.match(target.textContent, /SOURCE SEAL/);
   assert.doesNotMatch(target.textContent, /shipment.fields_extra.seal_numbers/);
@@ -139,7 +147,7 @@ test("opening an event builds its raw value and source as text once", () => {
   });
   const find = (element, tag) =>
     element.tag === tag ? element : element.children.map((child) => find(child, tag)).find(Boolean);
-  const events = find(target, "details");
+  const events = disclosure(target, "船司原始记录");
   assert.equal(find(events, "table"), undefined);
   events.expand();
   assert.match(events.textContent, /Mapped event/);

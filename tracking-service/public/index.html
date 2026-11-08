@@ -28,10 +28,11 @@
     <link rel="stylesheet" href="./tracking-composition.css?v=maritime-comp-20261028" />
     <link rel="stylesheet" href="./tracking-milestones.css?v=reference-fidelity-20261029-r2" />
     <link rel="stylesheet" href="./workspace-navigation.css?v=carrier-workspace-20261029" />
-    <link rel="stylesheet" href="./tracking-json-preview.css?v=20261104-shipment-snapshot" />
+    <link rel="stylesheet" href="./tracking-json-preview.css?v=20261108-shipment-detail" />
     <link rel="stylesheet" href="./tracking-workspace.css?v=20261106-tracking-reference" />
     <link rel="stylesheet" href="./logistics-network-map.css?v=20261104-route-map-entry" />
-    <script src="./app.js?v=20261106-tracking-reference" type="module"></script>
+    <link rel="stylesheet" href="./tracking-detail.css?v=20261108-shipment-detail" />
+    <script src="./app.js?v=20261108-shipment-detail" type="module"></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -1222,29 +1223,59 @@
                 <span id="supplemental-details-message">Loading transport details…</span>
               </div>
 
-              <section
-                class="panel carrier-facts-panel"
-                id="carrier-facts-panel"
-                aria-labelledby="carrier-facts-title"
-                hidden
-              >
-                <div class="panel-header">
-                  <div>
-                    <span class="panel-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <path d="M4 7h16M4 12h16M4 17h10" />
-                      </svg>
-                    </span>
-                    <strong id="carrier-facts-title" data-i18n="carrierFacts.title"
-                      >Carrier key details</strong
-                    >
-                  </div>
-                  <span class="carrier-facts-note" id="carrier-facts-note" hidden></span>
-                </div>
-                <div class="carrier-facts-grid" id="carrier-facts-grid"></div>
-              </section>
-
               <div class="snapshot-route-context" id="snapshot-route-context">
+                <div class="primary-grid">
+                  <section class="panel route-panel" id="route-panel">
+                    <div class="panel-header">
+                      <div>
+                        <span class="panel-icon" aria-hidden="true"
+                          ><svg viewBox="0 0 24 24">
+                            <path d="M4 6h6v6H4zM14 12h6v6h-6zM10 9h7v3M7 12v6h7" /></svg
+                        ></span>
+                        <strong data-i18n="route.title">Shipment milestones</strong>
+                      </div>
+                      <span id="route-count">0 nodes</span>
+                    </div>
+                    <div class="route-summary">
+                      <div>
+                        <small data-i18n="route.origin">Origin</small>
+                        <span class="location-name"
+                          ><b class="flag-icon" id="origin-flag"></b
+                          ><strong id="origin-name">—</strong></span
+                        >
+                        <span id="origin-code">—</span>
+                      </div>
+                      <div class="route-summary-line" id="route-summary-line" aria-hidden="true">
+                        <i></i
+                        ><span id="route-summary-marker" aria-hidden="true"
+                          ><svg viewBox="0 0 24 24"><path d="M4 12h16m-5-5 5 5-5 5" /></svg
+                        ></span>
+                      </div>
+                      <div>
+                        <small data-i18n="route.destination">Destination</small>
+                        <span class="location-name"
+                          ><b class="flag-icon" id="destination-flag"></b
+                          ><strong id="destination-name">—</strong></span
+                        >
+                        <span id="destination-code">—</span>
+                      </div>
+                    </div>
+                    <div
+                      class="route-flow"
+                      id="route-flow"
+                      role="list"
+                      data-i18n-aria-label="route.title"
+                      aria-label="Shipment milestones"
+                    ></div>
+                    <p
+                      class="route-source-note"
+                      id="snapshot-milestone-note"
+                      data-i18n="route.sourceNote"
+                    >
+                      Milestones reflect carrier reports. Estimated dates may change.
+                    </p>
+                  </section>
+                </div>
                 <aside class="panel references-panel">
                   <div class="panel-header">
                     <div>
@@ -1304,6 +1335,32 @@
                     No additional references supplied.
                   </p>
                 </aside>
+
+              </div>
+
+              <div class="shipment-information-grid">
+              <section
+                class="panel carrier-facts-panel"
+                id="carrier-facts-panel"
+                aria-labelledby="carrier-facts-title"
+                hidden
+              >
+                <div class="panel-header">
+                  <div>
+                    <span class="panel-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M4 7h16M4 12h16M4 17h10" />
+                      </svg>
+                    </span>
+                    <strong id="carrier-facts-title" data-i18n="carrierFacts.title"
+                      >Carrier key details</strong
+                    >
+                  </div>
+                  <span class="carrier-facts-note" id="carrier-facts-note" hidden></span>
+                </div>
+                <div class="carrier-facts-grid" id="carrier-facts-grid"></div>
+              </section>
+
                 <section
                   id="shipment-logistics-map"
                   aria-label="Shipment route map"
@@ -1323,59 +1380,6 @@
                     </div>
                   </div>
                 </section>
-                <div class="primary-grid">
-                  <section class="panel route-panel" id="route-panel">
-                    <div class="panel-header">
-                      <div>
-                        <span class="panel-icon" aria-hidden="true"
-                          ><svg viewBox="0 0 24 24">
-                            <path d="M4 6h6v6H4zM14 12h6v6h-6zM10 9h7v3M7 12v6h7" /></svg
-                        ></span>
-                        <strong data-i18n="route.title">Shipment milestones</strong>
-                      </div>
-                      <span id="route-count">0 nodes</span>
-                    </div>
-                    <div class="route-summary">
-                      <div>
-                        <small data-i18n="route.origin">Origin</small>
-                        <span class="location-name"
-                          ><b class="flag-icon" id="origin-flag"></b
-                          ><strong id="origin-name">—</strong></span
-                        >
-                        <span id="origin-code">—</span>
-                      </div>
-                      <div class="route-summary-line" id="route-summary-line" aria-hidden="true">
-                        <i></i
-                        ><span id="route-summary-marker" aria-hidden="true"
-                          ><svg viewBox="0 0 24 24"><path d="M4 12h16m-5-5 5 5-5 5" /></svg
-                        ></span>
-                      </div>
-                      <div>
-                        <small data-i18n="route.destination">Destination</small>
-                        <span class="location-name"
-                          ><b class="flag-icon" id="destination-flag"></b
-                          ><strong id="destination-name">—</strong></span
-                        >
-                        <span id="destination-code">—</span>
-                      </div>
-                    </div>
-                    <div
-                      class="route-flow"
-                      id="route-flow"
-                      role="list"
-                      data-i18n-aria-label="route.title"
-                      aria-label="Shipment milestones"
-                    ></div>
-                    <section id="snapshot-reported-history" hidden></section>
-                    <p
-                      class="route-source-note"
-                      id="snapshot-milestone-note"
-                      data-i18n="route.sourceNote"
-                    >
-                      Milestones reflect carrier reports. Estimated dates may change.
-                    </p>
-                  </section>
-                </div>
               </div>
 
               <section class="panel table-panel routing-panel" id="routing-panel">
@@ -1451,6 +1455,8 @@
                         <tr>
                           <th data-i18n="containers.number">Container</th>
                           <th data-i18n="containers.type">Type</th>
+                          <th data-i18n="containers.seal">Seal number</th>
+                          <th data-i18n="containers.weight">Weight as reported</th>
                           <th data-i18n="containers.mode">Mode</th>
                           <th data-i18n="containers.terms">Terms</th>
                           <th data-i18n="containers.location">Current location</th>
@@ -1464,6 +1470,10 @@
                   </div>
                 </section>
               </div>
+
+              <section class="panel reported-history-panel" id="reported-history-panel" hidden>
+                <section id="snapshot-reported-history" hidden></section>
+              </section>
 
               <section
                 class="panel tracking-json-reported"

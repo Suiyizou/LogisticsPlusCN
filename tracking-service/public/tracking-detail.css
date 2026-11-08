@@ -1,0 +1,483 @@
+/* Customer detail: carrier progress first, then compact business tables. */
+#tracking-view .results {
+  gap: 16px;
+}
+#tracking-view .shipment-summary-card,
+#tracking-view .panel,
+#tracking-view .metric-card {
+  border-radius: 8px;
+  box-shadow: none;
+}
+#tracking-view .result-titlebar {
+  gap: 16px;
+  padding: 20px 24px;
+  align-items: center;
+}
+#tracking-view #result-number {
+  font-size: clamp(20px, 2.1vw, 30px);
+  overflow-wrap: anywhere;
+}
+#tracking-view .result-meta {
+  font-size: 12px;
+}
+#tracking-view .shipment-summary-grid {
+  min-height: 0;
+  grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.2fr) minmax(180px, 1fr);
+}
+#tracking-view .shipment-summary-grid > * {
+  padding: 16px 22px;
+}
+#tracking-view .shipment-summary-grid .summary-services {
+  grid-column: 1 / -1;
+  padding-block: 10px;
+  border-top: 1px solid #e4ebf3;
+  border-left: 0;
+}
+#tracking-view .journey-stage-summary strong {
+  font-size: 17px;
+  line-height: 1.5;
+}
+#tracking-view .summary-route-pair {
+  gap: 10px;
+}
+#tracking-view .summary-route-pair strong {
+  font-size: 17px;
+  line-height: 1.5;
+}
+#tracking-view .metric-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-top: 1px solid #e4ebf3;
+}
+#tracking-view .metric-grid[hidden] {
+  display: none;
+}
+#tracking-view .metric-card {
+  flex: 1 1 210px;
+  min-height: 0;
+  padding: 14px 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+#tracking-view .metric-card + .metric-card {
+  border-left: 1px solid #e4ebf3;
+}
+#tracking-view .metric-card > strong {
+  font-size: 18px;
+}
+#tracking-view .snapshot-route-context {
+  gap: 16px;
+}
+#tracking-view .primary-grid {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+#tracking-view .primary-grid:has(> #route-panel[hidden]) {
+  display: none;
+}
+#tracking-view .references-panel {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+#tracking-view .references-panel[hidden],
+#tracking-view #route-panel[hidden],
+#tracking-view #reported-history-panel[hidden] {
+  display: none;
+}
+#tracking-view .panel-header {
+  min-height: 50px;
+  padding: 14px 20px;
+  background: #fff;
+}
+#tracking-view .panel-header strong {
+  font-size: 15px;
+}
+#tracking-view .route-summary {
+  display: none;
+}
+#tracking-view .route-node,
+#tracking-view .route-node.is-complete,
+#tracking-view .route-node.is-active {
+  min-height: 145px;
+  padding: 16px;
+}
+#tracking-view .route-node.is-reported .route-dot {
+  color: #0866e8;
+  background: #eef5ff;
+  border-color: #a9c8f6;
+}
+#tracking-view .route-node.is-reported .route-evidence {
+  color: #315b89;
+  background: #f0f6ff;
+}
+#tracking-view .route-source-note {
+  padding: 10px 20px 14px;
+  margin: 0;
+  font-size: 11px;
+}
+#tracking-view #shipment-logistics-map {
+  grid-column: 2;
+  grid-row: 1;
+}
+#tracking-view #shipment-logistics-map .lnm-viewport {
+  height: 220px;
+  min-height: 180px;
+}
+#tracking-view .snapshot-route-context:has(.primary-grid > #route-panel[hidden]) #shipment-logistics-map {
+  grid-column: 1 / -1;
+}
+#tracking-view .carrier-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 28px;
+  padding: 16px 20px;
+}
+#tracking-view .carrier-fact-group {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+#tracking-view .carrier-fact-group h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #61788e;
+}
+#tracking-view .carrier-fact-list {
+  margin: 0;
+  display: block;
+}
+#tracking-view .carrier-fact-list > div {
+  display: grid;
+  grid-template-columns: minmax(100px, .65fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf1f6;
+  background: transparent;
+}
+#tracking-view .carrier-fact-list dt {
+  color: #61788e;
+  font-size: 12px;
+}
+#tracking-view .carrier-fact-list dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #20364f;
+  overflow-wrap: anywhere;
+}
+#tracking-view .snapshot-container-counts {
+  padding: 10px 20px;
+  gap: 14px 28px;
+  background: #f7faff;
+}
+#tracking-view .snapshot-container-counts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+#tracking-view .snapshot-container-counts dd {
+  font-size: 15px;
+  margin: 0;
+}
+#tracking-view .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+#tracking-view .table-scroll td,
+#tracking-view .table-scroll th {
+  padding: 12px 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+#tracking-view #container-table-body tr:not(.container-detail-row):hover {
+  background: #f7faff;
+}
+#tracking-view #snapshot-reported-history .tracking-json-history {
+  margin: 0;
+  border: 0;
+  border-radius: 8px;
+}
+#tracking-view .tracking-json-history h4 {
+  padding: 16px 20px 0;
+  font-size: 15px;
+  color: #20364f;
+}
+#tracking-view .tracking-json-history > p {
+  margin: 6px 20px 14px;
+  font-size: 12px;
+}
+#tracking-view #reported-tracking-details {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.tracking-source-archive {
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  background: #fff;
+}
+.tracking-source-archive > summary {
+  padding: 15px 20px;
+  color: #61788e;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.tracking-source-archive > summary:focus-visible {
+  outline: 2px solid #0866e8;
+  outline-offset: 3px;
+}
+.tracking-source-archive-body {
+  padding: 0 20px 18px;
+  border-top: 1px solid #e4ebf3;
+}
+.customer-profile-view {
+  max-width: 1040px;
+}
+.customer-profile-hero {
+  padding: 24px 28px;
+  margin-bottom: 18px;
+}
+.customer-profile-hero h1 {
+  font-size: clamp(25px, 3vw, 34px);
+}
+.customer-profile-card {
+  padding: 24px 28px;
+}
+@media (min-width: 861px) {
+  #tracking-view .snapshot-route-context:has(#shipment-logistics-map:not([hidden])) {
+    grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+  }
+  #tracking-view .snapshot-route-context:has(#shipment-logistics-map:not([hidden])) .primary-grid {
+    grid-column: 1;
+  }
+  #tracking-view .snapshot-route-context #shipment-logistics-map:not([hidden]) {
+    grid-row: 1;
+  }
+}
+@media (max-width: 1000px) {
+  #tracking-view .shipment-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #tracking-view .shipment-summary-grid .result-primary-facts {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid #e4ebf3;
+  }
+}
+@media (max-width: 860px) {
+  #tracking-view .snapshot-route-context {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #tracking-view #shipment-logistics-map,
+  #tracking-view .references-panel,
+  #tracking-view .primary-grid {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  #tracking-view .primary-grid { order: 0; }
+  #tracking-view #shipment-logistics-map { order: 1; }
+  #tracking-view .references-panel { order: 2; }
+  #tracking-view .carrier-facts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  #tracking-view .result-titlebar { padding: 16px; }
+  #tracking-view .shipment-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  #tracking-view .shipment-summary-grid > * {
+    border-left: 0;
+    padding: 14px 16px;
+  }
+  #tracking-view .shipment-summary-grid > * + * { border-top: 1px solid #e4ebf3; }
+  #tracking-view .result-meta { width: 100%; justify-content: flex-start; }
+  #tracking-view .carrier-fact-list > div { grid-template-columns: minmax(100px, .7fr) minmax(0, 1fr); }
+  #tracking-view .metric-card { flex-basis: 100%; }
+  #tracking-view .metric-card + .metric-card { border-left: 0; border-top: 1px solid #e4ebf3; }
+  .customer-profile-hero, .customer-profile-card { padding: 20px; }
+  .customer-profile-card dl { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The full-width progress owns its row. Map and reference tables follow in
+ * normal flow, so older grid-column rules cannot place them over milestones. */
+#tracking-view #snapshot-route-context {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+#tracking-view #snapshot-route-context > * {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#tracking-view .shipment-information-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 520px);
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+#tracking-view .shipment-information-grid > * {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+#tracking-view .shipment-information-grid #shipment-logistics-map {
+  max-width: 520px;
+  grid-column: auto;
+  grid-row: auto;
+}
+#tracking-view .shipment-information-grid .carrier-facts-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+#tracking-view .shipment-information-grid:has(> #shipment-logistics-map[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+#tracking-view .shipment-information-grid:has(> #carrier-facts-panel[hidden]) {
+  grid-template-columns: minmax(0, 520px);
+}
+#tracking-view .shipment-information-grid:has(> #carrier-facts-panel[hidden]):has(> #shipment-logistics-map[hidden]) {
+  display: none;
+}
+#tracking-view #snapshot-route-context .primary-grid,
+#tracking-view #snapshot-route-context .references-panel,
+#tracking-view #snapshot-route-context #shipment-logistics-map {
+  order: initial;
+}
+#tracking-view #snapshot-route-context #shipment-logistics-map {
+  width: 100%;
+  max-width: 520px;
+  align-self: flex-start;
+}
+#tracking-view #shipment-logistics-map :is(.lnm, .lnm-body, .lnm-stage) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+#tracking-view #shipment-logistics-map .lnm-stage:only-child {
+  display: block;
+}
+#tracking-view #shipment-logistics-map .lnm-viewport {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 2;
+  box-sizing: border-box;
+}
+
+/* A saved result needs a compact lookup bar, not a second large page hero. */
+#tracking-view:has(#results:not([hidden])) .page-heading {
+  min-height: 0;
+  margin-block: 0 12px;
+  padding-block: 0;
+}
+#tracking-view:has(#results:not([hidden])) .page-heading h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.4;
+}
+#tracking-view:has(#results:not([hidden])) .page-heading > div:first-child > p {
+  display: none;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel {
+  min-height: 0;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+}
+#tracking-view:has(#results:not([hidden])) .tracking-query-header {
+  display: none;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel .number-field {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel .number-field label {
+  margin-bottom: 5px;
+  font-size: 11px;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel input {
+  min-height: 40px;
+  height: 40px;
+  font-size: 13px;
+}
+#tracking-view:has(#results:not([hidden])) .query-panel #submit-button {
+  grid-column: 2;
+  grid-row: 1;
+  width: auto;
+  min-height: 40px;
+  height: 40px;
+  padding-inline: 18px;
+  align-self: end;
+}
+
+@media (max-width: 760px) {
+  #tracking-view .shipment-information-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #tracking-view #route-flow {
+    display: block;
+    padding: 18px 16px 0;
+  }
+  #tracking-view #route-flow .route-node,
+  #tracking-view #route-flow .route-node.is-complete,
+  #tracking-view #route-flow .route-node.is-active {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-rows: repeat(6, auto);
+    gap: 6px 14px;
+    min-height: 0;
+    padding: 0 0 22px;
+    text-align: left;
+    align-items: start;
+  }
+  #tracking-view #route-flow .route-node > * {
+    position: static;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    grid-column: 2;
+    align-self: start;
+    justify-self: start;
+    overflow-wrap: anywhere;
+  }
+  #tracking-view #route-flow .route-node > .route-dot { grid-column: 1; grid-row: 1 / span 6; }
+  #tracking-view #route-flow .route-node > .route-stage-label { grid-row: 1; }
+  #tracking-view #route-flow .route-node > .route-evidence { grid-row: 2; width: fit-content; }
+  #tracking-view #route-flow .route-node > strong { grid-row: 3; justify-content: flex-start; }
+  #tracking-view #route-flow .route-node > .route-event-name { grid-row: 4; }
+  #tracking-view #route-flow .route-node > .route-node-times { grid-row: 5; width: 100%; }
+  #tracking-view #route-flow .route-node > .route-current-label { grid-row: 6; }
+  #tracking-view #route-flow .route-node::before,
+  #tracking-view #route-flow .route-node:nth-child(3n)::before {
+    top: 43px;
+    bottom: 5px;
+    left: 18px;
+    right: auto;
+    width: 0;
+    height: auto;
+    border-top: 0;
+    border-left: 1px solid #d2deec;
+  }
+  #tracking-view #route-flow .route-node:last-child::before { display: none; }
+  #tracking-view #shipment-logistics-map .lnm-viewport { aspect-ratio: 2; }
+  #tracking-view:has(#results:not([hidden])) .query-panel { padding: 10px 12px; }
+  #tracking-view:has(#results:not([hidden])) .query-panel #submit-button { padding-inline: 12px; font-size: 12px; }
+}
