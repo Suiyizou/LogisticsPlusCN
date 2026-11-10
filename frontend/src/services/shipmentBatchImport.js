@@ -510,12 +510,14 @@ export function buildShipmentBatchPreview(
     mappings: [],
     adapterMode
   };
-  if (sheet?.resultSheet)
+  if (sheet?.resultSheet) {
     preview.errors.push({
       row: sheet.headerRow,
       code: "RESULT_WORKBOOK",
       message: "Tracking result workbook is not a task import workbook"
     });
+    return preview;
+  }
   if (sheet && !sheet.resultSheet && !sheet.columns.some((column) => column.score > 0)) {
     preview.errors.push({
       row: sheet.headerRow,
@@ -605,7 +607,7 @@ export function buildShipmentBatchPreview(
     const generic = kind === "GENERIC";
     const selectedType = generic ? "BOOKING"
       : kind || (suggestion?.referenceColumnIndex === col ? suggestion.referenceType : referenceType);
-    const headerType = generic && declared ? rowType || "" : selectedType;
+    const headerType = declared ? rowType || "" : selectedType;
     const defaultedBooking = generic && !declared;
     if (!cells.some(Boolean)) {
       preview.skipped++;
@@ -675,7 +677,7 @@ export function buildShipmentBatchPreview(
     };
     if (!validShipmentBatchReference(rawReference))
       add("INVALID_REFERENCE", "Reference contains unrecognized text or multiple identifiers");
-    if (generic && declared && !rowType) add("MISSING_TYPE", "Unknown reference type in the source type column");
+    if (declared && !rowType) add("MISSING_TYPE", "Unknown reference type in the source type column");
     if (headerType === "CONTAINER" && !isShipmentContainerNumber(rawReference))
       add("INVALID_CONTAINER", "Container references require the full equipment number");
     if (headerType !== "CONTAINER" && !defaultedBooking && isShipmentContainerReference(rawReference))

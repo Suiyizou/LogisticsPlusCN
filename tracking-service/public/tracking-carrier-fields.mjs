@@ -11,6 +11,8 @@
  * Pure functions only: no DOM, no network, no persistence.
  */
 
+import { shipmentBusinessFactGroups } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
+
 const LABEL = (zh, en) => ({ zh, en });
 const same = (label) => LABEL(label, label);
 
@@ -676,6 +678,7 @@ export function carrierKeyFacts(snapshot, language = "zh") {
   const reportedTimes = labelledCarrierTimes(snapshot, key);
   if (reportedTimes.length)
     groups.push({ id: "reported-times", title: key === "en" ? "Carrier-reported times" : "船司报告时间", items: reportedTimes });
+  groups.push(...shipmentBusinessFactGroups(snapshot, key));
   return groups;
 }
 

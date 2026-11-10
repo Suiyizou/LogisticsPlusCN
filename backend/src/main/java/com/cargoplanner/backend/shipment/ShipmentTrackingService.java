@@ -140,6 +140,9 @@ public class ShipmentTrackingService {
 
   static void markSingleResponse(ObjectNode envelope) {
     ObjectNode snapshot = (ObjectNode) envelope.path("snapshot");
+    ObjectNode clean = (ObjectNode) TrackingSnapshotPrivacy.sanitize(snapshot);
+    snapshot.removeAll();
+    snapshot.setAll(clean);
     snapshot.put("deliveryMode", SINGLE_RESPONSE);
     snapshot.remove("supplementalDetails");
     if (envelope.path("enrichment") instanceof ObjectNode enrichment) {
@@ -3262,6 +3265,7 @@ public class ShipmentTrackingService {
   public static JsonNode projectSnapshotDelivery(
       JsonNode snapshot, ShipmentTrackingProperties properties
   ) {
+    snapshot = TrackingSnapshotPrivacy.sanitize(snapshot);
     if (snapshot instanceof ObjectNode saved
         && (!properties.supportsLegacySupplemental()
             || !LEGACY_SUPPLEMENTAL.equals(saved.path("deliveryMode").asText()))) {

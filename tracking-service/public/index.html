@@ -21,18 +21,18 @@
     />
     <link rel="stylesheet" href="./fonts/brand-fonts.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./styles.css?v=maritime-v2-20261028-r3" />
-    <link rel="stylesheet" href="./design-system.css?v=maritime-v2-20261028-r3" />
+    <link rel="stylesheet" href="./design-system.css?v=20261108-navy-sidebar" />
     <!-- A versioned link also replaces brand tokens held by an older immutable cache. -->
     <link rel="stylesheet" href="./brand-tokens.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./tracking-refinement.css?v=maritime-v2-20261028-r3" />
     <link rel="stylesheet" href="./tracking-composition.css?v=maritime-comp-20261028" />
     <link rel="stylesheet" href="./tracking-milestones.css?v=reference-fidelity-20261029-r2" />
-    <link rel="stylesheet" href="./workspace-navigation.css?v=carrier-workspace-20261029" />
+    <link rel="stylesheet" href="./workspace-navigation.css?v=20261108-navy-sidebar" />
     <link rel="stylesheet" href="./tracking-json-preview.css?v=20261108-shipment-detail" />
     <link rel="stylesheet" href="./tracking-workspace.css?v=20261106-tracking-reference" />
     <link rel="stylesheet" href="./logistics-network-map.css?v=20261104-route-map-entry" />
-    <link rel="stylesheet" href="./tracking-detail.css?v=20261108-shipment-detail" />
-    <script src="./app.js?v=20261108-shipment-detail" type="module"></script>
+    <link rel="stylesheet" href="./tracking-detail.css?v=20261108-carrier-details-r4" />
+    <script src="./app.js?v=20261108-carrier-details-r4" type="module"></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -1236,6 +1236,10 @@
                       </div>
                       <span id="route-count">0 nodes</span>
                     </div>
+                    <div class="tracking-detail-filter" id="route-container-filter" hidden>
+                      <label for="route-container-select" data-i18n="route.containerProgress">Container progress</label>
+                      <select id="route-container-select"></select>
+                    </div>
                     <div class="route-summary">
                       <div>
                         <small data-i18n="route.origin">Origin</small>
@@ -1431,6 +1435,7 @@
                     </div>
                     <span id="container-count">0 containers</span>
                   </div>
+                  <p class="snapshot-empty" id="snapshot-detail-coverage" role="status" hidden></p>
                   <dl class="snapshot-container-counts" id="snapshot-container-counts" hidden>
                     <div>
                       <dt data-i18n="containers.declared">Carrier-declared containers</dt>
@@ -1457,11 +1462,14 @@
                           <th data-i18n="containers.type">Type</th>
                           <th data-i18n="containers.seal">Seal number</th>
                           <th data-i18n="containers.weight">Weight as reported</th>
+                          <th data-i18n="containers.tare">Equipment tare (kg)</th>
+                          <th data-i18n="containers.payload">Maximum payload (kg)</th>
                           <th data-i18n="containers.mode">Mode</th>
                           <th data-i18n="containers.terms">Terms</th>
                           <th data-i18n="containers.location">Current location</th>
                           <th data-i18n="containers.status">Latest status</th>
                           <th data-i18n="containers.time">Status time</th>
+                          <th data-i18n="containers.eta">Container ETA</th>
                           <th data-i18n="containers.details">Details</th>
                         </tr>
                       </thead>

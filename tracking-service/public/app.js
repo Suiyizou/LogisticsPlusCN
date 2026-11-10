@@ -9,7 +9,8 @@ import {
   uniqueMilestones,
   currentMilestoneIndex,
   containerMilestoneTiming
-} from "./tracking-milestones.mjs";
+} from "./tracking-milestones.mjs?v=20261108-carrier-details-r4";
+import { detailCaptureLabel, eventVesselLabel, eventTerminalLabel, eventLoadLabel, containerBusinessFacts, reportedTimeLabel, progressEventPresentation, routeLocationLabel } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
 import { renderTrackingWorkspaceNavigation } from "./workspace-navigation.mjs";
 import { createFilePreviewLifecycle } from "./file-preview-lifecycle.mjs";
 import { shipmentListIndicators } from "./shipment-list-status.mjs?v=20261105";
@@ -24,7 +25,7 @@ import {
 import {
   carrierFactsProvenance,
   carrierKeyFacts
-} from "./tracking-carrier-fields.mjs?v=20261108-shipment-detail";
+} from "./tracking-carrier-fields.mjs?v=20261108-carrier-details-r4";
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
@@ -37,13 +38,14 @@ import {
   usesLegacySupplementalDelivery,
   normalizeTrackingPayload,
   trackingProgressNodes,
+  progressContainerNumbers,
   detailSections,
   createCarrierBadge
-} from "./tracking-v1-adapter.mjs?v=20261108-shipment-detail";
+} from "./tracking-v1-adapter.mjs?v=20261108-carrier-details-r4";
 import {
   installLocalTrackingPreview,
   renderTrackingHistory
-} from "./tracking-json-preview.mjs?v=20261108-shipment-detail";
+} from "./tracking-json-preview.mjs?v=20261108-carrier-details-r4";
 import {
   carrierReferenceForDisplay,
   reportedRouteTime,
@@ -981,6 +983,7 @@ const MESSAGES = {
     "journey.noBusinessData": "No business data",
     "references.empty": "No additional references supplied.",
     "route.title": "Shipment milestones",
+    "route.containerProgress": "Container progress",
     "route.origin": "Origin",
     "route.destination": "Destination",
     "route.nodes": "{count} nodes",
@@ -1057,6 +1060,14 @@ const MESSAGES = {
     "containers.openDetails": "View timeline",
     "containers.closeDetails": "Hide timeline",
     "containers.noMilestones": "No container-specific milestones were returned.",
+    "containers.tare": "Equipment tare (kg)",
+    "containers.payload": "Maximum payload (kg)",
+    "containers.eta": "Container ETA",
+    "containers.event": "Logistics event",
+    "containers.timeType": "Time type",
+    "containers.terminal": "Terminal / depot",
+    "containers.vesselVoyage": "Vessel / voyage",
+    "containers.loadStatus": "Empty / laden",
     "containers.enriched": "Completed by container sub-query",
     "containers.empty": "The carrier did not provide container-level details.",
     "containers.declared": "Carrier-declared containers",
@@ -1689,6 +1700,15 @@ const MESSAGES = {
     "containers.seal": "封条号",
     "containers.weight": "重量（船司原值）",
     "route.time.reported": "船司报告时间",
+    "route.containerProgress": "本箱进度",
+    "containers.tare": "箱体自重（kg）",
+    "containers.payload": "最大载荷（kg）",
+    "containers.eta": "该箱预计到达",
+    "containers.event": "物流记录",
+    "containers.timeType": "时间性质",
+    "containers.terminal": "码头 / 堆场",
+    "containers.vesselVoyage": "船名 / 航次",
+    "containers.loadStatus": "空重状态",
     "route.evidence.reported": "船司报告节点",
     "route.event.departure": "船舶离港",
     "route.event.arrival": "船舶到港",
@@ -1877,6 +1897,8 @@ const elements = Object.fromEntries(
     "destination-code",
     "route-count",
     "route-flow",
+    "route-container-filter",
+    "route-container-select",
     "route-panel",
     "route-summary-line",
     "route-summary-marker",
@@ -1905,6 +1927,7 @@ const elements = Object.fromEntries(
     "snapshot-references-empty",
     "snapshot-milestone-note",
     "snapshot-container-counts",
+    "snapshot-detail-coverage",
     "snapshot-declared-count",
     "snapshot-returned-count",
     "snapshot-containers-empty",
@@ -2078,9 +2101,7 @@ function valueOrDash(value, fallback = "—") {
 }
 
 function formatDateTime(value, timezone) {
-  if (!value) return "—";
-  const formatted = String(value).replace("T", " ");
-  return timezone ? `${formatted} ${timezone}` : formatted;
+  return reportedTimeLabel(value, timezone);
 }
 
 function formatLocalDateTime(value) {
@@ -6438,6 +6459,7 @@ function routeStageKind(node, index, total) {
   const locationType = String(node?.locationType ?? "")
     .trim()
     .toUpperCase();
+  if (locationType === "REPORTED") return "waypoint";
   if (locationType === "FND" || locationType.includes("FINAL")) return "destination";
   if (["LPOD", "POD"].includes(locationType) || locationType.includes("DISCHARGE")) {
     return "arrival";
@@ -6517,7 +6539,9 @@ function renderRoute(route) {
   const currentIndex = currentMilestoneIndex(route);
 
   route.forEach((node, index) => {
-    const stage = routeStageKind(node, index, route.length);
+    const presentation = progressEventPresentation(node, currentLanguage);
+    const stage = presentation?.icon || routeStageKind(node, index, route.length);
+    const stageLabel = presentation?.label || t(`route.stage.${stage}`);
     const timing = milestoneTiming(node);
     const item = document.createElement("article");
     item.setAttribute("role", "listitem");
@@ -6534,18 +6558,18 @@ function renderRoute(route) {
     const dot = document.createElement("span");
     dot.className = `route-dot route-stage-icon route-stage-icon-${stage}`;
     dot.innerHTML = ROUTE_STAGE_ICONS[stage];
-    dot.setAttribute("aria-label", t(`route.stage.${stage}`));
-    dot.title = t(`route.stage.${stage}`);
+    dot.setAttribute("aria-label", stageLabel);
+    dot.title = stageLabel;
 
     const type = document.createElement("small");
     type.className = "route-stage-label";
-    type.textContent = t(`route.stage.${stage}`);
+    type.textContent = stageLabel;
 
     const city = document.createElement("strong");
     city.append(
       createCountryFlag(node.countryCode),
       document.createTextNode(
-        [node.city, node.countryCode].filter(Boolean).join(", ") || t("route.unknownLocation")
+        routeLocationLabel(node) || t("route.unknownLocation")
       )
     );
 
@@ -6554,6 +6578,7 @@ function renderRoute(route) {
     event.textContent = node.typedEvent
       ? t(`route.event.${node.typedEvent}`)
       : valueOrDash(node.event, t("route.noEvent"));
+    if (node.containerNumber) event.textContent += ` · ${node.containerNumber}`;
 
     const evidence = document.createElement("span");
     evidence.className = "route-evidence";
@@ -6591,6 +6616,25 @@ function renderRoute(route) {
     }
     elements["route-flow"].append(item);
   });
+}
+
+function renderProgressContainerControl(snapshot) {
+  const numbers = progressContainerNumbers(snapshot);
+  const select = elements["route-container-select"];
+  const identity = [snapshot.provider?.code, snapshot.tracking?.type, snapshot.tracking?.number].join("|");
+  const previous = select.dataset.snapshotIdentity === identity ? select.value : "";
+  select.dataset.snapshotIdentity = identity;
+  select.replaceChildren();
+  for (const number of numbers) {
+    const option = document.createElement("option");
+    option.value = number;
+    option.textContent = number;
+    select.append(option);
+  }
+  select.value = numbers.includes(previous) ? previous : numbers[0] || "";
+  elements["route-container-filter"].hidden = numbers.length < 2;
+  select.onchange = () => renderRoute(trackingProgressNodes(snapshot, { containerNumber: select.value }));
+  return { route: trackingProgressNodes(snapshot, { containerNumber: numbers.length ? select.value : "" }), hasSelector: numbers.length > 1 };
 }
 
 function renderRoutingLegs(legs) {
@@ -6764,48 +6808,60 @@ function renderContainerMilestones(cell, container) {
   wrapper.append(heading);
 
   const milestones = container.milestones ?? [];
-  if (milestones.length === 0) {
+  const facts = containerBusinessFacts(container, currentLanguage);
+  if (facts.length) {
+    const factsTable = document.createElement("table");
+    const body = document.createElement("tbody");
+    for (const fact of facts) {
+      const row = document.createElement("tr");
+      const label = document.createElement("th");
+      label.scope = "row";
+      label.textContent = fact.label;
+      row.append(label);
+      appendCell(row, fact.value);
+      body.append(row);
+    }
+    factsTable.append(body);
+    const factsWrap = document.createElement("div");
+    factsWrap.className = "table-scroll";
+    factsWrap.append(factsTable);
+    wrapper.append(factsWrap);
+  }
+  if (milestones.length === 0 && facts.length === 0) {
     const empty = document.createElement("p");
     empty.textContent = t("containers.noMilestones");
     wrapper.append(empty);
-  } else {
+  } else if (milestones.length > 0) {
     const timeline = document.createElement("div");
-    timeline.className = "container-milestone-timeline";
+    timeline.className = "table-scroll";
+    const table = document.createElement("table");
+    const head = document.createElement("thead");
+    const header = document.createElement("tr");
+    const hasLoadStatus = milestones.some((event) => eventLoadLabel(event, currentLanguage));
+    for (const key of ["containers.number", "containers.timeType", "containers.time", "containers.event", ...(hasLoadStatus ? ["containers.loadStatus"] : []), "containers.location", "containers.terminal", "containers.vesselVoyage"]) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = t(key);
+      header.append(cell);
+    }
+    head.append(header);
+    const body = document.createElement("tbody");
     for (const milestone of milestones) {
       const timing = containerMilestoneTiming(milestone);
-      const item = document.createElement("article");
-      item.className = `is-${timing.state}`;
-      const marker = document.createElement("i");
-      marker.setAttribute("aria-hidden", "true");
-      const copy = document.createElement("span");
-      const name = document.createElement("strong");
-      const meta = document.createElement("small");
-      name.textContent = valueOrDash(milestone.name, t("route.noEvent"));
-      meta.textContent = [milestone.location, milestone.transportMode].filter(Boolean).join(" · ");
-      const evidence = document.createElement("small");
-      evidence.className = "container-milestone-evidence";
-      evidence.textContent = t(`route.evidence.${timing.state}`);
-      copy.append(evidence);
-      for (const kind of ["actual", "estimated"]) {
-        if (!timing[kind]) continue;
-        const time = document.createElement("small");
-        time.textContent = `${t(`route.time.${kind}`)} · ${formatDateTime(timing[kind], milestone.timezone)}`;
-        copy.append(time);
-      }
-      if (timing.state === "unknown") {
-        const unknown = document.createElement("small");
-        unknown.textContent = t("route.time.unknown");
-        copy.append(unknown);
-        if (milestone.reportedTime) {
-          const reported = document.createElement("small");
-          reported.textContent = `${currentLanguage === "zh" ? "源数据时间" : "Reported time"} · ${milestone.reportedTime}`;
-          copy.append(reported);
-        }
-      }
-      copy.append(name, meta);
-      item.append(marker, copy);
-      timeline.append(item);
+      const row = document.createElement("tr");
+      const kind = timing.state === "unknown" && milestone.reportedTime ? "reported" : timing.state;
+      appendCell(row, milestone.containerNumber || container.number);
+      appendCell(row, t(`route.time.${kind}`));
+      appendCell(row, formatDateTime(milestone.reportedTime || timing.actual || timing.estimated, milestone.timezone));
+      appendCell(row, milestone.name);
+      if (hasLoadStatus) appendCell(row, eventLoadLabel(milestone, currentLanguage));
+      appendCell(row, milestone.location);
+      appendCell(row, eventTerminalLabel(milestone));
+      appendCell(row, eventVesselLabel(milestone, currentLanguage) || milestone.transportMode);
+      body.append(row);
     }
+    table.append(head, body);
+    timeline.append(table);
     wrapper.append(timeline);
   }
   cell.append(wrapper);
@@ -6813,6 +6869,9 @@ function renderContainerMilestones(cell, container) {
 
 function renderContainers(snapshot) {
   const containers = snapshot.containers ?? [];
+  const coverage = detailCaptureLabel(snapshot, currentLanguage);
+  elements["snapshot-detail-coverage"].hidden = !coverage;
+  elements["snapshot-detail-coverage"].textContent = coverage;
   const { declared, returned } = snapshotContainerCounts(snapshot);
   const countsDiffer = declared !== null && declared !== returned;
   elements["snapshot-container-counts"].hidden = !countsDiffer;
@@ -6830,13 +6889,16 @@ function renderContainers(snapshot) {
 
   const visibleColumns = [
     true,
-    ...["type", "seal", "weight", "transportMode", "trafficTerm", "currentLocation", "latestEvent"].map((key) =>
+    ...["type", "seal", "weight"].map((key) =>
       containers.some((container) => hasText(container[key]))
     ),
+    ...["tareKg", "payloadKg"].map((key) => containers.some((container) => typeof container[key] === "number" && container[key] >= 0)),
+    ...["transportMode", "trafficTerm", "currentLocation", "latestEvent"].map((key) => containers.some((container) => hasText(container[key]))),
     containers.some((container) =>
       hasText(container.latestEventTime || container.reportedStatusTime)
     ),
-    containers.some((container) => (container.milestones ?? []).length > 0)
+    containers.some((container) => hasText(container.estimatedArrivalRaw || container.estimatedArrival)),
+    containers.some((container) => (container.milestones ?? []).length > 0 || containerBusinessFacts(container, currentLanguage).length > 0)
   ];
   document.querySelectorAll("#container-panel thead th").forEach((cell, index) => {
     cell.hidden = !visibleColumns[index];
@@ -6847,18 +6909,21 @@ function renderContainers(snapshot) {
     appendCell(row, container.type);
     appendCell(row, container.seal);
     appendCell(row, container.weight);
+    appendCell(row, typeof container.tareKg === "number" ? `${container.tareKg} kg` : null);
+    appendCell(row, typeof container.payloadKg === "number" ? `${container.payloadKg} kg` : null);
     appendCell(row, container.transportMode);
     appendCell(row, container.trafficTerm);
     appendCell(row, container.currentLocation);
     appendCell(row, container.latestEvent);
-    appendCell(row, formatDateTime(container.latestEventTime || container.reportedStatusTime));
+    appendCell(row, formatDateTime(container.reportedStatusTime || container.latestEventTime, container.timezone));
+    appendCell(row, formatDateTime(container.estimatedArrivalRaw || container.estimatedArrival, container.timezone));
     const actionCell = document.createElement("td");
     const detailsButton = document.createElement("button");
     detailsButton.type = "button";
     detailsButton.className = "container-details-button";
     detailsButton.textContent = t("containers.openDetails");
     detailsButton.setAttribute("aria-expanded", "false");
-    const showMilestoneDetails = (container.milestones ?? []).length > 0;
+    const showMilestoneDetails = (container.milestones ?? []).length > 0 || containerBusinessFacts(container, currentLanguage).length > 0;
     if (showMilestoneDetails) actionCell.append(detailsButton);
     else actionCell.textContent = "—";
     row.append(actionCell);
@@ -7303,14 +7368,15 @@ function renderResult(payload) {
   elements["destination-name"].textContent = valueOrDash(summary.destination?.name);
   elements["destination-code"].textContent = valueOrDash(summary.destination?.countryCode);
 
-  const route = selectDisplayRouteNodes(trackingProgressNodes(snapshot));
+  const progress = renderProgressContainerControl(snapshot);
+  const route = selectDisplayRouteNodes(progress.route);
   const routingLegs = snapshot.routingLegs ?? [];
   const { declared } = snapshotContainerCounts(snapshot);
   const reportedHistoryCount = renderTrackingHistory(document, snapshot, currentLanguage);
-  elements["route-panel"].hidden = route.length === 0;
+  elements["route-panel"].hidden = route.length === 0 && !progress.hasSelector;
   elements["routing-panel"].hidden = routingLegs.length === 0;
   elements["secondary-grid"].hidden = !sections.containers && declared === null;
-  elements["route-flow"].hidden = route.length === 0;
+  elements["route-flow"].hidden = route.length === 0 && !progress.hasSelector;
   elements["snapshot-milestone-note"].hidden = route.length === 0;
 
   renderRoute(route);

@@ -6,17 +6,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /** Maps source-reported facts without assigning guessed event or timezone semantics. */
 final class TrackingV1SnapshotMapper {
   private static final int SOURCE_FIELD_LIMIT = 200;
   private static final int SOURCE_VALUE_LIMIT = 8_192;
-  private static final Set<String> NON_BUSINESS_KEYS = Set.of(
-      "meta", "metadata", "evidence", "provenance", "textpath", "screenshotpath", "artifactpath",
-      "cookie", "cookies", "setcookie", "authorization", "headers", "password", "token",
-      "accesstoken", "refreshtoken", "sessiontoken", "idtoken", "apikey", "secret", "clientsecret");
+  private static final Set<String> DETAIL_SOURCE_KINDS = Set.of(
+      "PAGE_TEXT", "PAGE_OVERVIEW", "PAGE_DETAIL", "PAGE_DETAILS", "PDF_DOWNLOAD", "PDF_TEXT");
   private final ObjectMapper mapper;
 
   TrackingV1SnapshotMapper(ObjectMapper mapper) {
@@ -24,7 +21,7 @@ final class TrackingV1SnapshotMapper {
   }
 
   ObjectNode map(JsonNode record, NormalizedTrackRequest request, String fetchedAt, String jobId) {
-    JsonNode shipment = record.path("shipment");
+    JsonNode shipment = businessValue(record.path("shipment"));
     JsonNode fields = shipment.path("fields");
     JsonNode route = shipment.path("route");
     JsonNode vessel = route.path("vessel");
@@ -122,19 +119,25 @@ final class TrackingV1SnapshotMapper {
       target.put("currentLocation", text(container.path("position")));
       target.put("latestEvent", text(container.path("latest_status")));
       target.put("latestEventTime", text(container.path("status_time")));
-      target.put("reportedStatusTime", text(container.path("status_time")));
-      target.put("seal", first(container.path("seal"), container.path("seal_number")));
+      target.put("reportedStatusTime", first(container.path("status_time_raw"), container.path("status_time")));
+      target.put("timezone", text(container.path("timezone")));
+      String seal = first(container.path("seal"), container.path("seal_number"), container.path("extra").path("seal"), container.path("extra").path("seal_number"));
+      target.put("seal", seal != null && !seal.contains("*") && !seal.contains("•") ? seal : null);
       target.put("weight", text(container.path("weight")));
+      if (container.path("extra").isObject()) target.set("extra", businessValue(container.path("extra")));
+      equipmentKg(target, "tareKg", container.path("tare_kg"));
+      equipmentKg(target, "payloadKg", container.path("payload_kg"));
+      target.put("estimatedArrival", text(container.path("eta")));
+      target.put("estimatedArrivalRaw", first(container.path("eta_raw"), container.path("eta")));
+      target.put("estimatedArrivalLabel", text(container.path("eta_label")));
       ArrayNode milestones = target.putArray("milestones");
       for (JsonNode event : array(container.path("events"))) {
         ObjectNode mapped = event(event, milestones.size() + 1, "container.events", false);
         if (mapped == null) continue;
         ObjectNode milestone = milestones.addObject();
-        milestone.set("name", mapped.path("name"));
+        milestone.setAll(mapped);
         milestone.putNull("time");
-        milestone.set("reportedTime", mapped.path("reportedTime"));
-        milestone.set("location", mapped.path("location"));
-        milestone.set("transportMode", mapped.path("transportMode"));
+        milestone.put("containerNumber", first(mapped.path("containerNumber"), container.path("number")));
       }
     }
     ArrayNode events = snapshot.putArray("events");
@@ -151,13 +154,15 @@ final class TrackingV1SnapshotMapper {
     source.put("vessel", vesselName);
     source.put("voyage", voyage);
     source.put("confidence", text(meta.path("confidence")));
+    JsonNode capture = detailCapture(meta.path("detail_capture"));
+    if (capture != null) source.set("detailCapture", capture);
     source.put("businessVerified", false);
     source.put("noBusinessData", "NO_BUSINESS_DATA".equals(text(query.path("status"))));
     JsonNode evidence = record.path("evidence");
     source.put("evidenceAvailable", first(evidence.path("text_path"),
         evidence.path("screenshot_path")) != null);
     ArrayNode warnings = source.putArray("warnings");
-    for (JsonNode warning : array(meta.path("warnings"))) {
+    for (JsonNode warning : array(businessValue(meta.path("warnings")))) {
       String value = text(warning);
       if (value != null) warnings.add(value);
     }
@@ -180,13 +185,15 @@ final class TrackingV1SnapshotMapper {
         continue;
       }
       appendSourceFields(sourceFields, container, path,
-          "number type movement terms position latest_status status_time seal seal_number weight events");
+          "number type movement terms position latest_status status_time status_time_raw timezone seal seal_number weight tare_kg payload_kg eta eta_raw eta_label events");
       appendSourceRows(sourceFields, container.path("events"), path + ".events",
           "description status name time date time_raw location mode");
       if (sourceFields.size() >= SOURCE_FIELD_LIMIT) break;
     }
     JsonNode extra = businessValue(shipment.path("fields_extra"));
     source.set("extraFields", extra.isObject() ? extra : mapper.createObjectNode());
+    JsonNode businessExtras = extra.path("extra");
+    source.set("businessExtras", businessExtras.isObject() ? businessExtras.deepCopy() : mapper.createObjectNode());
     ArrayNode additional = source.putArray("additionalEvents");
     appendEvents(additional, extra.path("hmm_history"), "hmm_history", true);
     appendEvents(additional, extra.path("msc_events"), "msc_events", true);
@@ -218,6 +225,7 @@ final class TrackingV1SnapshotMapper {
       if (path.startsWith("shipment.containers.") && mappedKeys.contains("events")
           && "events".equals(field.getKey())) continue;
       value = businessValue(value);
+      if (value.isMissingNode() || value.isNull()) continue;
       if (value.isContainerNode() && value.isEmpty()) continue;
       String rawText = value.isTextual() ? value.asText() : value.toString();
       ObjectNode entry = target.addObject();
@@ -236,23 +244,46 @@ final class TrackingV1SnapshotMapper {
   }
 
   private boolean isBusinessKey(String key) {
-    return !NON_BUSINESS_KEYS.contains(key.toLowerCase(Locale.ROOT).replaceAll("[_ -]", ""));
+    return TrackingSnapshotPrivacy.isPublicKey(key) && !"provenance".equalsIgnoreCase(key);
   }
 
   private JsonNode businessValue(JsonNode value) {
-    if (value.isObject()) {
-      ObjectNode result = mapper.createObjectNode();
-      value.fields().forEachRemaining(field -> {
-        if (isBusinessKey(field.getKey())) result.set(field.getKey(), businessValue(field.getValue()));
-      });
-      return result;
+    return TrackingSnapshotPrivacy.sanitize(value);
+  }
+
+  private void equipmentKg(ObjectNode target, String key, JsonNode value) {
+    if (value.isNumber() && value.doubleValue() >= 0) target.set(key, value.deepCopy());
+  }
+
+  private JsonNode detailCapture(JsonNode value) {
+    String status = text(value.path("status"));
+    if (!List.of("captured", "partial", "overview_only", "unverified").contains(status == null ? "" : status)) return null;
+    ObjectNode capture = mapper.createObjectNode();
+    JsonNode coverage = value.path("coverage");
+    capture.put("status", status);
+    capture.put("scopeComplete", coverage.path("scope_complete").asBoolean(false));
+    JsonNode declared = coverage.path("declared_containers");
+    if (declared.isIntegralNumber() && declared.asInt() >= 0) capture.set("declaredContainers", declared.deepCopy());
+    else capture.putNull("declaredContainers");
+    capture.put("overviewCount", uniqueTextCount(coverage.path("overview_containers")));
+    capture.put("detailedCount", uniqueTextCount(coverage.path("detailed_containers")));
+    capture.put("pendingCount", uniqueTextCount(coverage.path("pending_containers")));
+    ArrayNode kinds = capture.putArray("sourceKinds");
+    Set<String> seen = new java.util.LinkedHashSet<>();
+    for (JsonNode source : array(value.path("sources"))) {
+      String kind = text(source.path("kind"));
+      if (kind != null && DETAIL_SOURCE_KINDS.contains(kind) && seen.add(kind)) kinds.add(kind);
     }
-    if (value.isArray()) {
-      ArrayNode result = mapper.createArrayNode();
-      value.forEach(item -> result.add(businessValue(item)));
-      return result;
+    return capture;
+  }
+
+  private int uniqueTextCount(JsonNode values) {
+    Set<String> seen = new java.util.HashSet<>();
+    for (JsonNode value : array(values)) {
+      String item = text(value);
+      if (item != null) seen.add(item);
     }
-    return value;
+    return seen.size();
   }
 
   private void appendEvents(ArrayNode target, JsonNode values, String source, boolean joinDate) {
@@ -266,7 +297,8 @@ final class TrackingV1SnapshotMapper {
     if (!value.isObject()) return null;
     String name = first(value.path("description"), value.path("status"),
         value.path("name"), value.path("raw"));
-    String time = first(value.path("time_raw"), value.path("time"), value.path("date"));
+    String typedTime = first(value.path("time"), value.path("date"));
+    String time = first(value.path("time_raw"), value.path("reportedTime"), value.path("time"), value.path("date"));
     if (joinDate && text(value.path("date")) != null && text(value.path("time")) != null
         && text(value.path("time_raw")) == null) {
       time = text(value.path("date")) + " " + text(value.path("time"));
@@ -278,12 +310,29 @@ final class TrackingV1SnapshotMapper {
     else result.put("sequence", sequence);
     result.put("name", name);
     result.putNull("occurredAt");
+    result.putNull("estimatedAt");
+    String timeType = text(value.path("time_type"));
+    if (!List.of("ACTUAL", "ESTIMATED", "REPORTED").contains(timeType == null ? "" : timeType)) timeType = "REPORTED";
+    if ("ACTUAL".equals(timeType)) result.put("occurredAt", typedTime);
+    if ("ESTIMATED".equals(timeType)) result.put("estimatedAt", typedTime);
+    result.put("timeType", timeType);
+    result.put("sourceTime", typedTime);
     result.put("reportedTime", time);
     result.put("location", location);
     result.put("transportMode", text(value.path("mode")));
     result.put("containerNumber", first(value.path("container_number"), value.path("containerNumber")));
+    result.put("terminal", text(value.path("terminal")));
+    result.put("vesselName", first(value.path("vessel"), value.path("vessel_name")));
+    result.put("voyage", text(value.path("voyage")));
+    result.put("timezone", text(value.path("timezone")));
+    result.put("timePrecision", text(value.path("time_precision")));
+    result.put("loadStatus", text(value.path("load_status")));
+    if (value.path("vessel_details").isObject()) result.set("vesselDetails", businessValue(value.path("vessel_details")));
+    if (value.path("terminal_details").isObject()) result.set("terminalDetails", businessValue(value.path("terminal_details")));
+    String sourceKind = first(value.path("source").path("kind"), value.path("source"));
+    result.put("sourceKind", sourceKind != null && DETAIL_SOURCE_KINDS.contains(sourceKind) ? sourceKind : null);
     result.put("source", source);
-    result.put("semanticKind", "SOURCE_ENTRY");
+    result.put("semanticKind", "REPORTED".equals(timeType) ? "SOURCE_ENTRY" : "CARRIER_EVENT");
     result.put("raw", text(value.path("raw")));
     return result;
   }

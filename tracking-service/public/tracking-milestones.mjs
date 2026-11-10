@@ -22,7 +22,9 @@ export function uniqueMilestones(route = []) {
       node.event,
       node.actualTime,
       node.estimatedTime,
-      node.timezone
+      node.reportedTime,
+      node.timezone,
+      node.containerNumber
     ]
       .map((value) =>
         String(value ?? "")
@@ -44,7 +46,7 @@ export function currentMilestoneIndex(route = []) {
 
 export function containerMilestoneTiming(milestone = {}) {
   return milestoneTiming({
-    actualTime: milestone.actual === false ? "" : milestone.occurredAt,
-    estimatedTime: milestone.estimatedAt
+    actualTime: milestone.timeType === "REPORTED" || milestone.timeType === "ESTIMATED" || milestone.actual === false ? "" : milestone.occurredAt,
+    estimatedTime: milestone.timeType === "REPORTED" || milestone.timeType === "ACTUAL" ? "" : milestone.estimatedAt
   });
 }

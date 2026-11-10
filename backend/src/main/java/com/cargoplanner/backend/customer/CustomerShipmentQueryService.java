@@ -765,7 +765,7 @@ public class CustomerShipmentQueryService {
     value.put("updatedAt", updatedAt != null ? updatedAt : fetchedAt);
     value.put("customerCount", 0L);
     value.put("boundRoles", List.of());
-    value.put("snapshotJson", snapshotJson);
+    value.put("snapshotJson", null);
     value.put("sourceChannel", rs.getString("source_channel"));
     value.put("businessState", rs.getString("business_state"));
     value.put("hasValidTracking", rs.getBoolean("has_valid_tracking"));
@@ -859,7 +859,8 @@ public class CustomerShipmentQueryService {
         if (routingLegs.isArray() && routingLegs.size() > 0) {
           JsonNode firstLeg = routingLegs.get(0);
           if (!value.containsKey("vesselVoyage") || value.get("vesselVoyage") == null) {
-            String vessel = ShipmentReferences.textOrNull(firstLeg.path("vessel"));
+            String vessel = ShipmentReferences.textOrNull(firstLeg.path("vesselName"));
+            if (vessel == null) vessel = ShipmentReferences.textOrNull(firstLeg.path("vessel"));
             String voyage = ShipmentReferences.textOrNull(firstLeg.path("voyage"));
             if (vessel != null || voyage != null) {
               value.put("vesselVoyage", (vessel != null ? vessel : "") + (voyage != null ? " / " + voyage : ""));

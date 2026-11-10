@@ -216,6 +216,27 @@
   border: 0;
   background: transparent;
 }
+#tracking-view .tracking-detail-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 20px;
+  font-size: 12px;
+}
+#tracking-view .tracking-detail-filter[hidden] { display: none; }
+#tracking-view .tracking-detail-filter label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+#tracking-view .tracking-detail-filter select {
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+}
 .tracking-source-archive {
   border: 1px solid #dce6f2;
   border-radius: 8px;

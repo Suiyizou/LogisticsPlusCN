@@ -20,7 +20,7 @@
   margin: 16px 12px 8px;
 }
 .workspace-nav-group {
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid var(--tracking-sidebar-line, #405b7c);
   padding-bottom: 6px;
 }
 .workspace-nav-trigger {
@@ -33,7 +33,7 @@
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: #e6eef2;
+  color: var(--tracking-sidebar-text, #e5edf7);
   font: inherit;
   font-size: 14px;
   text-align: left;
@@ -64,10 +64,10 @@
   transform: rotate(90deg);
 }
 .workspace-nav-trigger:hover {
-  background: rgb(255 255 255 / 7%);
+  background: var(--tracking-sidebar-hover, #1d3552);
 }
 .workspace-nav-group.is-current > .workspace-nav-trigger {
-  color: #fff;
+  color: var(--tracking-sidebar-title, #fff);
 }
 .workspace-navigation .workspace-nav-children {
   display: grid;
@@ -80,20 +80,20 @@
   padding: 10px 12px 10px 44px;
   border-radius: 2px;
   font-size: 13px;
-  color: #c4d4df;
+  color: var(--tracking-sidebar-text, #e5edf7);
   border-left: 2px solid transparent;
 }
 .workspace-nav-children .nav-item .nav-icon {
   display: none;
 }
 .sidebar .workspace-nav-children .nav-item.is-active {
-  color: #fff;
-  background: rgb(255 255 255 / 9%);
+  color: var(--tracking-sidebar-title, #fff);
+  background: var(--tracking-sidebar-active, #254566);
   border-left-color: var(--color-accent, #c67556);
   box-shadow: none;
 }
 .workspace-navigation :is(a, button):focus-visible {
-  outline: 2px solid #e1ab82;
+  outline: 2px solid var(--tracking-sidebar-focus, #91c4ff);
   outline-offset: -2px;
 }
 .workspace-navigation .portal-return-link {
@@ -163,10 +163,10 @@
     width: 100%;
     min-height: 44px;
     padding: 10px 12px;
-    border: 1px solid rgb(141 160 172 / 55%);
+    border: 1px solid var(--tracking-sidebar-line, #405b7c);
     border-radius: 3px;
     background: transparent;
-    color: inherit;
+    color: var(--tracking-sidebar-text, #e5edf7);
     font: inherit;
     font-size: 13px;
     text-align: left;

@@ -2,6 +2,7 @@ import {
   normalizeTrackingLocation,
   normalizeTrackingSnapshotLocations
 } from "./tracking-location-normalizer.mjs";
+import { sanitizeTrackingData, normalizeDetailCapture, reportedSeal } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
 
 /** Read-only compatibility for supplied tracking.v1 JSON. No network or persistence. */
 const text = (value) =>
@@ -53,16 +54,30 @@ function normalizeEvent(value, index, source) {
     country: first(e.country, e.countryName, e.country_name, e.location?.country)
   });
   const time = first(e.time, e.date, e.occurredAt, e.occurred_at);
+  const timeType = ["ACTUAL", "ESTIMATED", "REPORTED"].includes(e.time_type || e.timeType)
+    ? e.time_type || e.timeType : "REPORTED";
   if (!description && !time && !place?.name) return null;
   return {
     sequence: e.sequence ?? index + 1,
     name: description,
-    occurredAt: isoTime(time),
+    occurredAt: timeType === "ACTUAL" ? time || null : null,
+    estimatedAt: timeType === "ESTIMATED" ? time || first(e.estimatedAt) || null : null,
+    timeType,
+    sourceTime: first(e.sourceTime, time) || null,
     reportedTime: first(e.time_raw, e.reportedTime, time),
     location: place?.name ?? "",
     countryCode: place?.countryCode || undefined,
     transportMode: first(e.mode, e.transportMode, e.transport_mode),
     containerNumber: first(e.container_number, e.containerNumber),
+    terminal: text(e.terminal),
+    vesselName: first(e.vessel, e.vessel_name, e.vesselName),
+    voyage: text(e.voyage),
+    timezone: text(e.timezone) || null,
+    timePrecision: first(e.time_precision, e.timePrecision) || null,
+    loadStatus: first(e.load_status, e.loadStatus) || null,
+    vesselDetails: object(e.vessel_details || e.vesselDetails),
+    terminalDetails: object(e.terminal_details || e.terminalDetails),
+    sourceKind: first(e.sourceKind, e.source?.kind, typeof e.source === "string" ? e.source : ""),
     source,
     ...(e.raw != null ? { raw: e.raw } : {})
   };
@@ -71,7 +86,7 @@ function shipmentEvents(shipment) {
   return list(shipment.events)
     .map((e, i) => normalizeEvent(e, i, "shipment.events"))
     .filter(Boolean)
-    .map((entry) => ({ ...entry, semanticKind: "SOURCE_ENTRY", occurredAt: null }));
+    .map((entry) => ({ ...entry, semanticKind: entry.timeType === "REPORTED" ? "SOURCE_ENTRY" : "CARRIER_EVENT" }));
 }
 function additionalEvents(shipment) {
   const extra = object(shipment.fields_extra);
@@ -125,7 +140,31 @@ function typedLegRoute(legs) {
 
 /** Display progress from native milestones, typed sailing legs, or the
  * carrier's separate history table. Generic source entries stay in archives. */
+const transportMovement = (name) => !/customs|clearance|freight|\b(?:ISF|AMS|ACI|ACE)\b/i.test(name) &&
+  /\b(?:gate[ -]?(?:in|out)|(?:in|out)gate|load(?:ed|ing)?|discharg(?:e|ed|ing)|depart(?:ure|ed)?|arriv(?:al|ed)|deliver(?:y|ed)|empty return(?:ed)?|empty to shipper|empty container released|returned|received|available|pick[ -]?up)\b|还空箱|装船|卸船|进场|出场|提箱|交付|离港|到港/i.test(name);
+
+export function carrierDetailEvents(snapshot) {
+  const entries = [
+    ...list(snapshot?.events),
+    ...list(snapshot?.containers).flatMap((container) => list(container.milestones)
+      .map((event) => ({ ...event, containerNumber: event.containerNumber || container.number })))
+  ];
+  const seen = new Set();
+  return entries.filter((entry) => {
+    if (!["PAGE_DETAIL", "PAGE_DETAILS"].includes(entry?.sourceKind) ||
+        !text(entry.name) || !text(entry.reportedTime || entry.occurredAt || entry.estimatedAt)) return false;
+    if (/^(?:containers?|type|weight|POD ETA)$/i.test(entry.name) || /^[A-Z]{4}\d{7}$/i.test(entry.name) || /price calculation date|\bindicative\b/i.test(entry.name)) return false;
+    const key = [entry.containerNumber, entry.name, entry.location, entry.terminal, entry.reportedTime,
+      entry.occurredAt, entry.estimatedAt, entry.timeType, entry.timezone, entry.vesselName, entry.voyage].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function reportedTrackingHistory(snapshot) {
+  const details = carrierDetailEvents(snapshot);
+  if (details.length) return details;
   return list(snapshot?.sourceDetails?.additionalEvents).filter((entry) => {
     if (!entry || !text(entry.name) || !text(entry.reportedTime || entry.occurredAt)) return false;
     const name = text(entry.name);
@@ -141,10 +180,38 @@ export function reportedTrackingHistory(snapshot) {
   });
 }
 
-export function trackingProgressNodes(snapshot) {
+export function progressContainerNumbers(snapshot) {
+  if (list(snapshot?.route).length || typedLegRoute(list(snapshot?.routingLegs)).length) return [];
+  const events = carrierDetailEvents(snapshot);
+  if (!events.length) return [];
+  return [...new Set([...events.map((event) => text(event.containerNumber)),
+    ...list(snapshot?.containers).map((container) => text(container.number))].filter(Boolean))];
+}
+
+export function trackingProgressNodes(snapshot, { containerNumber = "" } = {}) {
   if (Array.isArray(snapshot?.route) && snapshot.route.length) return snapshot.route;
   const typed = typedLegRoute(list(snapshot?.routingLegs));
   if (typed.length) return typed;
+  const details = carrierDetailEvents(snapshot).filter((entry) => text(entry.location) && transportMovement(entry.name) && (!containerNumber || entry.containerNumber === containerNumber));
+  // Order one box's explicitly ISO-formatted source dates without converting
+  // local timestamps, adding a time, or assigning completion semantics.
+  if (containerNumber && details.every((entry) => /^\d{4}-\d{2}-\d{2}(?:$|T| )/.test(entry.sourceTime || "")))
+    details.sort((a, b) => a.sourceTime.localeCompare(b.sourceTime));
+  if (details.length) return details.map((entry) => ({
+    city: entry.location,
+    countryCode: text(entry.countryCode),
+    locationType: "REPORTED",
+    event: entry.name,
+    containerNumber: text(entry.containerNumber),
+    actualTime: entry.timeType === "ACTUAL" ? entry.occurredAt || null : null,
+    estimatedTime: entry.timeType === "ESTIMATED" ? entry.estimatedAt || null : null,
+    reportedTime: entry.reportedTime || null,
+    timezone: entry.timezone || null,
+    timePrecision: entry.timePrecision || null,
+    semanticKind: entry.timeType === "ACTUAL" || entry.timeType === "ESTIMATED" ? "CARRIER_EVENT" : "CARRIER_REPORTED",
+    source: entry.source,
+    sourceKind: entry.sourceKind
+  }));
   return reportedTrackingHistory(snapshot).flatMap((entry) => {
     if (entry?.source !== "hmm_history") return [];
     const name = text(entry.name);
@@ -277,7 +344,7 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
   const carrier = carrierIdentity(record.carrier?.code || carrierCode, record.carrier?.name);
   if (carrierCode && carrierIdentity(carrierCode).code !== carrier.code)
     throw new Error("Carrier group conflicts with record.carrier.code");
-  const shipment = object(record.shipment),
+  const shipment = object(sanitizeTrackingData(record.shipment)),
     fields = object(shipment.fields),
     extra = object(shipment.fields_extra),
     route = object(shipment.route),
@@ -345,17 +412,26 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
       ),
       latestEvent: first(c.latest_status, c.latestEvent, c.latest_event),
       latestEventTime: first(c.status_time, c.latestEventTime, c.latest_event_time) || null,
-      reportedStatusTime: first(c.status_time, c.reportedStatusTime, c.reported_status_time),
-      seal: first(c.seal, c.seal_number),
+      reportedStatusTime: first(c.status_time_raw, c.status_time, c.reportedStatusTime, c.reported_status_time),
+      timezone: text(c.timezone) || null,
+      seal: reportedSeal(first(c.seal, c.seal_number, c.extra?.seal, c.extra?.seal_number)),
       weight: text(c.weight),
+      extra: object(c.extra),
+      tareKg: typeof c.tare_kg === "number" && c.tare_kg >= 0 ? c.tare_kg : null,
+      payloadKg: typeof c.payload_kg === "number" && c.payload_kg >= 0 ? c.payload_kg : null,
+      estimatedArrival: text(c.eta) || null,
+      estimatedArrivalRaw: first(c.eta_raw, c.eta) || null,
+      estimatedArrivalLabel: text(c.eta_label) || null,
       ...(c.raw != null ? { raw: c.raw } : {}),
       milestones: list(c.events)
         .map((e, i) => normalizeEvent(e, i, "container.events"))
         .filter(Boolean)
         .map((e) => ({
+          ...e,
           name: e.name,
-          time: e.occurredAt,
+          time: null,
           reportedTime: e.reportedTime,
+          containerNumber: e.containerNumber || first(c.number, c.container_number, c.containerNumber),
           location: e.location,
           countryCode: e.countryCode,
           transportMode: e.transportMode,
@@ -429,7 +505,7 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
       .filter(([, value]) => value)
   );
   const latestEvent = first(status.latest_event, fields.latest_event);
-  const warnings = list(record.meta?.warnings).map(text).filter(Boolean);
+  const warnings = list(sanitizeTrackingData(record.meta?.warnings)).map(text).filter(Boolean);
   const sourceFields = [
     ...collectSourceFields(fields, "shipment.fields"),
     ...collectSourceFields(shipment.fields_extra, "shipment.fields_extra"),
@@ -456,7 +532,7 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
     ...collectSourceFields(
       supplementaryRows(
         shipment.containers,
-        "number type movement terms position latest_status status_time seal seal_number weight"
+        "number type movement terms position latest_status status_time status_time_raw timezone seal seal_number weight tare_kg payload_kg eta eta_raw eta_label"
       ),
       "shipment.containers"
     ),
@@ -509,12 +585,14 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
       vessel: first(vessel.name, fields.vessel),
       voyage: first(vessel.voyage, fields.voyage),
       fields: sourceFields,
+      businessExtras: object(extra.extra),
       additionalEvents: additionalEvents(shipment),
       warnings,
       businessVerified: record.meta?.business_verified === true,
       confidence: text(record.meta?.confidence),
       noBusinessData: query.status === "NO_BUSINESS_DATA",
-      evidenceAvailable: Boolean(record.evidence?.screenshot_path || record.evidence?.text_path)
+      evidenceAvailable: Boolean(record.evidence?.screenshot_path || record.evidence?.text_path),
+      detailCapture: normalizeDetailCapture(record.meta?.detail_capture)
     }
   };
   // Endpoint names are summary facts, never fabricated milestone nodes.
@@ -528,6 +606,7 @@ export function adaptTrackingV1(record, { carrierCode = "" } = {}) {
 
 export function normalizeSourceDetails(details) {
   if (!details || typeof details !== "object" || Array.isArray(details)) return details;
+  details = sanitizeTrackingData(details);
   const fields = list(details.fields)
     .slice(0, 200)
     .flatMap((entry) => {
@@ -559,6 +638,7 @@ export function normalizeSourceDetails(details) {
   const seen = new Set();
   const normalized = {
     ...details,
+    detailCapture: normalizeDetailCapture(details.detailCapture),
     fields: fields.filter((field) => {
       const key = field.source + "|" + field.key;
       if (seen.has(key)) return false;
@@ -576,7 +656,10 @@ export function usesLegacySupplementalDelivery(snapshot) {
 
 export function normalizeTrackingPayload(payload) {
   if (payload?.snapshot && typeof payload.snapshot === "object") {
-    const snapshot = normalizeTrackingSnapshotLocations(payload.snapshot);
+    const safe = sanitizeTrackingData(payload.snapshot);
+    const snapshot = normalizeTrackingSnapshotLocations(
+      JSON.stringify(safe) === JSON.stringify(payload.snapshot) ? payload.snapshot : safe
+    );
     if (!snapshot.sourceDetails)
       return snapshot === payload.snapshot ? payload : { ...payload, snapshot };
     return {

@@ -1,4 +1,5 @@
-import { readTrackingPreview, createCarrierBadge, reportedTrackingHistory } from "./tracking-v1-adapter.mjs?v=20261108-shipment-detail";
+import { readTrackingPreview, createCarrierBadge, reportedTrackingHistory } from "./tracking-v1-adapter.mjs?v=20261108-carrier-details-r4";
+import { sanitizeTrackingData, eventVesselLabel, eventTerminalLabel, eventLoadLabel, reportedTimeLabel } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
 const labels = {
   en: {
     title: "Preview tracking JSON",
@@ -193,12 +194,22 @@ export function trackingSourceSummary(snapshot, language) {
 }
 function eventTable(doc, entries, l) {
   const hasTransport = entries.some((entry) => entry?.transportMode);
-  const { wrap, body } = table(doc, [l.time, l.event, l.location, ...(hasTransport ? [l.transport] : [])]);
+  const hasContainer = entries.some((entry) => entry?.containerNumber);
+  const hasDetails = entries.some((entry) => entry?.sourceKind === "PAGE_DETAILS" || entry?.sourceKind === "PAGE_DETAIL");
+  const en = l === labels.en;
+  const hasLoadStatus = entries.some((entry) => eventLoadLabel(entry, en ? "en" : "zh"));
+  const { wrap, body } = table(doc, [
+    ...(hasContainer ? [en ? "Container" : "箱号"] : []),
+    ...(hasDetails ? [en ? "Time type" : "时间性质"] : []),
+    l.time, l.event, ...(hasLoadStatus ? [en ? "Empty / laden" : "空重状态"] : []), l.location,
+    ...(hasDetails ? [en ? "Terminal / depot" : "码头 / 堆场", en ? "Vessel / voyage" : "船名 / 航次"] : []),
+    ...(hasTransport ? [l.transport] : [])
+  ]);
   for (const event of entries) {
     if (!event) continue;
     const row = node(doc, "tr");
     const description = node(doc, "td", event.name || "—");
-    if (event.raw != null || event.source) {
+    if (!hasDetails && (event.raw != null || event.source)) {
       const original = node(doc, "details");
       original.append(node(doc, "summary", l.expandSource));
       buildOnOpen(original, () => {
@@ -211,11 +222,16 @@ function eventTable(doc, entries, l) {
       });
       description.append(original);
     }
+    if (hasContainer) row.append(node(doc, "td", event.containerNumber || "—"));
+    if (hasDetails) row.append(node(doc, "td", event.timeType === "ACTUAL" ? (en ? "Actual" : "实际") : event.timeType === "ESTIMATED" ? (en ? "Estimated" : "预计") : (en ? "Reported" : "船司报告")));
+    const time = event.reportedTime || event.occurredAt || event.estimatedAt || "—";
     row.append(
-      node(doc, "td", event.reportedTime || event.occurredAt || "—"),
-      description,
-      node(doc, "td", event.location || "—")
+      node(doc, "td", reportedTimeLabel(time, event.timezone)),
+      description
     );
+    if (hasLoadStatus) row.append(node(doc, "td", eventLoadLabel(event, en ? "en" : "zh") || "—"));
+    row.append(node(doc, "td", event.location || "—"));
+    if (hasDetails) row.append(node(doc, "td", eventTerminalLabel(event) || "—"), node(doc, "td", eventVesselLabel(event, en ? "en" : "zh") || "—"));
     if (hasTransport) row.append(node(doc, "td", event.transportMode || "—"));
     body.append(row);
   }
@@ -235,9 +251,35 @@ export function renderTrackingHistory(doc, snapshot, language) {
       const section = node(doc, "div", undefined, "tracking-json-history");
       section.append(
         node(doc, "h4", l.additionalEvents),
-        node(doc, "p", l.historyHint),
-        eventTable(doc, history, l)
+        node(doc, "p", l.historyHint)
       );
+      const content = node(doc, "div");
+      const numbers = [...new Set(history.map((entry) => entry.containerNumber).filter(Boolean))];
+      if (numbers.length > 1) {
+        const filter = node(doc, "div", undefined, "tracking-detail-filter");
+        const label = node(doc, "label", l === labels.zh ? "按箱号查看记录" : "Filter records by container");
+        const select = node(doc, "select");
+        const all = node(doc, "option", l === labels.zh ? "全部箱号" : "All containers");
+        all.value = "";
+        select.append(all);
+        for (const number of numbers) {
+          const option = node(doc, "option", number);
+          option.value = number;
+          select.append(option);
+        }
+        const count = node(doc, "span");
+        const update = () => {
+          const shown = select.value ? history.filter((event) => event.containerNumber === select.value) : history;
+          count.textContent = l === labels.zh ? `显示 ${shown.length}/${history.length} 条记录` : `${shown.length}/${history.length} records`;
+          content.replaceChildren(eventTable(doc, shown, l));
+        };
+        select.addEventListener("change", update);
+        label.append(select);
+        filter.append(label, count);
+        section.append(filter);
+        update();
+      } else content.append(eventTable(doc, history, l));
+      section.append(content);
       target.append(section);
     }
   }
@@ -245,6 +287,7 @@ export function renderTrackingHistory(doc, snapshot, language) {
 }
 
 export function renderReportedTrackingDetails(doc, snapshot, language) {
+  snapshot = sanitizeTrackingData(snapshot);
   const target = doc.querySelector("#reported-tracking-details");
   if (!target) return;
   target.replaceChildren();
