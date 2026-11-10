@@ -17,6 +17,15 @@ export async function dismissMscCookieNotice(page) {
   await reject.waitFor({state:'hidden',timeout:5000});
 }
 
+export async function dismissYmlNecessaryCookieNotice(page) {
+  const agree=page.getByRole('button',{name:'Agree',exact:true});
+  if(!await optionalVisible(agree))return;
+  if(await agree.count()!==1 || !/This Website uses necessary cookies to collect data/.test(await page.locator('body').innerText()))
+    throw new Error('Unrecognized Yang Ming cookie notice');
+  await agree.click({timeout:7000});
+  await agree.waitFor({state:'hidden',timeout:7000});
+}
+
 export async function dismissOoclCookieNotice(page) {
   const preference = page.locator('#preference');
   if (!(await optionalVisible(preference))) return;

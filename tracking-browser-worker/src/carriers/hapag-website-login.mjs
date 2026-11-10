@@ -13,6 +13,19 @@ const clean = value => String(value ?? '').replace(/\s+/g,' ').trim();
 const fail = (code, message) => Object.assign(new Error(message), {name:'HapagWebsiteLoginError', code});
 const MAX_SECRET_BYTES = 16384;
 
+// OneTrust currently places role=dialog on children of these stable SDK roots.
+// Recognize the actual privacy controls, never an arbitrary login-form parent.
+export function areKnownHapagPrivacyDialogs(nodes) {
+  return nodes.length>0 && nodes.every(dialog=>{
+    const panel=dialog.closest('#onetrust-pc-sdk');
+    if(panel)return panel.querySelectorAll('input[id^="ot-group-id-"]').length>=4 &&
+      [...panel.querySelectorAll('button')].some(button=>button.textContent.replace(/\s+/g,' ').trim()==='Confirm My Choices');
+    const banner=dialog.closest('#onetrust-banner-sdk');
+    return !!banner && banner.querySelectorAll('#onetrust-reject-all-handler').length===1 &&
+      /Depending on your consent and your cookie settings/.test(banner.textContent);
+  });
+}
+
 export const hapagWebsiteAutoLoginEnabled = () => process.env.HAPAG_AUTO_LOGIN === '1';
 export const hapagPublicEntryWaitEnabled = () => process.env.HAPAG_PUBLIC_ENTRY_WAIT_MS === '600000';
 export function hapagTestDeadline() {
@@ -420,6 +433,8 @@ function createOrdinaryHapagWebsiteLoginGate(page, {end, lifecycle, reservationP
         // Only the already observed privacy panel can be delegated to its
         // existing exact handler. An SDK/login-form parent is not guessed.
         if(count===1&&await dialogs.getAttribute?.('id')==='onetrust-pc-sdk')return true;
+        if(count>0 && typeof dialogs.evaluateAll==='function' &&
+          await dialogs.evaluateAll(areKnownHapagPrivacyDialogs))return true;
         normalDialogDeadline??=Math.min(end-100,Date.now()+8000);
         audit.normalLoginDialogWait??={startedAt:new Date(Date.now()).toISOString(),deadline:new Date(normalDialogDeadline).toISOString(),
           policy:'READ_ONLY_UNRECOGNIZED_DIALOG',dialogClicks:0,status:'WAITING',observations:0};

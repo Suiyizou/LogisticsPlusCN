@@ -25,7 +25,7 @@ import {collectOneDetails} from './one-details.mjs';
 import {collectHapagDetails} from './hapag-details.mjs';
 import {collectHapagLegacyContainerDetails, probeHapagLegacyContainerOverview} from './hapag-legacy-details.mjs';
 import {queryHapagLegacyContainer} from './hapag-legacy-session.mjs';
-import {dismissOoclCookieNotice, dismissHapagCookieNotice, dismissMscCookieNotice} from './ordinary-page-controls.mjs';
+import {dismissOoclCookieNotice, dismissHapagCookieNotice, dismissMscCookieNotice, dismissYmlNecessaryCookieNotice} from './ordinary-page-controls.mjs';
 import {assertCmaHumanVerification} from './cma-human-verification.mjs';
 import {checkHapagVerification, checkWanHaiVerification} from './carrier-verification.mjs';
 
@@ -555,13 +555,12 @@ export const CARRIERS = {
     async steps(page, ref) {
       await page.goto('https://www.yangming.com/en/esolution/tracking/cargo_tracking', {waitUntil: 'domcontentloaded', timeout: TIMEOUT});
       await page.waitForTimeout(3000);
-      const agree = page.getByRole('button', {name: 'Agree', exact: true}).first();
-      if (await agree.isVisible().catch(() => false)) await agree.click({timeout: 3000}).catch(() => {});
       // Current Yang Ming form accepts up to 20 references in a textarea;
       // its generated react-aria id is not stable between builds.
       const input = page.locator('textarea').first();
       await input.waitFor({state: 'visible', timeout: 15000});
       await input.fill(ref);
+      await dismissYmlNecessaryCookieNotice(page);
       const search = page.getByRole('button', {name: 'Search', exact: true}).first();
       if (await search.count()) await search.click({timeout: 5000});
       else await input.press('Enter');
