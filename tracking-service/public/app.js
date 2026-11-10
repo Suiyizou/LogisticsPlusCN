@@ -6591,6 +6591,7 @@ function renderRoute(route) {
       ? t(`route.event.${node.typedEvent}`)
       : valueOrDash(node.event, t("route.noEvent"));
     if (node.containerNumber) event.textContent += ` · ${node.containerNumber}`;
+    event.title = event.textContent;
 
     const evidence = document.createElement("span");
     evidence.className = "route-evidence";
