@@ -947,66 +947,8 @@ public class ShipmentTrackingService {
     String snapshotJson = record.cached().snapshotJson();
     if (snapshotJson == null || snapshotJson.isBlank()) return null;
     try {
-      JsonNode snapshot = objectMapper.readTree(snapshotJson);
-      JsonNode keyTimes = snapshot.path("keyTimes");
-      JsonNode lastLeg = null;
-      JsonNode lastOceanLeg = null;
-      JsonNode legs = snapshot.path("routingLegs");
-      if (legs.isArray()) {
-        for (JsonNode leg : legs) {
-          lastLeg = leg;
-          if ("SEA".equalsIgnoreCase(leg.path("mode").asText())) lastOceanLeg = leg;
-        }
-      }
-      JsonNode arrivalLeg = lastOceanLeg == null ? lastLeg : lastOceanLeg;
-      String displayedArrival = firstNonBlankText(
-          arrivalLeg == null ? null : arrivalLeg.path("actualArrival").asText(null),
-          keyTimes.path("actualArrival").path("time").asText(null),
-          keyTimes.path("estimatedDelivery").path("actualTime").asText(null),
-          arrivalLeg == null ? null : arrivalLeg.path("estimatedArrival").asText(null),
-          keyTimes.path("estimatedFinalArrival").path("time").asText(null),
-          keyTimes.path("estimatedArrival").path("time").asText(null),
-          keyTimes.path("estimatedDelivery").path("time").asText(null)
-      );
-      return parseShipmentTimestamp(displayedArrival);
+      return TrackingArrivalOrder.arrival(objectMapper.readTree(snapshotJson));
     } catch (JsonProcessingException ignored) {
-      return null;
-    }
-  }
-
-  private String firstNonBlankText(String... values) {
-    for (String value : values) {
-      if (value != null && !value.isBlank()) return value.trim();
-    }
-    return null;
-  }
-
-  private Long parseShipmentTimestamp(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) return null;
-    String value = rawValue.trim();
-    try {
-      return Instant.parse(value).toEpochMilli();
-    } catch (DateTimeParseException ignored) {
-      // Continue with offset-free carrier and manually-entered date formats.
-    }
-    try {
-      return OffsetDateTime.parse(value).toInstant().toEpochMilli();
-    } catch (DateTimeParseException ignored) {
-      // Continue with a local timestamp.
-    }
-    try {
-      return LocalDateTime.parse(value.replace(' ', 'T'))
-          .toInstant(ZoneOffset.UTC)
-          .toEpochMilli();
-    } catch (DateTimeParseException ignored) {
-      // Continue with a date-only value.
-    }
-    try {
-      return LocalDate.parse(value.length() >= 10 ? value.substring(0, 10) : value)
-          .atStartOfDay()
-          .toInstant(ZoneOffset.UTC)
-          .toEpochMilli();
-    } catch (DateTimeParseException ignored) {
       return null;
     }
   }

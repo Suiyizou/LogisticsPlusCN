@@ -6,6 +6,7 @@ import com.cargoplanner.backend.shipment.ShipmentBatchItemRequest;
 import com.cargoplanner.backend.shipment.ShipmentTrackingProperties;
 import com.cargoplanner.backend.shipment.ShipmentTrackingService;
 import com.cargoplanner.backend.shipment.TrackingCarriers;
+import com.cargoplanner.backend.shipment.TrackingArrivalOrder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -311,59 +312,7 @@ public class CustomerShipmentQueryService {
   }
 
   private Long shipmentArrivalTimestamp(Map<String, Object> item) {
-    if (!(item.get("snapshot") instanceof JsonNode snapshot)) return null;
-    JsonNode keyTimes = snapshot.path("keyTimes");
-    JsonNode lastLeg = null;
-    JsonNode lastOceanLeg = null;
-    JsonNode legs = snapshot.path("routingLegs");
-    if (legs.isArray()) {
-      for (JsonNode leg : legs) {
-        lastLeg = leg;
-        if ("SEA".equalsIgnoreCase(leg.path("mode").asText())) lastOceanLeg = leg;
-      }
-    }
-    JsonNode arrivalLeg = lastOceanLeg == null ? lastLeg : lastOceanLeg;
-    String displayedArrival = firstNonBlankText(
-        arrivalLeg == null ? null : arrivalLeg.path("actualArrival").asText(null),
-        keyTimes.path("actualArrival").path("time").asText(null),
-        keyTimes.path("estimatedDelivery").path("actualTime").asText(null),
-        arrivalLeg == null ? null : arrivalLeg.path("estimatedArrival").asText(null),
-        keyTimes.path("estimatedFinalArrival").path("time").asText(null),
-        keyTimes.path("estimatedArrival").path("time").asText(null),
-        keyTimes.path("estimatedDelivery").path("time").asText(null)
-    );
-    return parseShipmentTimestamp(displayedArrival);
-  }
-
-  private String firstNonBlankText(String... values) {
-    for (String value : values) {
-      if (value != null && !value.isBlank()) return value.trim();
-    }
-    return null;
-  }
-
-  private Long parseShipmentTimestamp(String value) {
-    if (value == null || value.isBlank()) return null;
-    try {
-      return Instant.parse(value).toEpochMilli();
-    } catch (RuntimeException ignored) {
-      // Try the date formats used by imported/manual tracking snapshots.
-    }
-    try {
-      return OffsetDateTime.parse(value).toInstant().toEpochMilli();
-    } catch (RuntimeException ignored) {
-      // Continue with local date-time and date-only values.
-    }
-    try {
-      return LocalDateTime.parse(value).toInstant(ZoneOffset.UTC).toEpochMilli();
-    } catch (RuntimeException ignored) {
-      // Continue with date-only values.
-    }
-    try {
-      return LocalDate.parse(value).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-    } catch (RuntimeException ignored) {
-      return null;
-    }
+    return item.get("snapshot") instanceof JsonNode snapshot ? TrackingArrivalOrder.arrival(snapshot) : null;
   }
 
   /**

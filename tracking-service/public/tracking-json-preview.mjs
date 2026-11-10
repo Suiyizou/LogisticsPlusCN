@@ -1,3 +1,4 @@
+import { sourceBusinessFields } from "./tracking-source-fields.mjs?v=20261110-compact";
 import { readTrackingPreview, createCarrierBadge, reportedTrackingHistory } from "./tracking-v1-adapter.mjs?v=20261108-carrier-details-r4";
 import { sanitizeTrackingData, eventVesselLabel, eventTerminalLabel, eventLoadLabel, reportedTimeLabel } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
 const labels = {
@@ -33,7 +34,7 @@ const labels = {
     time: "Reported time",
     event: "Source entry",
     location: "Location",
-    transport: "Vessel / transport details",
+    transport: "Transport mode",
     source: "Source",
     sourceDetails: "Source details",
     historyHint: "Original times, locations and descriptions as reported by the carrier.",
@@ -105,7 +106,7 @@ const labels = {
     time: "源数据时间",
     event: "源条目",
     location: "地点",
-    transport: "船名 / 运输说明",
+    transport: "运输方式",
     source: "来源",
     sourceDetails: "来源详情",
     historyHint: "保留船司报告的原始时间、地点与描述。",
@@ -341,36 +342,31 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     );
     archiveBody.append(section);
   }
+  const usefulFields = sourceBusinessFields(snapshot, language);
+  if (usefulFields.length) {
+    const section = node(doc, "section", undefined, "tracking-business-fields");
+    section.append(node(doc, "h3", l === labels.zh ? "补充业务信息" : "Additional shipment facts"));
+    const { wrap, body } = table(doc, l === labels.zh ? ["项目", "船司报告值"] : ["Field", "Carrier-reported value"]);
+    for (const field of usefulFields) {
+      const row = node(doc, "tr");
+      row.append(node(doc, "th", field.label), node(doc, "td", field.value));
+      body.append(row);
+    }
+    section.append(wrap);
+    // Business facts remain visible; technical provenance stays in the archive.
+    target.append(section);
+  }
   if (details?.fields?.length) {
-    const section = node(doc, "details", undefined, "tracking-json-disclosure");
-    section.append(node(doc, "summary", `${l.fields} (${details.fields.length})`));
+    const section = node(doc, "details", undefined, "tracking-json-disclosure tracking-technical-fields");
+    section.append(node(doc, "summary", l === labels.zh ? "原始字段（核对用）" : "Original fields (for reference)"));
     buildOnOpen(section, () => {
-      const dl = node(doc, "dl", undefined, "tracking-json-source-fields");
-      for (const field of details.fields) {
-        const row = node(doc, "div");
-        const label = Object.hasOwn(l.fieldLabels, field.key)
-          ? l.fieldLabels[field.key]
-          : field.key;
-        const term = node(doc, "dt", label);
-        const preview = field.value == null ? "" : rawSourceText(field.value);
-        const description = node(doc, "dd", preview);
-        const original = node(doc, "details");
-        original.append(node(doc, "summary", l.sourceDetails));
-        buildOnOpen(original, () => {
-          if (field.source) original.append(node(doc, "p", `${field.source}.${field.key}`));
-          if (field.structured || (field.rawText != null && field.rawText !== preview)) {
-            original.append(node(doc, "pre", field.rawText ?? preview));
-          }
-        });
-        description.append(original);
-        if (field.truncated) description.append(node(doc, "small", l.sourceLimited));
-        row.append(term, description);
-        dl.append(row);
-      }
-      section.append(dl);
+      const original = details.fields.map(field => `${field.source ? field.source + "." : ""}${field.key}: ${field.rawText ?? rawSourceText(field.value)}`).join("\n");
+      section.append(node(doc, "pre", original.slice(0, 120000)));
+      if (original.length > 120000) section.append(node(doc, "small", l.sourceLimited));
     });
     archiveBody.append(section);
   }
+
   if (details) {
     const section = node(doc, "details", undefined, "tracking-json-disclosure");
     section.append(node(doc, "summary", l.sourceDetails));
@@ -378,7 +374,8 @@ export function renderReportedTrackingDetails(doc, snapshot, language) {
     for (const key of ["queryStatus", "schema", "strategy", "confidence", "jobId"]) {
       if (!details[key]) continue;
       const row = node(doc, "div");
-      row.append(node(doc, "dt", key), node(doc, "dd", String(details[key])));
+      const names = {queryStatus: "查询状态", schema: "数据格式", strategy: "采集方式", confidence: "来源标记", jobId: "查询批次"};
+      row.append(node(doc, "dt", l === labels.zh ? names[key] : key), node(doc, "dd", String(details[key])));
       metadata.append(row);
     }
     const history = Array.isArray(details.additionalEvents) ? details.additionalEvents : [];

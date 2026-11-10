@@ -9,11 +9,12 @@ import {
   uniqueMilestones,
   currentMilestoneIndex,
   containerMilestoneTiming
-} from "./tracking-milestones.mjs?v=20261108-carrier-details-r4";
-import { detailCaptureLabel, eventVesselLabel, eventTerminalLabel, eventLoadLabel, containerBusinessFacts, reportedTimeLabel, progressEventPresentation, routeLocationLabel } from "./tracking-detail-data.mjs?v=20261108-carrier-details-r4";
+} from "./tracking-milestones.mjs?v=20261110-compact";
+import { detailCaptureLabel, eventVesselLabel, eventTerminalLabel, eventLoadLabel, containerBusinessFacts, reportedTimeLabel, progressEventPresentation, routeLocationLabel } from "./tracking-detail-data.mjs?v=20261110-compact";
 import { renderTrackingWorkspaceNavigation } from "./workspace-navigation.mjs";
 import { createFilePreviewLifecycle } from "./file-preview-lifecycle.mjs";
-import { shipmentListIndicators } from "./shipment-list-status.mjs?v=20261105";
+import { shipmentListIndicators } from "./shipment-list-status.mjs?v=20261110-compact";
+import { overviewTiming, overviewReference } from "./tracking-overview-facts.mjs?v=20261110-compact";
 import { createPdfCanvasPreview, pdfPreviewErrorKey } from "./pdf-canvas-preview.mjs";
 const filePreviewLifecycle = createFilePreviewLifecycle();
 import {
@@ -25,7 +26,7 @@ import {
 import {
   carrierFactsProvenance,
   carrierKeyFacts
-} from "./tracking-carrier-fields.mjs?v=20261108-carrier-details-r4";
+} from "./tracking-carrier-fields.mjs?v=20261110-compact";
 import { MULTI_CARRIER_CATALOG, SUPPORTED_CARRIER_CODES } from "./carrier-catalog.mjs";
 import {
   canonicalTrackingCarrier,
@@ -41,11 +42,12 @@ import {
   progressContainerNumbers,
   detailSections,
   createCarrierBadge
-} from "./tracking-v1-adapter.mjs?v=20261108-carrier-details-r4";
+} from "./tracking-v1-adapter.mjs?v=20261110-compact";
 import {
   installLocalTrackingPreview,
+  renderReportedTrackingDetails,
   renderTrackingHistory
-} from "./tracking-json-preview.mjs?v=20261108-carrier-details-r4";
+} from "./tracking-json-preview.mjs?v=20261110-compact";
 import {
   carrierReferenceForDisplay,
   reportedRouteTime,
@@ -571,10 +573,10 @@ const MESSAGES = {
     "history.customerFilter": "Customer filter",
     "history.customerFilterLabel": "Filter shipments by customer",
     "history.currentCustomer": "Current customer",
-    "history.etaSort": "ETA order",
+    "history.etaSort": "Arrival date order",
     "history.etaSortLabel": "Sort shipments by ETA",
-    "history.etaAscending": "ETA ascending",
-    "history.etaDescending": "ETA descending",
+    "history.etaAscending": "Date ascending (earliest first)",
+    "history.etaDescending": "Date descending (latest first)",
     "agent.followingOnly": "Following only",
     "agent.showAll": "Show all",
     "agent.follow": "Follow",
@@ -642,6 +644,9 @@ const MESSAGES = {
     "history.route": "Route",
     "history.latestStatus": "Latest status",
     "history.emptyReturned": "Empty returned",
+    "history.createdToday": "Added today",
+    "history.referenceNeedsReview": "Reference needs review",
+    "history.notProvided": "Not provided",
     "history.updatedToday": "Updated today",
     "history.queriedAt": "Queried at",
     "history.open": "Open details",
@@ -1252,10 +1257,10 @@ const MESSAGES = {
     "history.customerFilter": "客户筛选",
     "history.customerFilterLabel": "按客户筛选票单",
     "history.currentCustomer": "当前客户",
-    "history.etaSort": "ETA 排序",
+    "history.etaSort": "到达日期排序",
     "history.etaSortLabel": "按预计到达时间排序票单",
-    "history.etaAscending": "ETA 正序",
-    "history.etaDescending": "ETA 倒序",
+    "history.etaAscending": "日期升序（早 → 晚）",
+    "history.etaDescending": "日期降序（晚 → 早）",
     "history.allCustomers": "全部客户",
     "agent.followingOnly": "只看跟进",
     "agent.showAll": "查看全部",
@@ -1321,6 +1326,9 @@ const MESSAGES = {
     "history.route": "路线",
     "history.latestStatus": "最新状态",
     "history.emptyReturned": "还空箱",
+    "history.createdToday": "今日新增",
+    "history.referenceNeedsReview": "单号待核对",
+    "history.notProvided": "船司未提供",
     "history.updatedToday": "今日更新",
     "history.queriedAt": "查询时间",
     "history.open": "打开详情",
@@ -5309,6 +5317,8 @@ async function loadCustomerAssignedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           businessUpdatedAt: item.updatedAt || item.lastTrackedAt || serverSnapshot?.fetchedAt || null,
+          businessCreatedAt: item.createdAt || null,
+          originalBillOfLading: item.originalBillOfLading || null,
           shipmentId: item.shipmentId,
           customerReadOnly: payload?.customerReadOnly !== false,
           trackingStatus,
@@ -5443,6 +5453,8 @@ async function loadInternalTrackedHistory() {
           snapshot,
           savedAt: lastTrackedAt,
           businessUpdatedAt: item.updatedAt || item.lastTrackedAt || serverSnapshot?.fetchedAt || null,
+          businessCreatedAt: item.createdAt || null,
+          originalBillOfLading: item.originalBillOfLading || null,
           shipmentId: item.shipmentId,
           trackingStatus: pendingStatus,
           boundShipment: true,
@@ -7232,10 +7244,10 @@ function renderResult(payload) {
       String(bookingNumbers[0]).trim().toUpperCase() ===
         elements["result-number"].textContent.trim().toUpperCase());
   elements["summary-origin-name"].textContent = valueOrDash(
-    [summary.origin?.name, summary.origin?.countryCode].filter(Boolean).join(", ")
+    routeLocationLabel({ city: summary.origin?.name, countryCode: summary.origin?.countryCode })
   );
   elements["summary-destination-name"].textContent = valueOrDash(
-    [summary.destination?.name, summary.destination?.countryCode].filter(Boolean).join(", ")
+    routeLocationLabel({ city: summary.destination?.name, countryCode: summary.destination?.countryCode })
   );
   for (const side of ["origin", "destination"]) {
     const flag = document.querySelector(`#summary-${side}-flag`);
@@ -7395,7 +7407,7 @@ function renderResult(payload) {
   if (referencesPanel) referencesPanel.hidden = !elements["snapshot-references-empty"].hidden && !canManageFileVisibility(readFileSession());
   renderContainers(snapshot);
   if (!payload.localPreview) renderDocumentDrawer(snapshot);
-  localTrackingPreview?.renderDetails(snapshot);
+  renderReportedTrackingDetails(document, snapshot, currentLanguage);
   elements["raw-json"].textContent = payload.raw
     ? JSON.stringify(payload.raw, null, 2)
     : JSON.stringify({ notice: t("raw.cacheNotice"), snapshot }, null, 2);
@@ -7451,37 +7463,7 @@ function historyPort(snapshot, side) {
 }
 
 function historyTiming(snapshot) {
-  const keyTimes = snapshot.keyTimes ?? {};
-  const legs = snapshot.routingLegs ?? [];
-  const firstLeg = legs[0] ?? {};
-  const lastLeg = legs.at(-1) ?? {};
-  const oceanLegs = legs.filter((leg) => String(leg.mode ?? "").toUpperCase() === "SEA");
-  const firstOceanLeg = oceanLegs[0] ?? firstLeg;
-  const lastOceanLeg = oceanLegs.at(-1) ?? lastLeg;
-  const actualDeparture = firstOceanLeg.actualDeparture ?? keyTimes.actualDeparture?.time ?? null;
-  const estimatedDeparture =
-    firstOceanLeg.estimatedDeparture ?? keyTimes.estimatedDeparture?.time ?? null;
-  const actualArrival =
-    lastOceanLeg.actualArrival ??
-    keyTimes.actualArrival?.time ??
-    keyTimes.estimatedDelivery?.actualTime ??
-    null;
-  const estimatedArrival =
-    lastOceanLeg.estimatedArrival ??
-    keyTimes.estimatedFinalArrival?.time ??
-    keyTimes.estimatedArrival?.time ??
-    keyTimes.estimatedDelivery?.time ??
-    null;
-
-  return {
-    departureTime: actualDeparture ?? estimatedDeparture,
-    departureIsActual: Boolean(actualDeparture),
-    arrivalTime: actualArrival ?? estimatedArrival,
-    arrivalIsActual: Boolean(actualArrival),
-    actualDeparture,
-    actualArrival,
-    estimatedArrival
-  };
+  return overviewTiming(snapshot);
 }
 
 function historyTimeline(snapshot) {
@@ -8628,13 +8610,14 @@ function renderHistory() {
       ? `${t("business.clientCode")} · ${businessReferences.clientNameCode}`
       : t("history.reference");
     const indicators = shipmentListIndicators(entry);
-    if (indicators.emptyReturned || indicators.updatedToday) {
+    if (indicators.emptyReturned || indicators.createdToday || indicators.updatedToday) {
       identityLabel.classList.add("shipment-identity-label");
       const tags = document.createElement("span");
       tags.className = "shipment-list-tags";
       for (const [visible, kind, label] of [
         [indicators.emptyReturned, "empty-returned", "history.emptyReturned"],
-        [indicators.updatedToday, "updated-today", "history.updatedToday"]
+        [indicators.createdToday, "created-today", "history.createdToday"],
+        [indicators.updatedToday && !indicators.createdToday, "updated-today", "history.updatedToday"]
       ]) {
         if (!visible) continue;
         const tag = document.createElement("span");
@@ -8645,7 +8628,7 @@ function renderHistory() {
       identityLabel.append(tags);
     }
     const number = document.createElement("strong");
-    number.textContent = entry.query.number;
+    number.textContent = overviewReference(entry) || t("history.referenceNeedsReview");
     const identityMeta = document.createElement("small");
     identityMeta.className = "shipment-carrier-meta";
     const referenceType = document.createElement("span");
@@ -8677,9 +8660,9 @@ function renderHistory() {
     const dateLabels = document.createElement("span");
     dateLabels.className = "shipment-date-labels";
     const departureDate = document.createElement("span");
-    departureDate.innerHTML = `<b>${t(timing.departureIsActual ? "history.departed" : "history.etd")}</b><small>${formatShipmentDate(timing.departureTime)}</small>`;
+    departureDate.innerHTML = `<b>${t(timing.departureIsActual ? "history.departed" : "history.etd")}</b><small>${timing.departureTime ? formatShipmentDate(timing.departureTime) : t("history.notProvided")}</small>`;
     const arrivalDate = document.createElement("span");
-    arrivalDate.innerHTML = `<b>${t(timing.arrivalIsActual ? "history.arrived" : "history.eta")}</b><small>${formatShipmentDate(timing.arrivalTime)}</small>`;
+    arrivalDate.innerHTML = `<b>${t(timing.arrivalIsActual ? "history.arrived" : "history.eta")}</b><small>${timing.arrivalTime ? formatShipmentDate(timing.arrivalTime) : t("history.notProvided")}</small>`;
     dateLabels.append(departureDate, arrivalDate);
     const connector = document.createElement("span");
     connector.className = "shipment-journey-connector";
@@ -8694,6 +8677,7 @@ function renderHistory() {
     currentLabel.textContent = t("history.latestStatus");
     const currentName = document.createElement("strong");
     currentName.textContent = valueOrDash(summary.latestEvent?.name, t("metrics.noLatestEvent"));
+    currentName.title = currentName.textContent;
     const currentTime = document.createElement("small");
     currentTime.textContent = formatLocalDateTime(summary.latestEvent?.occurredAt);
     current.append(currentLabel, currentName, currentTime);
@@ -10279,7 +10263,7 @@ window.addEventListener("pageshow", () => {
   void loadSystemAnnouncements({ autoOpen: false });
 });
 
-localTrackingPreview = installLocalTrackingPreview({
+if (["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) && new URLSearchParams(location.search).get("preview") === "1") localTrackingPreview = installLocalTrackingPreview({
   language: () => currentLanguage,
   onOpen(payload) {
     if (!currentPayload?.localPreview) preLocalPreviewPayload = currentPayload;

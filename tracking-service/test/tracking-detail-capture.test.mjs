@@ -74,6 +74,7 @@ test("eight explicit CMA movement titles are readable in both languages without 
   assert.equal(progressEventPresentation({ ...nodes[0], semanticKind: "CARRIER_EVENT" }), null);
   assert.equal(routeLocationLabel({ city: "TIANJIN XINGANG (CN)", countryCode: "CN" }), "TIANJIN XINGANG, CN");
   assert.equal(routeLocationLabel({ city: "SAVANNAH, GA (US)", countryCode: "US" }), "SAVANNAH, GA, US");
+  assert.equal(routeLocationLabel({ city: "NINGBO, CN", countryCode: "CN" }), "NINGBO, CN");
 });
 
 test("two detailed containers keep all sixteen distinct local reported moves without actual completion", () => {

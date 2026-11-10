@@ -168,6 +168,11 @@ function resolveLocation(value) {
     nonPortCountries.get(key(name)),
     ...locationCodes.map((value) => nonPortCountries.get(key(value)))
   ].filter(Boolean));
+  const subdivisions=new Set((port?.subdivisions||[]).map(key));
+  const qualifiedCountries=new Set(name.split(/[(),]+/).slice(1).filter(part=>!subdivisions.has(key(part)) &&
+    (port || key(part).length>2 || key(name).includes(`(${key(part)})`))).map(part=>countries.get(key(part))).filter(Boolean));
+  if(qualifiedCountries.size===1)countryCandidates.add([...qualifiedCountries][0]);
+  else if(qualifiedCountries.size>1)return{name,countryCode:country,port:null};
   const inferredCountry = countryCandidates.size === 1 ? [...countryCandidates][0] : "";
   return {
     name,

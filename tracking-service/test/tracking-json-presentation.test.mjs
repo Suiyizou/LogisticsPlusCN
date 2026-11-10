@@ -127,11 +127,9 @@ test("original fields retain values and paths behind disclosures without repeati
   const { target, visible } = render(snapshot);
   assert.doesNotMatch(visible, /SOURCE SEAL|shipment.fields_extra|SUMMARY VESSEL|SUMMARY VOYAGE/);
   assert.doesNotMatch(target.textContent, /SOURCE SEAL/);
-  const section = disclosure(target, "原始字段与扩展字段");
+  const section = disclosure(target, "原始字段（核对用）");
   section.expand();
   assert.match(target.textContent, /SOURCE SEAL/);
-  assert.doesNotMatch(target.textContent, /shipment.fields_extra.seal_numbers/);
-  section.children[1].children[0].children[1].children[0].expand();
   assert.match(target.textContent, /shipment.fields_extra.seal_numbers/);
 });
 

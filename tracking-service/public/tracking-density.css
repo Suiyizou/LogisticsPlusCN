@@ -1,0 +1,87 @@
+/* Compact desktop operations surfaces; keep original mobile/touch affordances. */
+body.is-embedded .content { padding: 16px 20px 24px; }
+#overview-view, #tracking-view { gap: 12px; }
+#overview-view .overview-hero { margin-bottom: 12px; }
+#overview-view .hero-copy h1 { font-size: 21px; }
+#overview-view .panel-header.history-heading { min-height: 0; padding: 12px 16px; gap: 10px; align-items: flex-start; }
+#overview-view .history-heading > div:first-child { display: flex; align-items: center; gap: 10px; }
+#overview-view .history-heading .panel-icon { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; margin: 0; }
+#overview-view .history-heading .panel-icon svg { width: 19px; height: 19px; }
+#overview-view .history-heading strong { font-size: 16px; line-height: 1.4; }
+#overview-view .history-heading small { margin-top: 2px; font-size: 12px; line-height: 1.4; }
+#overview-view .history-heading-actions { gap: 10px; }
+#overview-view .history-customer-filter { gap: 4px; min-width: 125px; }
+#overview-view .history-customer-filter .tracking-select-trigger,
+#overview-view .history-search, #overview-view .history-search input { min-height: 36px; height: 36px; font-size: 13px; }
+#overview-view .shipment-row-toggle {
+  grid-template-columns: 28px minmax(170px,1.2fr) minmax(110px,.8fr) minmax(175px,1fr) minmax(110px,.8fr) minmax(125px,.9fr);
+  grid-template-areas: "icon identity origin timing destination status" ". business business business business business";
+  padding: 10px 14px; gap: 5px 12px; min-height: 88px;
+}
+#overview-view .shipment-transport-icon { width: 28px; height: 28px; border-radius: 6px; }
+#overview-view .shipment-transport-icon svg { width: 18px; height: 18px; }
+#overview-view .shipment-identity { gap: 3px; }
+#overview-view .shipment-identity > strong { font-size: 14px; line-height: 1.35; }
+#overview-view .shipment-field-label, #overview-view .shipment-date-labels b { margin: 0; font-size: 11px; line-height: 1.4; }
+#overview-view .tracking-carrier-badge { padding: 1px 5px; gap: 5px; background: transparent; border: 0; }
+#overview-view .tracking-carrier-badge img { width: 64px; max-width: 64px; height: 20px; }
+#overview-view .shipment-carrier-meta { gap: 5px; }
+#overview-view .shipment-list-tags { gap: 4px; }
+#overview-view .shipment-list-tag { min-height: 19px; font-size: 11px; padding: 1px 5px; }
+#overview-view .shipment-list-tag.is-created-today { color: #1753a2; background: #edf4ff; border-color: #c1d7f5; }
+#overview-view .shipment-port { gap: 6px; }
+#overview-view .shipment-port strong { font-size: 13px; line-height: 1.4; }
+#overview-view .shipment-port > span { gap: 1px; }
+#overview-view .shipment-port .flag-icon { width: 20px; height: 14px; }
+#overview-view .shipment-business-meta { padding-top: 2px; border: 0; font-size: 11px; gap: 3px 14px; line-height: 1.4; }
+#overview-view .shipment-current-status { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#overview-view .shipment-current-status > strong { font-size: 13px; line-height: 1.4; }
+#overview-view .shipment-current-status > strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+#overview-view .shipment-journey-connector { margin-top: 3px; }
+#overview-view .shipment-date-labels { gap: 8px; }
+#overview-view .shipment-date-labels small { font-size: 12px; margin-top: 2px; }
+#overview-view .shipment-row-details { padding: 12px 16px; gap: 12px; }
+#tracking-view .results { gap: 12px; }
+#tracking-view .result-titlebar { padding: 12px 16px; gap: 10px; }
+#tracking-view #result-number { font-size: 23px; }
+#tracking-view .shipment-summary-grid > * { padding: 10px 14px; }
+#tracking-view .metric-card { padding: 9px 14px; flex-basis: 165px; }
+#tracking-view .metric-card > strong { font-size: 16px; }
+#tracking-view .panel-header { min-height: 38px; padding: 9px 14px; }
+#tracking-view .panel-header strong { font-size: 14px; }
+#tracking-view .carrier-facts-grid { gap: 10px 20px; padding: 10px 14px; }
+#tracking-view .carrier-fact-group h4 { margin-bottom: 5px; }
+#tracking-view .carrier-fact-list > div { gap: 10px; padding: 6px 0; }
+#tracking-view .table-scroll :is(td,th), #tracking-view .tracking-json-table-wrap :is(td,th) { padding: 7px 10px; font-size: 13px; line-height: 1.45; }
+#tracking-view .tracking-json-history h4 { padding: 10px 14px 0; font-size: 14px; }
+#tracking-view .tracking-json-history > p { margin: 4px 14px 8px; }
+#tracking-view .tracking-json-history { margin: 0; }
+#tracking-view .tracking-json-history table { min-width: 1080px; }
+#tracking-view .tracking-json-history :is(td,th):first-child { min-width: 114px; white-space: nowrap; }
+#tracking-view .tracking-json-history :is(td,th):nth-child(2) { min-width: 68px; white-space: nowrap; }
+#tracking-view .snapshot-route-context { gap: 12px; }
+#tracking-view #shipment-logistics-map .lnm-viewport { height: 180px; min-height: 150px; }
+#tracking-view .route-node, #tracking-view .route-node.is-complete, #tracking-view .route-node.is-active { min-height: 110px; padding: 10px; }
+#tracking-view .tracking-source-archive > summary { padding: 10px 14px; font-size: 12px; }
+#tracking-view .tracking-source-archive-body { padding: 0 14px 10px; }
+#tracking-view .tracking-business-fields { margin: 10px 14px; }
+#tracking-view .tracking-business-fields h3 { font-size: 14px; margin: 0 0 7px; }
+#tracking-view .tracking-business-fields th { width: 180px; background: #f7f9fc; font-weight: 500; color: #526680; }
+#tracking-view .tracking-technical-fields pre { max-height: 260px; overflow: auto; padding: 10px; background: #f6f8fa; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 1100px) {
+  #overview-view .shipment-row-toggle { grid-template-columns: minmax(180px,1.1fr) minmax(0,1fr) minmax(0,1fr); grid-template-areas: "identity origin destination" "identity timing status" "business business business"; gap: 6px 14px; }
+  #overview-view .shipment-transport-icon { display: none; }
+  #overview-view .shipment-identity { display: flex; align-items: stretch; }
+  #overview-view .shipment-current-status { align-items: flex-end; text-align: right; }
+}
+@media (max-width: 640px) {
+  body.is-embedded .content { padding: 12px; }
+  #overview-view .shipment-row-toggle { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-areas: "identity identity" "origin destination" "timing timing" "status status" "business business"; gap: 9px; padding: 12px; }
+  #overview-view .shipment-current-status { align-items: flex-start; text-align: left; }
+  #overview-view .history-heading-actions { flex-wrap: wrap; }
+  #tracking-view .carrier-facts-grid { grid-template-columns: minmax(0,1fr); }
+  #tracking-view .tracking-business-fields th { width: 115px; }
+}
+@media (pointer: coarse) {
+  #overview-view .history-customer-filter .tracking-select-trigger, #overview-view .history-search, #overview-view .history-search input { min-height: 44px; height: 44px; }
+}

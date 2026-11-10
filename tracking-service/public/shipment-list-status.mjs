@@ -8,13 +8,13 @@ function statusText(value) {
 
 export function isEmptyReturnStatus(value) {
   // A carrier's scheduled event label is not evidence that the box was returned.
-  if (value && typeof value === "object" && value.actual === false) return false;
+  if (value && typeof value === "object" && (value.actual === false || value.timeType === "ESTIMATED")) return false;
   const text = statusText(value).normalize("NFKC").toUpperCase().trim();
   if (!text || /未|尚未|待|预计|计划|預計|計劃|NOT\b|PENDING\b|EXPECTED\b|ESTIMATED\b|SCHEDULED\b/.test(text)) return false;
   const normalized = text.replace(/[^A-Z0-9\p{Script=Han}]+/gu, " ").trim();
   if (/还空箱|空箱返还|空箱已退回|空箱已归还/.test(normalized)) return true;
   if (!/\b(?:EMPTY|MTY)\b/.test(normalized)) return false;
-  return /^(?:EMPTY RETURN|MTY RETURN)$/.test(normalized)
+  return /^(?:EMPTY|MTY) (?:CONTAINER )?RETURN$/.test(normalized)
     || /\bRETURN OF EMPTY\b|\bEMPTY DROP OFF\b|\bRETURNED\b|\bRETURN (?:COMPLETE|CONFIRMED)\b|\b(?:RECEIVED AT|RECEIVED IN|IN|AT) DEPOT\b/.test(normalized);
 }
 
@@ -57,6 +57,7 @@ export function shipmentListIndicators(entry, now = new Date()) {
   const updatedDate = businessDate(updatedAt);
   return {
     emptyReturned: isShipmentEmptyReturned(entry),
+    createdToday: Boolean(businessDate(entry?.businessCreatedAt ?? entry?.createdAt)) && businessDate(entry?.businessCreatedAt ?? entry?.createdAt) === businessDate(now),
     updatedToday: Boolean(updatedDate) && updatedDate === businessDate(now)
   };
 }
