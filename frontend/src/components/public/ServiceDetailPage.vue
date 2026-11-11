@@ -249,7 +249,7 @@
             ><ServiceIcon name="ship" />
             <h2>{{ t("publicSite.bookingTitle") }}</h2>
             <p>{{ t("publicSite.bookingBody") }}</p>
-            <span class="service-external-domain">{{ t("publicSite.bookingDomain") }}</span
+            <span class="service-external-domain">{{ externalHost }}</span
             ><a
               class="maritime-button maritime-button--navy"
               :href="service.entry"
@@ -372,6 +372,9 @@ const route = useRoute(),
   page = ref<HTMLElement | null>(null);
 const trackingPath = import.meta.env.VITE_TRACKING_WORKBENCH_URL || "/workspace/tracking/overview";
 const service = computed(() => findPublicService(String(route.params.slug || "")));
+const externalHost = computed(() =>
+  service.value?.access === "external" ? new URL(service.value.entry).host : ""
+);
 const copy = computed(() =>
   service.value ? getPublicServiceCopy(service.value.id, currentLocale.value) : null
 );

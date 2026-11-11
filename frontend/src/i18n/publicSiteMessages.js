@@ -151,7 +151,6 @@ export const publicSiteMessages = {
       bookingTitle: "在独立订舱平台继续。",
       bookingBody:
         "此入口打开已存在的独立订舱平台，需要在那里另行登录。本平台不会携带或转发当前账号凭据。",
-      bookingDomain: "booking.dreweslogistics.com",
       bookingAction: "打开独立订舱平台",
       bookingNote: "外部平台的账号、可用功能与办理结果由该平台管理。",
       services: {
@@ -615,7 +614,6 @@ export const publicSiteMessages = {
       bookingTitle: "Continue on the separate booking platform.",
       bookingBody:
         "This link opens the booking platform, where a separate sign-in is required. Your current credentials are never attached or forwarded.",
-      bookingDomain: "booking.dreweslogistics.com",
       bookingAction: "Open the booking platform",
       bookingNote:
         "Accounts, available features and booking outcomes are managed by the external platform.",

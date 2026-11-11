@@ -39,7 +39,7 @@ const definitions = [
     group: "transport",
     icon: "ship",
     access: "external",
-    entry: "http://booking.dreweslogistics.com/login",
+    entry: import.meta.env?.VITE_BOOKING_PLATFORM_URL || "http://booking.dreweslogistics.com/login",
     layout: "external",
     image: "transport"
   },
