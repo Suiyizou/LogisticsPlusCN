@@ -357,6 +357,41 @@ class ShipmentTrackingServiceTest {
   }
 
   @Test
+  void ooclBillsWithTheSameBookingStatusRemainSeparateShipments() throws Exception {
+    for (int sequence : List.of(1, 2)) {
+      String bill = "OOLU12345678" + sequence;
+      ObjectNode upstream = (ObjectNode) objectMapper.readTree("""
+          {
+            "snapshot": {
+              "channel": "LOCAL_CHROME",
+              "fetchedAt": "2026-07-16T10:00:00Z",
+              "tracking": {"type": "BILLOFLADING", "number": "%s"},
+              "summary": {
+                "billOfLading": "%s",
+                "bookingNumbers": [" confirmed "],
+                "latestEvent": {"name": "Loaded on board"}
+              },
+              "references": {"bookingNumbers": ["Booking confirmed", "CONFIRMED100%d"]}
+            }
+          }
+          """.formatted(bill, bill, sequence));
+      NormalizedTrackRequest request = new NormalizedTrackRequest("OOCL", "AUTO", "BILLOFLADING", bill);
+      when(adapterClient.track(request)).thenReturn(upstream);
+      ObjectNode result = service.track(new ShipmentTrackRequest("OOCL", "AUTO", "BILLOFLADING", bill, false), business);
+      assertThat(result.path("shipmentId").asText()).isNotBlank();
+    }
+
+    assertThat(jdbcTemplate.queryForObject(
+        "SELECT COUNT(DISTINCT shipment_id) FROM cp_shipment_references WHERE reference_type = 'BILLOFLADING'",
+        Integer.class
+    )).isEqualTo(2);
+    assertThat(jdbcTemplate.queryForList(
+        "SELECT reference_no_normalized FROM cp_shipment_references WHERE reference_type = 'BOOKING'",
+        String.class
+    )).containsExactlyInAnyOrder("CONFIRMED1001", "CONFIRMED1002");
+  }
+
+  @Test
   void aliasesShareCanonicalSnapshotIdentityAndNeverCreateManualPlaceholders() throws Exception {
     properties.setAdapterMode(ShipmentTrackingProperties.AdapterMode.LOCAL_QUEUE);
     Map<String, String> aliases = Map.of(

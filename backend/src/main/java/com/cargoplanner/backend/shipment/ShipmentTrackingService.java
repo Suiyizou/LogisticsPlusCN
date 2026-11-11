@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -47,6 +48,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class ShipmentTrackingService {
   private static final List<String> SUPPORTED_TYPES = List.of("BILLOFLADING", "BOOKING", "CONTAINER");
+  private static final Set<String> DISCOVERED_REFERENCE_STATUS_LABELS = Set.of(
+      "CONFIRMED", "BOOKINGCONFIRMED", "UNCONFIRMED", "CANCELED", "CANCELLED",
+      "BOOKINGCANCELED", "BOOKINGCANCELLED"
+  );
   static final String SINGLE_RESPONSE = "SINGLE_RESPONSE";
   static final String LEGACY_SUPPLEMENTAL = "LEGACY_SUPPLEMENTAL";
   private static final List<String> SUPPORTED_CHANNELS = List.of(
@@ -3153,7 +3158,8 @@ public class ShipmentTrackingService {
   }
 
   private boolean isValidDiscoveredReference(String carrier, String type, String normalized) {
-    if (normalized.matches(".*(?:NOTREADY|NOTAVAILABLE|NORECORD|UNKNOWN|PENDING).*$")) {
+    if (DISCOVERED_REFERENCE_STATUS_LABELS.contains(normalized)
+        || normalized.matches(".*(?:NOTREADY|NOTAVAILABLE|NORECORD|UNKNOWN|PENDING).*$")) {
       return false;
     }
     if ("COSCO".equals(carrier) && "BILLOFLADING".equals(type)) {
